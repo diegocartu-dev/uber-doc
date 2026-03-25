@@ -1,0 +1,80 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import LogoutButton from "./LogoutButton";
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  const fullName = user.user_metadata?.full_name || user.email;
+
+  return (
+    <div className="min-h-full">
+      <nav className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🩺</span>
+            <span className="text-xl font-bold text-gray-900">Uber Doc</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">Hola, {fullName}</span>
+            <LogoutButton />
+          </div>
+        </div>
+      </nav>
+
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-2 text-gray-600">
+          Bienvenido a Uber Doc. Desde acá podés gestionar tus consultas
+          médicas.
+        </p>
+
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-3xl">📅</div>
+            <h3 className="mt-4 text-lg font-semibold text-gray-900">
+              Mis turnos
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              No tenés turnos programados.
+            </p>
+            <button className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+              Agendar turno
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-3xl">📋</div>
+            <h3 className="mt-4 text-lg font-semibold text-gray-900">
+              Historial médico
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Accedé a tus consultas anteriores y recetas.
+            </p>
+            <button className="mt-4 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              Ver historial
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="text-3xl">👤</div>
+            <h3 className="mt-4 text-lg font-semibold text-gray-900">
+              Mi perfil
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Editá tus datos personales y preferencias.
+            </p>
+            <button className="mt-4 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              Editar perfil
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
