@@ -18,7 +18,13 @@ export default async function ClinicaPage() {
 
   const { data: medicos } = await supabase
     .from("medicos")
-    .select("especialidad, modalidad_atencion, nombre_completo");
+    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta");
+
+  // Contar consultas en espera por médico para estimar tiempos
+  const { data: consultasEspera } = await supabase
+    .from("consultas")
+    .select("medico_id")
+    .eq("estado", "esperando");
 
   return (
     <div className="min-h-full bg-gray-50">
@@ -49,7 +55,10 @@ export default async function ClinicaPage() {
           </p>
         </div>
 
-        <GrillaEspecialidades medicos={medicos ?? []} />
+        <GrillaEspecialidades
+          medicos={medicos ?? []}
+          consultasEspera={consultasEspera ?? []}
+        />
       </main>
     </div>
   );

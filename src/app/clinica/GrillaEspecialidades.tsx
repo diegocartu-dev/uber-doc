@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { crearConsulta } from "./actions";
 
 type Medico = {
+  id: string;
   especialidad: string;
   modalidad_atencion: string;
   nombre_completo: string;
+  disponible: boolean;
+  disponible_desde: string | null;
+  disponible_hasta: string | null;
+  precio_consulta: number;
+  duracion_consulta: number;
 };
+
+type ConsultaEspera = { medico_id: string };
 
 type Especialidad = { nombre: string; icono: string };
 
@@ -77,6 +86,22 @@ function semaforo(estado: Disponibilidad) {
   }
 }
 
+function estaEnHorario(medico: Medico): boolean {
+  if (!medico.disponible) return false;
+  if (!medico.disponible_desde || !medico.disponible_hasta)
+    return medico.disponible;
+
+  const ahora = new Date();
+  const hh = ahora.getHours().toString().padStart(2, "0");
+  const mm = ahora.getMinutes().toString().padStart(2, "0");
+  const horaActual = `${hh}:${mm}`;
+
+  return (
+    horaActual >= medico.disponible_desde &&
+    horaActual <= medico.disponible_hasta
+  );
+}
+
 function calcularDisponibilidad(
   especialidad: string,
   medicos: Medico[]
@@ -91,18 +116,28 @@ function calcularDisponibilidad(
 
   if (medicosDeLaEsp.length === 0) return "sin_medicos";
 
-  const tieneInmediata = medicosDeLaEsp.some(
+  const disponiblesAhora = medicosDeLaEsp.filter(
     (m) =>
-      m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas"
+      (m.modalidad_atencion === "inmediata" ||
+        m.modalidad_atencion === "ambas") &&
+      estaEnHorario(m)
   );
+
   const soloProgramada = medicosDeLaEsp.every(
     (m) => m.modalidad_atencion === "programada"
   );
 
-  if (tieneInmediata && medicosDeLaEsp.length >= 2) return "disponible";
-  if (tieneInmediata) return "espera";
+  if (disponiblesAhora.length >= 2) return "disponible";
+  if (disponiblesAhora.length === 1) return "espera";
   if (soloProgramada) return "programada";
-  return "espera";
+
+  const tieneInmediata = medicosDeLaEsp.some(
+    (m) =>
+      m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas"
+  );
+  if (tieneInmediata) return "programada";
+
+  return "programada";
 }
 
 function normalize(text: string) {
@@ -112,18 +147,31 @@ function normalize(text: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function formatPrecio(precio: number) {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(precio);
+}
+
 export default function GrillaEspecialidades({
   medicos,
+  consultasEspera,
 }: {
   medicos: Medico[];
+  consultasEspera: ConsultaEspera[];
 }) {
   const [busqueda, setBusqueda] = useState("");
+  const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(
+    null
+  );
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const termino = normalize(busqueda.trim());
 
-  // Especialidades que matchean por nombre de especialidad
   const espConMatch = new Set<string>();
-  // Especialidades que matchean por nombre de médico
   const espPorMedico = new Set<string>();
 
   if (termino) {
@@ -146,11 +194,40 @@ export default function GrillaEspecialidades({
           (esp) => espConMatch.has(esp.nombre) || espPorMedico.has(esp.nombre)
         );
 
+  // Contar esperas por médico
+  const esperasPorMedico = new Map<string, number>();
+  for (const c of consultasEspera) {
+    esperasPorMedico.set(
+      c.medico_id,
+      (esperasPorMedico.get(c.medico_id) ?? 0) + 1
+    );
+  }
+
+  // Médicos con inmediata/ambas para la especialidad del modal
+  const medicosDelModal = modalEspecialidad
+    ? medicos.filter(
+        (m) =>
+          m.especialidad === modalEspecialidad &&
+          (m.modalidad_atencion === "inmediata" ||
+            m.modalidad_atencion === "ambas")
+      )
+    : [];
+
+  function handleElegirMedico(medicoId: string, especialidad: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await crearConsulta(medicoId, especialidad);
+      if (result?.error) {
+        setError(result.error);
+      }
+    });
+  }
+
   return (
     <>
       {/* Buscador */}
       <div className="relative mb-6">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-gray-400">
           🔍
         </span>
         <input
@@ -195,9 +272,15 @@ export default function GrillaEspecialidades({
           const estado = calcularDisponibilidad(esp.nombre, medicos);
           const { color, texto } = semaforo(estado);
           const sinMedicos = estado === "sin_medicos";
-          const soloProgramada = estado === "programada" || sinMedicos;
 
-          // Médicos que matchean en esta especialidad
+          // El botón se habilita si hay al menos un médico con inmediata/ambas
+          const tieneInmediata = medicos.some(
+            (m) =>
+              m.especialidad === esp.nombre &&
+              (m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
+          );
+          const botonConsultaDeshabilitado = !tieneInmediata;
+
           const medicosMatch =
             termino && espPorMedico.has(esp.nombre)
               ? medicos.filter(
@@ -230,7 +313,6 @@ export default function GrillaEspecialidades({
                 {esp.nombre}
               </h3>
 
-              {/* Médicos que matchean la búsqueda */}
               {medicosMatch.length > 0 && (
                 <p className="mt-1 text-xs text-blue-600">
                   {medicosMatch.map((m) => m.nombre_completo).join(", ")}
@@ -239,7 +321,15 @@ export default function GrillaEspecialidades({
 
               <div className="mt-4 flex gap-2">
                 <button
-                  disabled={soloProgramada}
+                  disabled={botonConsultaDeshabilitado}
+                  onClick={() => {
+                    console.log("[Consulta ahora]", esp.nombre, {
+                      botonConsultaDeshabilitado,
+                      medicosEnEspecialidad: medicos.filter(m => m.especialidad === esp.nombre),
+                      totalMedicos: medicos.length,
+                    });
+                    setModalEspecialidad(esp.nombre);
+                  }}
                   className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                 >
                   Consulta ahora
@@ -255,6 +345,111 @@ export default function GrillaEspecialidades({
           );
         })}
       </div>
+
+      {/* Modal: Médicos disponibles */}
+      {modalEspecialidad && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Médicos disponibles — {modalEspecialidad}
+              </h2>
+              <button
+                onClick={() => {
+                  setModalEspecialidad(null);
+                  setError(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
+            {medicosDelModal.length === 0 ? (
+              <p className="mt-6 text-center text-sm text-gray-500">
+                No hay médicos disponibles en este momento.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {medicosDelModal.map((m) => {
+                  const enEspera = esperasPorMedico.get(m.id) ?? 0;
+                  const tiempoEstimado = enEspera * m.duracion_consulta;
+                  const disponibleAhora = estaEnHorario(m);
+
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex items-center justify-between rounded-xl border p-4 ${
+                        disponibleAhora
+                          ? "border-gray-200"
+                          : "border-gray-100 opacity-60"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">
+                            {m.nombre_completo}
+                          </p>
+                          <span
+                            className={`inline-block h-2 w-2 rounded-full ${
+                              disponibleAhora ? "bg-green-500" : "bg-gray-300"
+                            }`}
+                          />
+                        </div>
+                        <p className="mt-0.5 text-sm text-gray-600">
+                          {formatPrecio(m.precio_consulta)} ·{" "}
+                          {m.duracion_consulta} min
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {!disponibleAhora ? (
+                            <span className="text-gray-400">
+                              No disponible ahora
+                            </span>
+                          ) : enEspera === 0 ? (
+                            <span className="font-medium text-green-600">
+                              Sin espera
+                            </span>
+                          ) : (
+                            <>
+                              {enEspera} paciente{enEspera !== 1 ? "s" : ""} en
+                              espera · ~{tiempoEstimado} min
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        disabled={isPending || !disponibleAhora}
+                        onClick={() =>
+                          handleElegirMedico(m.id, modalEspecialidad!)
+                        }
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                      >
+                        {isPending ? "..." : "Elegir"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setModalEspecialidad(null);
+                setError(null);
+              }}
+              className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
