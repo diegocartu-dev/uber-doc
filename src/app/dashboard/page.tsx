@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./LogoutButton";
@@ -43,9 +44,12 @@ export default async function DashboardPage() {
             <p className="mt-1 text-sm text-gray-600">
               No tenés turnos programados.
             </p>
-            <button className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            <Link
+              href="/clinica"
+              className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
               Agendar turno
-            </button>
+            </Link>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
