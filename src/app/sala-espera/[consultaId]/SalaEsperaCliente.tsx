@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -33,10 +32,11 @@ export default function SalaEsperaCliente({
   posicion: posicionInicial,
   tiempoEstimado: tiempoInicial,
 }: Props) {
-  const router = useRouter();
   const [estado, setEstado] = useState(estadoInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
+  const [pagando, setPagando] = useState(false);
+  const [errorPago, setErrorPago] = useState<string | null>(null);
 
   // Suscripción en tiempo real a cambios de la consulta
   useEffect(() => {
@@ -160,11 +160,42 @@ export default function SalaEsperaCliente({
       </div>
 
       {/* Botón de pago */}
+      {errorPago && (
+        <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          {errorPago}
+        </div>
+      )}
+
       <button
-        disabled={!aceptada}
-        className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+        disabled={!aceptada || pagando}
+        onClick={async () => {
+          setPagando(true);
+          setErrorPago(null);
+          try {
+            const res = await fetch("/api/pago", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ consultaId }),
+            });
+            const data = await res.json();
+            if (data.init_point) {
+              window.location.href = data.init_point;
+            } else {
+              setErrorPago(data.error || "Error al crear el pago.");
+              setPagando(false);
+            }
+          } catch {
+            setErrorPago("Error de conexión. Intentá de nuevo.");
+            setPagando(false);
+          }
+        }}
+        className="mt-6 w-full rounded-xl bg-[#009ee3] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#007eb5] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
       >
-        {aceptada ? "Pagar con Mercado Pago" : "Esperando aceptación del médico..."}
+        {pagando
+          ? "Redirigiendo a Mercado Pago..."
+          : aceptada
+            ? "Pagar con Mercado Pago"
+            : "Esperando aceptación del médico..."}
       </button>
 
       {!aceptada && (
@@ -173,7 +204,7 @@ export default function SalaEsperaCliente({
         </p>
       )}
 
-      {aceptada && (
+      {aceptada && !pagando && (
         <p className="mt-3 text-xs text-green-600">
           Tu consulta fue aceptada. Procedé al pago para iniciar la
           videollamada.

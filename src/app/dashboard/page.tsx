@@ -42,24 +42,34 @@ export default async function DashboardPage() {
     medico = data;
 
     if (data) {
-      // Traer consultas en espera con nombre del paciente
+      // Traer consultas en espera
       const { data: consultas } = await supabase
         .from("consultas")
-        .select("id, especialidad, estado, created_at, paciente_id, pacientes!consultas_paciente_id_fkey(nombre_completo)")
+        .select("id, especialidad, estado, created_at, paciente_id")
         .eq("medico_id", data.id)
         .eq("estado", "esperando")
         .order("created_at", { ascending: true });
 
-      consultasPendientes = (consultas ?? []).map((c) => {
-        const paciente = c.pacientes as unknown as { nombre_completo: string } | null;
-        return {
+      if (consultas && consultas.length > 0) {
+        // Traer nombres de pacientes por user_id
+        const pacienteIds = consultas.map((c) => c.paciente_id);
+        const { data: pacientes } = await supabase
+          .from("pacientes")
+          .select("user_id, nombre_completo")
+          .in("user_id", pacienteIds);
+
+        const nombresPorId = new Map(
+          (pacientes ?? []).map((p) => [p.user_id, p.nombre_completo])
+        );
+
+        consultasPendientes = consultas.map((c) => ({
           id: c.id,
           especialidad: c.especialidad,
           estado: c.estado,
           created_at: c.created_at,
-          paciente_nombre: paciente?.nombre_completo ?? "Paciente",
-        };
-      });
+          paciente_nombre: nombresPorId.get(c.paciente_id) ?? "Paciente",
+        }));
+      }
     }
   }
 
