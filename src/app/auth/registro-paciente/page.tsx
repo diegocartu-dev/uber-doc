@@ -7,6 +7,8 @@ import { registrarPaciente } from "./actions";
 export default function RegistroPacientePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkTerminos, setCheckTerminos] = useState(false);
+  const [modalTerminos, setModalTerminos] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -140,14 +142,66 @@ export default function RegistroPacientePage() {
             />
           </div>
 
+          {/* Términos y condiciones */}
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={checkTerminos}
+              onChange={(e) => setCheckTerminos(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">
+              Leí y acepto los{" "}
+              <button
+                type="button"
+                onClick={() => setModalTerminos(true)}
+                className="font-medium text-blue-600 hover:text-blue-500 underline"
+              >
+                términos y condiciones
+              </button>{" "}
+              de Uber Doc
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !checkTerminos}
             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? "Registrando..." : "Registrarme como paciente"}
           </button>
         </form>
+
+        {/* Modal términos */}
+        {modalTerminos && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Términos y condiciones
+                </h2>
+                <button
+                  onClick={() => setModalTerminos(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p className="font-medium">
+                  Términos y condiciones del paciente — contenido legal
+                  próximamente.
+                </p>
+              </div>
+              <button
+                onClick={() => setModalTerminos(false)}
+                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
 
         <p className="mt-6 text-center text-sm text-gray-600">
           ¿Ya tenés cuenta?{" "}

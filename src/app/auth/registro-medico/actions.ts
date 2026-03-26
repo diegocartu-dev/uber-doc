@@ -48,6 +48,7 @@ export async function registrarMedico(formData: FormData) {
   }
 
   // 2. Insertar en tabla medicos
+  const ahora = new Date().toISOString();
   const { error: dbError } = await supabase.from("medicos").insert({
     user_id: authData.user.id,
     nombre_completo,
@@ -59,6 +60,8 @@ export async function registrarMedico(formData: FormData) {
     precio_consulta,
     duracion_consulta,
     modalidad_atencion,
+    terminos_aceptados_at: ahora,
+    declaracion_matricula_at: ahora,
   });
 
   if (dbError) {

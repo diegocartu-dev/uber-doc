@@ -46,6 +46,7 @@ export async function registrarPaciente(formData: FormData) {
     dni,
     fecha_nacimiento,
     telefono,
+    terminos_aceptados_at: new Date().toISOString(),
   });
 
   if (dbError) {

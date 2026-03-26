@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { crearConsulta } from "./actions";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Medico = {
   id: string;
@@ -163,11 +163,10 @@ export default function GrillaEspecialidades({
   consultasEspera: ConsultaEspera[];
 }) {
   const [busqueda, setBusqueda] = useState("");
+  const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(
     null
   );
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   const termino = normalize(busqueda.trim());
 
@@ -214,13 +213,7 @@ export default function GrillaEspecialidades({
     : [];
 
   function handleElegirMedico(medicoId: string, especialidad: string) {
-    setError(null);
-    startTransition(async () => {
-      const result = await crearConsulta(medicoId, especialidad);
-      if (result?.error) {
-        setError(result.error);
-      }
-    });
+    router.push(`/triage?medicoId=${encodeURIComponent(medicoId)}&especialidad=${encodeURIComponent(especialidad)}`);
   }
 
   return (
@@ -355,21 +348,12 @@ export default function GrillaEspecialidades({
                 Médicos disponibles — {modalEspecialidad}
               </h2>
               <button
-                onClick={() => {
-                  setModalEspecialidad(null);
-                  setError(null);
-                }}
+                onClick={() => setModalEspecialidad(null)}
                 className="text-gray-400 hover:text-gray-600"
               >
                 ✕
               </button>
             </div>
-
-            {error && (
-              <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                {error}
-              </div>
-            )}
 
             {medicosDelModal.length === 0 ? (
               <p className="mt-6 text-center text-sm text-gray-500">
@@ -424,13 +408,13 @@ export default function GrillaEspecialidades({
                         </p>
                       </div>
                       <button
-                        disabled={isPending || !disponibleAhora}
+                        disabled={!disponibleAhora}
                         onClick={() =>
                           handleElegirMedico(m.id, modalEspecialidad!)
                         }
                         className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
-                        {isPending ? "..." : "Elegir"}
+                        Elegir
                       </button>
                     </div>
                   );
@@ -439,10 +423,7 @@ export default function GrillaEspecialidades({
             )}
 
             <button
-              onClick={() => {
-                setModalEspecialidad(null);
-                setError(null);
-              }}
+              onClick={() => setModalEspecialidad(null)}
               className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Cancelar

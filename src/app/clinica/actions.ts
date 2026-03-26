@@ -3,7 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
-export async function crearConsulta(medicoId: string, especialidad: string) {
+export async function crearConsulta(
+  medicoId: string,
+  especialidad: string,
+  motivoConsulta: string,
+  sintomas: string[]
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,6 +18,10 @@ export async function crearConsulta(medicoId: string, especialidad: string) {
     return { error: "No autenticado." };
   }
 
+  if (!motivoConsulta.trim()) {
+    return { error: "El motivo de consulta es obligatorio." };
+  }
+
   const { data, error } = await supabase
     .from("consultas")
     .insert({
@@ -20,6 +29,8 @@ export async function crearConsulta(medicoId: string, especialidad: string) {
       medico_id: medicoId,
       especialidad,
       estado: "esperando",
+      motivo_consulta: motivoConsulta.trim(),
+      sintomas,
     })
     .select("id")
     .single();
