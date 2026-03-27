@@ -75,7 +75,7 @@ export default async function VideoPage({
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-gray-900">
+    <div className="flex flex-col bg-gray-900" style={{ height: "100vh" }}>
       <nav className="border-b border-gray-700 bg-gray-800">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
           <div className="flex items-center gap-2">

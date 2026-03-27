@@ -198,7 +198,7 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           </div>
         )}
 
-        <div id="video-container" className="h-full w-full p-4" />
+        <div id="video-container" style={{ width: "100%", height: "100vh", minHeight: "500px" }} />
       </div>
     </div>
   );
