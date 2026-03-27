@@ -165,14 +165,12 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           <p className="mt-2 text-sm text-gray-400">
             Se va a abrir en una nueva pestaña con la interfaz optimizada para tu dispositivo
           </p>
-          <a
-            href={mobileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => { window.location.href = mobileUrl!; }}
             className="mt-6 block w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition hover:bg-[#178a64]"
           >
             Unirse a la videollamada
-          </a>
+          </button>
           <button
             onClick={() => { window.location.href = "/dashboard"; }}
             className="mt-3 block w-full rounded-xl bg-gray-800 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-700"
