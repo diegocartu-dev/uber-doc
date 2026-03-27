@@ -97,6 +97,13 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           },
           showLeaveButton: true,
           showFullscreenButton: true,
+          lang: "es",
+          theme: {
+            colors: {
+              accent: "#1D9E75",
+              accentText: "#ffffff",
+            },
+          },
         });
 
         frameRef.current = callFrame;
@@ -289,7 +296,7 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           </div>
         )}
 
-        <div id="video-container" style={{ width: "100%", height: "100vh", minHeight: "500px" }} />
+        <div id="video-container" style={{ width: "100%", height: "calc(100vh - 60px)", minHeight: "500px" }} />
       </div>
     </div>
   );
