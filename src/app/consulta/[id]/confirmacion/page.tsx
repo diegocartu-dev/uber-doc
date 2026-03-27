@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import EsperaVideo from "./EsperaVideo";
 
 export default async function ConfirmacionPagoPage({
   params,
@@ -20,7 +21,7 @@ export default async function ConfirmacionPagoPage({
   // Verificar consulta del paciente
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, medico_id")
+    .select("id, especialidad, estado, medico_id, sala_video_url")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -102,9 +103,10 @@ export default async function ConfirmacionPagoPage({
         )}
 
         <div className="mt-8 space-y-3">
-          <button className="w-full rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-            Iniciar videollamada
-          </button>
+          <EsperaVideo
+            consultaId={consultaId}
+            salaVideoUrlInicial={consulta.sala_video_url}
+          />
 
           <Link
             href="/dashboard"

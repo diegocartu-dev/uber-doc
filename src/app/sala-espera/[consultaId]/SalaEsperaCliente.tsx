@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -12,6 +12,7 @@ type Props = {
   especialidad: string;
   posicion: number;
   tiempoEstimado: number;
+  isDev?: boolean;
 };
 
 function formatPrecio(precio: number) {
@@ -31,40 +32,51 @@ export default function SalaEsperaCliente({
   especialidad,
   posicion: posicionInicial,
   tiempoEstimado: tiempoInicial,
+  isDev = false,
 }: Props) {
   const [estado, setEstado] = useState(estadoInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [pagando, setPagando] = useState(false);
-  const [errorPago, setErrorPago] = useState<string | null>(null);
+  const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
 
-  // Suscripción en tiempo real a cambios de la consulta
   useEffect(() => {
     const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const channel = supabase
-      .channel(`consulta-${consultaId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "consultas",
-          filter: `id=eq.${consultaId}`,
-        },
-        (payload) => {
-          const nuevoEstado = payload.new.estado as string;
-          setEstado(nuevoEstado);
-          if (nuevoEstado === "aceptada") {
-            setPosicion(0);
-            setTiempoEstimado(0);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+
+      channel = supabase
+        .channel(`sala-espera-${consultaId}-${Date.now()}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "consultas" },
+          (payload) => {
+            const updated = payload.new as {
+              id: string;
+              estado: string;
+              sala_video_url: string | null;
+            };
+            if (updated.id !== consultaId) return;
+
+            setEstado(updated.estado);
+
+            if (updated.estado === "aceptada" || updated.estado === "en_curso") {
+              setPosicion(0);
+              setTiempoEstimado(0);
+            }
+
+            if (updated.sala_video_url) {
+              setSalaVideoUrl(updated.sala_video_url);
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [consultaId]);
 
@@ -74,7 +86,9 @@ export default function SalaEsperaCliente({
     <div className="text-center">
       {/* Animación de espera / check */}
       <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-blue-50">
-        {aceptada ? (
+        {salaVideoUrl ? (
+          <span className="text-5xl">📹</span>
+        ) : aceptada ? (
           <span className="text-5xl">✅</span>
         ) : (
           <svg
@@ -100,15 +114,19 @@ export default function SalaEsperaCliente({
       </div>
 
       <h1 className="mt-6 text-xl font-bold text-gray-900">
-        {aceptada
-          ? "¡El médico aceptó tu consulta!"
-          : "Estás en la sala de espera"}
+        {salaVideoUrl
+          ? "¡El médico inició la videollamada!"
+          : aceptada
+            ? "¡El médico aceptó tu consulta!"
+            : "Estás en la sala de espera"}
       </h1>
 
       <p className="mt-2 text-sm text-gray-600">
-        {aceptada
-          ? especialidad
-          : `Esperando que el Dr. ${medicoNombre} acepte tu consulta...`}
+        {salaVideoUrl
+          ? "Ya podés unirte a la consulta"
+          : aceptada
+            ? "Esperando que el médico inicie la videollamada..."
+            : `Esperando que el Dr. ${medicoNombre} acepte tu consulta...`}
       </p>
 
       {/* Info card */}
@@ -134,10 +152,18 @@ export default function SalaEsperaCliente({
               <span className="text-gray-500">Estado</span>
               <span
                 className={`font-medium ${
-                  aceptada ? "text-green-600" : "text-yellow-600"
+                  salaVideoUrl
+                    ? "text-blue-600"
+                    : aceptada
+                      ? "text-green-600"
+                      : "text-yellow-600"
                 }`}
               >
-                {aceptada ? "Aceptada" : "Esperando"}
+                {salaVideoUrl
+                  ? "Videollamada lista"
+                  : aceptada
+                    ? "Aceptada"
+                    : "Esperando"}
               </span>
             </div>
           </div>
@@ -159,57 +185,56 @@ export default function SalaEsperaCliente({
         </div>
       </div>
 
-      {/* Botón de pago */}
-      {errorPago && (
-        <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-          {errorPago}
-        </div>
+      {/* Botón para unirse a la videollamada */}
+      {salaVideoUrl && (
+        <a
+          href={`/consulta/${consultaId}/video`}
+          className="mt-6 block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+        >
+          Unirse a la videollamada
+        </a>
       )}
 
-      <button
-        disabled={!aceptada || pagando}
-        onClick={async () => {
-          setPagando(true);
-          setErrorPago(null);
-          try {
-            const res = await fetch("/api/pago", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ consultaId }),
-            });
-            const data = await res.json();
-            if (data.init_point) {
-              window.location.href = data.init_point;
-            } else {
-              setErrorPago(data.error || "Error al crear el pago.");
-              setPagando(false);
-            }
-          } catch {
-            setErrorPago("Error de conexión. Intentá de nuevo.");
-            setPagando(false);
-          }
-        }}
-        className="mt-6 w-full rounded-xl bg-[#009ee3] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#007eb5] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-      >
-        {pagando
-          ? "Redirigiendo a Mercado Pago..."
-          : aceptada
-            ? "Pagar con Mercado Pago"
-            : "Esperando aceptación del médico..."}
-      </button>
+      {/* TODO: Restaurar botón de Mercado Pago en producción */}
 
+      {/* Botones de testing */}
       {!aceptada && (
-        <p className="mt-3 text-xs text-gray-400">
-          El botón de pago se habilitará cuando el médico acepte tu consulta.
-        </p>
+        <button
+          onClick={async () => {
+            const supabase = createClient();
+            await supabase
+              .from("consultas")
+              .update({ estado: "aceptada" })
+              .eq("id", consultaId);
+            setEstado("aceptada");
+            setPosicion(0);
+            setTiempoEstimado(0);
+          }}
+          className="mt-6 w-full rounded-xl bg-amber-500 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"
+        >
+          🧪 Simular aceptación médico
+        </button>
       )}
-
-      {aceptada && !pagando && (
-        <p className="mt-3 text-xs text-green-600">
-          Tu consulta fue aceptada. Procedé al pago para iniciar la
-          videollamada.
-        </p>
+      {aceptada && !salaVideoUrl && (
+        <button
+          disabled={pagando}
+          onClick={async () => {
+            setPagando(true);
+            const supabase = createClient();
+            await supabase
+              .from("consultas")
+              .update({ estado: "en_curso" })
+              .eq("id", consultaId);
+            window.location.href = `/consulta/${consultaId}/confirmacion`;
+          }}
+          className="mt-2 w-full rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
+        >
+          🧪 Simular pago aprobado
+        </button>
       )}
+      <p className="mt-2 text-center text-xs text-gray-400">
+        Modo desarrollo — botones de testing
+      </p>
     </div>
   );
 }

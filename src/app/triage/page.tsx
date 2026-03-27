@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, useRef, useEffect, useTransition } from "react";
+import { useState, useRef, useEffect, useTransition, Suspense } from "react";
 import { crearConsulta } from "@/app/clinica/actions";
 
 const SINTOMAS_EMERGENCIA = [
@@ -44,6 +44,20 @@ const TIEMPO_OPCIONES = [
 ];
 
 export default function TriagePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-full items-center justify-center bg-gray-50">
+          <p className="text-sm text-gray-500">Cargando...</p>
+        </div>
+      }
+    >
+      <TriageContent />
+    </Suspense>
+  );
+}
+
+function TriageContent() {
   const searchParams = useSearchParams();
   const medicoId = searchParams.get("medicoId") ?? "";
   const especialidad = searchParams.get("especialidad") ?? "";

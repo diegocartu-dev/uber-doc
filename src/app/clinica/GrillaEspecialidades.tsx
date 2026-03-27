@@ -306,6 +306,23 @@ export default function GrillaEspecialidades({
                 {esp.nombre}
               </h3>
 
+              {(() => {
+                const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre);
+                if (medicosEsp.length === 0) return null;
+                const minPrecio = Math.min(...medicosEsp.map((m) => m.precio_consulta));
+                const minDuracion = medicosEsp.find((m) => m.precio_consulta === minPrecio)?.duracion_consulta;
+                return (
+                  <p className="mt-1 text-xs font-medium text-gray-900">
+                    {formatPrecio(minPrecio)}
+                    {minDuracion && (
+                      <span className="ml-1 font-normal text-gray-400">
+                        · {minDuracion} min
+                      </span>
+                    )}
+                  </p>
+                );
+              })()}
+
               {medicosMatch.length > 0 && (
                 <p className="mt-1 text-xs text-blue-600">
                   {medicosMatch.map((m) => m.nombre_completo).join(", ")}

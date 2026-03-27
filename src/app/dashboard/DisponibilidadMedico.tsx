@@ -14,7 +14,7 @@ type Props = {
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
   const [hDesde, mDesde] = desde.split(":").map(Number);
   const [hHasta, mHasta] = hasta.split(":").map(Number);
-  const minutosTotal = (hHasta * 60 + mHasta) - (hDesde * 60 + mDesde);
+  const minutosTotal = hHasta * 60 + mHasta - (hDesde * 60 + mDesde);
   if (minutosTotal <= 0) return 0;
   return Math.floor(minutosTotal / duracion);
 }
@@ -26,6 +26,7 @@ export default function DisponibilidadMedico({
   duracionConsulta,
   pacientesEnEspera,
 }: Props) {
+  const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(disponible);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
   const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
@@ -53,7 +54,7 @@ export default function DisponibilidadMedico({
     }
   }
 
-  async function handleGuardarHorario() {
+  async function handleGuardar() {
     setGuardando(true);
     setMensaje(null);
 
@@ -67,134 +68,155 @@ export default function DisponibilidadMedico({
     if (result?.error) {
       setMensaje(result.error);
     } else {
-      setMensaje("Horario guardado");
+      setMensaje("Guardado");
       setTimeout(() => setMensaje(null), 2000);
     }
   }
 
+  const selectStyle = { border: "0.5px solid #e5e7eb" } as const;
+  const selectClass =
+    "appearance-none rounded-lg bg-[#f8f9fa] px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
+
+  const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
+  const MINUTOS = ["00", "15", "30", "45"];
+
+  function parseHM(val: string): [string, string] {
+    const [h, m] = val.split(":");
+    const mSnap = MINUTOS.reduce((prev, cur) =>
+      Math.abs(parseInt(cur) - parseInt(m)) < Math.abs(parseInt(prev) - parseInt(m)) ? cur : prev
+    );
+    return [h ?? "08", mSnap];
+  }
+
+  const [desdeH, desdeM] = parseHM(desde);
+  const [hastaH, hastaM] = parseHM(hasta);
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            Configuración de disponibilidad de atención hoy
-          </h3>
-          <p className="mt-1 text-sm text-gray-600">
-            {activo
-              ? "Estás visible para consultas inmediatas"
-              : "No estás recibiendo consultas inmediatas"}
-          </p>
-        </div>
-
-        {/* Toggle */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={activo}
-          disabled={guardando}
-          onClick={handleToggle}
-          className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
-            activo ? "bg-green-500" : "bg-gray-300"
-          }`}
-        >
-          <span
-            className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-              activo ? "translate-x-6" : "translate-x-1"
-            }`}
-          />
-        </button>
-      </div>
-
-      {/* Indicador de estado */}
-      <div className="mt-4 flex items-center gap-2">
-        <span
-          className={`inline-block h-3 w-3 rounded-full ${
-            activo ? "bg-green-500" : "bg-gray-300"
-          }`}
-        />
-        <span className="text-sm font-medium text-gray-700">
-          {activo ? "Disponible" : "No disponible"}
-        </span>
-      </div>
-
-      {/* Ventana horaria */}
-      <div className="mt-5 border-t border-gray-100 pt-5">
-        <p className="text-sm font-medium text-gray-700">Ventana horaria</p>
-        <p className="mt-0.5 text-xs text-gray-500">
-          Fuera de este rango se desactiva automáticamente tu disponibilidad
-        </p>
-
-        <div className="mt-3 flex items-center gap-3">
-          <div className="flex-1">
-            <label htmlFor="desde" className="block text-xs text-gray-500">
-              Desde
-            </label>
-            <input
-              id="desde"
-              type="time"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <span className="mt-5 text-gray-400">—</span>
-          <div className="flex-1">
-            <label htmlFor="hasta" className="block text-xs text-gray-500">
-              Hasta
-            </label>
-            <input
-              id="hasta"
-              type="time"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Capacidad y pacientes en espera */}
-        <div className="mt-4 space-y-2">
-          <p className="text-sm text-gray-700">
-            <span className="font-medium">Capacidad máxima hoy:</span>{" "}
-            <span className="font-semibold text-blue-600">
-              {capacidad} consulta{capacidad !== 1 ? "s" : ""}
-            </span>
-            <span className="ml-1 text-xs text-gray-400">
-              ({duracionConsulta} min c/u)
-            </span>
-          </p>
-          <p className="text-sm text-gray-700">
-            <span className="font-medium">Pacientes en espera:</span>{" "}
-            <span
-              className={`font-semibold ${
-                pacientesEnEspera >= capacidad && capacidad > 0
-                  ? "text-red-600"
-                  : "text-green-600"
-              }`}
-            >
-              {pacientesEnEspera} / {capacidad}
-            </span>
-          </p>
-        </div>
-
-        <button
-          onClick={handleGuardarHorario}
-          disabled={guardando}
-          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {guardando ? "Guardando..." : "Guardar horario"}
-        </button>
-
-        {mensaje && (
-          <p
-            className={`mt-2 text-sm ${
-              mensaje.startsWith("Horario") ? "text-green-600" : "text-red-600"
+    <div
+      className="rounded-xl bg-white"
+      style={{ border: "0.5px solid #e5e7eb" }}
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setAbierto(!abierto)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setAbierto(!abierto); }}
+        className="flex w-full cursor-pointer items-center justify-between px-6 py-4"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium tracking-wide text-gray-400">
+            DISPONIBILIDAD
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={activo}
+            disabled={guardando}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggle();
+            }}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
+              activo ? "bg-[#1D9E75]" : "bg-gray-300"
             }`}
           >
-            {mensaje}
-          </p>
-        )}
+            <span
+              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                activo ? "translate-x-4.5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+        <span className="text-xs text-gray-400">{abierto ? "▲" : "▼"}</span>
       </div>
+
+      {abierto && (
+        <div className="border-t border-gray-50 px-6 pb-6">
+          <div className="mt-4 flex items-center gap-4">
+            <div>
+              <label className="text-xs text-gray-400">Desde</label>
+              <div className="mt-1 flex items-center gap-1">
+                <select
+                  value={desdeH}
+                  onChange={(e) => setDesde(`${e.target.value}:${desdeM}`)}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  {HORAS.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <span className="text-gray-300">:</span>
+                <select
+                  value={desdeM}
+                  onChange={(e) => setDesde(`${desdeH}:${e.target.value}`)}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  {MINUTOS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <span className="mt-5 text-gray-300">—</span>
+            <div>
+              <label className="text-xs text-gray-400">Hasta</label>
+              <div className="mt-1 flex items-center gap-1">
+                <select
+                  value={hastaH}
+                  onChange={(e) => setHasta(`${e.target.value}:${hastaM}`)}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  {HORAS.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <span className="text-gray-300">:</span>
+                <select
+                  value={hastaM}
+                  onChange={(e) => setHasta(`${hastaH}:${e.target.value}`)}
+                  className={selectClass}
+                  style={selectStyle}
+                >
+                  {MINUTOS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
+            <span>
+              Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracionConsulta} min c/u)
+            </span>
+            <span>
+              En espera: <span className="font-medium text-gray-700">{pacientesEnEspera}/{capacidad}</span>
+            </span>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={handleGuardar}
+              disabled={guardando}
+              className="rounded-lg bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+            {mensaje && (
+              <span
+                className={`text-xs ${
+                  mensaje === "Guardado" ? "text-[#1D9E75]" : "text-red-500"
+                }`}
+              >
+                {mensaje}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
