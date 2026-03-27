@@ -107,6 +107,61 @@ function useDictado(
   return { dictando, iniciar, detener };
 }
 
+function CampoDictado({
+  label,
+  campo,
+  value,
+  setter,
+  placeholder,
+  rows = 3,
+  required = false,
+  dictando,
+  onIniciar,
+  onDetener,
+}: {
+  label: string;
+  campo: string;
+  value: string;
+  setter: (v: string) => void;
+  placeholder: string;
+  rows?: number;
+  required?: boolean;
+  dictando: string | null;
+  onIniciar: () => void;
+  onDetener: () => void;
+}) {
+  const activo = dictando === campo;
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium tracking-wide text-gray-400">
+          {label}{required && " *"}
+        </p>
+        <button
+          type="button"
+          onMouseDown={onIniciar}
+          onMouseUp={onDetener}
+          onTouchStart={onIniciar}
+          onTouchEnd={onDetener}
+          className={`rounded-md px-2 py-1 text-xs transition ${
+            activo ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+          }`}
+        >
+          {activo ? "🔴 Dictando..." : "🎙️ Dictar"}
+        </button>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => setter(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="mt-1.5 w-full resize-none rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
+        style={{ border: "0.5px solid #e5e7eb" }}
+      />
+    </div>
+  );
+}
+
 export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -302,58 +357,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     }
   }
 
-  // --- Helper: campo con dictado ---
-  function CampoDictado({
-    label,
-    campo,
-    value,
-    setter,
-    placeholder,
-    rows = 3,
-    required = false,
-  }: {
-    label: string;
-    campo: string;
-    value: string;
-    setter: React.Dispatch<React.SetStateAction<string>>;
-    placeholder: string;
-    rows?: number;
-    required?: boolean;
-  }) {
-    const activo = dictando === campo;
-    return (
-      <div className="mt-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium tracking-wide text-gray-400">
-            {label}{required && " *"}
-          </p>
-          <button
-            type="button"
-            onMouseDown={() => iniciarDictado(campo, setter)}
-            onMouseUp={() => detenerDictado()}
-            onTouchStart={() => iniciarDictado(campo, setter)}
-            onTouchEnd={() => detenerDictado()}
-            className={`rounded-md px-2 py-1 text-xs transition ${
-              activo
-                ? "bg-red-100 text-red-600"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-            }`}
-          >
-            {activo ? "🔴 Dictando..." : "🎙️ Dictar"}
-          </button>
-        </div>
-        <textarea
-          value={value}
-          onChange={(e) => setter(e.target.value)}
-          rows={rows}
-          placeholder={placeholder}
-          className="mt-1.5 w-full resize-none rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
-          style={{ border: "0.5px solid #e5e7eb" }}
-        />
-      </div>
-    );
-  }
-
   // --- Chrome iOS ---
   if (chromeIOS) {
     return (
@@ -480,10 +483,10 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
             )}
 
             <div className="mt-5 border-t pt-4" style={{ borderColor: "#e5e7eb" }}>
-              <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico del paciente..." required />
-              <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis, frecuencia..." />
-              <CampoDictado label="INDICACIONES" campo="indicaciones" value={indicaciones} setter={setIndicaciones} placeholder="Reposo, estudios, derivaciones..." />
-              <CampoDictado label="CERTIFICADO" campo="certificado" value={certificado} setter={setCertificado} placeholder="Certificado médico..." />
+              <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico del paciente..." required dictando={dictando} onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)} onDetener={detenerDictado} />
+              <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis, frecuencia..." dictando={dictando} onIniciar={() => iniciarDictado("receta", setReceta)} onDetener={detenerDictado} />
+              <CampoDictado label="INDICACIONES" campo="indicaciones" value={indicaciones} setter={setIndicaciones} placeholder="Reposo, estudios, derivaciones..." dictando={dictando} onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)} onDetener={detenerDictado} />
+              <CampoDictado label="CERTIFICADO" campo="certificado" value={certificado} setter={setCertificado} placeholder="Certificado médico..." dictando={dictando} onIniciar={() => iniciarDictado("certificado", setCertificado)} onDetener={detenerDictado} />
             </div>
           </div>
         </div>
