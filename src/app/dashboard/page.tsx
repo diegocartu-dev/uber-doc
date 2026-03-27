@@ -376,16 +376,17 @@ export default async function DashboardPage() {
               Buscá un médico y agendá una consulta
             </p>
           </Link>
-          <div
-            className="rounded-xl bg-white p-6"
+          <Link
+            href="/documentos"
+            className="rounded-xl bg-white p-6 transition hover:shadow-sm"
             style={{ border: "0.5px solid #e5e7eb" }}
           >
             <p className="text-2xl">📋</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Historial médico</p>
+            <p className="mt-3 text-sm font-medium text-gray-900">Mis documentos</p>
             <p className="mt-1 text-xs text-gray-500">
-              Accedé a tus consultas anteriores y recetas
+              Recetas, indicaciones y certificados
             </p>
-          </div>
+          </Link>
         </div>
       </main>
     </div>

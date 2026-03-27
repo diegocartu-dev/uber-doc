@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
+import { useEffect, useRef, useState, useCallback } from "react";
 import DailyIframe from "@daily-co/daily-js";
 import { createClient } from "@/lib/supabase/client";
 import { soundVideoLista } from "@/lib/sounds";
@@ -42,6 +50,63 @@ type Props = {
   consulta: ConsultaData;
 };
 
+// --- Dictado por voz ---
+function useDictado(
+  frameRef: React.RefObject<ReturnType<typeof DailyIframe.createFrame> | null>,
+  micOnRef: React.RefObject<boolean>
+) {
+  const recRef = useRef<any>(null);
+  const [dictando, setDictando] = useState<string | null>(null);
+
+  const iniciar = useCallback(
+    (campo: string, setter: (fn: (prev: string) => string) => void) => {
+      if (typeof window === "undefined") return;
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+
+      // Silenciar mic de la videollamada
+      if (frameRef.current) frameRef.current.setLocalAudio(false);
+
+      const rec = new SR();
+      rec.lang = "es-AR";
+      rec.continuous = true;
+      rec.interimResults = true;
+
+      rec.onresult = (e: any) => {
+        let transcript = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        if (e.results[e.results.length - 1].isFinal) {
+          setter((prev) => (prev ? prev + " " : "") + transcript);
+        }
+      };
+
+      rec.onerror = () => detener();
+      rec.onend = () => {
+        setDictando(null);
+        if (frameRef.current && micOnRef.current) frameRef.current.setLocalAudio(true);
+      };
+
+      recRef.current = rec;
+      setDictando(campo);
+      rec.start();
+    },
+    [frameRef, micOnRef]
+  );
+
+  const detener = useCallback(() => {
+    if (recRef.current) {
+      recRef.current.stop();
+      recRef.current = null;
+    }
+    setDictando(null);
+    if (frameRef.current && micOnRef.current) frameRef.current.setLocalAudio(true);
+  }, [frameRef, micOnRef]);
+
+  return { dictando, iniciar, detener };
+}
+
 export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -51,16 +116,25 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   const [copiado, setCopiado] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [notas, setNotas] = useState("");
+  const [finalizando, setFinalizando] = useState(false);
+
+  // Campos clínicos
+  const [diagnostico, setDiagnostico] = useState("");
+  const [receta, setReceta] = useState("");
   const [indicaciones, setIndicaciones] = useState("");
+  const [certificado, setCertificado] = useState("");
+
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
   const unmountedRef = useRef(false);
   const joinedRef = useRef(false);
+  const micOnRef = useRef(true);
+  micOnRef.current = micOn;
   const nav = detectarNavegador();
-
   const edad = calcularEdad(consulta.paciente_nacimiento);
+  const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado(frameRef, micOnRef);
 
+  // --- Daily.co init ---
   useEffect(() => {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
@@ -76,14 +150,12 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     async function iniciar() {
       try {
         setEtapaCarga("Creando sala...");
-
         const res = await fetch("/api/videollamada", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ consultaId }),
         });
         const data = await res.json();
-
         if (unmountedRef.current) return;
 
         if (!data.url) {
@@ -95,43 +167,25 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
         if (nav.esMobile) {
           clearTimeout(timeoutId);
-          if (nav.esChromeIOS) {
-            setChromeIOS(true);
-          } else {
-            setMobileUrl(data.url);
-          }
+          if (nav.esChromeIOS) setChromeIOS(true);
+          else setMobileUrl(data.url);
           setCargando(false);
           return;
         }
 
         const container = document.getElementById("video-container");
-        if (!container) {
-          clearTimeout(timeoutId);
-          setError("No se encontró el contenedor de video.");
-          setCargando(false);
-          return;
-        }
+        if (!container) { clearTimeout(timeoutId); setError("Contenedor no encontrado."); setCargando(false); return; }
 
         setEtapaCarga("Esperando permisos de cámara y micrófono...");
 
         const callFrame = DailyIframe.createFrame(container, {
-          iframeStyle: {
-            width: "100%",
-            height: "100%",
-            border: "0",
-          },
+          iframeStyle: { width: "100%", height: "100%", border: "0" },
           showLeaveButton: false,
           showFullscreenButton: false,
           showParticipantsBar: false,
           lang: "es",
-          theme: {
-            colors: {
-              accent: "#1D9E75",
-              accentText: "#ffffff",
-            },
-          },
+          theme: { colors: { accent: "#1D9E75", accentText: "#ffffff" } },
         });
-
         frameRef.current = callFrame;
 
         function marcarJoined() {
@@ -143,39 +197,20 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         }
 
         callFrame.on("joined-meeting", () => marcarJoined());
-        callFrame.on("participant-updated", (e) => {
-          if (e?.participant?.local) marcarJoined();
-        });
-
+        callFrame.on("participant-updated", (e) => { if (e?.participant?.local) marcarJoined(); });
         callFrame.on("left-meeting", () => {
-          if (joinedRef.current) {
-            callFrame.destroy();
-            frameRef.current = null;
-            window.location.href = "/dashboard";
-          } else {
-            clearTimeout(timeoutId);
-            setError("La videollamada se desconectó. Intentá de nuevo.");
-            setCargando(false);
-          }
+          if (joinedRef.current) { callFrame.destroy(); frameRef.current = null; window.location.href = "/dashboard"; }
+          else { clearTimeout(timeoutId); setError("Videollamada desconectada."); setCargando(false); }
         });
-
-        callFrame.on("error", (ev) => {
-          clearTimeout(timeoutId);
-          setError(`Error: ${ev?.error?.msg || ev?.errorMsg || "desconocido"}`);
-          setCargando(false);
-        });
+        callFrame.on("error", (ev) => { clearTimeout(timeoutId); setError(`Error: ${ev?.error?.msg || "desconocido"}`); setCargando(false); });
 
         setEtapaCarga("Conectando... Aceptá los permisos de cámara y micrófono");
         await callFrame.join({ url: data.url });
-
         if (!joinedRef.current && !unmountedRef.current) setCargando(false);
       } catch (err) {
         console.error("[VideoLlamada]", err);
         clearTimeout(timeoutId);
-        if (!unmountedRef.current) {
-          setError("Error al conectar. Podés reintentar.");
-          setCargando(false);
-        }
+        if (!unmountedRef.current) { setError("Error al conectar."); setCargando(false); }
       }
     }
 
@@ -197,15 +232,126 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     setCamOn(next);
   }
 
-  async function terminarConsulta() {
-    if (frameRef.current) {
-      frameRef.current.leave();
-      frameRef.current.destroy();
-      frameRef.current = null;
+  async function finalizarConsulta() {
+    if (!diagnostico.trim()) {
+      setError("El diagnóstico es obligatorio para finalizar.");
+      return;
     }
-    const supabase = createClient();
-    await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
-    window.location.href = "/dashboard";
+    setFinalizando(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+
+      // Obtener IDs de paciente y médico
+      const { data: consultaDb } = await supabase
+        .from("consultas")
+        .select("paciente_id, medico_id")
+        .eq("id", consultaId)
+        .single();
+
+      if (!consultaDb) { setError("Consulta no encontrada."); setFinalizando(false); return; }
+
+      // Obtener paciente.id y medico.id (tabla ids, no auth ids)
+      const { data: paciente } = await supabase
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", consultaDb.paciente_id)
+        .single();
+
+      const { data: medico } = await supabase
+        .from("medicos")
+        .select("id")
+        .eq("id", consultaDb.medico_id)
+        .single();
+
+      if (!paciente || !medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
+
+      // Generar documentos por cada campo completado
+      const docs: { tipo: string; contenido: string }[] = [];
+      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+      if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+      if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+
+      if (docs.length > 0) {
+        const inserts = docs.map((d) => ({
+          consulta_id: consultaId,
+          paciente_id: paciente.id,
+          medico_id: medico.id,
+          tipo: d.tipo,
+          diagnostico: diagnostico.trim(),
+          contenido: d.contenido,
+        }));
+        await supabase.from("documentos").insert(inserts);
+      }
+
+      // Finalizar consulta
+      await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
+
+      if (frameRef.current) {
+        frameRef.current.leave();
+        frameRef.current.destroy();
+        frameRef.current = null;
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err) {
+      console.error("[Finalizar]", err);
+      setError("Error al finalizar. Intentá de nuevo.");
+      setFinalizando(false);
+    }
+  }
+
+  // --- Helper: campo con dictado ---
+  function CampoDictado({
+    label,
+    campo,
+    value,
+    setter,
+    placeholder,
+    rows = 3,
+    required = false,
+  }: {
+    label: string;
+    campo: string;
+    value: string;
+    setter: React.Dispatch<React.SetStateAction<string>>;
+    placeholder: string;
+    rows?: number;
+    required?: boolean;
+  }) {
+    const activo = dictando === campo;
+    return (
+      <div className="mt-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium tracking-wide text-gray-400">
+            {label}{required && " *"}
+          </p>
+          <button
+            type="button"
+            onMouseDown={() => iniciarDictado(campo, setter)}
+            onMouseUp={() => detenerDictado()}
+            onTouchStart={() => iniciarDictado(campo, setter)}
+            onTouchEnd={() => detenerDictado()}
+            className={`rounded-md px-2 py-1 text-xs transition ${
+              activo
+                ? "bg-red-100 text-red-600"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            {activo ? "🔴 Dictando..." : "🎙️ Dictar"}
+          </button>
+        </div>
+        <textarea
+          value={value}
+          onChange={(e) => setter(e.target.value)}
+          rows={rows}
+          placeholder={placeholder}
+          className="mt-1.5 w-full resize-none rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
+          style={{ border: "0.5px solid #e5e7eb" }}
+        />
+      </div>
+    );
   }
 
   // --- Chrome iOS ---
@@ -215,22 +361,14 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         <div className="w-full max-w-sm text-center">
           <span className="text-4xl">⚠️</span>
           <h2 className="mt-4 text-lg font-medium text-white">Chrome en iPhone no es compatible</h2>
-          <p className="mt-2 text-sm text-gray-400">
-            Copiá el link y abrilo en Safari.
-          </p>
+          <p className="mt-2 text-sm text-gray-400">Copiá el link y abrilo en Safari.</p>
           <button
-            onClick={async () => {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopiado(true);
-              setTimeout(() => setCopiado(false), 2000);
-            }}
+            onClick={async () => { await navigator.clipboard.writeText(window.location.href); setCopiado(true); setTimeout(() => setCopiado(false), 2000); }}
             className="mt-5 w-full rounded-lg bg-amber-500 px-5 py-3 text-sm font-medium text-white"
           >
             {copiado ? "Link copiado" : "Copiar link para Safari"}
           </button>
-          <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">
-            Volver
-          </button>
+          <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">Volver</button>
         </div>
       </div>
     );
@@ -244,15 +382,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
           <span className="text-4xl">📹</span>
           <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
           <p className="mt-2 text-sm text-gray-400">{consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}</p>
-          <button
-            onClick={() => { window.location.href = mobileUrl!; }}
-            className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
-          >
-            Unirse a la videollamada
-          </button>
-          <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">
-            Volver
-          </button>
+          <button onClick={() => { window.location.href = mobileUrl!; }} className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white">Unirse a la videollamada</button>
+          <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">Volver</button>
         </div>
       </div>
     );
@@ -263,7 +394,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     <div className="flex flex-1 overflow-hidden">
       {/* Video + controles */}
       <div className="relative flex flex-1 flex-col">
-        {/* Loading */}
         {cargando && !error && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900">
             <div className="text-center">
@@ -289,95 +419,71 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
           </div>
         )}
 
-        {/* Video iframe */}
         <div id="video-container" className="flex-1" />
 
-        {/* Controles propios */}
+        {/* Controles */}
         {!cargando && !error && (
           <div className="flex items-center justify-center gap-3 bg-gray-900 px-4 py-3">
-            <button
-              onClick={toggleMic}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                micOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white hover:bg-red-700"
-              }`}
-            >
+            <button onClick={toggleMic} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${micOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
               {micOn ? "🎙️ Micrófono" : "🔇 Silenciado"}
             </button>
-            <button
-              onClick={toggleCam}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
-                camOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white hover:bg-red-700"
-              }`}
-            >
-              {camOn ? "📷 Cámara" : "📷 Cámara apagada"}
+            <button onClick={toggleCam} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${camOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
+              {camOn ? "📷 Cámara" : "📷 Apagada"}
             </button>
-            <button
-              onClick={terminarConsulta}
-              className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700"
-            >
-              Terminar consulta
-            </button>
+            {esMedico ? (
+              <button
+                onClick={finalizarConsulta}
+                disabled={finalizando}
+                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
+              </button>
+            ) : (
+              <button
+                onClick={async () => {
+                  if (frameRef.current) { frameRef.current.leave(); frameRef.current.destroy(); frameRef.current = null; }
+                  window.location.href = "/dashboard";
+                }}
+                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700"
+              >
+                Salir de la consulta
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Panel derecho — solo médico en desktop */}
+      {/* Panel derecho — solo médico desktop */}
       {esMedico && (
         <div className="hidden w-80 shrink-0 overflow-y-auto bg-white lg:block" style={{ borderLeft: "0.5px solid #e5e7eb" }}>
           <div className="p-5">
-            {/* Paciente */}
             <p className="text-xs font-medium tracking-wide text-gray-400">PACIENTE</p>
             <p className="mt-2 text-lg font-medium text-gray-900">{consulta.paciente_nombre}</p>
-            <p className="mt-0.5 text-sm text-gray-500">
-              {[edad, consulta.especialidad].filter(Boolean).join(" · ")}
-            </p>
+            <p className="mt-0.5 text-sm text-gray-500">{[edad, consulta.especialidad].filter(Boolean).join(" · ")}</p>
 
-            {/* Motivo */}
             {consulta.motivo_consulta && (
-              <div className="mt-5">
+              <div className="mt-4">
                 <p className="text-xs font-medium tracking-wide text-gray-400">MOTIVO</p>
                 <p className="mt-1 text-sm text-gray-700">{consulta.motivo_consulta}</p>
               </div>
             )}
 
-            {/* Síntomas */}
             {consulta.sintomas && consulta.sintomas.length > 0 && (
-              <div className="mt-5">
+              <div className="mt-4">
                 <p className="text-xs font-medium tracking-wide text-gray-400">SÍNTOMAS</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {consulta.sintomas.map((s) => (
-                    <span key={s} className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-600" style={{ border: "0.5px solid #e5e7eb" }}>
-                      {s}
-                    </span>
+                    <span key={s} className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-600" style={{ border: "0.5px solid #e5e7eb" }}>{s}</span>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Notas */}
-            <div className="mt-5">
-              <p className="text-xs font-medium tracking-wide text-gray-400">NOTAS DE LA CONSULTA</p>
-              <textarea
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                rows={4}
-                placeholder="Escribí notas durante la consulta..."
-                className="mt-2 w-full resize-none rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
-                style={{ border: "0.5px solid #e5e7eb" }}
-              />
-            </div>
-
-            {/* Indicaciones */}
-            <div className="mt-5">
-              <p className="text-xs font-medium tracking-wide text-gray-400">INDICACIONES MÉDICAS</p>
-              <textarea
-                value={indicaciones}
-                onChange={(e) => setIndicaciones(e.target.value)}
-                rows={4}
-                placeholder="Indicaciones para el paciente..."
-                className="mt-2 w-full resize-none rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
-                style={{ border: "0.5px solid #e5e7eb" }}
-              />
+            <div className="mt-5 border-t pt-4" style={{ borderColor: "#e5e7eb" }}>
+              <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico del paciente..." required />
+              <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis, frecuencia..." />
+              <CampoDictado label="INDICACIONES" campo="indicaciones" value={indicaciones} setter={setIndicaciones} placeholder="Reposo, estudios, derivaciones..." />
+              <CampoDictado label="CERTIFICADO" campo="certificado" value={certificado} setter={setCertificado} placeholder="Certificado médico..." />
             </div>
           </div>
         </div>
