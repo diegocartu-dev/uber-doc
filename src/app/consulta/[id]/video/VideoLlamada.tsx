@@ -3,18 +3,45 @@
 import { useEffect, useRef, useState } from "react";
 import DailyIframe from "@daily-co/daily-js";
 
+function detectarNavegador(): { esMobile: boolean; esSafari: boolean; nombre: string } {
+  if (typeof navigator === "undefined") return { esMobile: false, esSafari: false, nombre: "" };
+  const ua = navigator.userAgent;
+  const esMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  const esSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
+  const nombre = esSafari ? "Safari" : /CriOS/i.test(ua) ? "Chrome iOS" : /Chrome/i.test(ua) ? "Chrome" : "Navegador";
+  return { esMobile, esSafari, nombre };
+}
+
 export default function VideoLlamada({ consultaId }: { consultaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [enLlamada, setEnLlamada] = useState(false);
+  const [advertencia, setAdvertencia] = useState<string | null>(null);
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
   const unmountedRef = useRef(false);
+  const joinedRef = useRef(false);
 
   useEffect(() => {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
     unmountedRef.current = false;
+
+    // Detectar navegador
+    const { esMobile, esSafari } = detectarNavegador();
+    if (esMobile && esSafari) {
+      setAdvertencia(
+        "Safari mobile puede tener problemas con videollamadas. Si no funciona, abrí este link en Chrome."
+      );
+    }
+
+    // Timeout de conexión
+    const timeoutId = setTimeout(() => {
+      if (!joinedRef.current && !unmountedRef.current) {
+        console.warn("[VideoLlamada] Timeout: 15s sin joined-meeting");
+        setCargando(false);
+        setError("No se pudo conectar a la videollamada. La conexión tardó demasiado.");
+      }
+    }, 15000);
 
     async function iniciar() {
       try {
@@ -27,14 +54,12 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         });
         const data = await res.json();
 
-        console.log("[VideoLlamada] API response:", data);
+        console.log("[VideoLlamada] API response:", { url: data.url ? "OK" : "null", error: data.error });
 
-        if (unmountedRef.current) {
-          console.log("[VideoLlamada] Componente desmontado antes de crear frame");
-          return;
-        }
+        if (unmountedRef.current) return;
 
         if (!data.url) {
+          clearTimeout(timeoutId);
           setError(data.error || "No se pudo crear la videollamada.");
           setCargando(false);
           return;
@@ -42,12 +67,11 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
 
         const container = document.getElementById("video-container");
         if (!container) {
+          clearTimeout(timeoutId);
           setError("No se encontró el contenedor de video.");
           setCargando(false);
           return;
         }
-
-        console.log("[VideoLlamada] Creando frame con URL:", data.url);
 
         const callFrame = DailyIframe.createFrame(container, {
           iframeStyle: {
@@ -62,32 +86,46 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
 
         frameRef.current = callFrame;
 
-        // Cuando el usuario se une exitosamente
         callFrame.on("joined-meeting", () => {
           console.log("[VideoLlamada] joined-meeting");
-          setEnLlamada(true);
+          joinedRef.current = true;
+          clearTimeout(timeoutId);
           setCargando(false);
         });
 
-        // Solo redirigir si el usuario estuvo en la llamada
+        // Solo redirigir si el usuario realmente estuvo en la llamada
         callFrame.on("left-meeting", () => {
-          console.log("[VideoLlamada] left-meeting, enLlamada:", true);
-          callFrame.destroy();
-          frameRef.current = null;
-          window.location.href = "/dashboard";
+          console.log("[VideoLlamada] left-meeting, joined:", joinedRef.current);
+          if (joinedRef.current) {
+            callFrame.destroy();
+            frameRef.current = null;
+            window.location.href = "/dashboard";
+          } else {
+            // Daily no pudo conectar — no redirigir, mostrar error
+            clearTimeout(timeoutId);
+            setError("La videollamada se desconectó antes de iniciar. Intentá de nuevo.");
+            setCargando(false);
+          }
         });
 
-        // Errores de Daily
         callFrame.on("error", (ev) => {
-          console.error("[VideoLlamada] Daily error:", ev);
-          setError(`Error de videollamada: ${ev?.error?.msg || ev?.errorMsg || "Error desconocido"}`);
+          console.error("[VideoLlamada] Daily error event:", ev);
+          clearTimeout(timeoutId);
+          const msg = ev?.error?.msg || ev?.errorMsg || "Error desconocido";
+          setError(`Error de videollamada: ${msg}`);
           setCargando(false);
         });
 
         await callFrame.join({ url: data.url });
-        console.log("[VideoLlamada] join() completado");
+        console.log("[VideoLlamada] join() promise resolved");
+
+        // Fallback: si join() resuelve pero joined-meeting no disparó aún
+        if (!joinedRef.current && !unmountedRef.current) {
+          setCargando(false);
+        }
       } catch (err) {
-        console.error("[VideoLlamada] Error en iniciar():", err);
+        console.error("[VideoLlamada] Error:", err);
+        clearTimeout(timeoutId);
         if (!unmountedRef.current) {
           setError("Error al conectar con la videollamada. Podés reintentar.");
           setCargando(false);
@@ -98,15 +136,20 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
     iniciar();
 
     return () => {
-      console.log("[VideoLlamada] Cleanup ejecutado");
       unmountedRef.current = true;
-      // NO destruir el frame en cleanup — dejar que left-meeting lo maneje
-      // Esto evita que un re-render mate la llamada activa
+      clearTimeout(timeoutId);
     };
   }, [consultaId]);
 
   return (
     <div className="flex flex-1 flex-col">
+      {/* Advertencia de navegador */}
+      {advertencia && !error && (
+        <div className="mx-4 mt-3 rounded-lg bg-amber-900/40 px-4 py-2 text-center text-xs text-amber-300">
+          {advertencia}
+        </div>
+      )}
+
       {error && (
         <div className="mx-auto mt-8 max-w-lg rounded-lg bg-red-900/50 p-4 text-center text-sm text-red-300">
           <p>{error}</p>
