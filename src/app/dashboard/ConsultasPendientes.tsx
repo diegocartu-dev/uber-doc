@@ -37,12 +37,25 @@ function tiempoEspera(fecha: string): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+}
+
+async function fetchNombrePaciente(
+  supabase: ReturnType<typeof createClient>,
+  pacienteUserId: string,
+  retries = 3
+): Promise<{ nombre: string; nacimiento: string | null }> {
+  for (let i = 0; i < retries; i++) {
+    const { data } = await supabase
+      .from("pacientes")
+      .select("nombre_completo, fecha_nacimiento")
+      .eq("user_id", pacienteUserId)
+      .single();
+    if (data) return { nombre: data.nombre_completo, nacimiento: data.fecha_nacimiento };
+    // Esperar antes de reintentar (la RLS puede tardar en ver la consulta nueva)
+    if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { nombre: "Paciente", nacimiento: null };
 }
 
 export default function ConsultasPendientes({
@@ -55,35 +68,34 @@ export default function ConsultasPendientes({
   const [consultas, setConsultas] = useState(consultasIniciales);
   const [isPending, startTransition] = useTransition();
   const chimeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
     setConsultas(consultasIniciales);
   }, [consultasIniciales]);
 
-  // Timbre cada 30s si hay pacientes esperando
+  // Timbre cada 30s
   useEffect(() => {
     if (chimeRef.current) clearInterval(chimeRef.current);
-
     if (consultas.length > 0) {
-      chimeRef.current = setInterval(() => {
-        soundPacienteEsperando();
-      }, 30000);
+      chimeRef.current = setInterval(() => soundPacienteEsperando(), 30000);
     }
-
-    return () => {
-      if (chimeRef.current) clearInterval(chimeRef.current);
-    };
+    return () => { if (chimeRef.current) clearInterval(chimeRef.current); };
   }, [consultas.length]);
 
+  // Realtime
   useEffect(() => {
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    supabaseRef.current = supabase;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    async function setup() {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      console.log("[Pendientes] getUser:", user?.id ?? "null", error?.message ?? "ok");
       if (!user) return;
 
-      channel = supabase
-        .channel(`pendientes-${medicoId}-${Date.now()}`)
+      const channel = supabase
+        .channel(`pendientes-${medicoId}`)
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "consultas" },
@@ -97,15 +109,12 @@ export default function ConsultasPendientes({
               paciente_id: string;
               motivo_consulta: string | null;
             };
+            console.log("[Pendientes] INSERT recibido:", nueva.id, nueva.estado, nueva.medico_id);
             if (nueva.medico_id !== medicoId || nueva.estado !== "esperando") return;
 
             soundPacienteEsperando();
 
-            const { data: paciente } = await supabase
-              .from("pacientes")
-              .select("nombre_completo, fecha_nacimiento")
-              .eq("user_id", nueva.paciente_id)
-              .single();
+            const pac = await fetchNombrePaciente(supabase, nueva.paciente_id);
 
             setConsultas((prev) => {
               if (prev.some((c) => c.id === nueva.id)) return prev;
@@ -116,9 +125,9 @@ export default function ConsultasPendientes({
                   especialidad: nueva.especialidad,
                   estado: nueva.estado,
                   created_at: nueva.created_at,
-                  paciente_nombre: paciente?.nombre_completo ?? "Paciente",
+                  paciente_nombre: pac.nombre,
                   motivo_consulta: nueva.motivo_consulta,
-                  fecha_nacimiento: paciente?.fecha_nacimiento ?? null,
+                  fecha_nacimiento: pac.nacimiento,
                 },
               ];
             });
@@ -135,11 +144,19 @@ export default function ConsultasPendientes({
             }
           }
         )
-        .subscribe();
-    });
+        .subscribe((status) => {
+          console.log("[Pendientes] Realtime status:", status);
+        });
+
+      channelRef.current = channel;
+    }
+
+    setup();
 
     return () => {
-      if (channel) createClient().removeChannel(channel);
+      if (channelRef.current && supabaseRef.current) {
+        supabaseRef.current.removeChannel(channelRef.current);
+      }
     };
   }, [medicoId]);
 
@@ -153,13 +170,8 @@ export default function ConsultasPendientes({
   if (consultas.length === 0) return null;
 
   return (
-    <div
-      className="rounded-xl bg-white p-6"
-      style={{ border: "0.5px solid #e5e7eb" }}
-    >
-      <p className="text-xs font-medium tracking-wide text-gray-400">
-        PACIENTES EN ESPERA
-      </p>
+    <div className="rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
+      <p className="text-xs font-medium tracking-wide text-gray-400">PACIENTES EN ESPERA</p>
 
       <div className="mt-4 space-y-3">
         {consultas.map((c) => {
@@ -168,40 +180,20 @@ export default function ConsultasPendientes({
           const initials = getInitials(c.paciente_nombre);
 
           return (
-            <div
-              key={c.id}
-              className="flex items-center gap-4 rounded-lg p-3 transition hover:bg-gray-50"
-            >
-              {/* Avatar */}
+            <div key={c.id} className="flex items-center gap-4 rounded-lg p-3 transition hover:bg-gray-50">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500">
                 {initials}
               </div>
-
-              {/* Info */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-sm font-medium text-gray-900">
-                    {c.paciente_nombre}
-                  </p>
-                  {edad && (
-                    <span className="text-xs text-gray-400">{edad}</span>
-                  )}
+                  <p className="text-sm font-medium text-gray-900">{c.paciente_nombre}</p>
+                  {edad && <span className="text-xs text-gray-400">{edad}</span>}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-gray-500">
-                  {[c.motivo_consulta, c.especialidad]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {[c.motivo_consulta, c.especialidad].filter(Boolean).join(" · ")}
                 </p>
               </div>
-
-              {/* Wait time */}
-              {espera && (
-                <span className="shrink-0 text-xs text-gray-400">
-                  {espera}
-                </span>
-              )}
-
-              {/* Accept */}
+              {espera && <span className="shrink-0 text-xs text-gray-400">{espera}</span>}
               <button
                 disabled={isPending}
                 onClick={() => handleAceptar(c.id)}

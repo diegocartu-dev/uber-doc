@@ -63,7 +63,7 @@ export default function AdminConsultas({
       if (!user) return;
 
       channel = supabase
-        .channel(`admin-${medicoId}-${Date.now()}`)
+        .channel(`admin-${medicoId}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "consultas" },
