@@ -89,16 +89,27 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         callFrame.on("loading", () => console.log("[Daily] loading"));
         callFrame.on("loaded", () => console.log("[Daily] loaded"));
         callFrame.on("joining-meeting", () => console.log("[Daily] joining-meeting"));
-        callFrame.on("participant-updated", (e) => console.log("[Daily] participant-updated", e));
         callFrame.on("camera-error", (e) => console.error("[Daily] camera-error", e));
-        callFrame.on("network-quality-change", (e) => console.log("[Daily] network-quality", e));
 
-        callFrame.on("joined-meeting", (e) => {
-          console.log("[Daily] joined-meeting", e);
+        function marcarJoined() {
+          if (joinedRef.current) return;
           joinedRef.current = true;
           clearTimeout(timeoutId);
           setCargando(false);
           soundVideoLista();
+          console.log("[Daily] → marcado como joined");
+        }
+
+        callFrame.on("joined-meeting", (e) => {
+          console.log("[Daily] joined-meeting", e);
+          marcarJoined();
+        });
+
+        callFrame.on("participant-updated", (e) => {
+          console.log("[Daily] participant-updated", e);
+          if (e?.participant?.local) {
+            marcarJoined();
+          }
         });
 
         callFrame.on("left-meeting", () => {
