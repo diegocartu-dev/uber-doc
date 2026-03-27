@@ -85,7 +85,16 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
 
         frameRef.current = callFrame;
 
-        callFrame.on("joined-meeting", () => {
+        // Debug logs
+        callFrame.on("loading", () => console.log("[Daily] loading"));
+        callFrame.on("loaded", () => console.log("[Daily] loaded"));
+        callFrame.on("joining-meeting", () => console.log("[Daily] joining-meeting"));
+        callFrame.on("participant-updated", (e) => console.log("[Daily] participant-updated", e));
+        callFrame.on("camera-error", (e) => console.error("[Daily] camera-error", e));
+        callFrame.on("network-quality-change", (e) => console.log("[Daily] network-quality", e));
+
+        callFrame.on("joined-meeting", (e) => {
+          console.log("[Daily] joined-meeting", e);
           joinedRef.current = true;
           clearTimeout(timeoutId);
           setCargando(false);
