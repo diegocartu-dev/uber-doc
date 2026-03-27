@@ -4,9 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import DailyIframe from "@daily-co/daily-js";
 import { soundVideoLista } from "@/lib/sounds";
 
-function esMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+function detectarNavegador() {
+  if (typeof navigator === "undefined")
+    return { esIOS: false, esAndroid: false, esChromeIOS: false, esSafariIOS: false, esMobileAndroid: false, esMobile: false };
+  const ua = navigator.userAgent;
+  const esIOS = /iPhone|iPad|iPod/i.test(ua);
+  const esAndroid = /Android/i.test(ua);
+  const esChromeIOS = esIOS && /CriOS/i.test(ua);
+  const esSafariIOS = esIOS && /Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua);
+  const esMobileAndroid = esAndroid;
+  return { esIOS, esAndroid, esChromeIOS, esSafariIOS, esMobileAndroid, esMobile: esIOS || esAndroid };
 }
 
 export default function VideoLlamada({ consultaId }: { consultaId: string }) {
@@ -14,11 +21,14 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
   const [cargando, setCargando] = useState(true);
   const [etapaCarga, setEtapaCarga] = useState("Preparando videollamada...");
   const [mobileUrl, setMobileUrl] = useState<string | null>(null);
+  const [chromeIOS, setChromeIOS] = useState(false);
+  const [copiado, setCopiado] = useState(false);
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
   const unmountedRef = useRef(false);
   const joinedRef = useRef(false);
-  const mobile = esMobile();
+  const nav = detectarNavegador();
+  const mobile = nav.esMobile;
 
   useEffect(() => {
     if (iniciadoRef.current) return;
@@ -52,9 +62,16 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           return;
         }
 
-        // Mobile: mostrar botón para abrir en navegador
+        // Mobile: manejar por tipo de navegador
         if (mobile) {
           clearTimeout(timeoutId);
+          if (nav.esChromeIOS) {
+            // Chrome en iPhone no soporta Daily — pedir Safari
+            setChromeIOS(true);
+            setCargando(false);
+            return;
+          }
+          // Safari iOS y Android: navegar directo
           setMobileUrl(data.url);
           setCargando(false);
           return;
@@ -151,7 +168,42 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
     };
   }, [consultaId, mobile]);
 
-  // Mobile: pantalla con botón grande
+  // Chrome en iPhone: no compatible
+  if (chromeIOS) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-sm text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
+            <span className="text-4xl">⚠️</span>
+          </div>
+          <h2 className="mt-5 text-lg font-medium text-white">
+            Chrome en iPhone no es compatible
+          </h2>
+          <p className="mt-2 text-sm text-gray-400">
+            Daily.co no funciona en Chrome para iPhone. Copiá el link y abrilo en Safari.
+          </p>
+          <button
+            onClick={async () => {
+              await navigator.clipboard.writeText(window.location.href);
+              setCopiado(true);
+              setTimeout(() => setCopiado(false), 2000);
+            }}
+            className="mt-6 block w-full rounded-xl bg-amber-500 px-6 py-3.5 text-sm font-medium text-white transition hover:bg-amber-600"
+          >
+            {copiado ? "Link copiado" : "Copiar link para Safari"}
+          </button>
+          <button
+            onClick={() => { window.location.href = "/dashboard"; }}
+            className="mt-3 block w-full rounded-xl bg-gray-800 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-700"
+          >
+            Volver al dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Mobile (Safari iOS / Android): botón para navegar directo
   if (mobileUrl) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
@@ -163,7 +215,7 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
             Videollamada lista
           </h2>
           <p className="mt-2 text-sm text-gray-400">
-            Se va a abrir en una nueva pestaña con la interfaz optimizada para tu dispositivo
+            Se va a abrir la sala de Daily.co optimizada para tu dispositivo
           </p>
           <button
             onClick={() => { window.location.href = mobileUrl!; }}
