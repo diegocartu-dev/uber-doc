@@ -38,19 +38,39 @@ export async function registrarPaciente(formData: FormData) {
     return { error: "No se pudo crear el usuario." };
   }
 
-  // 2. Insertar en tabla pacientes
-  const { error: dbError } = await supabase.from("pacientes").insert({
-    user_id: authData.user.id,
-    nombre_completo,
-    email,
-    dni,
-    fecha_nacimiento,
-    telefono,
-    terminos_aceptados_at: new Date().toISOString(),
-  });
+  // 2. Insertar en tabla pacientes — con retry
+  let dbError = null;
+  for (let i = 0; i < 3; i++) {
+    const { error } = await supabase.from("pacientes").insert({
+      user_id: authData.user.id,
+      nombre_completo,
+      email,
+      dni,
+      fecha_nacimiento,
+      telefono,
+      terminos_aceptados_at: new Date().toISOString(),
+    });
+
+    if (!error) {
+      dbError = null;
+      break;
+    }
+
+    dbError = error;
+    console.error(`[Registro paciente] INSERT intento ${i + 1} falló:`, error.message);
+
+    // Si es duplicate key, el registro ya existe (quizás por el trigger)
+    if (error.code === "23505") {
+      dbError = null;
+      break;
+    }
+
+    // Esperar antes de reintentar
+    if (i < 2) await new Promise((r) => setTimeout(r, 1000));
+  }
 
   if (dbError) {
-    return { error: dbError.message };
+    return { error: `Error al crear el perfil: ${dbError.message}` };
   }
 
   redirect("/dashboard");

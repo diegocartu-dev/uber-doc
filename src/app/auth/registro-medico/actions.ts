@@ -47,25 +47,34 @@ export async function registrarMedico(formData: FormData) {
     return { error: "No se pudo crear el usuario." };
   }
 
-  // 2. Insertar en tabla medicos
+  // 2. Insertar en tabla medicos — con retry
   const ahora = new Date().toISOString();
-  const { error: dbError } = await supabase.from("medicos").insert({
-    user_id: authData.user.id,
-    nombre_completo,
-    email,
-    especialidad,
-    tipo_matricula,
-    numero_matricula,
-    provincia: tipo_matricula === "MP" ? provincia : null,
-    precio_consulta,
-    duracion_consulta,
-    modalidad_atencion,
-    terminos_aceptados_at: ahora,
-    declaracion_matricula_at: ahora,
-  });
+  let dbError = null;
+  for (let i = 0; i < 3; i++) {
+    const { error } = await supabase.from("medicos").insert({
+      user_id: authData.user.id,
+      nombre_completo,
+      email,
+      especialidad,
+      tipo_matricula,
+      numero_matricula,
+      provincia: tipo_matricula === "MP" ? provincia : null,
+      precio_consulta,
+      duracion_consulta,
+      modalidad_atencion,
+      terminos_aceptados_at: ahora,
+      declaracion_matricula_at: ahora,
+    });
+
+    if (!error) { dbError = null; break; }
+    dbError = error;
+    console.error(`[Registro médico] INSERT intento ${i + 1} falló:`, error.message);
+    if (error.code === "23505") { dbError = null; break; }
+    if (i < 2) await new Promise((r) => setTimeout(r, 1000));
+  }
 
   if (dbError) {
-    return { error: dbError.message };
+    return { error: `Error al crear el perfil: ${dbError.message}` };
   }
 
   redirect("/dashboard");
