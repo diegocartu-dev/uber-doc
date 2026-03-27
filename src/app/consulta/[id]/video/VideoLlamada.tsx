@@ -4,39 +4,29 @@ import { useEffect, useRef, useState } from "react";
 import DailyIframe from "@daily-co/daily-js";
 import { soundVideoLista } from "@/lib/sounds";
 
-function detectarNavegador(): { esMobile: boolean; esSafari: boolean } {
-  if (typeof navigator === "undefined") return { esMobile: false, esSafari: false };
-  const ua = navigator.userAgent;
-  return {
-    esMobile: /iPhone|iPad|iPod|Android/i.test(ua),
-    esSafari: /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua),
-  };
+function esMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
 export default function VideoLlamada({ consultaId }: { consultaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [etapaCarga, setEtapaCarga] = useState("Preparando videollamada...");
-  const [advertencia, setAdvertencia] = useState<string | null>(null);
+  const [mobileUrl, setMobileUrl] = useState<string | null>(null);
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
   const unmountedRef = useRef(false);
   const joinedRef = useRef(false);
+  const mobile = esMobile();
 
   useEffect(() => {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
     unmountedRef.current = false;
 
-    const { esMobile, esSafari } = detectarNavegador();
-    if (esMobile && esSafari) {
-      setAdvertencia(
-        "Safari mobile puede tener problemas con videollamadas. Si no funciona, abrí este link en Chrome."
-      );
-    }
-
     const timeoutId = setTimeout(() => {
-      if (!joinedRef.current && !unmountedRef.current) {
+      if (!joinedRef.current && !unmountedRef.current && !mobile) {
         setCargando(false);
         setError("No se pudo conectar a la videollamada. La conexión tardó demasiado.");
       }
@@ -62,6 +52,15 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           return;
         }
 
+        // Mobile: mostrar botón para abrir en navegador
+        if (mobile) {
+          clearTimeout(timeoutId);
+          setMobileUrl(data.url);
+          setCargando(false);
+          return;
+        }
+
+        // Desktop: iframe
         const container = document.getElementById("video-container");
         if (!container) {
           clearTimeout(timeoutId);
@@ -85,7 +84,6 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
 
         frameRef.current = callFrame;
 
-        // Debug logs
         callFrame.on("loading", () => console.log("[Daily] loading"));
         callFrame.on("loaded", () => console.log("[Daily] loaded"));
         callFrame.on("joining-meeting", () => console.log("[Daily] joining-meeting"));
@@ -97,7 +95,6 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           clearTimeout(timeoutId);
           setCargando(false);
           soundVideoLista();
-          console.log("[Daily] → marcado como joined");
         }
 
         callFrame.on("joined-meeting", (e) => {
@@ -106,10 +103,7 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         });
 
         callFrame.on("participant-updated", (e) => {
-          console.log("[Daily] participant-updated", e);
-          if (e?.participant?.local) {
-            marcarJoined();
-          }
+          if (e?.participant?.local) marcarJoined();
         });
 
         callFrame.on("left-meeting", () => {
@@ -125,7 +119,7 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         });
 
         callFrame.on("error", (ev) => {
-          console.error("[VideoLlamada] Daily error:", ev);
+          console.error("[Daily] error", ev);
           clearTimeout(timeoutId);
           const msg = ev?.error?.msg || ev?.errorMsg || "Error desconocido";
           setError(`Error de videollamada: ${msg}`);
@@ -155,16 +149,43 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
       unmountedRef.current = true;
       clearTimeout(timeoutId);
     };
-  }, [consultaId]);
+  }, [consultaId, mobile]);
+
+  // Mobile: pantalla con botón grande
+  if (mobileUrl) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-sm text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#1D9E75]/10">
+            <span className="text-4xl">📹</span>
+          </div>
+          <h2 className="mt-5 text-lg font-medium text-white">
+            Videollamada lista
+          </h2>
+          <p className="mt-2 text-sm text-gray-400">
+            Se va a abrir en una nueva pestaña con la interfaz optimizada para tu dispositivo
+          </p>
+          <a
+            href={mobileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 block w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition hover:bg-[#178a64]"
+          >
+            Unirse a la videollamada
+          </a>
+          <button
+            onClick={() => { window.location.href = "/dashboard"; }}
+            className="mt-3 block w-full rounded-xl bg-gray-800 px-6 py-3 text-sm text-gray-400 transition hover:bg-gray-700"
+          >
+            Volver al dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col">
-      {advertencia && !error && (
-        <div className="mx-4 mt-3 rounded-lg bg-amber-900/40 px-4 py-2 text-center text-xs text-amber-300">
-          {advertencia}
-        </div>
-      )}
-
       {error && (
         <div className="mx-auto mt-8 max-w-lg rounded-lg bg-red-900/50 p-4 text-center text-sm text-red-300">
           <p>{error}</p>
