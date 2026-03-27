@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
 type Props = {
   consultaId: string;
@@ -60,14 +61,21 @@ export default function SalaEsperaCliente({
             };
             if (updated.id !== consultaId) return;
 
+            const prevEstado = estado;
             setEstado(updated.estado);
 
             if (updated.estado === "aceptada" || updated.estado === "en_curso") {
               setPosicion(0);
               setTiempoEstimado(0);
+              if (prevEstado === "esperando") {
+                soundConsultaAceptada();
+              }
             }
 
-            if (updated.sala_video_url) {
+            if (updated.sala_video_url && !salaVideoUrl) {
+              setSalaVideoUrl(updated.sala_video_url);
+              soundVideoLista();
+            } else if (updated.sala_video_url) {
               setSalaVideoUrl(updated.sala_video_url);
             }
           }

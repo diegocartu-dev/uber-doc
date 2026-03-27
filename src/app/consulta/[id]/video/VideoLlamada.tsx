@@ -2,19 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import DailyIframe from "@daily-co/daily-js";
+import { soundVideoLista } from "@/lib/sounds";
 
-function detectarNavegador(): { esMobile: boolean; esSafari: boolean; nombre: string } {
-  if (typeof navigator === "undefined") return { esMobile: false, esSafari: false, nombre: "" };
+function detectarNavegador(): { esMobile: boolean; esSafari: boolean } {
+  if (typeof navigator === "undefined") return { esMobile: false, esSafari: false };
   const ua = navigator.userAgent;
-  const esMobile = /iPhone|iPad|iPod|Android/i.test(ua);
-  const esSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
-  const nombre = esSafari ? "Safari" : /CriOS/i.test(ua) ? "Chrome iOS" : /Chrome/i.test(ua) ? "Chrome" : "Navegador";
-  return { esMobile, esSafari, nombre };
+  return {
+    esMobile: /iPhone|iPad|iPod|Android/i.test(ua),
+    esSafari: /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua),
+  };
 }
 
 export default function VideoLlamada({ consultaId }: { consultaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [etapaCarga, setEtapaCarga] = useState("Preparando videollamada...");
   const [advertencia, setAdvertencia] = useState<string | null>(null);
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
@@ -26,7 +28,6 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
     iniciadoRef.current = true;
     unmountedRef.current = false;
 
-    // Detectar navegador
     const { esMobile, esSafari } = detectarNavegador();
     if (esMobile && esSafari) {
       setAdvertencia(
@@ -34,18 +35,16 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
       );
     }
 
-    // Timeout de conexión
     const timeoutId = setTimeout(() => {
       if (!joinedRef.current && !unmountedRef.current) {
-        console.warn("[VideoLlamada] Timeout: 15s sin joined-meeting");
         setCargando(false);
         setError("No se pudo conectar a la videollamada. La conexión tardó demasiado.");
       }
-    }, 15000);
+    }, 60000);
 
     async function iniciar() {
       try {
-        console.log("[VideoLlamada] Iniciando, consultaId:", consultaId);
+        setEtapaCarga("Creando sala de videollamada...");
 
         const res = await fetch("/api/videollamada", {
           method: "POST",
@@ -53,8 +52,6 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           body: JSON.stringify({ consultaId }),
         });
         const data = await res.json();
-
-        console.log("[VideoLlamada] API response:", { url: data.url ? "OK" : "null", error: data.error });
 
         if (unmountedRef.current) return;
 
@@ -73,6 +70,8 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
           return;
         }
 
+        setEtapaCarga("Esperando permisos de cámara y micrófono...");
+
         const callFrame = DailyIframe.createFrame(container, {
           iframeStyle: {
             width: "100%",
@@ -87,21 +86,18 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         frameRef.current = callFrame;
 
         callFrame.on("joined-meeting", () => {
-          console.log("[VideoLlamada] joined-meeting");
           joinedRef.current = true;
           clearTimeout(timeoutId);
           setCargando(false);
+          soundVideoLista();
         });
 
-        // Solo redirigir si el usuario realmente estuvo en la llamada
         callFrame.on("left-meeting", () => {
-          console.log("[VideoLlamada] left-meeting, joined:", joinedRef.current);
           if (joinedRef.current) {
             callFrame.destroy();
             frameRef.current = null;
             window.location.href = "/dashboard";
           } else {
-            // Daily no pudo conectar — no redirigir, mostrar error
             clearTimeout(timeoutId);
             setError("La videollamada se desconectó antes de iniciar. Intentá de nuevo.");
             setCargando(false);
@@ -109,17 +105,17 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
         });
 
         callFrame.on("error", (ev) => {
-          console.error("[VideoLlamada] Daily error event:", ev);
+          console.error("[VideoLlamada] Daily error:", ev);
           clearTimeout(timeoutId);
           const msg = ev?.error?.msg || ev?.errorMsg || "Error desconocido";
           setError(`Error de videollamada: ${msg}`);
           setCargando(false);
         });
 
-        await callFrame.join({ url: data.url });
-        console.log("[VideoLlamada] join() promise resolved");
+        setEtapaCarga("Conectando... Aceptá los permisos de cámara y micrófono en tu navegador");
 
-        // Fallback: si join() resuelve pero joined-meeting no disparó aún
+        await callFrame.join({ url: data.url });
+
         if (!joinedRef.current && !unmountedRef.current) {
           setCargando(false);
         }
@@ -143,7 +139,6 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
 
   return (
     <div className="flex flex-1 flex-col">
-      {/* Advertencia de navegador */}
       {advertencia && !error && (
         <div className="mx-4 mt-3 rounded-lg bg-amber-900/40 px-4 py-2 text-center text-xs text-amber-300">
           {advertencia}
@@ -194,7 +189,10 @@ export default function VideoLlamada({ consultaId }: { consultaId: string }) {
                 />
               </svg>
               <p className="mt-4 text-sm text-gray-400">
-                Conectando videollamada...
+                {etapaCarga}
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                Si tu navegador pide permisos, aceptalos para continuar
               </p>
             </div>
           </div>

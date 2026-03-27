@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
+import { soundPacienteEsperando } from "@/lib/sounds";
 
 type Consulta = {
   id: string;
@@ -53,10 +54,26 @@ export default function ConsultasPendientes({
 }) {
   const [consultas, setConsultas] = useState(consultasIniciales);
   const [isPending, startTransition] = useTransition();
+  const chimeRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setConsultas(consultasIniciales);
   }, [consultasIniciales]);
+
+  // Timbre cada 30s si hay pacientes esperando
+  useEffect(() => {
+    if (chimeRef.current) clearInterval(chimeRef.current);
+
+    if (consultas.length > 0) {
+      chimeRef.current = setInterval(() => {
+        soundPacienteEsperando();
+      }, 30000);
+    }
+
+    return () => {
+      if (chimeRef.current) clearInterval(chimeRef.current);
+    };
+  }, [consultas.length]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -81,6 +98,8 @@ export default function ConsultasPendientes({
               motivo_consulta: string | null;
             };
             if (nueva.medico_id !== medicoId || nueva.estado !== "esperando") return;
+
+            soundPacienteEsperando();
 
             const { data: paciente } = await supabase
               .from("pacientes")
