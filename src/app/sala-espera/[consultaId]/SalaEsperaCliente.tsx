@@ -205,24 +205,7 @@ export default function SalaEsperaCliente({
 
       {/* TODO: Restaurar botón de Mercado Pago en producción */}
 
-      {/* Botones de testing */}
-      {!aceptada && (
-        <button
-          onClick={async () => {
-            const supabase = createClient();
-            await supabase
-              .from("consultas")
-              .update({ estado: "aceptada" })
-              .eq("id", consultaId);
-            setEstado("aceptada");
-            setPosicion(0);
-            setTiempoEstimado(0);
-          }}
-          className="mt-6 w-full rounded-xl bg-amber-500 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"
-        >
-          🧪 Simular aceptación médico
-        </button>
-      )}
+      {/* Botón de testing — solo simular pago (la aceptación la hace el médico desde su dashboard) */}
       {aceptada && !salaVideoUrl && (
         <button
           disabled={pagando}
@@ -235,13 +218,13 @@ export default function SalaEsperaCliente({
               .eq("id", consultaId);
             window.location.href = `/consulta/${consultaId}/confirmacion`;
           }}
-          className="mt-2 w-full rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
+          className="mt-4 w-full rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
         >
           🧪 Simular pago aprobado
         </button>
       )}
       <p className="mt-2 text-center text-xs text-gray-400">
-        Modo desarrollo — botones de testing
+        Modo desarrollo
       </p>
     </div>
   );
