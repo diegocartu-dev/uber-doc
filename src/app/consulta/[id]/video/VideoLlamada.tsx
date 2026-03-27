@@ -386,6 +386,14 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
           <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
           <p className="mt-2 text-sm text-gray-400">{consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}</p>
           <button onClick={() => { window.location.href = mobileUrl!; }} className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white">Unirse a la videollamada</button>
+          {esMedico && (
+            <button
+              onClick={() => { window.location.href = `/consulta/${consultaId}/completar`; }}
+              className="mt-3 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white hover:bg-gray-600"
+            >
+              Terminé la consulta — completar documentos
+            </button>
+          )}
           <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">Volver</button>
         </div>
       </div>
