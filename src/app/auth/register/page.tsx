@@ -19,7 +19,14 @@ export default function RegisterPage() {
             className="rounded-xl bg-white p-6 text-center transition hover:shadow-md"
             style={{ border: "0.5px solid #e5e7eb" }}
           >
-            <span className="text-4xl">🧑‍⚕��</span>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2v4a6 6 0 0 0 12 0V2"/>
+              <path d="M6 2H4a2 2 0 0 0-2 2v1a6 6 0 0 0 6 6"/>
+              <path d="M18 2h2a2 2 0 0 1 2 2v1a6 6 0 0 1-6 6"/>
+              <path d="M12 11v4"/>
+              <path d="M12 15a4 4 0 0 0 4 4h0a4 4 0 0 0 4-4v-2"/>
+              <circle cx="20" cy="13" r="1.5" fill="#1D9E75"/>
+            </svg>
             <p className="mt-4 text-sm font-medium text-gray-900">Soy médico</p>
             <p className="mt-1 text-xs text-gray-500">
               Ofrecé consultas online a tus pacientes
@@ -32,12 +39,12 @@ export default function RegisterPage() {
             style={{ border: "0.5px solid #e5e7eb" }}
           >
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0C447C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="7" r="3"/>
-              <path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/>
-              <line x1="18" y1="3" x2="18" y2="13"/>
-              <circle cx="18" cy="14" r="2" fill="#0C447C" stroke="#0C447C"/>
-              <line x1="20" y1="7" x2="22" y2="7"/>
-              <line x1="20" y1="10" x2="22" y2="10"/>
+              <circle cx="10" cy="7" r="3"/>
+              <path d="M4 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/>
+              <line x1="19" y1="2" x2="19" y2="12"/>
+              <circle cx="19" cy="13.5" r="1.5" fill="#0C447C" stroke="#0C447C"/>
+              <line x1="21" y1="5" x2="23" y2="5"/>
+              <line x1="21" y1="8" x2="23" y2="8"/>
             </svg>
             <p className="mt-4 text-sm font-medium text-gray-900">Soy paciente</p>
             <p className="mt-1 text-xs text-gray-500">
