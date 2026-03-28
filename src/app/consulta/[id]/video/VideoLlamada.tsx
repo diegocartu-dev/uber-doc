@@ -423,6 +423,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
             {/* Consulta completada */}
             {consultaCompletada ? (
+              /* Consulta finalizada — banner */
               <div className="rounded-xl bg-[#1D9E75] p-6">
                 <p className="text-lg font-semibold text-white">✅ ¡Consulta finalizada!</p>
                 <p className="mt-2 text-sm text-white/80">Tus documentos ya están disponibles</p>
@@ -434,23 +435,25 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 </a>
               </div>
             ) : !dailyAbierto ? (
-              /* Pre-join */
+              /* Pre-join — primera vez */
               <>
                 <span className="text-4xl">📹</span>
                 <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
-                <a
-                  href={mobileUrl}
-                  onClick={() => setDailyAbierto(true)}
-                  className="mt-5 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                <button
+                  onClick={() => {
+                    window.open(mobileUrl!, "_blank");
+                    setDailyAbierto(true);
+                  }}
+                  className="mt-5 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
                 >
                   Unirse a la videollamada
-                </a>
+                </button>
               </>
             ) : (
-              /* Consulta en curso */
+              /* Consulta en curso — sala de espera con Realtime */
               <>
                 <div
                   className="mx-auto h-4 w-4 rounded-full bg-[#1D9E75]"
@@ -460,18 +463,24 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
-                <a
-                  href={mobileUrl}
-                  className="mt-6 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                <button
+                  onClick={() => window.open(mobileUrl!, "_blank")}
+                  className="mt-6 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
                 >
                   Volver a la videollamada
-                </a>
+                </button>
                 {!esMedico && (
-                  <p className="mt-5 px-4 text-[13px] leading-relaxed text-gray-500">
-                    Tus documentos estarán disponibles en{" "}
-                    <strong className="text-gray-400">Mis documentos</strong>{" "}
-                    una vez que el médico finalice la consulta.
-                  </p>
+                  <>
+                    <p className="mt-5 px-4 text-[13px] leading-relaxed text-gray-500">
+                      Cuando el médico finalice la consulta, tus documentos aparecerán automáticamente acá.
+                    </p>
+                    <a
+                      href="/dashboard"
+                      className="mt-4 block text-xs text-gray-600 underline"
+                    >
+                      Ir al dashboard
+                    </a>
+                  </>
                 )}
               </>
             )}
