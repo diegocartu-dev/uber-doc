@@ -274,6 +274,24 @@ export default function RegistroMedicoPage() {
             />
           </div>
 
+          {/* Domicilio profesional */}
+          <div>
+            <label htmlFor="domicilio" className={labelClass}>
+              Domicilio profesional
+            </label>
+            <input
+              id="domicilio"
+              name="domicilio"
+              type="text"
+              required
+              className={inputClass}
+              placeholder="Calle, número, ciudad"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Requerido por Ley 17.132 para figurar en recetas médicas
+            </p>
+          </div>
+
           {/* Matrícula provincial */}
           <div>
             <label htmlFor="matricula_provincial" className={labelClass}>

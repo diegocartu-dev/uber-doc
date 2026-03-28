@@ -124,7 +124,7 @@ function TriageContent() {
   function handleConfirmarConsulta() {
     setMostrarConfirmacion(false);
     startTransition(async () => {
-      const result = await crearConsulta(medicoId, especialidad, motivo, sintomas);
+      const result = await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo);
       if (result?.error) {
         setError(result.error);
       }

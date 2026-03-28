@@ -114,6 +114,25 @@ export default function RegistroPacientePage() {
             />
           </div>
 
+          {/* CUIL */}
+          <div>
+            <label htmlFor="cuil" className={labelClass}>
+              CUIL
+            </label>
+            <input
+              id="cuil"
+              name="cuil"
+              type="text"
+              required
+              pattern="^\d{2}-\d{8}-\d{1}$"
+              className={inputClass}
+              placeholder="20-12345678-9"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Requerido por Ley 27.553 para emitir recetas electrónicas válidas
+            </p>
+          </div>
+
           {/* Fecha de nacimiento */}
           <div>
             <label htmlFor="fecha_nacimiento" className={labelClass}>

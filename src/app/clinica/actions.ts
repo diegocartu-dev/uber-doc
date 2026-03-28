@@ -7,7 +7,8 @@ export async function crearConsulta(
   medicoId: string,
   especialidad: string,
   motivoConsulta: string,
-  sintomas: string[]
+  sintomas: string[],
+  tiempoSintomas: string
 ) {
   const supabase = await createClient();
   const {
@@ -31,6 +32,7 @@ export async function crearConsulta(
       estado: "esperando",
       motivo_consulta: motivoConsulta.trim(),
       sintomas,
+      tiempo_sintomas: tiempoSintomas,
     })
     .select("id")
     .single();
