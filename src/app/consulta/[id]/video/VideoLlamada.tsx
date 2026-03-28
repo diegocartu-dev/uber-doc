@@ -307,14 +307,18 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         .eq("id", consultaId)
         .single();
 
-      if (!consultaDb) { setError("Consulta no encontrada."); setFinalizando(false); return; }
+      if (!consultaDb || !consultaDb.paciente_id) { setError("Consulta no encontrada."); setFinalizando(false); return; }
 
-      // Obtener paciente.id y medico.id (tabla ids, no auth ids)
-      const { data: paciente } = await supabase
+      console.log("[Finalizar] consulta:", consultaId, "paciente_auth_id:", consultaDb.paciente_id, "medico_id:", consultaDb.medico_id);
+
+      // Obtener paciente.id (tabla) desde auth user_id
+      const { data: paciente, error: pacErr } = await supabase
         .from("pacientes")
-        .select("id")
+        .select("id, nombre_completo")
         .eq("user_id", consultaDb.paciente_id)
         .single();
+
+      console.log("[Finalizar] paciente lookup:", paciente?.id, paciente?.nombre_completo, pacErr?.message);
 
       const { data: medico } = await supabase
         .from("medicos")
@@ -322,7 +326,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         .eq("id", consultaDb.medico_id)
         .single();
 
-      if (!paciente || !medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
+      if (!paciente || !medico) { setError(`Error al obtener datos: paciente=${paciente?.id ?? "null"} medico=${medico?.id ?? "null"}`); setFinalizando(false); return; }
 
       // Generar documentos por cada campo completado
       const docs: { tipo: string; contenido: string }[] = [];
@@ -420,10 +424,11 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                     const { data: consultaDb } = await supabase
                       .from("consultas").select("paciente_id, medico_id").eq("id", consultaId).single();
 
-                    if (consultaDb) {
-                      // Lookup pacientes.id desde auth user_id
+                    if (consultaDb && consultaDb.paciente_id) {
+                      console.log("[Mobile finalizar] paciente_auth_id:", consultaDb.paciente_id);
                       const { data: pac } = await supabase
-                        .from("pacientes").select("id").eq("user_id", consultaDb.paciente_id).single();
+                        .from("pacientes").select("id, nombre_completo").eq("user_id", consultaDb.paciente_id).single();
+                      console.log("[Mobile finalizar] paciente lookup:", pac?.id, pac?.nombre_completo);
                       const { data: med } = await supabase
                         .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
 

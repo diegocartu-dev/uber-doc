@@ -139,12 +139,15 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
       const supabase = createClient();
 
       if (conDocumentos) {
-        // Obtener paciente.id (tabla id, no auth id)
-        const { data: paciente } = await supabase
+        console.log("[Completar] paciente_auth_id:", consulta.paciente_id);
+        // Obtener paciente.id (tabla id) desde auth user_id
+        const { data: paciente, error: pacErr } = await supabase
           .from("pacientes")
-          .select("id")
+          .select("id, nombre_completo")
           .eq("user_id", consulta.paciente_id)
           .single();
+
+        console.log("[Completar] paciente lookup:", paciente?.id, paciente?.nombre_completo, pacErr?.message);
 
         if (paciente) {
           const docs: { tipo: string; contenido: string }[] = [];
