@@ -65,9 +65,9 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
   <div class="paciente">
     <div class="row">
       <span><strong>Paciente:</strong> ${documento.paciente_nombre}</span>
-      <span><strong>DNI:</strong> ${documento.paciente_dni}</span>
+      <span><strong>${documento.paciente_cuil ? "CUIL" : "DNI"}:</strong> ${documento.paciente_cuil || documento.paciente_dni}</span>
     </div>
-    ${documento.paciente_cuil ? `<div class="row"><span><strong>CUIL:</strong> ${documento.paciente_cuil}</span></div>` : ""}
+    ${documento.paciente_cuil && documento.paciente_dni ? `<div class="row"><span><strong>DNI:</strong> ${documento.paciente_dni}</span></div>` : ""}
   </div>
 
   <div class="section">

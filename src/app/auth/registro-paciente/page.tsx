@@ -117,19 +117,18 @@ export default function RegistroPacientePage() {
           {/* CUIL */}
           <div>
             <label htmlFor="cuil" className={labelClass}>
-              CUIL
+              CUIL <span className="text-gray-400">(opcional)</span>
             </label>
             <input
               id="cuil"
               name="cuil"
               type="text"
-              required
               pattern="^\d{2}-\d{8}-\d{1}$"
               className={inputClass}
               placeholder="20-12345678-9"
             />
             <p className="mt-1 text-xs text-gray-400">
-              Requerido por Ley 27.553 para emitir recetas electrónicas válidas
+              Si tenés CUIL ingresalo para recibir recetas válidas en farmacias. Podés consultarlo en mi.afip.gob.ar
             </p>
           </div>
 
