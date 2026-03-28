@@ -332,14 +332,7 @@ export default function GrillaEspecialidades({
               <div className="mt-4 flex gap-2">
                 <button
                   disabled={botonConsultaDeshabilitado}
-                  onClick={() => {
-                    console.log("[Consulta ahora]", esp.nombre, {
-                      botonConsultaDeshabilitado,
-                      medicosEnEspecialidad: medicos.filter(m => m.especialidad === esp.nombre),
-                      totalMedicos: medicos.length,
-                    });
-                    setModalEspecialidad(esp.nombre);
-                  }}
+                  onClick={() => setModalEspecialidad(esp.nombre)}
                   className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                 >
                   Consulta ahora

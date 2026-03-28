@@ -22,16 +22,14 @@ export default function EsperaVideo({
       if (!user) return;
 
       channel = supabase
-        .channel(`espera-video-${consultaId}-${Date.now()}`)
+        .channel(`espera-video-${consultaId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas" },
+          { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
           (payload) => {
             const updated = payload.new as {
-              id: string;
               sala_video_url: string | null;
             };
-            if (updated.id !== consultaId) return;
             if (updated.sala_video_url) {
               setSalaUrl(updated.sala_video_url);
             }

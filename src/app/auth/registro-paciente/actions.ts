@@ -61,7 +61,6 @@ export async function registrarPaciente(formData: FormData) {
     }
 
     dbError = error;
-    console.error(`[Registro paciente] INSERT intento ${i + 1} falló:`, error.message);
 
     // Si es duplicate key, el registro ya existe (quizás por el trigger)
     if (error.code === "23505") {

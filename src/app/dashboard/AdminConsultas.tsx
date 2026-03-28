@@ -67,7 +67,7 @@ export default function AdminConsultas({
         .channel(`admin-${medicoId}`)
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "consultas" },
+          { event: "*", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
           async (payload) => {
             if (payload.eventType === "DELETE") {
               const old = payload.old as { id: string };
@@ -86,8 +86,6 @@ export default function AdminConsultas({
               sintomas: string[] | null;
               sala_video_url: string | null;
             };
-            if (row.medico_id !== medicoId) return;
-
             if (payload.eventType === "UPDATE") {
               setConsultas((prev) =>
                 prev.map((c) =>

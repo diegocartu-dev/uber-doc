@@ -265,7 +265,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         await callFrame.join({ url: data.url });
         if (!joinedRef.current && !unmountedRef.current) setCargando(false);
       } catch (err) {
-        console.error("[VideoLlamada]", err);
         clearTimeout(timeoutId);
         if (!unmountedRef.current) { setError("Error al conectar."); setCargando(false); }
       }
@@ -309,16 +308,11 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
       if (!consultaDb || !consultaDb.paciente_id) { setError("Consulta no encontrada."); setFinalizando(false); return; }
 
-      console.log("[Finalizar] consulta:", consultaId, "paciente_auth_id:", consultaDb.paciente_id, "medico_id:", consultaDb.medico_id);
-
-      // Obtener paciente.id (tabla) desde auth user_id
-      const { data: paciente, error: pacErr } = await supabase
+      const { data: paciente } = await supabase
         .from("pacientes")
-        .select("id, nombre_completo")
+        .select("id")
         .eq("user_id", consultaDb.paciente_id)
         .single();
-
-      console.log("[Finalizar] paciente lookup:", paciente?.id, paciente?.nombre_completo, pacErr?.message);
 
       const { data: medico } = await supabase
         .from("medicos")
@@ -326,7 +320,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         .eq("id", consultaDb.medico_id)
         .single();
 
-      if (!paciente || !medico) { setError(`Error al obtener datos: paciente=${paciente?.id ?? "null"} medico=${medico?.id ?? "null"}`); setFinalizando(false); return; }
+      if (!paciente || !medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
 
       // Generar documentos por cada campo completado
       const docs: { tipo: string; contenido: string }[] = [];
@@ -357,7 +351,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
       window.location.href = "/dashboard";
     } catch (err) {
-      console.error("[Finalizar]", err);
       setError("Error al finalizar. Intentá de nuevo.");
       setFinalizando(false);
     }
@@ -425,29 +418,19 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                       .from("consultas").select("paciente_id, medico_id").eq("id", consultaId).single();
 
                     if (consultaDb && consultaDb.paciente_id) {
-                      console.log("[Mobile] consultaId:", consultaId);
-                      console.log("[Mobile] paciente_auth_id:", consultaDb.paciente_id);
-                      console.log("[Mobile] medico_id:", consultaDb.medico_id);
-
-                      const { data: pac, error: pacErr } = await supabase
-                        .from("pacientes").select("id, nombre_completo").eq("user_id", consultaDb.paciente_id).single();
-                      console.log("[Mobile] paciente lookup:", pac?.id, pac?.nombre_completo, "error:", pacErr?.message);
-
-                      const { data: med, error: medErr } = await supabase
+                      const { data: pac } = await supabase
+                        .from("pacientes").select("id").eq("user_id", consultaDb.paciente_id).single();
+                      const { data: med } = await supabase
                         .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
-                      console.log("[Mobile] medico lookup:", med?.id, "error:", medErr?.message);
 
                       if (pac && med) {
                         const docs: { tipo: string; contenido: string }[] = [];
                         if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
                         if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
                         if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
-                        // Si solo hay diagnóstico sin otros campos, crear indicaciones con el diagnóstico
                         if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-                        console.log("[Mobile] insertando", docs.length, "documentos, paciente_id:", pac.id, "medico_id:", med.id);
-
-                        const { error: insertErr } = await supabase.from("documentos").insert(
+                        await supabase.from("documentos").insert(
                           docs.map((d) => ({
                             consulta_id: consultaId,
                             paciente_id: pac.id,
@@ -457,12 +440,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                             contenido: d.contenido,
                           }))
                         );
-                        console.log("[Mobile] insert result:", insertErr ? insertErr.message : "OK");
-                      } else {
-                        console.error("[Mobile] No se pudo obtener paciente o médico");
                       }
-                    } else {
-                      console.error("[Mobile] consultaDb vacío o sin paciente_id");
                     }
                   }
 

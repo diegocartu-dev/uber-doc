@@ -91,14 +91,14 @@ export default function ConsultasPendientes({
 
     async function setup() {
       const { data: { user }, error } = await supabase.auth.getUser();
-      console.log("[Pendientes] getUser:", user?.id ?? "null", error?.message ?? "ok");
+
       if (!user) return;
 
       const channel = supabase
         .channel(`pendientes-${medicoId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "consultas" },
+          { event: "INSERT", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
           async (payload) => {
             const nueva = payload.new as {
               id: string;
@@ -109,8 +109,8 @@ export default function ConsultasPendientes({
               paciente_id: string;
               motivo_consulta: string | null;
             };
-            console.log("[Pendientes] INSERT recibido:", nueva.id, nueva.estado, nueva.medico_id);
-            if (nueva.medico_id !== medicoId || nueva.estado !== "esperando") return;
+
+            if (nueva.estado !== "esperando") return;
 
             soundPacienteEsperando();
 
@@ -136,18 +136,15 @@ export default function ConsultasPendientes({
         )
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas" },
+          { event: "UPDATE", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
           (payload) => {
-            const updated = payload.new as { id: string; medico_id: string; estado: string };
-            if (updated.medico_id !== medicoId) return;
+            const updated = payload.new as { id: string; estado: string };
             if (updated.estado !== "esperando") {
               setConsultas((prev) => prev.filter((c) => c.id !== updated.id));
             }
           }
         )
-        .subscribe((status) => {
-          console.log("[Pendientes] Realtime status:", status);
-        });
+        .subscribe();
 
       channelRef.current = channel;
     }

@@ -49,17 +49,15 @@ export default function SalaEsperaCliente({
       if (!user) return;
 
       channel = supabase
-        .channel(`sala-espera-${consultaId}-${Date.now()}`)
+        .channel(`sala-espera-${consultaId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas" },
+          { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
           (payload) => {
             const updated = payload.new as {
-              id: string;
               estado: string;
               sala_video_url: string | null;
             };
-            if (updated.id !== consultaId) return;
 
             const prevEstado = estado;
             setEstado(updated.estado);

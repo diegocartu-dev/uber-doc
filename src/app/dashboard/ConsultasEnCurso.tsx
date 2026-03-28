@@ -73,14 +73,13 @@ export default function ConsultasEnCurso({
       if (!user) return;
 
       channel = supabase
-        .channel(`en-curso-${medicoId}-${Date.now()}`)
+        .channel(`en-curso-${medicoId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas" },
+          { event: "UPDATE", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
           async (payload) => {
             const updated = payload.new as {
               id: string;
-              medico_id: string;
               estado: string;
               especialidad: string;
               sala_video_url: string | null;
@@ -89,8 +88,6 @@ export default function ConsultasEnCurso({
               sintomas: string[] | null;
               created_at: string;
             };
-            if (updated.medico_id !== medicoId) return;
-
             if (updated.estado === "en_curso") {
               setConsultas((prev) => {
                 const exists = prev.find((c) => c.id === updated.id);

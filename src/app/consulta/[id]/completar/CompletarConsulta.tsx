@@ -139,29 +139,20 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
       const supabase = createClient();
 
       if (conDocumentos) {
-        console.log("[Completar] consultaId:", consultaId);
-        console.log("[Completar] paciente_auth_id:", consulta.paciente_id);
-        console.log("[Completar] medicoId:", medicoId);
-
-        const { data: paciente, error: pacErr } = await supabase
+        const { data: paciente } = await supabase
           .from("pacientes")
-          .select("id, nombre_completo")
+          .select("id")
           .eq("user_id", consulta.paciente_id)
           .single();
-
-        console.log("[Completar] paciente lookup:", paciente?.id, paciente?.nombre_completo, "error:", pacErr?.message);
 
         if (paciente) {
           const docs: { tipo: string; contenido: string }[] = [];
           if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
           if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
           if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
-          // Si solo hay diagnóstico sin otros campos, crear indicaciones con el diagnóstico
           if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-          console.log("[Completar] insertando", docs.length, "documentos, paciente_id:", paciente.id, "medico_id:", medicoId);
-
-          const { error: insertErr } = await supabase.from("documentos").insert(
+          await supabase.from("documentos").insert(
             docs.map((d) => ({
               consulta_id: consultaId,
               paciente_id: paciente.id,
@@ -171,16 +162,12 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
               contenido: d.contenido,
             }))
           );
-          console.log("[Completar] insert result:", insertErr ? insertErr.message : "OK");
-        } else {
-          console.error("[Completar] No se pudo obtener paciente, error:", pacErr?.message);
         }
       }
 
       await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
       window.location.href = "/dashboard";
     } catch (err) {
-      console.error("[Completar]", err);
       setError("Error al finalizar. Intentá de nuevo.");
       setFinalizando(false);
     }

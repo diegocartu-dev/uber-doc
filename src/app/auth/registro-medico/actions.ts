@@ -74,7 +74,6 @@ export async function registrarMedico(formData: FormData) {
 
     if (!error) { dbError = null; break; }
     dbError = error;
-    console.error(`[Registro médico] INSERT intento ${i + 1} falló:`, error.message);
     if (error.code === "23505") { dbError = null; break; }
     if (i < 2) await new Promise((r) => setTimeout(r, 1000));
   }
