@@ -195,7 +195,7 @@ export default function SalaEsperaCliente({
       {salaVideoUrl && (
         <a
           href={`/consulta/${consultaId}/video`}
-          className="mt-6 block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+          className="mt-6 block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
         >
           Unirse a la videollamada
         </a>

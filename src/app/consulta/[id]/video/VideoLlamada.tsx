@@ -410,7 +410,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                     window.open(mobileUrl!, "_blank");
                     setDailyAbierto(true);
                   }}
-                  className="mt-5 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                  className="mt-5 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white active:scale-95 active:opacity-80 transition-all duration-100"
                 >
                   Unirse a la videollamada
                 </button>
@@ -438,7 +438,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                     </p>
                     <a
                       href="/documentos"
-                      className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center"
+                      className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center active:scale-95 active:opacity-80 transition-all duration-100"
                     >
                       Ya terminé la consulta → Ver mis documentos
                     </a>
@@ -608,7 +608,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
               <button
                 onClick={finalizarConsulta}
                 disabled={finalizando}
-                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-red-700 disabled:opacity-50"
               >
                 {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
               </button>
@@ -618,7 +618,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                   if (frameRef.current) { frameRef.current.leave(); frameRef.current.destroy(); frameRef.current = null; }
                   window.location.href = "/dashboard";
                 }}
-                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-700"
+                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-red-700 active:scale-95 active:opacity-80"
               >
                 Salir de la consulta
               </button>

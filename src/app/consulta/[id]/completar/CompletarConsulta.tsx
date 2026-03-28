@@ -226,7 +226,7 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
         <button
           disabled={finalizando}
           onClick={() => finalizar(true)}
-          className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition hover:bg-[#178a64] disabled:opacity-50"
+          className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
         >
           {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
         </button>

@@ -354,14 +354,14 @@ export default async function DashboardPage() {
               {consultaActiva.sala_video_url ? (
                 <Link
                   href={`/consulta/${consultaActiva.id}/video`}
-                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64]"
+                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
                 >
                   Reintentar videollamada
                 </Link>
               ) : (
                 <Link
                   href={`/sala-espera/${consultaActiva.id}`}
-                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64]"
+                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
                 >
                   Ir a la sala de espera
                 </Link>

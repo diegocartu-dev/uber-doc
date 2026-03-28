@@ -47,7 +47,7 @@ export default function EsperaVideo({
     return (
       <a
         href={`/consulta/${consultaId}/video`}
-        className="block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+        className="block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
       >
         Unirse a la videollamada
       </a>

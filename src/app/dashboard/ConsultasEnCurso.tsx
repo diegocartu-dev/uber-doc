@@ -242,7 +242,7 @@ export default function ConsultasEnCurso({
               {c.sala_video_url ? (
                 <a
                   href={`/consulta/${c.id}/video`}
-                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#178a64]"
+                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80"
                 >
                   Unirse a la videollamada
                 </a>
@@ -250,7 +250,7 @@ export default function ConsultasEnCurso({
                 <button
                   disabled={creando === c.id}
                   onClick={() => handleIniciar(c.id)}
-                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#178a64] disabled:opacity-50"
+                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
                 >
                   {creando === c.id ? "Creando sala..." : "Iniciar videollamada"}
                 </button>

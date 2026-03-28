@@ -468,7 +468,7 @@ export default function RegistroMedicoPage() {
               </div>
               <button
                 onClick={() => setModalTerminos(false)}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
               >
                 Cerrar
               </button>
@@ -507,7 +507,7 @@ export default function RegistroMedicoPage() {
               </div>
               <button
                 onClick={() => setModalMatricula(false)}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
               >
                 Cerrar
               </button>

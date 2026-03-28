@@ -17,7 +17,7 @@ export default function Home() {
         <div className="mt-10 flex items-center gap-4">
           <Link
             href="/auth/register"
-            className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
           >
             Comenzar ahora
           </Link>

@@ -577,7 +577,7 @@ function TriageContent() {
               </button>
               <a
                 href="tel:107"
-                className="block w-full rounded-lg bg-red-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                className="block w-full rounded-lg bg-red-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-red-700 active:scale-95 active:opacity-80 transition-all duration-100"
               >
                 Es una urgencia — llamar al 107
               </a>
