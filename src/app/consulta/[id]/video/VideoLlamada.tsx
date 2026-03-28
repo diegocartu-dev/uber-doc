@@ -185,6 +185,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   const joinedRef = useRef(false);
   const micOnRef = useRef(true);
   micOnRef.current = micOn;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [dailyAbierto, setDailyAbierto] = useState(false);
   const nav = detectarNavegador();
   const edad = calcularEdad(consulta.paciente_nacimiento);
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado(frameRef, micOnRef);
@@ -380,22 +382,121 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   // --- Mobile ---
   if (mobileUrl) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <div className="w-full max-w-sm text-center">
-          <span className="text-4xl">📹</span>
-          <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
-          <p className="mt-2 text-sm text-gray-400">{consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}</p>
-          <button onClick={() => { window.location.href = mobileUrl!; }} className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white">Unirse a la videollamada</button>
-          {esMedico && (
-            <button
-              onClick={() => { window.location.href = `/consulta/${consultaId}/completar`; }}
-              className="mt-3 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white hover:bg-gray-600"
-            >
-              Terminé la consulta — completar documentos
-            </button>
-          )}
-          <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">Volver</button>
+      <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-sm text-center">
+            <span className="text-4xl">{dailyAbierto ? "🟢" : "📹"}</span>
+            <h2 className="mt-4 text-lg font-medium text-white">
+              {dailyAbierto ? "Videollamada en curso" : "Videollamada lista"}
+            </h2>
+            <p className="mt-2 text-sm text-gray-400">
+              {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
+            </p>
+
+            {!dailyAbierto ? (
+              <button
+                onClick={() => { window.open(mobileUrl!, "_blank"); setDailyAbierto(true); }}
+                className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
+              >
+                Unirse a la videollamada
+              </button>
+            ) : (
+              <button
+                onClick={() => { window.open(mobileUrl!, "_blank"); }}
+                className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
+              >
+                Volver a la videollamada
+              </button>
+            )}
+
+            {esMedico && dailyAbierto && (
+              <button
+                onClick={async () => {
+                  setFinalizando(true);
+                  const supabase = createClient();
+                  // Guardar documentos si hay diagnóstico
+                  if (diagnostico.trim()) {
+                    const { data: paciente } = await supabase
+                      .from("pacientes").select("id").eq("user_id", consulta.paciente_nombre).single();
+                    // Fallback: intentar obtener paciente_id de la consulta
+                    const { data: consultaDb } = await supabase
+                      .from("consultas").select("paciente_id").eq("id", consultaId).single();
+                    const { data: pac } = await supabase
+                      .from("pacientes").select("id").eq("user_id", consultaDb?.paciente_id ?? "").single();
+                    const pacId = paciente?.id ?? pac?.id;
+
+                    if (pacId) {
+                      const { data: med } = await supabase
+                        .from("medicos").select("id").eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "").single();
+
+                      const docs: { tipo: string; contenido: string }[] = [];
+                      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+                      if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+                      if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+
+                      if (docs.length > 0 && med) {
+                        await supabase.from("documentos").insert(
+                          docs.map((d) => ({
+                            consulta_id: consultaId,
+                            paciente_id: pacId,
+                            medico_id: med.id,
+                            tipo: d.tipo,
+                            diagnostico: diagnostico.trim(),
+                            contenido: d.contenido,
+                          }))
+                        );
+                      }
+                    }
+                  }
+                  await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
+                  window.location.href = "/dashboard";
+                }}
+                disabled={finalizando}
+                className="mt-3 w-full rounded-lg bg-red-600 px-5 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {finalizando ? "Finalizando..." : "Finalizar consulta"}
+              </button>
+            )}
+
+            {!dailyAbierto && (
+              <button onClick={() => { window.location.href = "/dashboard"; }} className="mt-2 w-full rounded-lg bg-gray-800 px-5 py-3 text-sm text-gray-400">
+                Volver
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Floating notes button — solo médico después de abrir Daily */}
+        {esMedico && dailyAbierto && !drawerOpen && (
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="fixed bottom-6 left-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-lg"
+            style={{ border: "0.5px solid #e5e7eb" }}
+          >
+            <span className="text-xl">📝</span>
+          </button>
+        )}
+
+        {/* Drawer de notas */}
+        {esMedico && drawerOpen && (
+          <div className="fixed inset-0 z-50 flex flex-col">
+            <div className="flex-1 bg-black/40" onClick={() => setDrawerOpen(false)} />
+            <div className="max-h-[85vh] overflow-y-auto rounded-t-2xl bg-[#f8f9fa]">
+              <div className="sticky top-0 flex items-center justify-between bg-white px-5 py-3 rounded-t-2xl" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
+                <p className="text-sm font-medium text-gray-900">Notas de la consulta</p>
+                <button onClick={() => setDrawerOpen(false)} className="text-gray-400 text-lg">✕</button>
+              </div>
+              <div className="px-5 pb-8 pt-2">
+                <p className="text-sm text-gray-500">{consulta.paciente_nombre} · {consulta.especialidad}</p>
+
+                <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico..." required dictando={dictando} onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)} onDetener={detenerDictado} />
+                <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis..." dictando={dictando} onIniciar={() => iniciarDictado("receta", setReceta)} onDetener={detenerDictado} />
+                <CampoDictado label="INDICACIONES" campo="indicaciones" value={indicaciones} setter={setIndicaciones} placeholder="Indicaciones..." dictando={dictando} onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)} onDetener={detenerDictado} />
+                <CampoDictado label="CERTIFICADO" campo="certificado" value={certificado} setter={setCertificado} placeholder="Certificado..." dictando={dictando} onIniciar={() => iniciarDictado("certificado", setCertificado)} onDetener={detenerDictado} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
