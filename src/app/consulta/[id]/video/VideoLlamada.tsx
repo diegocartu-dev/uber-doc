@@ -409,9 +409,18 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                     const checkClosed = setInterval(() => {
                       if (dailyWindow.closed) {
                         clearInterval(checkClosed);
+                        document.removeEventListener("visibilitychange", handleVisibility);
                         window.location.href = "/dashboard";
                       }
-                    }, 1000);
+                    }, 500);
+                    const handleVisibility = () => {
+                      if (!document.hidden && dailyWindow.closed) {
+                        clearInterval(checkClosed);
+                        document.removeEventListener("visibilitychange", handleVisibility);
+                        window.location.href = "/dashboard";
+                      }
+                    };
+                    document.addEventListener("visibilitychange", handleVisibility);
                   }
                 }}
                 className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
@@ -425,6 +434,12 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
               >
                 Volver a la videollamada
               </button>
+            )}
+
+            {!esMedico && dailyAbierto && (
+              <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
+                Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
+              </p>
             )}
 
             {esMedico && dailyAbierto && (
