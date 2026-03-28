@@ -9,6 +9,7 @@ export default function RegistroPacientePage() {
   const [loading, setLoading] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
   const [modalTerminos, setModalTerminos] = useState(false);
+  const [obraSocial, setObraSocial] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -141,6 +142,38 @@ export default function RegistroPacientePage() {
               placeholder="11 2345-6789"
             />
           </div>
+
+          {/* Obra social */}
+          <div>
+            <label htmlFor="obra_social" className={labelClass}>
+              Obra social <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              id="obra_social"
+              name="obra_social"
+              type="text"
+              value={obraSocial}
+              onChange={(e) => setObraSocial(e.target.value)}
+              className={inputClass}
+              placeholder="Ej: OSDE, Swiss Medical"
+            />
+          </div>
+
+          {/* Número de afiliado — solo si tiene obra social */}
+          {obraSocial && (
+            <div>
+              <label htmlFor="nro_afiliado" className={labelClass}>
+                Número de afiliado <span className="text-gray-400">(opcional)</span>
+              </label>
+              <input
+                id="nro_afiliado"
+                name="nro_afiliado"
+                type="text"
+                className={inputClass}
+                placeholder="Ej: 123456789"
+              />
+            </div>
+          )}
 
           {/* Términos y condiciones */}
           <label className="flex items-start gap-3">

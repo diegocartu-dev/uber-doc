@@ -259,6 +259,49 @@ export default function RegistroMedicoPage() {
             </div>
           )}
 
+          {/* CUIT */}
+          <div>
+            <label htmlFor="cuit" className={labelClass}>
+              CUIT
+            </label>
+            <input
+              id="cuit"
+              name="cuit"
+              type="text"
+              required
+              className={inputClass}
+              placeholder="20-12345678-9"
+            />
+          </div>
+
+          {/* Matrícula provincial */}
+          <div>
+            <label htmlFor="matricula_provincial" className={labelClass}>
+              Matrícula provincial <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              id="matricula_provincial"
+              name="matricula_provincial"
+              type="text"
+              className={inputClass}
+              placeholder="MP 45678"
+            />
+          </div>
+
+          {/* Provincia de la matrícula */}
+          <div>
+            <label htmlFor="provincia_matricula" className={labelClass}>
+              Provincia de la matrícula <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              id="provincia_matricula"
+              name="provincia_matricula"
+              type="text"
+              className={inputClass}
+              placeholder="Buenos Aires"
+            />
+          </div>
+
           {/* Precio de consulta */}
           <div>
             <label htmlFor="precio_consulta" className={labelClass}>

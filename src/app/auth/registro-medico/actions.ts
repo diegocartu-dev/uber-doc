@@ -16,9 +16,12 @@ export async function registrarMedico(formData: FormData) {
   const precio_consulta = parseInt(formData.get("precio_consulta") as string, 10);
   const duracion_consulta = parseInt(formData.get("duracion_consulta") as string, 10);
   const modalidad_atencion = formData.get("modalidad_atencion") as string;
+  const cuit = formData.get("cuit") as string;
+  const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
+  const provincia_matricula = (formData.get("provincia_matricula") as string) || null;
 
   // Validaciones básicas del servidor
-  if (!email || !password || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion) {
+  if (!email || !password || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit) {
     return { error: "Todos los campos son obligatorios." };
   }
 
@@ -62,6 +65,9 @@ export async function registrarMedico(formData: FormData) {
       precio_consulta,
       duracion_consulta,
       modalidad_atencion,
+      cuit,
+      matricula_provincial,
+      provincia_matricula,
       terminos_aceptados_at: ahora,
       declaracion_matricula_at: ahora,
     });

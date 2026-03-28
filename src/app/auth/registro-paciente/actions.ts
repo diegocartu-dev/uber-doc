@@ -12,6 +12,8 @@ export async function registrarPaciente(formData: FormData) {
   const dni = formData.get("dni") as string;
   const fecha_nacimiento = formData.get("fecha_nacimiento") as string;
   const telefono = formData.get("telefono") as string;
+  const obra_social = (formData.get("obra_social") as string) || null;
+  const nro_afiliado = (formData.get("nro_afiliado") as string) || null;
 
   if (!email || !password || !nombre_completo || !dni || !fecha_nacimiento || !telefono) {
     return { error: "Todos los campos son obligatorios." };
@@ -48,6 +50,8 @@ export async function registrarPaciente(formData: FormData) {
       dni,
       fecha_nacimiento,
       telefono,
+      obra_social,
+      nro_afiliado,
       terminos_aceptados_at: new Date().toISOString(),
     });
 
