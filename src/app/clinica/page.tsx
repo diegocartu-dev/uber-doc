@@ -39,7 +39,7 @@ export default async function ClinicaPage() {
               href="/dashboard"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
-              Dashboard
+              Inicio
             </Link>
             <span className="text-sm text-gray-600">Hola, {fullName}</span>
             <LogoutButton />

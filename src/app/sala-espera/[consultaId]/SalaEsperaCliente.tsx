@@ -203,7 +203,7 @@ export default function SalaEsperaCliente({
 
       {/* TODO: Restaurar botón de Mercado Pago en producción */}
 
-      {/* Botón de testing — solo simular pago (la aceptación la hace el médico desde su dashboard) */}
+      {/* Botón de testing — solo simular pago (la aceptación la hace el médico desde su panel) */}
       {aceptada && !salaVideoUrl && (
         <button
           disabled={pagando}

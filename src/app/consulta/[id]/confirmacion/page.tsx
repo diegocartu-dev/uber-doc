@@ -112,7 +112,7 @@ export default async function ConfirmacionPagoPage({
             href="/dashboard"
             className="block w-full rounded-xl border border-gray-300 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            Volver al dashboard
+            Volver al inicio
           </Link>
         </div>
       </main>

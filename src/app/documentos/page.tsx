@@ -125,7 +125,7 @@ export default async function DocumentosPage() {
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
           <span className="text-lg font-medium text-gray-900">Uber Doc</span>
           <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
-            Dashboard
+            Inicio
           </Link>
         </div>
       </nav>
