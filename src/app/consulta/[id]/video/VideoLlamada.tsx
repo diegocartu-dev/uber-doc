@@ -421,62 +421,57 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="w-full max-w-sm text-center">
 
-            {/* Banner de consulta completada */}
+            {/* Consulta completada */}
             {consultaCompletada ? (
-              <>
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#1D9E75]/20">
-                  <span className="text-3xl">✅</span>
-                </div>
-                <h2 className="mt-4 text-lg font-medium text-white">
-                  ¡Tu consulta finalizó!
-                </h2>
-                <p className="mt-2 text-sm text-gray-400">
-                  Tus documentos ya están disponibles.
-                </p>
+              <div className="rounded-xl bg-[#1D9E75] p-6">
+                <p className="text-lg font-semibold text-white">✅ ¡Consulta finalizada!</p>
+                <p className="mt-2 text-sm text-white/80">Tus documentos ya están disponibles</p>
                 <a
                   href="/documentos"
-                  className="mt-5 block w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
+                  className="mt-4 inline-block rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-[#1D9E75]"
                 >
                   Ver mis documentos →
                 </a>
-                <p className="mt-3 text-xs text-gray-500">
-                  Redirigiendo automáticamente...
-                </p>
-              </>
-            ) : (
+              </div>
+            ) : !dailyAbierto ? (
+              /* Pre-join */
               <>
-                <span className="text-4xl">{dailyAbierto ? "🟢" : "📹"}</span>
-                <h2 className="mt-4 text-lg font-medium text-white">
-                  {dailyAbierto ? "Videollamada en curso" : "Videollamada lista"}
-                </h2>
+                <span className="text-4xl">📹</span>
+                <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
-
-                {!dailyAbierto ? (
-                  <button
-                    onClick={() => {
-                      window.open(mobileUrl!, "_blank");
-                      setDailyAbierto(true);
-                    }}
-                    className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
-                  >
-                    Unirse a la videollamada
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { window.open(mobileUrl!, "_blank"); }}
-                      className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
-                    >
-                      Volver a la videollamada
-                    </button>
-                    {!esMedico && (
-                      <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
-                        Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
-                      </p>
-                    )}
-                  </>
+                <a
+                  href={mobileUrl}
+                  onClick={() => setDailyAbierto(true)}
+                  className="mt-5 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                >
+                  Unirse a la videollamada
+                </a>
+              </>
+            ) : (
+              /* Consulta en curso */
+              <>
+                <div
+                  className="mx-auto h-4 w-4 rounded-full bg-[#1D9E75]"
+                  style={{ boxShadow: "0 0 0 8px rgba(29,158,117,0.2)" }}
+                />
+                <h2 className="mt-6 text-xl font-semibold text-white">Consulta en curso</h2>
+                <p className="mt-2 text-sm text-gray-400">
+                  {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
+                </p>
+                <a
+                  href={mobileUrl}
+                  className="mt-6 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                >
+                  Volver a la videollamada
+                </a>
+                {!esMedico && (
+                  <p className="mt-5 px-4 text-[13px] leading-relaxed text-gray-500">
+                    Tus documentos estarán disponibles en{" "}
+                    <strong className="text-gray-400">Mis documentos</strong>{" "}
+                    una vez que el médico finalice la consulta.
+                  </p>
                 )}
               </>
             )}
