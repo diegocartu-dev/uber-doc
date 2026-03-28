@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import DailyIframe from "@daily-co/daily-js";
 import { createClient } from "@/lib/supabase/client";
 import { soundVideoLista } from "@/lib/sounds";
+import { TouchButton } from "@/components/TouchButton";
 
 function detectarNavegador() {
   if (typeof navigator === "undefined")
@@ -402,7 +403,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
-                <button
+                <TouchButton
                   onClick={() => {
                     if (!esMedico) {
                       alert("La videollamada se abrirá en una nueva pestaña.\n\nCuando termines, volvé a esta pestaña de Uber Doc para ver tus documentos.");
@@ -410,10 +411,10 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                     window.open(mobileUrl!, "_blank");
                     setDailyAbierto(true);
                   }}
-                  className="mt-5 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white active:scale-95 active:opacity-80 transition-all duration-100"
+                  className="mt-5 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
                 >
                   Unirse a la videollamada
-                </button>
+                </TouchButton>
               </>
             ) : (
               <>
@@ -425,23 +426,23 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
-                <button
+                <TouchButton
                   onClick={() => window.open(mobileUrl!, "_blank")}
                   className="mt-6 w-full rounded-xl bg-gray-700 px-5 py-3 text-sm font-medium text-white"
                 >
                   Volver a la videollamada
-                </button>
+                </TouchButton>
                 {!esMedico && (
                   <>
                     <p className="mt-5 px-2 text-xs text-gray-500">
                       ← Deslizá a la derecha o tocá el botón atrás para volver aquí después de la consulta
                     </p>
-                    <a
+                    <TouchButton
                       href="/documentos"
-                      className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center active:scale-95 active:opacity-80 transition-all duration-100"
+                      className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center"
                     >
                       Ya terminé la consulta → Ver mis documentos
-                    </a>
+                    </TouchButton>
                   </>
                 )}
               </>

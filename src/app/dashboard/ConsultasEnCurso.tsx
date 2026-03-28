@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { TouchButton } from "@/components/TouchButton";
 
 type Consulta = {
   id: string;
@@ -240,20 +241,20 @@ export default function ConsultasEnCurso({
             {/* Action */}
             <div className="mt-5 flex justify-end">
               {c.sala_video_url ? (
-                <a
+                <TouchButton
                   href={`/consulta/${c.id}/video`}
-                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80"
+                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64]"
                 >
                   Unirse a la videollamada
-                </a>
+                </TouchButton>
               ) : (
-                <button
+                <TouchButton
                   disabled={creando === c.id}
                   onClick={() => handleIniciar(c.id)}
-                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+                  className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50"
                 >
                   {creando === c.id ? "Creando sala..." : "Iniciar videollamada"}
-                </button>
+                </TouchButton>
               )}
             </div>
           </div>

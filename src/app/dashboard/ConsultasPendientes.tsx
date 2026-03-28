@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
+import { TouchButton } from "@/components/TouchButton";
 import { soundPacienteEsperando } from "@/lib/sounds";
 
 type Consulta = {
@@ -196,13 +197,13 @@ export default function ConsultasPendientes({
                 </p>
               </div>
               {espera && <span className="shrink-0 text-xs text-gray-400">{espera}</span>}
-              <button
+              <TouchButton
                 disabled={isPending}
                 onClick={() => handleAceptar(c.id)}
-                className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:opacity-50"
+                className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
               >
-                Aceptar
-              </button>
+                {isPending ? "..." : "Aceptar"}
+              </TouchButton>
             </div>
           );
         })}
