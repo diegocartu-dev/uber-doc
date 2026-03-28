@@ -60,6 +60,7 @@ export default async function DashboardPage() {
     sintomas: string[] | null;
     sala_video_url: string | null;
     paciente_nombre: string;
+    paciente_tabla_id: string | null;
     medico_nombre: string;
   }[] = [];
 
@@ -203,6 +204,7 @@ export default async function DashboardPage() {
           sintomas: c.sintomas,
           sala_video_url: c.sala_video_url,
           paciente_nombre: pacMap.get(c.paciente_id)?.nombre ?? "—",
+          paciente_tabla_id: pacMap.get(c.paciente_id)?.id ?? null,
           medico_nombre: fullName,
         }));
       }

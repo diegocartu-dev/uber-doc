@@ -12,6 +12,7 @@ type Consulta = {
   sintomas: string[] | null;
   sala_video_url: string | null;
   paciente_nombre: string;
+  paciente_tabla_id: string | null;
   medico_nombre: string;
 };
 
@@ -100,7 +101,7 @@ export default function AdminConsultas({
             if (payload.eventType === "INSERT") {
               const { data: paciente } = await supabase
                 .from("pacientes")
-                .select("nombre_completo")
+                .select("id, nombre_completo")
                 .eq("user_id", row.paciente_id)
                 .single();
 
@@ -116,6 +117,7 @@ export default function AdminConsultas({
                     sintomas: row.sintomas,
                     sala_video_url: row.sala_video_url,
                     paciente_nombre: paciente?.nombre_completo ?? "—",
+                    paciente_tabla_id: paciente?.id ?? null,
                     medico_nombre: "Yo",
                   },
                   ...prev,
@@ -175,9 +177,15 @@ export default function AdminConsultas({
                 <span
                   className={`inline-block h-1.5 w-1.5 rounded-full ${estadoDot(c.estado)}`}
                 />
-                <span className="flex-1 truncate text-xs font-medium text-gray-900">
-                  {c.paciente_nombre}
-                </span>
+                {c.paciente_tabla_id ? (
+                  <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="flex-1 truncate text-xs font-medium text-[#1D9E75] hover:underline">
+                    {c.paciente_nombre}
+                  </a>
+                ) : (
+                  <span className="flex-1 truncate text-xs font-medium text-gray-900">
+                    {c.paciente_nombre}
+                  </span>
+                )}
                 <span className="text-[10px] text-gray-400">
                   {formatHora(c.created_at)}
                 </span>
