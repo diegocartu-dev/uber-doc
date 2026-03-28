@@ -404,6 +404,9 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 </p>
                 <button
                   onClick={() => {
+                    if (!esMedico) {
+                      alert("La videollamada se abrirá en una nueva pestaña.\n\nCuando termines, volvé a esta pestaña de Uber Doc para ver tus documentos.");
+                    }
                     window.open(mobileUrl!, "_blank");
                     setDailyAbierto(true);
                   }}
@@ -429,12 +432,17 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                   Volver a la videollamada
                 </button>
                 {!esMedico && (
-                  <a
-                    href="/documentos"
-                    className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center"
-                  >
-                    Ya terminé la consulta → Ver mis documentos
-                  </a>
+                  <>
+                    <p className="mt-5 px-2 text-xs text-gray-500">
+                      ← Deslizá a la derecha o tocá el botón atrás para volver aquí después de la consulta
+                    </p>
+                    <a
+                      href="/documentos"
+                      className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center"
+                    >
+                      Ya terminé la consulta → Ver mis documentos
+                    </a>
+                  </>
                 )}
               </>
             )}
