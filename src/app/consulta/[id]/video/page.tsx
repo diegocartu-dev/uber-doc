@@ -17,7 +17,7 @@ export default async function VideoPage({
 
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas")
+    .select("id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas, tiempo_sintomas")
     .eq("id", consultaId)
     .single();
 
@@ -39,17 +39,15 @@ export default async function VideoPage({
 
   if (!esPaciente && !esMedico) redirect("/dashboard");
 
-  // Traer datos del paciente
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, fecha_nacimiento")
+    .select("nombre_completo, fecha_nacimiento, cuil")
     .eq("user_id", consulta.paciente_id)
     .single();
 
-  // Traer nombre del médico
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo")
+    .select("nombre_completo, domicilio")
     .eq("id", consulta.medico_id)
     .single();
 
@@ -62,9 +60,12 @@ export default async function VideoPage({
           especialidad: consulta.especialidad,
           motivo_consulta: consulta.motivo_consulta,
           sintomas: consulta.sintomas,
+          tiempo_sintomas: consulta.tiempo_sintomas,
           paciente_nombre: paciente?.nombre_completo ?? "Paciente",
           paciente_nacimiento: paciente?.fecha_nacimiento ?? null,
+          paciente_cuil: paciente?.cuil ?? null,
           medico_nombre: medico?.nombre_completo ?? "Médico",
+          medico_domicilio: medico?.domicilio ?? null,
         }}
       />
     </div>

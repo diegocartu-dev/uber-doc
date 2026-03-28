@@ -39,9 +39,12 @@ type ConsultaData = {
   especialidad: string;
   motivo_consulta: string | null;
   sintomas: string[] | null;
+  tiempo_sintomas: string | null;
   paciente_nombre: string;
   paciente_nacimiento: string | null;
+  paciente_cuil: string | null;
   medico_nombre: string;
+  medico_domicilio: string | null;
 };
 
 type Props = {
@@ -573,6 +576,13 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
               <div className="mt-4">
                 <p className="text-xs font-medium tracking-wide text-gray-400">MOTIVO</p>
                 <p className="mt-1 text-sm text-gray-700">{consulta.motivo_consulta}</p>
+              </div>
+            )}
+
+            {consulta.tiempo_sintomas && (
+              <div className="mt-3">
+                <p className="text-xs font-medium tracking-wide text-gray-400">TIEMPO</p>
+                <p className="mt-0.5 text-xs text-gray-600">{consulta.tiempo_sintomas}</p>
               </div>
             )}
 

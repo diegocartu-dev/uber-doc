@@ -9,8 +9,10 @@ type Documento = {
   medico_nombre: string;
   medico_especialidad: string;
   medico_matricula: string;
+  medico_domicilio: string;
   paciente_nombre: string;
   paciente_dni: string;
+  paciente_cuil: string;
 };
 
 const tipoLabel: Record<string, string> = {
@@ -44,8 +46,9 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     .section { margin: 20px 0; }
     .section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 6px; }
     .section p { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; }
-    .paciente { display: flex; justify-content: space-between; background: #f8f9fa; padding: 12px 16px; border-radius: 6px; font-size: 13px; }
-    .footer { margin-top: 60px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+    .paciente { background: #f8f9fa; padding: 12px 16px; border-radius: 6px; font-size: 13px; }
+    .paciente .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .footer { margin-top: 60px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #e5e7eb; padding-top: 16px; }
     .firma { margin-top: 50px; text-align: right; }
     .firma .linea { border-top: 1px solid #333; width: 200px; margin-left: auto; margin-bottom: 4px; }
     .firma p { font-size: 12px; color: #666; margin: 2px 0; }
@@ -60,8 +63,11 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
   </div>
 
   <div class="paciente">
-    <span><strong>Paciente:</strong> ${documento.paciente_nombre}</span>
-    <span><strong>DNI:</strong> ${documento.paciente_dni}</span>
+    <div class="row">
+      <span><strong>Paciente:</strong> ${documento.paciente_nombre}</span>
+      <span><strong>DNI:</strong> ${documento.paciente_dni}</span>
+    </div>
+    ${documento.paciente_cuil ? `<div class="row"><span><strong>CUIL:</strong> ${documento.paciente_cuil}</span></div>` : ""}
   </div>
 
   <div class="section">
@@ -78,10 +84,12 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     <div class="linea"></div>
     <p>Dr. ${documento.medico_nombre}</p>
     <p>${documento.medico_especialidad} — ${documento.medico_matricula}</p>
+    ${documento.medico_domicilio ? `<p>${documento.medico_domicilio}</p>` : ""}
   </div>
 
   <div class="footer">
-    <p>Documento generado por Uber Doc — Plataforma de telemedicina</p>
+    <p>Documento generado por Uber Doc — Plataforma de telemedicina habilitada Ley 27.553</p>
+    <p>ReNaPDiS: En trámite</p>
     <p>Este documento no reemplaza una consulta presencial cuando sea necesaria</p>
   </div>
 </body>

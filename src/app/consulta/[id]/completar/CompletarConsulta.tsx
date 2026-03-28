@@ -109,8 +109,10 @@ type Props = {
     especialidad: string;
     motivo_consulta: string | null;
     sintomas: string[] | null;
+    tiempo_sintomas: string | null;
     paciente_nombre: string;
     paciente_nacimiento: string | null;
+    paciente_cuil: string | null;
     paciente_id: string;
   };
 };
@@ -190,6 +192,10 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
           <p className="text-xs text-gray-400">Motivo de consulta</p>
           <p className="mt-1 text-sm text-gray-700">{consulta.motivo_consulta}</p>
         </div>
+      )}
+
+      {consulta.tiempo_sintomas && (
+        <p className="mt-2 text-xs text-gray-500">Tiempo: {consulta.tiempo_sintomas}</p>
       )}
 
       {consulta.sintomas && consulta.sintomas.length > 0 && (

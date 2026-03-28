@@ -42,7 +42,7 @@ export default async function DocumentosPage() {
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("id, nombre_completo, dni")
+    .select("id, nombre_completo, dni, cuil")
     .eq("user_id", user.id)
     .single();
 
@@ -68,7 +68,7 @@ export default async function DocumentosPage() {
   // Traer médicos
   const medicoIds = [...new Set((documentos ?? []).map((d) => d.medico_id))];
   const { data: medicos } = medicoIds.length > 0
-    ? await supabase.from("medicos").select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula").in("id", medicoIds)
+    ? await supabase.from("medicos").select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio").in("id", medicoIds)
     : { data: [] };
 
   const medicosMap = new Map(
@@ -83,8 +83,10 @@ export default async function DocumentosPage() {
       medico_nombre: med?.nombre_completo ?? "Médico",
       medico_especialidad: med?.especialidad ?? "",
       medico_matricula: `${med?.tipo_matricula ?? ""} ${med?.numero_matricula ?? ""}`.trim(),
+      medico_domicilio: med?.domicilio ?? "",
       paciente_nombre: paciente.nombre_completo,
-      paciente_dni: paciente.dni,
+      paciente_dni: paciente.dni ?? "",
+      paciente_cuil: paciente.cuil ?? "",
     };
   });
 

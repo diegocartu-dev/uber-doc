@@ -77,7 +77,7 @@ export default async function FichaPacientePage({
   // Verificar que es médico
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula")
+    .select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio")
     .eq("user_id", user.id)
     .single();
 
@@ -86,7 +86,7 @@ export default async function FichaPacientePage({
   // Traer datos del paciente
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("id, nombre_completo, fecha_nacimiento, dni, obra_social, nro_afiliado, telefono, email")
+    .select("id, nombre_completo, fecha_nacimiento, dni, cuil, obra_social, nro_afiliado, telefono, email")
     .eq("id", pacienteId)
     .single();
 
@@ -131,8 +131,10 @@ export default async function FichaPacientePage({
     medico_nombre: medico.nombre_completo,
     medico_especialidad: medico.especialidad,
     medico_matricula: `${medico.tipo_matricula} ${medico.numero_matricula}`.trim(),
+    medico_domicilio: medico.domicilio ?? "",
     paciente_nombre: paciente.nombre_completo,
     paciente_dni: paciente.dni ?? "",
+    paciente_cuil: paciente.cuil ?? "",
   }));
 
   for (const doc of documentosCompletos) {
@@ -168,6 +170,12 @@ export default async function FichaPacientePage({
               <div>
                 <p className="text-xs text-gray-400">DNI</p>
                 <p className="mt-0.5 text-gray-700">{paciente.dni}</p>
+              </div>
+            )}
+            {paciente.cuil && (
+              <div>
+                <p className="text-xs text-gray-400">CUIL</p>
+                <p className="mt-0.5 text-gray-700">{paciente.cuil}</p>
               </div>
             )}
             {paciente.obra_social && (
