@@ -175,6 +175,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [finalizando, setFinalizando] = useState(false);
+  const [pacienteSalio, setPacienteSalio] = useState(false);
 
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
@@ -263,6 +264,11 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
           else { clearTimeout(timeoutId); setError("Videollamada desconectada."); setCargando(false); }
         });
         callFrame.on("error", (ev) => { clearTimeout(timeoutId); setError(`Error: ${ev?.error?.msg || "desconocido"}`); setCargando(false); });
+        callFrame.on("participant-left", (ev) => {
+          if (ev?.participant && !ev.participant.local) {
+            setPacienteSalio(true);
+          }
+        });
 
         setEtapaCarga("Conectando... Aceptá los permisos de cámara y micrófono");
         await callFrame.join({ url: data.url });
@@ -395,7 +401,18 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
             {!dailyAbierto ? (
               <button
-                onClick={() => { window.open(mobileUrl!, "_blank"); setDailyAbierto(true); }}
+                onClick={() => {
+                  const dailyWindow = window.open(mobileUrl!, "_blank");
+                  setDailyAbierto(true);
+                  if (dailyWindow && !esMedico) {
+                    const checkClosed = setInterval(() => {
+                      if (dailyWindow.closed) {
+                        clearInterval(checkClosed);
+                        window.location.href = "/dashboard";
+                      }
+                    }, 1000);
+                  }
+                }}
                 className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
               >
                 Unirse a la videollamada
@@ -531,6 +548,31 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         )}
 
         <div id="video-container" className="flex-1" />
+
+        {/* Banner: paciente salió */}
+        {pacienteSalio && esMedico && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+            <div className="max-w-sm rounded-xl bg-gray-900 p-6 text-center shadow-2xl" style={{ border: "0.5px solid #333" }}>
+              <p className="text-lg font-medium text-white">El paciente ha salido de la llamada</p>
+              <p className="mt-2 text-sm text-gray-400">Podés finalizar la consulta o esperar a que vuelva a conectarse.</p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => setPacienteSalio(false)}
+                  className="flex-1 rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-600"
+                >
+                  Esperar
+                </button>
+                <button
+                  onClick={finalizarConsulta}
+                  disabled={finalizando}
+                  className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {finalizando ? "Finalizando..." : "Finalizar consulta"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Controles */}
         {!cargando && !error && (

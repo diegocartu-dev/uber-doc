@@ -100,6 +100,8 @@ export async function POST(req: NextRequest) {
           enable_chat: true,
           enable_screenshare: true,
           max_participants: 2,
+          lang: "es",
+          prejoin_ui_show: false,
         },
       }),
     });
