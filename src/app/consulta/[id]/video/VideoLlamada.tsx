@@ -241,11 +241,12 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
 
         const callFrame = DailyIframe.createFrame(container, {
           iframeStyle: { width: "100%", height: "100%", border: "0" },
-          showLeaveButton: false,
+          showLeaveButton: true,
           showFullscreenButton: false,
           showParticipantsBar: false,
           lang: "es",
           theme: { colors: { accent: "#1D9E75", accentText: "#ffffff" } },
+          ...({ prejoinUI: false } as Record<string, unknown>),
         });
         frameRef.current = callFrame;
 
