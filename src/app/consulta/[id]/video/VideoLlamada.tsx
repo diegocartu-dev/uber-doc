@@ -284,6 +284,28 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     return () => { unmountedRef.current = true; clearTimeout(timeoutId); };
   }, [consultaId, nav.esMobile, nav.esChromeIOS]);
 
+  // Realtime: redirigir paciente mobile cuando médico completa consulta
+  useEffect(() => {
+    if (!dailyAbierto || esMedico || !nav.esMobile) return;
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`consulta-completada-${consultaId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
+        (payload) => {
+          const nuevo = payload.new as { estado: string };
+          if (nuevo.estado === "completada") {
+            window.location.href = "/dashboard";
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [dailyAbierto, esMedico, consultaId, nav.esMobile]);
+
   function toggleMic() {
     if (!frameRef.current) return;
     const next = !micOn;
@@ -403,43 +425,27 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
             {!dailyAbierto ? (
               <button
                 onClick={() => {
-                  const dailyWindow = window.open(mobileUrl!, "_blank");
+                  window.open(mobileUrl!, "_blank");
                   setDailyAbierto(true);
-                  if (dailyWindow && !esMedico) {
-                    const checkClosed = setInterval(() => {
-                      if (dailyWindow.closed) {
-                        clearInterval(checkClosed);
-                        document.removeEventListener("visibilitychange", handleVisibility);
-                        window.location.href = "/dashboard";
-                      }
-                    }, 500);
-                    const handleVisibility = () => {
-                      if (!document.hidden && dailyWindow.closed) {
-                        clearInterval(checkClosed);
-                        document.removeEventListener("visibilitychange", handleVisibility);
-                        window.location.href = "/dashboard";
-                      }
-                    };
-                    document.addEventListener("visibilitychange", handleVisibility);
-                  }
                 }}
                 className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
               >
                 Unirse a la videollamada
               </button>
             ) : (
-              <button
-                onClick={() => { window.open(mobileUrl!, "_blank"); }}
-                className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
-              >
-                Volver a la videollamada
-              </button>
-            )}
-
-            {!esMedico && dailyAbierto && (
-              <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
-                Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
-              </p>
+              <>
+                <button
+                  onClick={() => { window.open(mobileUrl!, "_blank"); }}
+                  className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
+                >
+                  Volver a la videollamada
+                </button>
+                {!esMedico && (
+                  <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
+                    Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
+                  </p>
+                )}
+              </>
             )}
 
             {esMedico && dailyAbierto && (
