@@ -414,40 +414,41 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 onClick={async () => {
                   setFinalizando(true);
                   const supabase = createClient();
-                  // Guardar documentos si hay diagnóstico
+
                   if (diagnostico.trim()) {
-                    const { data: paciente } = await supabase
-                      .from("pacientes").select("id").eq("user_id", consulta.paciente_nombre).single();
-                    // Fallback: intentar obtener paciente_id de la consulta
+                    // Obtener paciente_id (auth) desde la consulta
                     const { data: consultaDb } = await supabase
-                      .from("consultas").select("paciente_id").eq("id", consultaId).single();
-                    const { data: pac } = await supabase
-                      .from("pacientes").select("id").eq("user_id", consultaDb?.paciente_id ?? "").single();
-                    const pacId = paciente?.id ?? pac?.id;
+                      .from("consultas").select("paciente_id, medico_id").eq("id", consultaId).single();
 
-                    if (pacId) {
+                    if (consultaDb) {
+                      // Lookup pacientes.id desde auth user_id
+                      const { data: pac } = await supabase
+                        .from("pacientes").select("id").eq("user_id", consultaDb.paciente_id).single();
                       const { data: med } = await supabase
-                        .from("medicos").select("id").eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "").single();
+                        .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
 
-                      const docs: { tipo: string; contenido: string }[] = [];
-                      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-                      if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-                      if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+                      if (pac && med) {
+                        const docs: { tipo: string; contenido: string }[] = [];
+                        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+                        if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+                        if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
 
-                      if (docs.length > 0 && med) {
-                        await supabase.from("documentos").insert(
-                          docs.map((d) => ({
-                            consulta_id: consultaId,
-                            paciente_id: pacId,
-                            medico_id: med.id,
-                            tipo: d.tipo,
-                            diagnostico: diagnostico.trim(),
-                            contenido: d.contenido,
-                          }))
-                        );
+                        if (docs.length > 0) {
+                          await supabase.from("documentos").insert(
+                            docs.map((d) => ({
+                              consulta_id: consultaId,
+                              paciente_id: pac.id,
+                              medico_id: med.id,
+                              tipo: d.tipo,
+                              diagnostico: diagnostico.trim(),
+                              contenido: d.contenido,
+                            }))
+                          );
+                        }
                       }
                     }
                   }
+
                   await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
                   window.location.href = "/dashboard";
                 }}
