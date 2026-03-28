@@ -31,7 +31,14 @@ export default function RegisterPage() {
             className="rounded-xl bg-white p-6 text-center transition hover:shadow-md"
             style={{ border: "0.5px solid #e5e7eb" }}
           >
-            <span className="text-4xl">👤</span>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0C447C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="7" r="3"/>
+              <path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/>
+              <line x1="18" y1="3" x2="18" y2="13"/>
+              <circle cx="18" cy="14" r="2" fill="#0C447C" stroke="#0C447C"/>
+              <line x1="20" y1="7" x2="22" y2="7"/>
+              <line x1="20" y1="10" x2="22" y2="10"/>
+            </svg>
             <p className="mt-4 text-sm font-medium text-gray-900">Soy paciente</p>
             <p className="mt-1 text-xs text-gray-500">
               Consultá médicos desde tu casa
