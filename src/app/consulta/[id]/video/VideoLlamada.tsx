@@ -176,6 +176,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   const [camOn, setCamOn] = useState(true);
   const [finalizando, setFinalizando] = useState(false);
   const [pacienteSalio, setPacienteSalio] = useState(false);
+  const [consultaCompletada, setConsultaCompletada] = useState(false);
 
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
@@ -284,9 +285,13 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     return () => { unmountedRef.current = true; clearTimeout(timeoutId); };
   }, [consultaId, nav.esMobile, nav.esChromeIOS]);
 
-  // Realtime: redirigir paciente mobile cuando médico completa consulta
+  // Realtime: detectar cuando médico completa consulta (mobile paciente)
   useEffect(() => {
     if (!dailyAbierto || esMedico || !nav.esMobile) return;
+
+    // History hack: botón atrás del browser lleva a /dashboard
+    window.history.replaceState(null, "", "/dashboard");
+    window.history.pushState(null, "", window.location.href);
 
     const supabase = createClient();
     const channel = supabase
@@ -297,7 +302,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
         (payload) => {
           const nuevo = payload.new as { estado: string };
           if (nuevo.estado === "completada") {
-            window.location.href = "/dashboard";
+            setConsultaCompletada(true);
+            setTimeout(() => { window.location.href = "/documentos"; }, 3000);
           }
         }
       )
@@ -414,36 +420,63 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
       <div className="flex flex-1 flex-col">
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="w-full max-w-sm text-center">
-            <span className="text-4xl">{dailyAbierto ? "🟢" : "📹"}</span>
-            <h2 className="mt-4 text-lg font-medium text-white">
-              {dailyAbierto ? "Videollamada en curso" : "Videollamada lista"}
-            </h2>
-            <p className="mt-2 text-sm text-gray-400">
-              {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
-            </p>
 
-            {!dailyAbierto ? (
-              <button
-                onClick={() => {
-                  window.open(mobileUrl!, "_blank");
-                  setDailyAbierto(true);
-                }}
-                className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
-              >
-                Unirse a la videollamada
-              </button>
+            {/* Banner de consulta completada */}
+            {consultaCompletada ? (
+              <>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#1D9E75]/20">
+                  <span className="text-3xl">✅</span>
+                </div>
+                <h2 className="mt-4 text-lg font-medium text-white">
+                  ¡Tu consulta finalizó!
+                </h2>
+                <p className="mt-2 text-sm text-gray-400">
+                  Tus documentos ya están disponibles.
+                </p>
+                <a
+                  href="/documentos"
+                  className="mt-5 block w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
+                >
+                  Ver mis documentos →
+                </a>
+                <p className="mt-3 text-xs text-gray-500">
+                  Redirigiendo automáticamente...
+                </p>
+              </>
             ) : (
               <>
-                <button
-                  onClick={() => { window.open(mobileUrl!, "_blank"); }}
-                  className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
-                >
-                  Volver a la videollamada
-                </button>
-                {!esMedico && (
-                  <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
-                    Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
-                  </p>
+                <span className="text-4xl">{dailyAbierto ? "🟢" : "📹"}</span>
+                <h2 className="mt-4 text-lg font-medium text-white">
+                  {dailyAbierto ? "Videollamada en curso" : "Videollamada lista"}
+                </h2>
+                <p className="mt-2 text-sm text-gray-400">
+                  {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
+                </p>
+
+                {!dailyAbierto ? (
+                  <button
+                    onClick={() => {
+                      window.open(mobileUrl!, "_blank");
+                      setDailyAbierto(true);
+                    }}
+                    className="mt-5 w-full rounded-lg bg-[#1D9E75] px-5 py-3.5 text-sm font-medium text-white"
+                  >
+                    Unirse a la videollamada
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { window.open(mobileUrl!, "_blank"); }}
+                      className="mt-5 w-full rounded-lg bg-gray-700 px-5 py-3 text-sm font-medium text-white"
+                    >
+                      Volver a la videollamada
+                    </button>
+                    {!esMedico && (
+                      <p className="mt-4 px-6 text-center text-[13px] leading-relaxed text-gray-500">
+                        Tus documentos estarán disponibles en <strong>Mis documentos</strong> una vez que el médico finalice la consulta.
+                      </p>
+                    )}
+                  </>
                 )}
               </>
             )}
