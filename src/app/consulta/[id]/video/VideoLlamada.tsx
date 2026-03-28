@@ -425,32 +425,44 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                       .from("consultas").select("paciente_id, medico_id").eq("id", consultaId).single();
 
                     if (consultaDb && consultaDb.paciente_id) {
-                      console.log("[Mobile finalizar] paciente_auth_id:", consultaDb.paciente_id);
-                      const { data: pac } = await supabase
+                      console.log("[Mobile] consultaId:", consultaId);
+                      console.log("[Mobile] paciente_auth_id:", consultaDb.paciente_id);
+                      console.log("[Mobile] medico_id:", consultaDb.medico_id);
+
+                      const { data: pac, error: pacErr } = await supabase
                         .from("pacientes").select("id, nombre_completo").eq("user_id", consultaDb.paciente_id).single();
-                      console.log("[Mobile finalizar] paciente lookup:", pac?.id, pac?.nombre_completo);
-                      const { data: med } = await supabase
+                      console.log("[Mobile] paciente lookup:", pac?.id, pac?.nombre_completo, "error:", pacErr?.message);
+
+                      const { data: med, error: medErr } = await supabase
                         .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
+                      console.log("[Mobile] medico lookup:", med?.id, "error:", medErr?.message);
 
                       if (pac && med) {
                         const docs: { tipo: string; contenido: string }[] = [];
                         if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
                         if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
                         if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+                        // Si solo hay diagnóstico sin otros campos, crear indicaciones con el diagnóstico
+                        if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-                        if (docs.length > 0) {
-                          await supabase.from("documentos").insert(
-                            docs.map((d) => ({
-                              consulta_id: consultaId,
-                              paciente_id: pac.id,
-                              medico_id: med.id,
-                              tipo: d.tipo,
-                              diagnostico: diagnostico.trim(),
-                              contenido: d.contenido,
-                            }))
-                          );
-                        }
+                        console.log("[Mobile] insertando", docs.length, "documentos, paciente_id:", pac.id, "medico_id:", med.id);
+
+                        const { error: insertErr } = await supabase.from("documentos").insert(
+                          docs.map((d) => ({
+                            consulta_id: consultaId,
+                            paciente_id: pac.id,
+                            medico_id: med.id,
+                            tipo: d.tipo,
+                            diagnostico: diagnostico.trim(),
+                            contenido: d.contenido,
+                          }))
+                        );
+                        console.log("[Mobile] insert result:", insertErr ? insertErr.message : "OK");
+                      } else {
+                        console.error("[Mobile] No se pudo obtener paciente o médico");
                       }
+                    } else {
+                      console.error("[Mobile] consultaDb vacío o sin paciente_id");
                     }
                   }
 
