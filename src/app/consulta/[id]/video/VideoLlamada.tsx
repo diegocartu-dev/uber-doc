@@ -176,7 +176,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
   const [camOn, setCamOn] = useState(true);
   const [finalizando, setFinalizando] = useState(false);
   const [pacienteSalio, setPacienteSalio] = useState(false);
-  const [consultaCompletada, setConsultaCompletada] = useState(false);
 
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
@@ -285,32 +284,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     return () => { unmountedRef.current = true; clearTimeout(timeoutId); };
   }, [consultaId, nav.esMobile, nav.esChromeIOS]);
 
-  // Realtime: detectar cuando médico completa consulta (mobile paciente)
-  useEffect(() => {
-    if (!dailyAbierto || esMedico || !nav.esMobile) return;
-
-    // History hack: botón atrás del browser lleva a /dashboard
-    window.history.replaceState(null, "", "/dashboard");
-    window.history.pushState(null, "", window.location.href);
-
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`consulta-completada-${consultaId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
-        (payload) => {
-          const nuevo = payload.new as { estado: string };
-          if (nuevo.estado === "completada") {
-            setConsultaCompletada(true);
-            setTimeout(() => { window.location.href = "/documentos"; }, 3000);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [dailyAbierto, esMedico, consultaId, nav.esMobile]);
 
   function toggleMic() {
     if (!frameRef.current) return;
@@ -422,20 +395,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
           <div className="w-full max-w-sm text-center">
 
             {/* Consulta completada */}
-            {consultaCompletada ? (
-              /* Consulta finalizada — banner */
-              <div className="rounded-xl bg-[#1D9E75] p-6">
-                <p className="text-lg font-semibold text-white">✅ ¡Consulta finalizada!</p>
-                <p className="mt-2 text-sm text-white/80">Tus documentos ya están disponibles</p>
-                <a
-                  href="/documentos"
-                  className="mt-4 inline-block rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-[#1D9E75]"
-                >
-                  Ver mis documentos →
-                </a>
-              </div>
-            ) : !dailyAbierto ? (
-              /* Pre-join — primera vez */
+            {!dailyAbierto ? (
               <>
                 <span className="text-4xl">📹</span>
                 <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
@@ -453,7 +413,6 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 </button>
               </>
             ) : (
-              /* Consulta en curso — sala de espera con Realtime */
               <>
                 <div
                   className="mx-auto h-4 w-4 rounded-full bg-[#1D9E75]"
@@ -465,22 +424,17 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
                 </p>
                 <button
                   onClick={() => window.open(mobileUrl!, "_blank")}
-                  className="mt-6 w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white"
+                  className="mt-6 w-full rounded-xl bg-gray-700 px-5 py-3 text-sm font-medium text-white"
                 >
                   Volver a la videollamada
                 </button>
                 {!esMedico && (
-                  <>
-                    <p className="mt-5 px-4 text-[13px] leading-relaxed text-gray-500">
-                      Cuando el médico finalice la consulta, tus documentos aparecerán automáticamente acá.
-                    </p>
-                    <a
-                      href="/dashboard"
-                      className="mt-4 block text-xs text-gray-600 underline"
-                    >
-                      Ir al dashboard
-                    </a>
-                  </>
+                  <a
+                    href="/documentos"
+                    className="mt-4 block w-full rounded-xl bg-[#1D9E75] px-5 py-3.5 text-base font-semibold text-white text-center"
+                  >
+                    Ya terminé la consulta → Ver mis documentos
+                  </a>
                 )}
               </>
             )}

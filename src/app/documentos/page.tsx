@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "./DescargarPDF";
+import BannerConsultaActiva from "./BannerConsultaActiva";
 
 const tipoLabel: Record<string, string> = {
   receta: "Receta",
@@ -47,6 +48,17 @@ export default async function DocumentosPage() {
     .single();
 
   if (!paciente) redirect("/dashboard");
+
+  // Verificar si hay consulta activa
+  const { data: consultaActiva } = await supabase
+    .from("consultas")
+    .select("id")
+    .eq("paciente_id", user.id)
+    .in("estado", ["en_curso", "aceptada"])
+    .limit(1)
+    .single();
+
+  const tieneConsultaActiva = !!consultaActiva;
 
   // Traer documentos con consulta_id
   const { data: documentos } = await supabase
@@ -123,6 +135,10 @@ export default async function DocumentosPage() {
         <p className="mt-1 text-sm text-gray-500">
           {totalDocs} documento{totalDocs !== 1 ? "s" : ""} · {consultasOrdenadas.length} consulta{consultasOrdenadas.length !== 1 ? "s" : ""}
         </p>
+
+        {tieneConsultaActiva && (
+          <BannerConsultaActiva consultaId={consultaActiva!.id} />
+        )}
 
         {totalDocs === 0 ? (
           <div className="mt-12 text-center">
