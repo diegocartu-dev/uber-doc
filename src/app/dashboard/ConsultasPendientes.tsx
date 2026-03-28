@@ -11,6 +11,7 @@ type Consulta = {
   estado: string;
   created_at: string;
   paciente_nombre: string;
+  paciente_tabla_id: string | null;
   motivo_consulta: string | null;
   fecha_nacimiento: string | null;
 };
@@ -44,18 +45,17 @@ async function fetchNombrePaciente(
   supabase: ReturnType<typeof createClient>,
   pacienteUserId: string,
   retries = 3
-): Promise<{ nombre: string; nacimiento: string | null }> {
+): Promise<{ id: string | null; nombre: string; nacimiento: string | null }> {
   for (let i = 0; i < retries; i++) {
     const { data } = await supabase
       .from("pacientes")
-      .select("nombre_completo, fecha_nacimiento")
+      .select("id, nombre_completo, fecha_nacimiento")
       .eq("user_id", pacienteUserId)
       .single();
-    if (data) return { nombre: data.nombre_completo, nacimiento: data.fecha_nacimiento };
-    // Esperar antes de reintentar (la RLS puede tardar en ver la consulta nueva)
+    if (data) return { id: data.id, nombre: data.nombre_completo, nacimiento: data.fecha_nacimiento };
     if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000));
   }
-  return { nombre: "Paciente", nacimiento: null };
+  return { id: null, nombre: "Paciente", nacimiento: null };
 }
 
 export default function ConsultasPendientes({
@@ -126,6 +126,7 @@ export default function ConsultasPendientes({
                   estado: nueva.estado,
                   created_at: nueva.created_at,
                   paciente_nombre: pac.nombre,
+                  paciente_tabla_id: pac.id,
                   motivo_consulta: nueva.motivo_consulta,
                   fecha_nacimiento: pac.nacimiento,
                 },
@@ -186,7 +187,11 @@ export default function ConsultasPendientes({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-sm font-medium text-gray-900">{c.paciente_nombre}</p>
+                  {c.paciente_tabla_id ? (
+                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-sm font-medium text-gray-900 hover:text-[#1D9E75]">{c.paciente_nombre}</a>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-900">{c.paciente_nombre}</p>
+                  )}
                   {edad && <span className="text-xs text-gray-400">{edad}</span>}
                 </div>
                 <p className="mt-0.5 truncate text-xs text-gray-500">

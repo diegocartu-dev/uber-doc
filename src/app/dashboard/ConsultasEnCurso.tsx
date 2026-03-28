@@ -8,6 +8,7 @@ type Consulta = {
   id: string;
   especialidad: string;
   paciente_nombre: string;
+  paciente_tabla_id: string | null;
   sala_video_url: string | null;
   motivo_consulta: string | null;
   sintomas: string[] | null;
@@ -105,7 +106,7 @@ export default function ConsultasEnCurso({
 
               const { data: paciente } = await supabase
                 .from("pacientes")
-                .select("nombre_completo, fecha_nacimiento")
+                .select("id, nombre_completo, fecha_nacimiento")
                 .eq("user_id", updated.paciente_id)
                 .single();
 
@@ -117,6 +118,7 @@ export default function ConsultasEnCurso({
                     id: updated.id,
                     especialidad: updated.especialidad,
                     paciente_nombre: paciente?.nombre_completo ?? "Paciente",
+                    paciente_tabla_id: paciente?.id ?? null,
                     sala_video_url: updated.sala_video_url,
                     motivo_consulta: updated.motivo_consulta,
                     sintomas: updated.sintomas,
@@ -198,9 +200,15 @@ export default function ConsultasEnCurso({
             </div>
 
             {/* Patient info */}
-            <p className="mt-4 text-2xl font-medium text-gray-900" style={{ fontSize: "28px", lineHeight: "34px" }}>
-              {c.paciente_nombre}
-            </p>
+            {c.paciente_tabla_id ? (
+              <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="mt-4 block text-2xl font-medium text-gray-900 hover:text-[#1D9E75]" style={{ fontSize: "28px", lineHeight: "34px" }}>
+                {c.paciente_nombre}
+              </a>
+            ) : (
+              <p className="mt-4 text-2xl font-medium text-gray-900" style={{ fontSize: "28px", lineHeight: "34px" }}>
+                {c.paciente_nombre}
+              </p>
+            )}
             <p className="mt-1 text-sm text-gray-400">
               {[edad, c.especialidad].filter(Boolean).join(" · ")}
             </p>

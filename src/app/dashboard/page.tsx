@@ -34,6 +34,7 @@ export default async function DashboardPage() {
     estado: string;
     created_at: string;
     paciente_nombre: string;
+    paciente_tabla_id: string | null;
     motivo_consulta: string | null;
     fecha_nacimiento: string | null;
   }[] = [];
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
     id: string;
     especialidad: string;
     paciente_nombre: string;
+    paciente_tabla_id: string | null;
     sala_video_url: string | null;
     motivo_consulta: string | null;
     sintomas: string[] | null;
@@ -111,13 +113,13 @@ export default async function DashboardPage() {
     if (data) {
       // Helper: traer nombres + fecha_nacimiento de pacientes
       async function fetchPacientes(ids: string[]) {
-        if (ids.length === 0) return new Map<string, { nombre: string; nacimiento: string | null }>();
+        if (ids.length === 0) return new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
         const { data: pacs } = await supabase
           .from("pacientes")
-          .select("user_id, nombre_completo, fecha_nacimiento")
+          .select("id, user_id, nombre_completo, fecha_nacimiento")
           .in("user_id", ids);
         return new Map(
-          (pacs ?? []).map((p) => [p.user_id, { nombre: p.nombre_completo, nacimiento: p.fecha_nacimiento }])
+          (pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo, nacimiento: p.fecha_nacimiento }])
         );
       }
 
@@ -139,6 +141,7 @@ export default async function DashboardPage() {
             estado: c.estado,
             created_at: c.created_at,
             paciente_nombre: p?.nombre ?? "Paciente",
+            paciente_tabla_id: p?.id ?? null,
             motivo_consulta: c.motivo_consulta,
             fecha_nacimiento: p?.nacimiento ?? null,
           };
@@ -161,6 +164,7 @@ export default async function DashboardPage() {
             id: c.id,
             especialidad: c.especialidad,
             paciente_nombre: p?.nombre ?? "Paciente",
+            paciente_tabla_id: p?.id ?? null,
             sala_video_url: c.sala_video_url,
             motivo_consulta: c.motivo_consulta,
             sintomas: c.sintomas,
