@@ -44,10 +44,10 @@ for (let h = 7; h < 20; h++) {
 }
 
 export default function CalendarioAgendaMedico({
-  medicoId, precio, semanaOffset: semanaOffsetProp, onSemanaChange,
+  medicoId, precio, semanaOffset: semanaOffsetProp, onSemanaChange, onHoy,
 }: {
   medicoId: string; precio: number;
-  semanaOffset?: number; onSemanaChange?: (offset: number) => void;
+  semanaOffset?: number; onSemanaChange?: (offset: number) => void; onHoy?: () => void;
 }) {
   const [semanaOffsetLocal, setSemanaOffsetLocal] = useState(0);
   const semanaOffset = semanaOffsetProp ?? semanaOffsetLocal;
@@ -123,7 +123,7 @@ export default function CalendarioAgendaMedico({
           ${ingresosConfirmados.toLocaleString("es-AR")}
         </span>
         <button
-          onClick={() => setSemanaOffset(0)}
+          onClick={() => { if (onHoy) onHoy(); else setSemanaOffset(0); }}
           className="rounded-full bg-[#1D9E75]/10 px-2.5 py-1 text-[11px] font-medium text-[#1D9E75]"
         >
           Hoy
