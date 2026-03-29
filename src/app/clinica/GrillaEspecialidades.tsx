@@ -198,20 +198,29 @@ export default function GrillaEspecialidades({
   const BASICAS = ["Clínica médica", "Pediatría", "Ginecología", "Psiquiatría", "Dermatología", "Cardiología"];
   const espConMedicos = new Set(medicos.map((m) => m.especialidad));
 
-  const basicas = especialidadesFiltradas.filter((e) => BASICAS.includes(e.nombre))
+  // Básicas CON médicos van primero (orden fijo)
+  const basicasConMedicos = especialidadesFiltradas
+    .filter((e) => BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
     .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
 
-  const conMedicos = especialidadesFiltradas
+  // Otras con médicos (aleatorio)
+  const otrasConMedicos = especialidadesFiltradas
     .filter((e) => !BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
     .sort(() => Math.random() - 0.5);
 
+  // Básicas SIN médicos (después de las que tienen)
+  const basicasSinMedicos = especialidadesFiltradas
+    .filter((e) => BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
+    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
+
+  // Resto sin médicos (colapsadas)
   const sinMedicos = especialidadesFiltradas
     .filter((e) => !BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
     .sort(() => Math.random() - 0.5);
 
   const espVisibles = termino
     ? especialidadesFiltradas
-    : [...basicas, ...conMedicos, ...(verMas ? sinMedicos : [])];
+    : [...basicasConMedicos, ...otrasConMedicos, ...basicasSinMedicos, ...(verMas ? sinMedicos : [])];
 
   const tieneSinMedicos = !termino && sinMedicos.length > 0;
 
@@ -324,7 +333,7 @@ export default function GrillaEspecialidades({
                 </span>
               </div>
 
-              <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              <h3 className={`mt-3 text-sm font-semibold ${sinMedicos ? "text-gray-500" : "text-gray-900"}`}>
                 {esp.nombre}
               </h3>
 
@@ -375,7 +384,8 @@ export default function GrillaEspecialidades({
       {tieneSinMedicos && (
         <button
           onClick={() => setVerMas(!verMas)}
-          className="mt-4 w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 active:scale-95 active:opacity-80 transition-all duration-100"
+          className="mt-4 w-full rounded-lg bg-gray-50 px-4 py-2.5 text-sm text-gray-400 hover:bg-gray-100 active:scale-95 active:opacity-80 transition-all duration-100"
+          style={{ border: "0.5px solid #e5e7eb" }}
         >
           {verMas ? "▴ Ocultar especialidades sin médicos" : `▾ Ver ${sinMedicos.length} especialidades más`}
         </button>
