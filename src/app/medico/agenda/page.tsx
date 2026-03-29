@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import ListaModelos from "./ListaModelos";
 import FormularioModelo from "./FormularioModelo";
 import PanelCalendario from "./PanelCalendario";
+import LayoutAgenda from "./LayoutAgenda";
 
 export default async function AgendaPage({
   searchParams,
@@ -80,24 +81,23 @@ export default async function AgendaPage({
             />
           </div>
         ) : (
-          <div className="mt-6 gap-6 md:grid" style={{ gridTemplateColumns: "minmax(400px, 1fr) minmax(500px, 1.5fr)" }}>
-            {/* Columna izquierda — modelos */}
-            <div className="space-y-4">
-              <ListaModelos modelos={modelosCompletos} />
-              <Link
-                href="/medico/agenda?nuevo=1"
-                className="block rounded-xl bg-white p-4 text-center text-sm text-gray-500 hover:bg-gray-50 active:scale-95 transition-all duration-100"
-                style={{ border: "0.5px solid #e5e7eb" }}
-              >
-                + Nuevo modelo de agenda
-              </Link>
-            </div>
-
-            {/* Columna derecha — calendarios */}
-            <div className="mt-6 md:mt-0">
+          <LayoutAgenda
+            izquierda={
+              <>
+                <ListaModelos modelos={modelosCompletos} />
+                <Link
+                  href="/medico/agenda?nuevo=1"
+                  className="block rounded-xl bg-white p-4 text-center text-sm text-gray-500 hover:bg-gray-50 active:scale-95 transition-all duration-100"
+                  style={{ border: "0.5px solid #e5e7eb" }}
+                >
+                  + Nuevo modelo de agenda
+                </Link>
+              </>
+            }
+            derecha={
               <PanelCalendario medicoId={medico.id} precio={medico.precio_consulta} />
-            </div>
-          </div>
+            }
+          />
         )}
       </main>
     </div>
