@@ -41,7 +41,7 @@ export default function FormularioModelo({
     { inicio: "09:00", fin: "13:00" },
   ]);
   const [franjasCustom, setFranjasCustom] = useState<Record<number, { inicio: string; fin: string }[]>>({});
-  const [prioridad, setPrioridad] = useState(1);
+  const [prioridad, setPrioridad] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -115,13 +115,14 @@ export default function FormularioModelo({
     }
 
     if (todasFranjas.length === 0) { setError("Agregá al menos una franja horaria."); return; }
+    if (overlap.length > 0 && prioridad === null) { setError("Debés indicar si este modelo tiene prioridad sobre los existentes."); return; }
 
     startTransition(async () => {
       const result = await guardarModelo({
         nombre: nombre.trim(),
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
-        prioridad,
+        prioridad: prioridad ?? 1,
         duracion_turno: duracionTurno,
         precio,
         franjas: todasFranjas,
@@ -303,17 +304,31 @@ export default function FormularioModelo({
       {overlap.length > 0 && (
         <div className="mt-5 rounded-lg bg-amber-50 p-4" style={{ border: "0.5px solid #fbbf24" }}>
           <p className="text-xs text-amber-700">
-            Este modelo se superpone con: <strong>{overlap.map((m) => m.nombre).join(", ")}</strong>
+            ⚠️ Este modelo se superpone con: <strong>{overlap.map((m) => m.nombre).join(", ")}</strong>
           </p>
-          <label className="mt-2 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={prioridad > 1}
-              onChange={(e) => setPrioridad(e.target.checked ? 2 : 1)}
-              className="h-4 w-4 rounded border-gray-300 text-amber-600"
-            />
-            <span className="text-xs text-amber-700">Este modelo tiene prioridad sobre los existentes</span>
-          </label>
+          <p className="mt-2 text-xs font-medium text-amber-800">¿Qué prioridad tiene este modelo?</p>
+          <div className="mt-2 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="prioridad"
+                checked={prioridad === 2}
+                onChange={() => setPrioridad(2)}
+                className="h-3.5 w-3.5 text-amber-600"
+              />
+              <span className="text-xs text-amber-700">Tiene prioridad — pisa los días que se superpongan con {overlap.map((m) => m.nombre).join(", ")}</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="prioridad"
+                checked={prioridad === 1}
+                onChange={() => setPrioridad(1)}
+                className="h-3.5 w-3.5 text-amber-600"
+              />
+              <span className="text-xs text-amber-700">No tiene prioridad — {overlap.map((m) => m.nombre).join(", ")} mantiene precedencia</span>
+            </label>
+          </div>
         </div>
       )}
 
