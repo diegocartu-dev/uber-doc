@@ -16,7 +16,7 @@ export default async function AgendaPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, duracion_consulta")
+    .select("id, duracion_consulta, precio_consulta")
     .eq("user_id", user.id)
     .single();
   if (!medico) redirect("/dashboard");
@@ -84,6 +84,7 @@ export default async function AgendaPage({
             <FormularioModelo
               modelosExistentes={modelosCompletos}
               duracionConsulta={medico.duracion_consulta}
+              precioConsulta={medico.precio_consulta}
             />
           </div>
         ) : (

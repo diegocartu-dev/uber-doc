@@ -25,11 +25,15 @@ type DiaEstado = 0 | 1 | 2;
 export default function FormularioModelo({
   modelosExistentes,
   duracionConsulta,
+  precioConsulta,
 }: {
   modelosExistentes: Modelo[];
   duracionConsulta: number;
+  precioConsulta: number;
 }) {
   const [nombre, setNombre] = useState("");
+  const [duracionTurno, setDuracionTurno] = useState(duracionConsulta);
+  const [precio, setPrecio] = useState(precioConsulta);
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [dias, setDias] = useState<Record<number, DiaEstado>>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 });
@@ -118,6 +122,8 @@ export default function FormularioModelo({
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
         prioridad,
+        duracion_turno: duracionTurno,
+        precio,
         franjas: todasFranjas,
       });
       if (result?.error) setError(result.error);
@@ -185,6 +191,26 @@ export default function FormularioModelo({
         />
       </div>
 
+      {/* Duración y precio */}
+      <div className="mt-4 flex gap-4">
+        <div className="flex-1">
+          <label className="text-xs text-gray-400">Duración del turno</label>
+          <select value={duracionTurno} onChange={(e) => setDuracionTurno(parseInt(e.target.value))} className={`mt-1 w-full ${inputClass}`} style={borderStyle}>
+            <option value={20}>20 minutos</option>
+            <option value={30}>30 minutos</option>
+            <option value={45}>45 minutos</option>
+            <option value={60}>60 minutos</option>
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="text-xs text-gray-400">Precio (ARS)</label>
+          <div className="relative mt-1">
+            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-400">$</span>
+            <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${inputClass}`} style={borderStyle} />
+          </div>
+        </div>
+      </div>
+
       {/* Fechas */}
       <div className="mt-4 flex gap-4">
         <div className="flex-1">
@@ -227,7 +253,7 @@ export default function FormularioModelo({
       {Object.values(dias).some((v) => v === 1) && (
         <div className="mt-5">
           <div className="flex items-center justify-between">
-            <label className="text-xs text-gray-400">Franjas base ({duracionConsulta} min c/turno)</label>
+            <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
             <button onClick={addFranjaBase} className="text-xs text-[#1D9E75] hover:underline">+ Agregar franja</button>
           </div>
           <div className="mt-2 space-y-2">

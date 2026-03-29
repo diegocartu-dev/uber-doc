@@ -8,6 +8,8 @@ export async function guardarModelo(data: {
   fecha_inicio: string;
   fecha_fin: string;
   prioridad: number;
+  duracion_turno: number;
+  precio: number;
   franjas: { dia_semana: number; hora_inicio: string; hora_fin: string }[];
 }) {
   const supabase = await createClient();
@@ -30,6 +32,8 @@ export async function guardarModelo(data: {
       fecha_inicio: data.fecha_inicio,
       fecha_fin: data.fecha_fin,
       prioridad: data.prioridad,
+      duracion_turno: data.duracion_turno,
+      precio: data.precio,
       activo: true,
     })
     .select("id")

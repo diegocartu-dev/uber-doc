@@ -8,6 +8,7 @@ type Props = {
   disponibleDesde: string | null;
   disponibleHasta: string | null;
   duracionConsulta: number;
+  precioConsulta: number;
   pacientesEnEspera: number;
 };
 
@@ -24,16 +25,19 @@ export default function DisponibilidadMedico({
   disponibleDesde,
   disponibleHasta,
   duracionConsulta,
+  precioConsulta,
   pacientesEnEspera,
 }: Props) {
   const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(disponible);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
   const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
+  const [duracion, setDuracion] = useState(duracionConsulta);
+  const [precio, setPrecio] = useState(precioConsulta);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
-  const capacidad = calcularCapacidad(desde, hasta, duracionConsulta);
+  const capacidad = calcularCapacidad(desde, hasta, duracion);
 
   async function handleToggle() {
     const nuevoEstado = !activo;
@@ -62,6 +66,8 @@ export default function DisponibilidadMedico({
       disponible: activo,
       disponible_desde: desde,
       disponible_hasta: hasta,
+      duracion_consulta: duracion,
+      precio_consulta: precio,
     });
 
     setGuardando(false);
@@ -188,9 +194,29 @@ export default function DisponibilidadMedico({
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
+          {/* Duración y precio */}
+          <div className="mt-4 flex items-center gap-4">
+            <div>
+              <label className="text-xs text-gray-400">Duración</label>
+              <select value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value))} className={selectClass} style={selectStyle}>
+                <option value={20}>20 min</option>
+                <option value={30}>30 min</option>
+                <option value={45}>45 min</option>
+                <option value={60}>60 min</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">Precio (ARS)</label>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-400">$</span>
+                <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={selectClass} style={{ ...selectStyle, width: "80px" }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-6 text-xs text-gray-500">
             <span>
-              Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracionConsulta} min c/u)
+              Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracion} min c/u)
             </span>
             <span>
               En espera: <span className="font-medium text-gray-700">{pacientesEnEspera}/{capacidad}</span>

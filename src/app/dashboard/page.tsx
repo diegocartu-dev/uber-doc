@@ -314,6 +314,7 @@ export default async function DashboardPage() {
                 disponibleDesde={medico.disponible_desde}
                 disponibleHasta={medico.disponible_hasta}
                 duracionConsulta={medico.duracion_consulta}
+                precioConsulta={medico.precio_consulta}
                 pacientesEnEspera={consultasPendientes.length}
               />
             </div>
