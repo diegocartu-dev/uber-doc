@@ -1,5 +1,11 @@
 "use client";
 
+// Lista de modelos de agenda del médico
+// Extensiones pendientes:
+// - Botón "Editar" por modelo → abre FormularioModelo con datos precargados
+// - Indicador de turnos reservados por modelo
+// - Botón "Bloquear día" para bloqueos puntuales
+
 import { useState, useTransition } from "react";
 import { toggleModelo, eliminarModelo } from "./actions";
 

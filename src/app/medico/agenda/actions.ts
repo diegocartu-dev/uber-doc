@@ -1,5 +1,12 @@
 "use server";
 
+// Módulo de Agenda — Server Actions
+// Extensiones pendientes:
+// - editarModelo(): actualizar modelo existente + detectar turnos reservados afectados
+// - bloquearHorario(): bloquear días/horarios puntuales sin modificar el modelo
+// - reprogramarTurnos(): mover turnos reservados cuando se modifica un modelo activo
+// - enviarRecordatorios(): cron job para email/WhatsApp antes del turno
+
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -53,6 +60,9 @@ export async function guardarModelo(data: {
     .insert(franjasInsert);
 
   if (franjasErr) return { error: franjasErr.message };
+
+  // TODO [bloqueos]: antes de generar turnos, consultar tabla de bloqueos y excluir esos slots
+  // TODO [reprogramación]: si es edición de modelo existente, detectar turnos reservados afectados
 
   // Generar turnos automáticamente
   const turnos: {
@@ -110,6 +120,8 @@ export async function guardarModelo(data: {
     }
   }
 
+  // TODO [recordatorios]: después del INSERT, programar recordatorios para turnos reservados
+
   // INSERT masivo en lotes de 500
   for (let i = 0; i < turnos.length; i += 500) {
     const lote = turnos.slice(i, i + 500);
@@ -120,7 +132,10 @@ export async function guardarModelo(data: {
   redirect("/medico/agenda");
 }
 
+// TODO [edición]: agregar editarModelo() que actualice modelo + regenere turnos futuros no reservados
+
 export async function toggleModelo(modeloId: string, activo: boolean) {
+  // TODO [reprogramación]: si se desactiva, cancelar turnos disponibles futuros de este modelo
   const supabase = await createClient();
   const { error } = await supabase
     .from("agenda_modelos")
@@ -131,6 +146,7 @@ export async function toggleModelo(modeloId: string, activo: boolean) {
 }
 
 export async function eliminarModelo(modeloId: string) {
+  // TODO [reprogramación]: verificar si hay turnos reservados, avisar al médico, notificar pacientes
   const supabase = await createClient();
   const { error } = await supabase
     .from("agenda_modelos")

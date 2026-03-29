@@ -1,5 +1,11 @@
 "use client";
 
+// Formulario para crear/editar modelos de agenda
+// Extensiones pendientes:
+// - Modo edición: recibir modeloId como prop, precargar datos, usar editarModelo()
+// - Preview de turnos generados antes de guardar
+// - Selector de bloqueos dentro del modelo
+
 import { useState, useTransition } from "react";
 import { guardarModelo } from "./actions";
 
