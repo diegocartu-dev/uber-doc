@@ -293,7 +293,23 @@ export default async function DashboardPage() {
               />
 
               {/* Disponibilidad — colapsable */}
-              <DisponibilidadMedico
+              {/* Mi agenda */}
+            <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium tracking-wide text-gray-400">MI AGENDA</p>
+                  <p className="mt-1 text-sm text-gray-600">Configurá tus modelos de disponibilidad para turnos</p>
+                </div>
+                <Link
+                  href="/medico/agenda"
+                  className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                >
+                  Configurar
+                </Link>
+              </div>
+            </div>
+
+            <DisponibilidadMedico
                 disponible={medico.disponible}
                 disponibleDesde={medico.disponible_desde}
                 disponibleHasta={medico.disponible_hasta}
