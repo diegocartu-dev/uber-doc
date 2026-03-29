@@ -462,15 +462,21 @@ export default function GrillaEspecialidades({
                           )}
                         </p>
                       </div>
-                      <button
-                        disabled={!disponibleAhora}
-                        onClick={() =>
-                          handleElegirMedico(m.id, modalEspecialidad!)
-                        }
-                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-                      >
-                        Elegir
-                      </button>
+                      <div className="flex shrink-0 flex-col gap-1.5">
+                        <button
+                          disabled={!disponibleAhora}
+                          onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                        >
+                          Consulta ahora
+                        </button>
+                        <a
+                          href={`/clinica/${m.id}/turnos`}
+                          className="rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-700 hover:bg-gray-200"
+                        >
+                          Agendar turno
+                        </a>
+                      </div>
                     </div>
                   );
                 })}
