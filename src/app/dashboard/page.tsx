@@ -90,7 +90,49 @@ export default async function DashboardPage() {
     medico_nombre: string;
   } | null = null;
 
+  let turnosPaciente: {
+    id: string;
+    fecha: string;
+    hora_inicio: string;
+    especialidad: string;
+    medico_nombre: string;
+  }[] = [];
+
   if (role === "paciente") {
+    // Traer paciente.id para buscar turnos
+    const { data: pacienteData } = await supabase
+      .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+
+    if (pacienteData) {
+      const hoyStr = new Date().toISOString().split("T")[0];
+      const { data: turnosData } = await supabase
+        .from("turnos")
+        .select("id, fecha, hora_inicio, medico_id")
+        .eq("paciente_id", pacienteData.id)
+        .eq("estado", "reservado")
+        .gte("fecha", hoyStr)
+        .order("fecha", { ascending: true })
+        .order("hora_inicio", { ascending: true });
+
+      if (turnosData && turnosData.length > 0) {
+        const medIds = [...new Set(turnosData.map((t) => t.medico_id))];
+        const { data: meds } = await supabase
+          .from("medicos").select("id, nombre_completo, especialidad").in("id", medIds);
+        const medMap = new Map((meds ?? []).map((m) => [m.id, m]));
+
+        turnosPaciente = turnosData.map((t) => {
+          const med = medMap.get(t.medico_id);
+          return {
+            id: t.id,
+            fecha: t.fecha,
+            hora_inicio: t.hora_inicio,
+            especialidad: med?.especialidad ?? "",
+            medico_nombre: med?.nombre_completo ?? "Médico",
+          };
+        });
+      }
+    }
+
     const { data: activa } = await supabase
       .from("consultas")
       .select("id, especialidad, estado, sala_video_url, medico_id")
@@ -396,63 +438,73 @@ export default async function DashboardPage() {
       <main className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="text-xl font-medium text-gray-900">Hola, {fullName}</h1>
 
+        {/* Consulta activa */}
         {consultaActiva && (
-          <div
-            className="mt-6 rounded-xl bg-white p-6"
-            style={{ border: "0.5px solid #e5e7eb" }}
-          >
+          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-900">
-                  Tenés una consulta activa
-                </p>
-                <p className="mt-1 text-sm text-gray-500">
-                  {consultaActiva.especialidad} — Dr. {consultaActiva.medico_nombre}
-                </p>
+                <p className="text-sm font-medium text-gray-900">Tenés una consulta activa</p>
+                <p className="mt-1 text-sm text-gray-500">{consultaActiva.especialidad} — Dr. {consultaActiva.medico_nombre}</p>
               </div>
-              {consultaActiva.sala_video_url ? (
-                <Link
-                  href={`/consulta/${consultaActiva.id}/video`}
-                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
-                >
-                  Reintentar videollamada
-                </Link>
-              ) : (
-                <Link
-                  href={`/sala-espera/${consultaActiva.id}`}
-                  className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
-                >
-                  Ir a la sala de espera
-                </Link>
-              )}
+              <Link
+                href={consultaActiva.sala_video_url ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
+                className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
+              >
+                {consultaActiva.sala_video_url ? "Reintentar videollamada" : "Ir a la sala de espera"}
+              </Link>
             </div>
           </div>
         )}
 
+        {/* Próximo turno */}
+        {turnosPaciente.length > 0 && (
+          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+            <div className="flex items-center gap-2">
+              <span>📅</span>
+              <p className="text-xs font-medium tracking-wide text-gray-400">TU PRÓXIMO TURNO</p>
+            </div>
+            <p className="mt-2 text-sm font-medium text-gray-900">
+              {new Date(turnosPaciente[0].fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "long", timeZone: "America/Argentina/Buenos_Aires" })} · {turnosPaciente[0].hora_inicio.slice(0, 5)} hs
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500">
+              Dr. {turnosPaciente[0].medico_nombre} — {turnosPaciente[0].especialidad}
+            </p>
+          </div>
+        )}
+
+        {/* Acciones principales */}
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Link
-            href="/clinica"
-            className="rounded-xl bg-white p-6 transition hover:shadow-sm"
-            style={{ border: "0.5px solid #e5e7eb" }}
-          >
-            <p className="text-2xl">📅</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Agendar turno</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Buscá un médico y agendá una consulta
-            </p>
+          <Link href="/clinica" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+            <p className="text-2xl">🏥</p>
+            <p className="mt-3 text-sm font-medium text-gray-900">Clínica Virtual</p>
+            <p className="mt-1 text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
           </Link>
-          <Link
-            href="/documentos"
-            className="rounded-xl bg-white p-6 transition hover:shadow-sm"
-            style={{ border: "0.5px solid #e5e7eb" }}
-          >
-            <p className="text-2xl">📋</p>
+          <Link href="/documentos" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+            <p className="text-2xl">📄</p>
             <p className="mt-3 text-sm font-medium text-gray-900">Mis documentos</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Recetas, indicaciones y certificados
-            </p>
+            <p className="mt-1 text-xs text-gray-500">Recetas, indicaciones y certificados</p>
           </Link>
         </div>
+
+        {/* Mis turnos */}
+        {turnosPaciente.length > 0 && (
+          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+            <p className="text-xs font-medium tracking-wide text-gray-400">MIS TURNOS</p>
+            <div className="mt-3 space-y-2">
+              {turnosPaciente.map((t) => (
+                <div key={t.id} className="flex items-center justify-between rounded-lg p-2 hover:bg-gray-50">
+                  <div>
+                    <p className="text-sm text-gray-900">
+                      {new Date(t.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" })} · {t.hora_inicio.slice(0, 5)}
+                      <span className="ml-2 text-gray-500">— Dr. {t.medico_nombre} · {t.especialidad}</span>
+                    </p>
+                  </div>
+                  <button className="text-xs text-gray-400 hover:text-red-500">Cancelar</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
