@@ -99,7 +99,20 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   }, [medicoId, mesVisible, anioVisible]);
 
   const turnoMap = new Map<string, Turno>();
-  for (const t of turnos) turnoMap.set(`${t.fecha}-${t.hora_inicio}`, t);
+  for (const t of turnos) {
+    const key = `${t.fecha}-${t.hora_inicio}`;
+    turnoMap.set(key, t);
+  }
+
+  // Debug: log turnos and their keys
+  useEffect(() => {
+    if (turnos.length > 0) {
+      console.log("[Agenda] Turnos cargados:", turnos.length);
+      console.log("[Agenda] Reservados:", turnos.filter(t => t.estado === "reservado").map(t => `${t.fecha} ${t.hora_inicio} ${t.paciente_nombre}`));
+      console.log("[Agenda] Keys en turnoMap:", [...turnoMap.keys()].slice(0, 10));
+      console.log("[Agenda] HORAS sample:", HORAS.slice(0, 5));
+    }
+  }, [turnos]);
 
   const disponibles = turnos.filter((t) => t.estado === "disponible").length;
   const reservados = turnos.filter((t) => t.estado === "reservado");
@@ -200,19 +213,24 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
             <div className="max-h-[380px] overflow-y-auto">
               {HORAS.map((hora) => (
                 <div key={hora} className="grid" style={{ gridTemplateColumns: "48px repeat(7, 1fr)", borderBottom: "0.5px solid #f0f0f0" }}>
-                  <div className="flex items-center justify-end pr-2 text-[11px] text-gray-400" style={{ height: "28px" }}>{hora}</div>
+                  <div className="flex items-center justify-end pr-2 text-[11px] text-gray-400" style={{ height: "32px" }}>{hora}</div>
                   {diasSemana.map((fecha) => {
                     const t = turnoMap.get(`${fecha}-${hora}`);
-                    if (!t) return <div key={fecha} style={{ height: "28px" }} />;
+                    if (!t) return <div key={fecha} style={{ height: "32px" }} />;
                     return (
                       <div key={fecha} className="flex items-center justify-center" style={{
-                        height: "28px",
+                        height: "32px",
                         background: t.estado === "disponible" ? "#9FE1CB" : t.estado === "reservado" ? "#378ADD" : t.estado === "bloqueado" ? "#F7C1C1" : "transparent",
                       }}>
                         {t.estado === "reservado" && (
-                          <span style={{ fontSize: "11px", fontWeight: 500, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px", width: "100%" , textAlign: "center" }}>
-                            {t.paciente_nombre ?? t.hora_inicio}
-                          </span>
+                          <div style={{ overflow: "hidden", textAlign: "center", padding: "0 2px", lineHeight: "1.2" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 600, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {t.paciente_nombre ?? "Reservado"}
+                            </div>
+                            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.85)" }}>
+                              {t.hora_inicio}
+                            </div>
+                          </div>
                         )}
                         {t.estado === "bloqueado" && <span style={{ fontSize: "10px", color: "#791F1F" }}>—</span>}
                       </div>
