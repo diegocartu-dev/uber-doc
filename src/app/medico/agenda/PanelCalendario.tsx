@@ -10,40 +10,94 @@ const DIAS_SEMANA = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 function getLunes(d: Date): Date {
-  const date = new Date(d);
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = date.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   date.setDate(date.getDate() + diff);
   return date;
 }
 
-function offsetFromHoy(fecha: Date): number {
-  const hoy = new Date();
-  const lunesTarget = getLunes(fecha);
-  const lunesHoy = getLunes(hoy);
-  return Math.round((lunesTarget.getTime() - lunesHoy.getTime()) / (7 * 24 * 60 * 60 * 1000));
+function fechaStr(d: Date): string {
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")}`;
 }
 
 export default function PanelCalendario({ medicoId, precio }: { medicoId: string; precio: number }) {
   const hoy = new Date();
-  const [semanaOffset, setSemanaOffset] = useState(0);
+  const hoyStr = fechaStr(hoy);
+
+  // Estado único: el lunes de la semana seleccionada
+  const [lunesSeleccionado, setLunesSeleccionado] = useState(() => getLunes(hoy));
+
+  // El mes visible del mini calendario — se deriva del lunes pero puede navegarse independientemente
+  const [mesOverride, setMesOverride] = useState<{ mes: number; anio: number } | null>(null);
+
+  const mesVisible = mesOverride?.mes ?? lunesSeleccionado.getMonth();
+  const anioVisible = mesOverride?.anio ?? lunesSeleccionado.getFullYear();
+
+  // Cuando el semanal cambia (flechas o click en día), resetear el override para que siga al semanal
+  function cambiarSemana(nuevoLunes: Date) {
+    setLunesSeleccionado(nuevoLunes);
+    setMesOverride(null); // el mensual sigue al semanal
+  }
+
+  // Flechas del semanal
+  function semanaAnterior() {
+    const prev = new Date(lunesSeleccionado);
+    prev.setDate(prev.getDate() - 7);
+    cambiarSemana(prev);
+  }
+
+  function semanaSiguiente() {
+    const next = new Date(lunesSeleccionado);
+    next.setDate(next.getDate() + 7);
+    cambiarSemana(next);
+  }
+
+  // Flechas del mensual — solo cambian la vista del mes, NO el semanal
+  function mesAnterior() {
+    const m = mesOverride ?? { mes: lunesSeleccionado.getMonth(), anio: lunesSeleccionado.getFullYear() };
+    if (m.mes === 0) setMesOverride({ mes: 11, anio: m.anio - 1 });
+    else setMesOverride({ mes: m.mes - 1, anio: m.anio });
+  }
+
+  function mesSiguiente() {
+    const m = mesOverride ?? { mes: lunesSeleccionado.getMonth(), anio: lunesSeleccionado.getFullYear() };
+    if (m.mes === 11) setMesOverride({ mes: 0, anio: m.anio + 1 });
+    else setMesOverride({ mes: m.mes + 1, anio: m.anio });
+  }
+
+  // Click en día del mensual — cambia el semanal a esa semana
+  function handleDiaClick(fecha: string) {
+    cambiarSemana(getLunes(new Date(fecha + "T12:00:00")));
+  }
+
+  // Botón Hoy — ambos calendarios vuelven
+  function handleHoy() {
+    setLunesSeleccionado(getLunes(hoy));
+    setMesOverride(null);
+  }
+
+  // Semana offset para CalendarioAgendaMedico (relativo a hoy)
+  const lunesHoy = getLunes(hoy);
+  const semanaOffset = Math.round((lunesSeleccionado.getTime() - lunesHoy.getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+  function handleSemanaChange(offset: number) {
+    const nuevoLunes = new Date(lunesHoy);
+    nuevoLunes.setDate(nuevoLunes.getDate() + offset * 7);
+    cambiarSemana(nuevoLunes);
+  }
+
+  // Días de la semana actual para highlight en el mensual
+  const semanaActualDias = new Set(
+    Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(lunesSeleccionado);
+      d.setDate(d.getDate() + i);
+      return fechaStr(d);
+    })
+  );
+
+  // Fetch turno summaries
   const [turnosResumen, setTurnosResumen] = useState<TurnoResumen[]>([]);
-
-  // Derive mes/anio from the semana actual for sync
-  const lunesActual = getLunes(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + semanaOffset * 7));
-  const [mesVisible, setMesVisible] = useState(lunesActual.getMonth());
-  const [anioVisible, setAnioVisible] = useState(lunesActual.getFullYear());
-
-  const hoyStr = hoy.toISOString().split("T")[0];
-
-  // Sync mensual when semanal changes via arrows
-  useEffect(() => {
-    const lun = getLunes(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + semanaOffset * 7));
-    setMesVisible(lun.getMonth());
-    setAnioVisible(lun.getFullYear());
-  }, [semanaOffset]);
-
-  // Fetch turno summaries for visible month
   useEffect(() => {
     async function load() {
       const supabase = createClient();
@@ -68,49 +122,19 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
     if (t.estado === "reservado") diasConReservado.add(t.fecha);
   }
 
-  // Calendar math
   const primerDia = new Date(anioVisible, mesVisible, 1);
   const ultimoDia = new Date(anioVisible, mesVisible + 1, 0);
   const startPad = primerDia.getDay() === 0 ? 6 : primerDia.getDay() - 1;
   const totalDias = ultimoDia.getDate();
-
-  // Current week dates for highlight
-  const semanaActualDias = new Set(
-    Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(lunesActual);
-      d.setDate(d.getDate() + i);
-      return d.toISOString().split("T")[0];
-    })
-  );
-
-  function handleDiaClick(fecha: string) {
-    setSemanaOffset(offsetFromHoy(new Date(fecha + "T12:00:00")));
-  }
-
-  function handleHoy() {
-    setSemanaOffset(0);
-    setMesVisible(hoy.getMonth());
-    setAnioVisible(hoy.getFullYear());
-  }
-
-  function prevMes() {
-    if (mesVisible === 0) { setMesVisible(11); setAnioVisible(anioVisible - 1); }
-    else setMesVisible(mesVisible - 1);
-  }
-
-  function nextMes() {
-    if (mesVisible === 11) { setMesVisible(0); setAnioVisible(anioVisible + 1); }
-    else setMesVisible(mesVisible + 1);
-  }
 
   return (
     <div className="space-y-4">
       {/* Mini calendario mensual */}
       <div className="rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
         <div className="flex items-center justify-between">
-          <button onClick={prevMes} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">←</button>
+          <button onClick={mesAnterior} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">←</button>
           <p className="text-xs font-medium text-gray-700">{MESES[mesVisible]} {anioVisible}</p>
-          <button onClick={nextMes} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">→</button>
+          <button onClick={mesSiguiente} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">→</button>
         </div>
 
         <div className="mt-3 grid grid-cols-7 gap-0.5">
@@ -128,19 +152,17 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
             const enSemana = semanaActualDias.has(fecha);
             const tieneDisp = diasConDisponible.has(fecha);
             const tieneRes = diasConReservado.has(fecha);
-            const tieneAlgo = tieneDisp || tieneRes;
 
             return (
               <button
                 key={dia}
                 onClick={() => handleDiaClick(fecha)}
-                className={`relative flex h-7 items-center justify-center rounded text-[11px] transition-all duration-100 ${
-                  esHoy
-                    ? "font-medium text-[#1D9E75]"
-                    : tieneAlgo
-                      ? "text-gray-700 hover:bg-gray-100 cursor-pointer"
-                      : "text-gray-300 hover:bg-gray-50 cursor-pointer"
-                } ${enSemana ? "bg-[#1D9E75]/5" : ""}`}
+                className={`relative flex h-7 items-center justify-center rounded text-[11px] transition-all duration-100 cursor-pointer ${
+                  esHoy ? "font-medium text-[#1D9E75]"
+                    : (tieneDisp || tieneRes) ? "text-gray-700 hover:bg-gray-100"
+                    : "text-gray-300 hover:bg-gray-50"
+                }`}
+                style={enSemana ? { background: "#f0fdf4" } : undefined}
               >
                 {dia}
                 {(tieneDisp || tieneRes) && (
@@ -155,12 +177,12 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
         </div>
       </div>
 
-      {/* Calendario semanal — botón Hoy se pasa via onHoy */}
+      {/* Calendario semanal */}
       <CalendarioAgendaMedico
         medicoId={medicoId}
         precio={precio}
         semanaOffset={semanaOffset}
-        onSemanaChange={setSemanaOffset}
+        onSemanaChange={handleSemanaChange}
         onHoy={handleHoy}
       />
     </div>
