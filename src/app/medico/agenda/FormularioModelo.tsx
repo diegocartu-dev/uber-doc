@@ -203,7 +203,7 @@ export default function FormularioModelo({
           </select>
         </div>
         <div className="flex-1">
-          <label className="text-xs text-gray-400">Precio (ARS)</label>
+          <label className="text-xs text-gray-400">Valor de consulta</label>
           <div className="relative mt-1">
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-400">$</span>
             <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${inputClass}`} style={borderStyle} />

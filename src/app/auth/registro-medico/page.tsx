@@ -323,7 +323,7 @@ export default function RegistroMedicoPage() {
           {/* Precio de consulta */}
           <div>
             <label htmlFor="precio_consulta" className={labelClass}>
-              Precio de consulta (ARS)
+              Valor de consulta
             </label>
             <div className="relative mt-1">
               <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">

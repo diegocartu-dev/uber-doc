@@ -206,7 +206,7 @@ export default function DisponibilidadMedico({
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-400">Precio (ARS)</label>
+              <label className="text-xs text-gray-400">Valor de consulta</label>
               <div className="flex items-center gap-1">
                 <span className="text-xs text-gray-400">$</span>
                 <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={selectClass} style={{ ...selectStyle, width: "80px" }} />
