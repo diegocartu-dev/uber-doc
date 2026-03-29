@@ -82,7 +82,7 @@ function semaforo(estado: Disponibilidad) {
     case "programada":
       return { color: "bg-red-500", texto: "Solo programada" };
     case "sin_medicos":
-      return { color: "bg-gray-300", texto: "Sin médicos" };
+      return { color: "bg-gray-300", texto: "Sin disponibilidad" };
   }
 }
 
@@ -279,7 +279,7 @@ export default function GrillaEspecialidades({
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-gray-300" />
-          Sin médicos
+          Sin disponibilidad
         </span>
       </div>
 
@@ -360,21 +360,24 @@ export default function GrillaEspecialidades({
                 </p>
               )}
 
-              <div className="mt-4 flex gap-2">
-                <button
-                  disabled={botonConsultaDeshabilitado}
-                  onClick={() => setModalEspecialidad(esp.nombre)}
-                  className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-                >
-                  Consulta ahora
-                </button>
-                <button
-                  disabled={sinMedicos}
-                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
-                >
-                  Agendar turno
-                </button>
-              </div>
+              {sinMedicos ? (
+                <p className="mt-4 text-xs text-gray-400">Sin disponibilidad</p>
+              ) : (
+                <div className="mt-4 flex gap-2">
+                  <button
+                    disabled={botonConsultaDeshabilitado}
+                    onClick={() => setModalEspecialidad(esp.nombre)}
+                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                  >
+                    Consulta ahora
+                  </button>
+                  <button
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Agendar turno
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
