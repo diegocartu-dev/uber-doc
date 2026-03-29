@@ -47,15 +47,10 @@ export default function FormularioModelo({
     { inicio: "09:00", fin: "13:00" },
   ]);
   const [franjasCustom, setFranjasCustom] = useState<Record<number, { inicio: string; fin: string }[]>>({});
-  const [prioridad, setPrioridad] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Verificar overlap con modelos existentes
-  const overlap = modelosExistentes.filter((m) =>
-    m.activo && fechaInicio && fechaFin &&
-    m.fecha_inicio <= fechaFin && m.fecha_fin >= fechaInicio
-  );
+
 
   function toggleDia(num: number) {
     setDias((prev) => {
@@ -106,6 +101,7 @@ export default function FormularioModelo({
     setError(null);
     if (!nombre.trim()) { setError("Ingresá un nombre para el modelo."); return; }
     if (!fechaInicio || !fechaFin) { setError("Seleccioná fechas de inicio y fin."); return; }
+    if (fechaFin < fechaInicio) { setError("La fecha de fin debe ser igual o posterior a la fecha de inicio."); return; }
 
     const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0).map(([k]) => parseInt(k));
     if (diasSeleccionados.length === 0) { setError("Seleccioná al menos un día."); return; }
@@ -121,14 +117,12 @@ export default function FormularioModelo({
     }
 
     if (todasFranjas.length === 0) { setError("Agregá al menos una franja horaria."); return; }
-    if (overlap.length > 0 && prioridad === null) { setError("Debés indicar si este modelo tiene prioridad sobre los existentes."); return; }
 
     startTransition(async () => {
       const result = await guardarModelo({
         nombre: nombre.trim(),
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
-        prioridad: prioridad ?? 1,
         duracion_turno: duracionTurno,
         precio,
         franjas: todasFranjas,
@@ -226,7 +220,7 @@ export default function FormularioModelo({
         </div>
         <div className="flex-1">
           <label className="text-xs text-gray-400">Hasta</label>
-          <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={borderStyle} />
+          <input type="date" value={fechaFin} min={fechaInicio || undefined} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={borderStyle} />
         </div>
       </div>
 
@@ -305,38 +299,6 @@ export default function FormularioModelo({
             </div>
           );
         })}
-
-      {/* Prioridad */}
-      {overlap.length > 0 && (
-        <div className="mt-5 rounded-lg bg-amber-50 p-4" style={{ border: "0.5px solid #fbbf24" }}>
-          <p className="text-xs text-amber-700">
-            ⚠️ Este modelo se superpone con: <strong>{overlap.map((m) => m.nombre).join(", ")}</strong>
-          </p>
-          <p className="mt-2 text-xs font-medium text-amber-800">¿Qué prioridad tiene este modelo?</p>
-          <div className="mt-2 space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="prioridad"
-                checked={prioridad === 2}
-                onChange={() => setPrioridad(2)}
-                className="h-3.5 w-3.5 text-amber-600"
-              />
-              <span className="text-xs text-amber-700">Tiene prioridad — pisa los días que se superpongan con {overlap.map((m) => m.nombre).join(", ")}</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="prioridad"
-                checked={prioridad === 1}
-                onChange={() => setPrioridad(1)}
-                className="h-3.5 w-3.5 text-amber-600"
-              />
-              <span className="text-xs text-amber-700">No tiene prioridad — {overlap.map((m) => m.nombre).join(", ")} mantiene precedencia</span>
-            </label>
-          </div>
-        </div>
-      )}
 
       {/* Acciones */}
       <div className="mt-6 flex gap-3">

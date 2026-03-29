@@ -14,7 +14,6 @@ export async function guardarModelo(data: {
   nombre: string;
   fecha_inicio: string;
   fecha_fin: string;
-  prioridad: number;
   duracion_turno: number;
   precio: number;
   franjas: { dia_semana: number; hora_inicio: string; hora_fin: string }[];
@@ -38,7 +37,6 @@ export async function guardarModelo(data: {
       nombre: data.nombre,
       fecha_inicio: data.fecha_inicio,
       fecha_fin: data.fecha_fin,
-      prioridad: data.prioridad,
       duracion_turno: data.duracion_turno,
       precio: data.precio,
       activo: true,
@@ -129,107 +127,30 @@ export async function guardarModelo(data: {
     if (turnosErr) return { error: `Error al generar turnos: ${turnosErr.message}` };
   }
 
-  // Resolución de conflictos por prioridad
+  // Resolución automática de conflictos — el modelo más nuevo tiene prioridad
+  // Bloquear turnos disponibles de modelos anteriores en fechas/días que se pisan
   const diasDelModelo = [...new Set(data.franjas.map((f) => f.dia_semana))];
 
-  if (data.prioridad > 1) {
-    // Modelo con prioridad alta → bloquear turnos disponibles de modelos con prioridad menor
-    // en las mismas fechas y días de la semana
-    const { data: modelosBajos } = await supabase
-      .from("agenda_modelos")
-      .select("id")
-      .eq("medico_id", medico.id)
-      .eq("activo", true)
-      .lt("prioridad", data.prioridad)
-      .neq("id", modelo.id);
+  const { data: turnosAnteriores } = await supabase
+    .from("turnos")
+    .select("id, fecha")
+    .eq("medico_id", medico.id)
+    .eq("estado", "disponible")
+    .neq("modelo_id", modelo.id)
+    .gte("fecha", data.fecha_inicio)
+    .lte("fecha", data.fecha_fin);
 
-    if (modelosBajos && modelosBajos.length > 0) {
-      const modeloBajosIds = modelosBajos.map((m) => m.id);
+  if (turnosAnteriores && turnosAnteriores.length > 0) {
+    const idsABloquear = turnosAnteriores.filter((t) => {
+      const d = new Date(t.fecha + "T12:00:00");
+      const jsDay = d.getDay();
+      const diaSemana = jsDay === 0 ? 7 : jsDay;
+      return diasDelModelo.includes(diaSemana);
+    }).map((t) => t.id);
 
-      // Obtener turnos disponibles de modelos bajos que se pisan en fechas
-      const { data: turnosABloquear } = await supabase
-        .from("turnos")
-        .select("id, fecha")
-        .eq("medico_id", medico.id)
-        .eq("estado", "disponible")
-        .in("modelo_id", modeloBajosIds)
-        .gte("fecha", data.fecha_inicio)
-        .lte("fecha", data.fecha_fin);
-
-      if (turnosABloquear && turnosABloquear.length > 0) {
-        // Filtrar solo los que caen en días de la semana del modelo nuevo
-        const idsABloquear = turnosABloquear.filter((t) => {
-          const d = new Date(t.fecha + "T12:00:00");
-          const jsDay = d.getDay();
-          const diaSemana = jsDay === 0 ? 7 : jsDay;
-          return diasDelModelo.includes(diaSemana);
-        }).map((t) => t.id);
-
-        // Bloquear en lotes
-        for (let i = 0; i < idsABloquear.length; i += 500) {
-          const lote = idsABloquear.slice(i, i + 500);
-          await supabase
-            .from("turnos")
-            .update({ estado: "bloqueado" })
-            .in("id", lote);
-        }
-      }
-    }
-  } else {
-    // Modelo con prioridad baja → si hay modelos con prioridad alta activos que se pisen,
-    // marcar los turnos del modelo nuevo como bloqueados en esos días
-    const { data: modelosAltos } = await supabase
-      .from("agenda_modelos")
-      .select("id, fecha_inicio, fecha_fin")
-      .eq("medico_id", medico.id)
-      .eq("activo", true)
-      .gt("prioridad", data.prioridad)
-      .neq("id", modelo.id);
-
-    if (modelosAltos && modelosAltos.length > 0) {
-      // Obtener franjas de modelos altos para saber qué días cubren
-      const modeloAltosIds = modelosAltos.map((m) => m.id);
-      const { data: franjasAltas } = await supabase
-        .from("agenda_franjas")
-        .select("modelo_id, dia_semana")
-        .in("modelo_id", modeloAltosIds);
-
-      // Mapear qué días cubre cada modelo alto
-      const diasPorModeloAlto = new Map<string, Set<number>>();
-      for (const f of franjasAltas ?? []) {
-        if (!diasPorModeloAlto.has(f.modelo_id)) diasPorModeloAlto.set(f.modelo_id, new Set());
-        diasPorModeloAlto.get(f.modelo_id)!.add(f.dia_semana);
-      }
-
-      // Para cada turno del modelo nuevo, verificar si cae en una fecha/día cubierto por un modelo alto
-      const { data: turnosNuevos } = await supabase
-        .from("turnos")
-        .select("id, fecha")
-        .eq("modelo_id", modelo.id)
-        .eq("estado", "disponible");
-
-      if (turnosNuevos && turnosNuevos.length > 0) {
-        const idsABloquear = turnosNuevos.filter((t) => {
-          const d = new Date(t.fecha + "T12:00:00");
-          const jsDay = d.getDay();
-          const diaSemana = jsDay === 0 ? 7 : jsDay;
-
-          return modelosAltos.some((ma) => {
-            const diasAlto = diasPorModeloAlto.get(ma.id);
-            return diasAlto?.has(diaSemana) &&
-              t.fecha >= ma.fecha_inicio &&
-              t.fecha <= ma.fecha_fin;
-          });
-        }).map((t) => t.id);
-
-        for (let i = 0; i < idsABloquear.length; i += 500) {
-          const lote = idsABloquear.slice(i, i + 500);
-          await supabase
-            .from("turnos")
-            .update({ estado: "bloqueado" })
-            .in("id", lote);
-        }
-      }
+    for (let i = 0; i < idsABloquear.length; i += 500) {
+      const lote = idsABloquear.slice(i, i + 500);
+      await supabase.from("turnos").update({ estado: "bloqueado" }).in("id", lote);
     }
   }
 
