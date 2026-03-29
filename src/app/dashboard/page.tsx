@@ -16,7 +16,20 @@ export default async function DashboardPage() {
   }
 
   const fullName = user.user_metadata?.full_name || user.email;
-  const role = user.user_metadata?.role;
+  let role = user.user_metadata?.role;
+
+  // Fallback: si no hay rol en metadata, verificar en tablas
+  if (!role) {
+    const { data: esMedico } = await supabase
+      .from("medicos").select("id").eq("user_id", user.id).maybeSingle();
+    if (esMedico) {
+      role = "medico";
+    } else {
+      const { data: esPaciente } = await supabase
+        .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+      if (esPaciente) role = "paciente";
+    }
+  }
 
   // --- MÉDICO ---
   let medico: {
