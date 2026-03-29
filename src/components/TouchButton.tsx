@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 
 type Props = {
   onClick?: () => void;
@@ -12,54 +12,33 @@ type Props = {
 };
 
 export function TouchButton({ onClick, className, children, disabled, type = "button", href }: Props) {
-  const ref = useRef<HTMLButtonElement & HTMLAnchorElement>(null);
+  const [pressed, setPressed] = useState(false);
 
-  const handlePressStart = () => {
-    if (ref.current) {
-      ref.current.style.transform = "scale(0.95)";
-      ref.current.style.opacity = "0.8";
-    }
+  const pressStyle = {
+    transform: pressed ? "scale(0.95)" : "scale(1)",
+    opacity: pressed ? 0.8 : 1,
+    transition: "transform 0.12s ease, opacity 0.12s ease",
   };
 
-  const handlePressEnd = () => {
-    if (ref.current) {
-      ref.current.style.transform = "scale(1)";
-      ref.current.style.opacity = "1";
-    }
+  const handlers = {
+    onTouchStart: () => setPressed(true),
+    onTouchEnd: () => setPressed(false),
+    onTouchCancel: () => setPressed(false),
+    onMouseDown: () => setPressed(true),
+    onMouseUp: () => setPressed(false),
+    onMouseLeave: () => setPressed(false),
   };
-
-  const style = { transition: "transform 0.1s ease, opacity 0.1s ease" };
 
   if (href) {
     return (
-      <a
-        ref={ref}
-        href={href}
-        className={className}
-        style={style}
-        onTouchStart={handlePressStart}
-        onTouchEnd={handlePressEnd}
-        onMouseDown={handlePressStart}
-        onMouseUp={handlePressEnd}
-      >
+      <a href={href} className={className} style={pressStyle} {...handlers}>
         {children}
       </a>
     );
   }
 
   return (
-    <button
-      ref={ref}
-      type={type}
-      onClick={onClick}
-      className={className}
-      disabled={disabled}
-      style={style}
-      onTouchStart={handlePressStart}
-      onTouchEnd={handlePressEnd}
-      onMouseDown={handlePressStart}
-      onMouseUp={handlePressEnd}
-    >
+    <button type={type} onClick={onClick} className={className} disabled={disabled} style={pressStyle} {...handlers}>
       {children}
     </button>
   );
