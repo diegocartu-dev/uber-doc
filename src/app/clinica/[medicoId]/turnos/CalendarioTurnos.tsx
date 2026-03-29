@@ -25,6 +25,7 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
 
   // Filtrar turnos pasados y con menos de 1h de anticipación
   const ahora = new Date();
@@ -302,16 +303,55 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
               Volver
             </button>
             <button
-              onClick={handleConfirmar}
-              disabled={isPending}
-              className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
+              onClick={() => setMostrarConfirmacion(true)}
+              className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
             >
-              {isPending ? "Confirmando..." : "Confirmar turno →"}
+              Confirmar turno →
             </button>
           </div>
-          <p className="mt-3 text-center text-[11px] text-gray-400">
-            Podés cancelar sin costo hasta 48 hs antes. Si el profesional cancela, se reintegra el 100% del monto.
-          </p>
+        </div>
+      )}
+
+      {/* Modal de confirmación */}
+      {mostrarConfirmacion && turnoSeleccionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <p className="text-sm font-medium text-gray-900">Confirmá tu turno</p>
+
+            <div className="mt-4 space-y-1.5 text-sm">
+              <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
+              <p className="text-gray-700">Dr. {medico.nombre}</p>
+              <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-gray-50 p-3" style={{ border: "0.5px solid #e5e7eb" }}>
+              <p className="text-xs font-medium text-gray-500">ℹ️ Condiciones:</p>
+              <ul className="mt-1.5 space-y-1 text-[11px] text-gray-500">
+                <li>· Cancelación sin costo hasta 48 hs antes</li>
+                <li>· Si el profesional cancela, se reintegra el 100% del monto</li>
+              </ul>
+            </div>
+
+            {error && (
+              <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">{error}</div>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => { setMostrarConfirmacion(false); setError(null); }}
+                className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmar}
+                disabled={isPending}
+                className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
+              >
+                {isPending ? "Confirmando..." : "Confirmar y pagar"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

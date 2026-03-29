@@ -12,7 +12,8 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
     .from("pacientes")
     .select("id")
     .eq("user_id", user.id)
-    .single();
+    .limit(1)
+    .maybeSingle();
 
   if (!paciente) {
     return { error: `Perfil de paciente no encontrado. ${pacErr?.message ?? "Verificá que estés registrado como paciente."}` };
