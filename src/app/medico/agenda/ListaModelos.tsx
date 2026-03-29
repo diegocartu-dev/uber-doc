@@ -77,8 +77,8 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
                   <p className="text-sm font-medium text-gray-900">{m.nombre}</p>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                     m.prioridad > 1
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-green-100 text-green-700"
+                      ? "bg-[#BA7517]/10 text-[#BA7517]"
+                      : "bg-[#1D9E75]/10 text-[#1D9E75]"
                   }`}>
                     {m.prioridad > 1 ? "Alta" : "Base"}
                   </span>
@@ -96,7 +96,7 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
                     m.activo ? "bg-[#1D9E75]" : "bg-gray-300"
                   }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
                     m.activo ? "translate-x-4" : "translate-x-0.5"
                   }`} />
                 </button>

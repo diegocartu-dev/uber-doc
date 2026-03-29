@@ -42,11 +42,11 @@ const estadoLabel: Record<string, string> = {
 };
 
 const estadoColor: Record<string, string> = {
-  esperando: "bg-amber-100 text-amber-700",
-  aceptada: "bg-blue-100 text-blue-700",
-  en_curso: "bg-green-100 text-green-700",
+  esperando: "bg-[#BA7517]/10 text-[#BA7517]",
+  aceptada: "bg-[#378ADD]/10 text-[#378ADD]",
+  en_curso: "bg-[#1D9E75]/10 text-[#1D9E75]",
   completada: "bg-gray-100 text-gray-600",
-  cancelada: "bg-red-100 text-red-600",
+  cancelada: "bg-[#E24B4A]/10 text-[#E24B4A]",
 };
 
 const tipoLabel: Record<string, string> = {

@@ -159,10 +159,10 @@ export default function SalaEsperaCliente({
               <span
                 className={`font-medium ${
                   salaVideoUrl
-                    ? "text-blue-600"
+                    ? "text-[#378ADD]"
                     : aceptada
-                      ? "text-green-600"
-                      : "text-yellow-600"
+                      ? "text-[#1D9E75]"
+                      : "text-[#BA7517]"
                 }`}
               >
                 {salaVideoUrl
@@ -216,7 +216,7 @@ export default function SalaEsperaCliente({
               .eq("id", consultaId);
             window.location.href = `/consulta/${consultaId}/confirmacion`;
           }}
-          className="mt-4 w-full rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
+          className="mt-4 w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
         >
           🧪 Simular pago aprobado
         </button>

@@ -76,13 +76,13 @@ const ESPECIALIDADES: Especialidad[] = [
 function semaforo(estado: Disponibilidad) {
   switch (estado) {
     case "disponible":
-      return { color: "bg-green-500", texto: "Disponible ahora" };
+      return { color: "bg-[#1D9E75]", texto: "Disponible ahora" };
     case "espera":
-      return { color: "bg-yellow-400", texto: "Con espera" };
+      return { color: "bg-[#BA7517]", texto: "Con espera" };
     case "programada":
-      return { color: "bg-red-500", texto: "Solo programada" };
+      return { color: "bg-[#D85A30]", texto: "Solo programada" };
     case "sin_medicos":
-      return { color: "bg-gray-300", texto: "Sin disponibilidad" };
+      return { color: "bg-[#888780]", texto: "Sin disponibilidad" };
   }
 }
 
@@ -263,19 +263,19 @@ export default function GrillaEspecialidades({
       {/* Leyenda del semáforo */}
       <div className="mb-6 flex flex-wrap gap-4 text-sm text-gray-600">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+          <span className="inline-block h-3 w-3 rounded-full bg-[#1D9E75]" />
           Disponible ahora
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-yellow-400" />
+          <span className="inline-block h-3 w-3 rounded-full bg-[#BA7517]" />
           Con espera
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
+          <span className="inline-block h-3 w-3 rounded-full bg-[#D85A30]" />
           Solo programada
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-gray-300" />
+          <span className="inline-block h-3 w-3 rounded-full bg-[#888780]" />
           Sin disponibilidad
         </span>
       </div>
@@ -443,7 +443,7 @@ export default function GrillaEspecialidades({
                           </p>
                           <span
                             className={`inline-block h-2 w-2 rounded-full ${
-                              disponibleAhora ? "bg-green-500" : "bg-gray-300"
+                              disponibleAhora ? "bg-[#1D9E75]" : "bg-gray-300"
                             }`}
                           />
                         </div>

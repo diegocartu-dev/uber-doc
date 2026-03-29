@@ -58,7 +58,7 @@ export default async function ConfirmacionPagoPage({
 
       <main className="mx-auto max-w-lg px-4 py-16">
         <div className="text-center">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-green-50">
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/5">
             <span className="text-5xl">✅</span>
           </div>
 
@@ -95,7 +95,7 @@ export default async function ConfirmacionPagoPage({
               <div className="border-t border-gray-100 pt-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Estado</span>
-                  <span className="font-medium text-green-600">Pagada</span>
+                  <span className="font-medium text-[#1D9E75]">Pagada</span>
                 </div>
               </div>
             </div>

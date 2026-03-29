@@ -32,12 +32,12 @@ function formatHora(fecha: string) {
 
 function estadoDot(estado: string) {
   switch (estado) {
-    case "esperando": return "bg-amber-400";
-    case "aceptada": return "bg-blue-400";
+    case "esperando": return "bg-[#BA7517]";
+    case "aceptada": return "bg-[#378ADD]";
     case "en_curso": return "bg-[#1D9E75]";
-    case "completada": return "bg-gray-300";
-    case "cancelada": return "bg-red-400";
-    default: return "bg-gray-300";
+    case "completada": return "bg-[#888780]";
+    case "cancelada": return "bg-[#E24B4A]";
+    default: return "bg-[#888780]";
   }
 }
 
