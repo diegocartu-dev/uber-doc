@@ -66,6 +66,7 @@ export default async function DashboardPage() {
 
   let completadasHoy = 0;
   let ingresosHoy = 0;
+  let numModelosActivos = 0;
 
   // --- PACIENTE ---
   let consultaActiva: {
@@ -186,6 +187,14 @@ export default async function DashboardPage() {
       completadasHoy = compHoy?.length ?? 0;
       ingresosHoy = completadasHoy * (data.precio_consulta ?? 0);
 
+      // Contar modelos de agenda activos
+      const { count: modelosActivosCount } = await supabase
+        .from("agenda_modelos")
+        .select("id", { count: "exact", head: true })
+        .eq("medico_id", data.id)
+        .eq("activo", true);
+      numModelosActivos = modelosActivosCount ?? 0;
+
       // Admin: todas las consultas
       const { data: todas } = await supabase
         .from("consultas")
@@ -292,31 +301,50 @@ export default async function DashboardPage() {
                 medicoId={medico.id}
               />
 
-              {/* Disponibilidad — colapsable */}
-              {/* Mi agenda */}
-            <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium tracking-wide text-gray-400">MI AGENDA</p>
-                  <p className="mt-1 text-sm text-gray-600">Configurá tus modelos de disponibilidad para turnos</p>
+              {/* Consulta inmediata */}
+              <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="px-5 pt-5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚡</span>
+                    <p className="text-xs font-medium tracking-wide text-gray-400">CONSULTA INMEDIATA</p>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">Pacientes te contactan ahora sin turno previo</p>
                 </div>
-                <Link
-                  href="/medico/agenda"
-                  className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  Configurar
-                </Link>
+                <div className="px-1 pb-1">
+                  <DisponibilidadMedico
+                    disponible={medico.disponible}
+                    disponibleDesde={medico.disponible_desde}
+                    disponibleHasta={medico.disponible_hasta}
+                    duracionConsulta={medico.duracion_consulta}
+                    precioConsulta={medico.precio_consulta}
+                    pacientesEnEspera={consultasPendientes.length}
+                  />
+                </div>
               </div>
-            </div>
 
-            <DisponibilidadMedico
-                disponible={medico.disponible}
-                disponibleDesde={medico.disponible_desde}
-                disponibleHasta={medico.disponible_hasta}
-                duracionConsulta={medico.duracion_consulta}
-                precioConsulta={medico.precio_consulta}
-                pacientesEnEspera={consultasPendientes.length}
-              />
+              {/* Turnos programados */}
+              <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📅</span>
+                      <p className="text-xs font-medium tracking-wide text-gray-400">TURNOS PROGRAMADOS</p>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500">Pacientes reservan turno con anticipación</p>
+                    {numModelosActivos > 0 && (
+                      <p className="mt-1 text-xs text-[#1D9E75]">
+                        {numModelosActivos} modelo{numModelosActivos !== 1 ? "s" : ""} activo{numModelosActivos !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href="/medico/agenda"
+                    className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                  >
+                    Configurar agenda →
+                  </Link>
+                </div>
+              </div>
             </div>
 
             {/* Sidebar */}

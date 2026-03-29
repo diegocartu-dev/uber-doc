@@ -98,20 +98,17 @@ export default function DisponibilidadMedico({
   const [hastaH, hastaM] = parseHM(hasta);
 
   return (
-    <div
-      className="rounded-xl bg-white"
-      style={{ border: "0.5px solid #e5e7eb" }}
-    >
+    <div className="rounded-xl">
       <div
         role="button"
         tabIndex={0}
         onClick={() => setAbierto(!abierto)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setAbierto(!abierto); }}
-        className="flex w-full cursor-pointer items-center justify-between px-6 py-4"
+        className="flex w-full cursor-pointer items-center justify-between px-5 py-3"
       >
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium tracking-wide text-gray-400">
-            DISPONIBILIDAD
+          <span className="text-xs text-gray-500">
+            {activo ? "Activa" : "Inactiva"}
           </span>
           <button
             type="button"
