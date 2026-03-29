@@ -317,10 +317,10 @@ export default function GrillaEspecialidades({
           return (
             <div
               key={esp.nombre}
-              className={`rounded-xl border bg-white p-5 shadow-sm transition ${
+              className={`rounded-xl border bg-white shadow-sm transition ${
                 sinMedicos
-                  ? "border-gray-200 opacity-60"
-                  : "border-gray-200 hover:shadow-md"
+                  ? "border-gray-200 opacity-60 px-5 pt-5 pb-3"
+                  : "border-gray-200 hover:shadow-md p-5"
               }`}
             >
               <div className="flex items-start justify-between">
