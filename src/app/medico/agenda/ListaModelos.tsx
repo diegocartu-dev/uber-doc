@@ -20,14 +20,12 @@ type Modelo = {
   franjas: Franja[];
 };
 
-const DIAS = ["", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DIAS_CORTO = ["", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DIAS_LETRA = ["", "L", "M", "X", "J", "V", "S", "D"];
 
 function formatFecha(f: string) {
-  return new Date(f + "T12:00:00").toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "short",
-    timeZone: "America/Argentina/Buenos_Aires",
-  });
+  const d = new Date(f + "T12:00:00");
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" });
 }
 
 export default function ListaModelos({ modelos: modelosIniciales }: { modelos: Modelo[] }) {
@@ -36,109 +34,101 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
 
   function handleToggle(id: string, activo: boolean) {
     setModelos((prev) => prev.map((m) => m.id === id ? { ...m, activo } : m));
-    startTransition(async () => {
-      await toggleModelo(id, activo);
-    });
+    startTransition(async () => { await toggleModelo(id, activo); });
   }
 
   function handleEliminar(id: string) {
     if (!confirm("¿Eliminar este modelo de agenda?")) return;
     setModelos((prev) => prev.filter((m) => m.id !== id));
-    startTransition(async () => {
-      await eliminarModelo(id);
-    });
+    startTransition(async () => { await eliminarModelo(id); });
   }
 
   if (modelos.length === 0) {
     return (
-      <div className="mt-12 text-center">
-        <p className="text-3xl">📅</p>
-        <p className="mt-3 text-sm text-gray-500">
-          No tenés modelos de agenda. Creá uno para recibir turnos programados.
-        </p>
+      <div className="rounded-xl bg-white p-8 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
+        <p className="text-[28px]">📅</p>
+        <p className="mt-3 text-[14px] text-gray-500">No tenés modelos de agenda.</p>
+        <p className="mt-1 text-[13px] text-gray-400">Creá uno para recibir turnos programados.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <>
       {modelos.map((m) => {
         const diasActivos = [...new Set(m.franjas.map((f) => f.dia_semana))].sort();
+
+        // Group franjas by dia for readable display
+        const franjasPorDia = new Map<number, string[]>();
+        for (const f of m.franjas.sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio))) {
+          if (!franjasPorDia.has(f.dia_semana)) franjasPorDia.set(f.dia_semana, []);
+          franjasPorDia.get(f.dia_semana)!.push(`${f.hora_inicio.slice(0, 5)}–${f.hora_fin.slice(0, 5)}`);
+        }
 
         return (
           <div
             key={m.id}
-            className="rounded-xl bg-white p-5"
-            style={{ border: "0.5px solid #e5e7eb", opacity: m.activo ? 1 : 0.6 }}
+            className="rounded-xl bg-white"
+            style={{ border: "0.5px solid #e5e7eb", padding: "20px 24px", opacity: m.activo ? 1 : 0.5, minHeight: "140px" }}
           >
+            {/* Header */}
             <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-900">{m.nombre}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    m.prioridad > 1
-                      ? "bg-[#BA7517]/10 text-[#BA7517]"
-                      : "bg-[#1D9E75]/10 text-[#1D9E75]"
-                  }`}>
-                    {m.prioridad > 1 ? "Alta" : "Base"}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
+              <div className="flex-1">
+                <p className="text-[18px] font-semibold text-gray-900">{m.nombre}</p>
+                <p className="mt-1 text-[13px] text-gray-500">
                   {formatFecha(m.fecha_inicio)} — {formatFecha(m.fecha_fin)}
                 </p>
               </div>
-
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <button
                   onClick={() => handleToggle(m.id, !m.activo)}
                   disabled={isPending}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                  className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                     m.activo ? "bg-[#1D9E75]" : "bg-gray-300"
                   }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                    m.activo ? "translate-x-4" : "translate-x-0.5"
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    m.activo ? "translate-x-5" : "translate-x-0.5"
                   }`} />
-                </button>
-                <button
-                  onClick={() => handleEliminar(m.id)}
-                  className="text-xs text-gray-400 hover:text-red-500"
-                >
-                  Eliminar
                 </button>
               </div>
             </div>
 
-            {/* Días activos */}
-            <div className="mt-3 flex gap-1.5">
-              {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                <span
-                  key={d}
-                  className={`flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium ${
-                    diasActivos.includes(d)
-                      ? "bg-[#1D9E75] text-white"
-                      : "bg-gray-100 text-gray-400"
-                  }`}
-                >
-                  {DIAS[d]}
+            {/* Días */}
+            <div className="mt-4 flex gap-2">
+              {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                const activo = diasActivos.includes(d);
+                return (
+                  <span
+                    key={d}
+                    className={`flex h-8 min-w-[40px] items-center justify-center rounded-lg text-[13px] font-medium ${
+                      activo ? "bg-[#1D9E75] text-white" : "bg-gray-100 text-gray-400"
+                    }`}
+                  >
+                    {DIAS_LETRA[d]}
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Horarios legibles */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[...franjasPorDia.entries()].map(([dia, horas]) => (
+                <span key={dia} className="rounded-lg bg-gray-50 px-2.5 py-1 text-[12px] text-gray-600" style={{ border: "0.5px solid #e5e7eb" }}>
+                  {DIAS_CORTO[dia]} {horas.join(", ")}
                 </span>
               ))}
             </div>
 
-            {/* Franjas */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {m.franjas
-                .sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio))
-                .map((f) => (
-                  <span key={f.id} className="rounded bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500" style={{ border: "0.5px solid #e5e7eb" }}>
-                    {DIAS[f.dia_semana]} {f.hora_inicio.slice(0, 5)}-{f.hora_fin.slice(0, 5)}
-                  </span>
-                ))
-              }
+            {/* Eliminar */}
+            <div className="mt-3">
+              <button onClick={() => handleEliminar(m.id)} className="text-[12px] text-red-400 hover:text-red-600">
+                Eliminar modelo
+              </button>
             </div>
           </div>
         );
       })}
-    </div>
+    </>
   );
 }
