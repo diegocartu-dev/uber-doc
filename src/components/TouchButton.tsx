@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 type Props = {
   onClick?: () => void;
   className?: string;
@@ -12,33 +10,45 @@ type Props = {
 };
 
 export function TouchButton({ onClick, className, children, disabled, type = "button", href }: Props) {
-  const [pressed, setPressed] = useState(false);
-
-  const pressStyle = {
-    transform: pressed ? "scale(0.95)" : "scale(1)",
-    opacity: pressed ? 0.8 : 1,
-    transition: "transform 0.12s ease, opacity 0.12s ease",
+  const baseStyle = {
+    transition: "transform 0.15s ease, opacity 0.15s ease",
+    WebkitTapHighlightColor: "transparent",
+    cursor: "pointer",
+    userSelect: "none" as const,
   };
 
-  const handlers = {
-    onTouchStart: () => setPressed(true),
-    onTouchEnd: () => setPressed(false),
-    onTouchCancel: () => setPressed(false),
-    onMouseDown: () => setPressed(true),
-    onMouseUp: () => setPressed(false),
-    onMouseLeave: () => setPressed(false),
+  const handlePress = (e: React.PointerEvent) => {
+    const el = e.currentTarget as HTMLElement;
+    el.style.transform = "scale(0.93)";
+    el.style.opacity = "0.75";
+    setTimeout(() => {
+      el.style.transform = "scale(1)";
+      el.style.opacity = "1";
+    }, 150);
   };
 
   if (href) {
     return (
-      <a href={href} className={className} style={pressStyle} {...handlers}>
+      <a
+        href={href}
+        className={className}
+        style={baseStyle}
+        onPointerDown={handlePress}
+      >
         {children}
       </a>
     );
   }
 
   return (
-    <button type={type} onClick={onClick} className={className} disabled={disabled} style={pressStyle} {...handlers}>
+    <button
+      type={type}
+      onClick={onClick}
+      className={className}
+      disabled={disabled}
+      style={baseStyle}
+      onPointerDown={handlePress}
+    >
       {children}
     </button>
   );
