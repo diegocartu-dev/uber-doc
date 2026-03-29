@@ -209,7 +209,11 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                         height: "28px",
                         background: t.estado === "disponible" ? "#9FE1CB" : t.estado === "reservado" ? "#378ADD" : t.estado === "bloqueado" ? "#F7C1C1" : "transparent",
                       }}>
-                        {t.estado === "reservado" && <span style={{ fontSize: "10px", fontWeight: 500, color: "#ffffff" }}>Reservado</span>}
+                        {t.estado === "reservado" && (
+                          <span style={{ fontSize: "11px", fontWeight: 500, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", padding: "0 4px", width: "100%" , textAlign: "center" }}>
+                            {t.paciente_nombre ?? t.hora_inicio}
+                          </span>
+                        )}
                         {t.estado === "bloqueado" && <span style={{ fontSize: "10px", color: "#791F1F" }}>—</span>}
                       </div>
                     );
