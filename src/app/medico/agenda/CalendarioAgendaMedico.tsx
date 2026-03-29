@@ -13,7 +13,6 @@ type Turno = {
   paciente_nombre: string | null;
 };
 
-const DIAS_LV = ["Lun", "Mar", "Mié", "Jue", "Vie"];
 const DIAS_ALL = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -54,7 +53,6 @@ export default function CalendarioAgendaMedico({
   const setSemanaOffset = onSemanaChange ?? setSemanaOffsetLocal;
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [mostrarFinde, setMostrarFinde] = useState(false);
 
   const hoy = new Date();
   const lunes = getLunes(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + semanaOffset * 7));
@@ -63,9 +61,6 @@ export default function CalendarioAgendaMedico({
     d.setDate(d.getDate() + i);
     return d.toISOString().split("T")[0];
   });
-  const diasVisibles = mostrarFinde ? diasSemana : diasSemana.slice(0, 5);
-  const diasLabels = mostrarFinde ? DIAS_ALL : DIAS_LV;
-  const numCols = diasVisibles.length;
   const hoyStr = hoy.toISOString().split("T")[0];
 
   useEffect(() => {
@@ -149,14 +144,14 @@ export default function CalendarioAgendaMedico({
           <div className="py-10 text-center text-xs text-gray-400">Cargando...</div>
         ) : (
           <div className="min-w-[500px]">
-            <div className={`grid`} style={{ gridTemplateColumns: `50px repeat(${numCols}, 1fr)`, borderBottom: "0.5px solid #e5e7eb" }}>
+            <div className={`grid`} style={{ gridTemplateColumns: "40px repeat(7, minmax(60px, 1fr))", borderBottom: "0.5px solid #e5e7eb" }}>
               <div />
-              {diasVisibles.map((fecha, i) => {
+              {diasSemana.map((fecha, i) => {
                 const d = new Date(fecha + "T12:00:00");
                 const esHoy = fecha === hoyStr;
                 return (
                   <div key={fecha} className="py-2 text-center">
-                    <p className="text-[9px] text-gray-400">{diasLabels[i]}</p>
+                    <p className="text-[9px] text-gray-400">{DIAS_ALL[i]}</p>
                     <p className={`mt-0.5 text-[11px] font-medium ${esHoy ? "mx-auto flex h-5 w-5 items-center justify-center rounded-full bg-[#1D9E75] text-white" : "text-gray-700"}`}>
                       {d.getDate()}
                     </p>
@@ -167,11 +162,11 @@ export default function CalendarioAgendaMedico({
 
             <div className="max-h-[350px] overflow-y-auto">
               {HORAS.map((hora) => (
-                <div key={hora} style={{ gridTemplateColumns: `50px repeat(${numCols}, 1fr)`, borderBottom: "0.5px solid #f3f4f6" }} className="grid">
+                <div key={hora} style={{ gridTemplateColumns: "40px repeat(7, minmax(60px, 1fr))", borderBottom: "0.5px solid #f3f4f6" }} className="grid">
                   <div className="flex items-center justify-end pr-2 text-[9px] text-gray-400" style={{ height: "26px" }}>
                     {hora}
                   </div>
-                  {diasVisibles.map((fecha) => {
+                  {diasSemana.map((fecha) => {
                     const turno = turnoMap.get(`${fecha}-${hora}`);
                     if (!turno) return <div key={fecha} style={{ height: "26px" }} />;
                     return (
@@ -203,15 +198,6 @@ export default function CalendarioAgendaMedico({
           </div>
         )}
 
-        {/* Toggle fin de semana */}
-        <div className="px-4 py-2" style={{ borderTop: "0.5px solid #e5e7eb" }}>
-          <button
-            onClick={() => setMostrarFinde(!mostrarFinde)}
-            className="text-[10px] text-gray-400 hover:text-gray-600"
-          >
-            {mostrarFinde ? "− Ocultar fin de semana" : "+ Mostrar fin de semana"}
-          </button>
-        </div>
       </div>
 
       {/* Listado reservados */}

@@ -131,7 +131,7 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
 
         <div className="mt-3 grid grid-cols-7 gap-0.5">
           {DIAS_SEMANA.map((d) => (
-            <div key={d} className="text-center text-[9px] text-gray-400">{d}</div>
+            <div key={d} className="text-center text-[9px] font-medium text-gray-500">{d}</div>
           ))}
         </div>
 
@@ -150,11 +150,11 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
                 key={dia}
                 onClick={() => handleDiaClick(fecha)}
                 className={`relative flex h-7 items-center justify-center rounded text-[11px] transition-all duration-100 cursor-pointer ${
-                  esHoy ? "font-medium text-[#1D9E75]"
-                    : (tieneDisp || tieneRes) ? "text-gray-700 hover:bg-gray-100"
-                    : "text-gray-300 hover:bg-gray-50"
-                }`}
-                style={enSemana ? { background: "#f0fdf4" } : undefined}
+                  esHoy ? "bg-[#1D9E75] text-white font-medium rounded-full"
+                    : (tieneDisp || tieneRes) ? "text-gray-800 hover:bg-gray-100"
+                    : "text-gray-400 hover:bg-gray-50"
+                } ${enSemana && !esHoy ? "font-medium" : ""}`}
+                style={enSemana && !esHoy ? { background: "#f0fdf4" } : undefined}
               >
                 {dia}
                 {(tieneDisp || tieneRes) && (
