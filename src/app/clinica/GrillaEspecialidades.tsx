@@ -165,9 +165,8 @@ export default function GrillaEspecialidades({
   const [busqueda, setBusqueda] = useState("");
   const [verMas, setVerMas] = useState(false);
   const router = useRouter();
-  const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(
-    null
-  );
+  const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(null);
+  const [modalModo, setModalModo] = useState<"inmediata" | "turno">("inmediata");
 
   const termino = normalize(busqueda.trim());
 
@@ -235,11 +234,9 @@ export default function GrillaEspecialidades({
 
   // Médicos con inmediata/ambas para la especialidad del modal
   const medicosDelModal = modalEspecialidad
-    ? medicos.filter(
-        (m) =>
-          m.especialidad === modalEspecialidad &&
-          (m.modalidad_atencion === "inmediata" ||
-            m.modalidad_atencion === "ambas")
+    ? medicos.filter((m) =>
+        m.especialidad === modalEspecialidad &&
+        (modalModo === "turno" || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
       )
     : [];
 
@@ -366,13 +363,13 @@ export default function GrillaEspecialidades({
                 <div className="mt-4 flex gap-2">
                   <button
                     disabled={botonConsultaDeshabilitado}
-                    onClick={() => setModalEspecialidad(esp.nombre)}
+                    onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
                     className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                   >
                     Consulta ahora
                   </button>
                   <button
-                    onClick={() => setModalEspecialidad(esp.nombre)}
+                    onClick={() => { setModalModo("turno"); setModalEspecialidad(esp.nombre); }}
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Agendar turno
@@ -401,7 +398,7 @@ export default function GrillaEspecialidades({
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
-                Médicos disponibles — {modalEspecialidad}
+                {modalModo === "turno" ? "Agendar turno" : "Médicos disponibles"} — {modalEspecialidad}
               </h2>
               <button
                 onClick={() => setModalEspecialidad(null)}
@@ -463,21 +460,30 @@ export default function GrillaEspecialidades({
                           )}
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-col gap-1.5">
-                        <button
-                          disabled={!disponibleAhora}
-                          onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-                        >
-                          Consulta ahora
-                        </button>
+                      {modalModo === "turno" ? (
                         <a
                           href={`/clinica/${m.id}/turnos`}
-                          className="rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-700 hover:bg-gray-200"
+                          className="shrink-0 rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64]"
                         >
-                          Agendar turno
+                          Ver turnos
                         </a>
-                      </div>
+                      ) : (
+                        <div className="flex shrink-0 flex-col gap-1.5">
+                          <button
+                            disabled={!disponibleAhora}
+                            onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
+                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                          >
+                            Consulta ahora
+                          </button>
+                          <a
+                            href={`/clinica/${m.id}/turnos`}
+                            className="rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-700 hover:bg-gray-200"
+                          >
+                            Agendar turno
+                          </a>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

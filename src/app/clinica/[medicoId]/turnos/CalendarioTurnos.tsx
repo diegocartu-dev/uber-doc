@@ -20,15 +20,28 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null);
-  const [cuando, setCuando] = useState("todos");
+  const [cuando, setCuando] = useState<string[]>(["24h", "1h", "15m"]);
   const [canal, setCanal] = useState("ambos");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
 
+  // Filtrar turnos pasados y con menos de 1h de anticipación
+  const ahora = new Date();
+  const hoyStr = ahora.toISOString().split("T")[0];
+  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 60;
+
+  const turnosFiltrados = turnos.filter((t) => {
+    if (t.fecha > hoyStr) return true;
+    if (t.fecha < hoyStr) return false;
+    // Es hoy — verificar hora
+    const [h, m] = t.hora_inicio.split(":").map(Number);
+    return h * 60 + m >= enUnaHora;
+  });
+
   // Agrupar turnos por fecha
   const turnosPorFecha = new Map<string, Turno[]>();
-  for (const t of turnos) {
+  for (const t of turnosFiltrados) {
     if (!turnosPorFecha.has(t.fecha)) turnosPorFecha.set(t.fecha, []);
     turnosPorFecha.get(t.fecha)!.push(t);
   }
@@ -57,7 +70,7 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
     if (!turnoSeleccionado) return;
     setError(null);
     startTransition(async () => {
-      const result = await reservarTurno(turnoSeleccionado.id, { cuando, canal });
+      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal });
       if (result?.error) { setError(result.error); return; }
       setExito(true);
     });
@@ -215,29 +228,41 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
             </div>
           </div>
 
-          {/* Recordatorios */}
+          {/* Recordatorios — multiselección */}
           <div className="mt-4" style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: "12px" }}>
             <p className="text-xs text-gray-400">Recordatorios</p>
             <div className="mt-2 flex gap-2">
-              {[
-                { value: "todos", label: "Todos" },
-                { value: "24h", label: "24hs" },
-                { value: "1h", label: "1 hora" },
-                { value: "15m", label: "15 min" },
-              ].map((r) => (
+              {(() => {
+                const todosActivos = cuando.length === 3 && ["24h", "1h", "15m"].every((v) => cuando.includes(v));
+                const toggleRecordatorio = (value: string) => {
+                  if (value === "todos") {
+                    setCuando(todosActivos ? [] : ["24h", "1h", "15m"]);
+                  } else {
+                    setCuando((prev) =>
+                      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+                    );
+                  }
+                };
+                return [
+                  { value: "todos", label: "Todos", activo: todosActivos },
+                  { value: "24h", label: "24hs", activo: cuando.includes("24h") },
+                  { value: "1h", label: "1 hora", activo: cuando.includes("1h") },
+                  { value: "15m", label: "15 min", activo: cuando.includes("15m") },
+                ].map((r) => (
                 <button
                   key={r.value}
-                  onClick={() => setCuando(r.value)}
+                  onClick={() => toggleRecordatorio(r.value)}
                   className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
-                    cuando === r.value
+                    r.activo
                       ? "bg-[#1D9E75] text-white"
                       : "bg-gray-50 text-gray-500"
                   }`}
-                  style={{ border: cuando === r.value ? "none" : "0.5px solid #e5e7eb" }}
+                  style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
                 >
                   {r.label}
                 </button>
-              ))}
+              ));
+              })()}
             </div>
           </div>
 
