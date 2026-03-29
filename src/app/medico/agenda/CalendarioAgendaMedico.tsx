@@ -42,8 +42,20 @@ for (let h = 7; h < 20; h++) {
   }
 }
 
-export default function CalendarioAgendaMedico({ medicoId, precio }: { medicoId: string; precio: number }) {
-  const [semanaOffset, setSemanaOffset] = useState(0);
+export default function CalendarioAgendaMedico({
+  medicoId,
+  precio,
+  semanaOffset: semanaOffsetProp,
+  onSemanaChange,
+}: {
+  medicoId: string;
+  precio: number;
+  semanaOffset?: number;
+  onSemanaChange?: (offset: number) => void;
+}) {
+  const [semanaOffsetLocal, setSemanaOffsetLocal] = useState(0);
+  const semanaOffset = semanaOffsetProp ?? semanaOffsetLocal;
+  const setSemanaOffset = onSemanaChange ?? setSemanaOffsetLocal;
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
 
