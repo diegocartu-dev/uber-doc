@@ -331,11 +331,12 @@ export default async function DashboardPage() {
                       <p className="text-xs font-medium tracking-wide text-gray-400">TURNOS PROGRAMADOS</p>
                     </div>
                     <p className="mt-1 text-sm text-gray-500">Pacientes reservan turno con anticipación</p>
-                    {numModelosActivos > 0 && (
-                      <p className="mt-1 text-xs text-[#1D9E75]">
-                        {numModelosActivos} modelo{numModelosActivos !== 1 ? "s" : ""} activo{numModelosActivos !== 1 ? "s" : ""}
-                      </p>
-                    )}
+                    <p className={`mt-1 text-xs ${numModelosActivos > 0 ? "text-[#1D9E75]" : "text-gray-400"}`}>
+                      {numModelosActivos > 0
+                        ? `${numModelosActivos} modelo${numModelosActivos !== 1 ? "s" : ""} activo${numModelosActivos !== 1 ? "s" : ""}`
+                        : "Sin modelos configurados"
+                      }
+                    </p>
                   </div>
                   <Link
                     href="/medico/agenda"

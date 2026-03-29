@@ -104,7 +104,7 @@ export default function DisponibilidadMedico({
         tabIndex={0}
         onClick={() => setAbierto(!abierto)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setAbierto(!abierto); }}
-        className="flex w-full cursor-pointer items-center justify-between px-5 py-3"
+        className="flex w-full cursor-pointer items-center justify-between px-5 py-3 outline-none"
       >
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500">
@@ -191,11 +191,11 @@ export default function DisponibilidadMedico({
             </div>
           </div>
 
-          {/* Duración y precio */}
-          <div className="mt-4 flex items-center gap-4">
+          {/* Duración y valor */}
+          <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-400">Duración</label>
-              <select value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value))} className={selectClass} style={selectStyle}>
+              <label className="block text-xs text-gray-400">Duración</label>
+              <select value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value))} className={`mt-1 w-full ${selectClass}`} style={selectStyle}>
                 <option value={20}>20 min</option>
                 <option value={30}>30 min</option>
                 <option value={45}>45 min</option>
@@ -203,10 +203,10 @@ export default function DisponibilidadMedico({
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-400">Valor de consulta</label>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-400">$</span>
-                <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={selectClass} style={{ ...selectStyle, width: "80px" }} />
+              <label className="block text-xs text-gray-400">Valor de consulta</label>
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-gray-400">$</span>
+                <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${selectClass}`} style={selectStyle} />
               </div>
             </div>
           </div>
