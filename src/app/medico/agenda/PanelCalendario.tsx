@@ -84,7 +84,15 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
       <div className="rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
         <div className="flex items-center justify-between">
           <button onClick={prevMes} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">←</button>
-          <p className="text-xs font-medium text-gray-700">{MESES[mes]} {anio}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-medium text-gray-700">{MESES[mes]} {anio}</p>
+            <button
+              onClick={() => { setMes(hoy.getMonth()); setAnio(hoy.getFullYear()); setSemanaOffset(0); }}
+              className="rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#1D9E75]"
+            >
+              Hoy
+            </button>
+          </div>
           <button onClick={nextMes} className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">→</button>
         </div>
 

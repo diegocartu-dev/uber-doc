@@ -69,14 +69,6 @@ export default async function AgendaPage({
               Configurá tus modelos de disponibilidad para turnos programados
             </p>
           </div>
-          {!mostrarFormulario && (
-            <Link
-              href="/medico/agenda?nuevo=1"
-              className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
-            >
-              Nuevo modelo
-            </Link>
-          )}
         </div>
 
         {mostrarFormulario ? (
@@ -92,6 +84,13 @@ export default async function AgendaPage({
             {/* Columna izquierda — modelos */}
             <div className="space-y-4">
               <ListaModelos modelos={modelosCompletos} />
+              <Link
+                href="/medico/agenda?nuevo=1"
+                className="block rounded-xl bg-white p-4 text-center text-sm text-gray-500 hover:bg-gray-50 active:scale-95 transition-all duration-100"
+                style={{ border: "0.5px solid #e5e7eb" }}
+              >
+                + Nuevo modelo de agenda
+              </Link>
             </div>
 
             {/* Columna derecha — calendarios */}
