@@ -159,24 +159,116 @@ export async function guardarModelo(data: {
 
 // TODO [edición]: agregar editarModelo() que actualice modelo + regenere turnos futuros no reservados
 
+// Helper: recalcular bloqueos para un médico después de cambiar un modelo
+async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClient>>, medicoId: string) {
+  // Traer todos los modelos activos ordenados por created_at desc (más nuevo = más prioridad)
+  const { data: modelosActivos } = await supabase
+    .from("agenda_modelos")
+    .select("id, fecha_inicio, fecha_fin, created_at")
+    .eq("medico_id", medicoId)
+    .eq("activo", true)
+    .order("created_at", { ascending: false });
+
+  if (!modelosActivos || modelosActivos.length === 0) {
+    // Sin modelos activos → desbloquear todos los turnos bloqueados del médico
+    await supabase
+      .from("turnos")
+      .update({ estado: "disponible" })
+      .eq("medico_id", medicoId)
+      .eq("estado", "bloqueado");
+    return;
+  }
+
+  // Traer franjas de todos los modelos activos
+  const modeloIds = modelosActivos.map((m) => m.id);
+  const { data: franjas } = await supabase
+    .from("agenda_franjas")
+    .select("modelo_id, dia_semana")
+    .in("modelo_id", modeloIds);
+
+  const diasPorModelo = new Map<string, Set<number>>();
+  for (const f of franjas ?? []) {
+    if (!diasPorModelo.has(f.modelo_id)) diasPorModelo.set(f.modelo_id, new Set());
+    diasPorModelo.get(f.modelo_id)!.add(f.dia_semana);
+  }
+
+  // Traer todos los turnos bloqueados y disponibles del médico
+  const { data: todosTurnos } = await supabase
+    .from("turnos")
+    .select("id, fecha, modelo_id, estado")
+    .eq("medico_id", medicoId)
+    .in("estado", ["disponible", "bloqueado"]);
+
+  if (!todosTurnos || todosTurnos.length === 0) return;
+
+  const aBloquear: string[] = [];
+  const aDesbloquear: string[] = [];
+
+  for (const turno of todosTurnos) {
+    const d = new Date(turno.fecha + "T12:00:00");
+    const jsDay = d.getDay();
+    const diaSemana = jsDay === 0 ? 7 : jsDay;
+
+    // Encontrar el modelo activo más nuevo que cubre esta fecha/día
+    const modeloGanador = modelosActivos.find((m) => {
+      const dias = diasPorModelo.get(m.id);
+      return dias?.has(diaSemana) && turno.fecha >= m.fecha_inicio && turno.fecha <= m.fecha_fin;
+    });
+
+    if (modeloGanador && modeloGanador.id !== turno.modelo_id) {
+      // Otro modelo más nuevo cubre este slot → debe estar bloqueado
+      if (turno.estado === "disponible") aBloquear.push(turno.id);
+    } else {
+      // Este turno pertenece al modelo ganador (o no hay conflicto) → debe estar disponible
+      if (turno.estado === "bloqueado") aDesbloquear.push(turno.id);
+    }
+  }
+
+  // Aplicar cambios en lotes
+  for (let i = 0; i < aBloquear.length; i += 500) {
+    await supabase.from("turnos").update({ estado: "bloqueado" }).in("id", aBloquear.slice(i, i + 500));
+  }
+  for (let i = 0; i < aDesbloquear.length; i += 500) {
+    await supabase.from("turnos").update({ estado: "disponible" }).in("id", aDesbloquear.slice(i, i + 500));
+  }
+}
+
 export async function toggleModelo(modeloId: string, activo: boolean) {
-  // TODO [reprogramación]: si se desactiva, cancelar turnos disponibles futuros de este modelo
   const supabase = await createClient();
+
+  // Obtener medico_id antes de actualizar
+  const { data: modelo } = await supabase
+    .from("agenda_modelos").select("medico_id").eq("id", modeloId).single();
+  if (!modelo) return { error: "Modelo no encontrado." };
+
   const { error } = await supabase
     .from("agenda_modelos")
     .update({ activo })
     .eq("id", modeloId);
   if (error) return { error: error.message };
+
+  // Recalcular bloqueos después de toggle
+  await recalcularBloqueos(supabase, modelo.medico_id);
+
   return { success: true };
 }
 
 export async function eliminarModelo(modeloId: string) {
-  // TODO [reprogramación]: verificar si hay turnos reservados, avisar al médico, notificar pacientes
   const supabase = await createClient();
+
+  // Obtener medico_id antes de eliminar
+  const { data: modelo } = await supabase
+    .from("agenda_modelos").select("medico_id").eq("id", modeloId).single();
+  if (!modelo) return { error: "Modelo no encontrado." };
+
   const { error } = await supabase
     .from("agenda_modelos")
     .delete()
     .eq("id", modeloId);
   if (error) return { error: error.message };
+
+  // Recalcular bloqueos después de eliminar (los turnos del modelo eliminado se borran por CASCADE)
+  await recalcularBloqueos(supabase, modelo.medico_id);
+
   return { success: true };
 }
