@@ -163,6 +163,7 @@ export default function GrillaEspecialidades({
   consultasEspera: ConsultaEspera[];
 }) {
   const [busqueda, setBusqueda] = useState("");
+  const [verMas, setVerMas] = useState(false);
   const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(
     null
@@ -192,6 +193,27 @@ export default function GrillaEspecialidades({
       : ESPECIALIDADES.filter(
           (esp) => espConMatch.has(esp.nombre) || espPorMedico.has(esp.nombre)
         );
+
+  // Agrupar: básicas, con médicos, sin médicos
+  const BASICAS = ["Clínica médica", "Pediatría", "Ginecología", "Psiquiatría", "Dermatología", "Cardiología"];
+  const espConMedicos = new Set(medicos.map((m) => m.especialidad));
+
+  const basicas = especialidadesFiltradas.filter((e) => BASICAS.includes(e.nombre))
+    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
+
+  const conMedicos = especialidadesFiltradas
+    .filter((e) => !BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
+    .sort(() => Math.random() - 0.5);
+
+  const sinMedicos = especialidadesFiltradas
+    .filter((e) => !BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
+    .sort(() => Math.random() - 0.5);
+
+  const espVisibles = termino
+    ? especialidadesFiltradas
+    : [...basicas, ...conMedicos, ...(verMas ? sinMedicos : [])];
+
+  const tieneSinMedicos = !termino && sinMedicos.length > 0;
 
   // Contar esperas por médico
   const esperasPorMedico = new Map<string, number>();
@@ -253,7 +275,7 @@ export default function GrillaEspecialidades({
       </div>
 
       {/* Resultado vacío */}
-      {especialidadesFiltradas.length === 0 && (
+      {espVisibles.length === 0 && (
         <p className="py-12 text-center text-sm text-gray-500">
           No se encontraron especialidades para &quot;{busqueda}&quot;
         </p>
@@ -261,7 +283,7 @@ export default function GrillaEspecialidades({
 
       {/* Grilla */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {especialidadesFiltradas.map((esp) => {
+        {espVisibles.map((esp) => {
           const estado = calcularDisponibilidad(esp.nombre, medicos);
           const { color, texto } = semaforo(estado);
           const sinMedicos = estado === "sin_medicos";
@@ -348,6 +370,16 @@ export default function GrillaEspecialidades({
           );
         })}
       </div>
+
+      {/* Ver más especialidades */}
+      {tieneSinMedicos && (
+        <button
+          onClick={() => setVerMas(!verMas)}
+          className="mt-4 w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 active:scale-95 active:opacity-80 transition-all duration-100"
+        >
+          {verMas ? "▴ Ocultar especialidades sin médicos" : `▾ Ver ${sinMedicos.length} especialidades más`}
+        </button>
+      )}
 
       {/* Modal: Médicos disponibles */}
       {modalEspecialidad && (
