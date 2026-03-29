@@ -12,8 +12,7 @@ const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "
 function getLunes(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
+  date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
   return date;
 }
 
@@ -25,72 +24,65 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
   const hoy = new Date();
   const hoyStr = fechaStr(hoy);
 
-  // Estado único: el lunes de la semana seleccionada
-  const [lunesSeleccionado, setLunesSeleccionado] = useState(() => getLunes(hoy));
+  // ESTADO ÚNICO: el lunes de la semana seleccionada
+  const [lunesActual, setLunesActual] = useState(() => getLunes(hoy));
 
-  // El mes visible del mini calendario — se deriva del lunes pero puede navegarse independientemente
-  const [mesOverride, setMesOverride] = useState<{ mes: number; anio: number } | null>(null);
-
-  const mesVisible = mesOverride?.mes ?? lunesSeleccionado.getMonth();
-  const anioVisible = mesOverride?.anio ?? lunesSeleccionado.getFullYear();
-
-  // Cuando el semanal cambia (flechas o click en día), resetear el override para que siga al semanal
-  function cambiarSemana(nuevoLunes: Date) {
-    setLunesSeleccionado(nuevoLunes);
-    setMesOverride(null); // el mensual sigue al semanal
-  }
+  // El mes se DERIVA siempre del lunes actual — sin estado propio
+  const mesVisible = lunesActual.getMonth();
+  const anioVisible = lunesActual.getFullYear();
 
   // Flechas del semanal
   function semanaAnterior() {
-    const prev = new Date(lunesSeleccionado);
-    prev.setDate(prev.getDate() - 7);
-    cambiarSemana(prev);
+    setLunesActual((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
   }
 
   function semanaSiguiente() {
-    const next = new Date(lunesSeleccionado);
-    next.setDate(next.getDate() + 7);
-    cambiarSemana(next);
+    setLunesActual((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
   }
 
-  // Flechas del mensual — solo cambian la vista del mes, NO el semanal
+  // Flechas del mensual — saltan al primer lunes del mes anterior/siguiente
   function mesAnterior() {
-    const m = mesOverride ?? { mes: lunesSeleccionado.getMonth(), anio: lunesSeleccionado.getFullYear() };
-    if (m.mes === 0) setMesOverride({ mes: 11, anio: m.anio - 1 });
-    else setMesOverride({ mes: m.mes - 1, anio: m.anio });
+    const primerDiaMesAnterior = new Date(anioVisible, mesVisible - 1, 1);
+    setLunesActual(getLunes(primerDiaMesAnterior));
   }
 
   function mesSiguiente() {
-    const m = mesOverride ?? { mes: lunesSeleccionado.getMonth(), anio: lunesSeleccionado.getFullYear() };
-    if (m.mes === 11) setMesOverride({ mes: 0, anio: m.anio + 1 });
-    else setMesOverride({ mes: m.mes + 1, anio: m.anio });
+    const primerDiaMesSiguiente = new Date(anioVisible, mesVisible + 1, 1);
+    setLunesActual(getLunes(primerDiaMesSiguiente));
   }
 
-  // Click en día del mensual — cambia el semanal a esa semana
+  // Click en día del mensual
   function handleDiaClick(fecha: string) {
-    cambiarSemana(getLunes(new Date(fecha + "T12:00:00")));
+    setLunesActual(getLunes(new Date(fecha + "T12:00:00")));
   }
 
-  // Botón Hoy — ambos calendarios vuelven
+  // Botón Hoy
   function handleHoy() {
-    setLunesSeleccionado(getLunes(hoy));
-    setMesOverride(null);
+    setLunesActual(getLunes(hoy));
   }
 
-  // Semana offset para CalendarioAgendaMedico (relativo a hoy)
+  // Semana offset para CalendarioAgendaMedico
   const lunesHoy = getLunes(hoy);
-  const semanaOffset = Math.round((lunesSeleccionado.getTime() - lunesHoy.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  const semanaOffset = Math.round((lunesActual.getTime() - lunesHoy.getTime()) / (7 * 24 * 60 * 60 * 1000));
 
   function handleSemanaChange(offset: number) {
-    const nuevoLunes = new Date(lunesHoy);
-    nuevoLunes.setDate(nuevoLunes.getDate() + offset * 7);
-    cambiarSemana(nuevoLunes);
+    const d = new Date(lunesHoy);
+    d.setDate(d.getDate() + offset * 7);
+    setLunesActual(d);
   }
 
-  // Días de la semana actual para highlight en el mensual
+  // Días de la semana actual para highlight
   const semanaActualDias = new Set(
     Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(lunesSeleccionado);
+      const d = new Date(lunesActual);
       d.setDate(d.getDate() + i);
       return fechaStr(d);
     })
