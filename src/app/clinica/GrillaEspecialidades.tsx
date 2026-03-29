@@ -372,6 +372,7 @@ export default function GrillaEspecialidades({
                     Consulta ahora
                   </button>
                   <button
+                    onClick={() => setModalEspecialidad(esp.nombre)}
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Agendar turno
