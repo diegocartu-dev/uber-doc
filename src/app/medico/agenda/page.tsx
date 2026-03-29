@@ -53,7 +53,7 @@ export default async function AgendaPage({
   return (
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+        <div className="flex h-14 items-center justify-between px-6">
           <span className="text-lg font-medium text-gray-900">Uber Doc</span>
           <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
             Inicio
@@ -61,7 +61,7 @@ export default async function AgendaPage({
         </div>
       </nav>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="px-6 py-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-medium text-gray-900">Mi agenda</h1>
@@ -80,7 +80,7 @@ export default async function AgendaPage({
             />
           </div>
         ) : (
-          <div className="mt-6 gap-6 md:grid md:grid-cols-[1fr_400px]">
+          <div className="mt-6 gap-6 md:grid" style={{ gridTemplateColumns: "minmax(400px, 1fr) minmax(500px, 1.5fr)" }}>
             {/* Columna izquierda — modelos */}
             <div className="space-y-4">
               <ListaModelos modelos={modelosCompletos} />

@@ -143,7 +143,7 @@ export default function CalendarioAgendaMedico({
         {cargando ? (
           <div className="py-10 text-center text-xs text-gray-400">Cargando...</div>
         ) : (
-          <div className="min-w-[500px]">
+          <div className="w-full">
             <div className={`grid`} style={{ gridTemplateColumns: "40px repeat(7, minmax(60px, 1fr))", borderBottom: "0.5px solid #e5e7eb" }}>
               <div />
               {diasSemana.map((fecha, i) => {
