@@ -63,6 +63,9 @@ export default function CalendarioAgendaMedico({
   });
   const hoyStr = hoy.toISOString().split("T")[0];
 
+  const fechaDesde = diasSemana[0];
+  const fechaHasta = diasSemana[6];
+
   useEffect(() => {
     async function fetchTurnos() {
       setCargando(true);
@@ -71,8 +74,8 @@ export default function CalendarioAgendaMedico({
         .from("turnos")
         .select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id")
         .eq("medico_id", medicoId)
-        .gte("fecha", diasSemana[0])
-        .lte("fecha", diasSemana[6])
+        .gte("fecha", fechaDesde)
+        .lte("fecha", fechaHasta)
         .order("hora_inicio", { ascending: true });
 
       if (!data) { setTurnos([]); setCargando(false); return; }
@@ -93,7 +96,7 @@ export default function CalendarioAgendaMedico({
       setCargando(false);
     }
     fetchTurnos();
-  }, [medicoId, semanaOffset]);
+  }, [medicoId, fechaDesde, fechaHasta]);
 
   const turnoMap = new Map<string, Turno>();
   for (const t of turnos) turnoMap.set(`${t.fecha}-${t.hora_inicio}`, t);
@@ -126,7 +129,7 @@ export default function CalendarioAgendaMedico({
         <span className="ml-auto flex gap-3 text-[10px] text-gray-400">
           <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#9FE1CB]" />Disponible</span>
           <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#B5D4F4]" />Reservado</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#F7C1C1]" />Bloqueado</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#e5e7eb]" />Bloqueado</span>
         </span>
       </div>
 
@@ -178,7 +181,7 @@ export default function CalendarioAgendaMedico({
                           background:
                             turno.estado === "disponible" ? "#9FE1CB" :
                             turno.estado === "reservado" ? "#B5D4F4" :
-                            turno.estado === "bloqueado" ? "#F7C1C1" : "transparent",
+                            turno.estado === "bloqueado" ? "#f3f4f6" : "transparent",
                         }}
                       >
                         {turno.estado === "reservado" && (
@@ -187,7 +190,7 @@ export default function CalendarioAgendaMedico({
                           </span>
                         )}
                         {turno.estado === "bloqueado" && (
-                          <span className="text-[#A32D2D]">×</span>
+                          <span className="text-[#888780]">—</span>
                         )}
                       </div>
                     );

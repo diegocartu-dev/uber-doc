@@ -48,15 +48,14 @@ export default function PanelCalendario({ medicoId, precio }: { medicoId: string
     });
   }
 
-  // Flechas del mensual — saltan al primer lunes del mes anterior/siguiente
+  // Flechas del mensual — saltan a una semana que está claramente en el mes objetivo
   function mesAnterior() {
-    const primerDiaMesAnterior = new Date(anioVisible, mesVisible - 1, 1);
-    setLunesActual(getLunes(primerDiaMesAnterior));
+    // Día 15 del mes anterior garantiza que getLunes quede en ese mes
+    setLunesActual(getLunes(new Date(anioVisible, mesVisible - 1, 15)));
   }
 
   function mesSiguiente() {
-    const primerDiaMesSiguiente = new Date(anioVisible, mesVisible + 1, 1);
-    setLunesActual(getLunes(primerDiaMesSiguiente));
+    setLunesActual(getLunes(new Date(anioVisible, mesVisible + 1, 15)));
   }
 
   // Click en día del mensual
