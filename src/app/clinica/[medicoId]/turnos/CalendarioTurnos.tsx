@@ -306,9 +306,12 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
               disabled={isPending}
               className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
             >
-              {isPending ? "Confirmando..." : "Pagar y confirmar turno →"}
+              {isPending ? "Confirmando..." : "Confirmar turno →"}
             </button>
           </div>
+          <p className="mt-3 text-center text-[11px] text-gray-400">
+            Podés cancelar sin costo hasta 48 hs antes. Si el profesional cancela, se reintegra el 100% del monto.
+          </p>
         </div>
       )}
     </div>
