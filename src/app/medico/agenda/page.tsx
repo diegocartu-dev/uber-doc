@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListaModelos from "./ListaModelos";
 import FormularioModelo from "./FormularioModelo";
+import CalendarioAgendaMedico from "./CalendarioAgendaMedico";
 
 export default async function AgendaPage({
   searchParams,
@@ -88,8 +89,9 @@ export default async function AgendaPage({
             />
           </div>
         ) : (
-          <div className="mt-6">
+          <div className="mt-6 space-y-6">
             <ListaModelos modelos={modelosCompletos} />
+            <CalendarioAgendaMedico medicoId={medico.id} precio={medico.precio_consulta} />
           </div>
         )}
       </main>
