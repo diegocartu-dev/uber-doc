@@ -7,6 +7,7 @@ import ConsultasPendientes from "./ConsultasPendientes";
 import ConsultasEnCurso from "./ConsultasEnCurso";
 import AdminConsultas from "./AdminConsultas";
 import TurnosEnEspera from "./TurnosEnEspera";
+import AgendaHoy from "./AgendaHoy";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -82,6 +83,7 @@ export default async function DashboardPage() {
   let ingresosHoy = 0;
   let numModelosActivos = 0;
   let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; especialidad: string }[] = [];
+  let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
 
   // --- PACIENTE ---
   let consultaActiva: {
@@ -277,6 +279,27 @@ export default async function DashboardPage() {
         .eq("activo", true);
       numModelosActivos = modelosActivosCount ?? 0;
 
+      // Turnos del día para agenda
+      const { data: turnosHoyData } = await supabase
+        .from("turnos")
+        .select("id, fecha, hora_inicio, hora_fin, estado, paciente_id")
+        .eq("medico_id", data.id)
+        .eq("fecha", hoy)
+        .in("estado", ["confirmado", "en_espera", "en_curso", "completado"])
+        .order("hora_inicio", { ascending: true });
+
+      if (turnosHoyData && turnosHoyData.length > 0) {
+        const pacIdsTH = [...new Set(turnosHoyData.map((t) => t.paciente_id).filter(Boolean))];
+        const { data: pacsTH } = pacIdsTH.length > 0
+          ? await supabase.from("pacientes").select("id, nombre_completo").in("id", pacIdsTH)
+          : { data: [] };
+        const nombresTH = new Map((pacsTH ?? []).map((p) => [p.id, p.nombre_completo]));
+        turnosHoy = turnosHoyData.map((t) => ({
+          id: t.id, hora_inicio: t.hora_inicio, hora_fin: t.hora_fin,
+          estado: t.estado, paciente_nombre: nombresTH.get(t.paciente_id) ?? "Paciente",
+        }));
+      }
+
       // Admin: todas las consultas
       const { data: todas } = await supabase
         .from("consultas")
@@ -342,8 +365,9 @@ export default async function DashboardPage() {
 
         <div className="mx-auto max-w-7xl px-6 py-6">
           {/* Métricas */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             {[
+              { label: "Turnos hoy", value: turnosHoy.length, color: "text-[#378ADD]" },
               { label: "En espera", value: consultasPendientes.length, color: "text-amber-600" },
               { label: "En curso", value: consultasEnCurso.length, color: "text-[#1D9E75]" },
               { label: "Completadas hoy", value: completadasHoy, color: "text-gray-900" },
@@ -431,6 +455,8 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               </div>
+              {/* Agenda de hoy */}
+              <AgendaHoy turnos={turnosHoy} />
             </div>
 
             {/* Sidebar */}
