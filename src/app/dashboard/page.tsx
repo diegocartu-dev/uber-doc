@@ -396,7 +396,11 @@ export default async function DashboardPage() {
             {/* Main column */}
             <div className="min-w-0 flex-1 space-y-5">
               {/* Turnos en espera */}
-              <TurnosEnEspera turnos={turnosEsperaCompletos} medicoId={medico.id} />
+              <TurnosEnEspera
+                turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
+                medicoId={medico.id}
+                hayEnCurso={consultasEnCurso.length > 0}
+              />
 
               {/* Consulta activa */}
               <ConsultasEnCurso
