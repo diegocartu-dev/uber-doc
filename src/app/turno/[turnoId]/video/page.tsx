@@ -49,6 +49,7 @@ export default async function VideoTurnoPage({
       <VideoLlamada
         consultaId={turnoId}
         esMedico={esMedico}
+        apiEndpoint="/api/videollamada-turno"
         consulta={{
           especialidad: medicoData?.especialidad ?? "",
           motivo_consulta: null,

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -83,8 +84,13 @@ export async function entrarSalaEspera(turnoId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
 
-  // Usar RPC SECURITY DEFINER para bypass RLS
-  const { error } = await supabase.rpc("entrar_sala_espera", { turno_id: turnoId });
+  // UPDATE directo con service_role para bypass RLS Y emitir Realtime
+  const supabaseAdmin = createAdminClient();
+  const { error } = await supabaseAdmin
+    .from("turnos")
+    .update({ estado: "en_espera" })
+    .eq("id", turnoId)
+    .eq("estado", "confirmado");
 
   if (error) return { error: error.message };
   return { success: true };

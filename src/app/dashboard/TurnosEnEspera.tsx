@@ -167,7 +167,7 @@ export default function TurnosEnEspera({
         .update({ estado: "en_curso", iniciado_en: new Date().toISOString() })
         .eq("id", turnoId);
 
-      const res = await fetch("/api/videollamada", {
+      const res = await fetch("/api/videollamada-turno", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consultaId: turnoId }),

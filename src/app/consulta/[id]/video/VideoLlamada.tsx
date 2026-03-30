@@ -52,6 +52,7 @@ type Props = {
   consultaId: string;
   esMedico: boolean;
   consulta: ConsultaData;
+  apiEndpoint?: string;
 };
 
 // --- Dictado por voz ---
@@ -166,7 +167,7 @@ function CampoDictado({
   );
 }
 
-export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) {
+export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoint = "/api/videollamada" }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [etapaCarga, setEtapaCarga] = useState("Preparando videollamada...");
@@ -212,7 +213,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta }: Props) 
     async function iniciar() {
       try {
         setEtapaCarga("Creando sala...");
-        const res = await fetch("/api/videollamada", {
+        const res = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ consultaId }),
