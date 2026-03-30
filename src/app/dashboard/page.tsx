@@ -289,39 +289,32 @@ export default async function DashboardPage() {
       return mins > 0 ? Math.floor(mins / medico.duracion_consulta) : 0;
     })();
 
-    // Hemisferios — en mobile, urgencia primero
+    // ── Hemisferios con estructura idéntica ──
+    const hemiPad = "space-y-4 rounded-xl bg-white p-5";
+    const hemiStyle = { border: "0.5px solid #e5e7eb" } as const;
+    const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
+    const footerClass = "flex items-center justify-between border-t border-gray-100 pt-4 mt-4";
+    const historialClass = "text-xs text-gray-400 hover:text-gray-600 transition-colors";
+
     const colTurnos = (
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium text-gray-900">Turnos programados</h2>
-            {modelosActivosList.length > 0 && (
-              <span className="rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[11px] font-medium text-[#1D9E75]">
-                {modelosActivosList.length} modelo{modelosActivosList.length !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <Link href="/medico/agenda" className="text-xs font-medium text-[#1D9E75] hover:underline">
-            Mi agenda →
-          </Link>
-        </div>
+      <div className={hemiPad} style={hemiStyle}>
+        {/* Título */}
+        <h2 className={titleClass}>Turnos programados</h2>
 
         {/* Sub-métrica */}
-        <div className="rounded-lg bg-white px-4 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
-          <span className="text-xs text-gray-500">{turnosHoy.length} turno{turnosHoy.length !== 1 ? "s" : ""} hoy</span>
-        </div>
+        <p className="text-xs text-gray-500">
+          {turnosHoy.length} turno{turnosHoy.length !== 1 ? "s" : ""} hoy
+        </p>
 
-        {/* Urgencia: turnos en espera */}
+        {/* Zona urgencia */}
         <TurnosEnEspera
           turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
           medicoId={medico.id}
           hayEnCurso={hayAlgoEnCurso}
         />
 
-        {/* Turno en curso */}
         {turnoEnCurso && (
-          <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
+          <div className="rounded-xl bg-white p-4" style={{ border: "1px solid #378ADD" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -341,23 +334,27 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        {/* Agenda de hoy */}
+        {/* Lista del día */}
         <AgendaHoy turnos={turnosHoy} />
 
-        <Link href="/medico/historial?tipo=turno" className="block text-xs text-gray-400 hover:text-gray-600 transition-colors">
-          Ver historial →
-        </Link>
+        {/* Pie */}
+        <div className={footerClass}>
+          <Link href="/medico/agenda" className="text-xs font-medium text-[#1D9E75] hover:underline">
+            Mi agenda →
+          </Link>
+          <Link href="/medico/historial?tipo=turno" className={historialClass}>
+            Ver historial →
+          </Link>
+        </div>
       </div>
     );
 
     const colConsulta = (
-      <div className={`space-y-5 ${consultaInactiva ? "opacity-60" : ""}`}>
-        {/* Header con toggle */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-900">Consulta inmediata</h2>
-        </div>
+      <div className={`${hemiPad} ${consultaInactiva ? "opacity-60" : ""}`} style={hemiStyle}>
+        {/* Título */}
+        <h2 className={titleClass}>Consulta inmediata</h2>
 
-        {/* DisponibilidadMedico — config inline */}
+        {/* Sub-métrica / estado + toggle */}
         <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
           <DisponibilidadMedico
             medicoId={medico.id}
@@ -370,30 +367,27 @@ export default async function DashboardPage() {
           />
         </div>
 
+        {/* Zona urgencia / contenido */}
         {consultaInactiva && !hayUrgenciaConsulta ? (
           <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
             <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
           </div>
         ) : (
           <>
-            {/* Urgencia: consultas pendientes */}
             <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
-
-            {/* Urgencia: consultas en curso */}
             <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
-
-            {/* Sub-métrica */}
-            <div className="rounded-lg bg-white px-4 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
-              <span className="text-xs text-gray-500">
-                En espera: {consultasPendientes.length}/{capacidadCI}
-              </span>
-            </div>
           </>
         )}
 
-        <Link href="/medico/historial?tipo=consulta" className="block text-xs text-gray-400 hover:text-gray-600 transition-colors">
-          Ver historial →
-        </Link>
+        {/* Pie */}
+        <div className={footerClass}>
+          <span className="text-xs text-gray-500">
+            En espera: {consultasPendientes.length}/{capacidadCI}
+          </span>
+          <Link href="/medico/historial?tipo=consulta" className={historialClass}>
+            Ver historial →
+          </Link>
+        </div>
       </div>
     );
 
