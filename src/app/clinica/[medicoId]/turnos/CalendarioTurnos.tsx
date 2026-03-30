@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { reservarTurno } from "./actions";
+import { reservarTurno, limpiarReservasExpiradas } from "./actions";
+import { useEffect } from "react";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
@@ -26,6 +27,9 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+
+  // Limpiar reservas expiradas al cargar
+  useEffect(() => { limpiarReservasExpiradas(); }, []);
 
   // Filtrar turnos pasados y con menos de 1h de anticipación
   const ahora = new Date();
@@ -73,7 +77,8 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
     startTransition(async () => {
       const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal });
       if (result?.error) { setError(result.error); return; }
-      setExito(true);
+      // Redirect a página de pago con contador de 5 min
+      window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
     });
   }
 
