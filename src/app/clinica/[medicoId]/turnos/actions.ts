@@ -77,3 +77,10 @@ export async function confirmarPagoTurno(turnoId: string) {
   if (error) return { error: `Error al confirmar: ${error.message}` };
   return { success: true };
 }
+
+export async function expirarTurno(turnoId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
+  if (error) return { error: error.message };
+  return { success: true };
+}

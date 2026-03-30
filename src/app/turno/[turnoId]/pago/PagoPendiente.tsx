@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { confirmarPagoTurno } from "@/app/clinica/[medicoId]/turnos/actions";
+import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turnos/actions";
 
 type Props = {
   turnoId: string;
@@ -34,15 +34,16 @@ export default function PagoPendiente({ turnoId, reservadoHasta, medico, turno }
     const interval = setInterval(() => {
       setSegundosRestantes((prev) => {
         if (prev <= 1) {
-          setExpirado(true);
           clearInterval(interval);
+          // Liberar el turno en Supabase via RPC SECURITY DEFINER
+          expirarTurno(turnoId).then(() => setExpirado(true));
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [expirado]);
+  }, [expirado, turnoId]);
 
   function handlePagar() {
     setError(null);
