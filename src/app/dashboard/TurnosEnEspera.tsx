@@ -103,10 +103,10 @@ export default function TurnosEnEspera({
     const supabase = createClient();
     const hoy = getHoyAR();
 
-    console.log("RT: creando canal turnos-espera, hoy:", hoy);
+    console.log("RT TurnosEnEspera: creando canal, medicoId:", medicoId, "hoy:", hoy);
 
     const channel = supabase
-      .channel("turnos-espera-channel")
+      .channel("turnos-rt-debug")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "turnos" },
