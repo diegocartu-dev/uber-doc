@@ -98,28 +98,29 @@ export default function TurnosEnEspera({
     fetchEspera();
   }, [medicoId]);
 
-  // Realtime — SIN filtros en canal, filtrar en JS
+  // Realtime — SIN filtros en canal, event: '*', filtrar en JS
   useEffect(() => {
     const supabase = createClient();
     const hoy = getHoyAR();
 
+    console.log("RT: creando canal turnos-espera, hoy:", hoy);
+
     const channel = supabase
-      .channel(`turnos-espera-${medicoId}`)
+      .channel("turnos-espera-channel")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "turnos" },
+        { event: "*", schema: "public", table: "turnos" },
         async (payload) => {
           const row = payload.new as {
             id: string; medico_id: string; estado: string;
             fecha: string; hora_inicio: string; paciente_id: string;
           };
 
-          // Log temporal para debug
-          console.log("RT turno:", row.estado, "medico_id:", row.medico_id, "esperado:", medicoId);
+          console.log("RT turno evento:", payload.eventType, "estado:", row.estado, "medico_id:", row.medico_id, "esperado:", medicoId);
 
-          // Filtrar en JS: mismo médico, fecha de hoy
-          if (row.medico_id !== medicoId) return;
-          if (row.fecha !== hoy) return;
+          // Filtrar en JS
+          if (!row.medico_id || row.medico_id !== medicoId) return;
+          if (!row.fecha || row.fecha !== hoy) return;
 
           if (row.estado === "en_espera") {
             const { data: pac } = await supabase
@@ -136,7 +137,6 @@ export default function TurnosEnEspera({
               }].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
             });
 
-            // Beep cuando entra nuevo paciente
             playBeep();
           }
 
@@ -145,7 +145,9 @@ export default function TurnosEnEspera({
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("RT status:", status);
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [medicoId]);
