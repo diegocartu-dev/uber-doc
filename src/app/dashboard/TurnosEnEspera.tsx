@@ -176,7 +176,7 @@ export default function TurnosEnEspera({
       if (data.url) {
         await supabase.from("turnos").update({ sala_video_url: data.url }).eq("id", turnoId);
       }
-      window.location.href = `/consulta/${turnoId}/video`;
+      window.location.href = `/turno/${turnoId}/video`;
     });
   }
 

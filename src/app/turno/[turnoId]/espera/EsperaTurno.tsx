@@ -11,25 +11,31 @@ type Props = {
 };
 
 export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio }: Props) {
-  // Realtime — SIN filtros en el canal, filtrar en JS (patrón obligatorio del proyecto)
+  // Realtime — event: '*', SIN filtros en canal, filtrar en JS
   useEffect(() => {
     const supabase = createClient();
 
+    console.log("EsperaTurno RT: suscribiendo, turnoId:", turnoId);
+
     const channel = supabase
-      .channel(`espera-turno-${turnoId}`)
+      .channel("espera-turno-rt")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "turnos" },
+        { event: "*", schema: "public", table: "turnos" },
         (payload) => {
-          const updated = payload.new as { id: string; estado: string };
+          const updated = payload.new as { id: string; estado: string; sala_video_url: string | null };
+          console.log("EsperaTurno RT evento:", payload.eventType, "id:", updated.id, "estado:", updated.estado, "esperado:", turnoId);
+
           if (updated.id !== turnoId) return;
 
           if (updated.estado === "en_curso") {
-            window.location.href = `/consulta/${turnoId}/video`;
+            window.location.href = `/turno/${turnoId}/video`;
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("EsperaTurno RT status:", status);
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [turnoId]);
