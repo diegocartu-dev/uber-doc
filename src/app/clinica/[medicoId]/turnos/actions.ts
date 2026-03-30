@@ -83,11 +83,8 @@ export async function entrarSalaEspera(turnoId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
 
-  const { error } = await supabase
-    .from("turnos")
-    .update({ estado: "en_espera" })
-    .eq("id", turnoId)
-    .eq("estado", "confirmado");
+  // Usar RPC SECURITY DEFINER para bypass RLS
+  const { error } = await supabase.rpc("entrar_sala_espera", { turno_id: turnoId });
 
   if (error) return { error: error.message };
   return { success: true };

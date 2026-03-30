@@ -20,7 +20,7 @@ export default async function EsperaTurnoPage({
     .single();
 
   if (!turno) redirect("/dashboard");
-  if (turno.estado === "en_curso") redirect(`/consulta/${turnoId}/video`);
+  if (turno.estado === "en_curso") redirect(`/turno/${turnoId}/video`);
   if (turno.estado !== "confirmado" && turno.estado !== "en_espera") redirect("/dashboard");
 
   // Marcar como en_espera si está confirmado
