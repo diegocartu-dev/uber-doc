@@ -98,8 +98,8 @@ export default async function ConfirmacionTurnoPage({
 
         <div className="mt-6 space-y-3">
           {(() => {
-            const ahora = new Date();
-            const hoyStr = ahora.toISOString().split("T")[0];
+            const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+            const hoyStr = `${ahora.getFullYear()}-${(ahora.getMonth() + 1).toString().padStart(2, "0")}-${ahora.getDate().toString().padStart(2, "0")}`;
             const esHoy = turno.fecha === hoyStr;
             const [h, m] = turno.hora_inicio.split(":").map(Number);
             const minutosTurno = h * 60 + m;

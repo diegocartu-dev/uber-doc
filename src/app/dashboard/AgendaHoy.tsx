@@ -33,7 +33,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
   // Verificar alertas de 15 minutos cada 30 segundos
   useEffect(() => {
     function checkAlertas() {
-      const ahora = new Date();
+      const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
       const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
       const nuevas: typeof alertas = [];
 

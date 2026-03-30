@@ -548,11 +548,11 @@ export default async function DashboardPage() {
             <p className="text-xs font-medium tracking-wide text-gray-400">MIS TURNOS</p>
             <div className="mt-3 space-y-2">
               {turnosPaciente.map((t) => {
-                const ahora = new Date();
-                const hoyCheck = ahora.toISOString().split("T")[0];
+                const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+                const hoyCheck = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
                 const [h, m] = t.hora_inicio.split(":").map(Number);
                 const minTurno = h * 60 + m;
-                const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
+                const minAhora = ahoraAR.getHours() * 60 + ahoraAR.getMinutes();
                 const esHoy = t.fecha === hoyCheck;
                 const dentroDeRango = esHoy && minTurno - minAhora <= 15 && minTurno - minAhora >= -30;
                 const mostrarSala = dentroDeRango || t.estado === "en_espera";
