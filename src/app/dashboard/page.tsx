@@ -293,8 +293,9 @@ export default async function DashboardPage() {
     const hemiPad = "space-y-4 rounded-xl bg-white p-5";
     const hemiStyle = { border: "0.5px solid #e5e7eb" } as const;
     const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
-    const footerClass = "flex items-center justify-between border-t border-gray-100 pt-4 mt-4";
-    const historialClass = "text-xs text-gray-400 hover:text-gray-600 transition-colors";
+    const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
+    const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
+    const historialClass = "text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors";
 
     const colTurnos = (
       <div className={hemiPad} style={hemiStyle}>
@@ -339,12 +340,8 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass}>
-          <Link href="/medico/agenda" className="text-xs font-medium text-[#1D9E75] hover:underline">
-            Mi agenda →
-          </Link>
-          <Link href="/medico/historial?tipo=turno" className={historialClass}>
-            Ver historial →
-          </Link>
+          <Link href="/medico/agenda" className={actionClass}>Mi agenda →</Link>
+          <Link href="/medico/historial?tipo=turno" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
     );
@@ -381,12 +378,8 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass}>
-          <span className="text-xs text-gray-500">
-            En espera: {consultasPendientes.length}/{capacidadCI}
-          </span>
-          <Link href="/medico/historial?tipo=consulta" className={historialClass}>
-            Ver historial →
-          </Link>
+          <Link href="/medico/configuracion" className={actionClass}>Configurar →</Link>
+          <Link href="/medico/historial?tipo=consulta" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
     );
