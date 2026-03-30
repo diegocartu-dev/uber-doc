@@ -21,11 +21,9 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
   const [alertas, setAlertas] = useState<{ id: string; nombre: string; hora: string; minutos: number }[]>([]);
   const [permisoNotif, setPermisoNotif] = useState(false);
 
-  // Pedir permiso de notificaciones al montar
+  // Solo verificar permiso actual — no pedir automáticamente (Safari lo bloquea)
   useEffect(() => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission().then((p) => setPermisoNotif(p === "granted"));
-    } else if (typeof Notification !== "undefined") {
+    if (typeof Notification !== "undefined") {
       setPermisoNotif(Notification.permission === "granted");
     }
   }, []);

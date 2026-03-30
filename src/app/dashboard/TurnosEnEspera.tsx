@@ -54,9 +54,16 @@ export default function TurnosEnEspera({
 }) {
   const [turnos, setTurnos] = useState(turnosIniciales);
   const [isPending, startTransition] = useTransition();
-  const prevCountRef = useRef(turnosIniciales.length);
+  const [notifPermiso, setNotifPermiso] = useState<string>("default");
+
+  console.log("TurnosEnEspera montado, medicoId:", medicoId, "iniciales:", turnosIniciales.length);
 
   useEffect(() => { setTurnos(turnosIniciales); }, [turnosIniciales]);
+
+  // Check notif permission
+  useEffect(() => {
+    if (typeof Notification !== "undefined") setNotifPermiso(Notification.permission);
+  }, []);
 
   // Fetch propio al montar para no depender solo del server
   useEffect(() => {
@@ -171,10 +178,33 @@ export default function TurnosEnEspera({
     });
   }
 
-  if (turnos.length === 0) return null;
+  if (turnos.length === 0) {
+    // Solo mostrar botón de notificaciones si no tiene permiso
+    if (notifPermiso === "default") {
+      return (
+        <button
+          onClick={() => Notification.requestPermission().then((p) => setNotifPermiso(p))}
+          className="w-full rounded-lg bg-gray-50 px-4 py-2 text-xs text-gray-500 hover:bg-gray-100"
+          style={{ border: "0.5px solid #e5e7eb" }}
+        >
+          🔔 Activar notificaciones para turnos
+        </button>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="space-y-3">
+      {notifPermiso === "default" && (
+        <button
+          onClick={() => Notification.requestPermission().then((p) => setNotifPermiso(p))}
+          className="w-full rounded-lg bg-amber-50 px-4 py-2 text-xs text-amber-700"
+          style={{ border: "0.5px solid #fbbf24" }}
+        >
+          🔔 Activar notificaciones para no perderte turnos
+        </button>
+      )}
       {turnos.map((t) => (
         <div
           key={t.id}
