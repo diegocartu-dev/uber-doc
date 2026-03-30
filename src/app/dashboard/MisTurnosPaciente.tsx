@@ -74,7 +74,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
             </Link>
           ) : (
             <>
-              <span className="shrink-0 rounded-full bg-[#BA7517]/10 px-2.5 py-1 text-[11px] font-medium text-[#BA7517]">
+              <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
                 Confirmado
               </span>
               {t.estado === "confirmado" && (
