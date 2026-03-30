@@ -17,7 +17,6 @@ export default function MetricasMedico({
   const [metricas, setMetricas] = useState(inicial);
   const [isPending, startTransition] = useTransition();
 
-  // Sync con server re-renders
   useEffect(() => {
     setMetricas(inicial);
     setPeriodo("hoy");
@@ -33,15 +32,16 @@ export default function MetricasMedico({
   }
 
   const items = [
-    { label: "Turnos", value: metricas.turnos, color: "#378ADD" },
-    { label: "En espera", value: metricas.enEspera, color: metricas.enEspera > 0 ? "#D85A30" : "#888780" },
-    { label: "Completadas", value: metricas.completadas, color: "#888780" },
     { label: "Ingresos", value: `$${metricas.ingresos.toLocaleString("es-AR")}`, color: "#1D9E75" },
+    { label: "Completadas", value: metricas.completadas, color: "#888780" },
+    { label: "En espera", value: metricas.enEspera, color: metricas.enEspera > 0 ? "#D85A30" : "#888780" },
+    { label: "Turnos", value: metricas.turnos, color: "#378ADD" },
   ];
 
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-medium tracking-wide text-gray-400">MÉTRICAS</p>
         <div className="inline-flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
           {(["hoy", "semana", "mes"] as Periodo[]).map((p) => (
             <button

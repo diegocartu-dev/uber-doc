@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { actualizarDisponibilidad } from "./actions";
 
 type Props = {
+  medicoId: string;
   disponible: boolean;
   disponibleDesde: string | null;
   disponibleHasta: string | null;
@@ -11,6 +13,11 @@ type Props = {
   precioConsulta: number;
   pacientesEnEspera: number;
 };
+
+function getHoyAR(): string {
+  const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  return `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${ar.getDate().toString().padStart(2, "0")}`;
+}
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
   const [hDesde, mDesde] = desde.split(":").map(Number);
@@ -21,6 +28,7 @@ function calcularCapacidad(desde: string, hasta: string, duracion: number): numb
 }
 
 export default function DisponibilidadMedico({
+  medicoId,
   disponible,
   disponibleDesde,
   disponibleHasta,
@@ -36,8 +44,61 @@ export default function DisponibilidadMedico({
   const [precio, setPrecio] = useState(precioConsulta);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  const [bloqueado, setBloqueado] = useState(false);
+  const autoDesactivadoRef = useRef(false);
 
   const capacidad = calcularCapacidad(desde, hasta, duracion);
+
+  // Regla: bloquear si hay turnos activos hoy
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function checkTurnosHoy() {
+      const hoy = getHoyAR();
+      const { count } = await supabase
+        .from("turnos")
+        .select("id", { count: "exact", head: true })
+        .eq("medico_id", medicoId)
+        .eq("fecha", hoy)
+        .in("estado", ["confirmado", "en_espera"]);
+
+      const hay = (count ?? 0) > 0;
+      setBloqueado(hay);
+
+      // Auto-desactivar si está activo y hay turnos
+      if (hay && !autoDesactivadoRef.current) {
+        autoDesactivadoRef.current = true;
+        setActivo(false);
+        await actualizarDisponibilidad({
+          disponible: false,
+          disponible_desde: disponibleDesde ?? "08:00",
+          disponible_hasta: disponibleHasta ?? "18:00",
+        });
+      }
+      if (!hay) {
+        autoDesactivadoRef.current = false;
+      }
+    }
+
+    checkTurnosHoy();
+
+    // Realtime sin filtros, filtrar en JS
+    const channel = supabase
+      .channel("bloqueo-ci")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "turnos" },
+        (payload) => {
+          const row = payload.new as { medico_id?: string; fecha?: string };
+          if (row.medico_id !== medicoId) return;
+          if (row.fecha !== getHoyAR()) return;
+          checkTurnosHoy();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [medicoId, disponibleDesde, disponibleHasta]);
 
   async function handleToggle() {
     const nuevoEstado = !activo;
@@ -114,24 +175,32 @@ export default function DisponibilidadMedico({
             type="button"
             role="switch"
             aria-checked={activo}
-            disabled={guardando}
+            disabled={guardando || bloqueado}
             onClick={(e) => {
               e.stopPropagation();
               handleToggle();
             }}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
-              activo ? "bg-[#1D9E75]" : "bg-gray-300"
-            }`}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              bloqueado ? "cursor-not-allowed bg-gray-200" : "cursor-pointer"
+            } ${activo && !bloqueado ? "bg-[#1D9E75]" : !bloqueado ? "bg-gray-300" : ""}`}
           >
             <span
               className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                activo ? "translate-x-4.5" : "translate-x-0.5"
+                activo && !bloqueado ? "translate-x-4.5" : "translate-x-0.5"
               }`}
             />
           </button>
         </div>
         <span className="text-xs text-gray-400">{abierto ? "▲" : "▼"}</span>
       </div>
+
+      {bloqueado && (
+        <div className="px-5 pb-3">
+          <p className="text-xs text-[#D85A30]">
+            Tenés turnos programados para hoy. Podés activar consulta inmediata cuando los completes.
+          </p>
+        </div>
+      )}
 
       {abierto && (
         <div className="border-t border-gray-50 px-6 pb-6">

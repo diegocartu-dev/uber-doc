@@ -5,7 +5,6 @@ import LogoutButton from "./LogoutButton";
 import DisponibilidadMedico from "./DisponibilidadMedico";
 import ConsultasPendientes from "./ConsultasPendientes";
 import ConsultasEnCurso from "./ConsultasEnCurso";
-import AdminConsultas from "./AdminConsultas";
 import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
 import MetricasMedico from "./MetricasMedico";
@@ -52,12 +51,6 @@ export default async function DashboardPage() {
     id: string; especialidad: string; paciente_nombre: string; paciente_tabla_id: string | null;
     sala_video_url: string | null; motivo_consulta: string | null;
     sintomas: string[] | null; created_at: string; fecha_nacimiento: string | null;
-  }[] = [];
-
-  let todasLasConsultas: {
-    id: string; especialidad: string; estado: string; created_at: string;
-    motivo_consulta: string | null; sintomas: string[] | null; sala_video_url: string | null;
-    paciente_nombre: string; paciente_tabla_id: string | null; medico_nombre: string;
   }[] = [];
 
   let completadasHoy = 0;
@@ -273,95 +266,135 @@ export default async function DashboardPage() {
         }));
       }
 
-      // Consultas para historial
-      const { data: todas } = await supabase
-        .from("consultas")
-        .select("id, especialidad, estado, created_at, paciente_id, medico_id, motivo_consulta, sintomas, sala_video_url")
-        .eq("medico_id", data.id)
-        .order("created_at", { ascending: false });
-
-      if (todas && todas.length > 0) {
-        const pacMap = await fetchPacientes([...new Set(todas.map((c) => c.paciente_id))]);
-        todasLasConsultas = todas.map((c) => ({
-          id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
-          motivo_consulta: c.motivo_consulta, sintomas: c.sintomas, sala_video_url: c.sala_video_url,
-          paciente_nombre: pacMap.get(c.paciente_id)?.nombre ?? "—",
-          paciente_tabla_id: pacMap.get(c.paciente_id)?.id ?? null,
-          medico_nombre: fullName,
-        }));
-      }
     }
   }
 
   const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
   const hayAlgoEnCurso = consultasEnCurso.length > 0 || turnoEnCurso !== null;
+  const hayTurnosActivosHoy = turnosHoy.some((t) => t.estado === "confirmado" || t.estado === "en_espera");
+  const consultaInactiva = !medico?.disponible || hayTurnosActivosHoy;
+  const hayUrgenciaTurnos = turnosEsperaCompletos.length > 0 || turnoEnCurso !== null;
+  const hayUrgenciaConsulta = consultasPendientes.length > 0 || consultasEnCurso.length > 0;
 
   // ═══════════════════════════════════════
   // RENDER: MÉDICO
   // ═══════════════════════════════════════
   if (role === "medico" && medico) {
-    const sidebarContent = (
-      <>
-        {/* Panel: Consulta Inmediata */}
-        <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
-          <div className="px-5 pt-4">
-            <p className="text-xs font-medium tracking-wide text-gray-400">CONSULTA INMEDIATA</p>
+    const capacidadCI = (() => {
+      const d = medico.disponible_desde ?? "08:00";
+      const h = medico.disponible_hasta ?? "18:00";
+      const [hD, mD] = d.split(":").map(Number);
+      const [hH, mH] = h.split(":").map(Number);
+      const mins = hH * 60 + mH - (hD * 60 + mD);
+      return mins > 0 ? Math.floor(mins / medico.duracion_consulta) : 0;
+    })();
+
+    // Hemisferios — en mobile, urgencia primero
+    const colTurnos = (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-gray-900">Turnos programados</h2>
+            {modelosActivosList.length > 0 && (
+              <span className="rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[11px] font-medium text-[#1D9E75]">
+                {modelosActivosList.length} modelo{modelosActivosList.length !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
-          <div className="px-1 pb-1">
-            <DisponibilidadMedico
-              disponible={medico.disponible}
-              disponibleDesde={medico.disponible_desde}
-              disponibleHasta={medico.disponible_hasta}
-              duracionConsulta={medico.duracion_consulta}
-              precioConsulta={medico.precio_consulta}
-              pacientesEnEspera={consultasPendientes.length}
-            />
-          </div>
+          <Link href="/medico/agenda" className="text-xs font-medium text-[#1D9E75] hover:underline">
+            Mi agenda →
+          </Link>
         </div>
 
-        {/* Panel: Turnos Programados */}
-        <details className="group rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
-          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden">
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-medium tracking-wide text-gray-400">TURNOS PROGRAMADOS</p>
-              {modelosActivosList.length > 0 && (
-                <span className="rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[11px] font-medium text-[#1D9E75]">
-                  {modelosActivosList.length}
-                </span>
-              )}
-            </div>
-            <span className="text-xs text-gray-400 transition-transform group-open:rotate-180">▼</span>
-          </summary>
-          <div className="border-t border-gray-50 px-5 pb-4 pt-3">
-            {modelosActivosList.length > 0 ? (
-              <div className="space-y-2">
-                {modelosActivosList.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />
-                    <span className="text-sm text-gray-700">{m.nombre}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">Sin modelos configurados</p>
-            )}
-            <Link href="/medico/agenda" className="mt-3 block text-xs font-medium text-[#1D9E75] hover:underline">
-              Configurar agenda →
-            </Link>
-          </div>
-        </details>
+        {/* Sub-métrica */}
+        <div className="rounded-lg bg-white px-4 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
+          <span className="text-xs text-gray-500">{turnosHoy.length} turno{turnosHoy.length !== 1 ? "s" : ""} hoy</span>
+        </div>
 
-        {/* Panel: Historial */}
-        <details className="group rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
-          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden">
-            <p className="text-xs font-medium tracking-wide text-gray-400">HISTORIAL</p>
-            <span className="text-xs text-gray-400 transition-transform group-open:rotate-180">▼</span>
-          </summary>
-          <div className="border-t border-gray-50">
-            <AdminConsultas consultas={todasLasConsultas} medicoId={medico.id} />
+        {/* Urgencia: turnos en espera */}
+        <TurnosEnEspera
+          turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
+          medicoId={medico.id}
+          hayEnCurso={hayAlgoEnCurso}
+        />
+
+        {/* Turno en curso */}
+        {turnoEnCurso && (
+          <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
+                  <span className="text-xs font-medium tracking-wide text-[#378ADD]">TURNO EN CURSO</span>
+                </div>
+                <p className="mt-2 text-[15px] font-medium text-gray-900">{turnoEnCurso.paciente_nombre}</p>
+                <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCurso.hora_inicio.slice(0, 5)} hs</p>
+              </div>
+              <Link
+                href={`/turno/${turnoEnCurso.id}/video`}
+                className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-95 transition-all duration-100"
+              >
+                Ver consulta
+              </Link>
+            </div>
           </div>
-        </details>
-      </>
+        )}
+
+        {/* Agenda de hoy */}
+        <AgendaHoy turnos={turnosHoy} />
+
+        <Link href="/medico/historial?tipo=turno" className="block text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          Ver historial →
+        </Link>
+      </div>
+    );
+
+    const colConsulta = (
+      <div className={`space-y-5 ${consultaInactiva ? "opacity-60" : ""}`}>
+        {/* Header con toggle */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-gray-900">Consulta inmediata</h2>
+        </div>
+
+        {/* DisponibilidadMedico — config inline */}
+        <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
+          <DisponibilidadMedico
+            medicoId={medico.id}
+            disponible={medico.disponible}
+            disponibleDesde={medico.disponible_desde}
+            disponibleHasta={medico.disponible_hasta}
+            duracionConsulta={medico.duracion_consulta}
+            precioConsulta={medico.precio_consulta}
+            pacientesEnEspera={consultasPendientes.length}
+          />
+        </div>
+
+        {consultaInactiva && !hayUrgenciaConsulta ? (
+          <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
+            <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
+          </div>
+        ) : (
+          <>
+            {/* Urgencia: consultas pendientes */}
+            <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
+
+            {/* Urgencia: consultas en curso */}
+            <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
+
+            {/* Sub-métrica */}
+            <div className="rounded-lg bg-white px-4 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
+              <span className="text-xs text-gray-500">
+                En espera: {consultasPendientes.length}/{capacidadCI}
+              </span>
+            </div>
+          </>
+        )}
+
+        <Link href="/medico/historial?tipo=consulta" className="block text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          Ver historial →
+        </Link>
+      </div>
     );
 
     return (
@@ -385,7 +418,7 @@ export default async function DashboardPage() {
         </nav>
 
         <div className="mx-auto max-w-7xl px-6 py-6">
-          {/* Métricas con selector Hoy/Semana/Mes */}
+          {/* Métricas full width */}
           <MetricasMedico
             medicoId={medico.id}
             inicial={{
@@ -396,57 +429,19 @@ export default async function DashboardPage() {
             }}
           />
 
-          <div className="mt-6 flex gap-6">
-            {/* ── COLUMNA IZQUIERDA — Operativo ── */}
-            <div className="min-w-0 flex-1 space-y-5">
-              {/* Turnos en espera (programados) */}
-              <TurnosEnEspera
-                turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
-                medicoId={medico.id}
-                hayEnCurso={hayAlgoEnCurso}
-              />
-
-              {/* Turno en curso (programado) */}
-              {turnoEnCurso && (
-                <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
-                        <span className="text-xs font-medium tracking-wide text-[#378ADD]">TURNO EN CURSO</span>
-                      </div>
-                      <p className="mt-2 text-[15px] font-medium text-gray-900">{turnoEnCurso.paciente_nombre}</p>
-                      <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCurso.hora_inicio.slice(0, 5)} hs</p>
-                    </div>
-                    <Link
-                      href={`/turno/${turnoEnCurso.id}/video`}
-                      className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-95 transition-all duration-100"
-                    >
-                      Ver consulta
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* Consultas inmediatas en curso */}
-              <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
-
-              {/* Consultas inmediatas pendientes */}
-              <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
-
-              {/* Agenda de hoy */}
-              <AgendaHoy turnos={turnosHoy} />
-            </div>
-
-            {/* ── COLUMNA DERECHA — Sidebar (desktop) ── */}
-            <div className="hidden w-80 shrink-0 space-y-4 lg:block">
-              {sidebarContent}
-            </div>
+          {/* Dos hemisferios — desktop */}
+          <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2">
+            {colTurnos}
+            {colConsulta}
           </div>
 
-          {/* Sidebar (mobile) */}
-          <div className="mt-5 space-y-4 lg:hidden">
-            {sidebarContent}
+          {/* Mobile — urgencia primero */}
+          <div className="mt-6 space-y-8 lg:hidden">
+            {hayUrgenciaConsulta && !hayUrgenciaTurnos ? (
+              <>{colConsulta}{colTurnos}</>
+            ) : (
+              <>{colTurnos}{colConsulta}</>
+            )}
           </div>
         </div>
       </div>
@@ -583,20 +578,19 @@ export default async function DashboardPage() {
           );
         })()}
 
-        {/* ── Acción principal ── */}
-        <Link
-          href="/clinica"
-          className="block w-full rounded-xl bg-white p-5 transition hover:shadow-sm"
-          style={{ border: "0.5px solid #e5e7eb" }}
-        >
-          <div className="flex items-center gap-4">
-            <span className="text-2xl">🏥</span>
-            <div>
-              <p className="text-sm font-medium text-gray-900">Nueva consulta</p>
-              <p className="text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
-            </div>
-          </div>
-        </Link>
+        {/* ── Acciones principales ── */}
+        <div className="grid gap-4 grid-cols-2">
+          <Link href="/clinica" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+            <p className="text-2xl">🏥</p>
+            <p className="mt-3 text-sm font-medium text-gray-900">Clínica Virtual</p>
+            <p className="mt-1 text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
+          </Link>
+          <Link href="/documentos" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+            <p className="text-2xl">📄</p>
+            <p className="mt-3 text-sm font-medium text-gray-900">Mis documentos</p>
+            <p className="mt-1 text-xs text-gray-500">Recetas, indicaciones y certificados</p>
+          </Link>
+        </div>
 
         {/* ── Mis turnos ── */}
         <div className="mt-5">
