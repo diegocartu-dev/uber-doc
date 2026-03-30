@@ -307,6 +307,11 @@ export default async function DashboardPage() {
           {turnosHoy.length} turno{turnosHoy.length !== 1 ? "s" : ""} hoy
         </p>
 
+        {/* Mi agenda */}
+        <div className="rounded-xl bg-white px-5 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
+          <Link href="/medico/agenda" className={actionClass}>Mi agenda →</Link>
+        </div>
+
         {/* Zona urgencia */}
         <TurnosEnEspera
           turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
@@ -339,8 +344,7 @@ export default async function DashboardPage() {
         <AgendaHoy turnos={turnosHoy} />
 
         {/* Pie */}
-        <div className={footerClass}>
-          <Link href="/medico/agenda" className={actionClass}>Mi agenda →</Link>
+        <div className={footerClass + " justify-end"}>
           <Link href="/medico/historial?tipo=turno" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
@@ -377,8 +381,7 @@ export default async function DashboardPage() {
         )}
 
         {/* Pie */}
-        <div className={footerClass}>
-          <Link href="/medico/configuracion" className={actionClass}>Configurar →</Link>
+        <div className={footerClass + " justify-end"}>
           <Link href="/medico/historial?tipo=consulta" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
