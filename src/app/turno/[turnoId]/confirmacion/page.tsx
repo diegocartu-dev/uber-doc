@@ -97,9 +97,31 @@ export default async function ConfirmacionTurnoPage({
         </div>
 
         <div className="mt-6 space-y-3">
+          {(() => {
+            const ahora = new Date();
+            const hoyStr = ahora.toISOString().split("T")[0];
+            const esHoy = turno.fecha === hoyStr;
+            const [h, m] = turno.hora_inicio.split(":").map(Number);
+            const minutosTurno = h * 60 + m;
+            const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+            const faltanMenos15 = esHoy && minutosTurno - minutosAhora <= 15 && minutosTurno - minutosAhora >= -30;
+            const enEspera = turno.estado === "en_espera";
+
+            if (faltanMenos15 || enEspera) {
+              return (
+                <Link
+                  href={`/turno/${turnoId}/espera`}
+                  className="block w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-center text-sm font-medium text-white"
+                >
+                  Ir a sala de espera
+                </Link>
+              );
+            }
+            return null;
+          })()}
           <Link
             href="/dashboard"
-            className="block w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-center text-sm font-medium text-white"
+            className="block w-full rounded-xl bg-gray-100 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-200"
           >
             Volver al inicio
           </Link>

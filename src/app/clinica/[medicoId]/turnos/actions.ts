@@ -78,6 +78,21 @@ export async function confirmarPagoTurno(turnoId: string) {
   return { success: true };
 }
 
+export async function entrarSalaEspera(turnoId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { error } = await supabase
+    .from("turnos")
+    .update({ estado: "en_espera" })
+    .eq("id", turnoId)
+    .eq("estado", "confirmado");
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function expirarTurno(turnoId: string) {
   const supabase = await createClient();
   const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
