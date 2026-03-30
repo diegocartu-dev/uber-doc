@@ -37,7 +37,8 @@ export default function TurnosEnEspera({
             id: string; medico_id: string; estado: string;
             fecha: string; hora_inicio: string; paciente_id: string;
           };
-          if (updated.medico_id !== medicoId) return;
+          // Si medico_id no viene en el payload, no filtrar (aceptar todos y verificar después)
+          if (updated.medico_id && updated.medico_id !== medicoId) return;
 
           if (updated.estado === "en_espera") {
             // Nuevo turno en espera — traer nombre paciente
