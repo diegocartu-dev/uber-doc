@@ -8,19 +8,17 @@ import ConsultasEnCurso from "./ConsultasEnCurso";
 import AdminConsultas from "./AdminConsultas";
 import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
+import MetricasMedico from "./MetricasMedico";
+import MisTurnosPaciente from "./MisTurnosPaciente";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/auth/login");
-  }
+  if (!user) redirect("/auth/login");
 
   const fullName = user.user_metadata?.full_name || user.email;
   let role = user.user_metadata?.role;
 
-  // Fallback: si no hay rol en metadata, verificar en tablas
   if (!role) {
     const { data: esMedico } = await supabase
       .from("medicos").select("id").eq("user_id", user.id).maybeSingle();
@@ -33,89 +31,68 @@ export default async function DashboardPage() {
     }
   }
 
-  // --- MÉDICO ---
+  // AR timezone
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const hoy = `${ahoraAR.getFullYear()}-${pad(ahoraAR.getMonth() + 1)}-${pad(ahoraAR.getDate())}`;
+
+  // ─── MÉDICO DATA ───
   let medico: {
-    id: string;
-    disponible: boolean;
-    disponible_desde: string | null;
-    disponible_hasta: string | null;
-    duracion_consulta: number;
-    precio_consulta: number;
+    id: string; disponible: boolean; disponible_desde: string | null;
+    disponible_hasta: string | null; duracion_consulta: number; precio_consulta: number;
   } | null = null;
 
   let consultasPendientes: {
-    id: string;
-    especialidad: string;
-    estado: string;
-    created_at: string;
-    paciente_nombre: string;
-    paciente_tabla_id: string | null;
-    motivo_consulta: string | null;
-    fecha_nacimiento: string | null;
+    id: string; especialidad: string; estado: string; created_at: string;
+    paciente_nombre: string; paciente_tabla_id: string | null;
+    motivo_consulta: string | null; fecha_nacimiento: string | null;
   }[] = [];
 
   let consultasEnCurso: {
-    id: string;
-    especialidad: string;
-    paciente_nombre: string;
-    paciente_tabla_id: string | null;
-    sala_video_url: string | null;
-    motivo_consulta: string | null;
-    sintomas: string[] | null;
-    created_at: string;
-    fecha_nacimiento: string | null;
+    id: string; especialidad: string; paciente_nombre: string; paciente_tabla_id: string | null;
+    sala_video_url: string | null; motivo_consulta: string | null;
+    sintomas: string[] | null; created_at: string; fecha_nacimiento: string | null;
   }[] = [];
 
   let todasLasConsultas: {
-    id: string;
-    especialidad: string;
-    estado: string;
-    created_at: string;
-    motivo_consulta: string | null;
-    sintomas: string[] | null;
-    sala_video_url: string | null;
-    paciente_nombre: string;
-    paciente_tabla_id: string | null;
-    medico_nombre: string;
+    id: string; especialidad: string; estado: string; created_at: string;
+    motivo_consulta: string | null; sintomas: string[] | null; sala_video_url: string | null;
+    paciente_nombre: string; paciente_tabla_id: string | null; medico_nombre: string;
   }[] = [];
 
   let completadasHoy = 0;
   let ingresosHoy = 0;
-  let numModelosActivos = 0;
   let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; especialidad: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
+  let turnoEnCurso: { id: string; hora_inicio: string; paciente_nombre: string } | null = null;
+  let modelosActivosList: { id: string; nombre: string }[] = [];
 
-  // --- PACIENTE ---
+  // ─── PACIENTE DATA ───
   let consultaActiva: {
-    id: string;
-    especialidad: string;
-    estado: string;
-    sala_video_url: string | null;
-    medico_nombre: string;
+    id: string; especialidad: string; estado: string;
+    sala_video_url: string | null; medico_nombre: string;
   } | null = null;
 
   let turnosPaciente: {
-    id: string;
-    fecha: string;
-    hora_inicio: string;
-    estado: string;
-    especialidad: string;
-    medico_nombre: string;
+    id: string; fecha: string; hora_inicio: string; estado: string;
+    especialidad: string; medico_nombre: string;
   }[] = [];
 
+  let turnoEnCursoPaciente: {
+    id: string; medico_nombre: string; hora_inicio: string;
+  } | null = null;
+
   if (role === "paciente") {
-    // Traer paciente.id para buscar turnos
     const { data: pacienteData } = await supabase
       .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
 
     if (pacienteData) {
-      const hoyStr = new Date().toISOString().split("T")[0];
       const { data: turnosData } = await supabase
         .from("turnos")
         .select("id, fecha, hora_inicio, estado, medico_id")
         .eq("paciente_id", pacienteData.id)
         .in("estado", ["confirmado", "en_espera"])
-        .gte("fecha", hoyStr)
+        .gte("fecha", hoy)
         .order("fecha", { ascending: true })
         .order("hora_inicio", { ascending: true });
 
@@ -128,14 +105,25 @@ export default async function DashboardPage() {
         turnosPaciente = turnosData.map((t) => {
           const med = medMap.get(t.medico_id);
           return {
-            id: t.id,
-            fecha: t.fecha,
-            hora_inicio: t.hora_inicio,
-            estado: t.estado,
-            especialidad: med?.especialidad ?? "",
-            medico_nombre: med?.nombre_completo ?? "Médico",
+            id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio, estado: t.estado,
+            especialidad: med?.especialidad ?? "", medico_nombre: med?.nombre_completo ?? "Médico",
           };
         });
+      }
+
+      // Turno en curso del paciente
+      const { data: turnoECPac } = await supabase
+        .from("turnos").select("id, hora_inicio, medico_id")
+        .eq("paciente_id", pacienteData.id).eq("estado", "en_curso")
+        .limit(1).maybeSingle();
+
+      if (turnoECPac) {
+        const { data: medEC } = await supabase
+          .from("medicos").select("nombre_completo").eq("id", turnoECPac.medico_id).maybeSingle();
+        turnoEnCursoPaciente = {
+          id: turnoECPac.id, hora_inicio: turnoECPac.hora_inicio,
+          medico_nombre: medEC?.nombre_completo ?? "Médico",
+        };
       }
     }
 
@@ -150,17 +138,10 @@ export default async function DashboardPage() {
 
     if (activa) {
       const { data: med } = await supabase
-        .from("medicos")
-        .select("nombre_completo")
-        .eq("id", activa.medico_id)
-        .single();
-
+        .from("medicos").select("nombre_completo").eq("id", activa.medico_id).single();
       consultaActiva = {
-        id: activa.id,
-        especialidad: activa.especialidad,
-        estado: activa.estado,
-        sala_video_url: activa.sala_video_url,
-        medico_nombre: med?.nombre_completo ?? "Médico",
+        id: activa.id, especialidad: activa.especialidad, estado: activa.estado,
+        sala_video_url: activa.sala_video_url, medico_nombre: med?.nombre_completo ?? "Médico",
       };
     }
   }
@@ -174,13 +155,10 @@ export default async function DashboardPage() {
     medico = data;
 
     if (data) {
-      // Helper: traer nombres + fecha_nacimiento de pacientes
       async function fetchPacientes(ids: string[]) {
         if (ids.length === 0) return new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
         const { data: pacs } = await supabase
-          .from("pacientes")
-          .select("id, user_id, nombre_completo, fecha_nacimiento")
-          .in("user_id", ids);
+          .from("pacientes").select("id, user_id, nombre_completo, fecha_nacimiento").in("user_id", ids);
         return new Map(
           (pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo, nacimiento: p.fecha_nacimiento }])
         );
@@ -190,8 +168,7 @@ export default async function DashboardPage() {
       const { data: esperando } = await supabase
         .from("consultas")
         .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta")
-        .eq("medico_id", data.id)
-        .eq("estado", "esperando")
+        .eq("medico_id", data.id).eq("estado", "esperando")
         .order("created_at", { ascending: true });
 
       if (esperando && esperando.length > 0) {
@@ -199,14 +176,9 @@ export default async function DashboardPage() {
         consultasPendientes = esperando.map((c) => {
           const p = pacMap.get(c.paciente_id);
           return {
-            id: c.id,
-            especialidad: c.especialidad,
-            estado: c.estado,
-            created_at: c.created_at,
-            paciente_nombre: p?.nombre ?? "Paciente",
-            paciente_tabla_id: p?.id ?? null,
-            motivo_consulta: c.motivo_consulta,
-            fecha_nacimiento: p?.nacimiento ?? null,
+            id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
+            paciente_nombre: p?.nombre ?? "Paciente", paciente_tabla_id: p?.id ?? null,
+            motivo_consulta: c.motivo_consulta, fecha_nacimiento: p?.nacimiento ?? null,
           };
         });
       }
@@ -215,8 +187,7 @@ export default async function DashboardPage() {
       const { data: enCurso } = await supabase
         .from("consultas")
         .select("id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at")
-        .eq("medico_id", data.id)
-        .eq("estado", "en_curso")
+        .eq("medico_id", data.id).eq("estado", "en_curso")
         .order("created_at", { ascending: true });
 
       if (enCurso && enCurso.length > 0) {
@@ -224,25 +195,19 @@ export default async function DashboardPage() {
         consultasEnCurso = enCurso.map((c) => {
           const p = pacMap.get(c.paciente_id);
           return {
-            id: c.id,
-            especialidad: c.especialidad,
-            paciente_nombre: p?.nombre ?? "Paciente",
-            paciente_tabla_id: p?.id ?? null,
-            sala_video_url: c.sala_video_url,
-            motivo_consulta: c.motivo_consulta,
-            sintomas: c.sintomas,
-            created_at: c.created_at,
-            fecha_nacimiento: p?.nacimiento ?? null,
+            id: c.id, especialidad: c.especialidad, paciente_nombre: p?.nombre ?? "Paciente",
+            paciente_tabla_id: p?.id ?? null, sala_video_url: c.sala_video_url,
+            motivo_consulta: c.motivo_consulta, sintomas: c.sintomas,
+            created_at: c.created_at, fecha_nacimiento: p?.nacimiento ?? null,
           };
         });
       }
 
-      // Turnos en espera del médico
+      // Turnos en espera
       const { data: turnosEspera } = await supabase
         .from("turnos")
         .select("id, fecha, hora_inicio, paciente_id, estado")
-        .eq("medico_id", data.id)
-        .eq("estado", "en_espera")
+        .eq("medico_id", data.id).eq("estado", "en_espera")
         .order("hora_inicio", { ascending: true });
 
       if (turnosEspera && turnosEspera.length > 0) {
@@ -252,39 +217,47 @@ export default async function DashboardPage() {
           : { data: [] };
         const nombresEsp = new Map((pacsEsp ?? []).map((p) => [p.id, p.nombre_completo]));
         turnosEsperaCompletos = turnosEspera.map((t) => ({
-          id: t.id,
-          fecha: t.fecha,
-          hora_inicio: t.hora_inicio,
-          paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
-          especialidad: "",
+          id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio,
+          paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente", especialidad: "",
         }));
       }
 
-      // Completadas hoy + ingresos
-      const hoy = new Date().toISOString().split("T")[0];
-      const { data: compHoy } = await supabase
-        .from("consultas")
-        .select("id")
-        .eq("medico_id", data.id)
-        .eq("estado", "completada")
-        .gte("created_at", hoy);
-      completadasHoy = compHoy?.length ?? 0;
+      // Turno en curso
+      const { data: turnoEC } = await supabase
+        .from("turnos").select("id, hora_inicio, paciente_id")
+        .eq("medico_id", data.id).eq("estado", "en_curso")
+        .limit(1).maybeSingle();
+
+      if (turnoEC) {
+        const { data: pacEC } = await supabase
+          .from("pacientes").select("nombre_completo").eq("id", turnoEC.paciente_id).maybeSingle();
+        turnoEnCurso = {
+          id: turnoEC.id, hora_inicio: turnoEC.hora_inicio,
+          paciente_nombre: pacEC?.nombre_completo ?? "Paciente",
+        };
+      }
+
+      // Completadas hoy (consultas + turnos)
+      const { data: compConsHoy } = await supabase
+        .from("consultas").select("id")
+        .eq("medico_id", data.id).eq("estado", "completada").gte("created_at", hoy);
+      const { data: compTurnosHoy } = await supabase
+        .from("turnos").select("id")
+        .eq("medico_id", data.id).eq("estado", "completado").eq("fecha", hoy);
+      completadasHoy = (compConsHoy?.length ?? 0) + (compTurnosHoy?.length ?? 0);
       ingresosHoy = completadasHoy * (data.precio_consulta ?? 0);
 
-      // Contar modelos de agenda activos
-      const { count: modelosActivosCount } = await supabase
-        .from("agenda_modelos")
-        .select("id", { count: "exact", head: true })
-        .eq("medico_id", data.id)
-        .eq("activo", true);
-      numModelosActivos = modelosActivosCount ?? 0;
+      // Modelos activos (lista para sidebar)
+      const { data: modelosData } = await supabase
+        .from("agenda_modelos").select("id, nombre")
+        .eq("medico_id", data.id).eq("activo", true).order("nombre");
+      modelosActivosList = modelosData ?? [];
 
       // Turnos del día para agenda
       const { data: turnosHoyData } = await supabase
         .from("turnos")
         .select("id, fecha, hora_inicio, hora_fin, estado, paciente_id")
-        .eq("medico_id", data.id)
-        .eq("fecha", hoy)
+        .eq("medico_id", data.id).eq("fecha", hoy)
         .in("estado", ["confirmado", "en_espera", "en_curso", "completado"])
         .order("hora_inicio", { ascending: true });
 
@@ -300,7 +273,7 @@ export default async function DashboardPage() {
         }));
       }
 
-      // Admin: todas las consultas
+      // Consultas para historial
       const { data: todas } = await supabase
         .from("consultas")
         .select("id, especialidad, estado, created_at, paciente_id, medico_id, motivo_consulta, sintomas, sala_video_url")
@@ -310,13 +283,8 @@ export default async function DashboardPage() {
       if (todas && todas.length > 0) {
         const pacMap = await fetchPacientes([...new Set(todas.map((c) => c.paciente_id))]);
         todasLasConsultas = todas.map((c) => ({
-          id: c.id,
-          especialidad: c.especialidad,
-          estado: c.estado,
-          created_at: c.created_at,
-          motivo_consulta: c.motivo_consulta,
-          sintomas: c.sintomas,
-          sala_video_url: c.sala_video_url,
+          id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
+          motivo_consulta: c.motivo_consulta, sintomas: c.sintomas, sala_video_url: c.sala_video_url,
           paciente_nombre: pacMap.get(c.paciente_id)?.nombre ?? "—",
           paciente_tabla_id: pacMap.get(c.paciente_id)?.id ?? null,
           medico_nombre: fullName,
@@ -325,16 +293,77 @@ export default async function DashboardPage() {
     }
   }
 
-  // Initials for avatar
-  const initials = fullName
-    .split(" ")
-    .map((w: string) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
+  const hayAlgoEnCurso = consultasEnCurso.length > 0 || turnoEnCurso !== null;
 
-  // --- RENDER: MÉDICO ---
+  // ═══════════════════════════════════════
+  // RENDER: MÉDICO
+  // ═══════════════════════════════════════
   if (role === "medico" && medico) {
+    const sidebarContent = (
+      <>
+        {/* Panel: Consulta Inmediata */}
+        <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
+          <div className="px-5 pt-4">
+            <p className="text-xs font-medium tracking-wide text-gray-400">CONSULTA INMEDIATA</p>
+          </div>
+          <div className="px-1 pb-1">
+            <DisponibilidadMedico
+              disponible={medico.disponible}
+              disponibleDesde={medico.disponible_desde}
+              disponibleHasta={medico.disponible_hasta}
+              duracionConsulta={medico.duracion_consulta}
+              precioConsulta={medico.precio_consulta}
+              pacientesEnEspera={consultasPendientes.length}
+            />
+          </div>
+        </div>
+
+        {/* Panel: Turnos Programados */}
+        <details className="group rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium tracking-wide text-gray-400">TURNOS PROGRAMADOS</p>
+              {modelosActivosList.length > 0 && (
+                <span className="rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[11px] font-medium text-[#1D9E75]">
+                  {modelosActivosList.length}
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-gray-400 transition-transform group-open:rotate-180">▼</span>
+          </summary>
+          <div className="border-t border-gray-50 px-5 pb-4 pt-3">
+            {modelosActivosList.length > 0 ? (
+              <div className="space-y-2">
+                {modelosActivosList.map((m) => (
+                  <div key={m.id} className="flex items-center gap-2">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />
+                    <span className="text-sm text-gray-700">{m.nombre}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Sin modelos configurados</p>
+            )}
+            <Link href="/medico/agenda" className="mt-3 block text-xs font-medium text-[#1D9E75] hover:underline">
+              Configurar agenda →
+            </Link>
+          </div>
+        </details>
+
+        {/* Panel: Historial */}
+        <details className="group rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden">
+            <p className="text-xs font-medium tracking-wide text-gray-400">HISTORIAL</p>
+            <span className="text-xs text-gray-400 transition-transform group-open:rotate-180">▼</span>
+          </summary>
+          <div className="border-t border-gray-50">
+            <AdminConsultas consultas={todasLasConsultas} medicoId={medico.id} />
+          </div>
+        </details>
+      </>
+    );
+
     return (
       <div className="min-h-full bg-[#f8f9fa]">
         {/* Topbar */}
@@ -343,250 +372,236 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-5">
               <span className="text-lg font-medium text-gray-900">Uber Doc</span>
               <div className="flex items-center gap-1.5">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"
-                  }`}
-                />
-                <span className="text-xs text-gray-500">
-                  {medico.disponible ? "Disponible" : "No disponible"}
-                </span>
+                <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
+                <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-500">{fullName}</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
-                {initials}
-              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
               <LogoutButton />
             </div>
           </div>
         </nav>
 
         <div className="mx-auto max-w-7xl px-6 py-6">
-          {/* Métricas */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            {[
-              { label: "Turnos hoy", value: turnosHoy.length, color: "text-[#378ADD]" },
-              { label: "En espera", value: consultasPendientes.length, color: "text-amber-600" },
-              { label: "En curso", value: consultasEnCurso.length, color: "text-[#1D9E75]" },
-              { label: "Completadas hoy", value: completadasHoy, color: "text-gray-900" },
-              {
-                label: "Ingresos hoy",
-                value: `$${ingresosHoy.toLocaleString("es-AR")}`,
-                color: "text-gray-900",
-              },
-            ].map((m) => (
-              <div
-                key={m.label}
-                className="rounded-xl bg-white p-5"
-                style={{ border: "0.5px solid #e5e7eb" }}
-              >
-                <p className="text-xs font-medium tracking-wide text-gray-400">
-                  {m.label.toUpperCase()}
-                </p>
-                <p className={`mt-1 text-2xl font-medium ${m.color}`}>
-                  {m.value}
-                </p>
-              </div>
-            ))}
-          </div>
+          {/* Métricas con selector Hoy/Semana/Mes */}
+          <MetricasMedico
+            medicoId={medico.id}
+            inicial={{
+              turnos: turnosHoy.length,
+              enEspera: turnosEsperaCompletos.length + consultasPendientes.length,
+              completadas: completadasHoy,
+              ingresos: ingresosHoy,
+            }}
+          />
 
           <div className="mt-6 flex gap-6">
-            {/* Main column */}
+            {/* ── COLUMNA IZQUIERDA — Operativo ── */}
             <div className="min-w-0 flex-1 space-y-5">
-              {/* Turnos en espera */}
+              {/* Turnos en espera (programados) */}
               <TurnosEnEspera
                 turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
                 medicoId={medico.id}
-                hayEnCurso={consultasEnCurso.length > 0}
+                hayEnCurso={hayAlgoEnCurso}
               />
 
-              {/* Consulta activa */}
-              <ConsultasEnCurso
-                consultas={consultasEnCurso}
-                medicoId={medico.id}
-              />
-
-              {/* Pacientes en espera */}
-              <ConsultasPendientes
-                consultas={consultasPendientes}
-                medicoId={medico.id}
-              />
-
-              {/* Consulta inmediata */}
-              <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
-                <div className="px-5 pt-5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">⚡</span>
-                    <p className="text-xs font-medium tracking-wide text-gray-400">CONSULTA INMEDIATA</p>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-500">Pacientes te contactan ahora sin turno previo</p>
-                </div>
-                <div className="px-1 pb-1">
-                  <DisponibilidadMedico
-                    disponible={medico.disponible}
-                    disponibleDesde={medico.disponible_desde}
-                    disponibleHasta={medico.disponible_hasta}
-                    duracionConsulta={medico.duracion_consulta}
-                    precioConsulta={medico.precio_consulta}
-                    pacientesEnEspera={consultasPendientes.length}
-                  />
-                </div>
-              </div>
-
-              {/* Turnos programados */}
-              <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">📅</span>
-                      <p className="text-xs font-medium tracking-wide text-gray-400">TURNOS PROGRAMADOS</p>
+              {/* Turno en curso (programado) */}
+              {turnoEnCurso && (
+                <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
+                        <span className="text-xs font-medium tracking-wide text-[#378ADD]">TURNO EN CURSO</span>
+                      </div>
+                      <p className="mt-2 text-[15px] font-medium text-gray-900">{turnoEnCurso.paciente_nombre}</p>
+                      <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCurso.hora_inicio.slice(0, 5)} hs</p>
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">Pacientes reservan turno con anticipación</p>
-                    <p className={`mt-1 text-xs ${numModelosActivos > 0 ? "text-[#1D9E75]" : "text-gray-400"}`}>
-                      {numModelosActivos > 0
-                        ? `${numModelosActivos} modelo${numModelosActivos !== 1 ? "s" : ""} activo${numModelosActivos !== 1 ? "s" : ""}`
-                        : "Sin modelos configurados"
-                      }
-                    </p>
+                    <Link
+                      href={`/turno/${turnoEnCurso.id}/video`}
+                      className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-95 transition-all duration-100"
+                    >
+                      Ver consulta
+                    </Link>
                   </div>
-                  <Link
-                    href="/medico/agenda"
-                    className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200"
-                  >
-                    Configurar agenda →
-                  </Link>
                 </div>
-              </div>
+              )}
+
+              {/* Consultas inmediatas en curso */}
+              <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
+
+              {/* Consultas inmediatas pendientes */}
+              <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
+
               {/* Agenda de hoy */}
               <AgendaHoy turnos={turnosHoy} />
             </div>
 
-            {/* Sidebar */}
-            <div className="hidden w-80 shrink-0 space-y-5 lg:block">
-              {/* Admin */}
-              <AdminConsultas consultas={todasLasConsultas} medicoId={medico.id} />
+            {/* ── COLUMNA DERECHA — Sidebar (desktop) ── */}
+            <div className="hidden w-80 shrink-0 space-y-4 lg:block">
+              {sidebarContent}
             </div>
           </div>
 
-          {/* Admin mobile — below main content */}
-          <div className="mt-5 lg:hidden">
-            <AdminConsultas consultas={todasLasConsultas} medicoId={medico.id} />
+          {/* Sidebar (mobile) */}
+          <div className="mt-5 space-y-4 lg:hidden">
+            {sidebarContent}
           </div>
         </div>
       </div>
     );
   }
 
-  // --- RENDER: PACIENTE ---
+  // ═══════════════════════════════════════
+  // RENDER: PACIENTE
+  // ═══════════════════════════════════════
+  const hayUrgenciaPaciente = turnoEnCursoPaciente || consultaActiva || turnosPaciente.some((t) => t.estado === "en_espera");
+
   return (
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-6">
           <span className="text-lg font-medium text-gray-900">Uber Doc</span>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-500">{fullName}</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
-              {initials}
-            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
             <LogoutButton />
           </div>
         </div>
       </nav>
 
-      <main className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="text-xl font-medium text-gray-900">Hola, {fullName}</h1>
+      <main className="mx-auto max-w-lg px-6 py-8">
+        {/* ── ESTADO 1: Turno en curso (programado) ── */}
+        {turnoEnCursoPaciente && (
+          <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
+              <span className="text-xs font-medium tracking-wide text-[#378ADD]">CONSULTA EN CURSO</span>
+            </div>
+            <p className="mt-3 text-[15px] font-medium text-gray-900">
+              Tu consulta con Dr. {turnoEnCursoPaciente.medico_nombre} está en curso
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
+            <Link
+              href={`/turno/${turnoEnCursoPaciente.id}/video`}
+              className="mt-4 block w-full rounded-lg bg-[#378ADD] py-2.5 text-center text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-[0.98] transition-all duration-100"
+            >
+              Volver a la videollamada
+            </Link>
+          </div>
+        )}
 
-        {/* Consulta activa */}
-        {consultaActiva && (
-          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Tenés una consulta activa</p>
-                <p className="mt-1 text-sm text-gray-500">{consultaActiva.especialidad} — Dr. {consultaActiva.medico_nombre}</p>
-              </div>
-              <Link
-                href={consultaActiva.sala_video_url ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
-                className="rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 active:opacity-80 transition-all duration-100"
+        {/* ── ESTADO 1: Consulta inmediata activa ── */}
+        {consultaActiva && !turnoEnCursoPaciente && (
+          <div
+            className="mb-5 rounded-xl bg-white p-5"
+            style={{ border: `1px solid ${consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75"}` }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-2.5 w-2.5 animate-pulse rounded-full"
+                style={{ background: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
+              />
+              <span
+                className="text-xs font-medium tracking-wide"
+                style={{ color: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
               >
-                {consultaActiva.sala_video_url ? "Reintentar videollamada" : "Ir a la sala de espera"}
+                {consultaActiva.estado === "en_curso" ? "CONSULTA EN CURSO" : "EN SALA DE ESPERA"}
+              </span>
+            </div>
+            <p className="mt-3 text-[15px] font-medium text-gray-900">
+              {consultaActiva.estado === "en_curso"
+                ? `Tu consulta con Dr. ${consultaActiva.medico_nombre} está en curso`
+                : "Tu médico te atenderá en breve"}
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500">{consultaActiva.especialidad} — Dr. {consultaActiva.medico_nombre}</p>
+            <Link
+              href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
+              className="mt-4 block w-full rounded-lg py-2.5 text-center text-sm font-medium text-white active:scale-[0.98] transition-all duration-100"
+              style={{ background: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
+            >
+              {consultaActiva.estado === "en_curso" ? "Volver a la videollamada" : "Ir a la sala de espera"}
+            </Link>
+          </div>
+        )}
+
+        {/* ── ESTADO 1b: Turno en espera (esperando al médico) ── */}
+        {!turnoEnCursoPaciente && !consultaActiva && (() => {
+          const enEspera = turnosPaciente.find((t) => t.estado === "en_espera");
+          if (!enEspera) return null;
+          return (
+            <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "1px solid #1D9E75" }}>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#1D9E75]" />
+                <span className="text-xs font-medium tracking-wide text-[#1D9E75]">EN SALA DE ESPERA</span>
+              </div>
+              <p className="mt-3 text-[15px] font-medium text-gray-900">Tu médico te atenderá en breve</p>
+              <p className="mt-0.5 text-sm text-gray-500">Dr. {enEspera.medico_nombre} · {enEspera.hora_inicio.slice(0, 5)} hs</p>
+              <Link
+                href={`/turno/${enEspera.id}/espera`}
+                className="mt-4 block w-full rounded-lg bg-[#1D9E75] py-2.5 text-center text-sm font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+              >
+                Ir a sala de espera
               </Link>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* Próximo turno */}
-        {turnosPaciente.length > 0 && (
-          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-            <div className="flex items-center gap-2">
-              <span>📅</span>
+        {/* ── ESTADO 2: Próximo turno hoy ── */}
+        {!hayUrgenciaPaciente && (() => {
+          const proximoHoy = turnosPaciente.find((t) => {
+            if (t.fecha !== hoy || t.estado !== "confirmado") return false;
+            const [h, m] = t.hora_inicio.split(":").map(Number);
+            const minTurno = h * 60 + m;
+            const minAhora = ahoraAR.getHours() * 60 + ahoraAR.getMinutes();
+            return minTurno - minAhora > -30;
+          });
+          if (!proximoHoy) return null;
+
+          const [h, m] = proximoHoy.hora_inicio.split(":").map(Number);
+          const minTurno = h * 60 + m;
+          const minAhora = ahoraAR.getHours() * 60 + ahoraAR.getMinutes();
+          const mostrarSala = minTurno - minAhora <= 15;
+
+          return (
+            <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
               <p className="text-xs font-medium tracking-wide text-gray-400">TU PRÓXIMO TURNO</p>
+              <p className="mt-2 text-sm font-medium text-gray-900">
+                Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con Dr. {proximoHoy.medico_nombre}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">{proximoHoy.especialidad}</p>
+              {mostrarSala && (
+                <Link
+                  href={`/turno/${proximoHoy.id}/espera`}
+                  className="mt-3 block w-full rounded-lg bg-[#1D9E75] py-2.5 text-center text-sm font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+                >
+                  Ir a sala de espera
+                </Link>
+              )}
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-900">
-              {new Date(turnosPaciente[0].fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "long", timeZone: "America/Argentina/Buenos_Aires" })} · {turnosPaciente[0].hora_inicio.slice(0, 5)} hs
-            </p>
-            <p className="mt-0.5 text-sm text-gray-500">
-              Dr. {turnosPaciente[0].medico_nombre} — {turnosPaciente[0].especialidad}
-            </p>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* Acciones principales */}
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Link href="/clinica" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-2xl">🏥</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Clínica Virtual</p>
-            <p className="mt-1 text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
-          </Link>
-          <Link href="/documentos" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-2xl">📄</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Mis documentos</p>
-            <p className="mt-1 text-xs text-gray-500">Recetas, indicaciones y certificados</p>
-          </Link>
+        {/* ── Acción principal ── */}
+        <Link
+          href="/clinica"
+          className="block w-full rounded-xl bg-white p-5 transition hover:shadow-sm"
+          style={{ border: "0.5px solid #e5e7eb" }}
+        >
+          <div className="flex items-center gap-4">
+            <span className="text-2xl">🏥</span>
+            <div>
+              <p className="text-sm font-medium text-gray-900">Nueva consulta</p>
+              <p className="text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
+            </div>
+          </div>
+        </Link>
+
+        {/* ── Mis turnos ── */}
+        <div className="mt-5">
+          <MisTurnosPaciente turnos={turnosPaciente} />
         </div>
-
-        {/* Mis turnos */}
-        {turnosPaciente.length > 0 && (
-          <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-xs font-medium tracking-wide text-gray-400">MIS TURNOS</p>
-            <div className="mt-3 space-y-2">
-              {turnosPaciente.map((t) => {
-                const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-                const hoyCheck = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
-                const [h, m] = t.hora_inicio.split(":").map(Number);
-                const minTurno = h * 60 + m;
-                const minAhora = ahoraAR.getHours() * 60 + ahoraAR.getMinutes();
-                const esHoy = t.fecha === hoyCheck;
-                const dentroDeRango = esHoy && minTurno - minAhora <= 15 && minTurno - minAhora >= -30;
-                const mostrarSala = dentroDeRango || t.estado === "en_espera";
-
-                return (
-                  <div key={t.id} className="flex items-center justify-between rounded-lg p-3" style={{ border: mostrarSala ? "0.5px solid #1D9E75" : undefined, background: mostrarSala ? "#f0fdf4" : undefined }}>
-                    <div>
-                      <p className="text-sm text-gray-900">
-                        {new Date(t.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" })} · {t.hora_inicio.slice(0, 5)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-gray-500">Dr. {t.medico_nombre} · {t.especialidad}</p>
-                    </div>
-                    {mostrarSala ? (
-                      <Link
-                        href={`/turno/${t.id}/espera`}
-                        className="shrink-0 rounded-lg bg-[#1D9E75] px-4 py-2 text-xs font-medium text-white"
-                      >
-                        Ir a sala de espera
-                      </Link>
-                    ) : (
-                      <span className="shrink-0 rounded-full bg-[#1D9E75]/10 px-2.5 py-1 text-[11px] font-medium text-[#1D9E75]">
-                        Confirmado
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );
