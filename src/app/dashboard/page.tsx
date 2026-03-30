@@ -6,6 +6,7 @@ import DisponibilidadMedico from "./DisponibilidadMedico";
 import ConsultasPendientes from "./ConsultasPendientes";
 import ConsultasEnCurso from "./ConsultasEnCurso";
 import AdminConsultas from "./AdminConsultas";
+import TurnosEnEspera from "./TurnosEnEspera";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -80,6 +81,7 @@ export default async function DashboardPage() {
   let completadasHoy = 0;
   let ingresosHoy = 0;
   let numModelosActivos = 0;
+  let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; especialidad: string }[] = [];
 
   // --- PACIENTE ---
   let consultaActiva: {
@@ -94,6 +96,7 @@ export default async function DashboardPage() {
     id: string;
     fecha: string;
     hora_inicio: string;
+    estado: string;
     especialidad: string;
     medico_nombre: string;
   }[] = [];
@@ -107,9 +110,9 @@ export default async function DashboardPage() {
       const hoyStr = new Date().toISOString().split("T")[0];
       const { data: turnosData } = await supabase
         .from("turnos")
-        .select("id, fecha, hora_inicio, medico_id")
+        .select("id, fecha, hora_inicio, estado, medico_id")
         .eq("paciente_id", pacienteData.id)
-        .eq("estado", "reservado")
+        .in("estado", ["confirmado", "en_espera"])
         .gte("fecha", hoyStr)
         .order("fecha", { ascending: true })
         .order("hora_inicio", { ascending: true });
@@ -126,6 +129,7 @@ export default async function DashboardPage() {
             id: t.id,
             fecha: t.fecha,
             hora_inicio: t.hora_inicio,
+            estado: t.estado,
             especialidad: med?.especialidad ?? "",
             medico_nombre: med?.nombre_completo ?? "Médico",
           };
@@ -229,6 +233,29 @@ export default async function DashboardPage() {
             fecha_nacimiento: p?.nacimiento ?? null,
           };
         });
+      }
+
+      // Turnos en espera del médico
+      const { data: turnosEspera } = await supabase
+        .from("turnos")
+        .select("id, fecha, hora_inicio, paciente_id, estado")
+        .eq("medico_id", data.id)
+        .eq("estado", "en_espera")
+        .order("hora_inicio", { ascending: true });
+
+      if (turnosEspera && turnosEspera.length > 0) {
+        const pacIdsEsp = [...new Set(turnosEspera.map((t) => t.paciente_id).filter(Boolean))];
+        const { data: pacsEsp } = pacIdsEsp.length > 0
+          ? await supabase.from("pacientes").select("id, nombre_completo").in("id", pacIdsEsp)
+          : { data: [] };
+        const nombresEsp = new Map((pacsEsp ?? []).map((p) => [p.id, p.nombre_completo]));
+        turnosEsperaCompletos = turnosEspera.map((t) => ({
+          id: t.id,
+          fecha: t.fecha,
+          hora_inicio: t.hora_inicio,
+          paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
+          especialidad: "",
+        }));
       }
 
       // Completadas hoy + ingresos
@@ -344,6 +371,9 @@ export default async function DashboardPage() {
           <div className="mt-6 flex gap-6">
             {/* Main column */}
             <div className="min-w-0 flex-1 space-y-5">
+              {/* Turnos en espera */}
+              <TurnosEnEspera turnos={turnosEsperaCompletos} medicoId={medico.id} />
+
               {/* Consulta activa */}
               <ConsultasEnCurso
                 consultas={consultasEnCurso}
@@ -491,17 +521,39 @@ export default async function DashboardPage() {
           <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
             <p className="text-xs font-medium tracking-wide text-gray-400">MIS TURNOS</p>
             <div className="mt-3 space-y-2">
-              {turnosPaciente.map((t) => (
-                <div key={t.id} className="flex items-center justify-between rounded-lg p-2 hover:bg-gray-50">
-                  <div>
-                    <p className="text-sm text-gray-900">
-                      {new Date(t.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" })} · {t.hora_inicio.slice(0, 5)}
-                      <span className="ml-2 text-gray-500">— Dr. {t.medico_nombre} · {t.especialidad}</span>
-                    </p>
+              {turnosPaciente.map((t) => {
+                const ahora = new Date();
+                const hoyCheck = ahora.toISOString().split("T")[0];
+                const [h, m] = t.hora_inicio.split(":").map(Number);
+                const minTurno = h * 60 + m;
+                const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
+                const esHoy = t.fecha === hoyCheck;
+                const dentroDeRango = esHoy && minTurno - minAhora <= 15 && minTurno - minAhora >= -30;
+                const mostrarSala = dentroDeRango || t.estado === "en_espera";
+
+                return (
+                  <div key={t.id} className="flex items-center justify-between rounded-lg p-3" style={{ border: mostrarSala ? "0.5px solid #1D9E75" : undefined, background: mostrarSala ? "#f0fdf4" : undefined }}>
+                    <div>
+                      <p className="text-sm text-gray-900">
+                        {new Date(t.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" })} · {t.hora_inicio.slice(0, 5)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500">Dr. {t.medico_nombre} · {t.especialidad}</p>
+                    </div>
+                    {mostrarSala ? (
+                      <Link
+                        href={`/turno/${t.id}/espera`}
+                        className="shrink-0 rounded-lg bg-[#1D9E75] px-4 py-2 text-xs font-medium text-white"
+                      >
+                        Ir a sala de espera
+                      </Link>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-[#1D9E75]/10 px-2.5 py-1 text-[11px] font-medium text-[#1D9E75]">
+                        Confirmado
+                      </span>
+                    )}
                   </div>
-                  <button className="text-xs text-gray-400 hover:text-red-500">Cancelar</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
