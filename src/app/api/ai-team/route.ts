@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { messages, system } = body
@@ -20,5 +31,12 @@ export async function POST(req: NextRequest) {
   })
 
   const data = await response.json()
-  return NextResponse.json(data)
+
+  return NextResponse.json(data, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }
