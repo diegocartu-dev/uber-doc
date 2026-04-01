@@ -14,6 +14,12 @@ import { createClient } from "@/lib/supabase/client";
 import { soundVideoLista } from "@/lib/sounds";
 import { TouchButton } from "@/components/TouchButton";
 
+function formatTimer(seg: number): string {
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function detectarNavegador() {
   if (typeof navigator === "undefined")
     return { esChromeIOS: false, esMobile: false };
@@ -178,6 +184,13 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
   const [camOn, setCamOn] = useState(true);
   const [finalizando, setFinalizando] = useState(false);
   const [pacienteSalio, setPacienteSalio] = useState(false);
+  const [timerSeg, setTimerSeg] = useState(0);
+
+  // Timer en_curso
+  useEffect(() => {
+    const i = setInterval(() => setTimerSeg((s) => s + 1), 1000);
+    return () => clearInterval(i);
+  }, []);
 
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
@@ -424,6 +437,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
                   style={{ boxShadow: "0 0 0 8px rgba(29,158,117,0.2)" }}
                 />
                 <h2 className="mt-6 text-xl font-semibold text-white">Consulta en curso</h2>
+                <p className="mt-1 text-xs tabular-nums text-white/40">{formatTimer(timerSeg)}</p>
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
                 </p>
@@ -599,7 +613,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
 
         {/* Controles */}
         {!cargando && !error && (
-          <div className="flex items-center justify-center gap-3 bg-gray-900 px-4 py-3">
+          <div className="relative flex items-center justify-center gap-3 bg-gray-900 px-4 py-3">
+            <span className="absolute left-4 text-xs tabular-nums text-white/50">{formatTimer(timerSeg)}</span>
             <button onClick={toggleMic} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${micOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
               {micOn ? "🎙️ Micrófono" : "🔇 Silenciado"}
             </button>
