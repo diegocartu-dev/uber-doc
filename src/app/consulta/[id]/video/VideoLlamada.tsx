@@ -185,12 +185,30 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
   const [finalizando, setFinalizando] = useState(false);
   const [pacienteSalio, setPacienteSalio] = useState(false);
   const [timerSeg, setTimerSeg] = useState(0);
+  const [desconectado, setDesconectado] = useState(false);
+  const [reconexionSeg, setReconexionSeg] = useState(60);
+  const [medicoFinalizo, setMedicoFinalizo] = useState(false);
 
   // Timer en_curso
   useEffect(() => {
     const i = setInterval(() => setTimerSeg((s) => s + 1), 1000);
     return () => clearInterval(i);
   }, []);
+
+  // Countdown reconexión — 60s antes de redirigir
+  useEffect(() => {
+    if (!desconectado) return;
+    if (reconexionSeg <= 0) { window.location.href = "/dashboard"; return; }
+    const i = setInterval(() => setReconexionSeg((s) => s - 1), 1000);
+    return () => clearInterval(i);
+  }, [desconectado, reconexionSeg]);
+
+  // Médico finalizó → redirect después de 3s
+  useEffect(() => {
+    if (!medicoFinalizo) return;
+    const t = setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+    return () => clearTimeout(t);
+  }, [medicoFinalizo]);
 
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
@@ -221,7 +239,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         setCargando(false);
         setError("No se pudo conectar. La conexión tardó demasiado.");
       }
-    }, 60000);
+    }, 30000);
 
     async function iniciar() {
       try {
@@ -276,8 +294,21 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         callFrame.on("joined-meeting", () => marcarJoined());
         callFrame.on("participant-updated", (e) => { if (e?.participant?.local) marcarJoined(); });
         callFrame.on("left-meeting", () => {
-          if (joinedRef.current) { callFrame.destroy(); frameRef.current = null; window.location.href = "/dashboard"; }
-          else { clearTimeout(timeoutId); setError("Videollamada desconectada."); setCargando(false); }
+          if (joinedRef.current) {
+            callFrame.destroy();
+            frameRef.current = null;
+            if (esMedico) {
+              // Médico: ventana de reconexión 60s en vez de redirect inmediato
+              setDesconectado(true);
+            } else {
+              // Paciente: aviso 3s antes de redirigir
+              setMedicoFinalizo(true);
+            }
+          } else {
+            clearTimeout(timeoutId);
+            setError("Videollamada desconectada.");
+            setCargando(false);
+          }
         });
         callFrame.on("error", (ev) => { clearTimeout(timeoutId); setError(`Error: ${ev?.error?.msg || "desconocido"}`); setCargando(false); });
         callFrame.on("participant-left", (ev) => {
@@ -611,8 +642,46 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
           </div>
         )}
 
+        {/* Ventana reconexión — médico, 60s countdown */}
+        {desconectado && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900">
+            <div className="max-w-sm text-center">
+              <svg className="mx-auto h-10 w-10 animate-spin" style={{ color: "#D85A30" }} viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              <p className="mt-4 text-base font-medium text-white">Se cortó la conexión. Reconectando...</p>
+              <p className="mt-2 text-sm tabular-nums text-gray-400">Redirigiendo en {reconexionSeg}s</p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white" style={{ background: "#378ADD" }}
+                >
+                  Reconectar ahora
+                </button>
+                <button
+                  onClick={() => { window.location.href = "/dashboard"; }}
+                  className="flex-1 rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-600"
+                >
+                  Volver al dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso paciente — médico finalizó */}
+        {medicoFinalizo && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900">
+            <div className="max-w-sm text-center">
+              <p className="text-base font-medium text-white">El médico finalizó la consulta</p>
+              <p className="mt-2 text-sm text-gray-400">Redirigiendo al inicio...</p>
+            </div>
+          </div>
+        )}
+
         {/* Controles */}
-        {!cargando && !error && (
+        {!cargando && !error && !desconectado && !medicoFinalizo && (
           <div className="relative flex items-center justify-center gap-3 bg-gray-900 px-4 py-3">
             <span className="absolute left-4 text-xs tabular-nums text-white/50">{formatTimer(timerSeg)}</span>
             <button onClick={toggleMic} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${micOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
