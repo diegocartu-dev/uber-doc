@@ -11,7 +11,7 @@ type Props = {
   horaInicio: string;
 };
 
-type Estado = "esperando" | "iniciando" | "redirigiendo";
+type Estado = "esperando" | "iniciando" | "redirigiendo" | "finalizado" | "cancelado";
 
 export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio }: Props) {
   const [estado, setEstado] = useState<Estado>("esperando");
@@ -51,6 +51,22 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
           // Evento posterior con sala_video_url (ej: UPDATE que guarda la URL)
           if (estadoRef.current === "iniciando" && updated.sala_video_url) {
             setTimeout(() => redirigirAVideo(), 500);
+            return;
+          }
+
+          // Estados terminales
+          if (updated.estado === "completado") {
+            setEstado("finalizado");
+            setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+            return;
+          }
+          if (updated.estado === "cancelado_medico") {
+            setEstado("cancelado");
+            setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+            return;
+          }
+          if (["cancelado_paciente", "ausente_paciente"].includes(updated.estado)) {
+            window.location.href = "/dashboard";
           }
         }
       )
@@ -70,7 +86,11 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
   return (
     <div className="text-center">
       {/* Animación de estado */}
-      <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full" style={{ background: estado === "esperando" ? "#378ADD15" : "#1D9E7515" }}>
+      <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full" style={{
+        background: estado === "esperando" ? "#378ADD15"
+          : estado === "cancelado" ? "#E24B4A15"
+          : "#1D9E7515"
+      }}>
         {estado === "esperando" ? (
           <svg className="h-12 w-12 animate-spin" style={{ color: "#378ADD" }} viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -78,25 +98,29 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
           </svg>
         ) : estado === "iniciando" ? (
           <span className="text-5xl">✅</span>
+        ) : estado === "finalizado" ? (
+          <span className="text-5xl">✅</span>
+        ) : estado === "cancelado" ? (
+          <span className="text-5xl">❌</span>
         ) : (
           <span className="text-5xl">📹</span>
         )}
       </div>
 
       <h1 className="mt-6 text-xl font-bold text-gray-900">
-        {estado === "esperando"
-          ? "Esperando al médico..."
-          : estado === "iniciando"
-            ? "¡Tu médico está listo!"
-            : "Entrando a la videollamada..."}
+        {estado === "esperando" ? "Esperando al médico..."
+          : estado === "iniciando" ? "¡Tu médico está listo!"
+          : estado === "finalizado" ? "Tu consulta ha finalizado"
+          : estado === "cancelado" ? "El médico canceló el turno"
+          : "Entrando a la videollamada..."}
       </h1>
 
       <p className="mt-2 text-sm text-gray-600">
-        {estado === "esperando"
-          ? `Esperando que el Dr. ${medicoNombre} inicie la consulta...`
-          : estado === "iniciando"
-            ? "Preparando la videollamada..."
-            : "Redirigiendo..."}
+        {estado === "esperando" ? `Esperando que el Dr. ${medicoNombre} inicie la consulta...`
+          : estado === "iniciando" ? "Preparando la videollamada..."
+          : estado === "finalizado" ? "Los documentos están disponibles en tu perfil. Redirigiendo..."
+          : estado === "cancelado" ? "Redirigiendo al inicio..."
+          : "Redirigiendo..."}
       </p>
 
       {/* Info card */}

@@ -371,6 +371,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
     setCamOn(next);
   }
 
+  const esTurno = apiEndpoint === "/api/videollamada-turno";
+
   async function finalizarConsulta() {
     if (!diagnostico.trim()) {
       setError("El diagnóstico es obligatorio para finalizar.");
@@ -381,50 +383,81 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
 
     try {
       const supabase = createClient();
+      const tabla = esTurno ? "turnos" : "consultas";
+      const estadoFinal = esTurno ? "completado" : "completada";
 
-      // Obtener IDs de paciente y médico
-      const { data: consultaDb } = await supabase
-        .from("consultas")
-        .select("paciente_id, medico_id")
-        .eq("id", consultaId)
-        .single();
+      if (esTurno) {
+        // --- TURNO: paciente_id ya es pacientes.id ---
+        const { data: turnoDb } = await supabase
+          .from("turnos")
+          .select("estado, paciente_id, medico_id")
+          .eq("id", consultaId)
+          .single();
 
-      if (!consultaDb || !consultaDb.paciente_id) { setError("Consulta no encontrada."); setFinalizando(false); return; }
+        if (!turnoDb) { setError("Turno no encontrado."); setFinalizando(false); return; }
+        if (turnoDb.estado === "completado") { window.location.href = "/dashboard"; return; }
 
-      const { data: paciente } = await supabase
-        .from("pacientes")
-        .select("id")
-        .eq("user_id", consultaDb.paciente_id)
-        .single();
+        const { data: medico } = await supabase
+          .from("medicos").select("id").eq("id", turnoDb.medico_id).single();
+        if (!medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
 
-      const { data: medico } = await supabase
-        .from("medicos")
-        .select("id")
-        .eq("id", consultaDb.medico_id)
-        .single();
+        const docs: { tipo: string; contenido: string }[] = [];
+        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+        if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
 
-      if (!paciente || !medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
+        if (docs.length > 0) {
+          await supabase.from("documentos").insert(
+            docs.map((d) => ({
+              turno_id: consultaId,
+              consulta_id: null,
+              paciente_id: turnoDb.paciente_id,
+              medico_id: medico.id,
+              tipo: d.tipo,
+              diagnostico: diagnostico.trim(),
+              contenido: d.contenido,
+            }))
+          );
+        }
+      } else {
+        // --- CONSULTA: paciente_id es auth.users.id, requiere lookup ---
+        const { data: consultaDb } = await supabase
+          .from("consultas")
+          .select("estado, paciente_id, medico_id")
+          .eq("id", consultaId)
+          .single();
 
-      // Generar documentos por cada campo completado
-      const docs: { tipo: string; contenido: string }[] = [];
-      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-      if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-      if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+        if (!consultaDb || !consultaDb.paciente_id) { setError("Consulta no encontrada."); setFinalizando(false); return; }
+        if (consultaDb.estado === "completada") { window.location.href = "/dashboard"; return; }
 
-      if (docs.length > 0) {
-        const inserts = docs.map((d) => ({
-          consulta_id: consultaId,
-          paciente_id: paciente.id,
-          medico_id: medico.id,
-          tipo: d.tipo,
-          diagnostico: diagnostico.trim(),
-          contenido: d.contenido,
-        }));
-        await supabase.from("documentos").insert(inserts);
+        const { data: paciente } = await supabase
+          .from("pacientes").select("id").eq("user_id", consultaDb.paciente_id).single();
+        const { data: medico } = await supabase
+          .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
+        if (!paciente || !medico) { setError("Error al obtener datos."); setFinalizando(false); return; }
+
+        const docs: { tipo: string; contenido: string }[] = [];
+        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+        if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+
+        if (docs.length > 0) {
+          await supabase.from("documentos").insert(
+            docs.map((d) => ({
+              consulta_id: consultaId,
+              turno_id: null,
+              paciente_id: paciente.id,
+              medico_id: medico.id,
+              tipo: d.tipo,
+              diagnostico: diagnostico.trim(),
+              contenido: d.contenido,
+            }))
+          );
+        }
       }
 
-      // Finalizar consulta
-      await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
+      // Finalizar
+      await supabase.from(tabla).update({ estado: estadoFinal }).eq("id", consultaId);
 
       if (frameRef.current) {
         frameRef.current.leave();
@@ -522,45 +555,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
 
             {esMedico && dailyAbierto && (
               <button
-                onClick={async () => {
-                  setFinalizando(true);
-                  const supabase = createClient();
-
-                  if (diagnostico.trim()) {
-                    // Obtener paciente_id (auth) desde la consulta
-                    const { data: consultaDb } = await supabase
-                      .from("consultas").select("paciente_id, medico_id").eq("id", consultaId).single();
-
-                    if (consultaDb && consultaDb.paciente_id) {
-                      const { data: pac } = await supabase
-                        .from("pacientes").select("id").eq("user_id", consultaDb.paciente_id).single();
-                      const { data: med } = await supabase
-                        .from("medicos").select("id").eq("id", consultaDb.medico_id).single();
-
-                      if (pac && med) {
-                        const docs: { tipo: string; contenido: string }[] = [];
-                        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-                        if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-                        if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
-                        if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
-
-                        await supabase.from("documentos").insert(
-                          docs.map((d) => ({
-                            consulta_id: consultaId,
-                            paciente_id: pac.id,
-                            medico_id: med.id,
-                            tipo: d.tipo,
-                            diagnostico: diagnostico.trim(),
-                            contenido: d.contenido,
-                          }))
-                        );
-                      }
-                    }
-                  }
-
-                  await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
-                  window.location.href = "/dashboard";
-                }}
+                onClick={finalizarConsulta}
                 disabled={finalizando}
                 className="mt-3 w-full rounded-lg bg-red-600 px-5 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
