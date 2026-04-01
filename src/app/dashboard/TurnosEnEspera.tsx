@@ -94,6 +94,7 @@ export default function TurnosEnEspera({
         "postgres_changes",
         { event: "*", schema: "public", table: "turnos" },
         async (payload) => {
+          console.log("REALTIME TURNO EVENT:", payload);
           const row = payload.new as {
             id: string; medico_id: string; estado: string;
             fecha: string; hora_inicio: string; paciente_id: string;
@@ -127,7 +128,9 @@ export default function TurnosEnEspera({
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("REALTIME TURNO SUBSCRIBE STATUS:", status);
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [medicoId]);
