@@ -34,7 +34,7 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
   // Filtrar turnos pasados y con menos de 1h de anticipación
   const ahora = new Date();
   const hoyStr = ahora.toISOString().split("T")[0];
-  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 60;
+  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 0; // TEMP: sin anticipación mínima para testing
 
   const turnosFiltrados = turnos.filter((t) => {
     if (t.fecha > hoyStr) return true;
