@@ -55,7 +55,7 @@ export default async function DashboardPage() {
 
   let completadasHoy = 0;
   let ingresosHoy = 0;
-  let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; especialidad: string }[] = [];
+  let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
   let turnoEnCurso: { id: string; hora_inicio: string; paciente_nombre: string } | null = null;
   let modelosActivosList: { id: string; nombre: string }[] = [];
@@ -211,7 +211,8 @@ export default async function DashboardPage() {
         const nombresEsp = new Map((pacsEsp ?? []).map((p) => [p.id, p.nombre_completo]));
         turnosEsperaCompletos = turnosEspera.map((t) => ({
           id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio,
-          paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente", especialidad: "",
+          paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
+          paciente_tabla_id: t.paciente_id, especialidad: "",
         }));
       }
 

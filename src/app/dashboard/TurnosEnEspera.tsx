@@ -2,34 +2,20 @@
 
 import { useEffect, useState, useTransition, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { soundPacienteEsperando } from "@/lib/sounds";
 
 type TurnoEspera = {
   id: string;
   fecha: string;
   hora_inicio: string;
   paciente_nombre: string;
+  paciente_tabla_id: string | null;
   entradoEn: number; // timestamp ms para contador
 };
 
 function getHoyAR(): string {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   return `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${ar.getDate().toString().padStart(2, "0")}`;
-}
-
-function playBeep() {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-  } catch {}
 }
 
 function Contador({ desde }: { desde: number }) {
@@ -90,6 +76,7 @@ export default function TurnosEnEspera({
         fecha: t.fecha,
         hora_inicio: t.hora_inicio.slice(0, 5),
         paciente_nombre: nombres.get(t.paciente_id) ?? "Paciente",
+        paciente_tabla_id: t.paciente_id,
         entradoEn: Date.now(),
       })));
     }
@@ -127,11 +114,12 @@ export default function TurnosEnEspera({
                 fecha: row.fecha,
                 hora_inicio: row.hora_inicio.slice(0, 5),
                 paciente_nombre: pac?.nombre_completo ?? "Paciente",
+                paciente_tabla_id: row.paciente_id,
                 entradoEn: Date.now(),
               }].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
             });
 
-            playBeep();
+            soundPacienteEsperando();
           }
 
           if (["en_curso", "completado", "cancelado_paciente", "cancelado_medico", "ausente_paciente"].includes(row.estado)) {
@@ -214,7 +202,11 @@ export default function TurnosEnEspera({
                   <Contador desde={t.entradoEn} />
                 </span>
               </div>
-              <p className="mt-2 text-[15px] font-medium text-gray-900">{t.paciente_nombre}</p>
+              {t.paciente_tabla_id ? (
+                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-[15px] font-medium text-gray-900 hover:text-[#1D9E75]">{t.paciente_nombre}</a>
+              ) : (
+                <p className="mt-2 text-[15px] font-medium text-gray-900">{t.paciente_nombre}</p>
+              )}
               <p className="mt-0.5 text-sm text-gray-500">
                 Turno de las {t.hora_inicio} hs
               </p>
