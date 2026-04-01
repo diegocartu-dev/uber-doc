@@ -184,6 +184,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
   const [camOn, setCamOn] = useState(true);
   const [finalizando, setFinalizando] = useState(false);
   const [pacienteSalio, setPacienteSalio] = useState(false);
+  const [pacienteSalioTimeout, setPacienteSalioTimeout] = useState(false);
   const [timerSeg, setTimerSeg] = useState(0);
   const [desconectado, setDesconectado] = useState(false);
   const [reconexionSeg, setReconexionSeg] = useState(60);
@@ -210,6 +211,13 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
     return () => clearTimeout(t);
   }, [medicoFinalizo]);
 
+  // Paciente salió → 30s timeout, luego mostrar finalizar prominente
+  useEffect(() => {
+    if (!pacienteSalio) { setPacienteSalioTimeout(false); return; }
+    const t = setTimeout(() => setPacienteSalioTimeout(true), 30000);
+    return () => clearTimeout(t);
+  }, [pacienteSalio]);
+
   // Campos clínicos
   const [diagnostico, setDiagnostico] = useState("");
   const [receta, setReceta] = useState("");
@@ -224,6 +232,24 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
   micOnRef.current = micOn;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dailyAbierto, setDailyAbierto] = useState(false);
+
+  // Interceptar botón atrás durante llamada activa
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    history.pushState(null, "", window.location.href);
+    function onPopState() {
+      if (joinedRef.current || dailyAbierto) {
+        history.pushState(null, "", window.location.href);
+        if (confirm("¿Querés salir de la videollamada?")) {
+          if (frameRef.current) { frameRef.current.leave(); frameRef.current.destroy(); frameRef.current = null; }
+          window.location.href = "/dashboard";
+        }
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [dailyAbierto]);
+
   const nav = detectarNavegador();
   const edad = calcularEdad(consulta.paciente_nacimiento);
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado(frameRef, micOnRef);
@@ -622,18 +648,28 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
             <div className="max-w-sm rounded-xl bg-gray-900 p-6 text-center shadow-2xl" style={{ border: "0.5px solid #333" }}>
               <p className="text-lg font-medium text-white">El paciente ha salido de la llamada</p>
-              <p className="mt-2 text-sm text-gray-400">Podés finalizar la consulta o esperar a que vuelva a conectarse.</p>
+              <p className="mt-2 text-sm text-gray-400">
+                {pacienteSalioTimeout
+                  ? "Pasaron 30 segundos y no volvió."
+                  : "Podés finalizar la consulta o esperar a que vuelva a conectarse."}
+              </p>
               <div className="mt-5 flex gap-3">
-                <button
-                  onClick={() => setPacienteSalio(false)}
-                  className="flex-1 rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-600"
-                >
-                  Esperar
-                </button>
+                {!pacienteSalioTimeout && (
+                  <button
+                    onClick={() => setPacienteSalio(false)}
+                    className="flex-1 rounded-lg bg-gray-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-600"
+                  >
+                    Esperar
+                  </button>
+                )}
                 <button
                   onClick={finalizarConsulta}
                   disabled={finalizando}
-                  className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
+                    pacienteSalioTimeout
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
                 >
                   {finalizando ? "Finalizando..." : "Finalizar consulta"}
                 </button>

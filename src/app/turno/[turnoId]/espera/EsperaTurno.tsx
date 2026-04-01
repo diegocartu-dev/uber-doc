@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
@@ -15,6 +15,14 @@ type Estado = "esperando" | "iniciando" | "redirigiendo";
 
 export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio }: Props) {
   const [estado, setEstado] = useState<Estado>("esperando");
+  const estadoRef = useRef<Estado>("esperando");
+  estadoRef.current = estado;
+
+  function redirigirAVideo() {
+    soundVideoLista();
+    setEstado("redirigiendo");
+    window.location.href = `/turno/${turnoId}/video`;
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -32,12 +40,17 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
             setEstado("iniciando");
             soundConsultaAceptada();
 
-            // Redirect automático después de 1.5s para que el paciente vea la transición
-            setTimeout(() => {
-              soundVideoLista();
-              setEstado("redirigiendo");
-              window.location.href = `/turno/${turnoId}/video`;
-            }, 1500);
+            // Si la sala ya está lista en este evento, redirigir después de la transición
+            if (updated.sala_video_url) {
+              setTimeout(() => redirigirAVideo(), 1500);
+            }
+            // Si no, esperar el próximo evento con sala_video_url
+            return;
+          }
+
+          // Evento posterior con sala_video_url (ej: UPDATE que guarda la URL)
+          if (estadoRef.current === "iniciando" && updated.sala_video_url) {
+            setTimeout(() => redirigirAVideo(), 500);
           }
         }
       )
