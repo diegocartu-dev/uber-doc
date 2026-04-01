@@ -56,8 +56,6 @@ export default function TurnosEnEspera({
   const [isPending, startTransition] = useTransition();
   const [notifPermiso, setNotifPermiso] = useState<string>("default");
 
-  console.log("TurnosEnEspera montado, medicoId:", medicoId, "iniciales:", turnosIniciales.length);
-
   useEffect(() => { setTurnos(turnosIniciales); }, [turnosIniciales]);
 
   // Check notif permission
@@ -103,8 +101,6 @@ export default function TurnosEnEspera({
     const supabase = createClient();
     const hoy = getHoyAR();
 
-    console.log("RT TurnosEnEspera: creando canal, medicoId:", medicoId, "hoy:", hoy);
-
     const channel = supabase
       .channel("turnos-rt-debug")
       .on(
@@ -115,8 +111,6 @@ export default function TurnosEnEspera({
             id: string; medico_id: string; estado: string;
             fecha: string; hora_inicio: string; paciente_id: string;
           };
-
-          console.log("RT turno evento:", payload.eventType, "estado:", row.estado, "medico_id:", row.medico_id, "esperado:", medicoId);
 
           // Filtrar en JS
           if (!row.medico_id || row.medico_id !== medicoId) return;
@@ -145,9 +139,7 @@ export default function TurnosEnEspera({
           }
         }
       )
-      .subscribe((status) => {
-        console.log("RT status:", status);
-      });
+      .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [medicoId]);

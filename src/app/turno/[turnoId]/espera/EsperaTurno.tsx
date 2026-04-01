@@ -15,8 +15,6 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
   useEffect(() => {
     const supabase = createClient();
 
-    console.log("EsperaTurno RT: suscribiendo, turnoId:", turnoId);
-
     const channel = supabase
       .channel("espera-turno-rt")
       .on(
@@ -24,8 +22,6 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         { event: "*", schema: "public", table: "turnos" },
         (payload) => {
           const updated = payload.new as { id: string; estado: string; sala_video_url: string | null };
-          console.log("EsperaTurno RT evento:", payload.eventType, "id:", updated.id, "estado:", updated.estado, "esperado:", turnoId);
-
           if (updated.id !== turnoId) return;
 
           if (updated.estado === "en_curso") {
@@ -33,9 +29,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
           }
         }
       )
-      .subscribe((status) => {
-        console.log("EsperaTurno RT status:", status);
-      });
+      .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [turnoId]);
