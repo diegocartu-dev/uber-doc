@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
 type Props = {
@@ -37,6 +38,7 @@ export default function SalaEsperaCliente({
   const [estado, setEstado] = useState(estadoInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
+  const [pagando, setPagando] = useState(false);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
 
@@ -183,6 +185,25 @@ export default function SalaEsperaCliente({
         >
           Unirse a la videollamada
         </a>
+      )}
+
+      {/* Botón de testing — simular pago aprobado */}
+      {aceptada && !salaVideoUrl && (
+        <button
+          disabled={pagando}
+          onClick={async () => {
+            setPagando(true);
+            const supabase = createClient();
+            await supabase
+              .from("consultas")
+              .update({ estado: "en_curso" })
+              .eq("id", consultaId);
+            window.location.href = `/consulta/${consultaId}/confirmacion`;
+          }}
+          className="mt-4 w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
+        >
+          Simular pago aprobado
+        </button>
       )}
 
       <p className="mt-6 text-xs text-gray-400">
