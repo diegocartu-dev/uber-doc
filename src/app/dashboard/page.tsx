@@ -346,7 +346,7 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass + " justify-end"}>
-          <Link href="/dashboard" className={historialClass}>Ver historial →</Link>
+          <Link href="/medico/historial" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
     );
@@ -381,7 +381,7 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass + " justify-end"}>
-          <Link href="/dashboard" className={historialClass}>Ver historial →</Link>
+          <Link href="/medico/historial" className={historialClass}>Ver historial →</Link>
         </div>
       </div>
     );
