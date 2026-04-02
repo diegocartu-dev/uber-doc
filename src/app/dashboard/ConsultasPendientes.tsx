@@ -128,7 +128,11 @@ export default function ConsultasPendientes({
     });
   }
 
-  if (consultas.length === 0) return null;
+  if (consultas.length === 0) return (
+    <div className="text-sm text-gray-400 py-4 text-center">
+      Sin pacientes en espera
+    </div>
+  );
 
   return (
     <div className="rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
