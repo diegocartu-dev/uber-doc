@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { TouchButton } from "@/components/TouchButton";
 import { soundPacienteEsperando } from "@/lib/sounds";
@@ -44,23 +43,6 @@ function getInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-async function fetchNombrePaciente(
-  supabase: ReturnType<typeof createClient>,
-  pacienteUserId: string,
-  retries = 3
-): Promise<{ id: string | null; nombre: string; nacimiento: string | null }> {
-  for (let i = 0; i < retries; i++) {
-    const { data } = await supabase
-      .from("pacientes")
-      .select("id, nombre_completo, fecha_nacimiento")
-      .eq("user_id", pacienteUserId)
-      .single();
-    if (data) return { id: data.id, nombre: data.nombre_completo, nacimiento: data.fecha_nacimiento };
-    if (i < retries - 1) await new Promise((r) => setTimeout(r, 1000));
-  }
-  return { id: null, nombre: "Paciente", nacimiento: null };
-}
-
 export default function ConsultasPendientes({
   consultas: consultasIniciales,
   medicoId,
@@ -76,44 +58,21 @@ export default function ConsultasPendientes({
     setConsultas(consultasIniciales);
   }, [consultasIniciales]);
 
-  // Polling cada 3s — reemplaza Realtime que no funciona en este setup
+  // Polling cada 3s via API route (evita CORS en Safari)
   useEffect(() => {
-    const supabase = createClient();
-
     async function fetchPendientes() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const res = await fetch(`/api/consultas-pendientes?medicoId=${medicoId}`);
+        if (!res.ok) return;
+        const data: Consulta[] = await res.json();
 
-      const { data: esperando } = await supabase
-        .from("consultas")
-        .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta")
-        .eq("medico_id", medicoId)
-        .eq("estado", "esperando")
-        .order("created_at", { ascending: true });
+        setConsultas(data);
 
-      if (!esperando) return;
-
-      const pacUserIds = [...new Set(esperando.map((c) => c.paciente_id))];
-      let pacMap = new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
-      if (pacUserIds.length > 0) {
-        const { data: pacs } = await supabase
-          .from("pacientes").select("id, user_id, nombre_completo, fecha_nacimiento").in("user_id", pacUserIds);
-        pacMap = new Map((pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo, nacimiento: p.fecha_nacimiento }]));
-      }
-
-      setConsultas(esperando.map((c) => {
-        const p = pacMap.get(c.paciente_id);
-        return {
-          id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
-          paciente_nombre: p?.nombre ?? "Paciente", paciente_tabla_id: p?.id ?? null,
-          motivo_consulta: c.motivo_consulta, fecha_nacimiento: p?.nacimiento ?? null,
-        };
-      }));
-
-      if (esperando.length > prevCountRef.current) {
-        soundPacienteEsperando();
-      }
-      prevCountRef.current = esperando.length;
+        if (data.length > prevCountRef.current) {
+          soundPacienteEsperando();
+        }
+        prevCountRef.current = data.length;
+      } catch {}
     }
 
     fetchPendientes();

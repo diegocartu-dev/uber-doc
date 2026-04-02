@@ -15,11 +15,6 @@ type TurnoEspera = {
   entradoEn: number; // timestamp ms para contador
 };
 
-function getHoyAR(): string {
-  const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  return `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${ar.getDate().toString().padStart(2, "0")}`;
-}
-
 function Contador({ desde }: { desde: number }) {
   const [seg, setSeg] = useState(Math.floor((Date.now() - desde) / 1000));
   useEffect(() => {
@@ -51,51 +46,28 @@ export default function TurnosEnEspera({
     if (typeof Notification !== "undefined") setNotifPermiso(Notification.permission);
   }, []);
 
-  // Polling cada 3s — reemplaza Realtime que no funciona en este setup
+  // Polling cada 3s via API route (evita CORS en Safari)
   const prevCountRef = useRef(turnosIniciales.length);
 
   useEffect(() => {
-    const supabase = createClient();
-
     async function fetchEspera() {
-      const hoy = getHoyAR();
-      const { data } = await supabase
-        .from("turnos")
-        .select("id, fecha, hora_inicio, paciente_id")
-        .eq("medico_id", medicoId)
-        .eq("fecha", hoy)
-        .eq("estado", "en_espera")
-        .order("hora_inicio", { ascending: true });
+      try {
+        const res = await fetch(`/api/turnos-espera?medicoId=${medicoId}`);
+        if (!res.ok) return;
+        const data: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null }[] = await res.json();
 
-      if (!data) return;
-
-      const pacIds = [...new Set(data.map((t) => t.paciente_id).filter(Boolean))];
-      let nombres = new Map<string, string>();
-      if (pacIds.length > 0) {
-        const { data: pacs } = await supabase.from("pacientes").select("id, nombre_completo").in("id", pacIds);
-        nombres = new Map((pacs ?? []).map((p) => [p.id, p.nombre_completo]));
-      }
-
-      setTurnos((prev) => {
-        const nuevos = data.map((t) => {
-          const existente = prev.find((p) => p.id === t.id);
-          return {
-            id: t.id,
-            fecha: t.fecha,
-            hora_inicio: t.hora_inicio.slice(0, 5),
-            paciente_nombre: nombres.get(t.paciente_id) ?? "Paciente",
-            paciente_tabla_id: t.paciente_id,
-            entradoEn: existente?.entradoEn ?? Date.now(),
-          };
+        setTurnos((prev) => {
+          return data.map((t) => {
+            const existente = prev.find((p) => p.id === t.id);
+            return { ...t, entradoEn: existente?.entradoEn ?? Date.now() };
+          });
         });
-        return nuevos;
-      });
 
-      // Sonar si hay más turnos que antes
-      if (data.length > prevCountRef.current) {
-        soundPacienteEsperando();
-      }
-      prevCountRef.current = data.length;
+        if (data.length > prevCountRef.current) {
+          soundPacienteEsperando();
+        }
+        prevCountRef.current = data.length;
+      } catch {}
     }
 
     fetchEspera();
