@@ -88,28 +88,26 @@ export default function TurnosEnEspera({
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
-    console.log("TurnosEnEspera useEffect iniciado, medicoId:", medicoId);
     const supabase = createClient();
     supabaseRef.current = supabase;
     const hoy = getHoyAR();
 
     async function setup() {
-      console.log("setup() ejecutándose...");
       const { data: { user } } = await supabase.auth.getUser();
-      console.log("user obtenido:", user?.id);
-      if (!user) { console.log("sin user, saliendo"); return; }
+      if (!user) return;
 
       const channel = supabase
         .channel(`turnos-espera-${medicoId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "turnos", filter: `medico_id=eq.${medicoId}` },
+          { event: "INSERT", schema: "public", table: "turnos" },
           async (payload) => {
             const row = payload.new as {
               id: string; medico_id: string; estado: string;
               fecha: string; hora_inicio: string; paciente_id: string;
             };
 
+            if (row.medico_id !== medicoId) return;
             if (row.estado !== "en_espera") return;
             if (row.fecha !== hoy) return;
 
@@ -133,12 +131,13 @@ export default function TurnosEnEspera({
         )
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "turnos", filter: `medico_id=eq.${medicoId}` },
+          { event: "UPDATE", schema: "public", table: "turnos" },
           (payload) => {
             const row = payload.new as {
-              id: string; estado: string; fecha: string; hora_inicio: string; paciente_id: string;
+              id: string; medico_id: string; estado: string; fecha: string; hora_inicio: string; paciente_id: string;
             };
 
+            if (row.medico_id !== medicoId) return;
             if (row.fecha !== hoy) return;
 
             if (row.estado === "en_espera") {
@@ -161,11 +160,8 @@ export default function TurnosEnEspera({
             }
           }
         )
-        .subscribe((status) => {
-          console.log("RT turnos subscribe status:", status);
-        });
+        .subscribe();
 
-      console.log("canal creado:", `turnos-espera-${medicoId}`);
       channelRef.current = channel;
     }
 

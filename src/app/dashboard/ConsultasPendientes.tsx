@@ -99,7 +99,7 @@ export default function ConsultasPendientes({
         .channel(`pendientes-${medicoId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
+          { event: "INSERT", schema: "public", table: "consultas" },
           async (payload) => {
             const nueva = payload.new as {
               id: string;
@@ -111,6 +111,7 @@ export default function ConsultasPendientes({
               motivo_consulta: string | null;
             };
 
+            if (nueva.medico_id !== medicoId) return;
             if (nueva.estado !== "esperando") return;
 
             soundPacienteEsperando();
@@ -137,9 +138,10 @@ export default function ConsultasPendientes({
         )
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
+          { event: "UPDATE", schema: "public", table: "consultas" },
           (payload) => {
-            const updated = payload.new as { id: string; estado: string };
+            const updated = payload.new as { id: string; medico_id: string; estado: string };
+            if (updated.medico_id !== medicoId) return;
             if (updated.estado !== "esperando") {
               setConsultas((prev) => prev.filter((c) => c.id !== updated.id));
             }
