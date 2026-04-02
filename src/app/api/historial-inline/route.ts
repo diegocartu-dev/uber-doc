@@ -22,22 +22,25 @@ export async function GET(req: NextRequest) {
     if (!data) return NextResponse.json([]);
 
     const pacUserIds = [...new Set(data.map((c) => c.paciente_id))];
-    let pacMap = new Map<string, string>();
+    let pacMap = new Map<string, { id: string; nombre: string }>();
     if (pacUserIds.length > 0) {
       const { data: pacs } = await supabase
-        .from("pacientes").select("user_id, nombre_completo").in("user_id", pacUserIds);
-      pacMap = new Map((pacs ?? []).map((p) => [p.user_id, p.nombre_completo]));
+        .from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacUserIds);
+      pacMap = new Map((pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo }]));
     }
 
-    return NextResponse.json(data.map((c) => ({
-      id: c.id,
-      paciente_nombre: pacMap.get(c.paciente_id) ?? "Paciente",
-      fecha: new Date(c.created_at).toLocaleString("es-AR", {
-        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-        timeZone: "America/Argentina/Buenos_Aires",
-      }),
-      url: `/consulta/${c.id}/completar`,
-    })));
+    return NextResponse.json(data.map((c) => {
+      const pac = pacMap.get(c.paciente_id);
+      return {
+        id: c.id,
+        paciente_nombre: pac?.nombre ?? "Paciente",
+        fecha: new Date(c.created_at).toLocaleString("es-AR", {
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+          timeZone: "America/Argentina/Buenos_Aires",
+        }),
+        url: pac?.id ? `/medico/paciente/${pac.id}` : "#",
+      };
+    }));
   }
 
   if (tipo === "turno") {
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
         day: "2-digit", month: "short",
         timeZone: "America/Argentina/Buenos_Aires",
       })} · ${t.hora_inicio.slice(0, 5)}`,
-      url: `/documentos?turnoId=${t.id}`,
+      url: t.paciente_id ? `/medico/paciente/${t.paciente_id}` : "#",
     })));
   }
 

@@ -419,7 +419,7 @@ export default async function DashboardPage() {
           />
 
           {/* Dos hemisferios — desktop */}
-          <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2">
+          <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2 lg:items-start">
             {colTurnos}
             {colConsulta}
           </div>
