@@ -176,11 +176,11 @@ export default async function DashboardPage() {
         });
       }
 
-      // Consultas en curso
+      // Consultas aceptadas + en curso
       const { data: enCurso } = await supabase
         .from("consultas")
         .select("id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at")
-        .eq("medico_id", data.id).eq("estado", "en_curso")
+        .eq("medico_id", data.id).in("estado", ["aceptada", "en_curso"])
         .order("created_at", { ascending: true });
 
       if (enCurso && enCurso.length > 0) {

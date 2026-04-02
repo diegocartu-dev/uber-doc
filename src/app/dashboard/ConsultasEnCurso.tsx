@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { TouchButton } from "@/components/TouchButton";
+
+const POLL_INTERVAL = 3000;
 
 type Consulta = {
   id: string;
@@ -38,18 +39,6 @@ function tiempoTranscurrido(fecha: string): string {
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
-function formatHoraAR(fecha: string): string {
-  if (!fecha) return "";
-  const d = new Date(fecha);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("es-AR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "America/Argentina/Buenos_Aires",
-  });
-}
-
 export default function ConsultasEnCurso({
   consultas: consultasIniciales,
   medicoId,
@@ -61,83 +50,27 @@ export default function ConsultasEnCurso({
   const [consultas, setConsultas] = useState(consultasIniciales);
   const [creando, setCreando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const prevCountRef = useRef(consultasIniciales.length);
 
   useEffect(() => {
     setConsultas(consultasIniciales);
   }, [consultasIniciales]);
 
+  // Polling cada 3s via API route — busca aceptada + en_curso
   useEffect(() => {
-    const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    async function fetchActivas() {
+      try {
+        const res = await fetch(`/api/consultas-activas?medicoId=${medicoId}`, { credentials: "include" });
+        if (!res.ok) return;
+        const data: Consulta[] = await res.json();
+        setConsultas(data);
+        prevCountRef.current = data.length;
+      } catch {}
+    }
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-
-      channel = supabase
-        .channel(`en-curso-${medicoId}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
-          async (payload) => {
-            const updated = payload.new as {
-              id: string;
-              estado: string;
-              especialidad: string;
-              sala_video_url: string | null;
-              paciente_id: string;
-              motivo_consulta: string | null;
-              sintomas: string[] | null;
-              created_at: string;
-            };
-            if (updated.estado === "en_curso") {
-              setConsultas((prev) => {
-                const exists = prev.find((c) => c.id === updated.id);
-                if (exists) {
-                  return prev.map((c) =>
-                    c.id === updated.id
-                      ? { ...c, sala_video_url: updated.sala_video_url }
-                      : c
-                  );
-                }
-                return prev;
-              });
-
-              const { data: paciente } = await supabase
-                .from("pacientes")
-                .select("id, nombre_completo, fecha_nacimiento")
-                .eq("user_id", updated.paciente_id)
-                .single();
-
-              setConsultas((prev) => {
-                if (prev.some((c) => c.id === updated.id)) return prev;
-                return [
-                  ...prev,
-                  {
-                    id: updated.id,
-                    especialidad: updated.especialidad,
-                    paciente_nombre: paciente?.nombre_completo ?? "Paciente",
-                    paciente_tabla_id: paciente?.id ?? null,
-                    sala_video_url: updated.sala_video_url,
-                    motivo_consulta: updated.motivo_consulta,
-                    sintomas: updated.sintomas,
-                    created_at: updated.created_at,
-                    fecha_nacimiento: paciente?.fecha_nacimiento ?? null,
-                  },
-                ];
-              });
-            }
-
-            if (updated.estado === "completada" || updated.estado === "cancelada") {
-              setConsultas((prev) => prev.filter((c) => c.id !== updated.id));
-            }
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      if (channel) createClient().removeChannel(channel);
-    };
+    fetchActivas();
+    const interval = setInterval(fetchActivas, POLL_INTERVAL);
+    return () => clearInterval(interval);
   }, [medicoId]);
 
   async function handleIniciar(consultaId: string) {
@@ -148,6 +81,7 @@ export default function ConsultasEnCurso({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consultaId }),
+        credentials: "include",
       });
       const data = await res.json();
 
