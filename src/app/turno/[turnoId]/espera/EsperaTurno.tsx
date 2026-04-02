@@ -24,55 +24,60 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
     window.location.href = `/turno/${turnoId}/video`;
   }
 
+  // Realtime — patrón idéntico a SalaEsperaCliente (CI que funciona)
   useEffect(() => {
     const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const channel = supabase
-      .channel("espera-turno-rt")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "turnos" },
-        (payload) => {
-          const updated = payload.new as { id: string; estado: string; sala_video_url: string | null };
-          if (updated.id !== turnoId) return;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
 
-          if (updated.estado === "en_curso") {
-            setEstado("iniciando");
-            soundConsultaAceptada();
+      channel = supabase
+        .channel(`espera-turno-${turnoId}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "turnos", filter: `id=eq.${turnoId}` },
+          (payload) => {
+            const updated = payload.new as { id: string; estado: string; sala_video_url: string | null };
 
-            // Si la sala ya está lista en este evento, redirigir después de la transición
-            if (updated.sala_video_url) {
-              setTimeout(() => redirigirAVideo(), 1500);
+            if (updated.estado === "en_curso") {
+              setEstado("iniciando");
+              soundConsultaAceptada();
+
+              if (updated.sala_video_url) {
+                setTimeout(() => redirigirAVideo(), 1500);
+              }
+              return;
             }
-            // Si no, esperar el próximo evento con sala_video_url
-            return;
-          }
 
-          // Evento posterior con sala_video_url (ej: UPDATE que guarda la URL)
-          if (estadoRef.current === "iniciando" && updated.sala_video_url) {
-            setTimeout(() => redirigirAVideo(), 500);
-            return;
-          }
+            // Evento posterior con sala_video_url
+            if (estadoRef.current === "iniciando" && updated.sala_video_url) {
+              setTimeout(() => redirigirAVideo(), 500);
+              return;
+            }
 
-          // Estados terminales
-          if (updated.estado === "completado") {
-            setEstado("finalizado");
-            setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
-            return;
+            // Estados terminales
+            if (updated.estado === "completado") {
+              setEstado("finalizado");
+              setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+              return;
+            }
+            if (updated.estado === "cancelado_medico") {
+              setEstado("cancelado");
+              setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+              return;
+            }
+            if (["cancelado_paciente", "ausente_paciente"].includes(updated.estado)) {
+              window.location.href = "/dashboard";
+            }
           }
-          if (updated.estado === "cancelado_medico") {
-            setEstado("cancelado");
-            setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
-            return;
-          }
-          if (["cancelado_paciente", "ausente_paciente"].includes(updated.estado)) {
-            window.location.href = "/dashboard";
-          }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [turnoId]);
 
   // Fallback: si después de 5s en "redirigiendo" no navegó, mostrar botón

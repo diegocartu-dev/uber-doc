@@ -83,28 +83,33 @@ export default function TurnosEnEspera({
     fetchEspera();
   }, [medicoId]);
 
-  // Realtime — SIN filtros en canal, event: '*', filtrar en JS
+  // Realtime — patrón idéntico a ConsultasPendientes (CI que funciona)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+
   useEffect(() => {
     const supabase = createClient();
+    supabaseRef.current = supabase;
     const hoy = getHoyAR();
 
-    const channel = supabase
-      .channel("turnos-rt-debug")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "turnos" },
-        async (payload) => {
-          console.log("REALTIME TURNO EVENT:", payload);
-          const row = payload.new as {
-            id: string; medico_id: string; estado: string;
-            fecha: string; hora_inicio: string; paciente_id: string;
-          };
+    async function setup() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-          // Filtrar en JS
-          if (!row.medico_id || row.medico_id !== medicoId) return;
-          if (!row.fecha || row.fecha !== hoy) return;
+      const channel = supabase
+        .channel(`turnos-espera-${medicoId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "turnos", filter: `medico_id=eq.${medicoId}` },
+          async (payload) => {
+            const row = payload.new as {
+              id: string; medico_id: string; estado: string;
+              fecha: string; hora_inicio: string; paciente_id: string;
+            };
 
-          if (row.estado === "en_espera") {
+            if (row.estado !== "en_espera") return;
+            if (row.fecha !== hoy) return;
+
             const { data: pac } = await supabase
               .from("pacientes").select("nombre_completo").eq("id", row.paciente_id).maybeSingle();
 
@@ -122,17 +127,49 @@ export default function TurnosEnEspera({
 
             soundPacienteEsperando();
           }
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "turnos", filter: `medico_id=eq.${medicoId}` },
+          (payload) => {
+            const row = payload.new as {
+              id: string; estado: string; fecha: string; hora_inicio: string; paciente_id: string;
+            };
 
-          if (["en_curso", "completado", "cancelado_paciente", "cancelado_medico", "ausente_paciente"].includes(row.estado)) {
-            setTurnos((prev) => prev.filter((t) => t.id !== row.id));
+            if (row.fecha !== hoy) return;
+
+            if (row.estado === "en_espera") {
+              setTurnos((prev) => {
+                if (prev.some((t) => t.id === row.id)) return prev;
+                return [...prev, {
+                  id: row.id,
+                  fecha: row.fecha,
+                  hora_inicio: row.hora_inicio.slice(0, 5),
+                  paciente_nombre: "Paciente",
+                  paciente_tabla_id: row.paciente_id,
+                  entradoEn: Date.now(),
+                }].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+              });
+              soundPacienteEsperando();
+            }
+
+            if (["en_curso", "completado", "cancelado_paciente", "cancelado_medico", "ausente_paciente"].includes(row.estado)) {
+              setTurnos((prev) => prev.filter((t) => t.id !== row.id));
+            }
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log("REALTIME TURNO SUBSCRIBE STATUS:", status);
-      });
+        )
+        .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+      channelRef.current = channel;
+    }
+
+    setup();
+
+    return () => {
+      if (channelRef.current && supabaseRef.current) {
+        supabaseRef.current.removeChannel(channelRef.current);
+      }
+    };
   }, [medicoId]);
 
   // Badge en título cuando hay pacientes esperando
