@@ -9,6 +9,7 @@ import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
 import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
+import HistorialInline from "./HistorialInline";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -296,7 +297,6 @@ export default async function DashboardPage() {
     const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
     const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
     const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
-    const historialClass = "text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors";
 
     const colTurnos = (
       <div className={hemiPad} style={hemiStyle}>
@@ -346,7 +346,7 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass + " justify-end"}>
-          <Link href="/medico/historial" className={historialClass}>Ver historial →</Link>
+          <HistorialInline medicoId={medico.id} tipo="turno" />
         </div>
       </div>
     );
@@ -381,7 +381,7 @@ export default async function DashboardPage() {
 
         {/* Pie */}
         <div className={footerClass + " justify-end"}>
-          <Link href="/medico/historial" className={historialClass}>Ver historial →</Link>
+          <HistorialInline medicoId={medico.id} tipo="consulta" />
         </div>
       </div>
     );
