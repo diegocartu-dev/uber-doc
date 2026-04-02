@@ -60,21 +60,31 @@ export default async function DocumentosPage() {
 
   const tieneConsultaActiva = !!consultaActiva;
 
-  // Traer documentos con consulta_id
+  // Traer documentos con consulta_id y turno_id
   const { data: documentos } = await supabase
     .from("documentos")
-    .select("id, tipo, diagnostico, contenido, created_at, medico_id, consulta_id")
+    .select("id, tipo, diagnostico, contenido, created_at, medico_id, consulta_id, turno_id")
     .eq("paciente_id", paciente.id)
     .order("created_at", { ascending: false });
 
   // Traer consultas para fecha/hora y especialidad
-  const consultaIds = [...new Set((documentos ?? []).map((d) => d.consulta_id))];
+  const consultaIds = [...new Set((documentos ?? []).map((d) => d.consulta_id).filter(Boolean))];
   const { data: consultas } = consultaIds.length > 0
     ? await supabase.from("consultas").select("id, especialidad, created_at").in("id", consultaIds)
     : { data: [] };
 
   const consultasMap = new Map(
     (consultas ?? []).map((c) => [c.id, c])
+  );
+
+  // Traer turnos para fecha/hora
+  const turnoIds = [...new Set((documentos ?? []).map((d) => d.turno_id).filter(Boolean))];
+  const { data: turnos } = turnoIds.length > 0
+    ? await supabase.from("turnos").select("id, fecha, hora_inicio, medico_id").in("id", turnoIds)
+    : { data: [] };
+
+  const turnosMap = new Map(
+    (turnos ?? []).map((t) => [t.id, t])
   );
 
   // Traer médicos
@@ -102,19 +112,25 @@ export default async function DocumentosPage() {
     };
   });
 
-  // Agrupar por consulta_id (orden por fecha de consulta desc)
-  const porConsulta = new Map<string, typeof docsCompletos>();
+  // Agrupar por consulta_id o turno_id
+  const porOrigen = new Map<string, typeof docsCompletos>();
   for (const doc of docsCompletos) {
-    const key = doc.consulta_id;
-    if (!porConsulta.has(key)) porConsulta.set(key, []);
-    porConsulta.get(key)!.push(doc);
+    const key = doc.consulta_id ?? (doc.turno_id ? `turno:${doc.turno_id}` : "sin-origen");
+    if (!porOrigen.has(key)) porOrigen.set(key, []);
+    porOrigen.get(key)!.push(doc);
   }
 
-  // Ordenar consultas por fecha desc
-  const consultasOrdenadas = [...porConsulta.entries()].sort((a, b) => {
-    const ca = consultasMap.get(a[0]);
-    const cb = consultasMap.get(b[0]);
-    return new Date(cb?.created_at ?? 0).getTime() - new Date(ca?.created_at ?? 0).getTime();
+  // Ordenar por fecha desc
+  const origenesOrdenados = [...porOrigen.entries()].sort((a, b) => {
+    function getFecha(key: string) {
+      if (key.startsWith("turno:")) {
+        const t = turnosMap.get(key.replace("turno:", ""));
+        return t ? new Date(t.fecha + "T" + t.hora_inicio).getTime() : 0;
+      }
+      const c = consultasMap.get(key);
+      return c ? new Date(c.created_at).getTime() : 0;
+    }
+    return getFecha(b[0]) - getFecha(a[0]);
   });
 
   const totalDocs = docsCompletos.length;
@@ -133,7 +149,7 @@ export default async function DocumentosPage() {
       <main className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="text-xl font-medium text-gray-900">Mis documentos</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {totalDocs} documento{totalDocs !== 1 ? "s" : ""} · {consultasOrdenadas.length} consulta{consultasOrdenadas.length !== 1 ? "s" : ""}
+          {totalDocs} documento{totalDocs !== 1 ? "s" : ""} · {origenesOrdenados.length} consulta{origenesOrdenados.length !== 1 ? "s" : ""}
         </p>
 
         {tieneConsultaActiva && (
@@ -149,18 +165,33 @@ export default async function DocumentosPage() {
           </div>
         ) : (
           <div className="mt-6 space-y-6">
-            {consultasOrdenadas.map(([consultaId, docs]) => {
-              const consulta = consultasMap.get(consultaId);
-              const { dia, hora } = consulta
-                ? formatFechaConsulta(consulta.created_at)
-                : { dia: "—", hora: "--:--" };
-              const especialidad = consulta?.especialidad ?? docs[0]?.medico_especialidad ?? "";
+            {origenesOrdenados.map(([origenKey, docs]) => {
+              let dia = "—";
+              let hora = "--:--";
+              let especialidad = docs[0]?.medico_especialidad ?? "";
+
+              if (origenKey.startsWith("turno:")) {
+                const turno = turnosMap.get(origenKey.replace("turno:", ""));
+                if (turno) {
+                  const fd = new Date(turno.fecha + "T12:00:00");
+                  dia = fd.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" }).toUpperCase();
+                  hora = turno.hora_inicio.slice(0, 5);
+                }
+              } else {
+                const consulta = consultasMap.get(origenKey);
+                if (consulta) {
+                  const f = formatFechaConsulta(consulta.created_at);
+                  dia = f.dia;
+                  hora = f.hora;
+                  especialidad = consulta.especialidad ?? especialidad;
+                }
+              }
 
               return (
-                <div key={consultaId}>
-                  {/* Header de consulta */}
+                <div key={origenKey}>
+                  {/* Header */}
                   <p className="text-xs font-medium tracking-wide text-gray-400">
-                    {dia} — {hora} hs · {especialidad}
+                    {dia} — {hora} hs · {especialidad} {origenKey.startsWith("turno:") ? "· Turno" : ""}
                   </p>
 
                   {/* Documentos de esta consulta */}

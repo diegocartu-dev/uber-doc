@@ -39,6 +39,13 @@ const estadoLabel: Record<string, string> = {
   en_curso: "En curso",
   completada: "Completada",
   cancelada: "Cancelada",
+  // Turnos
+  confirmado: "Confirmado",
+  en_espera: "En espera",
+  completado: "Completado",
+  cancelado_paciente: "Cancelado por paciente",
+  cancelado_medico: "Cancelado por médico",
+  ausente_paciente: "Ausente",
 };
 
 const estadoColor: Record<string, string> = {
@@ -47,6 +54,13 @@ const estadoColor: Record<string, string> = {
   en_curso: "bg-[#1D9E75]/10 text-[#1D9E75]",
   completada: "bg-gray-100 text-gray-600",
   cancelada: "bg-[#E24B4A]/10 text-[#E24B4A]",
+  // Turnos
+  confirmado: "bg-[#888780]/10 text-[#888780]",
+  en_espera: "bg-[#1D9E75]/10 text-[#1D9E75]",
+  completado: "bg-gray-100 text-gray-600",
+  cancelado_paciente: "bg-[#E24B4A]/10 text-[#E24B4A]",
+  cancelado_medico: "bg-[#E24B4A]/10 text-[#E24B4A]",
+  ausente_paciente: "bg-[#D85A30]/10 text-[#D85A30]",
 };
 
 const tipoLabel: Record<string, string> = {
@@ -111,6 +125,47 @@ export default async function FichaPacientePage({
     : { data: [] };
 
   const consultasFinal = consultasData ?? [];
+
+  // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
+  const { data: turnosData } = await supabase
+    .from("turnos")
+    .select("id, fecha, hora_inicio, estado, medico_id")
+    .eq("medico_id", medico.id)
+    .eq("paciente_id", pacienteId)
+    .order("fecha", { ascending: false })
+    .order("hora_inicio", { ascending: false });
+
+  const turnosFinal = turnosData ?? [];
+
+  // Traer documentos de turnos
+  const turnoIds = turnosFinal.map((t) => t.id);
+  const { data: docsTurnos } = turnoIds.length > 0
+    ? await supabase
+        .from("documentos")
+        .select("id, tipo, diagnostico, contenido, created_at, turno_id, medico_id")
+        .eq("paciente_id", pacienteId)
+        .eq("medico_id", medico.id)
+        .in("turno_id", turnoIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const docsTurnosCompletos = (docsTurnos ?? []).map((d) => ({
+    ...d,
+    medico_nombre: medico.nombre_completo,
+    medico_especialidad: medico.especialidad,
+    medico_matricula: `${medico.tipo_matricula} ${medico.numero_matricula}`.trim(),
+    medico_domicilio: medico.domicilio ?? "",
+    paciente_nombre: paciente.nombre_completo,
+    paciente_dni: paciente.dni ?? "",
+    paciente_cuil: paciente.cuil ?? "",
+  }));
+
+  const docsPorTurno = new Map<string, typeof docsTurnosCompletos>();
+  for (const doc of docsTurnosCompletos) {
+    if (!doc.turno_id) continue;
+    if (!docsPorTurno.has(doc.turno_id)) docsPorTurno.set(doc.turno_id, []);
+    docsPorTurno.get(doc.turno_id)!.push(doc);
+  }
 
   // Traer documentos de las consultas de este médico con este paciente
   const consultaIds = consultasFinal.map((c) => c.id);
@@ -244,6 +299,61 @@ export default async function FichaPacientePage({
                     )}
 
                     {/* Documentos */}
+                    {docs.length > 0 && (
+                      <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
+                        <p className="text-xs text-gray-400">Documentos</p>
+                        <div className="mt-2 space-y-2">
+                          {docs.map((doc) => (
+                            <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
+                                <span className="text-xs font-medium text-gray-700">
+                                  {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
+                                </span>
+                              </div>
+                              <DescargarPDF documento={doc} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Historial de turnos */}
+        <div className="mt-6">
+          <p className="text-xs font-medium tracking-wide text-gray-400">
+            HISTORIAL DE TURNOS · {turnosFinal.length}
+          </p>
+
+          {turnosFinal.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-500">No hay turnos registrados con este paciente.</p>
+          ) : (
+            <div className="mt-3 space-y-4">
+              {turnosFinal.map((t) => {
+                const docs = docsPorTurno.get(t.id) ?? [];
+                return (
+                  <div
+                    key={t.id}
+                    className="rounded-xl bg-white p-5"
+                    style={{ border: "0.5px solid #e5e7eb" }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{medico.especialidad}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {formatFecha(t.fecha + "T12:00:00")} — {t.hora_inicio.slice(0, 5)} hs
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[t.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                        {estadoLabel[t.estado] ?? t.estado}
+                      </span>
+                    </div>
+
                     {docs.length > 0 && (
                       <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
                         <p className="text-xs text-gray-400">Documentos</p>
