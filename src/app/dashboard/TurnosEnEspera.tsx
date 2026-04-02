@@ -88,13 +88,16 @@ export default function TurnosEnEspera({
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
+    console.log("TurnosEnEspera useEffect iniciado, medicoId:", medicoId);
     const supabase = createClient();
     supabaseRef.current = supabase;
     const hoy = getHoyAR();
 
     async function setup() {
+      console.log("setup() ejecutándose...");
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log("user obtenido:", user?.id);
+      if (!user) { console.log("sin user, saliendo"); return; }
 
       const channel = supabase
         .channel(`turnos-espera-${medicoId}`)
@@ -158,8 +161,11 @@ export default function TurnosEnEspera({
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("RT turnos subscribe status:", status);
+        });
 
+      console.log("canal creado:", `turnos-espera-${medicoId}`);
       channelRef.current = channel;
     }
 
