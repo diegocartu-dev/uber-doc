@@ -370,15 +370,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* Zona urgencia / contenido */}
-        {consultaInactiva && !hayUrgenciaConsulta ? (
+        <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
+        {consultaInactiva ? (
           <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
             <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
           </div>
         ) : (
-          <>
-            <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
-            <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
-          </>
+          <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
         )}
 
         {/* Pie */}
