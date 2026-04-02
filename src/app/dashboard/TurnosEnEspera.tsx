@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { soundPacienteEsperando } from "@/lib/sounds";
 
+const POLL_INTERVAL = 3000;
+
 type TurnoEspera = {
   id: string;
   fecha: string;
@@ -49,10 +51,13 @@ export default function TurnosEnEspera({
     if (typeof Notification !== "undefined") setNotifPermiso(Notification.permission);
   }, []);
 
-  // Fetch propio al montar para no depender solo del server
+  // Polling cada 3s — reemplaza Realtime que no funciona en este setup
+  const prevCountRef = useRef(turnosIniciales.length);
+
   useEffect(() => {
+    const supabase = createClient();
+
     async function fetchEspera() {
-      const supabase = createClient();
       const hoy = getHoyAR();
       const { data } = await supabase
         .from("turnos")
@@ -62,7 +67,7 @@ export default function TurnosEnEspera({
         .eq("estado", "en_espera")
         .order("hora_inicio", { ascending: true });
 
-      if (!data || data.length === 0) return;
+      if (!data) return;
 
       const pacIds = [...new Set(data.map((t) => t.paciente_id).filter(Boolean))];
       let nombres = new Map<string, string>();
@@ -71,107 +76,31 @@ export default function TurnosEnEspera({
         nombres = new Map((pacs ?? []).map((p) => [p.id, p.nombre_completo]));
       }
 
-      setTurnos(data.map((t) => ({
-        id: t.id,
-        fecha: t.fecha,
-        hora_inicio: t.hora_inicio.slice(0, 5),
-        paciente_nombre: nombres.get(t.paciente_id) ?? "Paciente",
-        paciente_tabla_id: t.paciente_id,
-        entradoEn: Date.now(),
-      })));
-    }
-    fetchEspera();
-  }, [medicoId]);
+      setTurnos((prev) => {
+        const nuevos = data.map((t) => {
+          const existente = prev.find((p) => p.id === t.id);
+          return {
+            id: t.id,
+            fecha: t.fecha,
+            hora_inicio: t.hora_inicio.slice(0, 5),
+            paciente_nombre: nombres.get(t.paciente_id) ?? "Paciente",
+            paciente_tabla_id: t.paciente_id,
+            entradoEn: existente?.entradoEn ?? Date.now(),
+          };
+        });
+        return nuevos;
+      });
 
-  // Realtime — patrón idéntico a ConsultasPendientes (CI que funciona)
-  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
-  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabaseRef.current = supabase;
-    const hoy = getHoyAR();
-
-    async function setup() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const channel = supabase
-        .channel(`turnos-espera-${medicoId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "turnos" },
-          async (payload) => {
-            const row = payload.new as {
-              id: string; medico_id: string; estado: string;
-              fecha: string; hora_inicio: string; paciente_id: string;
-            };
-
-            if (row.medico_id !== medicoId) return;
-            if (row.estado !== "en_espera") return;
-            if (row.fecha !== hoy) return;
-
-            const { data: pac } = await supabase
-              .from("pacientes").select("nombre_completo").eq("id", row.paciente_id).maybeSingle();
-
-            setTurnos((prev) => {
-              if (prev.some((t) => t.id === row.id)) return prev;
-              return [...prev, {
-                id: row.id,
-                fecha: row.fecha,
-                hora_inicio: row.hora_inicio.slice(0, 5),
-                paciente_nombre: pac?.nombre_completo ?? "Paciente",
-                paciente_tabla_id: row.paciente_id,
-                entradoEn: Date.now(),
-              }].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
-            });
-
-            soundPacienteEsperando();
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "turnos" },
-          (payload) => {
-            const row = payload.new as {
-              id: string; medico_id: string; estado: string; fecha: string; hora_inicio: string; paciente_id: string;
-            };
-
-            if (row.medico_id !== medicoId) return;
-            if (row.fecha !== hoy) return;
-
-            if (row.estado === "en_espera") {
-              setTurnos((prev) => {
-                if (prev.some((t) => t.id === row.id)) return prev;
-                return [...prev, {
-                  id: row.id,
-                  fecha: row.fecha,
-                  hora_inicio: row.hora_inicio.slice(0, 5),
-                  paciente_nombre: "Paciente",
-                  paciente_tabla_id: row.paciente_id,
-                  entradoEn: Date.now(),
-                }].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
-              });
-              soundPacienteEsperando();
-            }
-
-            if (["en_curso", "completado", "cancelado_paciente", "cancelado_medico", "ausente_paciente"].includes(row.estado)) {
-              setTurnos((prev) => prev.filter((t) => t.id !== row.id));
-            }
-          }
-        )
-        .subscribe();
-
-      channelRef.current = channel;
-    }
-
-    setup();
-
-    return () => {
-      if (channelRef.current && supabaseRef.current) {
-        supabaseRef.current.removeChannel(channelRef.current);
+      // Sonar si hay más turnos que antes
+      if (data.length > prevCountRef.current) {
+        soundPacienteEsperando();
       }
-    };
+      prevCountRef.current = data.length;
+    }
+
+    fetchEspera();
+    const interval = setInterval(fetchEspera, POLL_INTERVAL);
+    return () => clearInterval(interval);
   }, [medicoId]);
 
   // Badge en título cuando hay pacientes esperando

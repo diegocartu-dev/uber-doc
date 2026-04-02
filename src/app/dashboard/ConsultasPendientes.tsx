@@ -6,6 +6,8 @@ import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { TouchButton } from "@/components/TouchButton";
 import { soundPacienteEsperando } from "@/lib/sounds";
 
+const POLL_INTERVAL = 3000;
+
 type Consulta = {
   id: string;
   especialidad: string;
@@ -68,97 +70,55 @@ export default function ConsultasPendientes({
 }) {
   const [consultas, setConsultas] = useState(consultasIniciales);
   const [isPending, startTransition] = useTransition();
-  const chimeRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
-  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const prevCountRef = useRef(consultasIniciales.length);
 
   useEffect(() => {
     setConsultas(consultasIniciales);
   }, [consultasIniciales]);
 
-  // Timbre cada 30s
-  useEffect(() => {
-    if (chimeRef.current) clearInterval(chimeRef.current);
-    if (consultas.length > 0) {
-      chimeRef.current = setInterval(() => soundPacienteEsperando(), 30000);
-    }
-    return () => { if (chimeRef.current) clearInterval(chimeRef.current); };
-  }, [consultas.length]);
-
-  // Realtime
+  // Polling cada 3s — reemplaza Realtime que no funciona en este setup
   useEffect(() => {
     const supabase = createClient();
-    supabaseRef.current = supabase;
 
-    async function setup() {
-      const { data: { user }, error } = await supabase.auth.getUser();
-
+    async function fetchPendientes() {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const channel = supabase
-        .channel(`pendientes-${medicoId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "consultas" },
-          async (payload) => {
-            const nueva = payload.new as {
-              id: string;
-              medico_id: string;
-              especialidad: string;
-              estado: string;
-              created_at: string;
-              paciente_id: string;
-              motivo_consulta: string | null;
-            };
+      const { data: esperando } = await supabase
+        .from("consultas")
+        .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta")
+        .eq("medico_id", medicoId)
+        .eq("estado", "esperando")
+        .order("created_at", { ascending: true });
 
-            if (nueva.medico_id !== medicoId) return;
-            if (nueva.estado !== "esperando") return;
+      if (!esperando) return;
 
-            soundPacienteEsperando();
+      const pacUserIds = [...new Set(esperando.map((c) => c.paciente_id))];
+      let pacMap = new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
+      if (pacUserIds.length > 0) {
+        const { data: pacs } = await supabase
+          .from("pacientes").select("id, user_id, nombre_completo, fecha_nacimiento").in("user_id", pacUserIds);
+        pacMap = new Map((pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo, nacimiento: p.fecha_nacimiento }]));
+      }
 
-            const pac = await fetchNombrePaciente(supabase, nueva.paciente_id);
+      setConsultas(esperando.map((c) => {
+        const p = pacMap.get(c.paciente_id);
+        return {
+          id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
+          paciente_nombre: p?.nombre ?? "Paciente", paciente_tabla_id: p?.id ?? null,
+          motivo_consulta: c.motivo_consulta, fecha_nacimiento: p?.nacimiento ?? null,
+        };
+      }));
 
-            setConsultas((prev) => {
-              if (prev.some((c) => c.id === nueva.id)) return prev;
-              return [
-                ...prev,
-                {
-                  id: nueva.id,
-                  especialidad: nueva.especialidad,
-                  estado: nueva.estado,
-                  created_at: nueva.created_at,
-                  paciente_nombre: pac.nombre,
-                  paciente_tabla_id: pac.id,
-                  motivo_consulta: nueva.motivo_consulta,
-                  fecha_nacimiento: pac.nacimiento,
-                },
-              ];
-            });
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas" },
-          (payload) => {
-            const updated = payload.new as { id: string; medico_id: string; estado: string };
-            if (updated.medico_id !== medicoId) return;
-            if (updated.estado !== "esperando") {
-              setConsultas((prev) => prev.filter((c) => c.id !== updated.id));
-            }
-          }
-        )
-        .subscribe();
-
-      channelRef.current = channel;
+      if (esperando.length > prevCountRef.current) {
+        soundPacienteEsperando();
+      }
+      prevCountRef.current = esperando.length;
     }
 
-    setup();
-
-    return () => {
-      if (channelRef.current && supabaseRef.current) {
-        supabaseRef.current.removeChannel(channelRef.current);
-      }
-    };
+    fetchPendientes();
+    const interval = setInterval(fetchPendientes, POLL_INTERVAL);
+    return () => clearInterval(interval);
   }, [medicoId]);
 
   function handleAceptar(consultaId: string) {
