@@ -62,7 +62,7 @@ export default function ConsultasPendientes({
   useEffect(() => {
     async function fetchPendientes() {
       try {
-        const res = await fetch(`/api/consultas-pendientes?medicoId=${medicoId}`);
+        const res = await fetch(`/api/consultas-pendientes?medicoId=${medicoId}`, { credentials: "include" });
         if (!res.ok) return;
         const data: Consulta[] = await res.json();
 

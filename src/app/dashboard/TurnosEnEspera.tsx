@@ -52,7 +52,7 @@ export default function TurnosEnEspera({
   useEffect(() => {
     async function fetchEspera() {
       try {
-        const res = await fetch(`/api/turnos-espera?medicoId=${medicoId}`);
+        const res = await fetch(`/api/turnos-espera?medicoId=${medicoId}`, { credentials: "include" });
         if (!res.ok) return;
         const data: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null }[] = await res.json();
 

@@ -47,7 +47,7 @@ export default function DisponibilidadMedico({
   useEffect(() => {
     async function checkTurnosHoy() {
       try {
-        const res = await fetch(`/api/turnos-activos-hoy?medicoId=${medicoId}`);
+        const res = await fetch(`/api/turnos-activos-hoy?medicoId=${medicoId}`, { credentials: "include" });
         if (!res.ok) return;
         const { count } = await res.json();
 
