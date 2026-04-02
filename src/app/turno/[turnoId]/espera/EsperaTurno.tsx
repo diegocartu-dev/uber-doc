@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
 type Props = {
@@ -24,17 +23,14 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
     window.location.href = `/turno/${turnoId}/video`;
   }
 
-  // Polling cada 3s
+  // Polling cada 3s via API route
   useEffect(() => {
-    const supabase = createClient();
-
     async function poll() {
-      const { data } = await supabase
-        .from("turnos")
-        .select("estado, sala_video_url")
-        .eq("id", turnoId)
-        .single();
-      if (!data) return;
+      try {
+        const res = await fetch(`/api/turno-estado?turnoId=${turnoId}`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.estado) return;
 
       // en_curso detectado
       if (data.estado === "en_curso" && estadoRef.current === "esperando") {
@@ -66,6 +62,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       if (["cancelado_paciente", "ausente_paciente"].includes(data.estado)) {
         window.location.href = "/dashboard";
       }
+      } catch {}
     }
 
     poll();

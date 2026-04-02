@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
 type Props = {
@@ -41,31 +40,29 @@ export default function SalaEsperaCliente({
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
 
-  // Polling cada 3s
+  // Polling cada 3s via API route
   useEffect(() => {
-    const supabase = createClient();
-
     async function poll() {
-      const { data } = await supabase
-        .from("consultas")
-        .select("estado, sala_video_url")
-        .eq("id", consultaId)
-        .single();
-      if (!data) return;
+      try {
+        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.estado) return;
 
-      if ((data.estado === "aceptada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
-        soundConsultaAceptada();
-        setPosicion(0);
-        setTiempoEstimado(0);
-      }
+        if ((data.estado === "aceptada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
+          soundConsultaAceptada();
+          setPosicion(0);
+          setTiempoEstimado(0);
+        }
 
-      if (data.sala_video_url && !salaVideoUrl) {
-        soundVideoLista();
-      }
+        if (data.sala_video_url && !salaVideoUrl) {
+          soundVideoLista();
+        }
 
-      prevEstadoRef.current = data.estado;
-      setEstado(data.estado);
-      if (data.sala_video_url) setSalaVideoUrl(data.sala_video_url);
+        prevEstadoRef.current = data.estado;
+        setEstado(data.estado);
+        if (data.sala_video_url) setSalaVideoUrl(data.sala_video_url);
+      } catch {}
     }
 
     poll();

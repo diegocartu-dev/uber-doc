@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export default function EsperaVideo({
   consultaId,
@@ -12,20 +11,19 @@ export default function EsperaVideo({
 }) {
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
 
-  // Polling cada 3s
+  // Polling cada 3s via API route
   useEffect(() => {
     if (salaUrl) return;
-    const supabase = createClient();
 
     async function poll() {
-      const { data } = await supabase
-        .from("consultas")
-        .select("sala_video_url")
-        .eq("id", consultaId)
-        .single();
-      if (data?.sala_video_url) {
-        setSalaUrl(data.sala_video_url);
-      }
+      try {
+        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.sala_video_url) {
+          setSalaUrl(data.sala_video_url);
+        }
+      } catch {}
     }
 
     poll();
