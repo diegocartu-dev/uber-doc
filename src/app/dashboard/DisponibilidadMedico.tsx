@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { actualizarDisponibilidad } from "./actions";
 
 type Props = {
@@ -13,11 +12,6 @@ type Props = {
   precioConsulta: number;
   pacientesEnEspera: number;
 };
-
-function getHoyAR(): string {
-  const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  return `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${ar.getDate().toString().padStart(2, "0")}`;
-}
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
   const [hDesde, mDesde] = desde.split(":").map(Number);
@@ -49,55 +43,35 @@ export default function DisponibilidadMedico({
 
   const capacidad = calcularCapacidad(desde, hasta, duracion);
 
-  // Regla: bloquear si hay turnos activos hoy
+  // Regla: bloquear si hay turnos activos hoy — polling via API route
   useEffect(() => {
-    const supabase = createClient();
-
     async function checkTurnosHoy() {
-      const hoy = getHoyAR();
-      const { count } = await supabase
-        .from("turnos")
-        .select("id", { count: "exact", head: true })
-        .eq("medico_id", medicoId)
-        .eq("fecha", hoy)
-        .in("estado", ["confirmado", "en_espera"]);
+      try {
+        const res = await fetch(`/api/turnos-activos-hoy?medicoId=${medicoId}`);
+        if (!res.ok) return;
+        const { count } = await res.json();
 
-      const hay = (count ?? 0) > 0;
-      setBloqueado(hay);
+        const hay = count > 0;
+        setBloqueado(hay);
 
-      // Auto-desactivar si está activo y hay turnos
-      if (hay && !autoDesactivadoRef.current) {
-        autoDesactivadoRef.current = true;
-        setActivo(false);
-        await actualizarDisponibilidad({
-          disponible: false,
-          disponible_desde: disponibleDesde ?? "08:00",
-          disponible_hasta: disponibleHasta ?? "18:00",
-        });
-      }
-      if (!hay) {
-        autoDesactivadoRef.current = false;
-      }
+        if (hay && !autoDesactivadoRef.current) {
+          autoDesactivadoRef.current = true;
+          setActivo(false);
+          await actualizarDisponibilidad({
+            disponible: false,
+            disponible_desde: disponibleDesde ?? "08:00",
+            disponible_hasta: disponibleHasta ?? "18:00",
+          });
+        }
+        if (!hay) {
+          autoDesactivadoRef.current = false;
+        }
+      } catch {}
     }
 
     checkTurnosHoy();
-
-    // Realtime sin filtros, filtrar en JS
-    const channel = supabase
-      .channel("bloqueo-ci")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "turnos" },
-        (payload) => {
-          const row = payload.new as { medico_id?: string; fecha?: string };
-          if (row.medico_id !== medicoId) return;
-          if (row.fecha !== getHoyAR()) return;
-          checkTurnosHoy();
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    const interval = setInterval(checkTurnosHoy, 10000);
+    return () => clearInterval(interval);
   }, [medicoId, disponibleDesde, disponibleHasta]);
 
   async function handleToggle() {
