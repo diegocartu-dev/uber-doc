@@ -12,35 +12,25 @@ export default function EsperaVideo({
 }) {
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
 
+  // Polling cada 3s
   useEffect(() => {
     if (salaUrl) return;
-
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+    async function poll() {
+      const { data } = await supabase
+        .from("consultas")
+        .select("sala_video_url")
+        .eq("id", consultaId)
+        .single();
+      if (data?.sala_video_url) {
+        setSalaUrl(data.sala_video_url);
+      }
+    }
 
-      channel = supabase
-        .channel(`espera-video-${consultaId}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
-          (payload) => {
-            const updated = payload.new as {
-              sala_video_url: string | null;
-            };
-            if (updated.sala_video_url) {
-              setSalaUrl(updated.sala_video_url);
-            }
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
   }, [consultaId, salaUrl]);
 
   if (salaUrl) {

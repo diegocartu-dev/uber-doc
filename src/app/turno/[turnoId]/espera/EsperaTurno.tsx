@@ -24,60 +24,53 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
     window.location.href = `/turno/${turnoId}/video`;
   }
 
-  // Realtime — patrón idéntico a SalaEsperaCliente (CI que funciona)
+  // Polling cada 3s
   useEffect(() => {
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+    async function poll() {
+      const { data } = await supabase
+        .from("turnos")
+        .select("estado, sala_video_url")
+        .eq("id", turnoId)
+        .single();
+      if (!data) return;
 
-      channel = supabase
-        .channel(`espera-turno-${turnoId}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "turnos", filter: `id=eq.${turnoId}` },
-          (payload) => {
-            const updated = payload.new as { id: string; estado: string; sala_video_url: string | null };
+      // en_curso detectado
+      if (data.estado === "en_curso" && estadoRef.current === "esperando") {
+        setEstado("iniciando");
+        soundConsultaAceptada();
+        if (data.sala_video_url) {
+          setTimeout(() => redirigirAVideo(), 1500);
+        }
+        return;
+      }
 
-            if (updated.estado === "en_curso") {
-              setEstado("iniciando");
-              soundConsultaAceptada();
+      // sala_video_url disponible después de en_curso
+      if (estadoRef.current === "iniciando" && data.sala_video_url) {
+        setTimeout(() => redirigirAVideo(), 500);
+        return;
+      }
 
-              if (updated.sala_video_url) {
-                setTimeout(() => redirigirAVideo(), 1500);
-              }
-              return;
-            }
+      // Estados terminales
+      if (data.estado === "completado") {
+        setEstado("finalizado");
+        setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+        return;
+      }
+      if (data.estado === "cancelado_medico") {
+        setEstado("cancelado");
+        setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+        return;
+      }
+      if (["cancelado_paciente", "ausente_paciente"].includes(data.estado)) {
+        window.location.href = "/dashboard";
+      }
+    }
 
-            // Evento posterior con sala_video_url
-            if (estadoRef.current === "iniciando" && updated.sala_video_url) {
-              setTimeout(() => redirigirAVideo(), 500);
-              return;
-            }
-
-            // Estados terminales
-            if (updated.estado === "completado") {
-              setEstado("finalizado");
-              setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
-              return;
-            }
-            if (updated.estado === "cancelado_medico") {
-              setEstado("cancelado");
-              setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
-              return;
-            }
-            if (["cancelado_paciente", "ausente_paciente"].includes(updated.estado)) {
-              window.location.href = "/dashboard";
-            }
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
   }, [turnoId]);
 
   // Fallback: si después de 5s en "redirigiendo" no navegó, mostrar botón

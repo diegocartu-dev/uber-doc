@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 
@@ -39,51 +39,39 @@ export default function SalaEsperaCliente({
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
+  const prevEstadoRef = useRef(estadoInicial);
 
+  // Polling cada 3s
   useEffect(() => {
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+    async function poll() {
+      const { data } = await supabase
+        .from("consultas")
+        .select("estado, sala_video_url")
+        .eq("id", consultaId)
+        .single();
+      if (!data) return;
 
-      channel = supabase
-        .channel(`sala-espera-${consultaId}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
-          (payload) => {
-            const updated = payload.new as {
-              estado: string;
-              sala_video_url: string | null;
-            };
+      if ((data.estado === "aceptada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
+        soundConsultaAceptada();
+        setPosicion(0);
+        setTiempoEstimado(0);
+      }
 
-            const prevEstado = estado;
-            setEstado(updated.estado);
+      if (data.sala_video_url && !salaVideoUrl) {
+        soundVideoLista();
+      }
 
-            if (updated.estado === "aceptada" || updated.estado === "en_curso") {
-              setPosicion(0);
-              setTiempoEstimado(0);
-              if (prevEstado === "esperando") {
-                soundConsultaAceptada();
-              }
-            }
+      prevEstadoRef.current = data.estado;
+      setEstado(data.estado);
+      if (data.sala_video_url) setSalaVideoUrl(data.sala_video_url);
+    }
 
-            if (updated.sala_video_url && !salaVideoUrl) {
-              setSalaVideoUrl(updated.sala_video_url);
-              soundVideoLista();
-            } else if (updated.sala_video_url) {
-              setSalaVideoUrl(updated.sala_video_url);
-            }
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, [consultaId]);
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
+  }, [consultaId, salaVideoUrl]);
 
   const aceptada = estado === "aceptada" || estado === "en_curso";
 
