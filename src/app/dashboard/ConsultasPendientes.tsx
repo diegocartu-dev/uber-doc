@@ -57,14 +57,14 @@ export default function ConsultasPendientes({ medicoId }: { medicoId: string }) 
   }
 
   if (consultas.length === 0) return (
-    <div className="text-sm text-gray-400 py-4 text-center">
-      Sin pacientes en espera
+    <div className="rounded-xl bg-gray-50 py-8 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
+      <p className="text-sm text-gray-400">Sin pacientes en espera</p>
     </div>
   );
 
   return (
-    <div className="rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
-      <p className="text-xs font-medium tracking-wide text-gray-400">PACIENTES EN ESPERA</p>
+    <div className="rounded-xl border-l-4 border-[#D85A30] bg-white p-6" style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}>
+      <p className="text-sm font-medium tracking-wide text-[#D85A30]">PACIENTES EN ESPERA</p>
 
       <div className="mt-4 space-y-3">
         {consultas.map((c) => {
@@ -73,16 +73,16 @@ export default function ConsultasPendientes({ medicoId }: { medicoId: string }) 
           const initials = getInitials(c.paciente_nombre);
 
           return (
-            <div key={c.id} className="flex items-center gap-4 rounded-lg p-3 transition hover:bg-gray-50">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500">
+            <div key={c.id} className="flex items-center gap-4 rounded-lg p-4 transition hover:bg-gray-50">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-500">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   {c.paciente_tabla_id ? (
-                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-sm font-medium text-gray-900 hover:text-[#1D9E75]">{c.paciente_nombre}</a>
+                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-base font-medium text-gray-900 hover:text-[#1D9E75]">{c.paciente_nombre}</a>
                   ) : (
-                    <p className="text-sm font-medium text-gray-900">{c.paciente_nombre}</p>
+                    <p className="text-base font-medium text-gray-900">{c.paciente_nombre}</p>
                   )}
                   {edad && <span className="text-xs text-gray-400">{edad}</span>}
                 </div>
@@ -90,11 +90,11 @@ export default function ConsultasPendientes({ medicoId }: { medicoId: string }) 
                   {[c.motivo_consulta, c.especialidad].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              {espera && <span className="shrink-0 text-xs text-gray-400">{espera}</span>}
+              {espera && <span className="shrink-0 text-sm text-[#D85A30]">{espera}</span>}
               <TouchButton
                 disabled={isPending}
                 onClick={() => handleAceptar(c.id)}
-                className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                className="shrink-0 rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50"
               >
                 {isPending ? "..." : "Aceptar"}
               </TouchButton>

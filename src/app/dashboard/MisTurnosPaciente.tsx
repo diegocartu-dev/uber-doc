@@ -54,7 +54,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
         }}
       >
         <div>
-          <p className="text-sm text-gray-900">
+          <p className="text-base text-gray-900">
             {esHoy
               ? `Hoy · ${t.hora_inicio.slice(0, 5)}`
               : `${new Date(t.fecha + "T12:00:00").toLocaleDateString("es-AR", {
@@ -62,19 +62,19 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                   timeZone: "America/Argentina/Buenos_Aires",
                 })} · ${t.hora_inicio.slice(0, 5)}`}
           </p>
-          <p className="mt-0.5 text-xs text-gray-500">Dr. {t.medico_nombre} · {t.especialidad}</p>
+          <p className="mt-0.5 text-sm text-gray-500">Dr. {t.medico_nombre} · {t.especialidad}</p>
         </div>
         <div className="flex items-center gap-2">
           {mostrarSala ? (
             <Link
               href={`/turno/${t.id}/espera`}
-              className="shrink-0 rounded-lg bg-[#1D9E75] px-4 py-2 text-xs font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+              className="shrink-0 rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
             >
               Ir a sala de espera
             </Link>
           ) : (
             <>
-              <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
+              <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
                 Confirmado
               </span>
               {t.estado === "confirmado" && (
@@ -111,7 +111,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
       )}
       <a
         href="/paciente/historial"
-        className="mt-4 block text-center text-xs text-gray-400 hover:text-gray-600 transition-colors"
+        className="mt-4 block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
       >
         Ver consultas anteriores
       </a>

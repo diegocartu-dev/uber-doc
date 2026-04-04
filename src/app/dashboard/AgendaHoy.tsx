@@ -75,7 +75,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
   if (turnos.length === 0) {
     return (
       <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-        <p className="text-xs font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
+        <p className="text-sm font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
         <p className="mt-3 text-sm text-gray-400">Sin turnos programados para hoy</p>
       </div>
     );
@@ -85,10 +85,10 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
     <div className="space-y-3">
       {/* Alertas proactivas */}
       {alertas.map((a) => (
-        <div key={a.id} className="rounded-xl p-4" style={{ background: "#FFF7ED", border: "1px solid #D85A30" }}>
+        <div key={a.id} className="rounded-xl p-5" style={{ background: "#FFF7ED", border: "1px solid #D85A30" }}>
           <div className="flex items-center gap-2">
-            <span className="text-base">⏰</span>
-            <p className="text-sm font-medium" style={{ color: "#D85A30" }}>
+            <span className="text-lg">⏰</span>
+            <p className="text-base font-medium" style={{ color: "#D85A30" }}>
               Turno con {a.nombre} a las {a.hora} — en {a.minutos} minutos
             </p>
           </div>
@@ -97,7 +97,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
 
       {/* Lista de turnos */}
       <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-        <p className="text-xs font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
+        <p className="text-sm font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
         <div className="mt-3 space-y-1">
           {turnos.map((t) => {
             const config = estadoConfig[t.estado] ?? estadoConfig.confirmado;
@@ -105,24 +105,24 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
             return (
               <div
                 key={t.id}
-                className="flex items-center justify-between rounded-lg p-2.5"
+                className="flex items-center justify-between rounded-lg p-3"
                 style={{ background: config.bg }}
               >
                 <div className="flex items-center gap-3">
                   <span
-                    className={`inline-block h-2 w-2 rounded-full ${esAnimado ? "animate-pulse" : ""}`}
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${esAnimado ? "animate-pulse" : ""}`}
                     style={{ background: config.dot }}
                   />
                   <div>
-                    <p className="text-[13px] font-medium" style={{ color: t.estado === "completado" ? "#d1d5db" : "#1a1a1a" }}>
+                    <p className="text-sm font-medium" style={{ color: t.estado === "completado" ? "#d1d5db" : "#1a1a1a" }}>
                       {t.hora_inicio.slice(0, 5)} — {t.hora_fin.slice(0, 5)}
                     </p>
-                    <p className="text-[12px]" style={{ color: config.text }}>
+                    <p className="text-sm" style={{ color: config.text }}>
                       {t.paciente_nombre}
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] font-medium" style={{ color: config.text }}>
+                <span className="text-xs font-medium" style={{ color: config.text }}>
                   {config.label}
                 </span>
               </div>

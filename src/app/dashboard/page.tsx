@@ -295,26 +295,27 @@ export default async function DashboardPage() {
     })();
 
     // ── Hemisferios con estructura idéntica ──
-    const hemiPad = "space-y-4 rounded-xl bg-white p-5";
+    const hemiPad = "space-y-4 rounded-xl bg-white p-6";
     const hemiStyle = { border: "0.5px solid #e5e7eb" } as const;
-    const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
     const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
-    const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
 
     const colTurnos = (
       <div className={hemiPad} style={hemiStyle}>
         {/* Título */}
-        <h2 className={titleClass}>Turnos programados</h2>
+        <div className="flex items-center gap-2">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#378ADD]" />
+          <h2 className="text-sm font-semibold tracking-wide uppercase text-[#378ADD]">Turnos programados</h2>
+        </div>
 
         {/* Sub-métrica */}
-        <p className="text-xs text-gray-500">
+        <p className="text-sm text-gray-500">
           {turnosHoy.length} turno{turnosHoy.length !== 1 ? "s" : ""} hoy
         </p>
 
         {/* Mi agenda */}
-        <div className="rounded-xl bg-white px-5 py-3" style={{ border: "0.5px solid #e5e7eb" }}>
-          <Link href="/medico/agenda" className={actionClass}>Mi agenda →</Link>
-        </div>
+        <Link href="/medico/agenda" className="flex items-center justify-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium text-[#378ADD] transition-colors hover:bg-[#378ADD]/5" style={{ border: "1px solid #378ADD" }}>
+          Mi agenda →
+        </Link>
 
         {/* Zona urgencia */}
         <TurnosEnEspera
@@ -330,12 +331,12 @@ export default async function DashboardPage() {
                   <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
                   <span className="text-xs font-medium tracking-wide text-[#378ADD]">TURNO EN CURSO</span>
                 </div>
-                <p className="mt-2 text-[15px] font-medium text-gray-900">{turnoEnCurso.paciente_nombre}</p>
+                <p className="mt-2 text-lg font-medium text-gray-900">{turnoEnCurso.paciente_nombre}</p>
                 <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCurso.hora_inicio.slice(0, 5)} hs</p>
               </div>
               <Link
                 href={`/turno/${turnoEnCurso.id}/video`}
-                className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-95 transition-all duration-100"
+                className="shrink-0 rounded-lg bg-[#378ADD] px-6 py-3 text-base font-medium text-white hover:bg-[#2d75c4] active:scale-95 transition-all duration-100"
               >
                 Ver consulta
               </Link>
@@ -354,9 +355,15 @@ export default async function DashboardPage() {
     );
 
     const colConsulta = (
-      <div className={`${hemiPad} ${consultaInactiva ? "opacity-60" : ""}`} style={hemiStyle}>
+      <div className={`${hemiPad} relative ${consultaInactiva ? "" : ""}`} style={hemiStyle}>
+        {consultaInactiva && (
+          <div className="pointer-events-none absolute inset-0 z-10 rounded-xl bg-white/60" />
+        )}
         {/* Título */}
-        <h2 className={titleClass}>Consulta inmediata</h2>
+        <div className="flex items-center gap-2">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1D9E75]" />
+          <h2 className="text-sm font-semibold tracking-wide uppercase text-[#1D9E75]">Consulta inmediata</h2>
+        </div>
 
         {/* Sub-métrica / estado + toggle */}
         <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
@@ -374,8 +381,8 @@ export default async function DashboardPage() {
         {/* Zona urgencia / contenido */}
         <ConsultasEnCurso medicoId={medico.id} />
         {consultaInactiva ? (
-          <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
-            <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
+          <div className="relative z-20 rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
+            <p className="text-base text-gray-400">Consulta inmediata inactiva</p>
           </div>
         ) : (
           <ConsultasPendientes medicoId={medico.id} />
@@ -398,17 +405,17 @@ export default async function DashboardPage() {
         <div className="min-h-full bg-[#f8f9fa]">
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-            <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
               <div className="flex items-center gap-5">
-                <span className="text-lg font-medium text-gray-900">Uber Doc</span>
+                <span className="text-lg font-bold text-gray-900">Uber Doc</span>
                 <div className="flex items-center gap-1.5">
-                  <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
-                  <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+                  <span className={`inline-block h-2.5 w-2.5 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse ring-2 ring-[#1D9E75]/20" : "bg-gray-300"}`} />
+                  <span className="text-sm text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-500">{fullName}</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
+                <span className="text-base text-gray-600">{fullName}</span>
+                <div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium ${medico.disponible ? "bg-[#1D9E75]/10 text-[#1D9E75]" : "bg-gray-100 text-gray-600"}`}>{initials}</div>
                 <LogoutButton />
               </div>
             </div>
@@ -454,11 +461,11 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-6">
-          <span className="text-lg font-medium text-gray-900">Uber Doc</span>
+        <div className="mx-auto flex h-16 max-w-lg items-center justify-between px-6">
+          <span className="text-lg font-bold text-gray-900">Uber Doc</span>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500">{fullName}</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
+            <span className="text-base text-gray-600">{fullName}</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">{initials}</div>
             <LogoutButton />
           </div>
         </div>
@@ -579,14 +586,14 @@ export default async function DashboardPage() {
         {/* ── Acciones principales ── */}
         <div className="grid gap-4 grid-cols-2">
           <Link href="/clinica" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-2xl">🏥</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Clínica Virtual</p>
-            <p className="mt-1 text-xs text-gray-500">Consultá un médico ahora o agendá turno</p>
+            <p className="text-3xl">🏥</p>
+            <p className="mt-3 text-base font-medium text-gray-900">Clínica Virtual</p>
+            <p className="mt-1 text-sm text-gray-500">Consultá un médico ahora o agendá turno</p>
           </Link>
           <Link href="/documentos" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-2xl">📄</p>
-            <p className="mt-3 text-sm font-medium text-gray-900">Mis documentos</p>
-            <p className="mt-1 text-xs text-gray-500">Recetas, indicaciones y certificados</p>
+            <p className="text-3xl">📄</p>
+            <p className="mt-3 text-base font-medium text-gray-900">Mis documentos</p>
+            <p className="mt-1 text-sm text-gray-500">Recetas, indicaciones y certificados</p>
           </Link>
         </div>
 

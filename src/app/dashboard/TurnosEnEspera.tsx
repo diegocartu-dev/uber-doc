@@ -99,28 +99,28 @@ export default function TurnosEnEspera({
               <div className="flex items-center gap-2">
                 <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#1D9E75]" />
                 <span className="text-xs font-medium tracking-wide text-[#1D9E75]">TURNO EN ESPERA</span>
-                <span className="text-xs text-gray-400">
+                <span className="text-sm font-medium text-[#D85A30]">
                   <Contador desde={t.entradoEn} />
                 </span>
               </div>
               {t.paciente_tabla_id ? (
-                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-[15px] font-medium text-gray-900 hover:text-[#1D9E75]">{t.paciente_nombre}</a>
+                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-lg font-medium text-gray-900 hover:text-[#1D9E75]">{t.paciente_nombre}</a>
               ) : (
-                <p className="mt-2 text-[15px] font-medium text-gray-900">{t.paciente_nombre}</p>
+                <p className="mt-2 text-lg font-medium text-gray-900">{t.paciente_nombre}</p>
               )}
               <p className="mt-0.5 text-sm text-gray-500">
                 Turno de las {t.hora_inicio} hs
               </p>
             </div>
             {hayEnCurso ? (
-              <span className="shrink-0 text-xs text-gray-400">
+              <span className="shrink-0 rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#D85A30]">
                 Finalizá la consulta actual primero
               </span>
             ) : (
               <button
                 onClick={() => handleIniciar(t.id)}
                 disabled={isPending}
-                className="shrink-0 rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
+                className="shrink-0 rounded-lg bg-[#1D9E75] px-6 py-3 text-base font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
               >
                 {isPending ? "Iniciando..." : "Iniciar turno"}
               </button>

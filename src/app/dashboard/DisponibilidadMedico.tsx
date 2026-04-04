@@ -116,7 +116,7 @@ export default function DisponibilidadMedico({
 
   const selectStyle = { border: "0.5px solid #e5e7eb" } as const;
   const selectClass =
-    "appearance-none rounded-lg bg-[#f8f9fa] px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
+    "appearance-none rounded-lg bg-[#f8f9fa] px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
 
   const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
   const MINUTOS = ["00", "15", "30", "45"];
@@ -142,7 +142,7 @@ export default function DisponibilidadMedico({
         className="flex w-full cursor-pointer items-center justify-between px-5 py-3 outline-none"
       >
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">
+          <span className={`text-sm font-medium ${activo ? "text-[#1D9E75]" : "text-gray-500"}`}>
             {activo ? "Activa" : "Inactiva"}
           </span>
           <button
@@ -154,13 +154,13 @@ export default function DisponibilidadMedico({
               e.stopPropagation();
               handleToggle();
             }}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
               bloqueado ? "cursor-not-allowed bg-gray-200" : "cursor-pointer"
             } ${activo && !bloqueado ? "bg-[#1D9E75]" : !bloqueado ? "bg-gray-300" : ""}`}
           >
             <span
-              className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                activo && !bloqueado ? "translate-x-4.5" : "translate-x-0.5"
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                activo && !bloqueado ? "translate-x-5.5" : "translate-x-0.5"
               }`}
             />
           </button>
@@ -170,7 +170,7 @@ export default function DisponibilidadMedico({
 
       {bloqueado && (
         <div className="px-5 pb-3">
-          <p className="text-xs text-[#D85A30]">
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#D85A30]">
             Tenés turnos programados para hoy. Podés activar consulta inmediata cuando los completes.
           </p>
         </div>
@@ -180,7 +180,7 @@ export default function DisponibilidadMedico({
         <div className="border-t border-gray-50 px-6 pb-6">
           <div className="mt-4 flex items-center gap-4">
             <div>
-              <label className="text-xs text-gray-400">Desde</label>
+              <label className="text-sm text-gray-400">Desde</label>
               <div className="mt-1 flex items-center gap-1">
                 <select
                   value={desdeH}
@@ -207,7 +207,7 @@ export default function DisponibilidadMedico({
             </div>
             <span className="mt-5 text-gray-300">—</span>
             <div>
-              <label className="text-xs text-gray-400">Hasta</label>
+              <label className="text-sm text-gray-400">Hasta</label>
               <div className="mt-1 flex items-center gap-1">
                 <select
                   value={hastaH}
@@ -237,7 +237,7 @@ export default function DisponibilidadMedico({
           {/* Duración y valor */}
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-gray-400">Duración</label>
+              <label className="block text-sm text-gray-400">Duración</label>
               <select value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value))} className={`mt-1 w-full ${selectClass}`} style={selectStyle}>
                 <option value={20}>20 min</option>
                 <option value={30}>30 min</option>
@@ -246,7 +246,7 @@ export default function DisponibilidadMedico({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400">Valor de consulta</label>
+              <label className="block text-sm text-gray-400">Valor de consulta</label>
               <div className="relative mt-1">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-gray-400">$</span>
                 <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${selectClass}`} style={selectStyle} />
@@ -254,7 +254,7 @@ export default function DisponibilidadMedico({
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-6 text-xs text-gray-500">
+          <div className="mt-3 flex items-center gap-6 text-sm text-gray-500">
             <span>
               Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracion} min c/u)
             </span>
@@ -267,7 +267,7 @@ export default function DisponibilidadMedico({
             <button
               onClick={handleGuardar}
               disabled={guardando}
-              className="rounded-lg bg-gray-100 px-4 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:opacity-50"
+              className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#178a64] disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Guardar"}
             </button>

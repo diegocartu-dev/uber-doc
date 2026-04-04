@@ -42,12 +42,12 @@ export default function HistorialInline({
 
   return (
     <div>
-      <button onClick={toggle} className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors">
+      <button onClick={toggle} className="text-base font-medium text-gray-500 hover:text-[#1D9E75] transition-colors">
         {abierto ? "Cerrar historial ×" : "Ver historial →"}
       </button>
 
       {abierto && (
-        <div className="mt-3 max-h-[280px] overflow-y-auto rounded-lg" style={{ border: "0.5px solid #e5e7eb" }}>
+        <div className="mt-3 max-h-[320px] overflow-y-auto rounded-lg" style={{ border: "0.5px solid #e5e7eb" }}>
           {items.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-gray-400">
               {cargado ? (tipo === "turno" ? "Sin turnos completados" : "Sin consultas completadas") : "Cargando..."}
@@ -57,12 +57,12 @@ export default function HistorialInline({
               {items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{item.paciente_nombre}</p>
-                    <p className="text-xs text-gray-400">{item.fecha}</p>
+                    <p className="text-base font-medium text-gray-900">{item.paciente_nombre}</p>
+                    <p className="text-sm text-gray-400">{item.fecha}</p>
                   </div>
                   <a
                     href={item.url}
-                    className="shrink-0 text-xs font-medium text-[#1D9E75] hover:underline"
+                    className="shrink-0 text-sm font-medium text-[#1D9E75] hover:underline"
                   >
                     Ver documentos
                   </a>
