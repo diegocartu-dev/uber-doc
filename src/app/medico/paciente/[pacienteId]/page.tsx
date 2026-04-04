@@ -129,15 +129,13 @@ export default async function FichaPacientePage({
   const consultasFinal = consultasData ?? [];
 
   // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
-  const { data: turnosData, error: turnosError } = await supabase
+  const { data: turnosData } = await supabase
     .from("turnos")
     .select("id, fecha, hora_inicio, estado, medico_id")
     .eq("medico_id", medico.id)
     .eq("paciente_id", pacienteId)
     .order("fecha", { ascending: false })
     .order("hora_inicio", { ascending: false });
-
-  console.log("DEBUG turnos ficha:", { medicoId: medico.id, pacienteId, turnosData, turnosError });
 
   const turnosFinal = turnosData ?? [];
 
