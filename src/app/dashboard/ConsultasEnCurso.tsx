@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TouchButton } from "@/components/TouchButton";
-
-const POLL_INTERVAL = 3000;
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Consulta = {
   id: string;
@@ -39,39 +38,11 @@ function tiempoTranscurrido(fecha: string): string {
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
-export default function ConsultasEnCurso({
-  consultas: consultasIniciales,
-  medicoId,
-}: {
-  consultas: Consulta[];
-  medicoId: string;
-}) {
+export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
+  const { enCurso: consultas } = useDashboardMedico();
   const router = useRouter();
-  const [consultas, setConsultas] = useState(consultasIniciales);
   const [creando, setCreando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const prevCountRef = useRef(consultasIniciales.length);
-
-  useEffect(() => {
-    setConsultas(consultasIniciales);
-  }, [consultasIniciales]);
-
-  // Polling cada 3s via API route — busca aceptada + en_curso
-  useEffect(() => {
-    async function fetchActivas() {
-      try {
-        const res = await fetch(`/api/consultas-activas?medicoId=${medicoId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data: Consulta[] = await res.json();
-        setConsultas(data);
-        prevCountRef.current = data.length;
-      } catch {}
-    }
-
-    fetchActivas();
-    const interval = setInterval(fetchActivas, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [medicoId]);
 
   async function handleIniciar(consultaId: string) {
     setCreando(consultaId);
@@ -91,11 +62,6 @@ export default function ConsultasEnCurso({
         return;
       }
 
-      setConsultas((prev) =>
-        prev.map((c) =>
-          c.id === consultaId ? { ...c, sala_video_url: data.url } : c
-        )
-      );
       setCreando(null);
       router.push(`/consulta/${consultaId}/video`);
     } catch {

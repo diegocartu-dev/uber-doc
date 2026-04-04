@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition, useRef } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { soundPacienteEsperando } from "@/lib/sounds";
-
-const POLL_INTERVAL = 3000;
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type TurnoEspera = {
   id: string;
@@ -27,60 +25,20 @@ function Contador({ desde }: { desde: number }) {
 }
 
 export default function TurnosEnEspera({
-  turnos: turnosIniciales,
   medicoId,
   hayEnCurso,
 }: {
-  turnos: TurnoEspera[];
   medicoId: string;
   hayEnCurso?: boolean;
 }) {
-  const [turnos, setTurnos] = useState(turnosIniciales);
+  const { turnosEspera: turnos } = useDashboardMedico();
   const [isPending, startTransition] = useTransition();
   const [notifPermiso, setNotifPermiso] = useState<string>("default");
-
-  useEffect(() => { setTurnos(turnosIniciales); }, [turnosIniciales]);
 
   // Check notif permission
   useEffect(() => {
     if (typeof Notification !== "undefined") setNotifPermiso(Notification.permission);
   }, []);
-
-  // Polling cada 3s via API route (evita CORS en Safari)
-  const prevCountRef = useRef(turnosIniciales.length);
-
-  useEffect(() => {
-    async function fetchEspera() {
-      try {
-        const res = await fetch(`/api/turnos-espera?medicoId=${medicoId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null }[] = await res.json();
-
-        setTurnos((prev) => {
-          return data.map((t) => {
-            const existente = prev.find((p) => p.id === t.id);
-            return { ...t, entradoEn: existente?.entradoEn ?? Date.now() };
-          });
-        });
-
-        if (data.length > prevCountRef.current) {
-          soundPacienteEsperando();
-        }
-        prevCountRef.current = data.length;
-      } catch {}
-    }
-
-    fetchEspera();
-    const interval = setInterval(fetchEspera, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [medicoId]);
-
-  // Badge en título cuando hay pacientes esperando
-  useEffect(() => {
-    if (turnos.length > 0) {
-      document.title = `(${turnos.length}) Docto — Médico`;
-    }
-  }, [turnos.length]);
 
   function handleIniciar(turnoId: string) {
     startTransition(async () => {

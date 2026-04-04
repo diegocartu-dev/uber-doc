@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { TouchButton } from "@/components/TouchButton";
-import { soundPacienteEsperando } from "@/lib/sounds";
-
-const POLL_INTERVAL = 3000;
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Consulta = {
   id: string;
@@ -43,47 +41,18 @@ function getInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export default function ConsultasPendientes({
-  consultas: consultasIniciales,
-  medicoId,
-}: {
-  consultas: Consulta[];
-  medicoId: string;
-}) {
-  const [consultas, setConsultas] = useState(consultasIniciales);
+export default function ConsultasPendientes({ medicoId }: { medicoId: string }) {
+  const { pendientes } = useDashboardMedico();
+  const [localRemoved, setLocalRemoved] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
-  const prevCountRef = useRef(consultasIniciales.length);
 
-  useEffect(() => {
-    setConsultas(consultasIniciales);
-  }, [consultasIniciales]);
-
-  // Polling cada 3s via API route (evita CORS en Safari)
-  useEffect(() => {
-    async function fetchPendientes() {
-      try {
-        const res = await fetch(`/api/consultas-pendientes?medicoId=${medicoId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data: Consulta[] = await res.json();
-
-        setConsultas(data);
-
-        if (data.length > prevCountRef.current) {
-          soundPacienteEsperando();
-        }
-        prevCountRef.current = data.length;
-      } catch {}
-    }
-
-    fetchPendientes();
-    const interval = setInterval(fetchPendientes, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [medicoId]);
+  // Filter out locally-accepted consultas until the next poll refreshes
+  const consultas = pendientes.filter((c) => !localRemoved.has(c.id));
 
   function handleAceptar(consultaId: string) {
     startTransition(async () => {
       await aceptarConsulta(consultaId);
-      setConsultas((prev) => prev.filter((c) => c.id !== consultaId));
+      setLocalRemoved((prev) => new Set(prev).add(consultaId));
     });
   }
 

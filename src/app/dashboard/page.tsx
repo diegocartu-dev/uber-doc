@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./LogoutButton";
 import DisponibilidadMedico from "./DisponibilidadMedico";
+import DashboardMedicoProvider from "./DashboardMedicoProvider";
 import ConsultasPendientes from "./ConsultasPendientes";
 import ConsultasEnCurso from "./ConsultasEnCurso";
 import TurnosEnEspera from "./TurnosEnEspera";
@@ -315,7 +316,6 @@ export default async function DashboardPage() {
 
         {/* Zona urgencia */}
         <TurnosEnEspera
-          turnos={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
           medicoId={medico.id}
           hayEnCurso={hayAlgoEnCurso}
         />
@@ -370,13 +370,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* Zona urgencia / contenido */}
-        <ConsultasEnCurso consultas={consultasEnCurso} medicoId={medico.id} />
+        <ConsultasEnCurso medicoId={medico.id} />
         {consultaInactiva ? (
           <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
             <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
           </div>
         ) : (
-          <ConsultasPendientes consultas={consultasPendientes} medicoId={medico.id} />
+          <ConsultasPendientes medicoId={medico.id} />
         )}
 
         {/* Pie */}
@@ -387,53 +387,60 @@ export default async function DashboardPage() {
     );
 
     return (
-      <div className="min-h-full bg-[#f8f9fa]">
-        {/* Topbar */}
-        <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-            <div className="flex items-center gap-5">
-              <span className="text-lg font-medium text-gray-900">Uber Doc</span>
-              <div className="flex items-center gap-1.5">
-                <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
-                <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+      <DashboardMedicoProvider
+        medicoId={medico.id}
+        initialPendientes={consultasPendientes}
+        initialEnCurso={consultasEnCurso}
+        initialTurnosEspera={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
+      >
+        <div className="min-h-full bg-[#f8f9fa]">
+          {/* Topbar */}
+          <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
+            <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+              <div className="flex items-center gap-5">
+                <span className="text-lg font-medium text-gray-900">Uber Doc</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
+                  <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-500">{fullName}</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
+                <LogoutButton />
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">{fullName}</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
-              <LogoutButton />
+          </nav>
+
+          <div className="mx-auto max-w-7xl px-6 py-6">
+            {/* Métricas full width */}
+            <MetricasMedico
+              medicoId={medico.id}
+              inicial={{
+                turnos: turnosHoy.length,
+                enEspera: turnosEsperaCompletos.length + consultasPendientes.length,
+                completadas: completadasHoy,
+                ingresos: ingresosHoy,
+              }}
+            />
+
+            {/* Dos hemisferios — desktop */}
+            <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2 lg:items-start">
+              {colTurnos}
+              {colConsulta}
+            </div>
+
+            {/* Mobile — urgencia primero */}
+            <div className="mt-6 space-y-8 lg:hidden">
+              {hayUrgenciaConsulta && !hayUrgenciaTurnos ? (
+                <>{colConsulta}{colTurnos}</>
+              ) : (
+                <>{colTurnos}{colConsulta}</>
+              )}
             </div>
           </div>
-        </nav>
-
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          {/* Métricas full width */}
-          <MetricasMedico
-            medicoId={medico.id}
-            inicial={{
-              turnos: turnosHoy.length,
-              enEspera: turnosEsperaCompletos.length + consultasPendientes.length,
-              completadas: completadasHoy,
-              ingresos: ingresosHoy,
-            }}
-          />
-
-          {/* Dos hemisferios — desktop */}
-          <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2 lg:items-start">
-            {colTurnos}
-            {colConsulta}
-          </div>
-
-          {/* Mobile — urgencia primero */}
-          <div className="mt-6 space-y-8 lg:hidden">
-            {hayUrgenciaConsulta && !hayUrgenciaTurnos ? (
-              <>{colConsulta}{colTurnos}</>
-            ) : (
-              <>{colTurnos}{colConsulta}</>
-            )}
-          </div>
         </div>
-      </div>
+      </DashboardMedicoProvider>
     );
   }
 
