@@ -50,7 +50,7 @@ export default function HistorialInline({
         <div className="mt-3 max-h-[280px] overflow-y-auto rounded-lg" style={{ border: "0.5px solid #e5e7eb" }}>
           {items.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-gray-400">
-              {cargado ? "Sin consultas completadas" : "Cargando..."}
+              {cargado ? (tipo === "turno" ? "Sin turnos completados" : "Sin consultas completadas") : "Cargando..."}
             </p>
           ) : (
             <div className="divide-y divide-gray-100">
