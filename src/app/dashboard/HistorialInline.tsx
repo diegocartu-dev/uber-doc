@@ -40,20 +40,27 @@ export default function HistorialInline({
     } catch {}
   }
 
+  const accentColor = tipo === "turno" ? "#378ADD" : "#1D9E75";
+
   return (
-    <div>
-      <button onClick={toggle} className={`text-base font-medium transition-colors ${tipo === "turno" ? "text-[#378ADD]/60 hover:text-[#378ADD]" : "text-[#1D9E75]/60 hover:text-[#1D9E75]"}`}>
+    <div className="w-full">
+      <button
+        onClick={toggle}
+        className="text-base font-medium transition-colors"
+        style={{ color: `${accentColor}99`, }}
+      >
         {abierto ? "Cerrar historial ×" : (tipo === "turno" ? "Historial de turnos →" : "Historial de consultas →")}
       </button>
 
       {abierto && (
-        <div className={`mt-3 max-h-[320px] overflow-y-auto rounded-lg border-l-[3px] ${tipo === "turno" ? "border-l-[#378ADD]" : "border-l-[#1D9E75]"}`} style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}>
-          {/* Header del historial */}
-          <div className={`px-4 py-2.5 ${tipo === "turno" ? "bg-[#378ADD]/5" : "bg-[#1D9E75]/5"}`}>
-            <p className={`text-xs font-medium tracking-wide uppercase ${tipo === "turno" ? "text-[#378ADD]" : "text-[#1D9E75]"}`}>
-              {tipo === "turno" ? "Turnos completados" : "Consultas completadas"}
+        <div className="mt-3 w-full max-h-[320px] overflow-y-auto rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb", borderLeft: `3px solid ${accentColor}` }}>
+          {/* Header con identidad de tipo */}
+          <div className="px-4 py-2.5" style={{ borderBottom: "0.5px solid #e5e7eb", background: `${accentColor}08` }}>
+            <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: accentColor }}>
+              {tipo === "turno" ? "📅 Historial de turnos" : "💬 Historial de consultas"}
             </p>
           </div>
+
           {items.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-gray-400">
               {cargado ? (tipo === "turno" ? "Sin turnos completados" : "Sin consultas completadas") : "Cargando..."}
@@ -68,7 +75,8 @@ export default function HistorialInline({
                   </div>
                   <a
                     href={`${item.url}?desde=${tipo}`}
-                    className={`shrink-0 text-sm font-medium hover:underline ${tipo === "turno" ? "text-[#378ADD]" : "text-[#1D9E75]"}`}
+                    className="shrink-0 text-sm font-medium hover:underline"
+                    style={{ color: accentColor }}
                   >
                     Ver documentos
                   </a>

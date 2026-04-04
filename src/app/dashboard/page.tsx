@@ -347,8 +347,8 @@ export default async function DashboardPage() {
         {/* Lista del día */}
         <AgendaHoy turnos={turnosHoy} />
 
-        {/* Pie */}
-        <div className={footerClass + " justify-end"}>
+        {/* Pie — historial full-width */}
+        <div className="border-t border-gray-100 pt-3 mt-4">
           <HistorialInline medicoId={medico.id} tipo="turno" />
         </div>
       </div>
@@ -388,8 +388,8 @@ export default async function DashboardPage() {
           <ConsultasPendientes medicoId={medico.id} />
         )}
 
-        {/* Pie */}
-        <div className={footerClass + " justify-end"}>
+        {/* Pie — historial full-width */}
+        <div className="border-t border-gray-100 pt-3 mt-4">
           <HistorialInline medicoId={medico.id} tipo="consulta" />
         </div>
       </div>

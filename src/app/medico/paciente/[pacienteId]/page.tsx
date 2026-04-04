@@ -202,6 +202,154 @@ export default async function FichaPacientePage({
     docsPorConsulta.get(doc.consulta_id)!.push(doc);
   }
 
+  /* ── Sección de consultas ── */
+  const seccionConsultas = (
+    <div key="consultas" className="mt-6">
+      <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(29,158,117,0.06)", borderLeft: "4px solid #1D9E75" }}>
+        <span className="text-base">💬</span>
+        <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#1D9E75" }}>
+          Historial de consultas · {consultasFinal.length}
+        </p>
+      </div>
+
+      {consultasFinal.length === 0 ? (
+        <p className="mt-4 text-sm text-gray-500">No hay consultas registradas con este paciente.</p>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {consultasFinal.map((c) => {
+            const docs = docsPorConsulta.get(c.id) ?? [];
+            return (
+              <div
+                key={c.id}
+                className="rounded-xl bg-white p-5"
+                style={{ border: "0.5px solid #e5e7eb", borderLeft: "4px solid #1D9E75" }}
+              >
+                {/* Consulta header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{c.especialidad}</p>
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(29,158,117,0.10)", color: "#1D9E75" }}>
+                        Consulta inmediata
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {formatFecha(c.created_at)} — {formatHora(c.created_at)} hs
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[c.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                    {estadoLabel[c.estado] ?? c.estado}
+                  </span>
+                </div>
+
+                {/* Motivo */}
+                {c.motivo_consulta && (
+                  <p className="mt-3 text-sm text-gray-600">{c.motivo_consulta}</p>
+                )}
+
+                {/* Síntomas */}
+                {c.sintomas && c.sintomas.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {c.sintomas.map((s: string) => (
+                      <span key={s} className="rounded-lg bg-gray-50 px-2 py-0.5 text-xs text-gray-500" style={{ border: "0.5px solid #e5e7eb" }}>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Documentos */}
+                {docs.length > 0 && (
+                  <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
+                    <p className="text-xs text-gray-400">Documentos</p>
+                    <div className="mt-2 space-y-2">
+                      {docs.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
+                            <span className="text-xs font-medium text-gray-700">
+                              {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
+                            </span>
+                          </div>
+                          <DescargarPDF documento={doc} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  /* ── Sección de turnos ── */
+  const seccionTurnos = (
+    <div key="turnos" className="mt-8">
+      <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(55,138,221,0.06)", borderLeft: "4px solid #378ADD" }}>
+        <span className="text-base">📅</span>
+        <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#378ADD" }}>
+          Historial de turnos · {turnosFinal.length}
+        </p>
+      </div>
+
+      {turnosFinal.length === 0 ? (
+        <p className="mt-4 text-sm text-gray-500">No hay turnos registrados con este paciente.</p>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {turnosFinal.map((t) => {
+            const docs = docsPorTurno.get(t.id) ?? [];
+            return (
+              <div
+                key={t.id}
+                className="rounded-xl bg-white p-5"
+                style={{ border: "0.5px solid #e5e7eb", borderLeft: "4px solid #378ADD" }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{medico.especialidad}</p>
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(55,138,221,0.10)", color: "#378ADD" }}>
+                        Turno programado
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {formatFecha(t.fecha + "T12:00:00")} — {t.hora_inicio.slice(0, 5)} hs
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[t.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                    {estadoLabel[t.estado] ?? t.estado}
+                  </span>
+                </div>
+
+                {docs.length > 0 && (
+                  <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
+                    <p className="text-xs text-gray-400">Documentos</p>
+                    <div className="mt-2 space-y-2">
+                      {docs.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
+                            <span className="text-xs font-medium text-gray-700">
+                              {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
+                            </span>
+                          </div>
+                          <DescargarPDF documento={doc} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
@@ -257,136 +405,10 @@ export default async function FichaPacientePage({
         </div>
 
         {/* Secciones de historial — orden según origen */}
-        {(desde === "turno" ? ["turnos", "consultas"] : ["consultas", "turnos"]).map((seccion) =>
-          seccion === "consultas" ? (
-            <div key="consultas" className="mt-6">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1D9E75]" />
-                <p className="text-sm font-medium tracking-wide text-[#1D9E75]">
-                  HISTORIAL DE CONSULTAS · {consultasFinal.length}
-                </p>
-              </div>
-
-              {consultasFinal.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">No hay consultas registradas con este paciente.</p>
-              ) : (
-                <div className="mt-3 space-y-4">
-                  {consultasFinal.map((c) => {
-                    const docs = docsPorConsulta.get(c.id) ?? [];
-                    return (
-                      <div
-                        key={c.id}
-                        className="rounded-xl border-l-[3px] border-l-[#1D9E75] bg-white p-5"
-                        style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{c.especialidad}</p>
-                            <p className="mt-0.5 text-xs text-gray-500">
-                              {formatFecha(c.created_at)} — {formatHora(c.created_at)} hs
-                            </p>
-                          </div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[c.estado] ?? "bg-gray-100 text-gray-600"}`}>
-                            {estadoLabel[c.estado] ?? c.estado}
-                          </span>
-                        </div>
-
-                        {c.motivo_consulta && (
-                          <p className="mt-3 text-sm text-gray-600">{c.motivo_consulta}</p>
-                        )}
-
-                        {c.sintomas && c.sintomas.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {c.sintomas.map((s: string) => (
-                              <span key={s} className="rounded-lg bg-gray-50 px-2 py-0.5 text-xs text-gray-500" style={{ border: "0.5px solid #e5e7eb" }}>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {docs.length > 0 && (
-                          <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
-                            <p className="text-xs text-gray-400">Documentos</p>
-                            <div className="mt-2 space-y-2">
-                              {docs.map((doc) => (
-                                <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
-                                    <span className="text-xs font-medium text-gray-700">
-                                      {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
-                                    </span>
-                                  </div>
-                                  <DescargarPDF documento={doc} />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div key="turnos" className="mt-6">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#378ADD]" />
-                <p className="text-sm font-medium tracking-wide text-[#378ADD]">
-                  HISTORIAL DE TURNOS · {turnosFinal.length}
-                </p>
-              </div>
-
-              {turnosFinal.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">No hay turnos registrados con este paciente.</p>
-              ) : (
-                <div className="mt-3 space-y-4">
-                  {turnosFinal.map((t) => {
-                    const docs = docsPorTurno.get(t.id) ?? [];
-                    return (
-                      <div
-                        key={t.id}
-                        className="rounded-xl border-l-[3px] border-l-[#378ADD] bg-white p-5"
-                        style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{medico.especialidad}</p>
-                            <p className="mt-0.5 text-xs text-gray-500">
-                              {formatFecha(t.fecha + "T12:00:00")} — {t.hora_inicio.slice(0, 5)} hs
-                            </p>
-                          </div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[t.estado] ?? "bg-gray-100 text-gray-600"}`}>
-                            {estadoLabel[t.estado] ?? t.estado}
-                          </span>
-                        </div>
-
-                        {docs.length > 0 && (
-                          <div className="mt-4 border-t pt-3" style={{ borderColor: "#e5e7eb" }}>
-                            <p className="text-xs text-gray-400">Documentos</p>
-                            <div className="mt-2 space-y-2">
-                              {docs.map((doc) => (
-                                <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
-                                    <span className="text-xs font-medium text-gray-700">
-                                      {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
-                                    </span>
-                                  </div>
-                                  <DescargarPDF documento={doc} />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )
+        {desde === "turno" ? (
+          <>{seccionTurnos}{seccionConsultas}</>
+        ) : (
+          <>{seccionConsultas}{seccionTurnos}</>
         )}
       </main>
     </div>
