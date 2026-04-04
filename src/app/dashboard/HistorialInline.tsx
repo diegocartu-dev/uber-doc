@@ -42,14 +42,20 @@ export default function HistorialInline({
 
   return (
     <div>
-      <button onClick={toggle} className="text-base font-medium text-gray-500 hover:text-[#1D9E75] transition-colors">
-        {abierto ? "Cerrar historial ×" : "Ver historial →"}
+      <button onClick={toggle} className={`text-base font-medium transition-colors ${tipo === "turno" ? "text-[#378ADD]/60 hover:text-[#378ADD]" : "text-[#1D9E75]/60 hover:text-[#1D9E75]"}`}>
+        {abierto ? "Cerrar historial ×" : (tipo === "turno" ? "Historial de turnos →" : "Historial de consultas →")}
       </button>
 
       {abierto && (
-        <div className="mt-3 max-h-[320px] overflow-y-auto rounded-lg" style={{ border: "0.5px solid #e5e7eb" }}>
+        <div className={`mt-3 max-h-[320px] overflow-y-auto rounded-lg border-l-[3px] ${tipo === "turno" ? "border-l-[#378ADD]" : "border-l-[#1D9E75]"}`} style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}>
+          {/* Header del historial */}
+          <div className={`px-4 py-2.5 ${tipo === "turno" ? "bg-[#378ADD]/5" : "bg-[#1D9E75]/5"}`}>
+            <p className={`text-xs font-medium tracking-wide uppercase ${tipo === "turno" ? "text-[#378ADD]" : "text-[#1D9E75]"}`}>
+              {tipo === "turno" ? "Turnos completados" : "Consultas completadas"}
+            </p>
+          </div>
           {items.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-gray-400">
+            <p className="px-4 py-6 text-center text-sm text-gray-400">
               {cargado ? (tipo === "turno" ? "Sin turnos completados" : "Sin consultas completadas") : "Cargando..."}
             </p>
           ) : (
@@ -61,8 +67,8 @@ export default function HistorialInline({
                     <p className="text-sm text-gray-400">{item.fecha}</p>
                   </div>
                   <a
-                    href={item.url}
-                    className="shrink-0 text-sm font-medium text-[#1D9E75] hover:underline"
+                    href={`${item.url}?desde=${tipo}`}
+                    className={`shrink-0 text-sm font-medium hover:underline ${tipo === "turno" ? "text-[#378ADD]" : "text-[#1D9E75]"}`}
                   >
                     Ver documentos
                   </a>
