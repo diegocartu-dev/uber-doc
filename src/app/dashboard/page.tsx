@@ -353,9 +353,24 @@ export default async function DashboardPage() {
     );
 
     const colConsulta = (
-      <div className={`${hemiPad} ${consultaInactiva ? "opacity-60" : ""}`} style={hemiStyle}>
-        {/* Título */}
-        <h2 className={titleClass}>Consulta inmediata</h2>
+      <div
+        className={`space-y-4 rounded-xl p-5 ${consultaInactiva ? "bg-gray-50" : ""}`}
+        style={{
+          border: "0.5px solid #e5e7eb",
+          borderLeft: `4px solid ${consultaInactiva ? "#888780" : "#1D9E75"}`,
+          background: consultaInactiva ? undefined : "rgba(29, 158, 117, 0.06)",
+        }}
+      >
+        {/* Título + estado inline */}
+        <div className="flex items-center justify-between">
+          <h2 className={titleClass}>Consulta inmediata</h2>
+          <span
+            className="text-xs font-semibold"
+            style={{ color: consultaInactiva ? "#888780" : "#1D9E75" }}
+          >
+            {consultaInactiva ? "Inactiva" : "Activa"}
+          </span>
+        </div>
 
         {/* Sub-métrica / estado + toggle */}
         <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
@@ -377,7 +392,7 @@ export default async function DashboardPage() {
             <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
           </div>
         ) : (
-          <ConsultasPendientes medicoId={medico.id} />
+          <ConsultasPendientes medicoId={medico.id} activa />
         )}
 
         {/* Pie */}
@@ -397,21 +412,28 @@ export default async function DashboardPage() {
         <div className="min-h-full bg-[#f8f9fa]">
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-            <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-              <div className="flex items-center gap-5">
-                <span className="text-lg font-medium text-gray-900">Docto</span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
-                  <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+            <div className="mx-auto max-w-7xl px-4 lg:px-6">
+              {/* Linea 1 */}
+              <div className="flex h-14 items-center justify-between">
+                <div className="flex items-center gap-4 lg:gap-5">
+                  <span className="text-lg font-medium text-gray-900">Docto</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
+                    <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 lg:gap-4">
+                  <Link href="/medico/nova" className="text-sm font-medium text-[#1D9E75] hover:text-[#178a64] transition-colors">
+                    Nova
+                  </Link>
+                  <span className="hidden text-sm text-gray-500 lg:inline">{fullName}</span>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
+                  <LogoutButton />
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <Link href="/medico/nova" className="hidden text-sm font-medium text-[#1D9E75] hover:text-[#178a64] transition-colors lg:inline-block">
-                  🤖 Nova
-                </Link>
-                <span className="text-sm text-gray-500">{fullName}</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
-                <LogoutButton />
+              {/* Linea 2 — solo mobile */}
+              <div className="flex h-8 items-center lg:hidden">
+                <p className="truncate text-sm text-gray-600">{fullName}</p>
               </div>
             </div>
           </nav>

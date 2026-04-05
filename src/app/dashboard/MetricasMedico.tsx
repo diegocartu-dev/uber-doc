@@ -47,7 +47,7 @@ export default function MetricasMedico({
             <button
               key={p}
               onClick={() => cambiar(p)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`rounded-md px-3.5 py-2 text-xs font-medium transition-all ${
                 periodo === p
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
@@ -60,7 +60,7 @@ export default function MetricasMedico({
       </div>
       <div className={`grid grid-cols-2 gap-3 lg:grid-cols-4 transition-opacity ${isPending ? "opacity-50" : ""}`}>
         {items.map((m) => (
-          <div key={m.label} className="rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
+          <div key={m.label} className="rounded-xl bg-white p-4 min-h-[80px]" style={{ border: "0.5px solid #e5e7eb" }}>
             <p className="text-[11px] font-medium tracking-wide text-gray-400">{m.label.toUpperCase()}</p>
             <p className="mt-1.5 text-2xl font-semibold" style={{ color: m.color }}>{m.value}</p>
           </div>
