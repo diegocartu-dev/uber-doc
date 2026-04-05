@@ -140,7 +140,7 @@ function TriageContent() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🩺</span>
-            <span className="text-xl font-bold text-gray-900">Uber Doc</span>
+            <span className="text-xl font-bold text-gray-900">Docto</span>
           </div>
           <Link
             href="/clinica"
@@ -205,7 +205,7 @@ function TriageContent() {
                 proporcionados durante el registro son verídicos, completos y
                 actualizados. El uso de la plataforma por parte de menores de
                 edad requiere el consentimiento y supervisión de un
-                representante legal. Uber Doc se reserva el derecho de solicitar
+                representante legal. Docto se reserva el derecho de solicitar
                 documentación que acredite la identidad del usuario en cualquier
                 momento.
               </p>
@@ -218,7 +218,7 @@ function TriageContent() {
                 en el artículo 292 y concordantes del Código Penal de la República
                 Argentina. Cualquier intento de utilizar datos de terceros sin
                 autorización, falsificar documentación o hacerse pasar por otra
-                persona será denunciado ante las autoridades competentes. Uber Doc
+                persona será denunciado ante las autoridades competentes. Docto
                 colaborará con las fuerzas de seguridad y la justicia en toda
                 investigación relacionada con suplantación de identidad.
               </p>
@@ -227,7 +227,7 @@ function TriageContent() {
                 3. Limitaciones del servicio de telemedicina
               </h3>
               <p className="mb-3">
-                El servicio de telemedicina ofrecido a través de Uber Doc tiene
+                El servicio de telemedicina ofrecido a través de Docto tiene
                 limitaciones inherentes a la atención médica a distancia. El
                 profesional médico no puede realizar examen físico directo,
                 procedimientos invasivos ni diagnósticos que requieran estudios
@@ -239,12 +239,12 @@ function TriageContent() {
               </p>
 
               <h3 className="mb-2 mt-4 font-semibold text-gray-900">
-                4. Servicio de emergencias — Uber Doc NO es un servicio de
+                4. Servicio de emergencias — Docto NO es un servicio de
                 emergencias
               </h3>
               <p className="mb-3">
                 <strong>
-                  Uber Doc NO es un servicio de emergencias médicas.
+                  Docto NO es un servicio de emergencias médicas.
                 </strong>{" "}
                 Ante una emergencia médica, el usuario debe comunicarse
                 inmediatamente con el servicio de emergencias médicas (SAME) al
@@ -276,7 +276,7 @@ function TriageContent() {
                 6. Protección de datos personales (Ley 25.326)
               </h3>
               <p className="mb-3">
-                Uber Doc cumple con la Ley 25.326 de Protección de Datos
+                Docto cumple con la Ley 25.326 de Protección de Datos
                 Personales de la República Argentina. Los datos personales y de
                 salud recopilados serán tratados con estricta confidencialidad y
                 utilizados exclusivamente para la prestación del servicio de
@@ -307,25 +307,25 @@ function TriageContent() {
                 8. Responsabilidad del médico
               </h3>
               <p className="mb-3">
-                Los profesionales médicos que utilizan Uber Doc son profesionales
+                Los profesionales médicos que utilizan Docto son profesionales
                 independientes debidamente matriculados. Cada médico es
                 responsable de sus actos profesionales, diagnósticos, indicaciones
                 y prescripciones de conformidad con la Ley 17.132 de Ejercicio de
-                la Medicina. Uber Doc no ejerce ningún tipo de dirección,
+                la Medicina. Docto no ejerce ningún tipo de dirección,
                 supervisión ni control sobre el criterio médico de los
                 profesionales.
               </p>
 
               <h3 className="mb-2 mt-4 font-semibold text-gray-900">
-                9. Responsabilidad de Uber Doc como plataforma intermediaria
+                9. Responsabilidad de Docto como plataforma intermediaria
               </h3>
               <p className="mb-3">
-                Uber Doc actúa exclusivamente como plataforma tecnológica
+                Docto actúa exclusivamente como plataforma tecnológica
                 intermediaria que facilita la conexión entre pacientes y
-                profesionales médicos. Uber Doc no presta servicios médicos, no
+                profesionales médicos. Docto no presta servicios médicos, no
                 emite diagnósticos ni prescripciones, y no es responsable por los
                 actos profesionales de los médicos registrados en la plataforma.
-                Uber Doc garantiza el correcto funcionamiento técnico de la
+                Docto garantiza el correcto funcionamiento técnico de la
                 plataforma y la seguridad de los datos transmitidos.
               </p>
 
@@ -442,7 +442,7 @@ function TriageContent() {
                   </p>
                 </div>
                 <p className="mt-3 text-xs text-red-600">
-                  Uber Doc no es un servicio de emergencias. No podemos
+                  Docto no es un servicio de emergencias. No podemos
                   continuar con la consulta virtual si presentás estos síntomas.
                 </p>
               </div>
@@ -552,7 +552,7 @@ function TriageContent() {
             </div>
 
             <p className="mt-4 text-sm leading-relaxed text-gray-700">
-              Uber Doc <strong>NO</strong> es un servicio de emergencias
+              Docto <strong>NO</strong> es un servicio de emergencias
               médicas. Si tu situación es urgente o sentís que empeora, no
               esperes — llamá al <strong>107</strong> (SAME) o al{" "}
               <strong>911</strong> de inmediato.

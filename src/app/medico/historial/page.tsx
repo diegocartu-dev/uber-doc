@@ -58,7 +58,7 @@ export default async function HistorialPage() {
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
-            <a href="/dashboard" className="text-lg font-medium text-gray-900">Uber Doc</a>
+            <a href="/dashboard" className="text-lg font-medium text-gray-900">Docto</a>
             <span className="text-lg text-gray-300">/</span>
             <span className="text-lg font-medium text-gray-500">Historial</span>
           </div>

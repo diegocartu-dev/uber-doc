@@ -6,11 +6,11 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
           <span className="text-3xl">🩺</span>
-          <span className="text-2xl font-bold text-gray-900">Uber Doc</span>
+          <span className="text-2xl font-bold text-gray-900">Docto</span>
         </Link>
 
         <h2 className="text-center text-xl font-medium text-gray-900">
-          ¿Cómo querés usar Uber Doc?
+          ¿Cómo querés usar Docto?
         </h2>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">

@@ -115,7 +115,7 @@ export default function RegistroMedicoPage() {
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
           <span className="text-3xl">🩺</span>
-          <span className="text-2xl font-bold text-gray-900">Uber Doc</span>
+          <span className="text-2xl font-bold text-gray-900">Docto</span>
         </Link>
 
         <h2 className="text-center text-xl font-semibold text-gray-900">
@@ -401,7 +401,7 @@ export default function RegistroMedicoPage() {
                 >
                   términos y condiciones
                 </button>{" "}
-                de Uber Doc
+                de Docto
               </span>
             </label>
 
@@ -452,7 +452,7 @@ export default function RegistroMedicoPage() {
               </div>
               <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
                 <h3 className="font-semibold">1. Aceptación de términos de uso</h3>
-                <p className="mt-1">Al registrarse como profesional médico en Uber Doc, usted acepta estos términos en su totalidad. La plataforma actúa como intermediaria tecnológica entre profesionales de la salud y pacientes.</p>
+                <p className="mt-1">Al registrarse como profesional médico en Docto, usted acepta estos términos en su totalidad. La plataforma actúa como intermediaria tecnológica entre profesionales de la salud y pacientes.</p>
 
                 <h3 className="mt-3 font-semibold">2. Protección de datos médicos (Ley 25.326)</h3>
                 <p className="mt-1">Los datos de los pacientes atendidos a través de la plataforma son tratados conforme a la Ley 25.326 de Protección de Datos Personales. Usted se compromete a mantener la confidencialidad de la información médica y a no compartirla con terceros no autorizados.</p>
@@ -460,8 +460,8 @@ export default function RegistroMedicoPage() {
                 <h3 className="mt-3 font-semibold">3. Ejercicio de la telemedicina</h3>
                 <p className="mt-1">Las consultas se realizan conforme a las normativas vigentes de telemedicina en Argentina. El profesional es responsable de evaluar si la teleconsulta es apropiada para cada caso y derivar a atención presencial cuando lo considere necesario, conforme a la Ley 26.529 de Derechos del Paciente.</p>
 
-                <h3 className="mt-3 font-semibold">4. Responsabilidad de Uber Doc</h3>
-                <p className="mt-1">Uber Doc actúa exclusivamente como plataforma tecnológica intermediaria. No ejerce dirección, supervisión ni control sobre el criterio médico de los profesionales. Cada médico es responsable de sus actos profesionales conforme a la Ley 17.132.</p>
+                <h3 className="mt-3 font-semibold">4. Responsabilidad de Docto</h3>
+                <p className="mt-1">Docto actúa exclusivamente como plataforma tecnológica intermediaria. No ejerce dirección, supervisión ni control sobre el criterio médico de los profesionales. Cada médico es responsable de sus actos profesionales conforme a la Ley 17.132.</p>
 
                 <h3 className="mt-3 font-semibold">5. Política de privacidad</h3>
                 <p className="mt-1">Los datos profesionales proporcionados se utilizan para la prestación del servicio y la verificación de credenciales. La información de consultas se almacena de forma segura y encriptada.</p>
@@ -501,7 +501,7 @@ export default function RegistroMedicoPage() {
 
                 <p className="mt-2"><strong>3.</strong> Se compromete a ejercer la telemedicina dentro de los límites de su especialidad y competencia, derivando a atención presencial cuando la situación clínica lo requiera.</p>
 
-                <p className="mt-2"><strong>4.</strong> Uber Doc no interviene en las decisiones médicas del profesional ni asume responsabilidad por las mismas. La plataforma actúa exclusivamente como intermediaria tecnológica.</p>
+                <p className="mt-2"><strong>4.</strong> Docto no interviene en las decisiones médicas del profesional ni asume responsabilidad por las mismas. La plataforma actúa exclusivamente como intermediaria tecnológica.</p>
 
                 <p className="mt-2"><strong>5.</strong> Se compromete a mantener actualizada su información profesional y a informar inmediatamente cualquier cambio en el estado de su matrícula.</p>
               </div>

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Uber Doc - Telemedicina",
+  title: "Docto - Telemedicina",
   description: "Tu doctor, a un click de distancia. Consultas médicas online por videollamada, chat y recetas digitales.",
 };
 
