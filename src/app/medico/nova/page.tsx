@@ -89,6 +89,7 @@ export default function NovaChat() {
   const [medicoId, setMedicoId] = useState<string | null>(null);
   const [hablando, setHablando] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioDesbloqueado = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
@@ -265,6 +266,24 @@ export default function NovaChat() {
 
   // ── TTS ──
 
+  // Desbloquear audio en el contexto de gesto del usuario (click/touch)
+  const desbloquearAudio = useCallback(() => {
+    if (audioDesbloqueado.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    // Reproducir silencio para desbloquear autoplay en iOS/Safari
+    audio.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYZN3kSiAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYZN3kSiAAAAAAAAAAAAAAAAAAAA";
+    audio.volume = 0;
+    audio.play().then(() => {
+      audio.pause();
+      audio.volume = 1;
+      audio.currentTime = 0;
+      audioDesbloqueado.current = true;
+    }).catch(() => {
+      // No se pudo desbloquear — se intentará de nuevo en el próximo gesto
+    });
+  }, []);
+
   const reproducirTTS = useCallback(async (texto: string) => {
     try {
       const res = await fetch("/api/nova/tts", {
@@ -277,31 +296,44 @@ export default function NovaChat() {
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      // Limpiar URL anterior si existe
+      const urlAnterior = audio.src;
 
       audio.onplay = () => setHablando(true);
       audio.onended = () => {
         setHablando(false);
         URL.revokeObjectURL(url);
-        audioRef.current = null;
       };
       audio.onerror = () => {
         setHablando(false);
         URL.revokeObjectURL(url);
-        audioRef.current = null;
       };
 
-      audio.play();
+      audio.src = url;
+      audio.volume = 1;
+      await audio.play().catch(() => {
+        // Autoplay bloqueado — fallback silencioso
+        setHablando(false);
+        URL.revokeObjectURL(url);
+      });
+
+      // Limpiar URL anterior
+      if (urlAnterior && urlAnterior.startsWith("blob:")) {
+        URL.revokeObjectURL(urlAnterior);
+      }
     } catch {
       // TTS falló silenciosamente
     }
   }, []);
 
   const detenerAudio = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
     }
     setHablando(false);
   }, []);
@@ -385,6 +417,7 @@ export default function NovaChat() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      desbloquearAudio();
       if (dictando) detenerDictado();
       enviarMensaje(input);
     }
@@ -547,6 +580,7 @@ export default function NovaChat() {
           {/* Send */}
           <button
             onClick={() => {
+              desbloquearAudio();
               if (dictando) detenerDictado();
               enviarMensaje(input);
             }}
@@ -561,6 +595,9 @@ export default function NovaChat() {
           </button>
         </div>
       </div>
+
+      {/* Audio persistente para TTS (desbloqueo mobile) */}
+      <audio ref={audioRef} playsInline />
 
       {/* ── Styles ── */}
       <style jsx>{`
