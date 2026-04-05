@@ -13,6 +13,8 @@ import AgendaHoy from "./AgendaHoy";
 import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
+import NovaWidget from "./NovaWidget";
+import NovaFab from "./NovaFab";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -414,6 +416,9 @@ export default async function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
+                <Link href="/medico/nova" className="hidden text-sm font-medium text-[#1D9E75] hover:text-[#178a64] transition-colors lg:inline-block">
+                  🤖 Nova
+                </Link>
                 <span className="text-base text-gray-600">{fullName}</span>
                 <div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium ${medico.disponible ? "bg-[#1D9E75]/10 text-[#1D9E75]" : "bg-gray-100 text-gray-600"}`}>{initials}</div>
                 <LogoutButton />
@@ -422,6 +427,12 @@ export default async function DashboardPage() {
           </nav>
 
           <div className="mx-auto max-w-7xl px-6 py-6">
+            {/* Nova widget */}
+            <NovaWidget
+              nombreMedico={fullName}
+              turnosHoy={turnosHoy.length}
+            />
+
             {/* Métricas full width */}
             <MetricasMedico
               medicoId={medico.id}
@@ -448,6 +459,7 @@ export default async function DashboardPage() {
               )}
             </div>
           </div>
+          <NovaFab />
         </div>
       </DashboardMedicoProvider>
     );
