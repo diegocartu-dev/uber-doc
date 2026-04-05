@@ -142,8 +142,11 @@ export default function DisponibilidadMedico({
         className="flex w-full cursor-pointer items-center justify-between px-5 py-3 outline-none"
       >
         <div className="flex items-center gap-3">
-          <span className={`text-sm font-medium ${activo ? "text-[#1D9E75]" : "text-gray-500"}`}>
-            {activo ? "Activa" : "Inactiva"}
+          <span
+            className="text-xs font-semibold"
+            style={{ color: activo && !bloqueado ? "#1D9E75" : "#888780" }}
+          >
+            {activo && !bloqueado ? "Activa" : "Inactiva"}
           </span>
           <button
             type="button"

@@ -41,7 +41,7 @@ function getInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export default function ConsultasPendientes({ medicoId }: { medicoId: string }) {
+export default function ConsultasPendientes({ medicoId, activa }: { medicoId: string; activa?: boolean }) {
   const { pendientes } = useDashboardMedico();
   const [localRemoved, setLocalRemoved] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -57,8 +57,16 @@ export default function ConsultasPendientes({ medicoId }: { medicoId: string }) 
   }
 
   if (consultas.length === 0) return (
-    <div className="rounded-xl bg-gray-50 py-8 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
-      <p className="text-sm text-gray-400">Sin pacientes en espera</p>
+    <div
+      className="rounded-xl px-5 py-8 text-center"
+      style={activa
+        ? { background: "rgba(29, 158, 117, 0.04)", border: "0.5px solid #e5e7eb" }
+        : { border: "0.5px solid #e5e7eb" }
+      }
+    >
+      <p className={`text-sm ${activa ? "text-[#1D9E75] font-medium" : "text-gray-400"}`}>
+        {activa ? "Disponible para consultas" : "Sin pacientes en espera"}
+      </p>
     </div>
   );
 

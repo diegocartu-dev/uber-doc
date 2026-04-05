@@ -97,37 +97,46 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
 
       {/* Lista de turnos */}
       <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-        <p className="text-sm font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
-        <div className="mt-3 space-y-1">
-          {turnos.map((t) => {
-            const config = estadoConfig[t.estado] ?? estadoConfig.confirmado;
-            const esAnimado = t.estado === "en_espera";
-            return (
-              <div
-                key={t.id}
-                className="flex items-center justify-between rounded-lg p-3"
-                style={{ background: config.bg }}
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`inline-block h-2.5 w-2.5 rounded-full ${esAnimado ? "animate-pulse" : ""}`}
-                    style={{ background: config.dot }}
-                  />
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: t.estado === "completado" ? "#d1d5db" : "#1a1a1a" }}>
-                      {t.hora_inicio.slice(0, 5)} — {t.hora_fin.slice(0, 5)}
-                    </p>
-                    <p className="text-sm" style={{ color: config.text }}>
-                      {t.paciente_nombre}
-                    </p>
+        <p className="text-xs font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
+        <div className="relative">
+          <div className="mt-3 max-h-[280px] space-y-1 overflow-y-auto lg:max-h-none lg:overflow-visible">
+            {turnos.map((t) => {
+              const config = estadoConfig[t.estado] ?? estadoConfig.confirmado;
+              const esAnimado = t.estado === "en_espera";
+              return (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between rounded-lg p-2.5"
+                  style={{ background: config.bg }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${esAnimado ? "animate-pulse" : ""}`}
+                      style={{ background: config.dot }}
+                    />
+                    <div>
+                      <p className="text-[13px] font-medium" style={{ color: t.estado === "completado" ? "#d1d5db" : "#1a1a1a" }}>
+                        {t.hora_inicio.slice(0, 5)} — {t.hora_fin.slice(0, 5)}
+                      </p>
+                      <p className="text-[12px]" style={{ color: config.text }}>
+                        {t.paciente_nombre}
+                      </p>
+                    </div>
                   </div>
+                  <span className="text-[11px] font-medium" style={{ color: config.text }}>
+                    {config.label}
+                  </span>
                 </div>
-                <span className="text-xs font-medium" style={{ color: config.text }}>
-                  {config.label}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          {/* Gradient fade — solo visible en mobile cuando hay suficientes turnos */}
+          {turnos.length >= 5 && (
+            <div
+              className="pointer-events-none sticky bottom-0 h-10 lg:hidden"
+              style={{ background: "linear-gradient(transparent, white)", marginTop: "-40px" }}
+            />
+          )}
         </div>
       </div>
     </div>
