@@ -50,6 +50,22 @@ export async function POST(req: NextRequest) {
     // Usar admin client para bypass RLS en mutaciones
     const supabase = createAdminClient();
 
+    // Lookup medicos.id desde auth user_id (turnos FK apunta a medicos.id, no a auth.users.id)
+    const { data: medico, error: medicoErr } = await supabase
+      .from("medicos")
+      .select("id")
+      .eq("user_id", medico_id)
+      .single();
+
+    if (medicoErr || !medico) {
+      return NextResponse.json(
+        { exito: false, mensaje: "Perfil de médico no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    const medicoDbId = medico.id;
+
     if (accion === "crear_slots") {
       const { fecha, hora_inicio, hora_fin, duracion } = datos as {
         fecha: string;
@@ -67,7 +83,7 @@ export async function POST(req: NextRequest) {
       }
 
       const rows = slots.map((s) => ({
-        medico_id,
+        medico_id: medicoDbId,
         fecha,
         hora_inicio: s.hora_inicio,
         hora_fin: s.hora_fin,
@@ -99,7 +115,7 @@ export async function POST(req: NextRequest) {
       const { data: slotsExistentes } = await supabase
         .from("turnos")
         .select("id")
-        .eq("medico_id", medico_id)
+        .eq("medico_id", medicoDbId)
         .eq("fecha", fecha)
         .eq("estado", "disponible")
         .gte("hora_inicio", hora_inicio)
@@ -111,7 +127,7 @@ export async function POST(req: NextRequest) {
           .from("turnos")
           .update({ estado: "bloqueado" })
           .in("id", ids)
-          .eq("medico_id", medico_id);
+          .eq("medico_id", medicoDbId);
 
         if (error) {
           return NextResponse.json({
@@ -128,7 +144,7 @@ export async function POST(req: NextRequest) {
 
       // Si no hay slots existentes, crear uno bloqueado
       const { error } = await supabase.from("turnos").insert({
-        medico_id,
+        medico_id: medicoDbId,
         fecha,
         hora_inicio,
         hora_fin,
@@ -155,7 +171,7 @@ export async function POST(req: NextRequest) {
         .from("turnos")
         .select("id, estado")
         .eq("id", turno_id)
-        .eq("medico_id", medico_id)
+        .eq("medico_id", medicoDbId)
         .single();
 
       if (fetchErr || !turno) {
@@ -169,7 +185,7 @@ export async function POST(req: NextRequest) {
         .from("turnos")
         .update({ estado: "cancelado_medico" })
         .eq("id", turno_id)
-        .eq("medico_id", medico_id);
+        .eq("medico_id", medicoDbId);
 
       if (error) {
         return NextResponse.json({

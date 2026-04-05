@@ -31,17 +31,26 @@ type MensajeChat = {
 function useDictado() {
   const recRef = useRef<any>(null);
   const [dictando, setDictando] = useState(false);
+  const detenidoManual = useRef(false);
 
   const iniciar = useCallback(
-    (setter: (fn: (prev: string) => string) => void) => {
+    async (setter: (fn: (prev: string) => string) => void) => {
       if (typeof window === "undefined") return;
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
+
+      // Pedir permisos primero — si el usuario los rechaza, no cambiamos estado
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        return; // Permisos rechazados
+      }
 
       const rec = new SR();
       rec.lang = "es-AR";
       rec.continuous = true;
       rec.interimResults = true;
+      detenidoManual.current = false;
 
       rec.onresult = (e: any) => {
         let transcript = "";
@@ -53,17 +62,30 @@ function useDictado() {
         }
       };
 
-      rec.onerror = () => detener();
-      rec.onend = () => setDictando(false);
+      rec.onerror = () => {
+        detenidoManual.current = true;
+        recRef.current = null;
+        setDictando(false);
+      };
+
+      rec.onend = () => {
+        // Solo actualizar estado si no fue detenido manualmente
+        // (evita que onend del permiso reset el estado)
+        if (!detenidoManual.current) {
+          recRef.current = null;
+          setDictando(false);
+        }
+      };
 
       recRef.current = rec;
-      setDictando(true);
       rec.start();
+      setDictando(true);
     },
     []
   );
 
   const detener = useCallback(() => {
+    detenidoManual.current = true;
     if (recRef.current) {
       try {
         recRef.current.stop();
