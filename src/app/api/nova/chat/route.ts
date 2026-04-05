@@ -367,18 +367,8 @@ Si es_primera_sesion es true: "Hola ${nombreMedico}, soy Nova, tu asistente en D
                     )
                   );
 
-                  // También enviar el texto que Claude generó antes del tool use
-                  const textoAntes = response.content
-                    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-                    .map((b) => b.text)
-                    .join("");
-                  if (textoAntes) {
-                    controller.enqueue(
-                      encoder.encode(
-                        `data: ${JSON.stringify({ type: "text", content: textoAntes })}\n\n`
-                      )
-                    );
-                  }
+                  // Nota: el texto de Claude ya se emitió arriba en el bloque "text"
+                  // del for loop — no re-emitir para evitar duplicación.
 
                   continuar = false;
                   break;
