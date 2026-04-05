@@ -82,31 +82,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Verificar slots existentes para evitar duplicados (unique constraint turnos_medico_fecha_hora_uq)
-      const horasInicio = slots.map((s) => s.hora_inicio);
-      const { data: existentes } = await supabase
-        .from("turnos")
-        .select("hora_inicio")
-        .eq("medico_id", medicoDbId)
-        .eq("fecha", fecha)
-        .in("hora_inicio", horasInicio);
-
-      const horasExistentes = new Set(
-        (existentes ?? []).map((e) => e.hora_inicio)
-      );
-
-      const slotsNuevos = slots.filter(
-        (s) => !horasExistentes.has(s.hora_inicio)
-      );
-
-      if (slotsNuevos.length === 0) {
-        return NextResponse.json({
-          exito: true,
-          mensaje: `Esos horarios ya están cargados para ${fecha}`,
-        });
-      }
-
-      const rows = slotsNuevos.map((s) => ({
+      const rows = slots.map((s) => ({
         medico_id: medicoDbId,
         fecha,
         hora_inicio: s.hora_inicio,
@@ -114,7 +90,15 @@ export async function POST(req: NextRequest) {
         estado: "disponible",
       }));
 
-      const { error } = await supabase.from("turnos").insert(rows);
+      // upsert con ignoreDuplicates = ON CONFLICT (medico_id, fecha, hora_inicio) DO NOTHING
+      const { data: insertados, error } = await supabase
+        .from("turnos")
+        .upsert(rows, {
+          onConflict: "medico_id,fecha,hora_inicio",
+          ignoreDuplicates: true,
+        })
+        .select("id");
+
       if (error) {
         return NextResponse.json({
           exito: false,
@@ -122,14 +106,20 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const omitidos = slots.length - slotsNuevos.length;
-      const msgOmitidos = omitidos > 0
-        ? ` (${omitidos} ya existían)`
-        : "";
+      const creados = insertados?.length ?? 0;
+      if (creados === 0) {
+        return NextResponse.json({
+          exito: true,
+          mensaje: `Esos horarios ya estaban disponibles para ${fecha}`,
+        });
+      }
+
+      const omitidos = slots.length - creados;
+      const msgOmitidos = omitidos > 0 ? ` (${omitidos} ya existían)` : "";
 
       return NextResponse.json({
         exito: true,
-        mensaje: `Se crearon ${slotsNuevos.length} slots para ${fecha}${msgOmitidos}`,
+        mensaje: `Se crearon ${creados} slots para ${fecha}${msgOmitidos}`,
       });
     }
 
