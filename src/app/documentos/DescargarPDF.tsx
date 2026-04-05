@@ -58,7 +58,7 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
 <body>
   <div class="header">
     <h1>${titulo}</h1>
-    <p>Uber Doc — Telemedicina</p>
+    <p>Docto — Telemedicina</p>
     <p>${fecha}</p>
   </div>
 
@@ -88,7 +88,7 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
   </div>
 
   <div class="footer">
-    <p>Documento generado por Uber Doc — Plataforma de telemedicina habilitada Ley 27.553</p>
+    <p>Documento generado por Docto — Plataforma de telemedicina habilitada Ley 27.553</p>
     <p>ReNaPDiS: En trámite</p>
     <p>Este documento no reemplaza una consulta presencial cuando sea necesaria</p>
   </div>

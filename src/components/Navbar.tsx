@@ -7,7 +7,7 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🩺</span>
-            <span className="text-xl font-bold text-gray-900">Uber Doc</span>
+            <span className="text-xl font-bold text-gray-900">Docto</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link

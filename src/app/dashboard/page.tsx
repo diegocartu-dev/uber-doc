@@ -14,7 +14,6 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
-import NovaFab from "./NovaFab";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -409,7 +408,7 @@ export default async function DashboardPage() {
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
             <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
               <div className="flex items-center gap-5">
-                <span className="text-lg font-bold text-gray-900">Uber Doc</span>
+                <span className="text-lg font-bold text-gray-900">Docto</span>
                 <div className="flex items-center gap-1.5">
                   <span className={`inline-block h-2.5 w-2.5 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse ring-2 ring-[#1D9E75]/20" : "bg-gray-300"}`} />
                   <span className="text-sm text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
@@ -459,7 +458,6 @@ export default async function DashboardPage() {
               )}
             </div>
           </div>
-          <NovaFab />
         </div>
       </DashboardMedicoProvider>
     );
@@ -474,7 +472,7 @@ export default async function DashboardPage() {
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-16 max-w-lg items-center justify-between px-6">
-          <span className="text-lg font-bold text-gray-900">Uber Doc</span>
+          <span className="text-lg font-bold text-gray-900">Docto</span>
           <div className="flex items-center gap-4">
             <span className="text-base text-gray-600">{fullName}</span>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">{initials}</div>

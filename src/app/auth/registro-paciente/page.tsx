@@ -34,7 +34,7 @@ export default function RegistroPacientePage() {
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
           <span className="text-3xl">🩺</span>
-          <span className="text-2xl font-bold text-gray-900">Uber Doc</span>
+          <span className="text-2xl font-bold text-gray-900">Docto</span>
         </Link>
 
         <h2 className="text-center text-xl font-semibold text-gray-900">
@@ -210,7 +210,7 @@ export default function RegistroPacientePage() {
               >
                 términos y condiciones
               </button>{" "}
-              de Uber Doc
+              de Docto
             </span>
           </label>
 
@@ -240,7 +240,7 @@ export default function RegistroPacientePage() {
               </div>
               <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
                 <h3 className="font-semibold">1. Aceptación de términos de uso</h3>
-                <p className="mt-1">Al registrarse en Uber Doc, el usuario acepta estos términos y condiciones en su totalidad. La plataforma ofrece servicios de telemedicina que conectan pacientes con profesionales médicos matriculados en la República Argentina.</p>
+                <p className="mt-1">Al registrarse en Docto, el usuario acepta estos términos y condiciones en su totalidad. La plataforma ofrece servicios de telemedicina que conectan pacientes con profesionales médicos matriculados en la República Argentina.</p>
 
                 <h3 className="mt-3 font-semibold">2. Protección de datos personales (Ley 25.326)</h3>
                 <p className="mt-1">Sus datos personales y de salud son tratados conforme a la Ley 25.326 de Protección de Datos Personales. La información médica es confidencial y solo será compartida con el profesional tratante. Usted tiene derecho a acceder, rectificar y suprimir sus datos en cualquier momento.</p>
@@ -249,7 +249,7 @@ export default function RegistroPacientePage() {
                 <p className="mt-1">El usuario consiente recibir atención médica mediante medios telemáticos conforme a la Ley 26.529 de Derechos del Paciente. La telemedicina tiene limitaciones inherentes y no reemplaza la atención presencial cuando esta sea necesaria. El profesional podrá derivar a consulta presencial según su criterio.</p>
 
                 <h3 className="mt-3 font-semibold">4. Responsabilidades del usuario</h3>
-                <p className="mt-1">El usuario se compromete a: proporcionar información veraz y completa, no utilizar la plataforma para obtener recetas sin consulta legítima, no grabar ni difundir las consultas sin consentimiento, y acudir a servicios de emergencia (107/911) ante situaciones urgentes. Uber Doc no es un servicio de emergencias.</p>
+                <p className="mt-1">El usuario se compromete a: proporcionar información veraz y completa, no utilizar la plataforma para obtener recetas sin consulta legítima, no grabar ni difundir las consultas sin consentimiento, y acudir a servicios de emergencia (107/911) ante situaciones urgentes. Docto no es un servicio de emergencias.</p>
 
                 <h3 className="mt-3 font-semibold">5. Política de privacidad</h3>
                 <p className="mt-1">Los datos recopilados se utilizan exclusivamente para la prestación del servicio. No se ceden a terceros sin consentimiento expreso, salvo obligación legal. Las consultas y documentos médicos se almacenan de forma segura y encriptada.</p>

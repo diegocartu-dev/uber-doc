@@ -510,7 +510,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
                 <TouchButton
                   onClick={() => {
                     if (!esMedico) {
-                      alert("La videollamada se abrirá en una nueva pestaña.\n\nCuando termines, volvé a esta pestaña de Uber Doc para ver tus documentos.");
+                      alert("La videollamada se abrirá en una nueva pestaña.\n\nCuando termines, volvé a esta pestaña de Docto para ver tus documentos.");
                     }
                     window.open(mobileUrl!, "_blank");
                     setDailyAbierto(true);
