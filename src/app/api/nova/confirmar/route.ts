@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       if (slots.length === 0) {
         return NextResponse.json({
           exito: false,
-          mensaje: "El rango horario no permite crear slots con esa duración",
+          mensaje: "El rango horario no permite crear turnos con esa duración",
         });
       }
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       if (error) {
         return NextResponse.json({
           exito: false,
-          mensaje: `Error al crear slots: ${error.message}`,
+          mensaje: `Error al crear turnos: ${error.message}`,
         });
       }
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       if (creados === 0) {
         return NextResponse.json({
           exito: true,
-          mensaje: `Esos horarios ya estaban disponibles para ${fecha}`,
+          mensaje: `Esos turnos ya estaban disponibles para ${fecha}`,
         });
       }
 
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         exito: true,
-        mensaje: `Se crearon ${creados} slots para ${fecha}${msgOmitidos}`,
+        mensaje: `Se crearon ${creados} turnos para ${fecha}${msgOmitidos}`,
       });
     }
 
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
           exito: true,
-          mensaje: `Se bloquearon ${ids.length} slots el ${fecha} de ${hora_inicio} a ${hora_fin}`,
+          mensaje: `Se bloquearon ${ids.length} turnos el ${fecha} de ${hora_inicio} a ${hora_fin}`,
         });
       }
 
