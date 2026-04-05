@@ -185,9 +185,9 @@ async function ejecutarTool(
 
 export async function POST(req: NextRequest) {
   try {
-    const { mensaje, medico_id } = await req.json();
+    const { mensajes: historial, medico_id } = await req.json();
 
-    if (!mensaje || !medico_id) {
+    if (!historial || !Array.isArray(historial) || historial.length === 0 || !medico_id) {
       return new Response(
         JSON.stringify({ error: "Faltan campos requeridos" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
@@ -287,9 +287,13 @@ Si es_primera_sesion es true: "Hola ${nombreMedico}, soy Nova, tu asistente en D
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          let messages: Anthropic.MessageParam[] = [
-            { role: "user", content: mensaje },
-          ];
+          // Convertir historial del frontend a formato Claude API
+          let messages: Anthropic.MessageParam[] = historial.map(
+            (m: { role: string; content: string }) => ({
+              role: m.role === "nova" ? "assistant" as const : "user" as const,
+              content: m.content,
+            })
+          );
 
           // Loop para manejar tool use iterativo
           let continuar = true;
