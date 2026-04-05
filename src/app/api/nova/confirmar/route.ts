@@ -82,7 +82,31 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const rows = slots.map((s) => ({
+      // Verificar slots existentes para evitar duplicados (unique constraint turnos_medico_fecha_hora_uq)
+      const horasInicio = slots.map((s) => s.hora_inicio);
+      const { data: existentes } = await supabase
+        .from("turnos")
+        .select("hora_inicio")
+        .eq("medico_id", medicoDbId)
+        .eq("fecha", fecha)
+        .in("hora_inicio", horasInicio);
+
+      const horasExistentes = new Set(
+        (existentes ?? []).map((e) => e.hora_inicio)
+      );
+
+      const slotsNuevos = slots.filter(
+        (s) => !horasExistentes.has(s.hora_inicio)
+      );
+
+      if (slotsNuevos.length === 0) {
+        return NextResponse.json({
+          exito: true,
+          mensaje: `Esos horarios ya están cargados para ${fecha}`,
+        });
+      }
+
+      const rows = slotsNuevos.map((s) => ({
         medico_id: medicoDbId,
         fecha,
         hora_inicio: s.hora_inicio,
@@ -98,9 +122,14 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      const omitidos = slots.length - slotsNuevos.length;
+      const msgOmitidos = omitidos > 0
+        ? ` (${omitidos} ya existían)`
+        : "";
+
       return NextResponse.json({
         exito: true,
-        mensaje: `Se crearon ${slots.length} slots para ${fecha}`,
+        mensaje: `Se crearon ${slotsNuevos.length} slots para ${fecha}${msgOmitidos}`,
       });
     }
 
