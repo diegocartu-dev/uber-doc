@@ -122,16 +122,23 @@ export default function NovaChat() {
         content: texto.trim(),
       };
 
-      setMensajes((prev) => [...prev, userMsg]);
+      const mensajesActualizados = [...mensajes, userMsg];
+      setMensajes(mensajesActualizados);
       setInput("");
       setEnviando(true);
       setPensando(true);
 
       try {
+        // Enviar historial completo (solo role y content)
+        const historial = mensajesActualizados.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
         const res = await fetch("/api/nova/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mensaje: texto.trim(), medico_id: medicoId }),
+          body: JSON.stringify({ mensajes: historial, medico_id: medicoId }),
         });
 
         if (!res.ok || !res.body) {
