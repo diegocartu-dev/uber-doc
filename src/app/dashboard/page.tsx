@@ -296,9 +296,11 @@ export default async function DashboardPage() {
     })();
 
     // ── Hemisferios con estructura idéntica ──
-    const hemiPad = "space-y-4 rounded-xl bg-white p-6";
+    const hemiPad = "space-y-4 rounded-xl bg-white p-5";
     const hemiStyle = { border: "0.5px solid #e5e7eb" } as const;
+    const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
     const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
+    const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
 
     const colTurnos = (
       <div className={hemiPad} style={hemiStyle}>
