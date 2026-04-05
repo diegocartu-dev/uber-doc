@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function generarSlots(
   horaInicio: string,
@@ -34,16 +35,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // Verificar autenticación con el client normal (respeta RLS)
+    const supabaseAuth = await createClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await supabaseAuth.auth.getUser();
     if (!user || user.id !== medico_id) {
       return NextResponse.json(
         { exito: false, mensaje: "No autenticado" },
         { status: 401 }
       );
     }
+
+    // Usar admin client para bypass RLS en mutaciones
+    const supabase = createAdminClient();
 
     if (accion === "crear_slots") {
       const { fecha, hora_inicio, hora_fin, duracion } = datos as {
