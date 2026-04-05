@@ -30,12 +30,6 @@ function formatFechaLarga(f: string) {
   return `${dias[d.getDay()]} ${d.getDate()} de ${MESES_CORTO[d.getMonth()]}`;
 }
 
-const HORAS: string[] = [];
-for (let h = 7; h < 21; h++) {
-  for (let m = 0; m < 60; m += 20) {
-    HORAS.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
-  }
-}
 
 export default function PanelDerecho({ medicoId, precio }: { medicoId: string; precio: number }) {
   const hoy = new Date();
@@ -92,22 +86,28 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", "reservado"]);
+      const { data } = await supabase.from("turnos").select("fecha, estado").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", "reservado_pendiente"]);
       setTurnosMes(data ?? []);
     }
     load();
   }, [medicoId, mesVisible, anioVisible]);
 
-  // Index: solo disponible y reservado
+  // Index: solo disponible y reservado_pendiente
   const slotMap = new Map<string, Turno>();
   for (const t of turnos) {
-    if (t.estado === "disponible" || t.estado === "reservado") {
+    if (t.estado === "disponible" || t.estado === "reservado_pendiente") {
       slotMap.set(`${t.fecha}-${t.hora_inicio}`, t);
     }
   }
 
+  // Horas únicas extraídas de los turnos reales (grilla adaptativa)
+  const horasUnicas = [...new Set(turnos
+    .filter((t) => t.estado === "disponible" || t.estado === "reservado_pendiente")
+    .map((t) => t.hora_inicio)
+  )].sort();
+
   const disponibles = turnos.filter((t) => t.estado === "disponible").length;
-  const reservados = turnos.filter((t) => t.estado === "reservado");
+  const reservados = turnos.filter((t) => t.estado === "reservado_pendiente");
 
   const reservadosPorDia = new Map<string, Turno[]>();
   for (const t of reservados) {
@@ -116,7 +116,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   }
 
   const diasConDisp = new Set<string>(); const diasConRes = new Set<string>();
-  for (const t of turnosMes) { if (t.estado === "disponible") diasConDisp.add(t.fecha); if (t.estado === "reservado") diasConRes.add(t.fecha); }
+  for (const t of turnosMes) { if (t.estado === "disponible") diasConDisp.add(t.fecha); if (t.estado === "reservado_pendiente") diasConRes.add(t.fecha); }
 
   const primerDia = new Date(anioVisible, mesVisible, 1);
   const startPad = primerDia.getDay() === 0 ? 6 : primerDia.getDay() - 1;
@@ -201,7 +201,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
             </div>
 
             <div className="max-h-[380px] overflow-y-auto">
-              {HORAS.map((hora) => (
+              {horasUnicas.map((hora) => (
                 <div key={hora} className="grid" style={{ gridTemplateColumns: "48px repeat(7, 1fr)", borderBottom: "0.5px solid #f0f0f0" }}>
                   <div className="flex items-center justify-end pr-2 text-[11px] text-gray-400" style={{ height: "30px" }}>{hora}</div>
                   {diasSemana.map((fecha) => {

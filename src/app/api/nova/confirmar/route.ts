@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     // Lookup medicos.id desde auth user_id (turnos FK apunta a medicos.id, no a auth.users.id)
     const { data: medico, error: medicoErr } = await supabase
       .from("medicos")
-      .select("id")
+      .select("id, duracion_consulta, precio_consulta")
       .eq("user_id", medico_id)
       .single();
 
@@ -67,14 +67,17 @@ export async function POST(req: NextRequest) {
     const medicoDbId = medico.id;
 
     if (accion === "crear_slots") {
-      const { fecha, hora_inicio, hora_fin, duracion } = datos as {
+      const { fecha, hora_inicio, hora_fin } = datos as {
         fecha: string;
         hora_inicio: string;
         hora_fin: string;
-        duracion: number;
       };
 
-      const slots = generarSlots(hora_inicio, hora_fin, duracion);
+      // Siempre usar duración y precio del perfil del médico
+      const duracionMedico = medico.duracion_consulta;
+      const precioMedico = medico.precio_consulta;
+
+      const slots = generarSlots(hora_inicio, hora_fin, duracionMedico);
       if (slots.length === 0) {
         return NextResponse.json({
           exito: false,
@@ -88,6 +91,7 @@ export async function POST(req: NextRequest) {
         hora_inicio: s.hora_inicio,
         hora_fin: s.hora_fin,
         estado: "disponible",
+        monto: precioMedico,
       }));
 
       // upsert con ignoreDuplicates = ON CONFLICT (medico_id, fecha, hora_inicio) DO NOTHING
