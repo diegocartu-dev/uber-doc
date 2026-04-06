@@ -8,8 +8,8 @@ type Turno = {
   estado: string; monto: number | null; paciente_nombre: string | null;
 };
 
-const DIAS_LABEL = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
-const DIAS_SEMANA_LARGO = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DIAS_LABEL = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
+const DIAS_SEMANA_LARGO = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const MESES_CORTO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -26,8 +26,14 @@ function fStr(d: Date): string {
 
 function formatFechaLarga(f: string) {
   const d = new Date(f + "T12:00:00");
-  const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const dias = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
   return `${dias[d.getDay()]} ${d.getDate()} de ${MESES_CORTO[d.getMonth()]}`;
+}
+
+function formatFechaDia(f: string) {
+  const d = new Date(f + "T12:00:00");
+  const diasLargo = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
+  return `${diasLargo[d.getDay()]} ${d.getDate()} de ${MESES_CORTO[d.getMonth()]}`;
 }
 
 
@@ -39,6 +45,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
   const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string }[]>([]);
+  const [selectedDate, setSelectedDate] = useState(hoyStr);
 
   const mesVisible = lunesActual.getMonth();
   const anioVisible = lunesActual.getFullYear();
@@ -51,8 +58,37 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   function semNext() { setLunesActual((p) => { const d = new Date(p); d.setDate(d.getDate() + 7); return d; }); }
   function mesPrev() { setLunesActual(getLunes(new Date(anioVisible, mesVisible - 1, 15))); }
   function mesNext() { setLunesActual(getLunes(new Date(anioVisible, mesVisible + 1, 15))); }
-  function goHoy() { setLunesActual(getLunes(hoy)); }
-  function goDia(f: string) { setLunesActual(getLunes(new Date(f + "T12:00:00"))); }
+  function goHoy() {
+    setLunesActual(getLunes(hoy));
+    setSelectedDate(hoyStr);
+  }
+  function goDia(f: string) {
+    setLunesActual(getLunes(new Date(f + "T12:00:00")));
+    setSelectedDate(f);
+  }
+
+  function diaPrev() {
+    const d = new Date(selectedDate + "T12:00:00");
+    d.setDate(d.getDate() - 1);
+    const nuevo = fStr(d);
+    setSelectedDate(nuevo);
+    // Si cambio de semana, actualizar lunes
+    const nuevoLunes = getLunes(d);
+    if (fStr(nuevoLunes) !== fStr(lunesActual)) {
+      setLunesActual(nuevoLunes);
+    }
+  }
+
+  function diaNext() {
+    const d = new Date(selectedDate + "T12:00:00");
+    d.setDate(d.getDate() + 1);
+    const nuevo = fStr(d);
+    setSelectedDate(nuevo);
+    const nuevoLunes = getLunes(d);
+    if (fStr(nuevoLunes) !== fStr(lunesActual)) {
+      setLunesActual(nuevoLunes);
+    }
+  }
 
   // Fetch turnos semana
   useEffect(() => {
@@ -100,7 +136,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
     }
   }
 
-  // Horas únicas extraídas de los turnos reales (grilla adaptativa)
+  // Horas unicas extraidas de los turnos reales (grilla adaptativa)
   const horasUnicas = [...new Set(turnos
     .filter((t) => t.estado === "disponible" || t.estado === "reservado_pendiente")
     .map((t) => t.hora_inicio)
@@ -122,48 +158,55 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const startPad = primerDia.getDay() === 0 ? 6 : primerDia.getDay() - 1;
   const totalDias = new Date(anioVisible, mesVisible + 1, 0).getDate();
 
+  // Slots del dia seleccionado (para vista mobile)
+  const slotsDia = turnos
+    .filter((t) => t.fecha === selectedDate && (t.estado === "disponible" || t.estado === "reservado_pendiente"))
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+
   const B = "0.5px solid #e5e7eb";
 
   return (
     <div className="space-y-4">
-      {/* Métricas */}
+      {/* Metricas */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#9FE1CB", color: "#085041" }}>● {disponibles} disponibles</span>
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.length} reservados</span>
-        <button onClick={goHoy} className="rounded-full bg-[#1D9E75] px-3 py-1 text-[11px] font-medium text-white">Hoy</button>
+        <button onClick={goHoy} className="rounded-full bg-[#1D9E75] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
       </div>
 
       {/* Calendario mensual */}
       <div className="rounded-xl bg-white p-4" style={{ border: B }}>
         <div className="flex items-center justify-between">
-          <button onClick={mesPrev} className="rounded px-2 py-1 text-[13px] text-gray-500 hover:bg-gray-100">←</button>
-          <p className="text-[13px] font-medium text-gray-800">{MESES[mesVisible]} {anioVisible}</p>
-          <button onClick={mesNext} className="rounded px-2 py-1 text-[13px] text-gray-500 hover:bg-gray-100">→</button>
+          <button onClick={mesPrev} className="flex items-center justify-center rounded min-w-[44px] min-h-[44px] text-[16px] text-gray-500 hover:bg-gray-100">←</button>
+          <p className="text-[14px] md:text-[13px] font-medium text-gray-800">{MESES[mesVisible]} {anioVisible}</p>
+          <button onClick={mesNext} className="flex items-center justify-center rounded min-w-[44px] min-h-[44px] text-[16px] text-gray-500 hover:bg-gray-100">→</button>
         </div>
-        <div className="mt-3 grid grid-cols-7">
-          {DIAS_LABEL.map((d) => <div key={d} className="py-1 text-center text-[11px] font-medium text-gray-500">{d}</div>)}
+        <div className="mt-3 grid grid-cols-7 gap-1">
+          {DIAS_LABEL.map((d) => <div key={d} className="py-1 text-center text-[12px] font-medium text-gray-500">{d}</div>)}
         </div>
-        <div className="grid grid-cols-7">
-          {Array.from({ length: startPad }).map((_, i) => <div key={`p${i}`} className="h-9" />)}
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: startPad }).map((_, i) => <div key={`p${i}`} className="h-[44px]" />)}
           {Array.from({ length: totalDias }).map((_, i) => {
             const dia = i + 1;
             const fecha = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${dia.toString().padStart(2, "0")}`;
             const esHoy = fecha === hoyStr;
             const enSemana = semanaSet.has(fecha);
+            const esSeleccionado = fecha === selectedDate;
             return (
               <button key={dia} onClick={() => goDia(fecha)}
-                className={`relative flex h-9 items-center justify-center text-[14px] cursor-pointer transition-all duration-100 ${
+                className={`relative flex items-center justify-center text-[15px] cursor-pointer transition-all duration-100 h-[44px] ${
                   esHoy ? "font-semibold" : "hover:bg-gray-50"
                 } ${enSemana && !esHoy ? "font-medium" : ""}`}
-                style={esHoy ? { background: "#1D9E75", color: "white", borderRadius: "50%", width: "36px", height: "36px", margin: "auto" }
+                style={esHoy ? { background: "#1D9E75", color: "white", borderRadius: "50%", width: "44px", height: "44px", margin: "auto" }
+                  : esSeleccionado ? { background: "#E1F5EE", borderRadius: "50%", width: "44px", height: "44px", margin: "auto", color: "#1D9E75", fontWeight: 600 }
                   : enSemana ? { background: "#E1F5EE", borderRadius: "4px", color: "#1a1a1a" }
                   : { color: (diasConDisp.has(fecha) || diasConRes.has(fecha)) ? "#1a1a1a" : "#d1d5db" }}
               >
                 {dia}
                 {(diasConDisp.has(fecha) || diasConRes.has(fecha)) && !esHoy && (
-                  <span className="absolute bottom-0 flex gap-0.5">
-                    {diasConDisp.has(fecha) && <span className="inline-block h-1 w-1 rounded-full bg-[#1D9E75]" />}
-                    {diasConRes.has(fecha) && <span className="inline-block h-1 w-1 rounded-full bg-[#378ADD]" />}
+                  <span className="absolute bottom-0.5 flex gap-0.5">
+                    {diasConDisp.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />}
+                    {diasConRes.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#378ADD]" />}
                   </span>
                 )}
               </button>
@@ -172,8 +215,40 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         </div>
       </div>
 
-      {/* Calendario semanal */}
-      <div className="overflow-hidden rounded-xl bg-white" style={{ border: B }}>
+      {/* Vista de dia mobile */}
+      <div className="md:hidden rounded-xl bg-white overflow-hidden" style={{ border: B }}>
+        <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: B }}>
+          <button onClick={diaPrev} className="flex items-center justify-center rounded min-w-[44px] min-h-[44px] text-[16px] text-gray-500 hover:bg-gray-100">←</button>
+          <p className="text-[14px] font-medium text-gray-700">{formatFechaDia(selectedDate)}</p>
+          <button onClick={diaNext} className="flex items-center justify-center rounded min-w-[44px] min-h-[44px] text-[16px] text-gray-500 hover:bg-gray-100">→</button>
+        </div>
+
+        {cargando ? (
+          <div className="py-10 text-center text-[12px] text-gray-400">Cargando...</div>
+        ) : slotsDia.length === 0 ? (
+          <div className="py-10 text-center text-[13px] text-gray-400">Sin turnos para este dia</div>
+        ) : (
+          <div className="max-h-[320px] overflow-y-auto">
+            {slotsDia.map((t) => (
+              <div key={t.id} className="flex items-center px-4 py-2" style={{ borderBottom: "0.5px solid #f0f0f0" }}>
+                <div className="w-[48px] shrink-0 text-[13px] text-gray-400">{t.hora_inicio}</div>
+                {t.estado === "disponible" ? (
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-[#1D9E75] font-medium" style={{ border: "1.5px dashed #1D9E75" }}>
+                    Disponible
+                  </div>
+                ) : (
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-white font-medium" style={{ background: "#378ADD" }}>
+                    {t.paciente_nombre ?? "Reservado"}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Calendario semanal desktop */}
+      <div className="hidden md:block overflow-hidden rounded-xl bg-white" style={{ border: B }}>
         <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: B }}>
           <button onClick={semPrev} className="rounded px-2 py-1 text-[13px] text-gray-500 hover:bg-gray-100">←</button>
           <p className="text-[12px] font-medium text-gray-600">

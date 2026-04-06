@@ -48,13 +48,25 @@ export default async function AgendaPage({
   const mostrarFormulario = params.nuevo === "1";
 
   return (
-    <div className="grid h-screen overflow-hidden" style={{ gridTemplateColumns: "60fr 40fr" }}>
-      {/* Columna izquierda */}
-      <div className="overflow-y-auto" style={{ height: "100vh" }}>
-        <div className="p-6">
+    <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden md:grid md:grid-cols-[60fr_40fr]">
+      {/*
+        Mobile: flex-col apilado — PanelDerecho primero (agenda), luego modelos
+        Desktop: grid 2 columnas — modelos izquierda, agenda derecha (order classes)
+      */}
+
+      {/* Panel calendario/grilla — mobile primero, desktop segundo (order-2) */}
+      <div className="order-1 md:order-2 overflow-y-auto bg-[#f8f9fa] md:border-l md:border-gray-200">
+        <div className="p-4 md:p-6">
+          <PanelDerecho medicoId={medico.id} precio={medico.precio_consulta} />
+        </div>
+      </div>
+
+      {/* Panel modelos — mobile segundo, desktop primero (order-1) */}
+      <div className="order-2 md:order-1 overflow-y-auto">
+        <div className="p-4 md:p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-[22px] font-semibold text-gray-900">Mi agenda</h1>
+              <h1 className="text-[20px] md:text-[22px] font-semibold text-gray-900">Mi agenda</h1>
               <p className="mt-1 text-[13px] text-gray-500">Modelos de disponibilidad para turnos programados</p>
             </div>
             <Link href="/dashboard" className="text-[13px] text-gray-500 hover:text-gray-700">← Inicio</Link>
@@ -70,10 +82,9 @@ export default async function AgendaPage({
             </div>
           ) : (
             <div className="mt-6">
-              {/* Botón nuevo ARRIBA */}
               <Link
                 href="/medico/agenda?nuevo=1"
-                className="mb-4 block rounded-xl bg-[#1D9E75] px-5 py-3 text-center text-[14px] font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+                className="mb-4 flex items-center justify-center rounded-xl bg-[#1D9E75] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
               >
                 + Nuevo modelo de agenda
               </Link>
@@ -83,13 +94,6 @@ export default async function AgendaPage({
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Columna derecha */}
-      <div className="overflow-y-auto bg-[#f8f9fa]" style={{ height: "100vh", borderLeft: "0.5px solid #e5e7eb" }}>
-        <div className="p-6">
-          <PanelDerecho medicoId={medico.id} precio={medico.precio_consulta} />
         </div>
       </div>
     </div>
