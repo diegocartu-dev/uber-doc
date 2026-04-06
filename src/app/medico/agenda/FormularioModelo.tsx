@@ -2,7 +2,7 @@
 
 // Formulario para crear/editar modelos de agenda
 // Extensiones pendientes:
-// - Modo edición: recibir modeloId como prop, precargar datos, usar editarModelo()
+// - Modo edicion: recibir modeloId como prop, precargar datos, usar editarModelo()
 // - Preview de turnos generados antes de guardar
 // - Selector de bloqueos dentro del modelo
 
@@ -99,12 +99,12 @@ export default function FormularioModelo({
 
   function handleGuardar() {
     setError(null);
-    if (!nombre.trim()) { setError("Ingresá un nombre para el modelo."); return; }
-    if (!fechaInicio || !fechaFin) { setError("Seleccioná fechas de inicio y fin."); return; }
+    if (!nombre.trim()) { setError("Ingresa un nombre para el modelo."); return; }
+    if (!fechaInicio || !fechaFin) { setError("Selecciona fechas de inicio y fin."); return; }
     if (fechaFin < fechaInicio) { setError("La fecha de fin debe ser igual o posterior a la fecha de inicio."); return; }
 
     const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0).map(([k]) => parseInt(k));
-    if (diasSeleccionados.length === 0) { setError("Seleccioná al menos un día."); return; }
+    if (diasSeleccionados.length === 0) { setError("Selecciona al menos un dia."); return; }
 
     // Construir franjas
     const todasFranjas: Franja[] = [];
@@ -116,7 +116,7 @@ export default function FormularioModelo({
       }
     }
 
-    if (todasFranjas.length === 0) { setError("Agregá al menos una franja horaria."); return; }
+    if (todasFranjas.length === 0) { setError("Agrega al menos una franja horaria."); return; }
 
     startTransition(async () => {
       const result = await guardarModelo({
@@ -131,8 +131,8 @@ export default function FormularioModelo({
     });
   }
 
-  const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
-  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
+  const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75] min-h-[44px]";
+  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75] min-h-[44px]";
   const borderStyle = { border: "0.5px solid #e5e7eb" };
 
   function FranjaRow({
@@ -149,31 +149,61 @@ export default function FormularioModelo({
     const [ih, im] = franja.inicio.split(":");
     const [fh, fm] = franja.fin.split(":");
     return (
-      <div className="flex items-center gap-2">
-        <select value={ih} onChange={(e) => onUpdate("inicio", `${e.target.value}:${im}`)} className={selectClass} style={borderStyle}>
-          {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-        </select>
-        <span className="text-gray-300">:</span>
-        <select value={im} onChange={(e) => onUpdate("inicio", `${ih}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-          {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <span className="text-xs text-gray-400">a</span>
-        <select value={fh} onChange={(e) => onUpdate("fin", `${e.target.value}:${fm}`)} className={selectClass} style={borderStyle}>
-          {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-        </select>
-        <span className="text-gray-300">:</span>
-        <select value={fm} onChange={(e) => onUpdate("fin", `${fh}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-          {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        {canRemove && (
-          <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500">✕</button>
-        )}
+      <div>
+        {/* Mobile: 2 filas — Desde / Hasta */}
+        <div className="md:hidden space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Desde</span>
+            <select value={ih} onChange={(e) => onUpdate("inicio", `${e.target.value}:${im}`)} className={selectClass} style={borderStyle}>
+              {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+            <span className="text-gray-300">:</span>
+            <select value={im} onChange={(e) => onUpdate("inicio", `${ih}:${e.target.value}`)} className={selectClass} style={borderStyle}>
+              {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Hasta</span>
+            <select value={fh} onChange={(e) => onUpdate("fin", `${e.target.value}:${fm}`)} className={selectClass} style={borderStyle}>
+              {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+            <span className="text-gray-300">:</span>
+            <select value={fm} onChange={(e) => onUpdate("fin", `${fh}:${e.target.value}`)} className={selectClass} style={borderStyle}>
+              {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {canRemove && (
+              <button onClick={onRemove} className="flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-400 hover:text-red-500 text-[16px]">✕</button>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop: 1 fila inline */}
+        <div className="hidden md:flex items-center gap-2">
+          <select value={ih} onChange={(e) => onUpdate("inicio", `${e.target.value}:${im}`)} className={selectClass} style={borderStyle}>
+            {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+          </select>
+          <span className="text-gray-300">:</span>
+          <select value={im} onChange={(e) => onUpdate("inicio", `${ih}:${e.target.value}`)} className={selectClass} style={borderStyle}>
+            {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span className="text-xs text-gray-400">a</span>
+          <select value={fh} onChange={(e) => onUpdate("fin", `${e.target.value}:${fm}`)} className={selectClass} style={borderStyle}>
+            {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+          </select>
+          <span className="text-gray-300">:</span>
+          <select value={fm} onChange={(e) => onUpdate("fin", `${fh}:${e.target.value}`)} className={selectClass} style={borderStyle}>
+            {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          {canRemove && (
+            <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl bg-white p-6" style={borderStyle}>
+    <div className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
       <h2 className="text-sm font-medium text-gray-900">Nuevo modelo de agenda</h2>
 
       {error && (
@@ -192,10 +222,10 @@ export default function FormularioModelo({
         />
       </div>
 
-      {/* Duración y precio */}
-      <div className="mt-4 flex gap-4">
+      {/* Duracion y precio */}
+      <div className="mt-4 flex flex-col md:flex-row gap-4">
         <div className="flex-1">
-          <label className="text-xs text-gray-400">Duración del turno</label>
+          <label className="text-xs text-gray-400">Duracion del turno</label>
           <select value={duracionTurno} onChange={(e) => setDuracionTurno(parseInt(e.target.value))} className={`mt-1 w-full ${inputClass}`} style={borderStyle}>
             <option value={20}>20 minutos</option>
             <option value={30}>30 minutos</option>
@@ -213,7 +243,7 @@ export default function FormularioModelo({
       </div>
 
       {/* Fechas */}
-      <div className="mt-4 flex gap-4">
+      <div className="mt-4 flex flex-col md:flex-row gap-4">
         <div className="flex-1">
           <label className="text-xs text-gray-400">Desde</label>
           <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={borderStyle} />
@@ -224,18 +254,18 @@ export default function FormularioModelo({
         </div>
       </div>
 
-      {/* Selector de días */}
+      {/* Selector de dias */}
       <div className="mt-5">
-        <label className="text-xs text-gray-400">Días</label>
+        <label className="text-xs text-gray-400">Dias</label>
         <p className="mt-0.5 text-[10px] text-gray-400">1 toque = horario base · 2 toques = personalizado · 3 toques = quitar</p>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap gap-[6px]">
           {DIAS.map((d) => {
             const estado = dias[d.num];
             return (
               <button
                 key={d.num}
                 onClick={() => toggleDia(d.num)}
-                className={`flex h-10 w-10 items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95 ${
+                className={`flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95 ${
                   estado === 2
                     ? "bg-blue-500 text-white"
                     : estado === 1
@@ -255,9 +285,9 @@ export default function FormularioModelo({
         <div className="mt-5">
           <div className="flex items-center justify-between">
             <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
-            <button onClick={addFranjaBase} className="text-xs text-[#1D9E75] hover:underline">+ Agregar franja</button>
+            <button onClick={addFranjaBase} className="text-xs text-[#1D9E75] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
           </div>
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-3 md:space-y-2">
             {franjasBase.map((f, i) => (
               <FranjaRow
                 key={i}
@@ -271,7 +301,7 @@ export default function FormularioModelo({
         </div>
       )}
 
-      {/* Franjas personalizadas por día */}
+      {/* Franjas personalizadas por dia */}
       {Object.entries(dias)
         .filter(([, v]) => v === 2)
         .map(([k]) => {
@@ -281,11 +311,11 @@ export default function FormularioModelo({
             <div key={diaNum} className="mt-4 rounded-lg bg-blue-50 p-4">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-blue-700">
-                  {["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][diaNum]} — personalizado
+                  {["", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"][diaNum]} — personalizado
                 </label>
-                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-blue-600 hover:underline">+ Agregar franja</button>
+                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-blue-600 hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
               </div>
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 space-y-3 md:space-y-2">
                 {franjasDelDia.map((f, i) => (
                   <FranjaRow
                     key={i}
@@ -301,14 +331,14 @@ export default function FormularioModelo({
         })}
 
       {/* Acciones */}
-      <div className="mt-6 flex gap-3">
-        <a href="/medico/agenda" className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-center text-sm text-gray-700 hover:bg-gray-200">
+      <div className="mt-6 flex flex-col md:flex-row gap-3">
+        <a href="/medico/agenda" className="flex-1 flex items-center justify-center rounded-lg bg-gray-100 px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-center text-sm text-gray-700 hover:bg-gray-200">
           Cancelar
         </a>
         <button
           onClick={handleGuardar}
           disabled={isPending}
-          className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 active:opacity-80 transition-all duration-100"
+          className="flex-1 flex items-center justify-center rounded-lg bg-[#1D9E75] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 active:opacity-80 transition-all duration-100"
         >
           {isPending ? "Guardando..." : "Guardar modelo"}
         </button>
