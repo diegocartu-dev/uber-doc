@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id")
+    .select("id, disponible")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico)
@@ -134,10 +134,20 @@ export async function GET(req: NextRequest) {
     especialidad: "",
   }));
 
+  // 4. Turnos activos hoy (confirmado/en_espera) para saber si bloquear CI
+  const { count: turnosActivosHoy } = await supabase
+    .from("turnos")
+    .select("id", { count: "exact", head: true })
+    .eq("medico_id", medicoId)
+    .eq("fecha", hoy)
+    .in("estado", ["confirmado", "en_espera"]);
+
   return NextResponse.json({
     consultas_pendientes,
     consultas_en_curso,
     turnos_espera,
+    disponible: medico.disponible,
+    turnos_activos_hoy: turnosActivosHoy ?? 0,
     timestamp: Date.now(),
   });
 }

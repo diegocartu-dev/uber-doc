@@ -4,10 +4,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./LogoutButton";
-import DisponibilidadMedico from "./DisponibilidadMedico";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
-import ConsultasPendientes from "./ConsultasPendientes";
-import ConsultasEnCurso from "./ConsultasEnCurso";
+import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
 import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
 import MetricasMedico from "./MetricasMedico";
@@ -278,7 +276,6 @@ export default async function DashboardPage() {
   const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
   const hayAlgoEnCurso = consultasEnCurso.length > 0 || turnoEnCurso !== null;
   const hayTurnosActivosHoy = turnosHoy.some((t) => t.estado === "confirmado" || t.estado === "en_espera");
-  const consultaInactiva = !medico?.disponible || hayTurnosActivosHoy;
   const hayUrgenciaTurnos = turnosEsperaCompletos.length > 0 || turnoEnCurso !== null;
   const hayUrgenciaConsulta = consultasPendientes.length > 0 || consultasEnCurso.length > 0;
 
@@ -303,7 +300,7 @@ export default async function DashboardPage() {
     const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
 
     const colTurnos = (
-      <div className={hemiPad} style={hemiStyle}>
+      <div className={hemiPad} style={{ ...hemiStyle, borderLeft: "4px solid #378ADD", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
         {/* Título */}
         <div className="flex items-center gap-2">
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#378ADD]" />
@@ -358,53 +355,15 @@ export default async function DashboardPage() {
     );
 
     const colConsulta = (
-      <div
-        className={`space-y-4 rounded-xl p-5 ${consultaInactiva ? "bg-gray-50" : ""}`}
-        style={{
-          border: "0.5px solid #e5e7eb",
-          borderLeft: `4px solid ${consultaInactiva ? "#888780" : "#1D9E75"}`,
-          background: consultaInactiva ? undefined : "rgba(29, 158, 117, 0.06)",
-        }}
-      >
-        {/* Título + estado inline */}
-        <div className="flex items-center justify-between">
-          <h2 className={titleClass}>Consulta inmediata</h2>
-          <span
-            className="text-xs font-semibold"
-            style={{ color: consultaInactiva ? "#888780" : "#1D9E75" }}
-          >
-            {consultaInactiva ? "Inactiva" : "Activa"}
-          </span>
-        </div>
-
-        {/* Sub-métrica / estado + toggle */}
-        <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
-          <DisponibilidadMedico
-            medicoId={medico.id}
-            disponible={medico.disponible}
-            disponibleDesde={medico.disponible_desde}
-            disponibleHasta={medico.disponible_hasta}
-            duracionConsulta={medico.duracion_consulta}
-            precioConsulta={medico.precio_consulta}
-            pacientesEnEspera={consultasPendientes.length}
-          />
-        </div>
-
-        {/* Zona urgencia / contenido */}
-        <ConsultasEnCurso medicoId={medico.id} />
-        {consultaInactiva ? (
-          <div className="relative z-20 rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
-            <p className="text-base text-gray-400">Consulta inmediata inactiva</p>
-          </div>
-        ) : (
-          <ConsultasPendientes medicoId={medico.id} activa />
-        )}
-
-        {/* Pie — historial full-width */}
-        <div className="border-t border-gray-100 pt-3 mt-4">
-          <HistorialInline medicoId={medico.id} tipo="consulta" />
-        </div>
-      </div>
+      <BloqueConsultaInmediata
+        medicoId={medico.id}
+        disponibleInicial={medico.disponible}
+        disponibleDesde={medico.disponible_desde}
+        disponibleHasta={medico.disponible_hasta}
+        duracionConsulta={medico.duracion_consulta}
+        precioConsulta={medico.precio_consulta}
+        consultasPendientesCount={consultasPendientes.length}
+      />
     );
 
     return (
@@ -413,6 +372,8 @@ export default async function DashboardPage() {
         initialPendientes={consultasPendientes}
         initialEnCurso={consultasEnCurso}
         initialTurnosEspera={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
+        initialDisponible={medico.disponible}
+        initialTurnosActivosHoy={hayTurnosActivosHoy}
       >
         <div className="min-h-full bg-[#f8f9fa]">
           {/* Topbar */}

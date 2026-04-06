@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { actualizarDisponibilidad } from "./actions";
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Props = {
   medicoId: string;
@@ -30,6 +31,7 @@ export default function DisponibilidadMedico({
   precioConsulta,
   pacientesEnEspera,
 }: Props) {
+  const { setDisponible: setDisponibleCtx } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(disponible);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
@@ -57,6 +59,7 @@ export default function DisponibilidadMedico({
         if (hay && !autoDesactivadoRef.current) {
           autoDesactivadoRef.current = true;
           setActivo(false);
+          setDisponibleCtx(false);
           await actualizarDisponibilidad({
             disponible: false,
             disponible_desde: disponibleDesde ?? "08:00",
@@ -77,6 +80,7 @@ export default function DisponibilidadMedico({
   async function handleToggle() {
     const nuevoEstado = !activo;
     setActivo(nuevoEstado);
+    setDisponibleCtx(nuevoEstado);
     setGuardando(true);
     setMensaje(null);
 
@@ -89,6 +93,7 @@ export default function DisponibilidadMedico({
     setGuardando(false);
     if (result?.error) {
       setActivo(!nuevoEstado);
+      setDisponibleCtx(!nuevoEstado);
       setMensaje(result.error);
     }
   }
