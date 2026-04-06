@@ -288,7 +288,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         if (nav.esMobile) {
           clearTimeout(timeoutId);
           if (nav.esChromeIOS) setChromeIOS(true);
-          else setMobileUrl(data.url);
+          else setMobileUrl(data.token ? `${data.url}?t=${data.token}` : data.url);
           setCargando(false);
           return;
         }
@@ -344,7 +344,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         });
 
         setEtapaCarga("Conectando... Aceptá los permisos de cámara y micrófono");
-        await callFrame.join({ url: data.url });
+        await callFrame.join({ url: data.url, ...(data.token ? { token: data.token } : {}) });
         if (!joinedRef.current && !unmountedRef.current) setCargando(false);
       } catch (err) {
         clearTimeout(timeoutId);

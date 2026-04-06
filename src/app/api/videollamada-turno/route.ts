@@ -4,9 +4,34 @@ import { createClient } from "@/lib/supabase/server";
 const DAILY_API_KEY = process.env.DAILY_API_KEY;
 const DAILY_API_URL = "https://api.daily.co/v1";
 
+async function generarMeetingToken(
+  roomName: string,
+  userName: string,
+  userId: string
+): Promise<string | null> {
+  const exp = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+  const res = await fetch(`${DAILY_API_URL}/meeting-tokens`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${DAILY_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      properties: {
+        room_name: roomName,
+        user_name: userName,
+        user_id: userId,
+        exp,
+      },
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.token ?? null;
+}
+
 export async function POST(req: NextRequest) {
   if (!DAILY_API_KEY) {
-    console.error("[Daily] DAILY_API_KEY no configurado en .env.local");
     return NextResponse.json(
       { error: "Daily.co no está configurado en el servidor." },
       { status: 500 }
@@ -69,12 +94,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
-  // Si ya tiene sala creada, devolverla directamente
-  if (turno.sala_video_url) {
-    return NextResponse.json({ url: turno.sala_video_url, roomName: `turno-${turnoId}` });
-  }
-
   const roomName = `turno-${turnoId}`;
+  const userName = esMedico ? "Médico" : "Paciente";
+
+  // Si ya tiene sala creada, devolver con token
+  if (turno.sala_video_url) {
+    const token = await generarMeetingToken(roomName, userName, user.id);
+    return NextResponse.json({ url: turno.sala_video_url, roomName, token });
+  }
 
   try {
     // Intentar obtener la sala existente en Daily
@@ -88,10 +115,11 @@ export async function POST(req: NextRequest) {
         .from("turnos")
         .update({ sala_video_url: room.url })
         .eq("id", turnoId);
-      return NextResponse.json({ url: room.url, roomName });
+      const token = await generarMeetingToken(roomName, userName, user.id);
+      return NextResponse.json({ url: room.url, roomName, token });
     }
 
-    // Crear nueva sala con expiración de 2 horas
+    // Crear nueva sala privada con expiración de 2 horas
     const exp = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
 
     const createRes = await fetch(`${DAILY_API_URL}/rooms`, {
@@ -102,6 +130,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         name: roomName,
+        privacy: "private",
         properties: {
           exp,
           enable_chat: true,
@@ -114,7 +143,6 @@ export async function POST(req: NextRequest) {
 
     if (!createRes.ok) {
       const err = await createRes.json();
-      console.error("[Daily] Error al crear sala:", JSON.stringify(err));
       return NextResponse.json(
         { error: `Error de Daily.co: ${err.info || err.error || JSON.stringify(err)}` },
         { status: 502 }
@@ -124,19 +152,15 @@ export async function POST(req: NextRequest) {
     const room = await createRes.json();
 
     // Guardar URL en el turno
-    const { error: updateError } = await supabase
+    await supabase
       .from("turnos")
       .update({ sala_video_url: room.url })
       .eq("id", turnoId);
 
-    if (updateError) {
-      console.error("[Daily] Error al guardar sala_video_url:", updateError.message);
-    }
-
-    return NextResponse.json({ url: room.url, roomName });
+    const token = await generarMeetingToken(roomName, userName, user.id);
+    return NextResponse.json({ url: room.url, roomName, token });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : JSON.stringify(err);
-    console.error("[Daily] Error:", message);
     return NextResponse.json(
       { error: `Error de Daily.co: ${message}` },
       { status: 502 }
