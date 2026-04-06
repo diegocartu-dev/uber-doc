@@ -8,7 +8,6 @@ import HistorialInline from "./HistorialInline";
 
 type Props = {
   medicoId: string;
-  disponibleInicial: boolean;
   disponibleDesde: string | null;
   disponibleHasta: string | null;
   duracionConsulta: number;
@@ -21,7 +20,6 @@ const footerClass = "flex items-center justify-between border-t border-gray-100 
 
 export default function BloqueConsultaInmediata({
   medicoId,
-  disponibleInicial,
   disponibleDesde,
   disponibleHasta,
   duracionConsulta,
@@ -57,7 +55,6 @@ export default function BloqueConsultaInmediata({
       <div className="rounded-xl bg-white" style={{ border: "0.5px solid #e5e7eb" }}>
         <DisponibilidadMedico
           medicoId={medicoId}
-          disponible={disponibleInicial}
           disponibleDesde={disponibleDesde}
           disponibleHasta={disponibleHasta}
           duracionConsulta={duracionConsulta}
