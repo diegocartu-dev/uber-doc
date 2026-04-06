@@ -6,7 +6,6 @@ import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Props = {
   medicoId: string;
-  disponible: boolean;
   disponibleDesde: string | null;
   disponibleHasta: string | null;
   duracionConsulta: number;
@@ -24,62 +23,42 @@ function calcularCapacidad(desde: string, hasta: string, duracion: number): numb
 
 export default function DisponibilidadMedico({
   medicoId,
-  disponible,
   disponibleDesde,
   disponibleHasta,
   duracionConsulta,
   precioConsulta,
   pacientesEnEspera,
 }: Props) {
-  const { setDisponible: setDisponibleCtx } = useDashboardMedico();
+  const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
-  const [activo, setActivo] = useState(disponible);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
   const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
   const [duracion, setDuracion] = useState(duracionConsulta);
   const [precio, setPrecio] = useState(precioConsulta);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
-  const [bloqueado, setBloqueado] = useState(false);
   const autoDesactivadoRef = useRef(false);
 
   const capacidad = calcularCapacidad(desde, hasta, duracion);
 
-  // Regla: bloquear si hay turnos activos hoy — polling via API route
+  // Auto-desactivar consulta inmediata cuando hay turnos activos hoy
   useEffect(() => {
-    async function checkTurnosHoy() {
-      try {
-        const res = await fetch(`/api/turnos-activos-hoy?medicoId=${medicoId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const { count } = await res.json();
-
-        const hay = count > 0;
-        setBloqueado(hay);
-
-        if (hay && !autoDesactivadoRef.current) {
-          autoDesactivadoRef.current = true;
-          setActivo(false);
-          setDisponibleCtx(false);
-          await actualizarDisponibilidad({
-            disponible: false,
-            disponible_desde: disponibleDesde ?? "08:00",
-            disponible_hasta: disponibleHasta ?? "18:00",
-          });
-        }
-        if (!hay) {
-          autoDesactivadoRef.current = false;
-        }
-      } catch {}
+    if (bloqueado && !autoDesactivadoRef.current) {
+      autoDesactivadoRef.current = true;
+      setDisponibleCtx(false);
+      actualizarDisponibilidad({
+        disponible: false,
+        disponible_desde: disponibleDesde ?? "08:00",
+        disponible_hasta: disponibleHasta ?? "18:00",
+      });
     }
-
-    checkTurnosHoy();
-    const interval = setInterval(checkTurnosHoy, 10000);
-    return () => clearInterval(interval);
-  }, [medicoId, disponibleDesde, disponibleHasta]);
+    if (!bloqueado) {
+      autoDesactivadoRef.current = false;
+    }
+  }, [bloqueado, disponibleDesde, disponibleHasta, setDisponibleCtx]);
 
   async function handleToggle() {
     const nuevoEstado = !activo;
-    setActivo(nuevoEstado);
     setDisponibleCtx(nuevoEstado);
     setGuardando(true);
     setMensaje(null);
@@ -92,7 +71,6 @@ export default function DisponibilidadMedico({
 
     setGuardando(false);
     if (result?.error) {
-      setActivo(!nuevoEstado);
       setDisponibleCtx(!nuevoEstado);
       setMensaje(result.error);
     }

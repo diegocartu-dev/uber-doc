@@ -352,7 +352,6 @@ export default async function DashboardPage() {
     const colConsulta = (
       <BloqueConsultaInmediata
         medicoId={medico.id}
-        disponibleInicial={medico.disponible}
         disponibleDesde={medico.disponible_desde}
         disponibleHasta={medico.disponible_hasta}
         duracionConsulta={medico.duracion_consulta}
