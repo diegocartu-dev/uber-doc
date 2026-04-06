@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { soundPacienteEsperando } from "@/lib/sounds";
 
 const POLL_INTERVAL = 5000;
@@ -42,12 +42,18 @@ type DashboardCtx = {
   pendientes: ConsultaPendiente[];
   enCurso: ConsultaEnCurso[];
   turnosEspera: TurnoEspera[];
+  disponible: boolean;
+  turnosActivosHoy: boolean;
+  setDisponible: (v: boolean) => void;
 };
 
 const Ctx = createContext<DashboardCtx>({
   pendientes: [],
   enCurso: [],
   turnosEspera: [],
+  disponible: false,
+  turnosActivosHoy: false,
+  setDisponible: () => {},
 });
 
 export function useDashboardMedico() {
@@ -59,20 +65,30 @@ export default function DashboardMedicoProvider({
   initialPendientes,
   initialEnCurso,
   initialTurnosEspera,
+  initialDisponible,
+  initialTurnosActivosHoy,
   children,
 }: {
   medicoId: string;
   initialPendientes: ConsultaPendiente[];
   initialEnCurso: ConsultaEnCurso[];
   initialTurnosEspera: TurnoEspera[];
+  initialDisponible: boolean;
+  initialTurnosActivosHoy: boolean;
   children: ReactNode;
 }) {
   const [pendientes, setPendientes] = useState(initialPendientes);
   const [enCurso, setEnCurso] = useState(initialEnCurso);
   const [turnosEspera, setTurnosEspera] = useState(initialTurnosEspera);
+  const [disponible, setDisponible] = useState(initialDisponible);
+  const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
 
   const prevPendientesCount = useRef(initialPendientes.length);
   const prevTurnosCount = useRef(initialTurnosEspera.length);
+
+  const handleSetDisponible = useCallback((v: boolean) => {
+    setDisponible(v);
+  }, []);
 
   useEffect(() => {
     async function poll() {
@@ -85,6 +101,8 @@ export default function DashboardMedicoProvider({
 
         setPendientes(data.consultas_pendientes);
         setEnCurso(data.consultas_en_curso);
+        setDisponible(data.disponible);
+        setTurnosActivosHoy((data.turnos_activos_hoy ?? 0) > 0);
 
         // Preserve entradoEn for known turnos
         setTurnosEspera((prev) =>
@@ -116,11 +134,11 @@ export default function DashboardMedicoProvider({
   // Badge in title
   useEffect(() => {
     const total = pendientes.length + turnosEspera.length;
-    document.title = total > 0 ? `(${total}) Docto — Médico` : "Docto — Médico";
+    document.title = total > 0 ? `(${total}) Docto — Medico` : "Docto — Medico";
   }, [pendientes.length, turnosEspera.length]);
 
   return (
-    <Ctx.Provider value={{ pendientes, enCurso, turnosEspera }}>
+    <Ctx.Provider value={{ pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy, setDisponible: handleSetDisponible }}>
       {children}
     </Ctx.Provider>
   );
