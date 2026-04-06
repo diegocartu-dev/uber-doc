@@ -13,6 +13,7 @@ import DailyIframe from "@daily-co/daily-js";
 import { createClient } from "@/lib/supabase/client";
 import { soundVideoLista } from "@/lib/sounds";
 import { TouchButton } from "@/components/TouchButton";
+import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 
 function formatTimer(seg: number): string {
   const m = Math.floor(seg / 60);
@@ -42,6 +43,14 @@ function calcularEdad(fechaNac: string | null): string {
   return `${edad} años`;
 }
 
+type DocBorrador = {
+  diagnostico?: string;
+  receta?: string;
+  indicaciones?: string;
+  certificado?: string;
+  updated_at?: string;
+} | null;
+
 type ConsultaData = {
   especialidad: string;
   motivo_consulta: string | null;
@@ -52,6 +61,7 @@ type ConsultaData = {
   paciente_cuil: string | null;
   medico_nombre: string;
   medico_domicilio: string | null;
+  doc_borrador?: DocBorrador;
 };
 
 type Props = {
@@ -218,11 +228,20 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
     return () => clearTimeout(t);
   }, [pacienteSalio]);
 
-  // Campos clínicos
-  const [diagnostico, setDiagnostico] = useState("");
-  const [receta, setReceta] = useState("");
-  const [indicaciones, setIndicaciones] = useState("");
-  const [certificado, setCertificado] = useState("");
+  // Campos clínicos — pre-cargar desde borrador si existe
+  const borrador = consulta.doc_borrador;
+  const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
+  const [receta, setReceta] = useState(borrador?.receta ?? "");
+  const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
+  const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+
+  // Auto-save borrador (solo médicos)
+  const esTurnoCheck = apiEndpoint === "/api/videollamada-turno";
+  const { estado: estadoBorrador } = useAutoSaveBorrador(
+    consultaId,
+    esTurnoCheck ? "turno" : "consulta",
+    esMedico ? { diagnostico, receta, indicaciones, certificado } : { diagnostico: "", receta: "", indicaciones: "", certificado: "" }
+  );
 
   const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const iniciadoRef = useRef(false);
@@ -456,8 +475,8 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         }
       }
 
-      // Finalizar
-      await supabase.from(tabla).update({ estado: estadoFinal }).eq("id", consultaId);
+      // Finalizar y limpiar borrador
+      await supabase.from(tabla).update({ estado: estadoFinal, doc_borrador: null }).eq("id", consultaId);
 
       if (frameRef.current) {
         frameRef.current.leave();
@@ -593,6 +612,17 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
               </div>
               <div className="px-5 pb-8 pt-2">
                 <p className="text-sm text-gray-500">{consulta.paciente_nombre} · {consulta.especialidad}</p>
+                {estadoBorrador !== "idle" && (
+                  <p className={`mt-2 text-xs ${
+                    estadoBorrador === "saving" ? "text-gray-400" :
+                    estadoBorrador === "saved" ? "text-[#1D9E75]" :
+                    "text-[#E24B4A]"
+                  }`}>
+                    {estadoBorrador === "saving" && "Guardando borrador..."}
+                    {estadoBorrador === "saved" && "Borrador guardado"}
+                    {estadoBorrador === "error" && "Error al guardar borrador"}
+                  </p>
+                )}
 
                 <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico..." required dictando={dictando} onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)} onDetener={detenerDictado} />
                 <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis..." dictando={dictando} onIniciar={() => iniciarDictado("receta", setReceta)} onDetener={detenerDictado} />
@@ -778,6 +808,17 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
             )}
 
             <div className="mt-5 border-t pt-4" style={{ borderColor: "#e5e7eb" }}>
+              {estadoBorrador !== "idle" && (
+                <p className={`mb-2 text-xs ${
+                  estadoBorrador === "saving" ? "text-gray-400" :
+                  estadoBorrador === "saved" ? "text-[#1D9E75]" :
+                  "text-[#E24B4A]"
+                }`}>
+                  {estadoBorrador === "saving" && "Guardando borrador..."}
+                  {estadoBorrador === "saved" && "Borrador guardado"}
+                  {estadoBorrador === "error" && "Error al guardar borrador"}
+                </p>
+              )}
               <CampoDictado label="DIAGNÓSTICO" campo="diagnostico" value={diagnostico} setter={setDiagnostico} placeholder="Diagnóstico del paciente..." required dictando={dictando} onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)} onDetener={detenerDictado} />
               <CampoDictado label="RECETA" campo="receta" value={receta} setter={setReceta} placeholder="Medicamentos, dosis, frecuencia..." dictando={dictando} onIniciar={() => iniciarDictado("receta", setReceta)} onDetener={detenerDictado} />
               <CampoDictado label="INDICACIONES" campo="indicaciones" value={indicaciones} setter={setIndicaciones} placeholder="Reposo, estudios, derivaciones..." dictando={dictando} onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)} onDetener={detenerDictado} />

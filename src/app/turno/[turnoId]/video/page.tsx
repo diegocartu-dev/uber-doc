@@ -14,7 +14,7 @@ export default async function VideoTurnoPage({
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, medico_id, paciente_id, sala_video_url, hora_inicio")
+    .select("id, estado, medico_id, paciente_id, sala_video_url, hora_inicio, doc_borrador")
     .eq("id", turnoId)
     .single();
 
@@ -60,6 +60,7 @@ export default async function VideoTurnoPage({
           paciente_cuil: paciente?.cuil ?? null,
           medico_nombre: medico?.nombre_completo ?? "Médico",
           medico_domicilio: medico?.domicilio ?? null,
+          doc_borrador: turno.doc_borrador ?? null,
         }}
       />
     </div>

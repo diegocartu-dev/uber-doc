@@ -26,7 +26,7 @@ export default async function CompletarPage({
 
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas, tiempo_sintomas")
+    .select("id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas, tiempo_sintomas, doc_borrador")
     .eq("id", consultaId)
     .single();
 
@@ -59,6 +59,7 @@ export default async function CompletarPage({
           paciente_nacimiento: paciente?.fecha_nacimiento ?? null,
           paciente_cuil: paciente?.cuil ?? null,
           paciente_id: consulta.paciente_id,
+          doc_borrador: consulta.doc_borrador ?? null,
         }}
       />
     </div>

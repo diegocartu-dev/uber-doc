@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Docto - Telemedicina",
   description: "Tu doctor, a un click de distancia. Consultas médicas online por videollamada, chat y recetas digitales.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

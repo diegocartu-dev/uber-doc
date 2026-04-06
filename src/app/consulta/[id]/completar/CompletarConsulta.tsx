@@ -10,6 +10,7 @@ declare global {
 
 import { useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -102,6 +103,14 @@ function CampoDictado({
   );
 }
 
+type DocBorrador = {
+  diagnostico?: string;
+  receta?: string;
+  indicaciones?: string;
+  certificado?: string;
+  updated_at?: string;
+} | null;
+
 type Props = {
   consultaId: string;
   medicoId: string;
@@ -114,23 +123,31 @@ type Props = {
     paciente_nacimiento: string | null;
     paciente_cuil: string | null;
     paciente_id: string;
+    doc_borrador?: DocBorrador;
   };
 };
 
 export default function CompletarConsulta({ consultaId, medicoId, consulta }: Props) {
-  const [diagnostico, setDiagnostico] = useState("");
-  const [receta, setReceta] = useState("");
-  const [indicaciones, setIndicaciones] = useState("");
-  const [certificado, setCertificado] = useState("");
+  const borrador = consulta.doc_borrador;
+  const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
+  const [receta, setReceta] = useState(borrador?.receta ?? "");
+  const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
+  const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
   const [finalizando, setFinalizando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { estado: estadoBorrador } = useAutoSaveBorrador(
+    consultaId,
+    "consulta",
+    { diagnostico, receta, indicaciones, certificado }
+  );
 
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
   const edad = calcularEdad(consulta.paciente_nacimiento);
 
-  async function finalizar(conDocumentos: boolean) {
-    if (conDocumentos && !diagnostico.trim()) {
-      setError("El diagnóstico es obligatorio para generar documentos.");
+  async function finalizar() {
+    if (!diagnostico.trim()) {
+      setError("El diagnóstico es obligatorio para finalizar la consulta.");
       return;
     }
 
@@ -140,36 +157,34 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
     try {
       const supabase = createClient();
 
-      if (conDocumentos) {
-        const { data: paciente } = await supabase
-          .from("pacientes")
-          .select("id")
-          .eq("user_id", consulta.paciente_id)
-          .single();
+      const { data: paciente } = await supabase
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", consulta.paciente_id)
+        .single();
 
-        if (paciente) {
-          const docs: { tipo: string; contenido: string }[] = [];
-          if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-          if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-          if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
-          if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
+      if (paciente) {
+        const docs: { tipo: string; contenido: string }[] = [];
+        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (indicaciones.trim()) docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+        if (certificado.trim()) docs.push({ tipo: "certificado", contenido: certificado.trim() });
+        if (docs.length === 0) docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-          await supabase.from("documentos").insert(
-            docs.map((d) => ({
-              consulta_id: consultaId,
-              paciente_id: paciente.id,
-              medico_id: medicoId,
-              tipo: d.tipo,
-              diagnostico: diagnostico.trim(),
-              contenido: d.contenido,
-            }))
-          );
-        }
+        await supabase.from("documentos").insert(
+          docs.map((d) => ({
+            consulta_id: consultaId,
+            paciente_id: paciente.id,
+            medico_id: medicoId,
+            tipo: d.tipo,
+            diagnostico: diagnostico.trim(),
+            contenido: d.contenido,
+          }))
+        );
       }
 
-      await supabase.from("consultas").update({ estado: "completada" }).eq("id", consultaId);
+      await supabase.from("consultas").update({ estado: "completada", doc_borrador: null }).eq("id", consultaId);
       window.location.href = "/dashboard";
-    } catch (err) {
+    } catch {
       setError("Error al finalizar. Intentá de nuevo.");
       setFinalizando(false);
     }
@@ -208,6 +223,19 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
         </div>
       )}
 
+      {/* Estado borrador */}
+      {estadoBorrador !== "idle" && (
+        <p className={`mt-4 text-xs ${
+          estadoBorrador === "saving" ? "text-gray-400" :
+          estadoBorrador === "saved" ? "text-[#1D9E75]" :
+          "text-[#E24B4A]"
+        }`}>
+          {estadoBorrador === "saving" && "Guardando borrador..."}
+          {estadoBorrador === "saved" && "Borrador guardado"}
+          {estadoBorrador === "error" && "Error al guardar borrador"}
+        </p>
+      )}
+
       {/* Error */}
       {error && (
         <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
@@ -222,21 +250,13 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
       </div>
 
       {/* Acciones */}
-      <div className="mt-8 space-y-3">
+      <div className="mt-8">
         <button
           disabled={finalizando}
-          onClick={() => finalizar(true)}
+          onClick={() => finalizar()}
           className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
         >
           {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
-        </button>
-        <button
-          disabled={finalizando}
-          onClick={() => finalizar(false)}
-          className="w-full rounded-xl px-6 py-3 text-sm text-gray-500 transition hover:bg-gray-100 disabled:opacity-50"
-          style={{ border: "0.5px solid #e5e7eb" }}
-        >
-          Saltar — no generar documentos
         </button>
       </div>
     </main>
