@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
           failure: `${baseUrl}/sala-espera/${consultaId}?pago=error`,
           pending: `${baseUrl}/sala-espera/${consultaId}?pago=pendiente`,
         },
+        notification_url: `${baseUrl}/api/pago/webhook`,
         external_reference: consultaId,
         metadata: {
           consulta_id: consultaId,

@@ -22,11 +22,10 @@ export default async function VideoPage({
     .single();
 
   if (!consulta) redirect("/dashboard");
-  if (consulta.estado === "completada" || consulta.estado === "cancelada") redirect("/dashboard");
 
-  if (consulta.estado !== "en_curso") {
-    await supabase.from("consultas").update({ estado: "en_curso" }).eq("id", consultaId);
-  }
+  // Solo permitir acceso si el pago fue confirmado o la consulta está en curso
+  const estadosPermitidos = ["pagada", "en_curso"];
+  if (!estadosPermitidos.includes(consulta.estado)) redirect("/dashboard");
 
   const { data: medicoData } = await supabase
     .from("medicos")

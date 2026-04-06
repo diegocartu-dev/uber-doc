@@ -30,13 +30,8 @@ export default async function ConfirmacionPagoPage({
     redirect("/clinica");
   }
 
-  // Actualizar estado a en_curso
-  if (consulta.estado === "aceptada") {
-    await supabase
-      .from("consultas")
-      .update({ estado: "en_curso" })
-      .eq("id", consultaId);
-  }
+  // Si el pago aún no fue confirmado por webhook, mostrar estado apropiado
+  const pagoConfirmado = consulta.estado === "pagada" || consulta.estado === "en_curso";
 
   // Traer datos del médico
   const { data: medico } = await supabase
@@ -63,11 +58,13 @@ export default async function ConfirmacionPagoPage({
           </div>
 
           <h1 className="mt-6 text-2xl font-bold text-gray-900">
-            ¡Pago confirmado!
+            {pagoConfirmado ? "¡Pago confirmado!" : "Procesando pago..."}
           </h1>
 
           <p className="mt-2 text-gray-600">
-            Tu consulta está lista para comenzar
+            {pagoConfirmado
+              ? "Tu consulta está lista para comenzar"
+              : "Estamos verificando tu pago con Mercado Pago"}
           </p>
         </div>
 

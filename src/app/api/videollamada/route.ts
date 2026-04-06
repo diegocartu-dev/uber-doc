@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (consulta.estado !== "en_curso" && consulta.estado !== "aceptada") {
+  if (consulta.estado !== "en_curso" && consulta.estado !== "pagada") {
     return NextResponse.json(
-      { error: `La consulta no está en curso (estado: ${consulta.estado}).` },
+      { error: `La consulta no está en estado válido (estado: ${consulta.estado}).` },
       { status: 400 }
     );
   }
@@ -74,12 +74,12 @@ export async function POST(req: NextRequest) {
 
     if (getRes.ok) {
       const room = await getRes.json();
-      // Guardar URL si no estaba guardada
-      if (!consulta.sala_video_url) {
-        await supabase
-          .from("consultas")
-          .update({ sala_video_url: room.url })
-          .eq("id", consultaId);
+      // Guardar URL y transicionar estado si corresponde
+      const updateData: Record<string, string> = {};
+      if (!consulta.sala_video_url) updateData.sala_video_url = room.url;
+      if (consulta.estado === "pagada") updateData.estado = "en_curso";
+      if (Object.keys(updateData).length > 0) {
+        await supabase.from("consultas").update(updateData).eq("id", consultaId);
       }
       return NextResponse.json({ url: room.url, roomName });
     }
@@ -116,10 +116,12 @@ export async function POST(req: NextRequest) {
 
     const room = await createRes.json();
 
-    // Guardar URL en la consulta ANTES de responder
+    // Guardar URL y transicionar estado
+    const updateFields: Record<string, string> = { sala_video_url: room.url };
+    if (consulta.estado === "pagada") updateFields.estado = "en_curso";
     const { error: updateError } = await supabase
       .from("consultas")
-      .update({ sala_video_url: room.url })
+      .update(updateFields)
       .eq("id", consultaId);
 
     if (updateError) {
