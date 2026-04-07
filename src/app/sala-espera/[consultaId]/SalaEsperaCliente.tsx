@@ -51,7 +51,7 @@ export default function SalaEsperaCliente({
         const data = await res.json();
         if (!data.estado) return;
 
-        if ((data.estado === "aceptada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
+        if ((data.estado === "aceptada" || data.estado === "pagada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
           soundConsultaAceptada();
           setPosicion(0);
           setTiempoEstimado(0);
@@ -72,7 +72,7 @@ export default function SalaEsperaCliente({
     return () => clearInterval(interval);
   }, [consultaId, salaVideoUrl]);
 
-  const aceptada = estado === "aceptada" || estado === "en_curso";
+  const aceptada = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
 
   return (
     <div className="text-center">
@@ -188,7 +188,7 @@ export default function SalaEsperaCliente({
       )}
 
       {/* Botón de testing — simular pago aprobado */}
-      {aceptada && !salaVideoUrl && (
+      {aceptada && !salaVideoUrl && estado !== "pagada" && estado !== "en_curso" && (
         <button
           disabled={pagando}
           onClick={async () => {
@@ -196,7 +196,7 @@ export default function SalaEsperaCliente({
             const supabase = createClient();
             await supabase
               .from("consultas")
-              .update({ estado: "en_curso" })
+              .update({ estado: "pagada" })
               .eq("id", consultaId);
             window.location.href = `/consulta/${consultaId}/confirmacion`;
           }}

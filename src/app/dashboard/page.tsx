@@ -51,7 +51,7 @@ export default async function DashboardPage() {
   }[] = [];
 
   let consultasEnCurso: {
-    id: string; especialidad: string; paciente_nombre: string; paciente_tabla_id: string | null;
+    id: string; especialidad: string; estado: string; paciente_nombre: string; paciente_tabla_id: string | null;
     sala_video_url: string | null; motivo_consulta: string | null;
     sintomas: string[] | null; created_at: string; fecha_nacimiento: string | null;
   }[] = [];
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
       .from("consultas")
       .select("id, especialidad, estado, sala_video_url, medico_id")
       .eq("paciente_id", user.id)
-      .in("estado", ["aceptada", "en_curso"])
+      .in("estado", ["aceptada", "pagada", "en_curso"])
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
@@ -182,8 +182,8 @@ export default async function DashboardPage() {
       // Consultas aceptadas + en curso
       const { data: enCurso } = await supabase
         .from("consultas")
-        .select("id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at")
-        .eq("medico_id", data.id).in("estado", ["aceptada", "en_curso"])
+        .select("id, especialidad, estado, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at")
+        .eq("medico_id", data.id).in("estado", ["aceptada", "pagada", "en_curso"])
         .order("created_at", { ascending: true });
 
       if (enCurso && enCurso.length > 0) {
@@ -191,7 +191,8 @@ export default async function DashboardPage() {
         consultasEnCurso = enCurso.map((c) => {
           const p = pacMap.get(c.paciente_id);
           return {
-            id: c.id, especialidad: c.especialidad, paciente_nombre: p?.nombre ?? "Paciente",
+            id: c.id, especialidad: c.especialidad, estado: c.estado,
+            paciente_nombre: p?.nombre ?? "Paciente",
             paciente_tabla_id: p?.id ?? null, sala_video_url: c.sala_video_url,
             motivo_consulta: c.motivo_consulta, sintomas: c.sintomas,
             created_at: c.created_at, fecha_nacimiento: p?.nacimiento ?? null,
