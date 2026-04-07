@@ -207,6 +207,7 @@ export default function WorkspaceConsulta({
   const [finalizando, setFinalizando] = useState(false);
   const [error, setError] = useState<string | null>(videoErrorProp);
   const [timerSeg, setTimerSeg] = useState(0);
+  const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   // Mobile: dos modos explícitos. false = video, true = escritura.
   const [modoEscritura, setModoEscritura] = useState(false);
@@ -347,6 +348,38 @@ export default function WorkspaceConsulta({
     }
   }
 
+  // --- Guardar documentos manual ---
+  async function guardarDocumentos() {
+    setGuardadoManual('saving');
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/borrador`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "consulta",
+          borrador: {
+            diagnostico,
+            receta,
+            indicaciones,
+            certificado,
+            updated_at: new Date().toISOString(),
+          },
+        }),
+      });
+      if (!res.ok) {
+        setGuardadoManual('idle');
+        setError("Error al guardar documentos.");
+        return;
+      }
+      setGuardadoManual('saved');
+      setTimeout(() => setGuardadoManual('idle'), 2000);
+    } catch {
+      setGuardadoManual('idle');
+      setError("Error de conexion al guardar.");
+    }
+  }
+
   // --- Render ---
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
@@ -354,7 +387,7 @@ export default function WorkspaceConsulta({
       {/* COLUMNA IZQUIERDA / ARRIBA — Video                               */}
       {/* ================================================================ */}
       <div
-        className={`relative flex flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
+        className={`relative flex w-full flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
           modoEscritura
             ? "h-[80px] min-h-[80px]"
             : "h-[75dvh] min-h-[200px]"
@@ -399,7 +432,7 @@ export default function WorkspaceConsulta({
 
         {/* Video iframe — en modo escritura mobile se oculta con CSS, NUNCA se desmonta */}
         <div
-          className={`flex-1 transition-all duration-300 ease-in-out ${
+          className={`flex-1 w-full transition-all duration-300 ease-in-out ${
             modoEscritura
               ? "h-0 min-h-0 overflow-hidden md:h-auto md:min-h-0 md:overflow-visible"
               : "min-h-0"
@@ -436,7 +469,7 @@ export default function WorkspaceConsulta({
                   {consulta.motivo_consulta || consulta.especialidad}
                 </p>
               </div>
-              <div className="ml-3 shrink-0 flex flex-col items-end gap-1">
+              <div className="ml-3 shrink-0 flex flex-col items-end gap-2">
                 <button
                   type="button"
                   onClick={() => setModoEscritura(true)}
@@ -445,22 +478,23 @@ export default function WorkspaceConsulta({
                 >
                   Documentar
                 </button>
-                <button
-                  type="button"
-                  disabled={finalizando}
-                  onClick={() => {
-                    if (!diagnostico.trim()) {
-                      setError("El diagnostico es obligatorio para finalizar.");
-                      setModoEscritura(true);
-                      return;
-                    }
-                    finalizarConsulta();
-                  }}
-                  className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
-                  style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
-                >
-                  {finalizando ? "Finalizando..." : "Finalizar consulta"}
-                </button>
+                {diagnostico.trim() && (
+                  <button
+                    type="button"
+                    disabled={finalizando}
+                    onClick={() => {
+                      const confirmado = window.confirm(
+                        "Finalizar la consulta y generar los documentos para el paciente?"
+                      );
+                      if (!confirmado) return;
+                      finalizarConsulta();
+                    }}
+                    className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
+                    style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
+                  >
+                    {finalizando ? "Finalizando..." : "Finalizar consulta"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -633,26 +667,64 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
           />
 
-          {/* Acciones sticky */}
+          {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
           <div
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
-            <button
-              disabled={finalizando}
-              onClick={finalizarConsulta}
-              className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
-              style={{ minHeight: "44px" }}
-            >
-              {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
-            </button>
-            <button
-              onClick={cancelarConsulta}
-              className="mt-2 w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
-              style={{ color: "#E24B4A", minHeight: "44px" }}
-            >
-              Cancelar consulta
-            </button>
+            {/* Mobile modo escritura: Guardar documentos + Volver a la llamada */}
+            <div className="md:hidden flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={guardadoManual === 'saving'}
+                onClick={guardarDocumentos}
+                className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+                style={{ minHeight: "44px" }}
+              >
+                {guardadoManual === 'saving'
+                  ? "Guardando..."
+                  : guardadoManual === 'saved'
+                    ? "\u2713 Guardado"
+                    : "Guardar documentos"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoEscritura(false)}
+                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80"
+                style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
+              >
+                Volver a la llamada
+              </button>
+            </div>
+
+            {/* Desktop: finalizar + cancelar */}
+            <div className="hidden md:flex md:flex-col md:gap-2">
+              <button
+                disabled={finalizando}
+                onClick={() => {
+                  if (!diagnostico.trim()) {
+                    setError("El diagnostico es obligatorio para finalizar.");
+                    return;
+                  }
+                  const confirmado = window.confirm(
+                    "Finalizar la consulta y generar los documentos para el paciente?"
+                  );
+                  if (!confirmado) return;
+                  finalizarConsulta();
+                }}
+                className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+                style={{ minHeight: "44px" }}
+              >
+                {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
+              </button>
+              <button
+                onClick={cancelarConsulta}
+                className="w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
+                style={{ color: "#E24B4A", minHeight: "44px" }}
+              >
+                Cancelar consulta
+              </button>
+            </div>
           </div>
         </div>
       </div>
