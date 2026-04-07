@@ -52,60 +52,16 @@ export default async function ConfirmacionPagoPage({
       </nav>
 
       <main className="mx-auto max-w-lg px-4 py-16">
-        <div className="text-center">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/5">
-            <span className="text-5xl">✅</span>
-          </div>
+        <EsperaVideo
+          consultaId={consultaId}
+          salaVideoUrlInicial={consulta.sala_video_url}
+          estadoInicial={consulta.estado}
+          medicoNombre={medico?.nombre_completo ?? ""}
+          especialidad={consulta.especialidad}
+          duracionConsulta={medico?.duracion_consulta ?? 20}
+        />
 
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">
-            {pagoConfirmado ? "¡Pago confirmado!" : "Procesando pago..."}
-          </h1>
-
-          <p className="mt-2 text-gray-600">
-            {pagoConfirmado
-              ? "Tu consulta está lista para comenzar"
-              : "Estamos verificando tu pago con Mercado Pago"}
-          </p>
-        </div>
-
-        {medico && (
-          <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Médico</span>
-                <span className="font-medium text-gray-900">
-                  {medico.nombre_completo}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Especialidad</span>
-                <span className="font-medium text-gray-900">
-                  {consulta.especialidad}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Duración</span>
-                <span className="font-medium text-gray-900">
-                  {medico.duracion_consulta} min
-                </span>
-              </div>
-              <div className="border-t border-gray-100 pt-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Estado</span>
-                  <span className="font-medium text-[#1D9E75]">Pagada</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-8 space-y-3">
-          <EsperaVideo
-            consultaId={consultaId}
-            salaVideoUrlInicial={consulta.sala_video_url}
-            estadoInicial={consulta.estado}
-          />
-
+        <div className="mt-4">
           <Link
             href="/dashboard"
             className="block w-full rounded-xl border border-gray-300 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
