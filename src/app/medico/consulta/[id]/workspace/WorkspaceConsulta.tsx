@@ -431,31 +431,29 @@ export default function WorkspaceConsulta({
           </div>
         </div>
 
-        {/* Video iframe */}
-        {!escribiendo && (
-          <div className="flex-1 relative">
-            {iframeUrl ? (
-              <iframe
-                src={iframeUrl}
-                allow="camera; microphone; autoplay; display-capture"
-                className="absolute inset-0 w-full h-full border-0"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <p className="text-sm text-white/50">
-                  {error || "Conectando video..."}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Video iframe — se oculta con CSS en modo escritura para NO desmontar/matar la conexión */}
+        <div className={`flex-1 relative ${escribiendo ? "hidden md:block" : ""}`}>
+          {iframeUrl ? (
+            <iframe
+              src={iframeUrl}
+              allow="camera; microphone; autoplay; display-capture; fullscreen"
+              referrerPolicy="no-referrer-when-downgrade"
+              className="absolute inset-0 w-full h-full border-0"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-sm text-white/50">
+                {error || "Conectando video..."}
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Footer controles desktop */}
-        {!escribiendo && (
-          <div
-            className="hidden md:flex items-center justify-center gap-3 px-4 py-3"
-            style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
-          >
+        <div
+          className={`hidden md:flex items-center justify-center gap-3 px-4 py-3 ${escribiendo ? "md:hidden" : ""}`}
+          style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+        >
             <span className="text-xs tabular-nums text-white/40">
               {formatTimer(timerSeg)}
             </span>
@@ -463,7 +461,6 @@ export default function WorkspaceConsulta({
               Controles de audio/video en el iframe
             </span>
           </div>
-        )}
       </div>
 
       {/* ================================================================ */}
