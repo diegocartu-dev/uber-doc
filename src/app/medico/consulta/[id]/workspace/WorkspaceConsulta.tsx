@@ -100,6 +100,8 @@ function CampoDictado({
   placeholder,
   rows = 3,
   required = false,
+  hasError = false,
+  textareaRef,
   dictando,
   onIniciar,
   onDetener,
@@ -111,6 +113,8 @@ function CampoDictado({
   placeholder: string;
   rows?: number;
   required?: boolean;
+  hasError?: boolean;
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
   dictando: string | null;
   onIniciar: () => void;
   onDetener: () => void;
@@ -119,7 +123,7 @@ function CampoDictado({
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium tracking-wide text-gray-400">
+        <p className={`text-xs font-medium tracking-wide ${hasError ? "text-[#E24B4A]" : "text-gray-400"}`}>
           {label}
           {required && " *"}
         </p>
@@ -140,12 +144,13 @@ function CampoDictado({
         </button>
       </div>
       <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => setter(e.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
-        style={{ border: "0.5px solid #e5e7eb" }}
+        className={`mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 ${hasError ? "focus:ring-[#E24B4A]" : "focus:ring-[#1D9E75]"}`}
+        style={{ border: `${hasError ? "1.5px" : "0.5px"} solid ${hasError ? "#E24B4A" : "#e5e7eb"}` }}
       />
     </div>
   );
@@ -211,6 +216,8 @@ export default function WorkspaceConsulta({
 
   // Mobile: dos modos explícitos. false = video, true = escritura.
   const [modoEscritura, setModoEscritura] = useState(false);
+  const [diagError, setDiagError] = useState(false);
+  const diagRef = useRef<HTMLTextAreaElement>(null);
 
   // --- Auto-save ---
   const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
@@ -240,12 +247,19 @@ export default function WorkspaceConsulta({
     return () => clearInterval(i);
   }, [horaInicio]);
 
+  // Helper: validar diagnóstico antes de finalizar
+  function validarDiagnostico(): boolean {
+    if (diagnostico.trim()) return true;
+    setError("Completá el diagnóstico antes de finalizar la consulta.");
+    setDiagError(true);
+    setModoEscritura(true);
+    setTimeout(() => diagRef.current?.focus(), 350); // después de la transición CSS
+    return false;
+  }
+
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
-    if (!diagnostico.trim()) {
-      setError("El diagnostico es obligatorio para finalizar.");
-      return;
-    }
+    if (!validarDiagnostico()) return;
 
     setFinalizando(true);
     setError(null);
@@ -629,11 +643,13 @@ export default function WorkspaceConsulta({
             label="DIAGNOSTICO"
             campo="diagnostico"
             value={diagnostico}
-            setter={setDiagnostico}
+            setter={(v) => { setDiagnostico(v); if (v.trim()) { setDiagError(false); setError(null); } }}
             placeholder="Diagnostico del paciente..."
             required
+            hasError={diagError}
+            textareaRef={diagRef}
             dictando={dictando}
-            onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)}
+            onIniciar={() => iniciarDictado("diagnostico", (fn) => setDiagnostico((prev) => { const val = fn(prev); if (val.trim()) { setDiagError(false); setError(null); } return val; }))}
             onDetener={detenerDictado}
           />
           <CampoDictado
@@ -702,10 +718,7 @@ export default function WorkspaceConsulta({
               <button
                 disabled={finalizando}
                 onClick={() => {
-                  if (!diagnostico.trim()) {
-                    setError("El diagnostico es obligatorio para finalizar.");
-                    return;
-                  }
+                  if (!validarDiagnostico()) return;
                   const confirmado = window.confirm(
                     "Finalizar la consulta y generar los documentos para el paciente?"
                   );
