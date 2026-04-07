@@ -103,8 +103,6 @@ function CampoDictado({
   dictando,
   onIniciar,
   onDetener,
-  onFocus,
-  onBlur,
 }: {
   label: string;
   campo: string;
@@ -116,8 +114,6 @@ function CampoDictado({
   dictando: string | null;
   onIniciar: () => void;
   onDetener: () => void;
-  onFocus?: () => void;
-  onBlur?: (e: React.FocusEvent) => void;
 }) {
   const activo = dictando === campo;
   return (
@@ -146,8 +142,6 @@ function CampoDictado({
       <textarea
         value={value}
         onChange={(e) => setter(e.target.value)}
-        onFocus={onFocus}
-        onBlur={onBlur}
         rows={rows}
         placeholder={placeholder}
         className="mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
@@ -212,10 +206,10 @@ export default function WorkspaceConsulta({
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
   const [error, setError] = useState<string | null>(videoErrorProp);
-  const [escribiendo, setEscribiendo] = useState(false);
   const [timerSeg, setTimerSeg] = useState(0);
 
-  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mobile: dos modos explícitos. false = video, true = escritura.
+  const [modoEscritura, setModoEscritura] = useState(false);
 
   // --- Auto-save ---
   const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
@@ -244,24 +238,6 @@ export default function WorkspaceConsulta({
     const i = setInterval(calcular, 1000);
     return () => clearInterval(i);
   }, [horaInicio]);
-
-  // --- Mobile: modo escritura ---
-  const handleTextareaFocus = useCallback(() => {
-    if (blurTimeoutRef.current) {
-      clearTimeout(blurTimeoutRef.current);
-      blurTimeoutRef.current = null;
-    }
-    setEscribiendo(true);
-  }, []);
-
-  const handleTextareaBlur = useCallback((e: React.FocusEvent) => {
-    // Si el nuevo focus es otro textarea, no salir del modo escritura
-    blurTimeoutRef.current = setTimeout(() => {
-      const active = document.activeElement;
-      if (active && active.tagName === "TEXTAREA") return;
-      setEscribiendo(false);
-    }, 100);
-  }, []);
 
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
@@ -371,68 +347,64 @@ export default function WorkspaceConsulta({
     }
   }
 
-  // --- Campos dictado props ---
-  const campoProps = {
-    dictando,
-    onFocus: handleTextareaFocus,
-    onBlur: handleTextareaBlur,
-  };
-
   // --- Render ---
   return (
-    <div className="flex h-screen flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
+    <div className="flex h-[100dvh] flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
       {/* ================================================================ */}
-      {/* COLUMNA IZQUIERDA — Video                                        */}
+      {/* COLUMNA IZQUIERDA / ARRIBA — Video                               */}
       {/* ================================================================ */}
       <div
         className={`relative flex flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
-          escribiendo
-            ? "h-[80px] min-h-[80px] md:h-auto md:min-h-0"
-            : "h-[40vh] min-h-[200px] max-h-[300px] md:h-auto md:max-h-none md:min-h-0"
-        } md:w-[60%] md:flex-1`}
+          modoEscritura
+            ? "h-[80px] min-h-[80px]"
+            : "h-[75dvh] min-h-[200px]"
+        } md:h-auto md:min-h-0 md:w-[60%] md:flex-1`}
       >
-        {/* Header con info paciente + timer */}
+        {/* Barra compacta modo escritura (solo mobile) */}
         <div
           className={`flex items-center justify-between px-4 ${
-            escribiendo ? "py-2" : "py-3"
+            modoEscritura ? "py-2" : "py-3"
           } md:py-3`}
           style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1D9E75]" />
-            {escribiendo ? (
-              <span className="text-xs text-white/70 truncate">
+            {modoEscritura ? (
+              <span className="text-xs text-white/70 truncate md:hidden">
                 Llamada activa
               </span>
-            ) : (
-              <span className="text-sm font-medium text-white truncate">
-                {consulta.paciente_nombre}
-              </span>
-            )}
+            ) : null}
+            {/* Desktop siempre muestra nombre */}
+            <span className={`text-sm font-medium text-white truncate ${modoEscritura ? "hidden md:inline" : ""}`}>
+              {consulta.paciente_nombre}
+            </span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <span className="text-xs tabular-nums text-white/50">
               {formatTimer(timerSeg)}
             </span>
-            {/* Controles mobile inline (modo escritura) o siempre visible en mobile */}
-            <div className="flex items-center gap-1 md:hidden">
+            {/* Botón volver al video (solo mobile, solo en modo escritura) */}
+            {modoEscritura && (
               <button
                 type="button"
-                onClick={() => {
-                  /* No-op: iframe controla mic/cam */
-                }}
-                className="rounded-md px-2 py-1 text-xs text-white/60"
+                onClick={() => setModoEscritura(false)}
+                className="md:hidden rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition"
                 style={{ minHeight: "44px", minWidth: "44px" }}
-                aria-label="Controles en iframe"
               >
-                {/* Los controles de mic/cam estan dentro del iframe de Daily */}
+                Volver al video
               </button>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Video iframe — se oculta con CSS en modo escritura para NO desmontar/matar la conexión */}
-        <div className={`flex-1 relative ${escribiendo ? "hidden md:block" : ""}`}>
+        {/* Video iframe — en modo escritura mobile se oculta con CSS, NUNCA se desmonta */}
+        <div
+          className={`flex-1 relative transition-all duration-300 ease-in-out ${
+            modoEscritura
+              ? "h-0 overflow-hidden md:h-auto md:overflow-visible"
+              : ""
+          }`}
+        >
           {iframeUrl ? (
             <iframe
               src={iframeUrl}
@@ -449,29 +421,58 @@ export default function WorkspaceConsulta({
           )}
         </div>
 
+        {/* Footer info paciente + botón Documentar (solo mobile, modo video) */}
+        {!modoEscritura && (
+          <div
+            className="md:hidden flex items-center justify-between px-4 py-3"
+            style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white truncate">
+                {consulta.paciente_nombre}
+              </p>
+              <p className="text-xs text-white/50 truncate">
+                {consulta.motivo_consulta || consulta.especialidad}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setModoEscritura(true)}
+              className="ml-3 shrink-0 rounded-xl bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+              style={{ minHeight: "44px" }}
+            >
+              Documentar
+            </button>
+          </div>
+        )}
+
         {/* Footer controles desktop */}
         <div
-          className={`hidden md:flex items-center justify-center gap-3 px-4 py-3 ${escribiendo ? "md:hidden" : ""}`}
+          className="hidden md:flex items-center justify-center gap-3 px-4 py-3"
           style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
         >
-            <span className="text-xs tabular-nums text-white/40">
-              {formatTimer(timerSeg)}
-            </span>
-            <span className="text-xs text-white/30">
-              Controles de audio/video en el iframe
-            </span>
-          </div>
+          <span className="text-xs tabular-nums text-white/40">
+            {formatTimer(timerSeg)}
+          </span>
+          <span className="text-xs text-white/30">
+            Controles de audio/video en el iframe
+          </span>
+        </div>
       </div>
 
       {/* ================================================================ */}
-      {/* COLUMNA DERECHA — Documentacion                                  */}
+      {/* COLUMNA DERECHA / ABAJO — Documentacion                          */}
+      {/* En mobile: solo visible en modo escritura                        */}
+      {/* En desktop: siempre visible (split 60/40)                        */}
       {/* ================================================================ */}
       <div
-        className="flex-1 overflow-y-auto md:w-[40%] md:flex-none"
+        className={`flex-1 overflow-y-auto md:w-[40%] md:flex-none ${
+          modoEscritura ? "" : "hidden md:block"
+        }`}
         style={{ borderLeft: "0.5px solid #e5e7eb" }}
       >
         <div className="p-5">
-          {/* Info paciente (solo desktop, mobile la ve en header video) */}
+          {/* Info paciente (solo desktop) */}
           <div className="hidden md:block">
             <p className="text-xs font-medium tracking-wide text-gray-400">
               PACIENTE
@@ -530,7 +531,7 @@ export default function WorkspaceConsulta({
             />
           </div>
 
-          {/* Info paciente mobile (visible solo en mobile) */}
+          {/* Info paciente mobile (visible solo en mobile, en modo escritura) */}
           <div className="md:hidden mb-4">
             <p className="text-sm font-medium text-gray-900">
               {consulta.paciente_nombre}
@@ -577,9 +578,9 @@ export default function WorkspaceConsulta({
             setter={setDiagnostico}
             placeholder="Diagnostico del paciente..."
             required
+            dictando={dictando}
             onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)}
             onDetener={detenerDictado}
-            {...campoProps}
           />
           <CampoDictado
             label="RECETA"
@@ -587,9 +588,9 @@ export default function WorkspaceConsulta({
             value={receta}
             setter={setReceta}
             placeholder="Medicamentos, dosis, frecuencia..."
+            dictando={dictando}
             onIniciar={() => iniciarDictado("receta", setReceta)}
             onDetener={detenerDictado}
-            {...campoProps}
           />
           <CampoDictado
             label="INDICACIONES"
@@ -597,9 +598,9 @@ export default function WorkspaceConsulta({
             value={indicaciones}
             setter={setIndicaciones}
             placeholder="Reposo, estudios, derivaciones..."
+            dictando={dictando}
             onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
             onDetener={detenerDictado}
-            {...campoProps}
           />
           <CampoDictado
             label="CERTIFICADO"
@@ -607,9 +608,9 @@ export default function WorkspaceConsulta({
             value={certificado}
             setter={setCertificado}
             placeholder="Certificado medico..."
+            dictando={dictando}
             onIniciar={() => iniciarDictado("certificado", setCertificado)}
             onDetener={detenerDictado}
-            {...campoProps}
           />
 
           {/* Acciones sticky */}

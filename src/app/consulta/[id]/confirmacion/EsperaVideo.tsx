@@ -113,7 +113,7 @@ export default function EsperaVideo({
   } else if (salaUrl) {
     action = (
       <a
-        href={`/consulta/${consultaId}/video`}
+        href={`/consulta/${consultaId}/sala`}
         className="mt-8 block w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#178a64] active:scale-95 transition-all duration-100"
       >
         Unirse a la videollamada
