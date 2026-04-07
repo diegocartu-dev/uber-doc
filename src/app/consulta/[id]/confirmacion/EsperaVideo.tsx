@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 export default function EsperaVideo({
   consultaId,
   salaVideoUrlInicial,
+  estadoInicial,
 }: {
   consultaId: string;
   salaVideoUrlInicial: string | null;
+  estadoInicial?: string;
 }) {
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
-  const [estado, setEstado] = useState<string | null>(null);
+  const [estado, setEstado] = useState<string | null>(estadoInicial ?? null);
 
   // Polling cada 3s via API route
   useEffect(() => {
@@ -60,10 +62,18 @@ export default function EsperaVideo({
     );
   }
 
-  const mensajeEspera =
-    estado === "aceptada"
-      ? "Esperando confirmacion de pago..."
-      : "Esperando que el medico inicie la videollamada...";
+  if (estado === "pagada") {
+    return (
+      <div className="rounded-xl border px-6 py-4 text-center" style={{ borderColor: "#1D9E75", background: "rgba(29,158,117,0.06)" }}>
+        <p className="text-sm font-medium" style={{ color: "#1D9E75" }}>
+          ✓ Pago confirmado
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          El médico iniciará la videollamada en breve
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 px-6 py-4 text-center">
@@ -88,7 +98,9 @@ export default function EsperaVideo({
           />
         </svg>
         <p className="text-sm text-gray-500">
-          {mensajeEspera}
+          {estado === "aceptada"
+            ? "Esperando confirmacion de pago..."
+            : "Conectando con el medico..."}
         </p>
       </div>
     </div>
