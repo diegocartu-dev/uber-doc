@@ -1,3 +1,4 @@
+// DEPRECATED: reemplazado por /medico/consulta/[id]/workspace
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CompletarConsulta from "./CompletarConsulta";

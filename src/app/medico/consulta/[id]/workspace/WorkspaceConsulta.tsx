@@ -1,0 +1,643 @@
+"use client";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+
+// ---------------------------------------------------------------------------
+// Utilidades
+// ---------------------------------------------------------------------------
+
+function calcularEdad(fechaNac: string | null): string {
+  if (!fechaNac) return "";
+  const hoy = new Date();
+  const nac = new Date(fechaNac);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  return `${edad} a\u00f1os`;
+}
+
+function formatTimer(seg: number): string {
+  if (seg >= 3600) {
+    const h = Math.floor(seg / 3600);
+    const m = Math.floor((seg % 3600) / 60);
+    const s = seg % 60;
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Dictado por voz
+// ---------------------------------------------------------------------------
+
+function useDictado() {
+  const recRef = useRef<any>(null);
+  const [dictando, setDictando] = useState<string | null>(null);
+
+  const iniciar = useCallback(
+    (campo: string, setter: (fn: (prev: string) => string) => void) => {
+      if (typeof window === "undefined") return;
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+
+      const rec = new SR();
+      rec.lang = "es-AR";
+      rec.continuous = true;
+      rec.interimResults = true;
+
+      rec.onresult = (e: any) => {
+        let transcript = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        if (e.results[e.results.length - 1].isFinal) {
+          setter((prev) => (prev ? prev + " " : "") + transcript);
+        }
+      };
+
+      rec.onerror = () => detener();
+      rec.onend = () => setDictando(null);
+
+      recRef.current = rec;
+      setDictando(campo);
+      rec.start();
+    },
+    []
+  );
+
+  const detener = useCallback(() => {
+    if (recRef.current) {
+      recRef.current.stop();
+      recRef.current = null;
+    }
+    setDictando(null);
+  }, []);
+
+  return { dictando, iniciar, detener };
+}
+
+// ---------------------------------------------------------------------------
+// Campo con dictado
+// ---------------------------------------------------------------------------
+
+function CampoDictado({
+  label,
+  campo,
+  value,
+  setter,
+  placeholder,
+  rows = 3,
+  required = false,
+  dictando,
+  onIniciar,
+  onDetener,
+  onFocus,
+  onBlur,
+}: {
+  label: string;
+  campo: string;
+  value: string;
+  setter: (v: string) => void;
+  placeholder: string;
+  rows?: number;
+  required?: boolean;
+  dictando: string | null;
+  onIniciar: () => void;
+  onDetener: () => void;
+  onFocus?: () => void;
+  onBlur?: (e: React.FocusEvent) => void;
+}) {
+  const activo = dictando === campo;
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium tracking-wide text-gray-400">
+          {label}
+          {required && " *"}
+        </p>
+        <button
+          type="button"
+          onMouseDown={onIniciar}
+          onMouseUp={onDetener}
+          onTouchStart={onIniciar}
+          onTouchEnd={onDetener}
+          className={`rounded-md px-2 py-1 text-xs transition ${
+            activo
+              ? "bg-red-100 text-red-600"
+              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+          }`}
+          style={{ minHeight: "44px", minWidth: "44px" }}
+        >
+          {activo ? "Dictando..." : "Dictar"}
+        </button>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => setter(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        rows={rows}
+        placeholder={placeholder}
+        className="mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
+        style={{ border: "0.5px solid #e5e7eb" }}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tipos
+// ---------------------------------------------------------------------------
+
+type DocBorrador = {
+  diagnostico?: string;
+  receta?: string;
+  indicaciones?: string;
+  certificado?: string;
+  updated_at?: string;
+} | null;
+
+type Props = {
+  consultaId: string;
+  medicoId: string;
+  dailyUrl: string | null;
+  dailyToken: string | null;
+  videoError: string | null;
+  horaInicio: string;
+  consulta: {
+    especialidad: string;
+    motivo_consulta: string | null;
+    sintomas: string[] | null;
+    tiempo_sintomas: string | null;
+    paciente_nombre: string;
+    paciente_nacimiento: string | null;
+    paciente_cuil: string | null;
+    paciente_id: string;
+    doc_borrador?: DocBorrador;
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Componente principal
+// ---------------------------------------------------------------------------
+
+export default function WorkspaceConsulta({
+  consultaId,
+  medicoId,
+  dailyUrl,
+  dailyToken,
+  videoError: videoErrorProp,
+  horaInicio,
+  consulta,
+}: Props) {
+  // --- Estado campos clinicos ---
+  const borrador = consulta.doc_borrador;
+  const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
+  const [receta, setReceta] = useState(borrador?.receta ?? "");
+  const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
+  const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+
+  // --- UI state ---
+  const [finalizando, setFinalizando] = useState(false);
+  const [error, setError] = useState<string | null>(videoErrorProp);
+  const [escribiendo, setEscribiendo] = useState(false);
+  const [timerSeg, setTimerSeg] = useState(0);
+
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // --- Auto-save ---
+  const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
+    diagnostico,
+    receta,
+    indicaciones,
+    certificado,
+  });
+
+  // --- Dictado ---
+  const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
+
+  // --- Datos derivados ---
+  const edad = calcularEdad(consulta.paciente_nacimiento);
+  const iframeUrl =
+    dailyUrl && dailyToken ? `${dailyUrl}?t=${dailyToken}` : dailyUrl;
+
+  // --- Timer ---
+  useEffect(() => {
+    const inicio = new Date(horaInicio).getTime();
+    const calcular = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - inicio) / 1000));
+      setTimerSeg(diff);
+    };
+    calcular();
+    const i = setInterval(calcular, 1000);
+    return () => clearInterval(i);
+  }, [horaInicio]);
+
+  // --- Mobile: modo escritura ---
+  const handleTextareaFocus = useCallback(() => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+    setEscribiendo(true);
+  }, []);
+
+  const handleTextareaBlur = useCallback((e: React.FocusEvent) => {
+    // Si el nuevo focus es otro textarea, no salir del modo escritura
+    blurTimeoutRef.current = setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active.tagName === "TEXTAREA") return;
+      setEscribiendo(false);
+    }, 100);
+  }, []);
+
+  // --- Finalizar consulta ---
+  async function finalizarConsulta() {
+    if (!diagnostico.trim()) {
+      setError("El diagnostico es obligatorio para finalizar.");
+      return;
+    }
+
+    setFinalizando(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+
+      const { data: consultaDb } = await supabase
+        .from("consultas")
+        .select("estado, paciente_id, medico_id")
+        .eq("id", consultaId)
+        .single();
+
+      if (!consultaDb || !consultaDb.paciente_id) {
+        setError("Consulta no encontrada.");
+        setFinalizando(false);
+        return;
+      }
+
+      if (consultaDb.estado === "completada") {
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      // Lookup: paciente_id en consultas es auth.users.id, documentos necesita pacientes.id
+      const { data: paciente } = await supabase
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", consultaDb.paciente_id)
+        .single();
+
+      const { data: medico } = await supabase
+        .from("medicos")
+        .select("id")
+        .eq("id", consultaDb.medico_id)
+        .single();
+
+      if (!paciente || !medico) {
+        setError("Error al obtener datos del paciente o medico.");
+        setFinalizando(false);
+        return;
+      }
+
+      // Insertar documentos
+      const docs: { tipo: string; contenido: string }[] = [];
+      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+      if (indicaciones.trim())
+        docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+      if (certificado.trim())
+        docs.push({ tipo: "certificado", contenido: certificado.trim() });
+      // Si no hay docs pero hay diagnostico, crear indicaciones con el diagnostico
+      if (docs.length === 0)
+        docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
+
+      await supabase.from("documentos").insert(
+        docs.map((d) => ({
+          consulta_id: consultaId,
+          turno_id: null,
+          paciente_id: paciente.id,
+          medico_id: medico.id,
+          tipo: d.tipo,
+          diagnostico: diagnostico.trim(),
+          contenido: d.contenido,
+        }))
+      );
+
+      // Finalizar y limpiar borrador
+      await supabase
+        .from("consultas")
+        .update({ estado: "completada", doc_borrador: null })
+        .eq("id", consultaId);
+
+      window.location.href = "/dashboard";
+    } catch {
+      setError("Error al finalizar. Intenta de nuevo.");
+      setFinalizando(false);
+    }
+  }
+
+  // --- Cancelar consulta ---
+  async function cancelarConsulta() {
+    const confirmado = window.confirm(
+      "Si cancelas, el paciente podria recibir un reembolso. Continuar?"
+    );
+    if (!confirmado) return;
+
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/cancelar-medico`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error || "Error al cancelar la consulta.");
+        return;
+      }
+      window.location.href = "/dashboard";
+    } catch {
+      setError("Error de conexion al cancelar.");
+    }
+  }
+
+  // --- Campos dictado props ---
+  const campoProps = {
+    dictando,
+    onFocus: handleTextareaFocus,
+    onBlur: handleTextareaBlur,
+  };
+
+  // --- Render ---
+  return (
+    <div className="flex h-screen flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
+      {/* ================================================================ */}
+      {/* COLUMNA IZQUIERDA — Video                                        */}
+      {/* ================================================================ */}
+      <div
+        className={`relative flex flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
+          escribiendo
+            ? "h-[80px] min-h-[80px] md:h-auto md:min-h-0"
+            : "h-[40vh] min-h-[200px] max-h-[300px] md:h-auto md:max-h-none md:min-h-0"
+        } md:w-[60%] md:flex-1`}
+      >
+        {/* Header con info paciente + timer */}
+        <div
+          className={`flex items-center justify-between px-4 ${
+            escribiendo ? "py-2" : "py-3"
+          } md:py-3`}
+          style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#1D9E75]" />
+            {escribiendo ? (
+              <span className="text-xs text-white/70 truncate">
+                Llamada activa
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-white truncate">
+                {consulta.paciente_nombre}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs tabular-nums text-white/50">
+              {formatTimer(timerSeg)}
+            </span>
+            {/* Controles mobile inline (modo escritura) o siempre visible en mobile */}
+            <div className="flex items-center gap-1 md:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  /* No-op: iframe controla mic/cam */
+                }}
+                className="rounded-md px-2 py-1 text-xs text-white/60"
+                style={{ minHeight: "44px", minWidth: "44px" }}
+                aria-label="Controles en iframe"
+              >
+                {/* Los controles de mic/cam estan dentro del iframe de Daily */}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Video iframe */}
+        {!escribiendo && (
+          <div className="flex-1 relative">
+            {iframeUrl ? (
+              <iframe
+                src={iframeUrl}
+                allow="camera; microphone; autoplay; display-capture"
+                className="absolute inset-0 w-full h-full border-0"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-sm text-white/50">
+                  {error || "Conectando video..."}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Footer controles desktop */}
+        {!escribiendo && (
+          <div
+            className="hidden md:flex items-center justify-center gap-3 px-4 py-3"
+            style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+          >
+            <span className="text-xs tabular-nums text-white/40">
+              {formatTimer(timerSeg)}
+            </span>
+            <span className="text-xs text-white/30">
+              Controles de audio/video en el iframe
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ================================================================ */}
+      {/* COLUMNA DERECHA — Documentacion                                  */}
+      {/* ================================================================ */}
+      <div
+        className="flex-1 overflow-y-auto md:w-[40%] md:flex-none"
+        style={{ borderLeft: "0.5px solid #e5e7eb" }}
+      >
+        <div className="p-5">
+          {/* Info paciente (solo desktop, mobile la ve en header video) */}
+          <div className="hidden md:block">
+            <p className="text-xs font-medium tracking-wide text-gray-400">
+              PACIENTE
+            </p>
+            <p className="mt-2 text-lg font-medium text-gray-900">
+              {consulta.paciente_nombre}
+            </p>
+            <p className="mt-0.5 text-sm text-gray-500">
+              {[edad, consulta.especialidad].filter(Boolean).join(" \u00b7 ")}
+            </p>
+
+            {consulta.motivo_consulta && (
+              <div className="mt-4">
+                <p className="text-xs font-medium tracking-wide text-gray-400">
+                  MOTIVO
+                </p>
+                <p className="mt-1 text-sm text-gray-700">
+                  {consulta.motivo_consulta}
+                </p>
+              </div>
+            )}
+
+            {consulta.tiempo_sintomas && (
+              <div className="mt-3">
+                <p className="text-xs font-medium tracking-wide text-gray-400">
+                  TIEMPO
+                </p>
+                <p className="mt-0.5 text-xs text-gray-600">
+                  {consulta.tiempo_sintomas}
+                </p>
+              </div>
+            )}
+
+            {consulta.sintomas && consulta.sintomas.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-medium tracking-wide text-gray-400">
+                  SINTOMAS
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {consulta.sintomas.map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-600"
+                      style={{ border: "0.5px solid #e5e7eb" }}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div
+              className="mt-5 border-t pt-4"
+              style={{ borderColor: "#e5e7eb" }}
+            />
+          </div>
+
+          {/* Info paciente mobile (visible solo en mobile) */}
+          <div className="md:hidden mb-4">
+            <p className="text-sm font-medium text-gray-900">
+              {consulta.paciente_nombre}
+            </p>
+            <p className="text-xs text-gray-500">
+              {[edad, consulta.especialidad].filter(Boolean).join(" \u00b7 ")}
+            </p>
+            {consulta.motivo_consulta && (
+              <p className="mt-2 text-xs text-gray-600">
+                {consulta.motivo_consulta}
+              </p>
+            )}
+          </div>
+
+          {/* Auto-save indicator */}
+          {estadoBorrador !== "idle" && (
+            <p
+              className={`text-xs ${
+                estadoBorrador === "saving"
+                  ? "text-gray-400"
+                  : estadoBorrador === "saved"
+                    ? "text-[#1D9E75]"
+                    : "text-[#E24B4A]"
+              }`}
+            >
+              {estadoBorrador === "saving" && "Guardando borrador..."}
+              {estadoBorrador === "saved" && "Borrador guardado"}
+              {estadoBorrador === "error" && "Error al guardar borrador"}
+            </p>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
+          {/* Campos */}
+          <CampoDictado
+            label="DIAGNOSTICO"
+            campo="diagnostico"
+            value={diagnostico}
+            setter={setDiagnostico}
+            placeholder="Diagnostico del paciente..."
+            required
+            onIniciar={() => iniciarDictado("diagnostico", setDiagnostico)}
+            onDetener={detenerDictado}
+            {...campoProps}
+          />
+          <CampoDictado
+            label="RECETA"
+            campo="receta"
+            value={receta}
+            setter={setReceta}
+            placeholder="Medicamentos, dosis, frecuencia..."
+            onIniciar={() => iniciarDictado("receta", setReceta)}
+            onDetener={detenerDictado}
+            {...campoProps}
+          />
+          <CampoDictado
+            label="INDICACIONES"
+            campo="indicaciones"
+            value={indicaciones}
+            setter={setIndicaciones}
+            placeholder="Reposo, estudios, derivaciones..."
+            onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
+            onDetener={detenerDictado}
+            {...campoProps}
+          />
+          <CampoDictado
+            label="CERTIFICADO"
+            campo="certificado"
+            value={certificado}
+            setter={setCertificado}
+            placeholder="Certificado medico..."
+            onIniciar={() => iniciarDictado("certificado", setCertificado)}
+            onDetener={detenerDictado}
+            {...campoProps}
+          />
+
+          {/* Acciones sticky */}
+          <div
+            className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
+            style={{ borderTop: "0.5px solid #e5e7eb" }}
+          >
+            <button
+              disabled={finalizando}
+              onClick={finalizarConsulta}
+              className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+              style={{ minHeight: "44px" }}
+            >
+              {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
+            </button>
+            <button
+              onClick={cancelarConsulta}
+              className="mt-2 w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
+              style={{ color: "#E24B4A", minHeight: "44px" }}
+            >
+              Cancelar consulta
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
