@@ -421,28 +421,48 @@ export default function WorkspaceConsulta({
           )}
         </div>
 
-        {/* Footer info paciente + botón Documentar (solo mobile, modo video) */}
+        {/* Footer info paciente + botones Documentar/Finalizar (solo mobile, modo video) */}
         {!modoEscritura && (
           <div
-            className="md:hidden flex items-center justify-between px-4 py-3"
+            className="md:hidden px-4 py-3"
             style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
           >
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-white truncate">
-                {consulta.paciente_nombre}
-              </p>
-              <p className="text-xs text-white/50 truncate">
-                {consulta.motivo_consulta || consulta.especialidad}
-              </p>
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white truncate">
+                  {consulta.paciente_nombre}
+                </p>
+                <p className="text-xs text-white/50 truncate">
+                  {consulta.motivo_consulta || consulta.especialidad}
+                </p>
+              </div>
+              <div className="ml-3 shrink-0 flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setModoEscritura(true)}
+                  className="rounded-xl bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+                  style={{ minHeight: "44px" }}
+                >
+                  Documentar
+                </button>
+                <button
+                  type="button"
+                  disabled={finalizando}
+                  onClick={() => {
+                    if (!diagnostico.trim()) {
+                      setError("El diagnostico es obligatorio para finalizar.");
+                      setModoEscritura(true);
+                      return;
+                    }
+                    finalizarConsulta();
+                  }}
+                  className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
+                  style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
+                >
+                  {finalizando ? "Finalizando..." : "Finalizar consulta"}
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setModoEscritura(true)}
-              className="ml-3 shrink-0 rounded-xl bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
-              style={{ minHeight: "44px" }}
-            >
-              Documentar
-            </button>
           </div>
         )}
 

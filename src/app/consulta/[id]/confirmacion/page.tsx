@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import EsperaVideo from "./EsperaVideo";
@@ -21,7 +20,7 @@ export default async function ConfirmacionPagoPage({
   // Verificar consulta del paciente
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, medico_id, sala_video_url")
+    .select("id, especialidad, estado, medico_id, sala_video_url, created_at")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -29,9 +28,6 @@ export default async function ConfirmacionPagoPage({
   if (!consulta) {
     redirect("/clinica");
   }
-
-  // Si el pago aún no fue confirmado por webhook, mostrar estado apropiado
-  const pagoConfirmado = consulta.estado === "pagada" || consulta.estado === "en_curso";
 
   // Traer datos del médico
   const { data: medico } = await supabase
@@ -59,16 +55,10 @@ export default async function ConfirmacionPagoPage({
           medicoNombre={medico?.nombre_completo ?? ""}
           especialidad={consulta.especialidad}
           duracionConsulta={medico?.duracion_consulta ?? 20}
+          createdAt={consulta.created_at}
         />
 
-        <div className="mt-4">
-          <Link
-            href="/dashboard"
-            className="block w-full rounded-xl border border-gray-300 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Volver al inicio
-          </Link>
-        </div>
+        {/* "Volver al inicio" se maneja dentro de EsperaVideo para ser reactivo al polling */}
       </main>
     </div>
   );
