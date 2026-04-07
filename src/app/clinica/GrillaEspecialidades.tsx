@@ -86,6 +86,11 @@ function semaforo(estado: Disponibilidad) {
   }
 }
 
+function normalizeTime(t: string): string {
+  // DB returns "HH:MM:SS", UI uses "HH:MM" — normalize to "HH:MM"
+  return t.slice(0, 5);
+}
+
 function estaEnHorario(medico: Medico): boolean {
   if (!medico.disponible) return false;
   if (!medico.disponible_desde || !medico.disponible_hasta)
@@ -97,8 +102,8 @@ function estaEnHorario(medico: Medico): boolean {
   const horaActual = `${hh}:${mm}`;
 
   return (
-    horaActual >= medico.disponible_desde &&
-    horaActual <= medico.disponible_hasta
+    horaActual >= normalizeTime(medico.disponible_desde) &&
+    horaActual <= normalizeTime(medico.disponible_hasta)
   );
 }
 
@@ -116,26 +121,21 @@ function calcularDisponibilidad(
 
   if (medicosDeLaEsp.length === 0) return "sin_medicos";
 
-  const disponiblesAhora = medicosDeLaEsp.filter(
-    (m) =>
-      (m.modalidad_atencion === "inmediata" ||
-        m.modalidad_atencion === "ambas") &&
-      estaEnHorario(m)
-  );
+  // Un medico esta disponible para consulta inmediata si:
+  // - tiene disponible=true (toggle activo) Y esta en horario, O
+  // - tiene modalidad inmediata/ambas Y esta en horario
+  const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
 
-  const soloProgramada = medicosDeLaEsp.every(
-    (m) => m.modalidad_atencion === "programada"
-  );
+  if (disponiblesAhora.length > 0) return "disponible";
 
-  if (disponiblesAhora.length >= 2) return "disponible";
-  if (disponiblesAhora.length === 1) return "espera";
-  if (soloProgramada) return "programada";
-
+  // Tiene medicos con capacidad de inmediata pero no estan en horario ahora
   const tieneInmediata = medicosDeLaEsp.some(
     (m) =>
-      m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas"
+      m.disponible ||
+      m.modalidad_atencion === "inmediata" ||
+      m.modalidad_atencion === "ambas"
   );
-  if (tieneInmediata) return "programada";
+  if (tieneInmediata) return "espera";
 
   return "programada";
 }
@@ -232,11 +232,11 @@ export default function GrillaEspecialidades({
     );
   }
 
-  // Médicos con inmediata/ambas para la especialidad del modal
+  // Médicos para el modal: inmediata incluye disponible=true O modalidad inmediata/ambas
   const medicosDelModal = modalEspecialidad
     ? medicos.filter((m) =>
         m.especialidad === modalEspecialidad &&
-        (modalModo === "turno" || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
+        (modalModo === "turno" || m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
       )
     : [];
 
@@ -294,11 +294,12 @@ export default function GrillaEspecialidades({
           const { color, texto } = semaforo(estado);
           const sinMedicos = estado === "sin_medicos";
 
-          // El botón se habilita si hay al menos un médico con inmediata/ambas
+          // El botón se habilita si hay al menos un médico con consulta inmediata
+          // disponible=true (toggle activo) O modalidad inmediata/ambas
           const tieneInmediata = medicos.some(
             (m) =>
               m.especialidad === esp.nombre &&
-              (m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
+              (m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
           );
           const botonConsultaDeshabilitado = !tieneInmediata;
 
