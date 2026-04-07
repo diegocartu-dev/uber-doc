@@ -42,34 +42,11 @@ function tiempoTranscurrido(fecha: string): string {
 export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
   const { enCurso: consultas } = useDashboardMedico();
   const router = useRouter();
-  const [creando, setCreando] = useState<string | null>(null);
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleIniciar(consultaId: string) {
-    setCreando(consultaId);
-    setError(null);
-    try {
-      const res = await fetch("/api/videollamada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consultaId }),
-        credentials: "include",
-      });
-      const data = await res.json();
-
-      if (!data.url) {
-        setError(data.error || "Error al crear la videollamada.");
-        setCreando(null);
-        return;
-      }
-
-      setCreando(null);
-      router.push(`/consulta/${consultaId}/video`);
-    } catch {
-      setError("Error de conexi\u00f3n.");
-      setCreando(null);
-    }
+  function handleIniciar(consultaId: string) {
+    router.push(`/medico/consulta/${consultaId}/workspace`);
   }
 
   async function handleCancelar(consultaId: string) {
@@ -115,9 +92,16 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
-                <span className="text-xs font-medium tracking-wide text-[#1D9E75]">
-                  {esperandoPago ? "ACEPTADA" : "EN CURSO"}
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    esperandoPago ? "bg-[#D85A30]" : "animate-pulse bg-[#1D9E75]"
+                  }`}
+                />
+                <span
+                  className="text-xs font-medium tracking-wide"
+                  style={{ color: esperandoPago ? "#D85A30" : "#1D9E75" }}
+                >
+                  {esperandoPago ? "ESPERANDO PAGO" : c.estado === "en_curso" ? "EN CURSO" : "LISTA PARA ATENDER"}
                 </span>
               </div>
               {transcurrido && (
@@ -173,20 +157,19 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
                   Esperando pago del paciente...
                 </p>
               ) : puedeVideo ? (
-                c.sala_video_url ? (
+                c.estado === "en_curso" ? (
                   <TouchButton
-                    href={`/consulta/${c.id}/video`}
+                    onClick={() => handleIniciar(c.id)}
                     className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64]"
                   >
-                    Unirse a la videollamada
+                    Volver al workspace
                   </TouchButton>
                 ) : (
                   <TouchButton
-                    disabled={creando === c.id}
                     onClick={() => handleIniciar(c.id)}
-                    className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50"
+                    className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64]"
                   >
-                    {creando === c.id ? "Creando sala..." : "Iniciar videollamada"}
+                    Iniciar consulta
                   </TouchButton>
                 )
               ) : null}

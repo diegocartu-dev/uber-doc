@@ -1,3 +1,4 @@
+// DEPRECATED: reemplazado por /medico/consulta/[id]/workspace
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
