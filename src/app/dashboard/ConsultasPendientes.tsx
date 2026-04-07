@@ -81,8 +81,8 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
           const initials = getInitials(c.paciente_nombre);
 
           return (
-            <div key={c.id} className="flex items-center gap-4 rounded-lg p-3 transition hover:bg-gray-50">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500">
+            <div key={c.id} className="flex flex-col gap-2 rounded-lg p-4 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:gap-4">
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500 sm:flex">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
@@ -92,17 +92,21 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
                   ) : (
                     <p className="text-sm font-medium text-gray-900">{c.paciente_nombre}</p>
                   )}
-                  {edad && <span className="text-xs text-gray-400">{edad}</span>}
                 </div>
-                <p className="mt-0.5 truncate text-xs text-gray-500">
-                  {[c.motivo_consulta, c.especialidad].filter(Boolean).join(" · ")}
+                <p className="mt-0.5 text-sm text-gray-500">
+                  {[edad, c.especialidad].filter(Boolean).join(" \u00b7 ")}
                 </p>
+                {c.motivo_consulta && (
+                  <p className="mt-0.5 truncate text-sm text-gray-600 sm:text-xs">
+                    {c.motivo_consulta}
+                  </p>
+                )}
               </div>
-              {espera && <span className="shrink-0 text-xs text-gray-400">{espera}</span>}
+              {espera && <span className="hidden shrink-0 text-xs text-gray-400 sm:block">{espera}</span>}
               <TouchButton
                 disabled={isPending}
                 onClick={() => handleAceptar(c.id)}
-                className="shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                className="w-full shrink-0 rounded-lg bg-gray-100 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 sm:w-auto min-h-[44px]"
               >
                 {isPending ? "..." : "Aceptar"}
               </TouchButton>

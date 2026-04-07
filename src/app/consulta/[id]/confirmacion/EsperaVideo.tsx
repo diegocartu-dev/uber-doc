@@ -10,6 +10,7 @@ export default function EsperaVideo({
   salaVideoUrlInicial: string | null;
 }) {
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
+  const [estado, setEstado] = useState<string | null>(null);
 
   // Polling cada 3s via API route
   useEffect(() => {
@@ -20,16 +21,33 @@ export default function EsperaVideo({
         const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, { credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
+        if (data.estado) setEstado(data.estado);
         if (data.sala_video_url) {
           setSalaUrl(data.sala_video_url);
         }
-      } catch {}
+        // Si la consulta fue cancelada, mostrar eso
+        if (data.estado === "cancelada") {
+          setEstado("cancelada");
+        }
+      } catch {
+        // silently ignore
+      }
     }
 
     poll();
     const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, [consultaId, salaUrl]);
+
+  if (estado === "cancelada") {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-red-50 px-6 py-4 text-center">
+        <p className="text-sm font-medium" style={{ color: "#E24B4A" }}>
+          La consulta fue cancelada por el medico.
+        </p>
+      </div>
+    );
+  }
 
   if (salaUrl) {
     return (
@@ -41,6 +59,11 @@ export default function EsperaVideo({
       </a>
     );
   }
+
+  const mensajeEspera =
+    estado === "aceptada"
+      ? "Esperando confirmacion de pago..."
+      : "Esperando que el medico inicie la videollamada...";
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 px-6 py-4 text-center">
@@ -65,7 +88,7 @@ export default function EsperaVideo({
           />
         </svg>
         <p className="text-sm text-gray-500">
-          Esperando que el médico inicie la videollamada...
+          {mensajeEspera}
         </p>
       </div>
     </div>

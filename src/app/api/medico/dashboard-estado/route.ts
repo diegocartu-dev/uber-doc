@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       "id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, estado"
     )
     .eq("medico_id", medicoId)
-    .in("estado", ["aceptada", "en_curso"])
+    .in("estado", ["aceptada", "pagada", "en_curso"])
     .order("created_at", { ascending: true });
 
   const pacMapCurso = await enrichPacientes(enCurso ?? []);
@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
     return {
       id: c.id,
       especialidad: c.especialidad,
+      estado: c.estado,
       paciente_nombre: p?.nombre ?? "Paciente",
       paciente_tabla_id: p?.id ?? null,
       sala_video_url: c.sala_video_url,

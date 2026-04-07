@@ -19,6 +19,7 @@ type ConsultaPendiente = {
 type ConsultaEnCurso = {
   id: string;
   especialidad: string;
+  estado: string;
   paciente_nombre: string;
   paciente_tabla_id: string | null;
   sala_video_url: string | null;
