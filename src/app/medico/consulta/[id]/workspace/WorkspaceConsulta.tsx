@@ -399,10 +399,10 @@ export default function WorkspaceConsulta({
 
         {/* Video iframe — en modo escritura mobile se oculta con CSS, NUNCA se desmonta */}
         <div
-          className={`flex-1 relative transition-all duration-300 ease-in-out ${
+          className={`flex-1 transition-all duration-300 ease-in-out ${
             modoEscritura
-              ? "h-0 overflow-hidden md:h-auto md:overflow-visible"
-              : ""
+              ? "h-0 min-h-0 overflow-hidden md:h-auto md:min-h-0 md:overflow-visible"
+              : "min-h-0"
           }`}
         >
           {iframeUrl ? (
@@ -410,10 +410,10 @@ export default function WorkspaceConsulta({
               src={iframeUrl}
               allow="camera; microphone; autoplay; display-capture; fullscreen"
               referrerPolicy="no-referrer-when-downgrade"
-              className="absolute inset-0 w-full h-full border-0"
+              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex items-center justify-center h-full">
               <p className="text-sm text-white/50">
                 {error || "Conectando video..."}
               </p>
