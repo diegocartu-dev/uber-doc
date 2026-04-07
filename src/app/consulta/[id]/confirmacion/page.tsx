@@ -103,6 +103,7 @@ export default async function ConfirmacionPagoPage({
           <EsperaVideo
             consultaId={consultaId}
             salaVideoUrlInicial={consulta.sala_video_url}
+            estadoInicial={consulta.estado}
           />
 
           <Link
