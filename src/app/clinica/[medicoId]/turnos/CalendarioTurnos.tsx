@@ -15,7 +15,7 @@ function formatFechaLarga(fecha: string) {
   return `${DIAS_SEMANA[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
-export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; medico: Medico }) {
+export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinica_virtual" }: { turnos: Turno[]; medico: Medico; canalOrigen?: "clinica_virtual" | "consultorio_privado" }) {
   const hoy = new Date();
   const [mes, setMes] = useState(hoy.getMonth());
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -75,7 +75,7 @@ export default function CalendarioTurnos({ turnos, medico }: { turnos: Turno[]; 
     if (!turnoSeleccionado) return;
     setError(null);
     startTransition(async () => {
-      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal });
+      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
       if (result?.error) { setError(result.error); return; }
       // Redirect a página de pago con contador de 5 min
       window.location.href = `/turno/${turnoSeleccionado.id}/pago`;

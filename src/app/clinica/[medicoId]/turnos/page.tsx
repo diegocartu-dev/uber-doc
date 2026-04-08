@@ -4,10 +4,15 @@ import CalendarioTurnos from "./CalendarioTurnos";
 
 export default async function TurnosPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ medicoId: string }>;
+  searchParams: Promise<{ canal?: string; from?: string }>;
 }) {
   const { medicoId } = await params;
+  const sp = await searchParams;
+  const canalOrigen = sp.canal === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
+  const fromUrl = sp.from;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -36,7 +41,7 @@ export default async function TurnosPage({
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-6">
           <span className="text-lg font-medium text-gray-900">Docto</span>
-          <a href="/clinica" className="text-sm text-gray-500 hover:text-gray-700">Volver</a>
+          <a href={fromUrl ?? "/clinica"} className="text-sm text-gray-500 hover:text-gray-700">Volver</a>
         </div>
       </nav>
 
@@ -58,6 +63,7 @@ export default async function TurnosPage({
             duracion: medico.duracion_consulta,
             precio: medico.precio_consulta,
           }}
+          canalOrigen={canalOrigen}
         />
       </main>
     </div>

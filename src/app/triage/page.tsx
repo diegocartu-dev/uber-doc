@@ -62,6 +62,8 @@ function TriageContent() {
   const searchParams = useSearchParams();
   const medicoId = searchParams.get("medicoId") ?? "";
   const especialidad = searchParams.get("especialidad") ?? "";
+  const canalOrigen = searchParams.get("canal") === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
+  const fromUrl = searchParams.get("from");
 
   const [paso, setPaso] = useState(1);
 
@@ -125,7 +127,7 @@ function TriageContent() {
   function handleConfirmarConsulta() {
     setMostrarConfirmacion(false);
     startTransition(async () => {
-      const result = await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo);
+      const result = await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen);
       if (result?.error) {
         setError(result.error);
       }
@@ -147,11 +149,11 @@ function TriageContent() {
             <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
           </Link>
           <Link
-            href="/clinica"
+            href={fromUrl ?? "/clinica"}
             className="text-sm transition-colors"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Volver a la clinica
+            {fromUrl ? "Volver al consultorio" : "Volver a la clínica"}
           </Link>
         </div>
       </nav>
