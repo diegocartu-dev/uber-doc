@@ -45,13 +45,9 @@ function generarSlotsParaFranja(
 }
 
 export async function GET(req: NextRequest) {
-  const isTest = req.nextUrl.searchParams.get("test") === "true";
-
-  if (!isTest) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
   const supabase = createAdminClient();

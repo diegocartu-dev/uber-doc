@@ -1,8 +1,18 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: "No autorizado" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const { texto } = await req.json();
 
     if (!texto) {
