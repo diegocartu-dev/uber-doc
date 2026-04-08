@@ -36,7 +36,7 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -80,6 +80,22 @@ export default async function ConsultorioPrivadoPage({
       <AppNavbar userName={fullName} userRole={role} />
 
       <main className="mx-auto max-w-lg px-4 py-8">
+        {/* Bienvenida */}
+        <div className="mb-6 text-center">
+          <h1
+            className="text-lg font-medium"
+            style={{ color: "var(--color-text-primary)" }}
+          >
+            Bienvenido al consultorio virtual del Dr. {medico.nombre_completo}
+          </h1>
+          <p
+            className="mt-1 text-sm"
+            style={{ color: "var(--color-text-secondary)" }}
+          >
+            {medico.especialidad} · Matrícula {medico.tipo_matricula} {medico.numero_matricula}
+          </p>
+        </div>
+
         {/* Card del médico */}
         <div
           className="rounded-[var(--radius-lg)] bg-white p-6"
