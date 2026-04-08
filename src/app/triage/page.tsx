@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect, useTransition, Suspense } from "react";
+import { Stethoscope, AlertTriangle, Check } from "lucide-react";
 import { crearConsulta } from "@/app/clinica/actions";
 
 const SINTOMAS_EMERGENCIA = [
@@ -132,21 +133,25 @@ function TriageContent() {
   }
 
   const inputClass =
-    "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+    "mt-1 block w-full rounded-[var(--radius-md)] border px-3 py-2 text-[15px] shadow-sm focus:outline-none";
 
   return (
     <div className="min-h-full bg-gray-50">
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🩺</span>
-            <span className="text-xl font-bold text-gray-900">Docto</span>
-          </div>
+      <nav
+        className="sticky top-0 z-50 bg-white"
+        style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
+      >
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
+            <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
+          </Link>
           <Link
             href="/clinica"
-            className="text-sm text-gray-600 hover:text-gray-900"
+            className="text-sm transition-colors"
+            style={{ color: "var(--color-text-secondary)" }}
           >
-            Volver a la clínica
+            Volver a la clinica
           </Link>
         </div>
       </nav>
@@ -155,21 +160,18 @@ function TriageContent() {
         {/* Indicador de pasos */}
         <div className="mb-8 flex items-center justify-center gap-3">
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-              paso === 1
-                ? "bg-blue-600 text-white"
-                : "bg-green-500 text-white"
-            }`}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white"
+            style={{ backgroundColor: paso === 1 ? "var(--color-primary)" : "var(--color-success)" }}
           >
-            {paso > 1 ? "✓" : "1"}
+            {paso > 1 ? <Check size={16} strokeWidth={2} /> : "1"}
           </div>
-          <div className="h-px w-12 bg-gray-300" />
+          <div className="h-px w-12" style={{ backgroundColor: "var(--color-border-default)" }} />
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-              paso === 2
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-500"
-            }`}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold"
+            style={{
+              backgroundColor: paso === 2 ? "var(--color-primary)" : "var(--color-bg-tertiary)",
+              color: paso === 2 ? "white" : "var(--color-text-tertiary)",
+            }}
           >
             2
           </div>
@@ -354,7 +356,7 @@ function TriageContent() {
                 corresponderles.
               </p>
 
-              <div className="mt-6 rounded-lg bg-blue-50 p-4 text-center text-xs text-blue-700">
+              <div className="mt-6 rounded-[var(--radius-md)] p-4 text-center text-xs" style={{ backgroundColor: "var(--color-primary-soft)", color: "var(--color-brand-dark)" }}>
                 — Fin de los Términos y Condiciones —
               </div>
             </div>
@@ -372,7 +374,7 @@ function TriageContent() {
                   disabled={!scrollCompleto}
                   checked={checkTerminos}
                   onChange={(e) => setCheckTerminos(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)] disabled:opacity-40"
                 />
                 <span
                   className={`text-sm ${
@@ -389,7 +391,7 @@ function TriageContent() {
                   disabled={!scrollCompleto}
                   checked={checkMayorEdad}
                   onChange={(e) => setCheckMayorEdad(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)] disabled:opacity-40"
                 />
                 <span
                   className={`text-sm ${
@@ -404,7 +406,8 @@ function TriageContent() {
             <button
               disabled={!checkTerminos || !checkMayorEdad}
               onClick={() => setPaso(2)}
-              className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-6 w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+              style={{ backgroundColor: "var(--color-primary)" }}
             >
               Continuar
             </button>
@@ -428,9 +431,9 @@ function TriageContent() {
             {/* Alerta de emergencia */}
             {tieneEmergencia && (
               <div className="mt-4 rounded-xl border-2 border-red-500 bg-red-50 p-5">
-                <div className="flex items-center gap-2 text-lg font-bold text-red-700">
-                  <span className="text-2xl">🚨</span>
-                  EMERGENCIA MÉDICA
+                <div className="flex items-center gap-2 text-lg font-bold" style={{ color: "var(--color-danger)" }}>
+                  <AlertTriangle size={24} strokeWidth={1.75} />
+                  EMERGENCIA MEDICA
                 </div>
                 <p className="mt-2 text-sm font-medium text-red-700">
                   Los síntomas que seleccionaste pueden indicar una emergencia
@@ -486,7 +489,7 @@ function TriageContent() {
                           seleccionado
                             ? esEmergencia
                               ? "border-red-300 bg-red-100 text-red-700"
-                              : "border-blue-300 bg-blue-100 text-blue-700"
+                              : "border-[var(--color-primary-border)] bg-[var(--color-primary-soft)] text-[var(--color-brand-dark)]"
                             : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                         }`}
                       >
@@ -531,7 +534,8 @@ function TriageContent() {
               <button
                 disabled={isPending || tieneEmergencia}
                 onClick={handleEnviarTriage}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
               >
                 {isPending ? "Enviando..." : "Entrar a la sala de espera"}
               </button>
@@ -545,7 +549,7 @@ function TriageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="text-center">
-              <span className="text-4xl">⚠️</span>
+              <AlertTriangle size={40} strokeWidth={1.75} style={{ color: "var(--color-warning)" }} />
               <h2 className="mt-3 text-lg font-bold text-gray-900">
                 Antes de continuar
               </h2>
@@ -569,7 +573,8 @@ function TriageContent() {
               <button
                 disabled={isPending}
                 onClick={handleConfirmarConsulta}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
               >
                 {isPending
                   ? "Enviando..."

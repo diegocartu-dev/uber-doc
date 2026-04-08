@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Stethoscope } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,27 +33,38 @@ export default function LoginPage() {
     window.location.href = "/dashboard";
   }
 
+  const inputClass =
+    "mt-1 block w-full rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none"
+  const inputStyle: React.CSSProperties = {
+    height: 44,
+    borderColor: "var(--color-border-strong)",
+    color: "var(--color-text-primary)",
+  };
+
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
-          <span className="text-3xl">🩺</span>
-          <span className="text-2xl font-bold text-gray-900">Docto</span>
+          <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
+          <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
-        <h2 className="text-center text-xl font-semibold text-gray-900">
-          Iniciá sesión en tu cuenta
+        <h2 className="text-center text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
+          Inicia sesion en tu cuenta
         </h2>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            <div
+              className="rounded-[var(--radius-md)] p-3 text-sm"
+              style={{ backgroundColor: "var(--color-danger-soft)", color: "var(--color-danger)" }}
+            >
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
               Email
             </label>
             <input
@@ -61,14 +73,17 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={inputClass}
+              style={inputStyle}
               placeholder="tu@email.com"
+              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Contraseña
+            <label htmlFor="password" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+              Contrasena
             </label>
             <input
               id="password"
@@ -76,22 +91,26 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={inputClass}
+              style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            className="w-full rounded-[var(--radius-md)] text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+            style={{ height: 44, backgroundColor: "var(--color-primary)" }}
           >
-            {loading ? "Ingresando..." : "Iniciar sesión"}
+            {loading ? "Ingresando..." : "Iniciar sesion"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          ¿No tenés cuenta?{" "}
-          <Link href="/auth/register" className="font-medium text-blue-600 hover:text-blue-500">
+        <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          No tenes cuenta?{" "}
+          <Link href="/auth/register" className="font-medium" style={{ color: "var(--color-text-link)" }}>
             Registrate
           </Link>
         </p>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
+import { CheckCircle, XCircle, Video } from "lucide-react";
 
 type Props = {
   turnoId: string;
@@ -92,13 +93,13 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
           </svg>
         ) : estado === "iniciando" ? (
-          <span className="text-5xl">✅</span>
+          <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
         ) : estado === "finalizado" ? (
-          <span className="text-5xl">✅</span>
+          <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
         ) : estado === "cancelado" ? (
-          <span className="text-5xl">❌</span>
+          <XCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-danger)" }} />
         ) : (
-          <span className="text-5xl">📹</span>
+          <Video size={40} strokeWidth={1.75} style={{ color: "var(--color-info)" }} />
         )}
       </div>
 

@@ -57,7 +57,7 @@ export default function HistorialInline({
           {/* Header con identidad de tipo */}
           <div className="px-4 py-2.5" style={{ borderBottom: "0.5px solid #e5e7eb", background: `${accentColor}08` }}>
             <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: accentColor }}>
-              {tipo === "turno" ? "📅 Historial de turnos" : "💬 Historial de consultas"}
+              {tipo === "turno" ? "Historial de turnos" : "Historial de consultas"}
             </p>
           </div>
 

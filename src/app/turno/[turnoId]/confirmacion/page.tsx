@@ -48,7 +48,7 @@ export default async function ConfirmacionTurnoPage({
       <main className="mx-auto max-w-lg px-6 py-10">
         <div className="text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#1D9E75]/10">
-            <span className="text-3xl">✅</span>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           </div>
           <h1 className="mt-4 text-xl font-medium text-gray-900">¡Turno confirmado!</h1>
           <p className="mt-2 text-sm text-gray-500">Tu pago fue acreditado</p>

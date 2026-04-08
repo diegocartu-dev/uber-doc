@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Search, X, Building2, Microscope, Syringe, Heart, Baby, Sparkles,
+  Stethoscope, Pipette, Pill, Activity, Brain, Apple, Eye, Ear,
+  Bone, Ambulance, Dna, Ribbon, PersonStanding, Scale, Radiation,
+  UserRound, FlaskConical,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 type Medico = {
   id: string;
@@ -17,77 +24,122 @@ type Medico = {
 
 type ConsultaEspera = { medico_id: string };
 
-type Especialidad = { nombre: string; icono: string };
+type Especialidad = { nombre: string; icon: LucideIcon };
 
 type Disponibilidad = "disponible" | "espera" | "programada" | "sin_medicos";
 
+const ICON_MAP: Record<string, LucideIcon> = {
+  "Clinica medica": Stethoscope,
+  "Alergia e inmunologia": FlaskConical,
+  "Anatomia patologica": Microscope,
+  "Anestesiologia": Syringe,
+  "Cardiologia": Heart,
+  "Cirugia cardiovascular": Heart,
+  "Cirugia general": Activity,
+  "Cirugia pediatrica": Baby,
+  "Cirugia plastica y reparadora": Sparkles,
+  "Dermatologia": Pipette,
+  "Endocrinologia": FlaskConical,
+  "Farmacologia clinica": Pill,
+  "Gastroenterologia": Activity,
+  "Genetica medica": Dna,
+  "Geriatria": UserRound,
+  "Ginecologia": Heart,
+  "Hematologia": Pipette,
+  "Infectologia": Microscope,
+  "Mastologia": Ribbon,
+  "Medicina del deporte": PersonStanding,
+  "Medicina familiar": UserRound,
+  "Medicina legal": Scale,
+  "Medicina nuclear": Radiation,
+  "Neurocirugia": Brain,
+  "Neurologia": Brain,
+  "Nutricion": Apple,
+  "Oftalmologia": Eye,
+  "Oncologia": Ribbon,
+  "Ortopedia y traumatologia": Bone,
+  "Otorrinolaringologia": Ear,
+  "Pediatria": Baby,
+  "Psiquiatria": Brain,
+  "Radioterapia": Radiation,
+  "Reumatologia": Bone,
+  "Terapia intensiva": Ambulance,
+  "Toxicologia": FlaskConical,
+  "Urologia": Activity,
+};
+
+function getIcon(nombre: string): LucideIcon {
+  // Normalize for lookup (remove accents)
+  const normalized = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return ICON_MAP[normalized] ?? Building2;
+}
+
 const ESPECIALIDADES: Especialidad[] = [
-  { nombre: "Clínica médica", icono: "🏥" },
-  { nombre: "Alergia e inmunología", icono: "🤧" },
-  { nombre: "Anatomía patológica", icono: "🔬" },
-  { nombre: "Anestesiología", icono: "💉" },
-  { nombre: "Cardiología", icono: "❤️" },
-  { nombre: "Cirugía cardiovascular", icono: "🫀" },
-  { nombre: "Cirugía general", icono: "🔪" },
-  { nombre: "Cirugía pediátrica", icono: "👶" },
-  { nombre: "Cirugía plástica y reparadora", icono: "✨" },
-  { nombre: "Cirugía torácica", icono: "🫁" },
-  { nombre: "Coloproctología", icono: "🩻" },
-  { nombre: "Dermatología", icono: "🧴" },
-  { nombre: "Diagnóstico por imágenes", icono: "📷" },
-  { nombre: "Endocrinología", icono: "⚗️" },
-  { nombre: "Farmacología clínica", icono: "💊" },
-  { nombre: "Fisiatría", icono: "🦿" },
-  { nombre: "Gastroenterología", icono: "🫃" },
-  { nombre: "Genética médica", icono: "🧬" },
-  { nombre: "Geriatría", icono: "👴" },
-  { nombre: "Ginecología", icono: "🩷" },
-  { nombre: "Hematología", icono: "🩸" },
-  { nombre: "Hemoterapia e inmunohematología", icono: "🅰️" },
-  { nombre: "Hepatología", icono: "🫘" },
-  { nombre: "Infectología", icono: "🦠" },
-  { nombre: "Mastología", icono: "🎀" },
-  { nombre: "Medicina del deporte", icono: "🏃" },
-  { nombre: "Medicina del trabajo", icono: "🏗️" },
-  { nombre: "Medicina familiar", icono: "👨‍👩‍👧‍👦" },
-  { nombre: "Medicina legal", icono: "⚖️" },
-  { nombre: "Medicina nuclear", icono: "☢️" },
-  { nombre: "Nefrología", icono: "🫘" },
-  { nombre: "Neonatología", icono: "🍼" },
-  { nombre: "Neumonología", icono: "🫁" },
-  { nombre: "Neurocirugía", icono: "🧠" },
-  { nombre: "Neurología", icono: "🧠" },
-  { nombre: "Nutrición", icono: "🥗" },
-  { nombre: "Obstetricia", icono: "🤰" },
-  { nombre: "Oftalmología", icono: "👁️" },
-  { nombre: "Oncología", icono: "🎗️" },
-  { nombre: "Ortopedia y traumatología", icono: "🦴" },
-  { nombre: "Otorrinolaringología", icono: "👂" },
-  { nombre: "Patología", icono: "🔬" },
-  { nombre: "Pediatría", icono: "🧒" },
-  { nombre: "Psiquiatría", icono: "🧩" },
-  { nombre: "Radioterapia", icono: "☢️" },
-  { nombre: "Reumatología", icono: "🦴" },
-  { nombre: "Terapia intensiva", icono: "🚑" },
-  { nombre: "Toxicología", icono: "☠️" },
-  { nombre: "Urología", icono: "🫀" },
-];
+  "Cl\u00ednica m\u00e9dica",
+  "Alergia e inmunolog\u00eda",
+  "Anatom\u00eda patol\u00f3gica",
+  "Anestesiolog\u00eda",
+  "Cardiolog\u00eda",
+  "Cirug\u00eda cardiovascular",
+  "Cirug\u00eda general",
+  "Cirug\u00eda pedi\u00e1trica",
+  "Cirug\u00eda pl\u00e1stica y reparadora",
+  "Cirug\u00eda tor\u00e1cica",
+  "Coloproctolog\u00eda",
+  "Dermatolog\u00eda",
+  "Diagn\u00f3stico por im\u00e1genes",
+  "Endocrinolog\u00eda",
+  "Farmacolog\u00eda cl\u00ednica",
+  "Fisiatr\u00eda",
+  "Gastroenterolog\u00eda",
+  "Gen\u00e9tica m\u00e9dica",
+  "Geriatr\u00eda",
+  "Ginecolog\u00eda",
+  "Hematolog\u00eda",
+  "Hemoterapia e inmunohematolog\u00eda",
+  "Hepatolog\u00eda",
+  "Infectolog\u00eda",
+  "Mastolog\u00eda",
+  "Medicina del deporte",
+  "Medicina del trabajo",
+  "Medicina familiar",
+  "Medicina legal",
+  "Medicina nuclear",
+  "Nefrolog\u00eda",
+  "Neonatolog\u00eda",
+  "Neumonolog\u00eda",
+  "Neurocirug\u00eda",
+  "Neurolog\u00eda",
+  "Nutrici\u00f3n",
+  "Obstetricia",
+  "Oftalmolog\u00eda",
+  "Oncolog\u00eda",
+  "Ortopedia y traumatolog\u00eda",
+  "Otorrinolaringolog\u00eda",
+  "Patolog\u00eda",
+  "Pediatr\u00eda",
+  "Psiquiatr\u00eda",
+  "Radioterapia",
+  "Reumatolog\u00eda",
+  "Terapia intensiva",
+  "Toxicolog\u00eda",
+  "Urolog\u00eda",
+].map((nombre) => ({ nombre, icon: getIcon(nombre) }));
 
 function semaforo(estado: Disponibilidad) {
   switch (estado) {
     case "disponible":
-      return { color: "bg-[#1D9E75]", texto: "Disponible ahora" };
+      return { color: "var(--color-success)", texto: "Disponible ahora" };
     case "espera":
-      return { color: "bg-[#BA7517]", texto: "Con espera" };
+      return { color: "var(--color-pending)", texto: "Con espera" };
     case "programada":
-      return { color: "bg-[#D85A30]", texto: "Solo programada" };
+      return { color: "var(--color-warning)", texto: "Solo programada" };
     case "sin_medicos":
-      return { color: "bg-[#888780]", texto: "Sin disponibilidad" };
+      return { color: "var(--color-muted)", texto: "Sin disponibilidad" };
   }
 }
 
 function normalizeTime(t: string): string {
-  // DB returns "HH:MM:SS", UI uses "HH:MM" — normalize to "HH:MM"
   return t.slice(0, 5);
 }
 
@@ -115,20 +167,15 @@ function calcularDisponibilidad(
     (m) => m.especialidad === especialidad
   );
 
-  if (especialidad === "Clínica médica" && medicosDeLaEsp.length === 0) {
+  if (especialidad === "Cl\u00ednica m\u00e9dica" && medicosDeLaEsp.length === 0) {
     return "programada";
   }
 
   if (medicosDeLaEsp.length === 0) return "sin_medicos";
 
-  // Un medico esta disponible para consulta inmediata si:
-  // - tiene disponible=true (toggle activo) Y esta en horario, O
-  // - tiene modalidad inmediata/ambas Y esta en horario
   const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
-
   if (disponiblesAhora.length > 0) return "disponible";
 
-  // Tiene medicos con capacidad de inmediata pero no estan en horario ahora
   const tieneInmediata = medicosDeLaEsp.some(
     (m) =>
       m.disponible ||
@@ -193,26 +240,21 @@ export default function GrillaEspecialidades({
           (esp) => espConMatch.has(esp.nombre) || espPorMedico.has(esp.nombre)
         );
 
-  // Agrupar: básicas, con médicos, sin médicos
-  const BASICAS = ["Clínica médica", "Pediatría", "Ginecología", "Psiquiatría", "Dermatología", "Cardiología"];
+  const BASICAS = ["Cl\u00ednica m\u00e9dica", "Pediatr\u00eda", "Ginecolog\u00eda", "Psiquiatr\u00eda", "Dermatolog\u00eda", "Cardiolog\u00eda"];
   const espConMedicos = new Set(medicos.map((m) => m.especialidad));
 
-  // Básicas CON médicos van primero (orden fijo)
   const basicasConMedicos = especialidadesFiltradas
     .filter((e) => BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
     .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
 
-  // Otras con médicos (aleatorio)
   const otrasConMedicos = especialidadesFiltradas
     .filter((e) => !BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
     .sort(() => Math.random() - 0.5);
 
-  // Básicas SIN médicos (después de las que tienen)
   const basicasSinMedicos = especialidadesFiltradas
     .filter((e) => BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
     .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
 
-  // Resto sin médicos (colapsadas)
   const sinMedicos = especialidadesFiltradas
     .filter((e) => !BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
     .sort(() => Math.random() - 0.5);
@@ -223,7 +265,6 @@ export default function GrillaEspecialidades({
 
   const tieneSinMedicos = !termino && sinMedicos.length > 0;
 
-  // Contar esperas por médico
   const esperasPorMedico = new Map<string, number>();
   for (const c of consultasEspera) {
     esperasPorMedico.set(
@@ -232,7 +273,6 @@ export default function GrillaEspecialidades({
     );
   }
 
-  // Médicos para el modal: inmediata incluye disponible=true O modalidad inmediata/ambas
   const medicosDelModal = modalEspecialidad
     ? medicos.filter((m) =>
         m.especialidad === modalEspecialidad &&
@@ -248,41 +288,47 @@ export default function GrillaEspecialidades({
     <>
       {/* Buscador */}
       <div className="relative mb-6">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-gray-400">
-          🔍
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+          <Search size={16} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)" }} />
         </span>
         <input
           type="text"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por especialidad o nombre de médico..."
-          className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          placeholder="Buscar por especialidad o nombre de medico..."
+          className="w-full rounded-[var(--radius-lg)] bg-white py-3 pl-10 pr-4 text-sm shadow-sm placeholder:text-[var(--color-text-tertiary)] focus:outline-none"
+          style={{
+            border: "1px solid var(--color-border-strong)",
+            color: "var(--color-text-primary)",
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
         />
       </div>
 
-      {/* Leyenda del semáforo */}
-      <div className="mb-6 flex flex-wrap gap-4 text-sm text-gray-600">
+      {/* Leyenda del semaforo */}
+      <div className="mb-6 flex flex-wrap gap-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#1D9E75]" />
+          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-success)" }} />
           Disponible ahora
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#BA7517]" />
+          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-pending)" }} />
           Con espera
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#D85A30]" />
+          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-warning)" }} />
           Solo programada
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#888780]" />
+          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-muted)" }} />
           Sin disponibilidad
         </span>
       </div>
 
-      {/* Resultado vacío */}
+      {/* Resultado vacio */}
       {espVisibles.length === 0 && (
-        <p className="py-12 text-center text-sm text-gray-500">
+        <p className="py-12 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
           No se encontraron especialidades para &quot;{busqueda}&quot;
         </p>
       )}
@@ -292,10 +338,8 @@ export default function GrillaEspecialidades({
         {espVisibles.map((esp) => {
           const estado = calcularDisponibilidad(esp.nombre, medicos);
           const { color, texto } = semaforo(estado);
-          const sinMedicos = estado === "sin_medicos";
+          const esSinMedicos = estado === "sin_medicos";
 
-          // El botón se habilita si hay al menos un médico con consulta inmediata
-          // disponible=true (toggle activo) O modalidad inmediata/ambas
           const tieneInmediata = medicos.some(
             (m) =>
               m.especialidad === esp.nombre &&
@@ -312,26 +356,37 @@ export default function GrillaEspecialidades({
                 )
               : [];
 
+          const IconComponent = esp.icon;
+
           return (
             <div
               key={esp.nombre}
-              className={`rounded-xl border bg-white shadow-sm transition ${
-                sinMedicos
-                  ? "border-gray-200 opacity-60 px-5 pt-5 pb-3"
-                  : "border-gray-200 hover:shadow-md p-5"
+              className={`rounded-[var(--radius-lg)] bg-white transition ${
+                esSinMedicos
+                  ? "opacity-60 px-5 pt-5 pb-3"
+                  : "hover:shadow-[var(--shadow-xs)] p-5"
               }`}
+              style={{ border: "1px solid var(--color-border-default)" }}
             >
               <div className="flex items-start justify-between">
-                <span className="text-3xl">{esp.icono}</span>
-                <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                <IconComponent
+                  size={24}
+                  strokeWidth={1.75}
+                  style={{ color: esSinMedicos ? "var(--color-muted)" : "var(--color-brand)" }}
+                />
+                <span className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>
                   <span
-                    className={`inline-block h-2.5 w-2.5 rounded-full ${color}`}
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: color }}
                   />
                   {texto}
                 </span>
               </div>
 
-              <h3 className={`mt-3 text-sm font-semibold ${sinMedicos ? "text-gray-500" : "text-gray-900"}`}>
+              <h3
+                className="mt-3 text-sm font-semibold"
+                style={{ color: esSinMedicos ? "var(--color-text-tertiary)" : "var(--color-text-primary)" }}
+              >
                 {esp.nombre}
               </h3>
 
@@ -341,11 +396,11 @@ export default function GrillaEspecialidades({
                 const minPrecio = Math.min(...medicosEsp.map((m) => m.precio_consulta));
                 const minDuracion = medicosEsp.find((m) => m.precio_consulta === minPrecio)?.duracion_consulta;
                 return (
-                  <p className="mt-1 text-xs font-medium text-gray-900">
+                  <p className="mt-1 text-xs font-medium" style={{ color: "var(--color-text-primary)" }}>
                     {formatPrecio(minPrecio)}
                     {minDuracion && (
-                      <span className="ml-1 font-normal text-gray-400">
-                        · {minDuracion} min
+                      <span className="ml-1 font-normal" style={{ color: "var(--color-text-tertiary)" }}>
+                        - {minDuracion} min
                       </span>
                     )}
                   </p>
@@ -353,19 +408,20 @@ export default function GrillaEspecialidades({
               })()}
 
               {medicosMatch.length > 0 && (
-                <p className="mt-1 text-xs text-blue-600">
+                <p className="mt-1 text-xs" style={{ color: "var(--color-text-link)" }}>
                   {medicosMatch.map((m) => m.nombre_completo).join(", ")}
                 </p>
               )}
 
-              {sinMedicos ? (
-                <p className="mt-4 text-xs text-gray-400">Sin disponibilidad</p>
+              {esSinMedicos ? (
+                <p className="mt-4 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Sin disponibilidad</p>
               ) : (
                 <div className="mt-4 flex gap-2">
                   <button
                     disabled={botonConsultaDeshabilitado}
                     onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
-                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                    className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
+                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "var(--color-primary)" }}
                   >
                     Consulta ahora
                   </button>
@@ -379,7 +435,11 @@ export default function GrillaEspecialidades({
                         setModalEspecialidad(esp.nombre);
                       }
                     }}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
+                    style={{
+                      border: "1px solid var(--color-border-strong)",
+                      color: "var(--color-text-secondary)",
+                    }}
                   >
                     Agendar turno
                   </button>
@@ -390,36 +450,40 @@ export default function GrillaEspecialidades({
         })}
       </div>
 
-      {/* Ver más especialidades */}
+      {/* Ver mas especialidades */}
       {tieneSinMedicos && (
         <button
           onClick={() => setVerMas(!verMas)}
-          className="mt-4 w-full rounded-lg bg-gray-50 px-4 py-2.5 text-sm text-gray-400 hover:bg-gray-100 active:scale-95 active:opacity-80 transition-all duration-100"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm active:scale-[0.97] transition-all duration-100"
+          style={{
+            border: "1px solid var(--color-border-default)",
+            color: "var(--color-text-tertiary)",
+            backgroundColor: "var(--color-bg-secondary)",
+          }}
         >
-          {verMas ? "▴ Ocultar especialidades sin médicos" : `▾ Ver ${sinMedicos.length} especialidades más`}
+          {verMas ? "Ocultar especialidades sin medicos" : `Ver ${sinMedicos.length} especialidades mas`}
         </button>
       )}
 
-      {/* Modal: Médicos disponibles */}
+      {/* Modal: Medicos disponibles */}
       {modalEspecialidad && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: "var(--color-overlay)" }}>
+          <div className="w-full max-w-lg rounded-[var(--radius-xl)] bg-white p-6" style={{ boxShadow: "var(--shadow-lg)" }}>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {modalModo === "turno" ? "Agendar turno" : "Médicos disponibles"} — {modalEspecialidad}
+              <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                {modalModo === "turno" ? "Agendar turno" : "Medicos disponibles"} - {modalEspecialidad}
               </h2>
               <button
                 onClick={() => setModalEspecialidad(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] transition-colors hover:bg-[var(--color-bg-tertiary)]"
               >
-                ✕
+                <X size={20} strokeWidth={1.75} style={{ color: "var(--color-text-tertiary)" }} />
               </button>
             </div>
 
             {medicosDelModal.length === 0 ? (
-              <p className="mt-6 text-center text-sm text-gray-500">
-                No hay médicos disponibles en este momento.
+              <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                No hay medicos disponibles en este momento.
               </p>
             ) : (
               <div className="mt-4 space-y-3">
@@ -431,40 +495,35 @@ export default function GrillaEspecialidades({
                   return (
                     <div
                       key={m.id}
-                      className={`flex items-center justify-between rounded-xl border p-4 ${
-                        disponibleAhora
-                          ? "border-gray-200"
-                          : "border-gray-100 opacity-60"
+                      className={`flex items-center justify-between rounded-[var(--radius-lg)] p-4 ${
+                        disponibleAhora ? "" : "opacity-60"
                       }`}
+                      style={{ border: `1px solid var(--color-border-default)` }}
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium" style={{ color: "var(--color-text-primary)" }}>
                             {m.nombre_completo}
                           </p>
                           <span
-                            className={`inline-block h-2 w-2 rounded-full ${
-                              disponibleAhora ? "bg-[#1D9E75]" : "bg-gray-300"
-                            }`}
+                            className="inline-block h-2 w-2 rounded-full"
+                            style={{ backgroundColor: disponibleAhora ? "var(--color-success)" : "var(--color-border-default)" }}
                           />
                         </div>
-                        <p className="mt-0.5 text-sm text-gray-600">
-                          {formatPrecio(m.precio_consulta)} ·{" "}
-                          {m.duracion_consulta} min
+                        <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                          {formatPrecio(m.precio_consulta)} - {m.duracion_consulta} min
                         </p>
-                        <p className="mt-0.5 text-xs text-gray-500">
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>
                           {!disponibleAhora ? (
-                            <span className="text-gray-400">
-                              No disponible ahora
-                            </span>
+                            <span>No disponible ahora</span>
                           ) : enEspera === 0 ? (
-                            <span className="font-medium text-green-600">
+                            <span className="font-medium" style={{ color: "var(--color-success)" }}>
                               Sin espera
                             </span>
                           ) : (
                             <>
                               {enEspera} paciente{enEspera !== 1 ? "s" : ""} en
-                              espera · ~{tiempoEstimado} min
+                              espera - ~{tiempoEstimado} min
                             </>
                           )}
                         </p>
@@ -472,7 +531,8 @@ export default function GrillaEspecialidades({
                       {modalModo === "turno" ? (
                         <a
                           href={`/clinica/${m.id}/turnos`}
-                          className="shrink-0 rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white hover:bg-[#178a64]"
+                          className="shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white"
+                          style={{ backgroundColor: "var(--color-success)" }}
                         >
                           Ver turnos
                         </a>
@@ -481,13 +541,15 @@ export default function GrillaEspecialidades({
                           <button
                             disabled={!disponibleAhora}
                             onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
-                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                            className="rounded-[var(--radius-md)] px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
+                            style={{ backgroundColor: disponibleAhora ? "var(--color-primary)" : "var(--color-muted)" }}
                           >
                             Consulta ahora
                           </button>
                           <a
                             href={`/clinica/${m.id}/turnos`}
-                            className="rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-700 hover:bg-gray-200"
+                            className="rounded-[var(--radius-md)] px-3 py-1.5 text-center text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
+                            style={{ backgroundColor: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)" }}
                           >
                             Agendar turno
                           </a>
@@ -501,7 +563,11 @@ export default function GrillaEspecialidades({
 
             <button
               onClick={() => setModalEspecialidad(null)}
-              className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
+              style={{
+                border: "1px solid var(--color-border-strong)",
+                color: "var(--color-text-secondary)",
+              }}
             >
               Cancelar
             </button>

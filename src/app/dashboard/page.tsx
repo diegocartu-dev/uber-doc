@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import AppNavbar from "@/components/AppNavbar";
 import LogoutButton from "./LogoutButton";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
 import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
@@ -12,6 +13,7 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
+import { Building2 } from "lucide-react";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -448,88 +450,81 @@ export default async function DashboardPage() {
   const hayUrgenciaPaciente = turnoEnCursoPaciente || consultaActiva || turnosPaciente.some((t) => t.estado === "en_espera");
 
   return (
-    <div className="min-h-full bg-[#f8f9fa]">
-      <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-16 max-w-lg items-center justify-between px-6">
-          <span className="text-lg font-bold text-gray-900">Docto</span>
-          <div className="flex items-center gap-4">
-            <span className="text-base text-gray-600">{fullName}</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">{initials}</div>
-            <LogoutButton />
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
+      <AppNavbar userName={fullName} userRole="paciente" />
 
       <main className="mx-auto max-w-lg px-6 py-8">
-        {/* ── ESTADO 1: Turno en curso (programado) ── */}
+        {/* -- ESTADO 1: Turno en curso (programado) -- */}
         {turnoEnCursoPaciente && (
-          <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "1px solid #378ADD" }}>
+          <div className="mb-5 rounded-[var(--radius-lg)] bg-white p-5" style={{ border: "1.5px solid var(--color-info)" }}>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
-              <span className="text-xs font-medium tracking-wide text-[#378ADD]">CONSULTA EN CURSO</span>
+              <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full" style={{ backgroundColor: "var(--color-info)" }} />
+              <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-info)" }}>CONSULTA EN CURSO</span>
             </div>
-            <p className="mt-3 text-[15px] font-medium text-gray-900">
-              Tu consulta con Dr. {turnoEnCursoPaciente.medico_nombre} está en curso
+            <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
+              Tu consulta con Dr. {turnoEnCursoPaciente.medico_nombre} esta en curso
             </p>
-            <p className="mt-0.5 text-sm text-gray-500">Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
+            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
             <Link
               href={`/turno/${turnoEnCursoPaciente.id}/video`}
-              className="mt-4 block w-full rounded-lg bg-[#378ADD] py-2.5 text-center text-sm font-medium text-white hover:bg-[#2d75c4] active:scale-[0.98] transition-all duration-100"
+              className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+              style={{ backgroundColor: "var(--color-info)" }}
             >
               Volver a la videollamada
             </Link>
           </div>
         )}
 
-        {/* ── ESTADO 1: Consulta inmediata activa ── */}
+        {/* -- ESTADO 1: Consulta inmediata activa -- */}
         {consultaActiva && !turnoEnCursoPaciente && (
           <div
-            className="mb-5 rounded-xl bg-white p-5"
-            style={{ border: `1px solid ${consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75"}` }}
+            className="mb-5 rounded-[var(--radius-lg)] bg-white p-5"
+            style={{ border: `1.5px solid ${consultaActiva.estado === "en_curso" ? "var(--color-info)" : "var(--color-success)"}` }}
           >
             <div className="flex items-center gap-2">
               <span
                 className="inline-block h-2.5 w-2.5 animate-pulse rounded-full"
-                style={{ background: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
+                style={{ background: consultaActiva.estado === "en_curso" ? "var(--color-info)" : "var(--color-success)" }}
               />
               <span
-                className="text-xs font-medium tracking-wide"
-                style={{ color: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
+                className="text-xs font-semibold tracking-wide"
+                style={{ color: consultaActiva.estado === "en_curso" ? "var(--color-info)" : "var(--color-success)" }}
               >
                 {consultaActiva.estado === "en_curso" ? "CONSULTA EN CURSO" : "EN SALA DE ESPERA"}
               </span>
             </div>
-            <p className="mt-3 text-[15px] font-medium text-gray-900">
+            <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
               {consultaActiva.estado === "en_curso"
-                ? `Tu consulta con Dr. ${consultaActiva.medico_nombre} está en curso`
-                : "Tu médico te atenderá en breve"}
+                ? `Tu consulta con Dr. ${consultaActiva.medico_nombre} esta en curso`
+                : "Tu medico te atendera en breve"}
             </p>
-            <p className="mt-0.5 text-sm text-gray-500">{consultaActiva.especialidad} — Dr. {consultaActiva.medico_nombre}</p>
+            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad} - Dr. {consultaActiva.medico_nombre}</p>
             <Link
               href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
-              className="mt-4 block w-full rounded-lg py-2.5 text-center text-sm font-medium text-white active:scale-[0.98] transition-all duration-100"
-              style={{ background: consultaActiva.estado === "en_curso" ? "#378ADD" : "#1D9E75" }}
+              className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+              style={{ background: consultaActiva.estado === "en_curso" ? "var(--color-info)" : "var(--color-success)" }}
             >
               {consultaActiva.estado === "en_curso" ? "Volver a la videollamada" : "Ir a la sala de espera"}
             </Link>
           </div>
         )}
 
-        {/* ── ESTADO 1b: Turno en espera (esperando al médico) ── */}
+        {/* -- ESTADO 1b: Turno en espera (esperando al medico) -- */}
         {!turnoEnCursoPaciente && !consultaActiva && (() => {
           const enEspera = turnosPaciente.find((t) => t.estado === "en_espera");
           if (!enEspera) return null;
           return (
-            <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "1px solid #1D9E75" }}>
+            <div className="mb-5 rounded-[var(--radius-lg)] bg-white p-5" style={{ border: "1.5px solid var(--color-success)" }}>
               <div className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#1D9E75]" />
-                <span className="text-xs font-medium tracking-wide text-[#1D9E75]">EN SALA DE ESPERA</span>
+                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full" style={{ backgroundColor: "var(--color-success)" }} />
+                <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-success)" }}>EN SALA DE ESPERA</span>
               </div>
-              <p className="mt-3 text-[15px] font-medium text-gray-900">Tu médico te atenderá en breve</p>
-              <p className="mt-0.5 text-sm text-gray-500">Dr. {enEspera.medico_nombre} · {enEspera.hora_inicio.slice(0, 5)} hs</p>
+              <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>Tu medico te atendera en breve</p>
+              <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Dr. {enEspera.medico_nombre} - {enEspera.hora_inicio.slice(0, 5)} hs</p>
               <Link
                 href={`/turno/${enEspera.id}/espera`}
-                className="mt-4 block w-full rounded-lg bg-[#1D9E75] py-2.5 text-center text-sm font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+                className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-success)" }}
               >
                 Ir a sala de espera
               </Link>
@@ -537,7 +532,7 @@ export default async function DashboardPage() {
           );
         })()}
 
-        {/* ── ESTADO 2: Próximo turno hoy ── */}
+        {/* -- ESTADO 2: Proximo turno hoy -- */}
         {!hayUrgenciaPaciente && (() => {
           const proximoHoy = turnosPaciente.find((t) => {
             if (t.fecha !== hoy || t.estado !== "confirmado") return false;
@@ -554,16 +549,17 @@ export default async function DashboardPage() {
           const mostrarSala = minTurno - minAhora <= 15;
 
           return (
-            <div className="mb-5 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-              <p className="text-xs font-medium tracking-wide text-gray-400">TU PRÓXIMO TURNO</p>
-              <p className="mt-2 text-sm font-medium text-gray-900">
+            <div className="mb-5 rounded-[var(--radius-lg)] bg-white p-5" style={{ border: "1px solid var(--color-border-default)" }}>
+              <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>TU PROXIMO TURNO</p>
+              <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
                 Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con Dr. {proximoHoy.medico_nombre}
               </p>
-              <p className="mt-0.5 text-xs text-gray-500">{proximoHoy.especialidad}</p>
+              <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>{proximoHoy.especialidad}</p>
               {mostrarSala && (
                 <Link
                   href={`/turno/${proximoHoy.id}/espera`}
-                  className="mt-3 block w-full rounded-lg bg-[#1D9E75] py-2.5 text-center text-sm font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+                  className="mt-3 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+                  style={{ backgroundColor: "var(--color-success)" }}
                 >
                   Ir a sala de espera
                 </Link>
@@ -572,21 +568,18 @@ export default async function DashboardPage() {
           );
         })()}
 
-        {/* ── Acciones principales ── */}
-        <div className="grid gap-4 grid-cols-2">
-          <Link href="/clinica" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-3xl">🏥</p>
-            <p className="mt-3 text-base font-medium text-gray-900">Clínica Virtual</p>
-            <p className="mt-1 text-sm text-gray-500">Consultá un médico ahora o agendá turno</p>
-          </Link>
-          <Link href="/documentos" className="rounded-xl bg-white p-6 transition hover:shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-            <p className="text-3xl">📄</p>
-            <p className="mt-3 text-base font-medium text-gray-900">Mis documentos</p>
-            <p className="mt-1 text-sm text-gray-500">Recetas, indicaciones y certificados</p>
-          </Link>
-        </div>
+        {/* -- Accion principal: Clinica Virtual -- */}
+        <Link
+          href="/clinica"
+          className="block rounded-[var(--radius-lg)] bg-white p-6 transition hover:shadow-[var(--shadow-xs)]"
+          style={{ border: "1px solid var(--color-border-default)" }}
+        >
+          <Building2 size={32} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} />
+          <p className="mt-3 text-base font-medium" style={{ color: "var(--color-text-primary)" }}>Clinica Virtual</p>
+          <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>Consulta un medico ahora o agenda turno</p>
+        </Link>
 
-        {/* ── Mis turnos ── */}
+        {/* -- Mis turnos -- */}
         <div className="mt-5">
           <MisTurnosPaciente turnos={turnosPaciente} />
         </div>

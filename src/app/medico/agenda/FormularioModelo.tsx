@@ -172,7 +172,7 @@ export default function FormularioModelo({
               {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
             {canRemove && (
-              <button onClick={onRemove} className="flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-400 hover:text-red-500 text-[16px]">✕</button>
+              <button onClick={onRemove} className="flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-400 hover:text-red-500 text-[16px]"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
             )}
           </div>
         </div>
@@ -195,7 +195,7 @@ export default function FormularioModelo({
             {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
           {canRemove && (
-            <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+            <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
           )}
         </div>
       </div>
@@ -267,7 +267,7 @@ export default function FormularioModelo({
                 onClick={() => toggleDia(d.num)}
                 className={`flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95 ${
                   estado === 2
-                    ? "bg-blue-500 text-white"
+                    ? "bg-[var(--color-primary)] text-white"
                     : estado === 1
                       ? "bg-[#1D9E75] text-white"
                       : "bg-gray-100 text-gray-500"
@@ -308,12 +308,12 @@ export default function FormularioModelo({
           const diaNum = parseInt(k);
           const franjasDelDia = franjasCustom[diaNum] ?? [];
           return (
-            <div key={diaNum} className="mt-4 rounded-lg bg-blue-50 p-4">
+            <div key={diaNum} className="mt-4 rounded-lg bg-[var(--color-primary-soft)] p-4">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-blue-700">
+                <label className="text-xs font-medium text-[var(--color-brand-dark)]">
                   {["", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"][diaNum]} — personalizado
                 </label>
-                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-blue-600 hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
+                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-[var(--color-text-link)] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
               </div>
               <div className="mt-2 space-y-3 md:space-y-2">
                 {franjasDelDia.map((f, i) => (

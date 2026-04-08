@@ -63,7 +63,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, medico, turno }
     return (
       <div className="text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#1D9E75]/10">
-          <span className="text-3xl">✅</span>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
         <h2 className="mt-4 text-lg font-medium text-gray-900">¡Pago confirmado!</h2>
         <p className="mt-2 text-sm text-gray-500">Redirigiendo...</p>
@@ -141,7 +141,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, medico, turno }
         disabled={isPending}
         className="mt-6 w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
       >
-        {isPending ? "Procesando..." : "🧪 Simular pago aprobado"}
+        {isPending ? "Procesando..." : "Simular pago aprobado"}
       </button>
 
       <p className="mt-3 text-center text-[11px] text-gray-400">

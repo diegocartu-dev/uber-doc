@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { Stethoscope } from "lucide-react";
 import EsperaVideo from "./EsperaVideo";
 
 export default async function ConfirmacionPagoPage({
@@ -37,13 +39,16 @@ export default async function ConfirmacionPagoPage({
     .single();
 
   return (
-    <div className="min-h-full bg-gray-50">
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🩺</span>
-            <span className="text-xl font-bold text-gray-900">Docto</span>
-          </div>
+    <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
+      <nav
+        className="sticky top-0 z-50 bg-white"
+        style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
+      >
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
+            <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
+          </Link>
         </div>
       </nav>
 

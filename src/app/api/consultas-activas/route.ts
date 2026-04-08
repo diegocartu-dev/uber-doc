@@ -9,6 +9,15 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+  // Verificar que el medicoId pertenece al usuario autenticado
+  const { data: medico } = await supabase
+    .from("medicos")
+    .select("id")
+    .eq("id", medicoId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!medico) return NextResponse.json({ error: "No autorizado para acceder a estos datos" }, { status: 403 });
+
   const { data: consultas } = await supabase
     .from("consultas")
     .select("id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, estado")
