@@ -317,10 +317,6 @@ export default function GrillaEspecialidades({
           <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-warning)" }} />
           Solo programada
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-muted)" }} />
-          Sin disponibilidad
-        </span>
       </div>
 
       {/* Resultado vacío / Captura de lead */}
