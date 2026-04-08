@@ -136,3 +136,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+.btn-primary {
+  background-color: var(--color-primary);
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+.btn-primary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}

@@ -15,27 +15,34 @@ export default function Home() {
           Tu doctor, a un click de distancia
         </h1>
         <p
-          className="mt-6 max-w-2xl text-lg"
-          style={{ color: "var(--color-text-secondary)" }}
+          className="mt-6 max-w-2xl"
+          style={{
+            color: "var(--color-text-secondary)",
+            fontSize: "15px",
+            lineHeight: "1.6",
+          }}
         >
-          Conecta con medicos profesionales desde la comodidad de tu hogar.
+          Conectá con médicos profesionales desde la comodidad de tu hogar.
           Consultas por videollamada, chat y recetas digitales, todo en un solo
           lugar.
         </p>
         <div className="mt-10 flex items-center gap-4">
           <Link
             href="/auth/register"
-            className="rounded-[var(--radius-md)] px-6 py-3 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100"
-            style={{ backgroundColor: "var(--color-primary)" }}
+            className="btn-primary px-6 py-3 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100"
+            style={{
+              borderRadius: "var(--radius-md)",
+            }}
           >
             Comenzar ahora
           </Link>
           <Link
             href="/auth/login"
-            className="rounded-[var(--radius-md)] px-6 py-3 text-sm font-semibold transition-colors"
+            className="px-6 py-3 text-sm font-semibold transition-colors"
             style={{
               border: "1px solid var(--color-border-strong)",
               color: "var(--color-text-primary)",
+              borderRadius: "var(--radius-md)",
             }}
           >
             Ya tengo cuenta
@@ -44,10 +51,17 @@ export default function Home() {
 
         <div className="mt-20 grid max-w-4xl gap-8 sm:grid-cols-3">
           <div
-            className="rounded-[var(--radius-lg)] p-6 text-left transition hover:shadow-[var(--shadow-xs)]"
-            style={{ border: "1px solid var(--color-border-default)" }}
+            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
+            style={{
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "var(--radius-lg)",
+            }}
           >
-            <Video size={32} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} />
+            <Video
+              size={32}
+              strokeWidth={1.75}
+              style={{ color: "var(--color-brand)" }}
+            />
             <h3
               className="mt-4 text-lg font-semibold"
               style={{ color: "var(--color-text-primary)" }}
@@ -58,32 +72,46 @@ export default function Home() {
               className="mt-2 text-sm"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              Habla cara a cara con tu medico sin salir de casa.
+              Hablá cara a cara con tu médico sin salir de casa.
             </p>
           </div>
           <div
-            className="rounded-[var(--radius-lg)] p-6 text-left transition hover:shadow-[var(--shadow-xs)]"
-            style={{ border: "1px solid var(--color-border-default)" }}
+            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
+            style={{
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "var(--radius-lg)",
+            }}
           >
-            <MessageCircle size={32} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} />
+            <MessageCircle
+              size={32}
+              strokeWidth={1.75}
+              style={{ color: "var(--color-brand)" }}
+            />
             <h3
               className="mt-4 text-lg font-semibold"
               style={{ color: "var(--color-text-primary)" }}
             >
-              Chat medico
+              Chat médico
             </h3>
             <p
               className="mt-2 text-sm"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              Consulta dudas rapidas por mensaje en cualquier momento.
+              Consultá dudas rápidas por mensaje en cualquier momento.
             </p>
           </div>
           <div
-            className="rounded-[var(--radius-lg)] p-6 text-left transition hover:shadow-[var(--shadow-xs)]"
-            style={{ border: "1px solid var(--color-border-default)" }}
+            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
+            style={{
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "var(--radius-lg)",
+            }}
           >
-            <FileText size={32} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} />
+            <FileText
+              size={32}
+              strokeWidth={1.75}
+              style={{ color: "var(--color-brand)" }}
+            />
             <h3
               className="mt-4 text-lg font-semibold"
               style={{ color: "var(--color-text-primary)" }}
@@ -94,7 +122,7 @@ export default function Home() {
               className="mt-2 text-sm"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              Recibi tus recetas directamente en tu celular.
+              Recibí tus recetas directamente en tu celular.
             </p>
           </div>
         </div>
