@@ -163,20 +163,32 @@ export default function GrillaEspecialidades({
   consultasEspera: ConsultaEspera[];
 }) {
   const [busqueda, setBusqueda] = useState("");
-  const [verMas, setVerMas] = useState(false);
+  const [emailLead, setEmailLead] = useState("");
+  const [leadEnviado, setLeadEnviado] = useState(false);
   const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(null);
   const [modalModo, setModalModo] = useState<"inmediata" | "turno">("inmediata");
 
   const termino = normalize(busqueda.trim());
 
+  const espConMedicos = new Set(medicos.map((m) => m.especialidad));
+
+  // Solo especialidades que tienen al menos un médico
+  const especialidadesConMedicos = ESPECIALIDADES.filter((e) => espConMedicos.has(e.nombre));
+
   const espConMatch = new Set<string>();
   const espPorMedico = new Set<string>();
+  // Para captura de lead: detectar si buscó una especialidad sin médicos
+  let especialidadBuscadaSinMedicos: string | null = null;
 
   if (termino) {
     for (const esp of ESPECIALIDADES) {
       if (normalize(esp.nombre).includes(termino)) {
-        espConMatch.add(esp.nombre);
+        if (espConMedicos.has(esp.nombre)) {
+          espConMatch.add(esp.nombre);
+        } else {
+          especialidadBuscadaSinMedicos = esp.nombre;
+        }
       }
     }
     for (const m of medicos) {
@@ -188,40 +200,20 @@ export default function GrillaEspecialidades({
 
   const especialidadesFiltradas =
     termino === ""
-      ? ESPECIALIDADES
-      : ESPECIALIDADES.filter(
+      ? especialidadesConMedicos
+      : especialidadesConMedicos.filter(
           (esp) => espConMatch.has(esp.nombre) || espPorMedico.has(esp.nombre)
         );
 
-  // Agrupar: básicas, con médicos, sin médicos
-  const BASICAS = ["Clínica médica", "Pediatría", "Ginecología", "Psiquiatría", "Dermatología", "Cardiología"];
-  const espConMedicos = new Set(medicos.map((m) => m.especialidad));
+  // Orden: Clínica médica siempre primera, el resto alfabético
+  const espVisibles = [...especialidadesFiltradas].sort((a, b) => {
+    if (a.nombre === "Clínica médica") return -1;
+    if (b.nombre === "Clínica médica") return 1;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
 
-  // Básicas CON médicos van primero (orden fijo)
-  const basicasConMedicos = especialidadesFiltradas
-    .filter((e) => BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
-    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
-
-  // Otras con médicos (aleatorio)
-  const otrasConMedicos = especialidadesFiltradas
-    .filter((e) => !BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
-    .sort(() => Math.random() - 0.5);
-
-  // Básicas SIN médicos (después de las que tienen)
-  const basicasSinMedicos = especialidadesFiltradas
-    .filter((e) => BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
-    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
-
-  // Resto sin médicos (colapsadas)
-  const sinMedicos = especialidadesFiltradas
-    .filter((e) => !BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
-    .sort(() => Math.random() - 0.5);
-
-  const espVisibles = termino
-    ? especialidadesFiltradas
-    : [...basicasConMedicos, ...otrasConMedicos, ...basicasSinMedicos, ...(verMas ? sinMedicos : [])];
-
-  const tieneSinMedicos = !termino && sinMedicos.length > 0;
+  // Mostrar captura de lead si busca especialidad sin médicos y no hay resultados con médicos
+  const mostrarLeadCapture = termino && especialidadBuscadaSinMedicos && espVisibles.length === 0;
 
   // Contar esperas por médico
   const esperasPorMedico = new Map<string, number>();
@@ -280,11 +272,48 @@ export default function GrillaEspecialidades({
         </span>
       </div>
 
-      {/* Resultado vacío */}
-      {espVisibles.length === 0 && (
-        <p className="py-12 text-center text-sm text-gray-500">
-          No se encontraron especialidades para &quot;{busqueda}&quot;
-        </p>
+      {/* Resultado vacío / Captura de lead */}
+      {espVisibles.length === 0 && termino && (
+        mostrarLeadCapture ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+            <p className="text-sm text-gray-600">
+              No hay médicos disponibles en <span className="font-semibold">{especialidadBuscadaSinMedicos}</span> por ahora.
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Dejanos tu email y te avisamos cuando haya uno.
+            </p>
+            {leadEnviado ? (
+              <p className="mt-4 text-sm font-medium text-[#1D9E75]">
+                ¡Listo! Te avisaremos cuando haya disponibilidad.
+              </p>
+            ) : (
+              <div className="mx-auto mt-4 flex max-w-sm gap-2">
+                <input
+                  type="email"
+                  value={emailLead}
+                  onChange={(e) => setEmailLead(e.target.value)}
+                  placeholder="tu@email.com"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#6B8DE3] focus:outline-none focus:ring-1 focus:ring-[#6B8DE3]"
+                />
+                <button
+                  onClick={() => {
+                    if (emailLead.trim()) {
+                      console.log(`[Lead] Especialidad: ${especialidadBuscadaSinMedicos}, Email: ${emailLead.trim()}`);
+                      setLeadEnviado(true);
+                    }
+                  }}
+                  className="rounded-lg bg-[#6B8DE3] px-4 py-2 text-sm font-medium text-white hover:bg-[#4A63A8]"
+                >
+                  Avisarme
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="py-12 text-center text-sm text-gray-500">
+            No se encontraron especialidades para &quot;{busqueda}&quot;
+          </p>
+        )
       )}
 
       {/* Grilla */}
@@ -365,7 +394,7 @@ export default function GrillaEspecialidades({
                   <button
                     disabled={botonConsultaDeshabilitado}
                     onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
-                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                    className="flex-1 rounded-lg bg-[#6B8DE3] px-3 py-2 text-xs font-medium text-white hover:bg-[#4A63A8] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                   >
                     Consulta ahora
                   </button>
@@ -389,17 +418,6 @@ export default function GrillaEspecialidades({
           );
         })}
       </div>
-
-      {/* Ver más especialidades */}
-      {tieneSinMedicos && (
-        <button
-          onClick={() => setVerMas(!verMas)}
-          className="mt-4 w-full rounded-lg bg-gray-50 px-4 py-2.5 text-sm text-gray-400 hover:bg-gray-100 active:scale-95 active:opacity-80 transition-all duration-100"
-          style={{ border: "0.5px solid #e5e7eb" }}
-        >
-          {verMas ? "▴ Ocultar especialidades sin médicos" : `▾ Ver ${sinMedicos.length} especialidades más`}
-        </button>
-      )}
 
       {/* Modal: Médicos disponibles */}
       {modalEspecialidad && (
@@ -481,7 +499,7 @@ export default function GrillaEspecialidades({
                           <button
                             disabled={!disponibleAhora}
                             onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
-                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                            className="rounded-lg bg-[#6B8DE3] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#4A63A8] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                           >
                             Consulta ahora
                           </button>
