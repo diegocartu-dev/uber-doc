@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   if (tipo === "consulta") {
     const { data } = await supabase
       .from("consultas")
-      .select("id, created_at, paciente_id")
+      .select("id, created_at, paciente_id, canal_origen")
       .eq("medico_id", medicoId)
       .eq("estado", "completada")
       .order("created_at", { ascending: false })
@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
           timeZone: "America/Argentina/Buenos_Aires",
         }),
         url: pac?.id ? `/medico/paciente/${pac.id}` : "#",
+        canal_origen: c.canal_origen ?? "clinica_virtual",
       };
     }));
   }
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
   if (tipo === "turno") {
     const { data } = await supabase
       .from("turnos")
-      .select("id, fecha, hora_inicio, paciente_id")
+      .select("id, fecha, hora_inicio, paciente_id, canal_origen")
       .eq("medico_id", medicoId)
       .eq("estado", "completado")
       .order("fecha", { ascending: false })
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
         timeZone: "America/Argentina/Buenos_Aires",
       })} · ${t.hora_inicio.slice(0, 5)}`,
       url: t.paciente_id ? `/medico/paciente/${t.paciente_id}` : "#",
+      canal_origen: (t as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
     })));
   }
 

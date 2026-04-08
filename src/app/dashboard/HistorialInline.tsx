@@ -7,6 +7,7 @@ type Item = {
   paciente_nombre: string;
   fecha: string;
   url: string;
+  canal_origen?: string;
 };
 
 export default function HistorialInline({
@@ -70,7 +71,14 @@ export default function HistorialInline({
               {items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between px-4 py-3">
                   <div>
-                    <p className="text-base font-medium text-gray-900">{item.paciente_nombre}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-base font-medium text-gray-900">{item.paciente_nombre}</p>
+                      {item.canal_origen === "consultorio_privado" && (
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                          Consultorio
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-400">{item.fecha}</p>
                   </div>
                   <a

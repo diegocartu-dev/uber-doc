@@ -123,7 +123,7 @@ export default async function FichaPacientePage({
   const { data: consultasData } = pacConUserId
     ? await supabase
         .from("consultas")
-        .select("id, especialidad, estado, created_at, motivo_consulta, sintomas")
+        .select("id, especialidad, estado, created_at, motivo_consulta, sintomas, canal_origen")
         .eq("medico_id", medico.id)
         .eq("paciente_id", pacConUserId.user_id)
         .order("created_at", { ascending: false })
@@ -134,7 +134,7 @@ export default async function FichaPacientePage({
   // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
   const { data: turnosData } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, estado, medico_id")
+    .select("id, fecha, hora_inicio, estado, medico_id, canal_origen")
     .eq("medico_id", medico.id)
     .eq("paciente_id", pacienteId)
     .order("fecha", { ascending: false })
@@ -232,6 +232,11 @@ export default async function FichaPacientePage({
                       <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(29,158,117,0.10)", color: "#1D9E75" }}>
                         Consulta inmediata
                       </span>
+                      {(c as { canal_origen?: string }).canal_origen === "consultorio_privado" && (
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                          Consultorio privado
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatFecha(c.created_at)} — {formatHora(c.created_at)} hs
@@ -314,6 +319,11 @@ export default async function FichaPacientePage({
                       <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(55,138,221,0.10)", color: "#378ADD" }}>
                         Turno programado
                       </span>
+                      {(t as { canal_origen?: string }).canal_origen === "consultorio_privado" && (
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                          Consultorio privado
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatFecha(t.fecha + "T12:00:00")} — {t.hora_inicio.slice(0, 5)} hs
