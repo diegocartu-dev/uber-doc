@@ -210,20 +210,32 @@ export default function GrillaEspecialidades({
   consultasEspera: ConsultaEspera[];
 }) {
   const [busqueda, setBusqueda] = useState("");
-  const [verMas, setVerMas] = useState(false);
+  const [emailLead, setEmailLead] = useState("");
+  const [leadEnviado, setLeadEnviado] = useState(false);
   const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(null);
   const [modalModo, setModalModo] = useState<"inmediata" | "turno">("inmediata");
 
   const termino = normalize(busqueda.trim());
 
+  const espConMedicos = new Set(medicos.map((m) => m.especialidad));
+
+  // Solo especialidades que tienen al menos un médico
+  const especialidadesConMedicos = ESPECIALIDADES.filter((e) => espConMedicos.has(e.nombre));
+
   const espConMatch = new Set<string>();
   const espPorMedico = new Set<string>();
+  // Para captura de lead: detectar si buscó una especialidad sin médicos
+  let especialidadBuscadaSinMedicos: string | null = null;
 
   if (termino) {
     for (const esp of ESPECIALIDADES) {
       if (normalize(esp.nombre).includes(termino)) {
-        espConMatch.add(esp.nombre);
+        if (espConMedicos.has(esp.nombre)) {
+          espConMatch.add(esp.nombre);
+        } else {
+          especialidadBuscadaSinMedicos = esp.nombre;
+        }
       }
     }
     for (const m of medicos) {
@@ -235,35 +247,20 @@ export default function GrillaEspecialidades({
 
   const especialidadesFiltradas =
     termino === ""
-      ? ESPECIALIDADES
-      : ESPECIALIDADES.filter(
+      ? especialidadesConMedicos
+      : especialidadesConMedicos.filter(
           (esp) => espConMatch.has(esp.nombre) || espPorMedico.has(esp.nombre)
         );
 
-  const BASICAS = ["Cl\u00ednica m\u00e9dica", "Pediatr\u00eda", "Ginecolog\u00eda", "Psiquiatr\u00eda", "Dermatolog\u00eda", "Cardiolog\u00eda"];
-  const espConMedicos = new Set(medicos.map((m) => m.especialidad));
+  // Orden: Clínica médica siempre primera, el resto alfabético
+  const espVisibles = [...especialidadesFiltradas].sort((a, b) => {
+    if (a.nombre === "Clínica médica") return -1;
+    if (b.nombre === "Clínica médica") return 1;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
 
-  const basicasConMedicos = especialidadesFiltradas
-    .filter((e) => BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
-    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
-
-  const otrasConMedicos = especialidadesFiltradas
-    .filter((e) => !BASICAS.includes(e.nombre) && espConMedicos.has(e.nombre))
-    .sort(() => Math.random() - 0.5);
-
-  const basicasSinMedicos = especialidadesFiltradas
-    .filter((e) => BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
-    .sort((a, b) => BASICAS.indexOf(a.nombre) - BASICAS.indexOf(b.nombre));
-
-  const sinMedicos = especialidadesFiltradas
-    .filter((e) => !BASICAS.includes(e.nombre) && !espConMedicos.has(e.nombre))
-    .sort(() => Math.random() - 0.5);
-
-  const espVisibles = termino
-    ? especialidadesFiltradas
-    : [...basicasConMedicos, ...otrasConMedicos, ...basicasSinMedicos, ...(verMas ? sinMedicos : [])];
-
-  const tieneSinMedicos = !termino && sinMedicos.length > 0;
+  // Mostrar captura de lead si busca especialidad sin médicos y no hay resultados con médicos
+  const mostrarLeadCapture = termino && especialidadBuscadaSinMedicos && espVisibles.length === 0;
 
   const esperasPorMedico = new Map<string, number>();
   for (const c of consultasEspera) {
@@ -295,7 +292,7 @@ export default function GrillaEspecialidades({
           type="text"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por especialidad o nombre de medico..."
+          placeholder="Buscar por especialidad o nombre de médico..."
           className="w-full rounded-[var(--radius-lg)] bg-white py-3 pl-10 pr-4 text-sm shadow-sm placeholder:text-[var(--color-text-tertiary)] focus:outline-none"
           style={{
             border: "1px solid var(--color-border-strong)",
@@ -326,11 +323,54 @@ export default function GrillaEspecialidades({
         </span>
       </div>
 
-      {/* Resultado vacio */}
-      {espVisibles.length === 0 && (
-        <p className="py-12 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          No se encontraron especialidades para &quot;{busqueda}&quot;
-        </p>
+      {/* Resultado vacío / Captura de lead */}
+      {espVisibles.length === 0 && termino && (
+        mostrarLeadCapture ? (
+          <div className="rounded-[var(--radius-lg)] bg-white p-6 text-center" style={{ border: "1px solid var(--color-border-default)", boxShadow: "var(--shadow-xs)" }}>
+            <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+              No hay médicos disponibles en <span className="font-semibold">{especialidadBuscadaSinMedicos}</span> por ahora.
+            </p>
+            <p className="mt-1 text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+              Dejanos tu email y te avisamos cuando haya uno.
+            </p>
+            {leadEnviado ? (
+              <p className="mt-4 text-sm font-medium" style={{ color: "var(--color-success)" }}>
+                ¡Listo! Te avisaremos cuando haya disponibilidad.
+              </p>
+            ) : (
+              <div className="mx-auto mt-4 flex max-w-sm gap-2">
+                <input
+                  type="email"
+                  value={emailLead}
+                  onChange={(e) => setEmailLead(e.target.value)}
+                  placeholder="tu@email.com"
+                  className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-sm focus:outline-none"
+                  style={{ border: "1px solid var(--color-border-strong)", color: "var(--color-text-primary)" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#6B8DE3"; e.currentTarget.style.boxShadow = "0 0 0 1px #6B8DE3"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
+                />
+                <button
+                  onClick={() => {
+                    if (emailLead.trim()) {
+                      console.log(`[Lead] Especialidad: ${especialidadBuscadaSinMedicos}, Email: ${emailLead.trim()}`);
+                      setLeadEnviado(true);
+                    }
+                  }}
+                  className="rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+                  style={{ backgroundColor: "#6B8DE3" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#4A63A8"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
+                >
+                  Avisarme
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="py-12 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            No se encontraron especialidades para &quot;{busqueda}&quot;
+          </p>
+        )
       )}
 
       {/* Grilla */}
@@ -421,7 +461,9 @@ export default function GrillaEspecialidades({
                     disabled={botonConsultaDeshabilitado}
                     onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
                     className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "var(--color-primary)" }}
+                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "#6B8DE3" }}
+                    onMouseEnter={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "#4A63A8"; }}
+                    onMouseLeave={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
                   >
                     Consulta ahora
                   </button>
@@ -450,28 +492,13 @@ export default function GrillaEspecialidades({
         })}
       </div>
 
-      {/* Ver mas especialidades */}
-      {tieneSinMedicos && (
-        <button
-          onClick={() => setVerMas(!verMas)}
-          className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm active:scale-[0.97] transition-all duration-100"
-          style={{
-            border: "1px solid var(--color-border-default)",
-            color: "var(--color-text-tertiary)",
-            backgroundColor: "var(--color-bg-secondary)",
-          }}
-        >
-          {verMas ? "Ocultar especialidades sin medicos" : `Ver ${sinMedicos.length} especialidades mas`}
-        </button>
-      )}
-
-      {/* Modal: Medicos disponibles */}
+      {/* Modal: Médicos disponibles */}
       {modalEspecialidad && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: "var(--color-overlay)" }}>
           <div className="w-full max-w-lg rounded-[var(--radius-xl)] bg-white p-6" style={{ boxShadow: "var(--shadow-lg)" }}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                {modalModo === "turno" ? "Agendar turno" : "Medicos disponibles"} - {modalEspecialidad}
+                {modalModo === "turno" ? "Agendar turno" : "Médicos disponibles"} — {modalEspecialidad}
               </h2>
               <button
                 onClick={() => setModalEspecialidad(null)}
@@ -483,7 +510,7 @@ export default function GrillaEspecialidades({
 
             {medicosDelModal.length === 0 ? (
               <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                No hay medicos disponibles en este momento.
+                No hay médicos disponibles en este momento.
               </p>
             ) : (
               <div className="mt-4 space-y-3">
@@ -542,7 +569,9 @@ export default function GrillaEspecialidades({
                             disabled={!disponibleAhora}
                             onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
                             className="rounded-[var(--radius-md)] px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-                            style={{ backgroundColor: disponibleAhora ? "var(--color-primary)" : "var(--color-muted)" }}
+                            style={{ backgroundColor: disponibleAhora ? "#6B8DE3" : "var(--color-muted)" }}
+                            onMouseEnter={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "#4A63A8"; }}
+                            onMouseLeave={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
                           >
                             Consulta ahora
                           </button>
