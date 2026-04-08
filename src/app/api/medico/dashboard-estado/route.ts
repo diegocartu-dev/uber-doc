@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   const { data: esperando } = await supabase
     .from("consultas")
     .select(
-      "id, especialidad, estado, created_at, paciente_id, motivo_consulta"
+      "id, especialidad, estado, created_at, paciente_id, motivo_consulta, canal_origen"
     )
     .eq("medico_id", medicoId)
     .eq("estado", "esperando")
@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
       paciente_tabla_id: p?.id ?? null,
       motivo_consulta: c.motivo_consulta,
       fecha_nacimiento: p?.nacimiento ?? null,
+      canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
     };
   });
 
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
   const { data: enCurso } = await supabase
     .from("consultas")
     .select(
-      "id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, estado"
+      "id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, estado, canal_origen"
     )
     .eq("medico_id", medicoId)
     .in("estado", ["aceptada", "pagada", "en_curso"])
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
       sintomas: c.sintomas,
       created_at: c.created_at,
       fecha_nacimiento: p?.nacimiento ?? null,
+      canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
     };
   });
 
@@ -106,7 +108,7 @@ export async function GET(req: NextRequest) {
 
   const { data: turnosEspera } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, paciente_id, estado")
+    .select("id, fecha, hora_inicio, paciente_id, estado, canal_origen")
     .eq("medico_id", medicoId)
     .eq("estado", "en_espera")
     .order("hora_inicio", { ascending: true });
@@ -133,6 +135,7 @@ export async function GET(req: NextRequest) {
     paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
     paciente_tabla_id: t.paciente_id,
     especialidad: "",
+    canal_origen: (t as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
   }));
 
   // 4. Turnos activos hoy (confirmado/en_espera) para saber si bloquear CI

@@ -50,12 +50,14 @@ export default async function DashboardPage() {
     id: string; especialidad: string; estado: string; created_at: string;
     paciente_nombre: string; paciente_tabla_id: string | null;
     motivo_consulta: string | null; fecha_nacimiento: string | null;
+    canal_origen?: string;
   }[] = [];
 
   let consultasEnCurso: {
     id: string; especialidad: string; estado: string; paciente_nombre: string; paciente_tabla_id: string | null;
     sala_video_url: string | null; motivo_consulta: string | null;
     sintomas: string[] | null; created_at: string; fecha_nacimiento: string | null;
+    canal_origen?: string;
   }[] = [];
 
   let completadasHoy = 0;
@@ -165,7 +167,7 @@ export default async function DashboardPage() {
       // Consultas en espera
       const { data: esperando } = await supabase
         .from("consultas")
-        .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta")
+        .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta, canal_origen")
         .eq("medico_id", data.id).eq("estado", "esperando")
         .order("created_at", { ascending: true });
 
@@ -177,6 +179,7 @@ export default async function DashboardPage() {
             id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
             paciente_nombre: p?.nombre ?? "Paciente", paciente_tabla_id: p?.id ?? null,
             motivo_consulta: c.motivo_consulta, fecha_nacimiento: p?.nacimiento ?? null,
+            canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
           };
         });
       }
@@ -184,7 +187,7 @@ export default async function DashboardPage() {
       // Consultas aceptadas + en curso
       const { data: enCurso } = await supabase
         .from("consultas")
-        .select("id, especialidad, estado, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at")
+        .select("id, especialidad, estado, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, canal_origen")
         .eq("medico_id", data.id).in("estado", ["aceptada", "pagada", "en_curso"])
         .order("created_at", { ascending: true });
 
@@ -198,6 +201,7 @@ export default async function DashboardPage() {
             paciente_tabla_id: p?.id ?? null, sala_video_url: c.sala_video_url,
             motivo_consulta: c.motivo_consulta, sintomas: c.sintomas,
             created_at: c.created_at, fecha_nacimiento: p?.nacimiento ?? null,
+            canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
           };
         });
       }

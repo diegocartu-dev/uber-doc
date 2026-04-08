@@ -11,6 +11,7 @@ type TurnoEspera = {
   paciente_nombre: string;
   paciente_tabla_id: string | null;
   entradoEn: number; // timestamp ms para contador
+  canal_origen?: string;
 };
 
 function Contador({ desde }: { desde: number }) {
@@ -108,9 +109,16 @@ export default function TurnosEnEspera({
               ) : (
                 <p className="mt-2 text-lg font-medium text-gray-900">{t.paciente_nombre}</p>
               )}
-              <p className="mt-0.5 text-sm text-gray-500">
-                Turno de las {t.hora_inicio} hs
-              </p>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="text-sm text-gray-500">
+                  Turno de las {t.hora_inicio} hs
+                </span>
+                {t.canal_origen === "consultorio_privado" && (
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                    Consultorio
+                  </span>
+                )}
+              </div>
             </div>
             {hayEnCurso ? (
               <span className="shrink-0 rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#D85A30]">

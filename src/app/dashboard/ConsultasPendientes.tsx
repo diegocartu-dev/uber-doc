@@ -14,6 +14,7 @@ type Consulta = {
   paciente_tabla_id: string | null;
   motivo_consulta: string | null;
   fecha_nacimiento: string | null;
+  canal_origen?: string;
 };
 
 function calcularEdad(fechaNac: string | null): string {
@@ -93,9 +94,16 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
                     <p className="text-base font-medium text-gray-900">{c.paciente_nombre}</p>
                   )}
                 </div>
-                <p className="mt-0.5 text-sm text-gray-500">
-                  {[edad, c.especialidad].filter(Boolean).join(" \u00b7 ")}
-                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm text-gray-500">
+                    {[edad, c.especialidad].filter(Boolean).join(" · ")}
+                  </span>
+                  {c.canal_origen === "consultorio_privado" && (
+                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                      Consultorio
+                    </span>
+                  )}
+                </div>
                 {c.motivo_consulta && (
                   <p className="mt-0.5 truncate text-sm text-gray-600 sm:text-xs">
                     {c.motivo_consulta}

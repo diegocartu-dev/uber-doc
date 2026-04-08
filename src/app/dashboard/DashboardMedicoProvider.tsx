@@ -14,6 +14,7 @@ type ConsultaPendiente = {
   paciente_tabla_id: string | null;
   motivo_consulta: string | null;
   fecha_nacimiento: string | null;
+  canal_origen?: string;
 };
 
 type ConsultaEnCurso = {
@@ -27,6 +28,7 @@ type ConsultaEnCurso = {
   sintomas: string[] | null;
   created_at: string;
   fecha_nacimiento: string | null;
+  canal_origen?: string;
 };
 
 type TurnoEspera = {
@@ -37,6 +39,7 @@ type TurnoEspera = {
   paciente_tabla_id: string | null;
   especialidad: string;
   entradoEn: number;
+  canal_origen?: string;
 };
 
 type DashboardCtx = {
