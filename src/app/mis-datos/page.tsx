@@ -19,7 +19,7 @@ export default async function MisDatosPage() {
   // Detect role from DB
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, precio_consulta, duracion_consulta")
+    .select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, precio_consulta, duracion_consulta, slug")
     .eq("user_id", user.id)
     .maybeSingle();
 

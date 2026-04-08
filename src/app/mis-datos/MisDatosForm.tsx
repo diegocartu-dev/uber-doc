@@ -23,6 +23,7 @@ type MedicoData = {
   domicilio: string | null;
   precio_consulta: number;
   duracion_consulta: number;
+  slug: string | null;
 } | null;
 
 type Props = {
@@ -63,6 +64,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
   // Paciente fields
   const [nombre, setNombre] = useState(
@@ -318,6 +320,60 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
       >
         {saving ? "Guardando..." : "Guardar cambios"}
       </button>
+
+      {/* Mi link — solo médicos con slug */}
+      {role === "medico" && medico?.slug && (
+        <div
+          className="mt-8 rounded-[var(--radius-lg)] p-5"
+          style={{
+            border: "1px solid var(--color-border-default)",
+            backgroundColor: "var(--color-bg-primary)",
+          }}
+        >
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--color-text-primary)" }}
+          >
+            Mi consultorio virtual
+          </p>
+          <p
+            className="mt-1 text-xs"
+            style={{ color: "var(--color-text-tertiary)" }}
+          >
+            Compartí este link con tus pacientes para que te consulten directamente por Docto.
+          </p>
+
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={`${typeof window !== "undefined" ? window.location.origin : "https://docto.com.ar"}/dr/${medico.slug}`}
+              style={{
+                ...disabledInputStyle,
+                fontSize: 13,
+                cursor: "text",
+              }}
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${window.location.origin}/dr/${medico.slug}`;
+                navigator.clipboard.writeText(url);
+                setLinkCopiado(true);
+                setTimeout(() => setLinkCopiado(false), 2000);
+              }}
+              className="shrink-0 rounded-[var(--radius-md)] px-4 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+              style={{
+                height: 44,
+                backgroundColor: linkCopiado ? "var(--color-success)" : "var(--color-primary)",
+              }}
+            >
+              {linkCopiado ? "Copiado!" : "Copiar link"}
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
