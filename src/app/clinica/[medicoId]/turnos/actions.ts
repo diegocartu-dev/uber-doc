@@ -12,7 +12,7 @@ export async function limpiarReservasExpiradas() {
     .lt("reservado_hasta", new Date().toISOString());
 }
 
-export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }) {
+export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual") {
   const supabase = await createClient();
   const { data: { user }, error: authErr } = await supabase.auth.getUser();
   if (!user) return { error: `No autenticado: ${authErr?.message ?? "sin sesión"}` };
@@ -36,6 +36,7 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
       paciente_id: paciente.id,
       reservado_hasta: reservadoHasta,
       recordatorios,
+      canal_origen: canalOrigen,
     })
     .eq("id", turnoId)
     .eq("estado", "disponible");

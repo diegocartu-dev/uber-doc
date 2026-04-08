@@ -51,7 +51,17 @@ export async function registrarMedico(formData: FormData) {
     return { error: "No se pudo crear el usuario." };
   }
 
-  // 2. Insertar en tabla medicos — con retry
+  // 2. Generar slug: nombre-apellido-TIPONUM
+  const slug = nombre_completo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    + "-" + tipo_matricula + numero_matricula;
+
+  // 3. Insertar en tabla medicos — con retry
   const ahora = new Date().toISOString();
   let dbError = null;
   for (let i = 0; i < 3; i++) {
@@ -72,6 +82,7 @@ export async function registrarMedico(formData: FormData) {
       provincia_matricula,
       terminos_aceptados_at: ahora,
       declaracion_matricula_at: ahora,
+      slug,
     });
 
     if (!error) { dbError = null; break; }
