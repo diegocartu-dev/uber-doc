@@ -1,8 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import AppNavbar from "@/components/AppNavbar";
 import DescargarPDF from "./DescargarPDF";
 import BannerConsultaActiva from "./BannerConsultaActiva";
+import { Pill, FileText, Award } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 const tipoLabel: Record<string, string> = {
   receta: "Receta",
@@ -10,10 +12,10 @@ const tipoLabel: Record<string, string> = {
   certificado: "Certificado",
 };
 
-const tipoIcon: Record<string, string> = {
-  receta: "💊",
-  indicaciones: "📋",
-  certificado: "📄",
+const tipoIconMap: Record<string, LucideIcon> = {
+  receta: Pill,
+  indicaciones: FileText,
+  certificado: Award,
 };
 
 function formatFechaConsulta(fecha: string) {
@@ -137,14 +139,7 @@ export default async function DocumentosPage() {
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
-      <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
-          <span className="text-lg font-medium text-gray-900">Docto</span>
-          <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
-            Inicio
-          </Link>
-        </div>
-      </nav>
+      <AppNavbar userName={paciente.nombre_completo} userRole="paciente" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="text-xl font-medium text-gray-900">Mis documentos</h1>
@@ -158,9 +153,9 @@ export default async function DocumentosPage() {
 
         {totalDocs === 0 ? (
           <div className="mt-12 text-center">
-            <p className="text-3xl">📄</p>
-            <p className="mt-3 text-sm text-gray-500">
-              No tenés documentos todavía. Se generan al finalizar una consulta.
+            <FileText size={48} strokeWidth={1.5} style={{ color: "var(--color-text-tertiary)", margin: "0 auto" }} />
+            <p className="mt-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+              No tenes documentos todavia. Se generan al finalizar una consulta.
             </p>
           </div>
         ) : (
@@ -204,7 +199,7 @@ export default async function DocumentosPage() {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
-                            <span>{tipoIcon[doc.tipo] ?? "📄"}</span>
+                            {(() => { const Icon = tipoIconMap[doc.tipo] ?? FileText; return <Icon size={16} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)" }} />; })()}
                             <div>
                               <p className="text-sm font-medium text-gray-900">
                                 {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}

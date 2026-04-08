@@ -32,7 +32,7 @@ export default function BannerConsultaActiva({ consultaId }: { consultaId: strin
       <div
         className="mb-6 rounded-xl bg-[#1D9E75] p-4 text-center text-sm text-white"
       >
-        ✅ ¡Tu consulta finalizó! Cargando documentos...
+        Tu consulta finalizo. Cargando documentos...
       </div>
     );
   }

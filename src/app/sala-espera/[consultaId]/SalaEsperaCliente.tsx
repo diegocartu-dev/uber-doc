@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
+import { Video, CheckCircle } from "lucide-react";
 
 type Props = {
   consultaId: string;
@@ -77,14 +78,18 @@ export default function SalaEsperaCliente({
   return (
     <div className="text-center">
       {/* Animación de espera / check */}
-      <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-blue-50">
+      <div
+        className="mx-auto flex h-24 w-24 items-center justify-center rounded-full"
+        style={{ backgroundColor: "var(--color-primary-soft)" }}
+      >
         {salaVideoUrl ? (
-          <span className="text-5xl">📹</span>
+          <Video size={40} strokeWidth={1.75} style={{ color: "var(--color-info)" }} />
         ) : aceptada ? (
-          <span className="text-5xl">✅</span>
+          <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
         ) : (
           <svg
-            className="h-12 w-12 animate-spin text-blue-500"
+            className="h-12 w-12 animate-spin"
+            style={{ color: "var(--color-primary)" }}
             viewBox="0 0 24 24"
             fill="none"
           >
@@ -181,7 +186,8 @@ export default function SalaEsperaCliente({
       {salaVideoUrl && (
         <a
           href={`/consulta/${consultaId}/video`}
-          className="mt-6 block w-full rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
+          className="mt-6 block w-full rounded-[var(--radius-lg)] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm active:scale-[0.97] transition-all duration-100"
+          style={{ backgroundColor: "var(--color-primary)" }}
         >
           Unirse a la videollamada
         </a>

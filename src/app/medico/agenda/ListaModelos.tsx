@@ -56,7 +56,7 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
   if (modelos.length === 0) {
     return (
       <div className="rounded-xl bg-white p-8 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
-        <p className="text-[28px]">📅</p>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto" }}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
         <p className="mt-3 text-[14px] text-gray-500">No tenes modelos de agenda.</p>
         <p className="mt-1 text-[13px] text-gray-400">Crea uno para recibir turnos programados.</p>
       </div>

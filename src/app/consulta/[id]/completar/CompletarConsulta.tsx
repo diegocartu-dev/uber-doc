@@ -89,7 +89,7 @@ function CampoDictado({
             activo ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
           }`}
         >
-          {activo ? "🔴 Dictando..." : "🎙️ Dictar"}
+          {activo ? "Dictando..." : "Dictar"}
         </button>
       </div>
       <textarea

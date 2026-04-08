@@ -72,9 +72,9 @@ const tipoLabel: Record<string, string> = {
 };
 
 const tipoIcon: Record<string, string> = {
-  receta: "💊",
-  indicaciones: "📋",
-  certificado: "📄",
+  receta: "Rx",
+  indicaciones: "Ind",
+  certificado: "Cert",
 };
 
 export default async function FichaPacientePage({
@@ -206,7 +206,7 @@ export default async function FichaPacientePage({
   const seccionConsultas = (
     <div key="consultas" className="mt-6">
       <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(29,158,117,0.06)", borderLeft: "4px solid #1D9E75" }}>
-        <span className="text-base">💬</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
         <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#1D9E75" }}>
           Historial de consultas · {consultasFinal.length}
         </p>
@@ -266,7 +266,7 @@ export default async function FichaPacientePage({
                       {docs.map((doc) => (
                         <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
+                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "Doc"}</span>
                             <span className="text-xs font-medium text-gray-700">
                               {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
                             </span>
@@ -289,7 +289,7 @@ export default async function FichaPacientePage({
   const seccionTurnos = (
     <div key="turnos" className="mt-8">
       <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(55,138,221,0.06)", borderLeft: "4px solid #378ADD" }}>
-        <span className="text-base">📅</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
         <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#378ADD" }}>
           Historial de turnos · {turnosFinal.length}
         </p>
@@ -331,7 +331,7 @@ export default async function FichaPacientePage({
                       {docs.map((doc) => (
                         <div key={doc.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "📄"}</span>
+                            <span className="text-sm">{tipoIcon[doc.tipo] ?? "Doc"}</span>
                             <span className="text-xs font-medium text-gray-700">
                               {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
                             </span>

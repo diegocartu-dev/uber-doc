@@ -169,7 +169,7 @@ function CampoDictado({
             activo ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
           }`}
         >
-          {activo ? "🔴 Dictando..." : "🎙️ Dictar"}
+          {activo ? "Dictando..." : "Dictar"}
         </button>
       </div>
       <textarea
@@ -497,7 +497,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
     return (
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-sm text-center">
-          <span className="text-4xl">⚠️</span>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D85A30" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
           <h2 className="mt-4 text-lg font-medium text-white">Chrome en iPhone no es compatible</h2>
           <p className="mt-2 text-sm text-gray-400">Copiá el link y abrilo en Safari.</p>
           <button
@@ -522,7 +522,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
             {/* Consulta completada */}
             {!dailyAbierto ? (
               <>
-                <span className="text-4xl">📹</span>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6B8DE3" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto" }}><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
                 <h2 className="mt-4 text-lg font-medium text-white">Videollamada lista</h2>
                 <p className="mt-2 text-sm text-gray-400">
                   {consulta.especialidad} — {esMedico ? consulta.paciente_nombre : `Dr. ${consulta.medico_nombre}`}
@@ -598,7 +598,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
             className="fixed bottom-6 left-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-lg"
             style={{ border: "0.5px solid #e5e7eb" }}
           >
-            <span className="text-xl">📝</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4B5563" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
           </button>
         )}
 
@@ -609,7 +609,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
             <div className="max-h-[85vh] overflow-y-auto rounded-t-2xl bg-[#f8f9fa]">
               <div className="sticky top-0 flex items-center justify-between bg-white px-5 py-3 rounded-t-2xl" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
                 <p className="text-sm font-medium text-gray-900">Notas de la consulta</p>
-                <button onClick={() => setDrawerOpen(false)} className="text-gray-400 text-lg">✕</button>
+                <button onClick={() => setDrawerOpen(false)} className="text-gray-400 text-lg"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
               </div>
               <div className="px-5 pb-8 pt-2">
                 <p className="text-sm text-gray-500">{consulta.paciente_nombre} · {consulta.especialidad}</p>
@@ -645,7 +645,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
         {cargando && !error && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900">
             <div className="text-center">
-              <svg className="mx-auto h-10 w-10 animate-spin text-blue-400" viewBox="0 0 24 24" fill="none">
+              <svg className="mx-auto h-10 w-10 animate-spin text-[var(--color-primary)]" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
@@ -660,7 +660,7 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
             <div className="max-w-sm text-center">
               <p className="text-sm text-red-400">{error}</p>
               <div className="mt-3 flex gap-2">
-                <button onClick={() => window.location.reload()} className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Reintentar</button>
+                <button onClick={() => window.location.reload()} className="flex-1 rounded-lg px-4 py-2 text-sm text-white" style={{ backgroundColor: "var(--color-primary)" }}>Reintentar</button>
                 <button onClick={() => { window.location.href = "/dashboard"; }} className="flex-1 rounded-lg bg-gray-700 px-4 py-2 text-sm text-white">Volver</button>
               </div>
             </div>
@@ -747,10 +747,10 @@ export default function VideoLlamada({ consultaId, esMedico, consulta, apiEndpoi
           <div className="relative flex items-center justify-center gap-3 bg-gray-900 px-4 py-3">
             <span className="absolute left-4 text-xs tabular-nums text-white/50">{formatTimer(timerSeg)}</span>
             <button onClick={toggleMic} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${micOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
-              {micOn ? "🎙️ Micrófono" : "🔇 Silenciado"}
+              {micOn ? "Microfono" : "Silenciado"}
             </button>
             <button onClick={toggleCam} className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${camOn ? "bg-gray-800 text-white hover:bg-gray-700" : "bg-red-600 text-white"}`}>
-              {camOn ? "📷 Cámara" : "📷 Apagada"}
+              {camOn ? "Camara" : "Apagada"}
             </button>
             {esMedico ? (
               <button

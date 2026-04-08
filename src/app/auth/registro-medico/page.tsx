@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Stethoscope, X } from "lucide-react";
 import { registrarMedico } from "./actions";
 
 const ESPECIALIDADES = [
@@ -107,15 +108,15 @@ export default function RegistroMedicoPage() {
   }
 
   const inputClass =
-    "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
-  const labelClass = "block text-sm font-medium text-gray-700";
+    "mt-1 block w-full rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
+  const labelClass = "block text-[13px] font-medium";
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2">
-          <span className="text-3xl">🩺</span>
-          <span className="text-2xl font-bold text-gray-900">Docto</span>
+          <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
+          <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
         <h2 className="text-center text-xl font-semibold text-gray-900">
@@ -390,14 +391,14 @@ export default function RegistroMedicoPage() {
                 type="checkbox"
                 checked={checkTerminos}
                 onChange={(e) => setCheckTerminos(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
               />
               <span className="text-sm text-gray-700">
                 Leí y acepto los{" "}
                 <button
                   type="button"
                   onClick={() => setModalTerminos(true)}
-                  className="font-medium text-blue-600 hover:text-blue-500 underline"
+                  className="font-medium underline"
                 >
                   términos y condiciones
                 </button>{" "}
@@ -410,7 +411,7 @@ export default function RegistroMedicoPage() {
                 type="checkbox"
                 checked={checkMatricula}
                 onChange={(e) => setCheckMatricula(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
               />
               <span className="text-sm text-gray-700">
                 Declaro que la información de mi matrícula profesional es
@@ -418,7 +419,7 @@ export default function RegistroMedicoPage() {
                 <button
                   type="button"
                   onClick={() => setModalMatricula(true)}
-                  className="font-medium text-blue-600 hover:text-blue-500 underline"
+                  className="font-medium underline"
                 >
                   profesional independiente
                 </button>
@@ -429,9 +430,10 @@ export default function RegistroMedicoPage() {
           <button
             type="submit"
             disabled={loading || !checkTerminos || !checkMatricula}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+            style={{ backgroundColor: "var(--color-primary)" }}
           >
-            {loading ? "Registrando..." : "Registrarme como médico"}
+            {loading ? "Registrando..." : "Registrarme como medico"}
           </button>
         </form>
 
@@ -447,7 +449,7 @@ export default function RegistroMedicoPage() {
                   onClick={() => setModalTerminos(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  ✕
+                  <X size={20} strokeWidth={1.75} />
                 </button>
               </div>
               <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
@@ -468,7 +470,8 @@ export default function RegistroMedicoPage() {
               </div>
               <button
                 onClick={() => setModalTerminos(false)}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
+                className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
               >
                 Cerrar
               </button>
@@ -476,7 +479,7 @@ export default function RegistroMedicoPage() {
           </div>
         )}
 
-        {/* Modal declaración de matrícula */}
+        {/* Modal declaracion de matricula */}
         {modalMatricula && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
@@ -488,7 +491,7 @@ export default function RegistroMedicoPage() {
                   onClick={() => setModalMatricula(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  ✕
+                  <X size={20} strokeWidth={1.75} />
                 </button>
               </div>
               <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
@@ -507,7 +510,8 @@ export default function RegistroMedicoPage() {
               </div>
               <button
                 onClick={() => setModalMatricula(false)}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:scale-95 active:opacity-80 transition-all duration-100"
+                className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
               >
                 Cerrar
               </button>
@@ -519,7 +523,7 @@ export default function RegistroMedicoPage() {
           ¿Ya tenés cuenta?{" "}
           <Link
             href="/auth/login"
-            className="font-medium text-blue-600 hover:text-blue-500"
+            className="font-medium" style={{ color: "var(--color-text-link)" }}
           >
             Iniciá sesión
           </Link>
