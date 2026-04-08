@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import EsperaVideo from "./EsperaVideo";
+import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function ConfirmacionPagoPage({
   params,
@@ -22,7 +23,7 @@ export default async function ConfirmacionPagoPage({
   // Verificar consulta del paciente
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, medico_id, sala_video_url, created_at")
+    .select("id, especialidad, estado, medico_id, sala_video_url, created_at, canal_origen")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -30,6 +31,8 @@ export default async function ConfirmacionPagoPage({
   if (!consulta) {
     redirect("/clinica");
   }
+
+  const returnUrl = await getReturnUrl(consulta.medico_id, consulta.canal_origen, "/dashboard");
 
   // Traer datos del médico
   const { data: medico } = await supabase
@@ -61,6 +64,7 @@ export default async function ConfirmacionPagoPage({
           especialidad={consulta.especialidad}
           duracionConsulta={medico?.duracion_consulta ?? 20}
           createdAt={consulta.created_at}
+          returnUrl={returnUrl}
         />
 
         {/* "Volver al inicio" se maneja dentro de EsperaVideo para ser reactivo al polling */}

@@ -9,11 +9,12 @@ type Props = {
   medicoNombre: string;
   medicoEspecialidad: string;
   horaInicio: string;
+  returnUrl?: string;
 };
 
 type Estado = "esperando" | "iniciando" | "redirigiendo" | "finalizado" | "cancelado";
 
-export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio }: Props) {
+export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio, returnUrl = "/dashboard" }: Props) {
   const [estado, setEstado] = useState<Estado>("esperando");
   const estadoRef = useRef<Estado>("esperando");
   estadoRef.current = estado;
@@ -52,16 +53,16 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       // Estados terminales
       if (data.estado === "completado") {
         setEstado("finalizado");
-        setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+        setTimeout(() => { window.location.href = returnUrl; }, 3000);
         return;
       }
       if (data.estado === "cancelado_medico") {
         setEstado("cancelado");
-        setTimeout(() => { window.location.href = "/dashboard"; }, 3000);
+        setTimeout(() => { window.location.href = returnUrl; }, 3000);
         return;
       }
       if (["cancelado_paciente", "ausente_paciente"].includes(data.estado)) {
-        window.location.href = "/dashboard";
+        window.location.href = returnUrl;
       }
       } catch {}
     }

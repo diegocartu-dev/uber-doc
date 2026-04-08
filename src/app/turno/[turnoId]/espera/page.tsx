@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { entrarSalaEspera } from "@/app/clinica/[medicoId]/turnos/actions";
 import EsperaTurno from "./EsperaTurno";
+import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function EsperaTurnoPage({
   params,
@@ -15,11 +16,12 @@ export default async function EsperaTurnoPage({
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, hora_fin, estado, monto, medico_id")
+    .select("id, fecha, hora_inicio, hora_fin, estado, monto, medico_id, canal_origen")
     .eq("id", turnoId)
     .single();
 
   if (!turno) redirect("/dashboard");
+  const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen, "/dashboard");
   if (turno.estado === "en_curso") redirect(`/turno/${turnoId}/video`);
   if (turno.estado !== "confirmado" && turno.estado !== "en_espera") redirect("/dashboard");
 
@@ -39,7 +41,9 @@ export default async function EsperaTurnoPage({
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-6">
           <span className="text-lg font-medium text-gray-900">Docto</span>
-          <a href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">Inicio</a>
+          <a href={returnUrl} className="text-sm text-gray-500 hover:text-gray-700">
+            {returnUrl.startsWith("/dr/") ? "Consultorio" : "Inicio"}
+          </a>
         </div>
       </nav>
 
@@ -49,6 +53,7 @@ export default async function EsperaTurnoPage({
           medicoNombre={medico?.nombre_completo ?? "Médico"}
           medicoEspecialidad={medico?.especialidad ?? ""}
           horaInicio={turno.hora_inicio}
+          returnUrl={returnUrl}
         />
       </main>
     </div>

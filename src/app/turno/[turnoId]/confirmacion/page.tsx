@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getReturnUrl } from "@/lib/consultorio-url";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -22,11 +23,12 @@ export default async function ConfirmacionTurnoPage({
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, hora_fin, monto, estado, medico_id, recordatorios")
+    .select("id, fecha, hora_inicio, hora_fin, monto, estado, medico_id, recordatorios, canal_origen")
     .eq("id", turnoId)
     .single();
 
   if (!turno || turno.estado === "disponible") redirect("/clinica");
+  const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen, "/dashboard");
 
   const { data: medico } = await supabase
     .from("medicos")
@@ -120,10 +122,10 @@ export default async function ConfirmacionTurnoPage({
             return null;
           })()}
           <Link
-            href="/dashboard"
+            href={returnUrl}
             className="block w-full rounded-xl bg-gray-100 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-200"
           >
-            Volver al inicio
+            {returnUrl.startsWith("/dr/") ? "Volver al consultorio" : "Volver al inicio"}
           </Link>
         </div>
       </main>

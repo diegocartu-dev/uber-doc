@@ -6,6 +6,7 @@ import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turno
 type Props = {
   turnoId: string;
   reservadoHasta: string | null;
+  returnUrl?: string;
   medico: { nombre: string; especialidad: string; duracion: number };
   turno: { fecha: string; horaInicio: string; horaFin: string; monto: number };
 };
@@ -18,7 +19,7 @@ function formatFecha(f: string) {
   return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
-export default function PagoPendiente({ turnoId, reservadoHasta, medico, turno }: Props) {
+export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/clinica", medico, turno }: Props) {
   const [segundosRestantes, setSegundosRestantes] = useState(() => {
     if (!reservadoHasta) return 0;
     return Math.max(0, Math.floor((new Date(reservadoHasta).getTime() - Date.now()) / 1000));
@@ -80,8 +81,8 @@ export default function PagoPendiente({ turnoId, reservadoHasta, medico, turno }
         </div>
         <h2 className="mt-4 text-lg font-medium text-gray-900">Tu reserva expiró</h2>
         <p className="mt-2 text-sm text-gray-500">El tiempo para completar el pago se agotó. El turno volvió a estar disponible.</p>
-        <a href="/clinica" className="mt-6 inline-block rounded-lg bg-[#1D9E75] px-6 py-2.5 text-sm font-medium text-white">
-          Volver al calendario
+        <a href={returnUrl} className="mt-6 inline-block rounded-lg bg-[#1D9E75] px-6 py-2.5 text-sm font-medium text-white">
+          {returnUrl.startsWith("/dr/") ? "Volver al consultorio" : "Volver al calendario"}
         </a>
       </div>
     );

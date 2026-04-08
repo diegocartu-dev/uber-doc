@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-// Boton reutilizable "Volver al inicio"
-function VolverAlInicio() {
+// Boton reutilizable "Volver"
+function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
   return (
     <div className="mt-4">
       <Link
-        href="/dashboard"
+        href={returnUrl}
         className="block w-full rounded-xl border border-gray-300 px-6 py-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-300"
       >
-        Volver al inicio
+        {returnUrl.startsWith("/dr/") ? "Volver al consultorio" : "Volver al inicio"}
       </Link>
     </div>
   );
@@ -25,6 +25,7 @@ export default function EsperaVideo({
   especialidad,
   duracionConsulta,
   createdAt,
+  returnUrl,
 }: {
   consultaId: string;
   salaVideoUrlInicial: string | null;
@@ -33,7 +34,9 @@ export default function EsperaVideo({
   especialidad: string;
   duracionConsulta: number;
   createdAt: string;
+  returnUrl?: string;
 }) {
+  const returnUrlFinal = returnUrl ?? "/dashboard";
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
   const [minutosEspera, setMinutosEspera] = useState(0);
@@ -89,7 +92,7 @@ export default function EsperaVideo({
           <span className="text-sm font-medium" style={{ color: "#E24B4A" }}>Cancelada</span>
         </div>
 
-        <VolverAlInicio />
+        <VolverAlInicio returnUrl={returnUrl} />
       </div>
     );
   }
@@ -179,7 +182,7 @@ export default function EsperaVideo({
           </div>
         </div>
 
-        <VolverAlInicio />
+        <VolverAlInicio returnUrl={returnUrl} />
       </div>
     );
   }

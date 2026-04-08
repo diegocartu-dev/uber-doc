@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PagoPendiente from "./PagoPendiente";
+import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function PagoTurnoPage({
   params,
@@ -14,11 +15,12 @@ export default async function PagoTurnoPage({
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, hora_fin, estado, monto, reservado_hasta, medico_id")
+    .select("id, fecha, hora_inicio, hora_fin, estado, monto, reservado_hasta, medico_id, canal_origen")
     .eq("id", turnoId)
     .single();
 
   if (!turno) redirect("/clinica");
+  const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen);
   if (turno.estado === "confirmado") redirect(`/turno/${turnoId}/confirmacion`);
   if (turno.estado !== "reservado_pendiente") redirect("/clinica");
 
@@ -40,6 +42,7 @@ export default async function PagoTurnoPage({
         <PagoPendiente
           turnoId={turnoId}
           reservadoHasta={turno.reservado_hasta}
+          returnUrl={returnUrl}
           medico={{
             nombre: medico?.nombre_completo ?? "Médico",
             especialidad: medico?.especialidad ?? "",

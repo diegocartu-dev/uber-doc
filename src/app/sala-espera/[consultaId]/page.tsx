@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import SalaEsperaCliente from "./SalaEsperaCliente";
+import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function SalaEsperaPage({
   params,
@@ -22,7 +23,7 @@ export default async function SalaEsperaPage({
   // Traer la consulta con datos del médico
   const { data: consulta, error } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, created_at, medico_id")
+    .select("id, especialidad, estado, created_at, medico_id, canal_origen")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -30,6 +31,8 @@ export default async function SalaEsperaPage({
   if (error || !consulta) {
     redirect("/clinica");
   }
+
+  const returnUrl = await getReturnUrl(consulta.medico_id, consulta.canal_origen);
 
   // Traer datos del médico
   const { data: medico } = await supabase
@@ -65,11 +68,11 @@ export default async function SalaEsperaPage({
             <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
           </Link>
           <Link
-            href="/clinica"
+            href={returnUrl}
             className="text-sm"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Volver a la clinica
+            {returnUrl.startsWith("/dr/") ? "Volver al consultorio" : "Volver a la clínica"}
           </Link>
         </div>
       </nav>
