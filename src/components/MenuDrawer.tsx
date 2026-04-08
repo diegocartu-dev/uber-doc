@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { X, User, FileText, MessageCircle, LogOut } from "lucide-react";
+import { X, User, FileText, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -78,12 +78,12 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
         {/* Header */}
         <div className="flex h-14 items-center justify-between px-5">
           <span className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            Menu
+            Menú
           </span>
           <button
             onClick={onClose}
             className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] transition-colors hover:bg-[var(--color-bg-tertiary)]"
-            aria-label="Cerrar menu"
+            aria-label="Cerrar menú"
           >
             <X size={20} strokeWidth={1.75} color="var(--color-text-secondary)" />
           </button>
@@ -120,10 +120,7 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
           <DrawerLink href="/mis-datos" icon={<User size={20} strokeWidth={1.75} />} label="Mis datos" onClick={onClose} />
 
           {userRole === "paciente" && (
-            <>
-              <DrawerLink href="/mis-consultas" icon={<FileText size={20} strokeWidth={1.75} />} label="Mis consultas" onClick={onClose} />
-              <DrawerLink href="/medico/nova" icon={<MessageCircle size={20} strokeWidth={1.75} />} label="Hablar con Nova" onClick={onClose} />
-            </>
+            <DrawerLink href="/mis-consultas" icon={<FileText size={20} strokeWidth={1.75} />} label="Mis consultas" onClick={onClose} />
           )}
         </div>
 
@@ -139,12 +136,12 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
               style={{ minHeight: 48, color: "var(--color-danger)" }}
             >
               <LogOut size={20} strokeWidth={1.75} />
-              <span className="text-sm font-medium">Cerrar sesion</span>
+              <span className="text-sm font-medium">Cerrar sesión</span>
             </button>
           ) : (
             <div className="px-5 py-3">
               <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                Seguro que queres cerrar sesion?
+                ¿Seguro que querés cerrar sesión?
               </p>
               <div className="mt-3 flex gap-2">
                 <button
@@ -152,7 +149,7 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
                   className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white transition-colors"
                   style={{ backgroundColor: "var(--color-danger)" }}
                 >
-                  Si, salir
+                  Sí, salir
                 </button>
                 <button
                   onClick={() => setConfirmLogout(false)}

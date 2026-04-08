@@ -52,21 +52,20 @@ function getMonthKey(dateStr: string) {
   return `${month} ${year}`;
 }
 
-function formatRelativeDate(dateStr: string) {
+function formatExactDate(dateStr: string) {
   const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Ayer";
-  if (diffDays < 7) return `Hace ${diffDays} dias`;
-
-  return d.toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "short",
+  const day = d.toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "long",
     timeZone: "America/Argentina/Buenos_Aires",
   });
+  const time = d.toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+  return `${day}, ${time} hs`;
 }
 
 export default function MisConsultasList({ items }: Props) {
@@ -84,7 +83,7 @@ export default function MisConsultasList({ items }: Props) {
           className="mt-4 text-sm leading-relaxed"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Todavia no tenes consultas. Cuando hagas tu primera consulta, vas a ver el historial aca.
+          Todavía no tenés consultas. Cuando hagas tu primera consulta, vas a ver el historial acá.
         </p>
       </div>
     );
@@ -146,7 +145,7 @@ export default function MisConsultasList({ items }: Props) {
                         className="text-xs truncate"
                         style={{ color: "var(--color-text-tertiary)" }}
                       >
-                        {item.especialidad} - {formatRelativeDate(item.date)}
+                        {item.especialidad} — {formatExactDate(item.date)}
                       </p>
                     </div>
 

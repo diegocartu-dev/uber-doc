@@ -46,7 +46,7 @@ export default async function MisDatosPage() {
           className="mt-1 text-sm"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Edita tu informacion personal
+          Edita tu información personal
         </p>
 
         <MisDatosForm

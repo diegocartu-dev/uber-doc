@@ -203,7 +203,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
           </div>
 
           <div>
-            <label style={labelStyle}>Telefono</label>
+            <label style={labelStyle}>Teléfono</label>
             <input
               type="tel"
               value={telefono}
@@ -242,7 +242,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
 
           {obraSocial && (
             <div>
-              <label style={labelStyle}>Numero de afiliado</label>
+              <label style={labelStyle}>Número de afiliado</label>
               <input
                 type="text"
                 value={nroAfiliado}
@@ -266,7 +266,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
       {role === "medico" && (
         <>
           <div>
-            <label style={labelStyle}>Matricula</label>
+            <label style={labelStyle}>Matrícula</label>
             <input
               type="text"
               value={`${medico?.tipo_matricula ?? ""} ${medico?.numero_matricula ?? ""}`.trim()}
@@ -292,7 +292,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
               value={domicilio}
               onChange={(e) => setDomicilio(e.target.value)}
               style={inputStyle}
-              placeholder="Calle, numero, ciudad"
+              placeholder="Calle, número, ciudad"
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = "var(--color-primary)";
                 e.currentTarget.style.boxShadow = "var(--shadow-focus)";
