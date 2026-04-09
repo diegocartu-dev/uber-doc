@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
+import OrigenBadge from "@/components/OrigenBadge";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -229,14 +230,7 @@ export default async function FichaPacientePage({
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900">{c.especialidad}</p>
-                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(29,158,117,0.10)", color: "#1D9E75" }}>
-                        Consulta inmediata
-                      </span>
-                      {(c as { canal_origen?: string }).canal_origen === "consultorio_privado" && (
-                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
-                          Consultorio privado
-                        </span>
-                      )}
+                      <OrigenBadge canalOrigen={(c as { canal_origen?: string }).canal_origen ?? null} />
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatFecha(c.created_at)} — {formatHora(c.created_at)} hs
@@ -316,14 +310,7 @@ export default async function FichaPacientePage({
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900">{medico.especialidad}</p>
-                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(55,138,221,0.10)", color: "#378ADD" }}>
-                        Turno programado
-                      </span>
-                      {(t as { canal_origen?: string }).canal_origen === "consultorio_privado" && (
-                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
-                          Consultorio privado
-                        </span>
-                      )}
+                      <OrigenBadge canalOrigen={(t as { canal_origen?: string }).canal_origen ?? null} />
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatFecha(t.fecha + "T12:00:00")} — {t.hora_inicio.slice(0, 5)} hs

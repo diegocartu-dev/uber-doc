@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { TouchButton } from "@/components/TouchButton";
+import OrigenBadge from "@/components/OrigenBadge";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Consulta = {
@@ -98,11 +99,7 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
                   <span className="text-sm text-gray-500">
                     {[edad, c.especialidad].filter(Boolean).join(" · ")}
                   </span>
-                  {c.canal_origen === "consultorio_privado" && (
-                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
-                      Consultorio
-                    </span>
-                  )}
+                  <OrigenBadge canalOrigen={c.canal_origen ?? null} />
                 </div>
                 {c.motivo_consulta && (
                   <p className="mt-0.5 truncate text-sm text-gray-600 sm:text-xs">

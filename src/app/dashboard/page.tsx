@@ -62,7 +62,7 @@ export default async function DashboardPage() {
 
   let completadasHoy = 0;
   let ingresosHoy = 0;
-  let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string }[] = [];
+  let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string; canal_origen?: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
   let turnoEnCurso: { id: string; hora_inicio: string; paciente_nombre: string } | null = null;
   let modelosActivosList: { id: string; nombre: string }[] = [];
@@ -209,7 +209,7 @@ export default async function DashboardPage() {
       // Turnos en espera
       const { data: turnosEspera } = await supabase
         .from("turnos")
-        .select("id, fecha, hora_inicio, paciente_id, estado")
+        .select("id, fecha, hora_inicio, paciente_id, estado, canal_origen")
         .eq("medico_id", data.id).eq("estado", "en_espera")
         .order("hora_inicio", { ascending: true });
 
@@ -223,6 +223,7 @@ export default async function DashboardPage() {
           id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio,
           paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
           paciente_tabla_id: t.paciente_id, especialidad: "",
+          canal_origen: (t as { canal_origen?: string }).canal_origen,
         }));
       }
 

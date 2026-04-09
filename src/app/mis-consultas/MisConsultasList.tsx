@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText, ChevronDown, Download } from "lucide-react";
+import OrigenBadge from "@/components/OrigenBadge";
 
 type DocItem = {
   id: string;
@@ -17,6 +18,7 @@ type ConsultaItem = {
   estado: string;
   medicoNombre: string;
   especialidad: string;
+  canalOrigen: string | null;
   documentos: DocItem[];
 };
 
@@ -141,12 +143,15 @@ export default function MisConsultasList({ items }: Props) {
                       >
                         Dr. {item.medicoNombre}
                       </p>
-                      <p
-                        className="text-xs truncate"
-                        style={{ color: "var(--color-text-tertiary)" }}
-                      >
-                        {item.especialidad} — {formatExactDate(item.date)}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p
+                          className="text-xs truncate"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
+                          {item.especialidad} — {formatExactDate(item.date)}
+                        </p>
+                        <OrigenBadge canalOrigen={item.canalOrigen} />
+                      </div>
                     </div>
 
                     {item.documentos.length > 0 && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import OrigenBadge from "@/components/OrigenBadge";
 
 type Item = {
   id: string;
@@ -73,11 +74,7 @@ export default function HistorialInline({
                   <div>
                     <div className="flex items-center gap-1.5">
                       <p className="text-base font-medium text-gray-900">{item.paciente_nombre}</p>
-                      {item.canal_origen === "consultorio_privado" && (
-                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
-                          Consultorio
-                        </span>
-                      )}
+                      <OrigenBadge canalOrigen={item.canal_origen ?? null} />
                     </div>
                     <p className="text-sm text-gray-400">{item.fecha}</p>
                   </div>

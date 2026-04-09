@@ -4,6 +4,7 @@ import AppNavbar from "@/components/AppNavbar";
 import DescargarPDF from "./DescargarPDF";
 import BannerConsultaActiva from "./BannerConsultaActiva";
 import { Pill, FileText, Award } from "lucide-react";
+import OrigenBadge from "@/components/OrigenBadge";
 import type { LucideIcon } from "lucide-react";
 
 const tipoLabel: Record<string, string> = {
@@ -72,7 +73,7 @@ export default async function DocumentosPage() {
   // Traer consultas para fecha/hora y especialidad
   const consultaIds = [...new Set((documentos ?? []).map((d) => d.consulta_id).filter(Boolean))];
   const { data: consultas } = consultaIds.length > 0
-    ? await supabase.from("consultas").select("id, especialidad, created_at").in("id", consultaIds)
+    ? await supabase.from("consultas").select("id, especialidad, created_at, canal_origen").in("id", consultaIds)
     : { data: [] };
 
   const consultasMap = new Map(
@@ -82,7 +83,7 @@ export default async function DocumentosPage() {
   // Traer turnos para fecha/hora
   const turnoIds = [...new Set((documentos ?? []).map((d) => d.turno_id).filter(Boolean))];
   const { data: turnos } = turnoIds.length > 0
-    ? await supabase.from("turnos").select("id, fecha, hora_inicio, medico_id").in("id", turnoIds)
+    ? await supabase.from("turnos").select("id, fecha, hora_inicio, medico_id, canal_origen").in("id", turnoIds)
     : { data: [] };
 
   const turnosMap = new Map(
@@ -164,6 +165,7 @@ export default async function DocumentosPage() {
               let dia = "—";
               let hora = "--:--";
               let especialidad = docs[0]?.medico_especialidad ?? "";
+              let canalOrigen: string | null = null;
 
               if (origenKey.startsWith("turno:")) {
                 const turno = turnosMap.get(origenKey.replace("turno:", ""));
@@ -171,6 +173,7 @@ export default async function DocumentosPage() {
                   const fd = new Date(turno.fecha + "T12:00:00");
                   dia = fd.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" }).toUpperCase();
                   hora = turno.hora_inicio.slice(0, 5);
+                  canalOrigen = (turno as { canal_origen?: string }).canal_origen ?? null;
                 }
               } else {
                 const consulta = consultasMap.get(origenKey);
@@ -179,15 +182,19 @@ export default async function DocumentosPage() {
                   dia = f.dia;
                   hora = f.hora;
                   especialidad = consulta.especialidad ?? especialidad;
+                  canalOrigen = (consulta as { canal_origen?: string }).canal_origen ?? null;
                 }
               }
 
               return (
                 <div key={origenKey}>
                   {/* Header */}
-                  <p className="text-xs font-medium tracking-wide text-gray-400">
-                    {dia} — {hora} hs · {especialidad} {origenKey.startsWith("turno:") ? "· Turno" : ""}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium tracking-wide text-gray-400">
+                      {dia} — {hora} hs · {especialidad} {origenKey.startsWith("turno:") ? "· Turno" : ""}
+                    </p>
+                    <OrigenBadge canalOrigen={canalOrigen} />
+                  </div>
 
                   {/* Documentos de esta consulta */}
                   <div className="mt-3 space-y-2">

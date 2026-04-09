@@ -27,14 +27,14 @@ export default async function MisConsultasPage() {
   // Fetch consultas
   const { data: consultas } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, created_at, medico_id")
+    .select("id, especialidad, estado, created_at, medico_id, canal_origen")
     .eq("paciente_id", user.id)
     .order("created_at", { ascending: false });
 
   // Fetch turnos
   const { data: turnos } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, estado, medico_id, especialidad")
+    .select("id, fecha, hora_inicio, estado, medico_id, especialidad, canal_origen")
     .eq("paciente_id", paciente.id)
     .order("fecha", { ascending: false });
 
@@ -67,6 +67,7 @@ export default async function MisConsultasPage() {
     estado: string;
     medicoNombre: string;
     especialidad: string;
+    canalOrigen: string | null;
     documentos: { id: string; tipo: string; diagnostico: string | null; contenido: string }[];
   };
 
@@ -82,6 +83,7 @@ export default async function MisConsultasPage() {
       estado: c.estado,
       medicoNombre: med?.nombre_completo ?? "Medico",
       especialidad: c.especialidad ?? med?.especialidad ?? "",
+      canalOrigen: (c as { canal_origen?: string }).canal_origen ?? null,
       documentos: docs.map((d) => ({ id: d.id, tipo: d.tipo, diagnostico: d.diagnostico, contenido: d.contenido })),
     });
   }
@@ -96,6 +98,7 @@ export default async function MisConsultasPage() {
       estado: t.estado,
       medicoNombre: med?.nombre_completo ?? "Medico",
       especialidad: t.especialidad ?? med?.especialidad ?? "",
+      canalOrigen: (t as { canal_origen?: string }).canal_origen ?? null,
       documentos: docs.map((d) => ({ id: d.id, tipo: d.tipo, diagnostico: d.diagnostico, contenido: d.contenido })),
     });
   }

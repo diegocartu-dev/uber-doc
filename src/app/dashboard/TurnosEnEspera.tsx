@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import OrigenBadge from "@/components/OrigenBadge";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type TurnoEspera = {
@@ -113,11 +114,7 @@ export default function TurnosEnEspera({
                 <span className="text-sm text-gray-500">
                   Turno de las {t.hora_inicio} hs
                 </span>
-                {t.canal_origen === "consultorio_privado" && (
-                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
-                    Consultorio
-                  </span>
-                )}
+                <OrigenBadge canalOrigen={t.canal_origen ?? null} />
               </div>
             </div>
             {hayEnCurso ? (
