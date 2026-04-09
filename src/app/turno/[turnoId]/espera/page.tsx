@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { entrarSalaEspera } from "@/app/clinica/[medicoId]/turnos/actions";
 import EsperaTurno from "./EsperaTurno";
+import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function EsperaTurnoPage({
@@ -40,7 +41,7 @@ export default async function EsperaTurnoPage({
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-6">
-          <span className="text-lg font-medium text-gray-900">Docto</span>
+          <DoctoLogo />
           <a href={returnUrl} className="text-sm text-gray-500 hover:text-gray-700">
             {returnUrl.startsWith("/dr/") ? "Consultorio" : "Inicio"}
           </a>

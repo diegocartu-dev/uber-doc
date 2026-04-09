@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
+import SetOriginSlug from "@/components/SetOriginSlug";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -58,9 +59,10 @@ export default async function ConsultorioPublicoPage({
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4">
+      <SetOriginSlug slug={slug} />
       <div className="w-full max-w-sm text-center">
         {/* Logo */}
-        <Link href="/" className="mb-10 flex items-center justify-center gap-2">
+        <Link href={`/dr/${slug}`} className="mb-10 flex items-center justify-center gap-2">
           <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>

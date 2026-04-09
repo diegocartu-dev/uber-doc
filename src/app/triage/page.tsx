@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect, useTransition, Suspense } from "react";
-import { Stethoscope, AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { crearConsulta } from "@/app/clinica/actions";
+import DoctoLogo from "@/components/DoctoLogo";
 
 const SINTOMAS_EMERGENCIA = [
   "Dolor de pecho",
@@ -144,10 +145,7 @@ function TriageContent() {
         style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
-            <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
-          </Link>
+          <DoctoLogo />
           <Link
             href={fromUrl ?? "/clinica"}
             className="text-sm transition-colors"

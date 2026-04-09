@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Stethoscope } from "lucide-react";
 import EsperaVideo from "./EsperaVideo";
+import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function ConfirmacionPagoPage({
@@ -48,10 +48,7 @@ export default async function ConfirmacionPagoPage({
         style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
-            <span className="text-lg font-bold lowercase" style={{ color: "var(--color-text-primary)" }}>docto</span>
-          </Link>
+          <DoctoLogo />
         </div>
       </nav>
 

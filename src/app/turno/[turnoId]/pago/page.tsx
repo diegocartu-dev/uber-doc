@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PagoPendiente from "./PagoPendiente";
+import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function PagoTurnoPage({
@@ -34,7 +35,7 @@ export default async function PagoTurnoPage({
     <div className="min-h-full bg-[#f8f9fa]">
       <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
         <div className="mx-auto flex h-14 max-w-lg items-center px-6">
-          <span className="text-lg font-medium text-gray-900">Docto</span>
+          <DoctoLogo />
         </div>
       </nav>
 

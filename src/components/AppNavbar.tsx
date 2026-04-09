@@ -1,18 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Stethoscope, Menu } from "lucide-react";
 import MenuDrawer from "./MenuDrawer";
+import { getLogoHref } from "@/lib/origin-slug";
 
 type Props = {
   userName?: string;
   userRole?: "paciente" | "medico" | null;
   showMenu?: boolean;
+  /** Override explícito para el href del logo. Si no se pasa, se calcula automáticamente. */
+  logoHref?: string;
 };
 
-export default function AppNavbar({ userName, userRole, showMenu = true }: Props) {
+export default function AppNavbar({ userName, userRole, showMenu = true, logoHref }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [resolvedHref, setResolvedHref] = useState(logoHref ?? (userName ? "/dashboard" : "/"));
+
+  useEffect(() => {
+    // Si hay override explícito o es médico, no tocar
+    if (logoHref || userRole === "medico") return;
+    // Para pacientes, resolver desde sessionStorage
+    const href = userName ? getLogoHref("/dashboard") : getLogoHref("/");
+    setResolvedHref(href);
+  }, [logoHref, userName, userRole]);
 
   return (
     <>
@@ -21,7 +33,7 @@ export default function AppNavbar({ userName, userRole, showMenu = true }: Props
         style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
-          <Link href={userName ? "/dashboard" : "/"} className="flex items-center gap-2">
+          <Link href={resolvedHref} className="flex items-center gap-2">
             <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
             <span
               className="text-lg lowercase"

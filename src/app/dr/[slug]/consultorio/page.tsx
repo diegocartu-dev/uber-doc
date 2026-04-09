@@ -5,6 +5,7 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
+import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioPrivadoClient from "./ConsultorioPrivadoClient";
 
 export default async function ConsultorioPrivadoPage({
@@ -77,7 +78,8 @@ export default async function ConsultorioPrivadoPage({
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
-      <AppNavbar userName={fullName} userRole={role} />
+      <SetOriginSlug slug={slug} />
+      <AppNavbar userName={fullName} userRole={role} logoHref={`/dr/${slug}/consultorio`} />
 
       <main className="mx-auto max-w-lg px-4 py-8">
         {/* Bienvenida */}
