@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
           timeZone: "America/Argentina/Buenos_Aires",
         }),
         url: pac?.id ? `/medico/paciente/${pac.id}` : "#",
-        canal_origen: c.canal_origen ?? "clinica_virtual",
+        canal_origen: c.canal_origen ?? null,
       };
     }));
   }
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         timeZone: "America/Argentina/Buenos_Aires",
       })} · ${t.hora_inicio.slice(0, 5)}`,
       url: t.paciente_id ? `/medico/paciente/${t.paciente_id}` : "#",
-      canal_origen: (t as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
+      canal_origen: (t as { canal_origen?: string }).canal_origen ?? null,
     })));
   }
 

@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       paciente_tabla_id: p?.id ?? null,
       motivo_consulta: c.motivo_consulta,
       fecha_nacimiento: p?.nacimiento ?? null,
-      canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
+      canal_origen: (c as { canal_origen?: string }).canal_origen ?? null,
     };
   });
 
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
       sintomas: c.sintomas,
       created_at: c.created_at,
       fecha_nacimiento: p?.nacimiento ?? null,
-      canal_origen: (c as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
+      canal_origen: (c as { canal_origen?: string }).canal_origen ?? null,
     };
   });
 
@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
     paciente_nombre: nombresEsp.get(t.paciente_id) ?? "Paciente",
     paciente_tabla_id: t.paciente_id,
     especialidad: "",
-    canal_origen: (t as { canal_origen?: string }).canal_origen ?? "clinica_virtual",
+    canal_origen: (t as { canal_origen?: string }).canal_origen ?? null,
   }));
 
   // 4. Turnos activos hoy (confirmado/en_espera) para saber si bloquear CI
