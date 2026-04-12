@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -107,7 +108,6 @@ export default function SalaConsultaPaciente({
   // --- Fetch documentos cuando la consulta se completa ---
   const fetchDocumentos = useCallback(async () => {
     try {
-      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { data } = await supabase
         .from("documentos")
@@ -120,33 +120,38 @@ export default function SalaConsultaPaciente({
     }
   }, [consultaId]);
 
-  // --- Polling estado ---
+  // --- Realtime estado: filtro por PK (id) → válido en Supabase Realtime ---
   useEffect(() => {
-    if (estado === "completada" || estado === "cancelada") return;
+    const supabase = createClient();
 
-    async function poll() {
-      try {
-        const res = await fetch(
-          `/api/consulta-estado?consultaId=${consultaId}`,
-          { credentials: "include" }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.estado && data.estado !== estado) {
-          setEstado(data.estado);
-          if (data.estado === "completada") {
-            fetchDocumentos();
-          }
+    // Sync inicial por si el estado cambió antes de montar el componente
+    supabase
+      .from("consultas")
+      .select("estado")
+      .eq("id", consultaId)
+      .single()
+      .then(({ data }) => {
+        if (!data?.estado) return;
+        setEstado(data.estado);
+        if (data.estado === "completada") fetchDocumentos();
+      });
+
+    const channel = supabase
+      .channel(`sala-paciente-${consultaId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
+        (payload) => {
+          const row = payload.new as { estado: string };
+          if (!row.estado) return;
+          setEstado(row.estado);
+          if (row.estado === "completada") fetchDocumentos();
         }
-      } catch {
-        // silently ignore
-      }
-    }
+      )
+      .subscribe();
 
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);
-  }, [consultaId, estado, fetchDocumentos]);
+    return () => { supabase.removeChannel(channel); };
+  }, [consultaId, fetchDocumentos]);
 
   // --- Pantalla de cierre (completada) ---
   if (estado === "completada") {

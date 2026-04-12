@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 // Boton reutilizable "Volver"
 function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
@@ -41,26 +42,37 @@ export default function EsperaVideo({
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
   const [minutosEspera, setMinutosEspera] = useState(0);
 
-  // Polling cada 3s
+  // Realtime: filtro por PK (id) → válido en Supabase Realtime
   useEffect(() => {
-    if (estado === "en_curso" && salaUrl) return;
+    const supabase = createClient();
 
-    async function poll() {
-      try {
-        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data = await res.json();
+    // Sync inicial para no perder cambios previos a la suscripción
+    supabase
+      .from("consultas")
+      .select("estado, sala_video_url")
+      .eq("id", consultaId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
         if (data.estado) setEstado(data.estado);
         if (data.sala_video_url) setSalaUrl(data.sala_video_url);
-      } catch {
-        // silently ignore
-      }
-    }
+      });
 
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => clearInterval(interval);
-  }, [consultaId, salaUrl, estado]);
+    const channel = supabase
+      .channel(`espera-video-${consultaId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
+        (payload) => {
+          const row = payload.new as { estado: string; sala_video_url: string | null };
+          if (row.estado) setEstado(row.estado);
+          if (row.sala_video_url) setSalaUrl(row.sala_video_url);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [consultaId]);
 
   // Timer de espera para estado pagada
   useEffect(() => {

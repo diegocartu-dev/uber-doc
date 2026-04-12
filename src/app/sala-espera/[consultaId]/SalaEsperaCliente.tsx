@@ -42,36 +42,55 @@ export default function SalaEsperaCliente({
   const [pagando, setPagando] = useState(false);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
+  const salaVideoUrlRef = useRef<string | null>(null);
 
-  // Polling cada 3s via API route
+  // Realtime: filtro por PK (id) → válido en Supabase Realtime
   useEffect(() => {
-    async function poll() {
-      try {
-        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.estado) return;
+    const supabase = createClient();
 
-        if ((data.estado === "aceptada" || data.estado === "pagada" || data.estado === "en_curso") && prevEstadoRef.current === "esperando") {
-          soundConsultaAceptada();
-          setPosicion(0);
-          setTiempoEstimado(0);
-        }
-
-        if (data.sala_video_url && !salaVideoUrl) {
-          soundVideoLista();
-        }
-
-        prevEstadoRef.current = data.estado;
-        setEstado(data.estado);
-        if (data.sala_video_url) setSalaVideoUrl(data.sala_video_url);
-      } catch {}
+    function handleCambio(row: { estado: string; sala_video_url: string | null }) {
+      if (
+        (row.estado === "aceptada" || row.estado === "pagada" || row.estado === "en_curso") &&
+        prevEstadoRef.current === "esperando"
+      ) {
+        soundConsultaAceptada();
+        setPosicion(0);
+        setTiempoEstimado(0);
+      }
+      if (row.sala_video_url && !salaVideoUrlRef.current) {
+        soundVideoLista();
+      }
+      prevEstadoRef.current = row.estado;
+      setEstado(row.estado);
+      if (row.sala_video_url) {
+        salaVideoUrlRef.current = row.sala_video_url;
+        setSalaVideoUrl(row.sala_video_url);
+      }
     }
 
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => clearInterval(interval);
-  }, [consultaId, salaVideoUrl]);
+    // Sync inicial para no perder cambios ocurridos antes de suscribirse
+    supabase
+      .from("consultas")
+      .select("estado, sala_video_url")
+      .eq("id", consultaId)
+      .single()
+      .then(({ data }) => {
+        if (data) handleCambio(data as { estado: string; sala_video_url: string | null });
+      });
+
+    const channel = supabase
+      .channel(`sala-espera-${consultaId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
+        (payload) => {
+          handleCambio(payload.new as { estado: string; sala_video_url: string | null });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [consultaId]);
 
   const aceptada = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
 

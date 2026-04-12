@@ -58,77 +58,80 @@ export default function AdminConsultas({
 
   useEffect(() => {
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-
-      channel = supabase
-        .channel(`admin-${medicoId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "consultas", filter: `medico_id=eq.${medicoId}` },
-          async (payload) => {
-            if (payload.eventType === "DELETE") {
-              const old = payload.old as { id: string };
-              setConsultas((prev) => prev.filter((c) => c.id !== old.id));
-              return;
-            }
-
-            const row = payload.new as {
-              id: string;
-              medico_id: string;
-              especialidad: string;
-              estado: string;
-              created_at: string;
-              paciente_id: string;
-              motivo_consulta: string | null;
-              sintomas: string[] | null;
-              sala_video_url: string | null;
-            };
-            if (payload.eventType === "UPDATE") {
-              setConsultas((prev) =>
-                prev.map((c) =>
-                  c.id === row.id
-                    ? { ...c, estado: row.estado, sala_video_url: row.sala_video_url }
-                    : c
-                )
-              );
-            }
-
-            if (payload.eventType === "INSERT") {
-              const { data: paciente } = await supabase
-                .from("pacientes")
-                .select("id, nombre_completo")
-                .eq("user_id", row.paciente_id)
-                .single();
-
-              setConsultas((prev) => {
-                if (prev.some((c) => c.id === row.id)) return prev;
-                return [
-                  {
-                    id: row.id,
-                    especialidad: row.especialidad,
-                    estado: row.estado,
-                    created_at: row.created_at,
-                    motivo_consulta: row.motivo_consulta,
-                    sintomas: row.sintomas,
-                    sala_video_url: row.sala_video_url,
-                    paciente_nombre: paciente?.nombre_completo ?? "—",
-                    paciente_tabla_id: paciente?.id ?? null,
-                    medico_nombre: "Yo",
-                  },
-                  ...prev,
-                ];
-              });
-            }
+    // Sin filtro: los filtros por columna non-PK fallan en Supabase Realtime.
+    // Filtramos por medico_id en JS.
+    const channel = supabase
+      .channel(`admin-consultas-${medicoId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "consultas" },
+        async (payload) => {
+          if (payload.eventType === "DELETE") {
+            // payload.old solo trae PK; el filter en JS no aplica para DELETE.
+            // setConsultas filtra por id, así que es seguro llamarlo siempre.
+            const old = payload.old as { id: string };
+            setConsultas((prev) => prev.filter((c) => c.id !== old.id));
+            return;
           }
-        )
-        .subscribe();
-    });
+
+          const row = payload.new as {
+            id: string;
+            medico_id: string;
+            especialidad: string;
+            estado: string;
+            created_at: string;
+            paciente_id: string;
+            motivo_consulta: string | null;
+            sintomas: string[] | null;
+            sala_video_url: string | null;
+          };
+
+          // Filtrar en JS: ignorar consultas de otros médicos
+          if (row.medico_id !== medicoId) return;
+
+          if (payload.eventType === "UPDATE") {
+            setConsultas((prev) =>
+              prev.map((c) =>
+                c.id === row.id
+                  ? { ...c, estado: row.estado, sala_video_url: row.sala_video_url }
+                  : c
+              )
+            );
+          }
+
+          if (payload.eventType === "INSERT") {
+            const { data: paciente } = await supabase
+              .from("pacientes")
+              .select("id, nombre_completo")
+              .eq("user_id", row.paciente_id)
+              .single();
+
+            setConsultas((prev) => {
+              if (prev.some((c) => c.id === row.id)) return prev;
+              return [
+                {
+                  id: row.id,
+                  especialidad: row.especialidad,
+                  estado: row.estado,
+                  created_at: row.created_at,
+                  motivo_consulta: row.motivo_consulta,
+                  sintomas: row.sintomas,
+                  sala_video_url: row.sala_video_url,
+                  paciente_nombre: paciente?.nombre_completo ?? "—",
+                  paciente_tabla_id: paciente?.id ?? null,
+                  medico_nombre: "Yo",
+                },
+                ...prev,
+              ];
+            });
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      if (channel) createClient().removeChannel(channel);
+      supabase.removeChannel(channel);
     };
   }, [medicoId]);
 
