@@ -2,13 +2,26 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-function getHoyAR(): string {
-  const ar = new Date(
-    new Date().toLocaleString("en-US", {
-      timeZone: "America/Argentina/Buenos_Aires",
-    })
-  );
-  return `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${ar.getDate().toString().padStart(2, "0")}`;
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+function getAhoraAR(): { fecha: string; horaISO: string; contexto: string } {
+  // Construir fecha/hora en zona Argentina (GMT-3, sin DST)
+  const ahora = new Date();
+  const ar = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+
+  const diaSemana = DIAS[ar.getDay()];
+  const dia = ar.getDate();
+  const mes = MESES[ar.getMonth()];
+  const anio = ar.getFullYear();
+  const hh = ar.getHours().toString().padStart(2, "0");
+  const mm = ar.getMinutes().toString().padStart(2, "0");
+
+  const fecha = `${ar.getFullYear()}-${(ar.getMonth() + 1).toString().padStart(2, "0")}-${dia.toString().padStart(2, "0")}`;
+  const horaISO = `${hh}:${mm}`;
+  const contexto = `${diaSemana} ${dia} de ${mes} de ${anio}, ${hh}:${mm} hs (Argentina, GMT-3)`;
+
+  return { fecha, horaISO, contexto };
 }
 
 const novaTools: Anthropic.Tool[] = [
@@ -207,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     // --- Contexto dinámico — queries en paralelo ---
 
-    const hoy = getHoyAR();
+    const { fecha: hoy, contexto: ahoraContexto } = getAhoraAR();
 
     const [perfilResult, medicoResult, agendaResult, slotsResult] = await Promise.all([
       supabase.from("nova_perfiles").select("*").eq("medico_id", medico_id).single(),
@@ -318,6 +331,7 @@ Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo l
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 
 CONTEXTO ACTUAL
+Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles: ${slotsResumen}`;
