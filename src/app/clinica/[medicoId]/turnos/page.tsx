@@ -32,6 +32,7 @@ export default async function TurnosPage({
     .select("id, fecha, hora_inicio, hora_fin, monto")
     .eq("medico_id", medicoId)
     .eq("estado", "disponible")
+    .eq("canal_origen", canalOrigen)
     .gte("fecha", hoy)
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true });
