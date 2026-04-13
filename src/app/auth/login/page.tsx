@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Stethoscope } from "lucide-react";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -98,14 +99,14 @@ export default function LoginPage() {
             />
           </div>
 
-          <button
+          <LoadingButton
             type="submit"
-            disabled={loading}
+            isLoading={loading}
             className="w-full rounded-[var(--radius-md)] text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
             style={{ height: 44, backgroundColor: "var(--color-primary)" }}
           >
-            {loading ? "Ingresando..." : "Iniciar sesion"}
-          </button>
+            Iniciar sesion
+          </LoadingButton>
         </form>
 
         <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>

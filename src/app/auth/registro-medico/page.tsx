@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Stethoscope, X } from "lucide-react";
 import { registrarMedico } from "./actions";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 const ESPECIALIDADES = [
   "Alergia e inmunología",
@@ -447,14 +448,15 @@ export default function RegistroMedicoPage() {
             </label>
           </div>
 
-          <button
+          <LoadingButton
             type="submit"
-            disabled={loading || !checkTerminos || !checkMatricula}
+            isLoading={loading}
+            disabled={!checkTerminos || !checkMatricula}
             className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
-            {loading ? "Registrando..." : "Registrarme como medico"}
-          </button>
+            Registrarme como medico
+          </LoadingButton>
         </form>
 
         {/* Modal términos */}

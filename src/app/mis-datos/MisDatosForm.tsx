@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 type PacienteData = {
   id: string;
@@ -308,9 +309,9 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
         </>
       )}
 
-      <button
+      <LoadingButton
         type="submit"
-        disabled={saving}
+        isLoading={saving}
         className="w-full text-sm font-semibold text-white transition-all duration-100 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
         style={{
           height: 44,
@@ -318,8 +319,8 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
           backgroundColor: "var(--color-primary)",
         }}
       >
-        {saving ? "Guardando..." : "Guardar cambios"}
-      </button>
+        Guardar cambios
+      </LoadingButton>
 
       {/* Mi link — solo médicos con slug */}
       {role === "medico" && medico?.slug && (
