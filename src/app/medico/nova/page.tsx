@@ -605,7 +605,7 @@ export default function NovaChat() {
         {/* Preview de texto parcial durante dictado */}
         {dictando && (
           <div className="mx-auto mb-1.5 max-w-[640px] pl-14 pr-14">
-            <p className="truncate text-xs text-[#9ca3af]">
+            <p className="truncate text-[13px] text-[#6b7280]">
               {interimText ? `"${interimText}"` : "Escuchando..."}
             </p>
           </div>
@@ -618,7 +618,7 @@ export default function NovaChat() {
             disabled={iniciando}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
               dictando
-                ? "bg-[#E24B4A] shadow-[0_0_0_6px_rgba(226,75,74,0.2)] animate-pulse"
+                ? "bg-[#D85A30] shadow-[0_0_0_6px_rgba(216,90,48,0.2)] animate-pulse"
                 : iniciando
                 ? "bg-[#f8f9fa] opacity-50"
                 : "bg-[#f8f9fa]"
@@ -656,7 +656,7 @@ export default function NovaChat() {
             placeholder={dictando ? "Dictando..." : "Escribí o dictá tu mensaje..."}
             disabled={enviando}
             className="h-11 flex-1 rounded-[22px] bg-[#f8f9fa] px-4 text-[15px] text-[#1a1a1a] placeholder:text-gray-400 focus:outline-none focus:ring-0 nova-input"
-            style={{ border: dictando ? "1.5px solid #E24B4A" : "0.5px solid #e5e7eb" }}
+            style={{ border: dictando ? "1.5px solid #D85A30" : "0.5px solid #e5e7eb" }}
           />
 
           {/* Send */}
