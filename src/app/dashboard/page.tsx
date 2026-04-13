@@ -179,7 +179,7 @@ export default async function DashboardPage() {
             id: c.id, especialidad: c.especialidad, estado: c.estado, created_at: c.created_at,
             paciente_nombre: p?.nombre ?? "Paciente", paciente_tabla_id: p?.id ?? null,
             motivo_consulta: c.motivo_consulta, fecha_nacimiento: p?.nacimiento ?? null,
-            canal_origen: (c as { canal_origen?: string }).canal_origen ?? null,
+            canal_origen: (c as { canal_origen?: string }).canal_origen ?? undefined,
           };
         });
       }
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
             paciente_tabla_id: p?.id ?? null, sala_video_url: c.sala_video_url,
             motivo_consulta: c.motivo_consulta, sintomas: c.sintomas,
             created_at: c.created_at, fecha_nacimiento: p?.nacimiento ?? null,
-            canal_origen: (c as { canal_origen?: string }).canal_origen ?? null,
+            canal_origen: (c as { canal_origen?: string }).canal_origen ?? undefined,
           };
         });
       }
