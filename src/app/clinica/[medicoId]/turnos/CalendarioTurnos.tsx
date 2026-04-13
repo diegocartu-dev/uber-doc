@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { reservarTurno, limpiarReservasExpiradas } from "./actions";
 import { useEffect } from "react";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
@@ -348,13 +349,13 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
               >
                 Cancelar
               </button>
-              <button
+              <LoadingButton
                 onClick={handleConfirmar}
-                disabled={isPending}
+                isLoading={isPending}
                 className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
               >
-                {isPending ? "Confirmando..." : "Confirmar y pagar"}
-              </button>
+                Confirmar y pagar
+              </LoadingButton>
             </div>
           </div>
         </div>

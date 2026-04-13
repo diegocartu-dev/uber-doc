@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turnos/actions";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 type Props = {
   turnoId: string;
@@ -137,13 +138,13 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
       )}
 
       {/* Botón pagar */}
-      <button
+      <LoadingButton
         onClick={handlePagar}
-        disabled={isPending}
+        isLoading={isPending}
         className="mt-6 w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
       >
-        {isPending ? "Procesando..." : "Simular pago aprobado"}
-      </button>
+        Simular pago aprobado
+      </LoadingButton>
 
       <p className="mt-3 text-center text-[11px] text-gray-400">
         Podés cancelar sin costo hasta 48 hs antes. Si el profesional cancela, se reintegra el 100% del monto.

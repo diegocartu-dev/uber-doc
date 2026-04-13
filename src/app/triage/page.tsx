@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useTransition, Suspense } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { crearConsulta } from "@/app/clinica/actions";
 import DoctoLogo from "@/components/DoctoLogo";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 const SINTOMAS_EMERGENCIA = [
   "Dolor de pecho",
@@ -531,14 +532,15 @@ function TriageContent() {
               >
                 Atrás
               </button>
-              <button
-                disabled={isPending || tieneEmergencia}
+              <LoadingButton
+                isLoading={isPending}
+                disabled={tieneEmergencia}
                 onClick={handleEnviarTriage}
                 className="flex-1 rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
-                {isPending ? "Enviando..." : "Entrar a la sala de espera"}
-              </button>
+                Entrar a la sala de espera
+              </LoadingButton>
             </div>
           </div>
         )}
@@ -570,16 +572,14 @@ function TriageContent() {
             </p>
 
             <div className="mt-6 space-y-3">
-              <button
-                disabled={isPending}
+              <LoadingButton
+                isLoading={isPending}
                 onClick={handleConfirmarConsulta}
                 className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
-                {isPending
-                  ? "Enviando..."
-                  : "Sí, es una consulta no urgente — continuar"}
-              </button>
+                Sí, es una consulta no urgente — continuar
+              </LoadingButton>
               <a
                 href="tel:107"
                 className="block w-full rounded-lg bg-red-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-red-700 active:scale-95 active:opacity-80 transition-all duration-100"
