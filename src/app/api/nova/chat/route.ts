@@ -134,7 +134,7 @@ async function ejecutarTool(
     const fecha = toolInput.fecha as string;
     const { data: turnos, error } = await supabase
       .from("turnos")
-      .select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id")
+      .select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id, canal_origen")
       .eq("medico_id", medicoId)
       .eq("fecha", fecha)
       .order("hora_inicio", { ascending: true });
@@ -168,6 +168,7 @@ async function ejecutarTool(
         estado: t.estado,
         monto: t.monto,
         paciente: t.paciente_id ? pacMap.get(t.paciente_id) ?? "Paciente" : null,
+        canal_origen: t.canal_origen,
       })),
     };
   }
@@ -329,6 +330,9 @@ PRIMERA SESIÓN
 Si es_primera_sesion es true: "Hola ${tituloDr} ${apellidoMedico}, soy Nova, su asistente personal en Docto. No soy un menú de opciones ni un bot — estoy acá para entenderle y ayudarle de verdad con su agenda. ¿Le cuento cómo?"
 Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo las cinco cosas que podés hacer. Cálida, natural, sin sonar a manual.
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
+
+CANALES DE ATENCIÓN
+Los turnos tienen un campo canal_origen que puede ser 'clinica_virtual' o 'consultorio_privado'. Cuando respondás sobre agenda, diferenciá los canales cuando corresponda: los turnos de 'consultorio_privado' son del consultorio particular del médico, los de 'clinica_virtual' son de la Clínica Virtual de Docto. Ejemplos: "Tenés 3 turnos en tu Consultorio Particular esta semana y 5 en la Clínica Virtual." o "Estás oculto de la Clínica Virtual, solo tus pacientes particulares pueden verte."
 
 CONTEXTO ACTUAL
 Fecha y hora: ${ahoraContexto}

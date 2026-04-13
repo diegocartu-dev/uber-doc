@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { actualizarDisponibilidad } from "./actions";
+import { actualizarDisponibilidad, actualizarOcultoClinica } from "./actions";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Props = {
@@ -11,6 +11,7 @@ type Props = {
   duracionConsulta: number;
   precioConsulta: number;
   pacientesEnEspera: number;
+  ocultoClinica: boolean;
 };
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
@@ -28,9 +29,12 @@ export default function DisponibilidadMedico({
   duracionConsulta,
   precioConsulta,
   pacientesEnEspera,
+  ocultoClinica,
 }: Props) {
   const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
+  const [oculto, setOculto] = useState(ocultoClinica);
+  const [guardandoOculto, setGuardandoOculto] = useState(false);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
   const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
   const [duracion, setDuracion] = useState(duracionConsulta);
@@ -94,6 +98,17 @@ export default function DisponibilidadMedico({
     } else {
       setMensaje("Guardado");
       setTimeout(() => setMensaje(null), 2000);
+    }
+  }
+
+  async function handleToggleOculto() {
+    const nuevoEstado = !oculto;
+    setOculto(nuevoEstado);
+    setGuardandoOculto(true);
+    const result = await actualizarOcultoClinica(nuevoEstado);
+    setGuardandoOculto(false);
+    if (result?.error) {
+      setOculto(!nuevoEstado);
     }
   }
 
@@ -161,6 +176,34 @@ export default function DisponibilidadMedico({
           </p>
         </div>
       )}
+
+      <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs font-semibold text-gray-700">Visible en Clínica Virtual</span>
+            <span className="text-[11px]" style={{ color: oculto ? "#888780" : "#1D9E75" }}>
+              {oculto ? "Oculto" : "Activo"}
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!oculto}
+            aria-label="Visible en Clínica Virtual"
+            disabled={guardandoOculto}
+            onClick={handleToggleOculto}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
+              oculto ? "bg-gray-300" : "bg-[#1D9E75]"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                oculto ? "translate-x-0.5" : "translate-x-5.5"
+              }`}
+            />
+          </button>
+        </div>
+      </div>
 
       {abierto && (
         <div className="border-t border-gray-50 px-6 pb-6">

@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function actualizarDisponibilidad(data: {
@@ -101,6 +102,21 @@ export async function fetchMetricasMedico(
     completadas,
     ingresos,
   };
+}
+
+export async function actualizarOcultoClinica(oculto: boolean) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { error } = await supabase
+    .from("medicos")
+    .update({ oculto_clinica: oculto })
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
+  return { success: true };
 }
 
 export async function cancelarTurnoPaciente(turnoId: string) {

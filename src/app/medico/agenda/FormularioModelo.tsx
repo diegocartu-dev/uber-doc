@@ -47,6 +47,7 @@ export default function FormularioModelo({
     { inicio: "09:00", fin: "13:00" },
   ]);
   const [franjasCustom, setFranjasCustom] = useState<Record<number, { inicio: string; fin: string }[]>>({});
+  const [soloConsultorioPrivado, setSoloConsultorioPrivado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -126,6 +127,7 @@ export default function FormularioModelo({
         duracion_turno: duracionTurno,
         precio,
         franjas: todasFranjas,
+        canal_origen: soloConsultorioPrivado ? "consultorio_privado" : "clinica_virtual",
       });
       if (result?.error) setError(result.error);
     });
@@ -329,6 +331,17 @@ export default function FormularioModelo({
             </div>
           );
         })}
+
+      {/* Canal */}
+      <label className="mt-5 flex items-center gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={soloConsultorioPrivado}
+          onChange={(e) => setSoloConsultorioPrivado(e.target.checked)}
+          className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#1D9E75] focus:ring-[#1D9E75]"
+        />
+        <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
+      </label>
 
       {/* Acciones */}
       <div className="mt-6 flex flex-col md:flex-row gap-3">

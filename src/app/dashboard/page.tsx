@@ -44,6 +44,7 @@ export default async function DashboardPage() {
   let medico: {
     id: string; disponible: boolean; disponible_desde: string | null;
     disponible_hasta: string | null; duracion_consulta: number; precio_consulta: number;
+    oculto_clinica: boolean;
   } | null = null;
 
   let consultasPendientes: {
@@ -149,7 +150,7 @@ export default async function DashboardPage() {
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -370,6 +371,7 @@ export default async function DashboardPage() {
         duracionConsulta={medico.duracion_consulta}
         precioConsulta={medico.precio_consulta}
         consultasPendientesCount={consultasPendientes.length}
+        ocultoClinica={medico.oculto_clinica}
       />
     );
 

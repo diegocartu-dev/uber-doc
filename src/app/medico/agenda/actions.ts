@@ -17,6 +17,7 @@ export async function guardarModelo(data: {
   duracion_turno: number;
   precio: number;
   franjas: { dia_semana: number; hora_inicio: string; hora_fin: string }[];
+  canal_origen?: "clinica_virtual" | "consultorio_privado";
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -71,6 +72,7 @@ export async function guardarModelo(data: {
     hora_fin: string;
     estado: string;
     monto: number;
+    canal_origen: string;
   }[] = [];
 
   // Agrupar franjas por día de la semana
@@ -113,6 +115,7 @@ export async function guardarModelo(data: {
           hora_fin: turnoFin,
           estado: "disponible",
           monto: data.precio,
+          canal_origen: data.canal_origen ?? "clinica_virtual",
         });
       }
     }
