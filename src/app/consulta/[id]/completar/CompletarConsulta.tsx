@@ -12,6 +12,7 @@ declare global {
 import { useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -252,13 +253,13 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
 
       {/* Acciones */}
       <div className="mt-8">
-        <button
-          disabled={finalizando}
+        <LoadingButton
+          isLoading={finalizando}
           onClick={() => finalizar()}
           className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
         >
-          {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
-        </button>
+          Finalizar y generar documentos
+        </LoadingButton>
       </div>
     </main>
   );

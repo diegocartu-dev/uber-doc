@@ -11,6 +11,7 @@ declare global {
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -493,9 +494,9 @@ export default function WorkspaceConsulta({
                   Documentar
                 </button>
                 {diagnostico.trim() && (
-                  <button
+                  <LoadingButton
                     type="button"
-                    disabled={finalizando}
+                    isLoading={finalizando}
                     onClick={() => {
                       const confirmado = window.confirm(
                         "Finalizar la consulta y generar los documentos para el paciente?"
@@ -506,8 +507,8 @@ export default function WorkspaceConsulta({
                     className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
                     style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
                   >
-                    {finalizando ? "Finalizando..." : "Finalizar consulta"}
-                  </button>
+                    Finalizar consulta
+                  </LoadingButton>
                 )}
               </div>
             </div>
@@ -690,19 +691,15 @@ export default function WorkspaceConsulta({
           >
             {/* Mobile modo escritura: Guardar documentos + Volver a la llamada */}
             <div className="md:hidden flex flex-col gap-2">
-              <button
+              <LoadingButton
                 type="button"
-                disabled={guardadoManual === 'saving'}
+                isLoading={guardadoManual === 'saving'}
                 onClick={guardarDocumentos}
                 className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
-                {guardadoManual === 'saving'
-                  ? "Guardando..."
-                  : guardadoManual === 'saved'
-                    ? "\u2713 Guardado"
-                    : "Guardar documentos"}
-              </button>
+                {guardadoManual === 'saved' ? "\u2713 Guardado" : "Guardar documentos"}
+              </LoadingButton>
               <button
                 type="button"
                 onClick={() => setModoEscritura(false)}
@@ -715,8 +712,8 @@ export default function WorkspaceConsulta({
 
             {/* Desktop: finalizar + cancelar */}
             <div className="hidden md:flex md:flex-col md:gap-2">
-              <button
-                disabled={finalizando}
+              <LoadingButton
+                isLoading={finalizando}
                 onClick={() => {
                   if (!validarDiagnostico()) return;
                   const confirmado = window.confirm(
@@ -728,8 +725,8 @@ export default function WorkspaceConsulta({
                 className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
-                {finalizando ? "Finalizando..." : "Finalizar y generar documentos"}
-              </button>
+                Finalizar y generar documentos
+              </LoadingButton>
               <button
                 onClick={cancelarConsulta}
                 className="w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import LoadingButton from "@/components/ui/LoadingButton";
 
 type Consulta = {
   id: string;
@@ -203,13 +204,13 @@ export default function AdminConsultas({
                     <option key={e} value={e}>{e}</option>
                   ))}
                 </select>
-                <button
-                  disabled={eliminando === c.id}
+                <LoadingButton
+                  isLoading={eliminando === c.id}
                   onClick={() => handleEliminar(c.id)}
                   className="text-[10px] text-gray-400 hover:text-red-500 disabled:opacity-50"
                 >
                   eliminar
-                </button>
+                </LoadingButton>
               </div>
             </div>
           ))}
