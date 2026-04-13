@@ -26,11 +26,31 @@ type MensajeChat = {
   confirmado?: "si" | "no" | null;
 };
 
-// ── SpeechRecognition hook (patrón de VideoLlamada.tsx) ──
+// ── Beep de UI con AudioContext (sin assets externos) ──
+
+function beepUI(freq: number, duracionMs: number, volumen = 0.25) {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(volumen, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duracionMs / 1000);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duracionMs / 1000);
+  } catch { /* AudioContext no disponible */ }
+}
+
+// ── SpeechRecognition hook ──
 
 function useDictado() {
   const recRef = useRef<any>(null);
   const [dictando, setDictando] = useState(false);
+  const [iniciando, setIniciando] = useState(false); // estado entre click y permisos
+  const [interimText, setInterimText] = useState(""); // texto parcial en tiempo real
   const detenidoManual = useRef(false);
 
   const iniciar = useCallback(
@@ -39,11 +59,13 @@ function useDictado() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
 
-      // Pedir permisos primero — si el usuario los rechaza, no cambiamos estado
+      setIniciando(true);
+
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch {
-        return; // Permisos rechazados
+        setIniciando(false);
+        return;
       }
 
       const rec = new SR();
@@ -53,12 +75,20 @@ function useDictado() {
       detenidoManual.current = false;
 
       rec.onresult = (e: any) => {
-        let transcript = "";
+        let finalTranscript = "";
+        let interimTranscript = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalTranscript += e.results[i][0].transcript;
+          } else {
+            interimTranscript += e.results[i][0].transcript;
+          }
         }
-        if (e.results[e.results.length - 1].isFinal) {
-          setter((prev) => (prev ? prev + " " : "") + transcript);
+        if (finalTranscript) {
+          setter((prev) => (prev ? prev + " " : "") + finalTranscript);
+          setInterimText("");
+        } else if (interimTranscript) {
+          setInterimText(interimTranscript);
         }
       };
 
@@ -66,20 +96,23 @@ function useDictado() {
         detenidoManual.current = true;
         recRef.current = null;
         setDictando(false);
+        setIniciando(false);
+        setInterimText("");
       };
 
       rec.onend = () => {
-        // Solo actualizar estado si no fue detenido manualmente
-        // (evita que onend del permiso reset el estado)
         if (!detenidoManual.current) {
           recRef.current = null;
           setDictando(false);
+          setIniciando(false);
+          setInterimText("");
         }
       };
 
       recRef.current = rec;
       rec.start();
       setDictando(true);
+      setIniciando(false);
     },
     []
   );
@@ -89,15 +122,15 @@ function useDictado() {
     if (recRef.current) {
       try {
         recRef.current.stop();
-      } catch {
-        // ya detenido
-      }
+      } catch { /* ya detenido */ }
       recRef.current = null;
     }
     setDictando(false);
+    setIniciando(false);
+    setInterimText("");
   }, []);
 
-  return { dictando, iniciar, detener };
+  return { dictando, iniciando, interimText, iniciar, detener };
 }
 
 // ── Component ──
@@ -114,7 +147,7 @@ export default function NovaChat() {
   const audioDesbloqueado = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
+  const { dictando, iniciando, interimText, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
 
   // Auth
   useEffect(() => {
@@ -246,8 +279,9 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // TTS si hay texto
-                if (novaTexto) {
+                // TTS solo en respuestas cortas/conversacionales (≤200 chars)
+                // Respuestas largas (agendas, listas) no se leen automáticamente
+                if (novaTexto && novaTexto.length <= 200) {
                   reproducirTTS(novaTexto);
                 }
               }
@@ -428,8 +462,10 @@ export default function NovaChat() {
 
   const toggleMic = useCallback(() => {
     if (dictando) {
+      beepUI(440, 120); // tono bajo = stop
       detenerDictado();
     } else {
+      beepUI(880, 80);  // tono alto = start
       iniciarDictado(setInput);
     }
   }, [dictando, iniciarDictado, detenerDictado]);
@@ -567,23 +603,51 @@ export default function NovaChat() {
 
       {/* ── Input bar ── */}
       <div
-        className="shrink-0 bg-white px-4 py-3"
+        className="shrink-0 bg-white px-4 pb-3 pt-2"
         style={{ borderTop: "0.5px solid #e5e7eb" }}
       >
+        {/* Preview de texto parcial durante dictado */}
+        {dictando && (
+          <div className="mx-auto mb-1.5 max-w-[640px] pl-14 pr-14">
+            <p className="truncate text-xs text-[#9ca3af]">
+              {interimText ? `"${interimText}"` : "Escuchando..."}
+            </p>
+          </div>
+        )}
+
         <div className="mx-auto flex max-w-[640px] items-center gap-2">
           {/* Mic */}
           <button
             onClick={toggleMic}
+            disabled={iniciando}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
               dictando
                 ? "bg-[#E24B4A] shadow-[0_0_0_6px_rgba(226,75,74,0.2)] animate-pulse"
+                : iniciando
+                ? "bg-[#f8f9fa] opacity-50"
                 : "bg-[#f8f9fa]"
             }`}
             style={!dictando ? { border: "0.5px solid #e5e7eb" } : undefined}
           >
-            <span className="text-lg">
-              {dictando ? <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#E24B4A"/></svg> : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
-            </span>
+            {dictando ? (
+              /* Cuadrado blanco = stop, visible sobre fondo rojo */
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect x="2" y="2" width="10" height="10" rx="2" fill="white"/>
+              </svg>
+            ) : iniciando ? (
+              /* Spinner mientras se piden permisos */
+              <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+            ) : (
+              /* Ícono de micrófono normal */
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" x2="12" y1="19" y2="22"/>
+              </svg>
+            )}
           </button>
 
           {/* Input */}
@@ -593,10 +657,10 @@ export default function NovaChat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Escribi o dicta tu mensaje..."
+            placeholder={dictando ? "Dictando..." : "Escribí o dictá tu mensaje..."}
             disabled={enviando}
             className="h-11 flex-1 rounded-[22px] bg-[#f8f9fa] px-4 text-[15px] text-[#1a1a1a] placeholder:text-gray-400 focus:outline-none focus:ring-0 nova-input"
-            style={{ border: "0.5px solid #e5e7eb" }}
+            style={{ border: dictando ? "1.5px solid #E24B4A" : "0.5px solid #e5e7eb" }}
           />
 
           {/* Send */}

@@ -205,16 +205,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- Contexto dinámico ---
+    // --- Contexto dinámico — queries en paralelo ---
 
-    // Perfil Nova
-    const { data: perfil } = await supabase
-      .from("nova_perfiles")
-      .select("*")
-      .eq("medico_id", medico_id)
-      .single();
+    const hoy = getHoyAR();
 
-    let perfilNova = perfil;
+    const [perfilResult, medicoResult, agendaResult, slotsResult] = await Promise.all([
+      supabase.from("nova_perfiles").select("*").eq("medico_id", medico_id).single(),
+      supabase.from("medicos").select("nombre_completo, titulo").eq("user_id", medico_id).single(),
+      supabase.from("turnos")
+        .select("id, hora_inicio, hora_fin, estado, paciente_id")
+        .eq("medico_id", medico_id).eq("fecha", hoy)
+        .order("hora_inicio", { ascending: true }),
+      supabase.from("turnos")
+        .select("id, hora_inicio, hora_fin")
+        .eq("medico_id", medico_id).eq("fecha", hoy).eq("estado", "disponible")
+        .order("hora_inicio", { ascending: true }),
+    ]);
+
+    let perfilNova = perfilResult.data;
     if (!perfilNova) {
       const { data: nuevoPerfil } = await supabase
         .from("nova_perfiles")
@@ -224,34 +232,13 @@ export async function POST(req: NextRequest) {
       perfilNova = nuevoPerfil;
     }
 
-    // Nombre del médico
-    const { data: medico } = await supabase
-      .from("medicos")
-      .select("nombre_completo, titulo")
-      .eq("user_id", medico_id)
-      .single();
+    const medico = medicoResult.data;
+    const agendaHoy = agendaResult.data;
+    const slotsDisponibles = slotsResult.data;
+
     const tituloDr = medico?.titulo ?? "Dr.";
     const nombreMedico = medico?.nombre_completo ?? "Doctor/a";
     const apellidoMedico = nombreMedico.trim().split(/\s+/).slice(-1)[0];
-
-    const hoy = getHoyAR();
-
-    // Agenda de hoy
-    const { data: agendaHoy } = await supabase
-      .from("turnos")
-      .select("id, hora_inicio, hora_fin, estado, paciente_id")
-      .eq("medico_id", medico_id)
-      .eq("fecha", hoy)
-      .order("hora_inicio", { ascending: true });
-
-    // Slots disponibles hoy
-    const { data: slotsDisponibles } = await supabase
-      .from("turnos")
-      .select("id, hora_inicio, hora_fin")
-      .eq("medico_id", medico_id)
-      .eq("fecha", hoy)
-      .eq("estado", "disponible")
-      .order("hora_inicio", { ascending: true });
 
     const agendaResumen =
       agendaHoy && agendaHoy.length > 0
@@ -284,15 +271,15 @@ ACCIONES QUE PODÉS EJECUTAR
 1. Crear turnos programados — ejecutás directo, después confirmás lo que hiciste y por qué lo hiciste así.
 2. Ver agenda del día o la semana — ejecutás directo.
 3. Activar disponibilidad inmediata ("estoy disponible ahora") — ejecutás directo.
-4. Cancelar o modificar turnos existentes — SIEMPRE pedís confirmación antes, con una sola pregunta clara. Explicás qué va a pasar si confirma.
-5. Desactivar disponibilidad inmediata — SIEMPRE pedís confirmación antes. Explicás que los pacientes no van a poder encontrarle hasta que la reactive.
+4. Cancelar o modificar turnos existentes — Describís claramente lo que vas a hacer ("Voy a cancelar el turno de las 15:00 del martes"). La interfaz le muestra al médico los botones para confirmar o cancelar. No preguntés verbalmente.
+5. Desactivar disponibilidad inmediata — Describís lo que vas a hacer ("Voy a desactivar su disponibilidad — los pacientes no van a poder encontrarle hasta que la reactive"). La interfaz maneja la confirmación.
 
 LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
 El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide cambiarlo le explicás que eso se hace desde la configuración de su perfil, no a través tuyo.
 
 REGLA DE CONFIRMACIÓN
 Creación y consultas: ejecutás directo, después avisás qué hiciste.
-Cancelaciones, modificaciones y desactivar disponibilidad: confirmás antes con una sola pregunta directa. Nunca ejecutás sin confirmación explícita.
+Cancelaciones, modificaciones y desactivar disponibilidad: describís lo que vas a hacer en tono informativo y afirmativo, sin preguntar. La interfaz muestra botones de confirmación al médico. No escribas "¿confirma?" ni "¿está seguro?" — eso lo maneja la UI, no vos.
 
 CREAR TURNOS — DATO OBLIGATORIO
 Cuando el médico pide crear turnos y no menciona la duración de cada consulta, siempre preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué lo necesitás. Si ya tenés ese dato en el perfil, lo usás sin preguntar.
@@ -306,7 +293,7 @@ Si los horarios nuevos se pisan con una agenda que ya tiene pacientes asignados:
 Si los horarios nuevos no se pisan con nada ocupado: creás la agenda sin problema, aunque sea el mismo día.
 
 "CANCELÁ TODO" O PEDIDOS DE CIERRE TOTAL
-Si el médico pide cerrar todo, parar, desconectarse o cancelar todo: interpretás que quiere tanto bloquear los turnos programados disponibles como desactivar la disponibilidad inmediata. Pedís confirmación antes de ejecutar. Una vez confirmado, ejecutás ambas acciones y le recordás que cuando quiera volver a atender tiene que reactivar su disponibilidad manualmente.
+Si el médico pide cerrar todo, parar, desconectarse o cancelar todo: interpretás que quiere tanto bloquear los turnos programados disponibles como desactivar la disponibilidad inmediata. Describís lo que vas a hacer ("Voy a bloquear sus turnos disponibles y desactivar la disponibilidad inmediata"). La interfaz pide confirmación. Una vez confirmado, ejecutás ambas acciones y le recordás que cuando quiera volver a atender tiene que reactivar su disponibilidad manualmente.
 
 INTERPRETACIÓN FLEXIBLE
 El médico puede pedir lo mismo de muchas formas. Todas estas expresiones llevan a la misma acción:
@@ -352,10 +339,11 @@ Turnos disponibles: ${slotsResumen}`;
             })
           );
 
-          // Loop para manejar tool use iterativo
+          // Loop para manejar tool use iterativo con streaming real
           let continuar = true;
           while (continuar) {
-            const response = await anthropic.messages.create({
+            // stream() emite tokens de texto en cuanto llegan (~300ms TTFT vs ~2-4s sin streaming)
+            const msgStream = anthropic.messages.stream({
               model: "claude-sonnet-4-6",
               max_tokens: 1024,
               system: systemPrompt,
@@ -363,27 +351,29 @@ Turnos disponibles: ${slotsResumen}`;
               messages,
             });
 
-            for (const block of response.content) {
-              if (block.type === "text") {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ type: "text", content: block.text })}\n\n`
-                  )
-                );
-              } else if (block.type === "tool_use") {
-                const toolName = block.name;
-                const toolInput = block.input as Record<string, unknown>;
+            // Emitir cada delta de texto inmediatamente al cliente
+            msgStream.on("text", (textDelta) => {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "text", content: textDelta })}\n\n`
+                )
+              );
+            });
+
+            // Esperar la respuesta completa para manejar tool_use
+            const response = await msgStream.finalMessage();
+
+            if (response.stop_reason === "tool_use") {
+              const toolBlock = response.content.find((b) => b.type === "tool_use");
+              if (!toolBlock || toolBlock.type !== "tool_use") {
+                continuar = false;
+              } else {
+                const toolName = toolBlock.name;
+                const toolInput = toolBlock.input as Record<string, unknown>;
 
                 if (TOOLS_SOLO_LECTURA.includes(toolName)) {
-                  // Ejecutar directamente
-                  const resultado = await ejecutarTool(
-                    toolName,
-                    toolInput,
-                    medico_id,
-                    supabase
-                  );
-
-                  // Agregar assistant message con tool_use y tool_result
+                  // Ejecutar directamente y continuar loop para que Claude formule respuesta
+                  const resultado = await ejecutarTool(toolName, toolInput, medico_id, supabase);
                   messages = [
                     ...messages,
                     { role: "assistant", content: response.content },
@@ -392,22 +382,21 @@ Turnos disponibles: ${slotsResumen}`;
                       content: [
                         {
                           type: "tool_result",
-                          tool_use_id: block.id,
+                          tool_use_id: toolBlock.id,
                           content: JSON.stringify(resultado),
                         },
                       ],
                     },
                   ];
-                  // Continuar loop para que Claude formule respuesta
-                  break;
+                  // continuar = true → siguiente iteración del while
                 } else {
-                  // Herramientas que modifican datos: devolver confirmación
+                  // Herramienta destructiva: el texto ya se emitió vía streaming.
+                  // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
-                    crear_slots: `Crear slots el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos`,
+                    crear_slots: `Crear turnos el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos`,
                     bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
                     cancelar_turno: `Cancelar turno ${toolInput.turno_id}`,
                   };
-
                   controller.enqueue(
                     encoder.encode(
                       `data: ${JSON.stringify({
@@ -419,18 +408,11 @@ Turnos disponibles: ${slotsResumen}`;
                       })}\n\n`
                     )
                   );
-
-                  // Nota: el texto de Claude ya se emitió arriba en el bloque "text"
-                  // del for loop — no re-emitir para evitar duplicación.
-
                   continuar = false;
-                  break;
                 }
               }
-            }
-
-            // Si no hubo tool_use, terminamos
-            if (response.stop_reason === "end_turn") {
+            } else {
+              // end_turn — respuesta completa sin tool_use
               continuar = false;
             }
           }
