@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
 import OrigenBadge from "@/components/OrigenBadge";
+import AppNavbar from "@/components/AppNavbar";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -349,14 +350,7 @@ export default async function FichaPacientePage({
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
-      <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
-          <span className="text-lg font-medium text-gray-900">Docto</span>
-          <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">
-            Inicio
-          </Link>
-        </div>
-      </nav>
+      <AppNavbar userName={medico.nombre_completo} userRole="medico" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
         {/* Datos del paciente */}

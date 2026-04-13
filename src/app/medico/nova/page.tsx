@@ -11,6 +11,7 @@ declare global {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Breadcrumb from "@/components/Breadcrumb";
 
 // ── Types ──
 
@@ -494,13 +495,8 @@ export default function NovaChat() {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
           <span className="text-lg font-medium text-[#1a1a1a]">Nova</span>
         </div>
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="text-sm text-[#6b7280]"
-        >
-          Volver
-        </button>
       </header>
+      <Breadcrumb />
 
       {/* ── Barra TTS ── */}
       {hablando && (

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminConsultas from "@/app/dashboard/AdminConsultas";
+import AppNavbar from "@/components/AppNavbar";
 
 export default async function HistorialPage() {
   const supabase = await createClient();
@@ -55,16 +56,7 @@ export default async function HistorialPage() {
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
-      <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <a href="/dashboard" className="text-lg font-medium text-gray-900">Docto</a>
-            <span className="text-lg text-gray-300">/</span>
-            <span className="text-lg font-medium text-gray-500">Historial</span>
-          </div>
-          <a href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700">Dashboard</a>
-        </div>
-      </nav>
+      <AppNavbar userName={fullName} userRole="medico" />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
         <AdminConsultas consultas={consultas} medicoId={medico.id} />

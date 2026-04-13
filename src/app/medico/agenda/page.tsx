@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import ListaModelos from "./ListaModelos";
 import FormularioModelo from "./FormularioModelo";
 import PanelDerecho from "./PanelDerecho";
+import AppNavbar from "@/components/AppNavbar";
 
 export default async function AgendaPage({
   searchParams,
@@ -21,6 +22,8 @@ export default async function AgendaPage({
     .eq("user_id", user.id)
     .single();
   if (!medico) redirect("/dashboard");
+
+  const fullName = user.user_metadata?.full_name || user.email;
 
   const { data: modelos } = await supabase
     .from("agenda_modelos")
@@ -48,7 +51,9 @@ export default async function AgendaPage({
   const mostrarFormulario = params.nuevo === "1";
 
   return (
-    <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden md:grid md:grid-cols-[60fr_40fr]">
+    <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
+      <AppNavbar userName={fullName} userRole="medico" />
+      <div className="flex flex-1 flex-col md:grid md:grid-cols-[60fr_40fr] md:overflow-hidden">
       {/*
         Mobile: flex-col apilado — PanelDerecho primero (agenda), luego modelos
         Desktop: grid 2 columnas — modelos izquierda, agenda derecha (order classes)
@@ -69,7 +74,6 @@ export default async function AgendaPage({
               <h1 className="text-[20px] md:text-[22px] font-semibold text-gray-900">Mi agenda</h1>
               <p className="mt-1 text-[13px] text-gray-500">Modelos de disponibilidad para turnos programados</p>
             </div>
-            <Link href="/dashboard" className="text-[13px] text-gray-500 hover:text-gray-700">← Inicio</Link>
           </div>
 
           {mostrarFormulario ? (
@@ -95,6 +99,7 @@ export default async function AgendaPage({
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
