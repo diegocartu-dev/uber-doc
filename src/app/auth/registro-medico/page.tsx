@@ -133,6 +133,26 @@ export default function RegistroMedicoPage() {
             </div>
           )}
 
+          {/* Título profesional */}
+          <div>
+            <label htmlFor="titulo" className={labelClass}>
+              Título profesional
+            </label>
+            <select
+              id="titulo"
+              name="titulo"
+              required
+              className={inputClass}
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Seleccioná tu título
+              </option>
+              <option value="Dr.">Dr.</option>
+              <option value="Dra.">Dra.</option>
+            </select>
+          </div>
+
           {/* Nombre completo */}
           <div>
             <label htmlFor="nombre_completo" className={labelClass}>
@@ -144,7 +164,7 @@ export default function RegistroMedicoPage() {
               type="text"
               required
               className={inputClass}
-              placeholder="Dr. Juan Pérez"
+              placeholder="Juan Pérez"
             />
           </div>
 

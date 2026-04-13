@@ -8,6 +8,7 @@ export async function registrarMedico(formData: FormData) {
 
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const titulo = formData.get("titulo") as string;
   const nombre_completo = formData.get("nombre_completo") as string;
   const especialidad = formData.get("especialidad") as string;
   const tipo_matricula = formData.get("tipo_matricula") as string;
@@ -22,8 +23,12 @@ export async function registrarMedico(formData: FormData) {
   const provincia_matricula = (formData.get("provincia_matricula") as string) || null;
 
   // Validaciones básicas del servidor
-  if (!email || !password || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio) {
+  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio) {
     return { error: "Todos los campos son obligatorios." };
+  }
+
+  if (titulo !== "Dr." && titulo !== "Dra.") {
+    return { error: "El título profesional debe ser Dr. o Dra." };
   }
 
   if (tipo_matricula === "MP" && !provincia) {
@@ -67,6 +72,7 @@ export async function registrarMedico(formData: FormData) {
   for (let i = 0; i < 3; i++) {
     const { error } = await supabase.from("medicos").insert({
       user_id: authData.user.id,
+      titulo,
       nombre_completo,
       email,
       especialidad,

@@ -227,10 +227,12 @@ export async function POST(req: NextRequest) {
     // Nombre del médico
     const { data: medico } = await supabase
       .from("medicos")
-      .select("nombre_completo")
+      .select("nombre_completo, titulo")
       .eq("user_id", medico_id)
       .single();
+    const titulo = medico?.titulo ?? "Dr.";
     const nombreMedico = medico?.nombre_completo ?? "Doctor/a";
+    const tratamiento = `${titulo} ${nombreMedico}`;
 
     const hoy = getHoyAR();
 
@@ -261,7 +263,7 @@ export async function POST(req: NextRequest) {
         ? slotsDisponibles.map((s) => `${s.hora_inicio}-${s.hora_fin}`).join(", ")
         : "Sin slots disponibles hoy";
 
-    const systemPrompt = `Sos Nova, la asistente personal de ${nombreMedico} dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
+    const systemPrompt = `Sos Nova, la asistente personal de ${tratamiento} dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
 
 Tuteás siempre, sin excepción. Cálida pero profesional. Nunca confianzuda ni efusiva. Sin exclamaciones exageradas. Concisa: nunca una palabra de más.
 
@@ -282,7 +284,7 @@ Contexto actual:
 - Agenda de hoy: ${agendaResumen}
 - Slots disponibles: ${slotsResumen}
 
-Si es_primera_sesion es true: "Hola ${nombreMedico}, soy Nova, tu asistente en Docto. ¿Querés que te cuente en qué puedo ayudarte?" Si dice no: "Perfecto, acá estoy cuando me necesités." Sin insistir.`;
+Si es_primera_sesion es true: "Hola ${tratamiento}, soy Nova, tu asistente en Docto. ¿Querés que te cuente en qué puedo ayudarte?" Si dice no: "Perfecto, acá estoy cuando me necesités." Sin insistir.`;
 
     // --- Claude API con streaming ---
 
