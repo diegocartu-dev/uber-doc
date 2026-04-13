@@ -1,133 +1,116 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { Video, MessageCircle, FileText } from "lucide-react";
+import { Stethoscope } from "lucide-react";
 
 export default function Home() {
-  return (
-    <>
-      <Navbar />
-      <main className="flex flex-1 flex-col items-center justify-center px-4 text-center">
-        <h1
-          className="text-5xl font-bold tracking-tight sm:text-6xl"
-          style={{ color: "var(--color-text-primary)" }}
-        >
-          Tu doctor, a un click de distancia
-        </h1>
-        <p
-          className="mt-6 max-w-2xl"
-          style={{
-            color: "var(--color-text-secondary)",
-            fontSize: "15px",
-            lineHeight: "1.6",
-          }}
-        >
-          Conectá con médicos profesionales desde la comodidad de tu hogar.
-          Consultas por videollamada, chat y recetas digitales, todo en un solo
-          lugar.
-        </p>
-        <div className="mt-10 flex items-center gap-4">
-          <Link
-            href="/auth/register"
-            className="btn-primary px-6 py-3 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100"
-            style={{
-              borderRadius: "var(--radius-md)",
-            }}
-          >
-            Comenzar ahora
-          </Link>
-          <Link
-            href="/auth/login"
-            className="px-6 py-3 text-sm font-semibold transition-colors"
-            style={{
-              border: "1px solid var(--color-border-strong)",
-              color: "var(--color-text-primary)",
-              borderRadius: "var(--radius-md)",
-            }}
-          >
-            Ya tengo cuenta
-          </Link>
-        </div>
+  const [email, setEmail] = useState("");
+  const [estado, setEstado] = useState<"idle" | "loading" | "ok" | "ya" | "error">("idle");
 
-        <div className="mt-20 grid max-w-4xl gap-8 sm:grid-cols-3">
-          <div
-            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
-            style={{
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <Video
-              size={32}
-              strokeWidth={1.75}
-              style={{ color: "var(--color-brand)" }}
-            />
-            <h3
-              className="mt-4 text-lg font-semibold"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              Videoconsultas
-            </h3>
-            <p
-              className="mt-2 text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Hablá cara a cara con tu médico sin salir de casa.
-            </p>
-          </div>
-          <div
-            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
-            style={{
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <MessageCircle
-              size={32}
-              strokeWidth={1.75}
-              style={{ color: "var(--color-brand)" }}
-            />
-            <h3
-              className="mt-4 text-lg font-semibold"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              Chat médico
-            </h3>
-            <p
-              className="mt-2 text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Consultá dudas rápidas por mensaje en cualquier momento.
-            </p>
-          </div>
-          <div
-            className="p-6 text-left transition hover:shadow-[var(--shadow-sm)]"
-            style={{
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-lg)",
-            }}
-          >
-            <FileText
-              size={32}
-              strokeWidth={1.75}
-              style={{ color: "var(--color-brand)" }}
-            />
-            <h3
-              className="mt-4 text-lg font-semibold"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              Recetas digitales
-            </h3>
-            <p
-              className="mt-2 text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Recibí tus recetas directamente en tu celular.
-            </p>
-          </div>
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setEstado("loading");
+    try {
+      const res = await fetch("/api/pre-registro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEstado("error"); return; }
+      setEstado(data.ya_registrado ? "ya" : "ok");
+    } catch {
+      setEstado("error");
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
+      {/* Logo */}
+      <div className="flex items-center gap-2 mb-12">
+        <Stethoscope size={28} strokeWidth={2} color="#1D9E75" />
+        <span className="text-2xl font-bold lowercase" style={{ color: "#1a1a1a" }}>
+          docto
+        </span>
+      </div>
+
+      {/* Headline */}
+      <div className="max-w-md text-center">
+        <div
+          className="mb-4 inline-block rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
+          style={{ background: "#f0faf6", color: "#1D9E75" }}
+        >
+          Beta cerrada
         </div>
-      </main>
-      <Footer />
-    </>
+        <h1 className="text-3xl font-bold" style={{ color: "#1a1a1a" }}>
+          Tu médico, a un click
+        </h1>
+        <p className="mt-3 text-[15px] leading-relaxed" style={{ color: "#6b7280" }}>
+          Estamos preparando el lanzamiento de Docto. Dejanos tu email y te avisamos cuando tengas acceso.
+        </p>
+      </div>
+
+      {/* Formulario pre-registro */}
+      <div className="mt-8 w-full max-w-sm">
+        {estado === "ok" && (
+          <div
+            className="rounded-xl px-4 py-3 text-center text-sm font-medium"
+            style={{ background: "#f0faf6", color: "#1D9E75" }}
+          >
+            Anotado. Te avisamos cuando abramos el acceso.
+          </div>
+        )}
+        {estado === "ya" && (
+          <div
+            className="rounded-xl px-4 py-3 text-center text-sm font-medium"
+            style={{ background: "#f0faf6", color: "#1D9E75" }}
+          >
+            Ya estabas en la lista. Te vamos a avisar.
+          </div>
+        )}
+        {estado !== "ok" && estado !== "ya" && (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-shadow focus:ring-2 focus:ring-[#1D9E75]/30"
+              style={{
+                border: "1px solid #e5e7eb",
+                color: "#1a1a1a",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={estado === "loading"}
+              className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-60"
+              style={{ background: "#1D9E75" }}
+            >
+              {estado === "loading" ? "Guardando..." : "Quiero acceso"}
+            </button>
+            {estado === "error" && (
+              <p className="text-center text-xs" style={{ color: "#E24B4A" }}>
+                Algo salió mal. Intentá de nuevo.
+              </p>
+            )}
+          </form>
+        )}
+      </div>
+
+      {/* Ya tengo cuenta */}
+      <p className="mt-8 text-sm" style={{ color: "#9ca3af" }}>
+        Ya tenés acceso?{" "}
+        <Link
+          href="/auth/login"
+          className="font-medium transition-colors hover:underline"
+          style={{ color: "#1D9E75" }}
+        >
+          Iniciar sesion
+        </Link>
+      </p>
+    </div>
   );
 }
