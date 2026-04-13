@@ -177,15 +177,19 @@ export default function DisponibilidadMedico({
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t border-gray-50 px-5 py-3">
+      <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold" style={{ color: oculto ? "#888780" : "#1D9E75" }}>
-            {oculto ? "Oculto de Clínica Virtual" : "Visible en Clínica Virtual"}
-          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs font-semibold text-gray-700">Visible en Clínica Virtual</span>
+            <span className="text-[11px]" style={{ color: oculto ? "#888780" : "#1D9E75" }}>
+              {oculto ? "Oculto" : "Activo"}
+            </span>
+          </div>
           <button
             type="button"
             role="switch"
             aria-checked={!oculto}
+            aria-label="Visible en Clínica Virtual"
             disabled={guardandoOculto}
             onClick={handleToggleOculto}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${

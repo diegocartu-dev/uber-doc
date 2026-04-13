@@ -344,7 +344,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
             Compartí este link con tus pacientes para que te consulten directamente por Docto.
           </p>
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <input
               type="text"
               readOnly
@@ -364,7 +364,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
                 setLinkCopiado(true);
                 setTimeout(() => setLinkCopiado(false), 2000);
               }}
-              className="shrink-0 rounded-[var(--radius-md)] px-4 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+              className="shrink-0 w-full sm:w-auto rounded-[var(--radius-md)] px-4 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
               style={{
                 height: 44,
                 backgroundColor: linkCopiado ? "var(--color-success)" : "var(--color-primary)",

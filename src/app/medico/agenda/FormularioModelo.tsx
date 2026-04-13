@@ -338,7 +338,7 @@ export default function FormularioModelo({
           type="checkbox"
           checked={soloConsultorioPrivado}
           onChange={(e) => setSoloConsultorioPrivado(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-[#1D9E75] focus:ring-[#1D9E75]"
+          className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#1D9E75] focus:ring-[#1D9E75]"
         />
         <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
       </label>
