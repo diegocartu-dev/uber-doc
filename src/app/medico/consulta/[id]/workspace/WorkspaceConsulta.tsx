@@ -305,6 +305,12 @@ export default function WorkspaceConsulta({
       }
 
       // Insertar documentos
+      if (receta.trim() && !consulta.paciente_cuil) {
+        setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
+        setFinalizando(false);
+        return;
+      }
+
       const docs: { tipo: string; contenido: string }[] = [];
       if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
       if (indicaciones.trim())

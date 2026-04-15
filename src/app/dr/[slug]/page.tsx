@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import SetOriginSlug from "@/components/SetOriginSlug";
+import ConsultorioLoginClient from "./ConsultorioLoginClient";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -97,29 +98,10 @@ export default async function ConsultorioPublicoPage({
           className="mt-6 text-sm leading-relaxed"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Consultorio virtual en Docto. Iniciá sesión o registrate para solicitar una consulta o agendar un turno.
+          Ingresá para solicitar una consulta o agendar un turno.
         </p>
 
-        {/* Botones */}
-        <div className="mt-8 space-y-3">
-          <Link
-            href={`/auth/login?redirect=/dr/${slug}/consultorio`}
-            className="block w-full rounded-[var(--radius-md)] py-3 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100"
-            style={{ backgroundColor: "var(--color-primary)" }}
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            href={`/auth/register?redirect=/dr/${slug}/consultorio`}
-            className="block w-full rounded-[var(--radius-md)] py-3 text-sm font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
-            style={{
-              border: "1px solid var(--color-border-strong)",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            Registrarse
-          </Link>
-        </div>
+        <ConsultorioLoginClient slug={slug} />
 
         <p
           className="mt-8 text-xs"

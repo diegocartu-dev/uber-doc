@@ -75,6 +75,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
   const [obraSocial, setObraSocial] = useState(paciente?.obra_social ?? "");
   const [nroAfiliado, setNroAfiliado] = useState(paciente?.nro_afiliado ?? "");
   const [fechaNac, setFechaNac] = useState(paciente?.fecha_nacimiento ?? "");
+  const [cuil, setCuil] = useState(paciente?.cuil ?? "");
 
   // Medico fields
   const [domicilio, setDomicilio] = useState(medico?.domicilio ?? "");
@@ -93,6 +94,7 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
         .update({
           nombre_completo: nombre,
           telefono,
+          cuil: cuil || null,
           obra_social: obraSocial || null,
           nro_afiliado: nroAfiliado || null,
           fecha_nacimiento: fechaNac || null,
@@ -225,7 +227,42 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
           </div>
 
           <div>
-            <label style={labelStyle}>Obra social</label>
+            <label style={labelStyle}>
+              CUIL
+              {!cuil && (
+                <span
+                  className="inline-block h-2 w-2 rounded-full ml-1.5 align-middle"
+                  style={{ backgroundColor: "#D85A30" }}
+                />
+              )}
+            </label>
+            <input
+              type="text"
+              value={cuil}
+              onChange={(e) => setCuil(e.target.value)}
+              style={inputStyle}
+              placeholder="20-12345678-9"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.boxShadow = "var(--shadow-focus)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-border-strong)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>
+              Obra social
+              {!obraSocial && (
+                <span
+                  className="inline-block h-2 w-2 rounded-full ml-1.5 align-middle"
+                  style={{ backgroundColor: "#D85A30" }}
+                />
+              )}
+            </label>
             <input
               type="text"
               value={obraSocial}
@@ -245,7 +282,15 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
 
           {obraSocial && (
             <div>
-              <label style={labelStyle}>Número de afiliado</label>
+              <label style={labelStyle}>
+                N&uacute;mero de afiliado
+                {!nroAfiliado && (
+                  <span
+                    className="inline-block h-2 w-2 rounded-full ml-1.5 align-middle"
+                    style={{ backgroundColor: "#D85A30" }}
+                  />
+                )}
+              </label>
               <input
                 type="text"
                 value={nroAfiliado}

@@ -20,6 +20,21 @@ export default async function ConsultorioPrivadoPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/dr/${slug}`);
 
+  const { data: pacienteCheck } = await supabase
+    .from("pacientes")
+    .select("nombre_completo, dni, fecha_nacimiento, telefono")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (pacienteCheck !== null) {
+    const perfilCompleto =
+      pacienteCheck?.nombre_completo?.trim() &&
+      pacienteCheck?.dni?.trim() &&
+      pacienteCheck?.fecha_nacimiento &&
+      pacienteCheck?.telefono?.trim();
+    if (!perfilCompleto) redirect(`/onboarding?redirectTo=/dr/${slug}/consultorio`);
+  }
+
   const fullName = user.user_metadata?.full_name || user.email;
   let role = user.user_metadata?.role as "paciente" | "medico" | null;
   if (!role) {

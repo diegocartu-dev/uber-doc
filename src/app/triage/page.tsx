@@ -65,7 +65,8 @@ function TriageContent() {
   const medicoId = searchParams.get("medicoId") ?? "";
   const especialidad = searchParams.get("especialidad") ?? "";
   const canalOrigen = searchParams.get("canal") === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
-  const fromUrl = searchParams.get("from");
+  const fromRaw = searchParams.get("from");
+  const fromUrl = fromRaw && fromRaw.startsWith("/") && !fromRaw.includes("://") ? fromRaw : null;
 
   const [paso, setPaso] = useState(1);
 
