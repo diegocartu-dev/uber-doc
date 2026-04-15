@@ -192,7 +192,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.length} reservados</span>
         <button onClick={goHoy} className="rounded-full bg-[#1D9E75] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
       </div>
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-[#378ADD] inline-block" />
           <span className="text-[11px] text-gray-500">Clínica Virtual</span>
