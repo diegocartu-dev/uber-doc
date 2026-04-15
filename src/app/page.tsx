@@ -3,7 +3,15 @@ import { Stethoscope } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string }>;
+}) {
+  // Si Supabase manda el code a la raíz (por www vs no-www), redirigir al callback
+  const { code } = await searchParams;
+  if (code) redirect(`/auth/callback?code=${code}`);
+
   const supabase = await createClient();
   const {
     data: { user },
