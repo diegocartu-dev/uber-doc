@@ -126,7 +126,7 @@ export default async function OnboardingPage({
             <input
               id="telefono"
               name="telefono"
-              type="text"
+              type="tel"
               required
               defaultValue={paciente?.telefono ?? ""}
               className={inputClass}

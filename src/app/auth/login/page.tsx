@@ -67,7 +67,7 @@ export default function LoginPage() {
         </Link>
 
         <h2 className="text-center text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
-          Inicia sesion en tu cuenta
+          Ingresá a tu cuenta
         </h2>
 
         {error && (
@@ -126,7 +126,7 @@ export default function LoginPage() {
 
           <div>
             <label htmlFor="password" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
-              Contrasena
+              Contraseña
             </label>
             <input
               id="password"
@@ -147,15 +147,15 @@ export default function LoginPage() {
             className="w-full rounded-[var(--radius-md)] text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
             style={{ height: 44, backgroundColor: "var(--color-primary)" }}
           >
-            Iniciar sesion
+            Ingresar
           </LoadingButton>
         </form>
 
-        <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          No tenes cuenta?{" "}
-          <Link href="/auth/register" className="font-medium" style={{ color: "var(--color-text-link)" }}>
-            Registrate
-          </Link>
+        <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+          ¿Olvidaste tu contraseña? Escribinos a{" "}
+          <a href="mailto:soporte@docto.com.ar" className="font-medium" style={{ color: "var(--color-text-link)" }}>
+            soporte@docto.com.ar
+          </a>
         </p>
       </div>
     </div>

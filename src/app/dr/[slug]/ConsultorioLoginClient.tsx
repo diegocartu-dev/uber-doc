@@ -95,17 +95,23 @@ export default function ConsultorioLoginClient({ slug }: Props) {
         </div>
       ) : (
         <form onSubmit={handleMagicLink} className="space-y-3">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="tu@email.com"
-            className="block w-full rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none"
-            style={{ height: 44, borderColor: "var(--color-border-strong)", color: "var(--color-text-primary)" }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
-          />
+          <div>
+            <label htmlFor="magic-email" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+              Tu email
+            </label>
+            <input
+              id="magic-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              className="mt-1 block w-full rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none"
+              style={{ height: 44, borderColor: "var(--color-border-strong)", color: "var(--color-text-primary)" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
+            />
+          </div>
           <LoadingButton
             type="submit"
             isLoading={loadingMagic}
