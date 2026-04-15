@@ -348,7 +348,6 @@ export default function GrillaEspecialidades({
                 <button
                   onClick={() => {
                     if (emailLead.trim()) {
-                      console.log(`[Lead] Especialidad: ${especialidadBuscadaSinMedicos}, Email: ${emailLead.trim()}`);
                       setLeadEnviado(true);
                     }
                   }}
