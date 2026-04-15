@@ -6,7 +6,19 @@ import { createClient } from "@/lib/supabase/client";
 type Turno = {
   id: string; fecha: string; hora_inicio: string; hora_fin: string;
   estado: string; monto: number | null; paciente_nombre: string | null;
+  canal_origen: string | null;
 };
+
+function colorPorCanal(canalOrigen: string | null | undefined): { bg: string; border: string; text: string; dot: string } {
+  switch (canalOrigen) {
+    case "consultorio_privado":
+      return { bg: "#D85A30", border: "#D85A30", text: "#D85A30", dot: "bg-[#D85A30]" };
+    case "clinica_virtual":
+      return { bg: "#378ADD", border: "#378ADD", text: "#378ADD", dot: "bg-[#378ADD]" };
+    default:
+      return { bg: "#1D9E75", border: "#1D9E75", text: "#1D9E75", dot: "bg-[#1D9E75]" };
+  }
+}
 
 const DIAS_LABEL = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const DIAS_SEMANA_LARGO = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
@@ -44,7 +56,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const [lunesActual, setLunesActual] = useState(() => getLunes(hoy));
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string }[]>([]);
+  const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string; canal_origen: string | null }[]>([]);
   const [selectedDate, setSelectedDate] = useState(hoyStr);
 
   const mesVisible = lunesActual.getMonth();
@@ -96,7 +108,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       setCargando(true);
       const supabase = createClient();
       const { data } = await supabase
-        .from("turnos").select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id")
+        .from("turnos").select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id, canal_origen")
         .eq("medico_id", medicoId).gte("fecha", diasSemana[0]).lte("fecha", diasSemana[6])
         .order("hora_inicio", { ascending: true });
       if (!data) { setTurnos([]); setCargando(false); return; }
@@ -110,6 +122,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio.slice(0, 5), hora_fin: t.hora_fin.slice(0, 5),
         estado: t.estado, monto: t.monto,
         paciente_nombre: t.paciente_id ? (nombres.get(t.paciente_id) ?? null) : null,
+        canal_origen: t.canal_origen ?? null,
       })));
       setCargando(false);
     }
@@ -122,7 +135,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", "reservado_pendiente"]);
+      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", "reservado_pendiente"]);
       setTurnosMes(data ?? []);
     }
     load();
@@ -152,7 +165,13 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   }
 
   const diasConDisp = new Set<string>(); const diasConRes = new Set<string>();
-  for (const t of turnosMes) { if (t.estado === "disponible") diasConDisp.add(t.fecha); if (t.estado === "reservado_pendiente") diasConRes.add(t.fecha); }
+  const canalesPorDia = new Map<string, Set<string>>();
+  for (const t of turnosMes) {
+    if (t.estado === "disponible") diasConDisp.add(t.fecha);
+    if (t.estado === "reservado_pendiente") diasConRes.add(t.fecha);
+    if (!canalesPorDia.has(t.fecha)) canalesPorDia.set(t.fecha, new Set());
+    canalesPorDia.get(t.fecha)!.add(t.canal_origen ?? "default");
+  }
 
   const primerDia = new Date(anioVisible, mesVisible, 1);
   const startPad = primerDia.getDay() === 0 ? 6 : primerDia.getDay() - 1;
@@ -203,10 +222,11 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                   : { color: (diasConDisp.has(fecha) || diasConRes.has(fecha)) ? "#1a1a1a" : "#d1d5db" }}
               >
                 {dia}
-                {(diasConDisp.has(fecha) || diasConRes.has(fecha)) && !esHoy && (
+                {canalesPorDia.has(fecha) && !esHoy && (
                   <span className="absolute bottom-0.5 flex gap-0.5">
-                    {diasConDisp.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />}
-                    {diasConRes.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#378ADD]" />}
+                    {[...canalesPorDia.get(fecha)!].map((canal) => (
+                      <span key={canal} className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: colorPorCanal(canal === "default" ? null : canal).bg }} />
+                    ))}
                   </span>
                 )}
               </button>
@@ -233,11 +253,11 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
               <div key={t.id} className="flex items-center px-4 py-2" style={{ borderBottom: "0.5px solid #f0f0f0" }}>
                 <div className="w-[48px] shrink-0 text-[13px] text-gray-400">{t.hora_inicio}</div>
                 {t.estado === "disponible" ? (
-                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-[#1D9E75] font-medium" style={{ border: "1.5px dashed #1D9E75" }}>
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ border: `1.5px dashed ${colorPorCanal(t.canal_origen).border}`, color: colorPorCanal(t.canal_origen).text }}>
                     Disponible
                   </div>
                 ) : (
-                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-white font-medium" style={{ background: "#378ADD" }}>
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-white font-medium" style={{ background: colorPorCanal(t.canal_origen).bg }}>
                     {t.paciente_nombre ?? "Reservado"}
                   </div>
                 )}
@@ -283,10 +303,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                     const t = slotMap.get(`${fecha}-${hora}`);
                     if (!t) return <div key={fecha} style={{ height: "30px" }} />;
                     if (t.estado === "disponible") {
-                      return <div key={fecha} style={{ height: "30px", background: "#9FE1CB" }} />;
+                      return <div key={fecha} style={{ height: "30px", background: `${colorPorCanal(t.canal_origen).bg}20`, borderLeft: `2px solid ${colorPorCanal(t.canal_origen).border}` }} />;
                     }
                     return (
-                      <div key={fecha} className="flex items-center justify-center" style={{ height: "30px", background: "#378ADD", overflow: "hidden", padding: "0 2px" }}>
+                      <div key={fecha} className="flex items-center justify-center" style={{ height: "30px", background: colorPorCanal(t.canal_origen).bg, overflow: "hidden", padding: "0 2px" }}>
                         <span style={{ fontSize: "11px", fontWeight: 500, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {t.paciente_nombre ?? "Reservado"}
                         </span>
