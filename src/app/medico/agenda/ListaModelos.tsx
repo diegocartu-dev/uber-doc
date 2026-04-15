@@ -88,7 +88,7 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
               className="flex w-full items-center justify-between text-left md:cursor-default"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-[16px] md:text-[18px] font-semibold text-gray-900 truncate">{m.nombre}</p>
+                <p className="text-[16px] md:text-[18px] font-semibold text-gray-900 truncate">{m.nombre.charAt(0).toUpperCase() + m.nombre.slice(1)}</p>
                 <p className="mt-0.5 text-[13px] text-gray-500">
                   {formatFecha(m.fecha_inicio)} — {formatFecha(m.fecha_fin)}
                 </p>
