@@ -8,6 +8,7 @@
 
 import { useState, useTransition } from "react";
 import { toggleModelo, eliminarModelo } from "./actions";
+import OrigenBadge from "@/components/OrigenBadge";
 
 type Franja = { id: string; dia_semana: number; hora_inicio: string; hora_fin: string };
 type Modelo = {
@@ -17,6 +18,7 @@ type Modelo = {
   fecha_fin: string;
   activo: boolean;
   prioridad: number;
+  canal_origen: string | null;
   franjas: Franja[];
 };
 
@@ -89,6 +91,9 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
             >
               <div className="flex-1 min-w-0">
                 <p className="text-[16px] md:text-[18px] font-semibold text-gray-900 truncate">{m.nombre.charAt(0).toUpperCase() + m.nombre.slice(1)}</p>
+                <div className="mt-1">
+                  <OrigenBadge canalOrigen={m.canal_origen} />
+                </div>
                 <p className="mt-0.5 text-[13px] text-gray-500">
                   {formatFecha(m.fecha_inicio)} — {formatFecha(m.fecha_fin)}
                 </p>

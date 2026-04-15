@@ -27,7 +27,7 @@ export default async function AgendaPage({
 
   const { data: modelos } = await supabase
     .from("agenda_modelos")
-    .select("id, nombre, fecha_inicio, fecha_fin, activo, prioridad, created_at")
+    .select("id, nombre, fecha_inicio, fecha_fin, activo, prioridad, canal_origen, created_at")
     .eq("medico_id", medico.id)
     .order("created_at", { ascending: false });
 

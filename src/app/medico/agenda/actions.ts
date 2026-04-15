@@ -41,6 +41,7 @@ export async function guardarModelo(data: {
       duracion_turno: data.duracion_turno,
       precio: data.precio,
       activo: true,
+      canal_origen: data.canal_origen ?? "clinica_virtual",
     })
     .select("id")
     .single();
