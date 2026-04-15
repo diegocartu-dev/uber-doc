@@ -1,7 +1,38 @@
 import Link from "next/link";
 import { Stethoscope } from "lucide-react";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: medico } = await supabase
+      .from("medicos")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (medico) redirect("/dashboard");
+
+    const { data: paciente } = await supabase
+      .from("pacientes")
+      .select("nombre_completo, dni, fecha_nacimiento, telefono")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const perfilCompleto =
+      paciente?.nombre_completo?.trim() &&
+      paciente?.dni?.trim() &&
+      paciente?.fecha_nacimiento &&
+      paciente?.telefono?.trim();
+
+    redirect(perfilCompleto ? "/clinica" : "/onboarding");
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
       {/* Logo + badge */}

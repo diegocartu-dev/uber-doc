@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -11,16 +11,51 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
   }
 
-  const supabase = await createClient();
+  // Construimos la response de redirect ANTES de crear el cliente para que
+  // exchangeCodeForSession pueda escribir las cookies directamente en ella.
+  // Si usamos createClient() de server.ts, el setAll intenta escribir en el
+  // cookie store de Next.js (read-only en Route Handlers) y falla silenciosamente,
+  // dejando la sesión sin persistir en el browser.
+  let redirectUrl = `${origin}/auth/login?error=auth_failed`;
+  const response = NextResponse.redirect(redirectUrl);
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.headers
+            .get("cookie")
+            ?.split("; ")
+            .map((c) => {
+              const [name, ...rest] = c.split("=");
+              return { name, value: rest.join("=") };
+            }) ?? [];
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
+    response.headers.set(
+      "location",
+      `${origin}/auth/login?error=auth_failed`
+    );
+    return response;
   }
 
   // Si viene un next útil (distinto de "/"), respetarlo — viene del flujo previo
   if (safeNext && safeNext !== "/") {
-    return NextResponse.redirect(`${origin}${safeNext}`);
+    response.headers.set("location", `${origin}${safeNext}`);
+    return response;
   }
 
   // Sin next útil: determinar destino según perfil del usuario autenticado
@@ -29,7 +64,11 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
+    response.headers.set(
+      "location",
+      `${origin}/auth/login?error=auth_failed`
+    );
+    return response;
   }
 
   // Chequear si es médico primero
@@ -40,7 +79,8 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   if (medico) {
-    return NextResponse.redirect(`${origin}/dashboard`);
+    response.headers.set("location", `${origin}/dashboard`);
+    return response;
   }
 
   // Es paciente: verificar si tiene perfil completo
@@ -57,9 +97,9 @@ export async function GET(request: Request) {
     paciente.fecha_nacimiento &&
     paciente.telefono;
 
-  if (perfilCompleto) {
-    return NextResponse.redirect(`${origin}/clinica`);
-  }
-
-  return NextResponse.redirect(`${origin}/onboarding?redirectTo=/clinica`);
+  response.headers.set(
+    "location",
+    perfilCompleto ? `${origin}/clinica` : `${origin}/onboarding?redirectTo=/clinica`
+  );
+  return response;
 }
