@@ -13,6 +13,21 @@ export default async function ClinicaPage() {
     redirect("/auth/login");
   }
 
+  const { data: paciente } = await supabase
+    .from("pacientes")
+    .select("nombre_completo, dni, fecha_nacimiento, telefono")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (paciente !== null) {
+    const perfilCompleto =
+      paciente?.nombre_completo?.trim() &&
+      paciente?.dni?.trim() &&
+      paciente?.fecha_nacimiento &&
+      paciente?.telefono?.trim();
+    if (!perfilCompleto) redirect("/onboarding?redirectTo=/clinica");
+  }
+
   const fullName = user.user_metadata?.full_name || user.email;
 
   const { data: medicos } = await supabase
