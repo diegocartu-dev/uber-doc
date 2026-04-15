@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   const safeNext = next.startsWith("/") && !next.includes("://") ? next : "";
 
   if (!code) {
+    console.log(`[CALLBACK] error=no_code | url=${request.url}`);
     return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
   }
 
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    console.log(`[CALLBACK] error=exchange_failed | ${error.message} | code_present=${!!code}`);
     response.headers.set(
       "location",
       `${origin}/auth/login?error=auth_failed`
@@ -97,9 +99,8 @@ export async function GET(request: Request) {
     paciente.fecha_nacimiento &&
     paciente.telefono;
 
-  response.headers.set(
-    "location",
-    perfilCompleto ? `${origin}/clinica` : `${origin}/onboarding?redirectTo=/clinica`
-  );
+  const finalDest = perfilCompleto ? `${origin}/clinica` : `${origin}/onboarding?redirectTo=/clinica`;
+  response.headers.set("location", finalDest);
+  console.log(`[CALLBACK] ok → ${finalDest} | perfil_completo=${!!perfilCompleto} | user=${user.id}`);
   return response;
 }
