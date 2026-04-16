@@ -112,7 +112,7 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
 
             {/* Patient info */}
             {c.paciente_tabla_id ? (
-              <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="mt-4 block text-2xl font-medium text-gray-900 hover:text-[#1D9E75]" style={{ fontSize: "28px", lineHeight: "34px" }}>
+              <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="mt-4 block text-2xl font-medium text-gray-900 hover:text-[#378ADD]" style={{ fontSize: "28px", lineHeight: "34px" }}>
                 {capitalizarNombre(c.paciente_nombre)}
               </a>
             ) : (

@@ -114,7 +114,7 @@ export default function DisponibilidadMedico({
 
   const selectStyle = { border: "0.5px solid #e5e7eb" } as const;
   const selectClass =
-    "appearance-none rounded-lg bg-[#f8f9fa] px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75]";
+    "appearance-none rounded-lg bg-[#f8f9fa] px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD]";
 
   const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
   const MINUTOS = ["00", "15", "30", "45"];
@@ -142,7 +142,7 @@ export default function DisponibilidadMedico({
         <div className="flex items-center gap-3">
           <span
             className="text-xs font-semibold"
-            style={{ color: activo && !bloqueado ? "#1D9E75" : "#888780" }}
+            style={{ color: activo && !bloqueado ? "#378ADD" : "#888780" }}
           >
             {activo && !bloqueado ? "Activa" : "Inactiva"}
           </span>
@@ -157,7 +157,7 @@ export default function DisponibilidadMedico({
             }}
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
               bloqueado ? "cursor-not-allowed bg-gray-200" : "cursor-pointer"
-            } ${activo && !bloqueado ? "bg-[#1D9E75]" : !bloqueado ? "bg-gray-300" : ""}`}
+            } ${activo && !bloqueado ? "bg-[#378ADD]" : !bloqueado ? "bg-gray-300" : ""}`}
           >
             <span
               className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
@@ -181,7 +181,7 @@ export default function DisponibilidadMedico({
         <div className="flex items-center gap-3">
           <div className="flex flex-col gap-0.5">
             <span className="text-xs font-semibold text-gray-700">Visible en Clínica Virtual</span>
-            <span className="text-[11px]" style={{ color: oculto ? "#888780" : "#1D9E75" }}>
+            <span className="text-[11px]" style={{ color: oculto ? "#888780" : "#378ADD" }}>
               {oculto ? "Oculto" : "Activo"}
             </span>
           </div>
@@ -193,7 +193,7 @@ export default function DisponibilidadMedico({
             disabled={guardandoOculto}
             onClick={handleToggleOculto}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
-              oculto ? "bg-gray-300" : "bg-[#1D9E75]"
+              oculto ? "bg-gray-300" : "bg-[#378ADD]"
             }`}
           >
             <span
@@ -296,14 +296,14 @@ export default function DisponibilidadMedico({
             <button
               onClick={handleGuardar}
               disabled={guardando}
-              className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#178a64] disabled:opacity-50"
+              className="rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#2e6fb5] disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Guardar"}
             </button>
             {mensaje && (
               <span
                 className={`text-xs ${
-                  mensaje === "Guardado" ? "text-[#1D9E75]" : "text-red-500"
+                  mensaje === "Guardado" ? "text-[#378ADD]" : "text-red-500"
                 }`}
               >
                 {mensaje}

@@ -50,8 +50,8 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
         key={t.id}
         className="flex items-center justify-between rounded-lg p-3"
         style={{
-          border: mostrarSala ? "0.5px solid #1D9E75" : "0.5px solid #e5e7eb",
-          background: mostrarSala ? "#f0fdf4" : undefined,
+          border: mostrarSala ? "0.5px solid #378ADD" : "0.5px solid #e5e7eb",
+          background: mostrarSala ? "#eff6ff" : undefined,
         }}
       >
         <div>
@@ -69,7 +69,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
           {mostrarSala ? (
             <Link
               href={`/turno/${t.id}/espera`}
-              className="shrink-0 rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+              className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
             >
               Ir a sala de espera
             </Link>

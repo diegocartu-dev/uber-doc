@@ -180,7 +180,7 @@ export default function AdminConsultas({
                   className={`inline-block h-1.5 w-1.5 rounded-full ${estadoDot(c.estado)}`}
                 />
                 {c.paciente_tabla_id ? (
-                  <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="flex-1 truncate text-xs font-medium text-[#1D9E75] hover:underline">
+                  <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="flex-1 truncate text-xs font-medium text-[#378ADD] hover:underline">
                     {c.paciente_nombre}
                   </a>
                 ) : (

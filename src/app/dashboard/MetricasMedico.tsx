@@ -32,7 +32,7 @@ export default function MetricasMedico({
   }
 
   const items = [
-    { label: "Ingresos", value: `$${metricas.ingresos.toLocaleString("es-AR")}`, color: "#1D9E75" },
+    { label: "Ingresos", value: `$${metricas.ingresos.toLocaleString("es-AR")}`, color: "#378ADD" },
     { label: "Completadas", value: metricas.completadas, color: "#888780" },
     { label: "En espera", value: metricas.enEspera, color: metricas.enEspera > 0 ? "#D85A30" : "#888780" },
     { label: "Turnos", value: metricas.turnos, color: "#378ADD" },

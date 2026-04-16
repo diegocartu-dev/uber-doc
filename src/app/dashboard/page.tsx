@@ -306,7 +306,7 @@ export default async function DashboardPage() {
     const hemiStyle = { border: "0.5px solid #e5e7eb" } as const;
     const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
     const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
-    const actionClass = "text-sm font-medium text-[#1D9E75] hover:underline transition-colors";
+    const actionClass = "text-sm font-medium text-[#378ADD] hover:underline transition-colors";
 
     const colTurnos = (
       <div className={hemiPad} style={{ ...hemiStyle, borderLeft: "4px solid #378ADD", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
@@ -398,7 +398,7 @@ export default async function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 lg:gap-4">
-                  <Link href="/medico/nova" className="text-sm font-medium text-[#1D9E75] hover:text-[#178a64] transition-colors">
+                  <Link href="/medico/nova" className="text-sm font-medium text-[#378ADD] hover:text-[#2e6fb5] transition-colors">
                     Nova
                   </Link>
                   <span className="hidden text-sm text-gray-500 lg:inline">{fullName}</span>
