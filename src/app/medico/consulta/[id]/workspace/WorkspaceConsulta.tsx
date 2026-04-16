@@ -219,6 +219,7 @@ export default function WorkspaceConsulta({
   const [timerSeg, setTimerSeg] = useState(0);
   const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   // Mobile: dos modos explícitos. false = video, true = escritura.
   const [modoEscritura, setModoEscritura] = useState(false);
@@ -341,11 +342,6 @@ export default function WorkspaceConsulta({
 
   // --- Cancelar consulta ---
   async function cancelarConsulta() {
-    const confirmado = window.confirm(
-      "Si cancelas, el paciente podria recibir un reembolso. Continuar?"
-    );
-    if (!confirmado) return;
-
     try {
       const res = await fetch(`/api/consulta/${consultaId}/cancelar-medico`, {
         method: "POST",
@@ -717,7 +713,7 @@ export default function WorkspaceConsulta({
                 Finalizar y generar documentos
               </LoadingButton>
               <button
-                onClick={cancelarConsulta}
+                onClick={() => setShowCancelDialog(true)}
                 className="w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
                 style={{ color: "#E24B4A", minHeight: "44px" }}
               >
@@ -727,6 +723,87 @@ export default function WorkspaceConsulta({
           </div>
         </div>
       </div>
+
+      {/* Dialog de cancelación — reemplaza window.confirm() que Chrome suprime en páginas con iframes cross-origin */}
+      {showCancelDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                color: "#111",
+                marginBottom: "8px",
+              }}
+            >
+              Cancelar consulta
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#666",
+                marginBottom: "24px",
+              }}
+            >
+              ¿Estás seguro que querés cancelar esta consulta?
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowCancelDialog(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => {
+                  setShowCancelDialog(false);
+                  cancelarConsulta();
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#E24B4A",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar consulta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dialog de confirmación — reemplaza window.confirm() que Chrome suprime en páginas con iframes cross-origin */}
       {showConfirmDialog && (
