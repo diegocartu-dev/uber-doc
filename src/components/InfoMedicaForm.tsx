@@ -87,7 +87,7 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
 
       router.push(redirect);
     } catch {
-      setError("Error de conexion. Intenta de nuevo.");
+      setError("Error de conexión. Intentá de nuevo.");
       setSaving(false);
     }
   }
@@ -117,14 +117,14 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
                 <circle cx="16" cy="18" r="2"/>
               </svg>
             </div>
-            <h1 className="mt-4 text-lg font-medium text-gray-900">Tu informacion medica</h1>
+            <h1 className="mt-4 text-lg font-medium text-gray-900">Tu información médica</h1>
             <p className="mt-1.5 text-sm text-gray-400">Estos datos se usan para tu receta.</p>
           </div>
 
           {/* Tarjeta lectura */}
           <div className="mt-8 rounded-xl bg-[#f8f9fa] p-5 space-y-3 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
             <div className="flex justify-between">
-              <span className="text-gray-500">Sexo (segun DNI)</span>
+              <span className="text-gray-500">Sexo (según DNI)</span>
               <span className="font-medium text-gray-900 capitalize">{paciente?.sexo_dni ?? "---"}</span>
             </div>
             <div className="flex justify-between">
@@ -178,17 +178,17 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
               <circle cx="16" cy="18" r="2"/>
             </svg>
           </div>
-          <h1 className="mt-4 text-lg font-medium text-gray-900">Tu informacion medica</h1>
-          <p className="mt-1.5 text-sm text-gray-400">La usamos para completar tu receta. Solo la ven vos y tu medico.</p>
+          <h1 className="mt-4 text-lg font-medium text-gray-900">Tu información médica</h1>
+          <p className="mt-1.5 text-sm text-gray-400">La usamos para completar tu receta. Solo la ven vos y tu médico.</p>
         </div>
 
         {error && (
           <div className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
         )}
 
-        {/* Sexo segun DNI */}
+        {/* Sexo según DNI */}
         <div className="mt-8">
-          <label className="mb-2 block text-sm font-medium text-gray-700">Sexo (segun DNI)</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">Sexo (según DNI)</label>
           <div className="grid grid-cols-2 gap-3">
             {(["femenino", "masculino"] as const).map((opt) => (
               <button
@@ -255,7 +255,7 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
         {/* Toggle cobertura */}
         <div className="mt-6">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">Tengo cobertura medica</span>
+            <span className="text-sm font-medium text-gray-700">Tengo cobertura médica</span>
             <button
               type="button"
               role="switch"
@@ -299,7 +299,7 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
                   type="text"
                   value={nroAfiliado}
                   onChange={(e) => setNroAfiliado(e.target.value)}
-                  placeholder="Numero de afiliado"
+                  placeholder="Número de afiliado"
                   className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-[#378ADD] focus:ring-1 focus:ring-[#378ADD]/30"
                 />
               </div>
