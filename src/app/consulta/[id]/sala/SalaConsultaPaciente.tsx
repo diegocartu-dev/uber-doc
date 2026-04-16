@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,8 @@ export default function SalaConsultaPaciente({
   medicoNombre,
   especialidad,
 }: Props) {
+  const router = useRouter();
+
   const [estado, setEstado] = useState<string>("en_curso");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -152,6 +155,30 @@ export default function SalaConsultaPaciente({
 
     return () => { supabase.removeChannel(channel); };
   }, [consultaId, fetchDocumentos]);
+
+  // --- Polling de respaldo cada 5s (complementa Realtime) ---
+  useEffect(() => {
+    // No arrancar si ya completada al montar
+    if (estado === "completada" || estado === "cancelada") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.estado === "completada") {
+          clearInterval(interval);
+          router.push("/mis-consultas");
+        }
+      } catch {
+        // Polling: falla silenciosamente, el siguiente tick reintenta
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [consultaId, estado, router]);
 
   // --- Pantalla de cierre (completada) ---
   if (estado === "completada") {

@@ -9,6 +9,7 @@ declare global {
 }
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
@@ -202,6 +203,8 @@ export default function WorkspaceConsulta({
   horaInicio,
   consulta,
 }: Props) {
+  const router = useRouter();
+
   // --- Estado campos clinicos ---
   const borrador = consulta.doc_borrador;
   const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
@@ -211,6 +214,7 @@ export default function WorkspaceConsulta({
 
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
+  const [iframeVisible, setIframeVisible] = useState(true);
   const [error, setError] = useState<string | null>(videoErrorProp);
   const [timerSeg, setTimerSeg] = useState(0);
   const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -262,100 +266,76 @@ export default function WorkspaceConsulta({
   async function finalizarConsulta() {
     if (!validarDiagnostico()) return;
 
-    setFinalizando(true);
-    setError(null);
-
-    try {
-      const supabase = createClient();
-
-      const { data: consultaDb } = await supabase
-        .from("consultas")
-        .select("estado, paciente_id, medico_id")
-        .eq("id", consultaId)
-        .single();
-
-      if (!consultaDb || !consultaDb.paciente_id) {
-        setError("Consulta no encontrada.");
-        setFinalizando(false);
-        return;
-      }
-
-      if (consultaDb.estado === "completada") {
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // Lookup: paciente_id en consultas es auth.users.id, documentos necesita pacientes.id
-      const { data: paciente } = await supabase
-        .from("pacientes")
-        .select("id")
-        .eq("user_id", consultaDb.paciente_id)
-        .single();
-
-      const { data: medico } = await supabase
-        .from("medicos")
-        .select("id")
-        .eq("id", consultaDb.medico_id)
-        .single();
-
-      if (!paciente || !medico) {
-        setError("Error al obtener datos del paciente o medico.");
-        setFinalizando(false);
-        return;
-      }
-
-      // Insertar documentos
-      if (receta.trim() && !consulta.paciente_cuil) {
-        setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
-        setFinalizando(false);
-        return;
-      }
-
-      const docs: { tipo: string; contenido: string }[] = [];
-      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-      if (indicaciones.trim())
-        docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-      if (certificado.trim())
-        docs.push({ tipo: "certificado", contenido: certificado.trim() });
-      // Si no hay docs pero hay diagnostico, crear indicaciones con el diagnostico
-      if (docs.length === 0)
-        docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
-
-      const { error: insertError } = await supabase.from("documentos").insert(
-        docs.map((d) => ({
-          consulta_id: consultaId,
-          turno_id: null,
-          paciente_id: paciente.id,
-          medico_id: medico.id,
-          tipo: d.tipo,
-          diagnostico: diagnostico.trim(),
-          contenido: d.contenido,
-        }))
-      );
-
-      if (insertError) {
-        setError("Error al guardar los documentos. Intenta de nuevo.");
-        setFinalizando(false);
-        return;
-      }
-
-      // Finalizar y limpiar borrador
-      const { error: updateError } = await supabase
-        .from("consultas")
-        .update({ estado: "completada", doc_borrador: null })
-        .eq("id", consultaId);
-
-      if (updateError) {
-        setError("Error al cerrar la consulta. Intenta de nuevo.");
-        setFinalizando(false);
-        return;
-      }
-
-      window.location.href = "/dashboard";
-    } catch {
-      setError("Error al finalizar. Intenta de nuevo.");
-      setFinalizando(false);
+    // Validación CUIL síncrona antes de cualquier async
+    if (receta.trim() && !consulta.paciente_cuil) {
+      setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
+      return;
     }
+
+    // 1. Ocultar iframe inmediatamente — evita que Daily siga consumiendo media
+    setIframeVisible(false);
+
+    // 2. Navegar al dashboard sin esperar Supabase
+    router.push("/dashboard");
+
+    // 3. Guardar documentos y cerrar consulta en background (fire-and-forget)
+    (async () => {
+      try {
+        const supabase = createClient();
+
+        const { data: consultaDb } = await supabase
+          .from("consultas")
+          .select("estado, paciente_id, medico_id")
+          .eq("id", consultaId)
+          .single();
+
+        if (!consultaDb?.paciente_id) return;
+        if (consultaDb.estado === "completada") return;
+
+        // Lookup: paciente_id en consultas es auth.users.id, documentos necesita pacientes.id
+        const { data: paciente } = await supabase
+          .from("pacientes")
+          .select("id")
+          .eq("user_id", consultaDb.paciente_id)
+          .single();
+
+        const { data: medico } = await supabase
+          .from("medicos")
+          .select("id")
+          .eq("id", consultaDb.medico_id)
+          .single();
+
+        if (!paciente || !medico) return;
+
+        const docs: { tipo: string; contenido: string }[] = [];
+        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (indicaciones.trim())
+          docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
+        if (certificado.trim())
+          docs.push({ tipo: "certificado", contenido: certificado.trim() });
+        if (docs.length === 0)
+          docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
+
+        await supabase.from("documentos").insert(
+          docs.map((d) => ({
+            consulta_id: consultaId,
+            turno_id: null,
+            paciente_id: paciente.id,
+            medico_id: medico.id,
+            tipo: d.tipo,
+            diagnostico: diagnostico.trim(),
+            contenido: d.contenido,
+          }))
+        );
+
+        await supabase
+          .from("consultas")
+          .update({ estado: "completada", doc_borrador: null })
+          .eq("id", consultaId);
+      } catch {
+        // Background: no hay UI para mostrar error, falla silenciosamente
+      }
+    })();
   }
 
   // --- Cancelar consulta ---
@@ -476,7 +456,7 @@ export default function WorkspaceConsulta({
               src={iframeUrl}
               allow="camera; microphone; autoplay; display-capture; fullscreen"
               referrerPolicy="no-referrer-when-downgrade"
-              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+              style={{ width: "100%", height: "100%", border: "none", display: iframeVisible ? "block" : "none" }}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
