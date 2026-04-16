@@ -170,7 +170,7 @@ export default async function DashboardPage() {
         .from("consultas")
         .select("id, especialidad, estado, created_at, paciente_id, motivo_consulta, canal_origen")
         .eq("medico_id", data.id).eq("estado", "esperando")
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
 
       if (esperando && esperando.length > 0) {
         const pacMap = await fetchPacientes(esperando.map((c) => c.paciente_id));
@@ -190,7 +190,7 @@ export default async function DashboardPage() {
         .from("consultas")
         .select("id, especialidad, estado, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, canal_origen")
         .eq("medico_id", data.id).in("estado", ["aceptada", "pagada", "en_curso"])
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
 
       if (enCurso && enCurso.length > 0) {
         const pacMap = await fetchPacientes(enCurso.map((c) => c.paciente_id));
@@ -212,7 +212,7 @@ export default async function DashboardPage() {
         .from("turnos")
         .select("id, fecha, hora_inicio, paciente_id, estado, canal_origen")
         .eq("medico_id", data.id).eq("estado", "en_espera")
-        .order("hora_inicio", { ascending: true });
+        .order("created_at", { ascending: false });
 
       if (turnosEspera && turnosEspera.length > 0) {
         const pacIdsEsp = [...new Set(turnosEspera.map((t) => t.paciente_id).filter(Boolean))];
