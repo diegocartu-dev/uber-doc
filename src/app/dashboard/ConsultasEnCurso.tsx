@@ -163,7 +163,7 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
                     onClick={() => handleIniciar(c.id)}
                     className="rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5]"
                   >
-                    Volver al workspace
+                    Continuar consulta
                   </TouchButton>
                 ) : (
                   <TouchButton
@@ -179,8 +179,8 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
               <button
                 disabled={cancelando === c.id}
                 onClick={() => handleCancelar(c.id)}
-                className="text-sm font-medium disabled:opacity-50"
-                style={{ color: "#E24B4A", minHeight: "44px", fontSize: "14px" }}
+                className="rounded-lg border text-sm font-medium disabled:opacity-50 px-5 py-2.5"
+                style={{ color: "#E24B4A", borderColor: "#E24B4A", background: "transparent", minHeight: "44px", fontSize: "14px" }}
               >
                 {cancelando === c.id ? "Cancelando..." : "Cancelar consulta"}
               </button>

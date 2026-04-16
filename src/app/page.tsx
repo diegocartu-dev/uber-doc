@@ -72,7 +72,7 @@ export default async function Home({
         <Link
           href="/auth/login"
           className="inline-flex items-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:opacity-90"
-          style={{ background: "#1D9E75" }}
+          style={{ background: "#378ADD" }}
         >
           Iniciar sesión
           <span aria-hidden="true">→</span>
