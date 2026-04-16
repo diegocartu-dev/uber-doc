@@ -67,17 +67,86 @@ export async function POST(req: NextRequest) {
     const medicoDbId = medico.id;
 
     if (accion === "crear_slots") {
-      const { fecha, hora_inicio, hora_fin } = datos as {
+      // 1. Extraer del payload
+      const { fecha, hora_inicio, hora_fin, canal_origen } = datos as {
         fecha: string;
         hora_inicio: string;
         hora_fin: string;
+        canal_origen: string;
       };
 
-      // Siempre usar duración y precio del perfil del médico
-      const duracionMedico = medico.duracion_consulta;
-      const precioMedico = medico.precio_consulta;
+      // 2. Validaciones server-side
+      const CANALES_VALIDOS = ["clinica_virtual", "consultorio_privado"] as const;
+      if (!CANALES_VALIDOS.includes(canal_origen as typeof CANALES_VALIDOS[number])) {
+        return NextResponse.json({ exito: false, mensaje: "Canal inválido" }, { status: 400 });
+      }
+      const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+      const horaRegex = /^\d{2}:\d{2}$/;
+      if (!fechaRegex.test(fecha) || !horaRegex.test(hora_inicio) || !horaRegex.test(hora_fin)) {
+        return NextResponse.json({ exito: false, mensaje: "Formato de fecha u hora inválido" }, { status: 400 });
+      }
+      if (hora_inicio >= hora_fin) {
+        return NextResponse.json({ exito: false, mensaje: "hora_inicio debe ser anterior a hora_fin" }, { status: 400 });
+      }
 
-      const slots = generarSlots(hora_inicio, hora_fin, duracionMedico);
+      // 3. Usar duracion_consulta del perfil del médico (no del payload)
+      const duracionMinutos = medico.duracion_consulta;
+
+      // 4. Idempotencia: verificar si ya existe modelo Nova para este médico/fecha
+      const { data: modeloExistente } = await supabase
+        .from("agenda_modelos")
+        .select("id")
+        .eq("medico_id", medicoDbId)
+        .eq("fecha_inicio", fecha)
+        .eq("creado_por_nova", true)
+        .maybeSingle();
+
+      if (modeloExistente) {
+        return NextResponse.json({ exito: true, mensaje: "Turnos ya creados anteriormente" });
+      }
+
+      // 5. Generar nombre del modelo
+      const [anio, mes, dia] = fecha.split("-");
+      const canalLabel = canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio";
+      const nombreModelo = `Nova - ${canalLabel} ${dia}/${mes}`;
+
+      // 6. INSERT en agenda_modelos
+      const { data: nuevoModelo, error: errorModelo } = await supabase
+        .from("agenda_modelos")
+        .insert({
+          medico_id: medicoDbId,
+          nombre: nombreModelo,
+          fecha_inicio: fecha,
+          fecha_fin: fecha,
+          duracion_turno: duracionMinutos,
+          precio: medico.precio_consulta,
+          canal_origen: canal_origen,
+          activo: true,
+          creado_por_nova: true,
+        })
+        .select("id")
+        .single();
+
+      if (errorModelo || !nuevoModelo) {
+        return NextResponse.json({ exito: false, mensaje: "Error al crear el modelo de agenda" }, { status: 500 });
+      }
+
+      // 7. INSERT en agenda_franjas
+      const diasSemana: Record<number, number> = { 0: 7, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
+      const diaSemana = diasSemana[new Date(fecha + "T12:00:00").getDay()];
+
+      // INSERT en agenda_franjas — no es bloqueante si falla; el modelo ya existe y los turnos se crean igual
+      await supabase
+        .from("agenda_franjas")
+        .insert({
+          modelo_id: nuevoModelo.id,
+          dia_semana: diaSemana,
+          hora_inicio: hora_inicio,
+          hora_fin: hora_fin,
+        });
+
+      // 8. Generar y upsert turnos con modelo_id y canal_origen
+      const slots = generarSlots(hora_inicio, hora_fin, duracionMinutos);
       if (slots.length === 0) {
         return NextResponse.json({
           exito: false,
@@ -85,46 +154,26 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const rows = slots.map((s) => ({
+      const turnosParaInsertar = slots.map((slot) => ({
         medico_id: medicoDbId,
         fecha,
-        hora_inicio: s.hora_inicio,
-        hora_fin: s.hora_fin,
+        hora_inicio: slot.hora_inicio,
+        hora_fin: slot.hora_fin,
         estado: "disponible",
-        monto: precioMedico,
+        monto: medico.precio_consulta,
+        modelo_id: nuevoModelo.id,
+        canal_origen: canal_origen,
       }));
 
-      // upsert con ignoreDuplicates = ON CONFLICT (medico_id, fecha, hora_inicio) DO NOTHING
-      const { data: insertados, error } = await supabase
+      const { error: errorTurnos } = await supabase
         .from("turnos")
-        .upsert(rows, {
-          onConflict: "medico_id,fecha,hora_inicio",
-          ignoreDuplicates: true,
-        })
-        .select("id");
+        .upsert(turnosParaInsertar, { onConflict: "medico_id,fecha,hora_inicio", ignoreDuplicates: true });
 
-      if (error) {
-        return NextResponse.json({
-          exito: false,
-          mensaje: `Error al crear turnos: ${error.message}`,
-        });
+      if (errorTurnos) {
+        return NextResponse.json({ exito: false, mensaje: "Error al crear los turnos" }, { status: 500 });
       }
 
-      const creados = insertados?.length ?? 0;
-      if (creados === 0) {
-        return NextResponse.json({
-          exito: true,
-          mensaje: `Esos turnos ya estaban disponibles para ${fecha}`,
-        });
-      }
-
-      const omitidos = slots.length - creados;
-      const msgOmitidos = omitidos > 0 ? ` (${omitidos} ya existían)` : "";
-
-      return NextResponse.json({
-        exito: true,
-        mensaje: `Se crearon ${creados} turnos para ${fecha}${msgOmitidos}`,
-      });
+      return NextResponse.json({ exito: true, mensaje: `${turnosParaInsertar.length} turnos creados correctamente` });
     }
 
     if (accion === "bloquear_agenda") {

@@ -63,8 +63,13 @@ const novaTools: Anthropic.Tool[] = [
           type: "number",
           description: "Duración de cada slot en minutos (20, 30 o 45)",
         },
+        canal_origen: {
+          type: "string",
+          description: "Canal del turno: 'clinica_virtual' para la clínica virtual de Docto, 'consultorio_privado' para el consultorio presencial del médico. Inferir del mensaje del médico.",
+          enum: ["clinica_virtual", "consultorio_privado"],
+        },
       },
-      required: ["fecha", "hora_inicio", "hora_fin", "duracion"],
+      required: ["fecha", "hora_inicio", "hora_fin", "duracion", "canal_origen"],
     },
   },
   {
@@ -411,7 +416,7 @@ Turnos disponibles: ${slotsResumen}`;
                   // Herramienta destructiva: el texto ya se emitió vía streaming.
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
-                    crear_slots: `Crear turnos el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos`,
+                    crear_slots: `Crear turnos el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos (${toolInput.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"})`,
                     bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
                     cancelar_turno: `Cancelar turno ${toolInput.turno_id}`,
                   };
