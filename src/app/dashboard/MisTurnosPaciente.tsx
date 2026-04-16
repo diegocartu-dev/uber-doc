@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { cancelarTurnoPaciente } from "./actions";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Turno = {
   id: string;
@@ -62,7 +63,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                   timeZone: "America/Argentina/Buenos_Aires",
                 })} · ${t.hora_inicio.slice(0, 5)}`}
           </p>
-          <p className="mt-0.5 text-sm text-gray-500">Dr. {t.medico_nombre} · {t.especialidad}</p>
+          <p className="mt-0.5 text-sm text-gray-500">Dr. {capitalizarNombre(t.medico_nombre)} · {t.especialidad}</p>
         </div>
         <div className="flex items-center gap-2">
           {mostrarSala ? (

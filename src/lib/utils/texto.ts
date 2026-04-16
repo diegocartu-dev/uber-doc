@@ -8,7 +8,7 @@
  *   "dra. ANA García"  → "Dra. Ana García"
  */
 export function capitalizarNombre(texto: string): string {
-  if (!texto) return texto;
+  if (!texto) return "";
   return texto
     .trim()
     .toLowerCase()

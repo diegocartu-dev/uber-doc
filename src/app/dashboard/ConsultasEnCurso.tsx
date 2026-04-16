@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TouchButton } from "@/components/TouchButton";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Consulta = {
   id: string;
@@ -112,11 +113,11 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
             {/* Patient info */}
             {c.paciente_tabla_id ? (
               <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="mt-4 block text-2xl font-medium text-gray-900 hover:text-[#1D9E75]" style={{ fontSize: "28px", lineHeight: "34px" }}>
-                {c.paciente_nombre}
+                {capitalizarNombre(c.paciente_nombre)}
               </a>
             ) : (
               <p className="mt-4 text-2xl font-medium text-gray-900" style={{ fontSize: "28px", lineHeight: "34px" }}>
-                {c.paciente_nombre}
+                {capitalizarNombre(c.paciente_nombre)}
               </p>
             )}
             <p className="mt-1 text-sm text-gray-400">

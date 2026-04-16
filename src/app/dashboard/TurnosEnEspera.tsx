@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import OrigenBadge from "@/components/OrigenBadge";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type TurnoEspera = {
   id: string;
@@ -106,9 +107,9 @@ export default function TurnosEnEspera({
                 </span>
               </div>
               {t.paciente_tabla_id ? (
-                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-lg font-medium text-gray-900 hover:text-[#1D9E75]">{t.paciente_nombre}</a>
+                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-lg font-medium text-gray-900 hover:text-[#1D9E75]">{capitalizarNombre(t.paciente_nombre)}</a>
               ) : (
-                <p className="mt-2 text-lg font-medium text-gray-900">{t.paciente_nombre}</p>
+                <p className="mt-2 text-lg font-medium text-gray-900">{capitalizarNombre(t.paciente_nombre)}</p>
               )}
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className="text-sm text-gray-500">

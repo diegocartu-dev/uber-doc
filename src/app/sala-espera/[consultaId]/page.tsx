@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import SalaEsperaCliente from "./SalaEsperaCliente";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 export default async function SalaEsperaPage({
   params,
@@ -78,7 +79,7 @@ export default async function SalaEsperaPage({
         <SalaEsperaCliente
           consultaId={consulta.id}
           estado={consulta.estado}
-          medicoNombre={medico.nombre_completo}
+          medicoNombre={capitalizarNombre(medico.nombre_completo)}
           precio={medico.precio_consulta}
           duracion={medico.duracion_consulta}
           especialidad={consulta.especialidad}

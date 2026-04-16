@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Turno = {
   id: string;
@@ -42,7 +43,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
         const diff = minTurno - minAhora;
 
         if (diff > 0 && diff <= 15) {
-          nuevas.push({ id: t.id, nombre: t.paciente_nombre, hora: t.hora_inicio.slice(0, 5), minutos: diff });
+          nuevas.push({ id: t.id, nombre: capitalizarNombre(t.paciente_nombre), hora: t.hora_inicio.slice(0, 5), minutos: diff });
         }
       }
 
@@ -65,7 +66,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
     if (permisoNotif && enEspera.length > 0) {
       for (const t of enEspera) {
         new Notification("Docto — Paciente esperando", {
-          body: `${t.paciente_nombre} está esperando tu consulta`,
+          body: `${capitalizarNombre(t.paciente_nombre)} está esperando tu consulta`,
           icon: "/favicon.ico",
         });
       }
@@ -119,7 +120,7 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
                         {t.hora_inicio.slice(0, 5)} — {t.hora_fin.slice(0, 5)}
                       </p>
                       <p className="text-[12px]" style={{ color: config.text }}>
-                        {t.paciente_nombre}
+                        {capitalizarNombre(t.paciente_nombre)}
                       </p>
                     </div>
                   </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import OrigenBadge from "@/components/OrigenBadge";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Item = {
   id: string;
@@ -73,7 +74,7 @@ export default function HistorialInline({
                 <div key={item.id} className="flex items-center justify-between px-4 py-3">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-base font-medium text-gray-900">{item.paciente_nombre}</p>
+                      <p className="text-base font-medium text-gray-900">{capitalizarNombre(item.paciente_nombre)}</p>
                       <OrigenBadge canalOrigen={item.canal_origen ?? null} />
                     </div>
                     <p className="text-sm text-gray-400">{item.fecha}</p>

@@ -5,6 +5,7 @@ import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { TouchButton } from "@/components/TouchButton";
 import OrigenBadge from "@/components/OrigenBadge";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Consulta = {
   id: string;
@@ -78,9 +79,10 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
 
       <div className="mt-4 space-y-3">
         {consultas.map((c) => {
+          const nombre = capitalizarNombre(c.paciente_nombre);
           const edad = calcularEdad(c.fecha_nacimiento);
           const espera = tiempoEspera(c.created_at);
-          const initials = getInitials(c.paciente_nombre);
+          const initials = getInitials(nombre);
 
           return (
             <div key={c.id} className="flex flex-col gap-2 rounded-lg p-4 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:gap-4">
@@ -90,9 +92,9 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   {c.paciente_tabla_id ? (
-                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-base font-medium text-gray-900 hover:text-[#1D9E75]">{c.paciente_nombre}</a>
+                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-base font-medium text-gray-900 hover:text-[#1D9E75]">{nombre}</a>
                   ) : (
-                    <p className="text-base font-medium text-gray-900">{c.paciente_nombre}</p>
+                    <p className="text-base font-medium text-gray-900">{nombre}</p>
                   )}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
