@@ -66,11 +66,13 @@ export default function SalaConsultaPaciente({
 
   const [estado, setEstado] = useState<string>("en_curso");
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const [iframeVisible, setIframeVisible] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [timerSeg, setTimerSeg] = useState(0);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const inicioRef = useRef(Date.now());
+  const yaRedirigioRef = useRef(false);
 
   // --- Obtener meeting token ---
   useEffect(() => {
@@ -148,7 +150,10 @@ export default function SalaConsultaPaciente({
           const row = payload.new as { estado: string };
           if (!row.estado) return;
           setEstado(row.estado);
-          if (row.estado === "completada") fetchDocumentos();
+          if (row.estado === "completada") {
+            setIframeVisible(false);
+            fetchDocumentos();
+          }
         }
       )
       .subscribe();
@@ -158,10 +163,8 @@ export default function SalaConsultaPaciente({
 
   // --- Polling de respaldo cada 5s (complementa Realtime) ---
   useEffect(() => {
-    // No arrancar si ya completada al montar
-    if (estado === "completada" || estado === "cancelada") return;
-
     const interval = setInterval(async () => {
+      if (yaRedirigioRef.current) return;
       try {
         const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, {
           credentials: "include",
@@ -169,7 +172,9 @@ export default function SalaConsultaPaciente({
         if (!res.ok) return;
         const data = await res.json();
         if (data.estado === "completada") {
+          yaRedirigioRef.current = true;
           clearInterval(interval);
+          setIframeVisible(false);
           router.push("/mis-consultas");
         }
       } catch {
@@ -178,7 +183,7 @@ export default function SalaConsultaPaciente({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [consultaId, estado, router]);
+  }, [consultaId, router]);
 
   // --- Pantalla de cierre (completada) ---
   if (estado === "completada") {
@@ -378,6 +383,7 @@ export default function SalaConsultaPaciente({
             allow="camera; microphone; autoplay; display-capture; fullscreen"
             referrerPolicy="no-referrer-when-downgrade"
             className="absolute inset-0 w-full h-full border-0"
+            style={{ display: iframeVisible ? "block" : "none" }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
