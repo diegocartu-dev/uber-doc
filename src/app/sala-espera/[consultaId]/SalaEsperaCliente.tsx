@@ -215,12 +215,12 @@ export default function SalaEsperaCliente({
               body: JSON.stringify({ consultaId }),
             });
             if (res.ok) {
-              window.location.href = `/consulta/${consultaId}/confirmacion`;
+              window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
             } else {
               setPagando(false);
             }
           }}
-          className="mt-4 w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50"
+          className="mt-4 w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
         >
           Simular pago aprobado
         </button>

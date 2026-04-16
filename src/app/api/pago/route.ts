@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
           },
         ],
         back_urls: {
-          success: `${baseUrl}/consulta/${consultaId}/confirmacion`,
+          success: `${baseUrl}/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`,
           failure: `${baseUrl}/sala-espera/${consultaId}?pago=error`,
           pending: `${baseUrl}/sala-espera/${consultaId}?pago=pendiente`,
         },
