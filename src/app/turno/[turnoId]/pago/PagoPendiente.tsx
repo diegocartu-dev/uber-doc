@@ -53,7 +53,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
       const result = await confirmarPagoTurno(turnoId);
       if (result?.error) { setError(result.error); return; }
       setPagado(true);
-      setTimeout(() => { window.location.href = `/turno/${turnoId}/confirmacion`; }, 1500);
+      setTimeout(() => { window.location.href = `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/confirmacion`; }, 1500);
     });
   }
 
