@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarEmailConsultaConfirmada } from "@/lib/email/enviar";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,10 +34,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Estado no válido para simular pago" }, { status: 400 });
     }
 
-    await supabaseAdmin
+    const { error: updateError } = await supabaseAdmin
       .from("consultas")
       .update({ estado: "pagada" })
       .eq("id", consultaId);
+
+    if (updateError) {
+      return NextResponse.json({ error: "Error al actualizar estado" }, { status: 500 });
+    }
+
+    // Fire and forget — no bloquea la respuesta al cliente
+    enviarEmailConsultaConfirmada(consultaId).catch(console.error);
 
     return NextResponse.json({ ok: true });
   } catch {

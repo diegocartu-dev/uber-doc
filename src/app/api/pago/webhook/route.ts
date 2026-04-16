@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarEmailConsultaConfirmada } from "@/lib/email/enviar";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,11 +40,16 @@ export async function POST(req: NextRequest) {
       const supabaseAdmin = createAdminClient();
 
       // Solo transicionar de "aceptada" a "pagada" — evitar reprocessing
-      await supabaseAdmin
+      const { error: updateError } = await supabaseAdmin
         .from("consultas")
         .update({ estado: "pagada" })
         .eq("id", consultaId)
         .eq("estado", "aceptada");
+
+      // Fire and forget — solo si el update fue exitoso
+      if (!updateError) {
+        enviarEmailConsultaConfirmada(consultaId).catch(console.error);
+      }
     }
 
     return NextResponse.json({ received: true });

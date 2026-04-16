@@ -9,7 +9,6 @@ declare global {
 }
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
 
@@ -262,86 +261,40 @@ export default function WorkspaceConsulta({
   async function finalizarConsulta() {
     if (!validarDiagnostico()) return;
 
+    // Validar CUIL para receta antes de llamar a la API
+    if (receta.trim() && !consulta.paciente_cuil) {
+      setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
+      return;
+    }
+
     setFinalizando(true);
     setError(null);
 
     try {
-      const supabase = createClient();
-
-      const { data: consultaDb } = await supabase
-        .from("consultas")
-        .select("estado, paciente_id, medico_id")
-        .eq("id", consultaId)
-        .single();
-
-      if (!consultaDb || !consultaDb.paciente_id) {
-        setError("Consulta no encontrada.");
-        setFinalizando(false);
-        return;
-      }
-
-      if (consultaDb.estado === "completada") {
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // Lookup: paciente_id en consultas es auth.users.id, documentos necesita pacientes.id
-      const { data: paciente } = await supabase
-        .from("pacientes")
-        .select("id")
-        .eq("user_id", consultaDb.paciente_id)
-        .single();
-
-      const { data: medico } = await supabase
-        .from("medicos")
-        .select("id")
-        .eq("id", consultaDb.medico_id)
-        .single();
-
-      if (!paciente || !medico) {
-        setError("Error al obtener datos del paciente o medico.");
-        setFinalizando(false);
-        return;
-      }
-
-      // Insertar documentos
-      if (receta.trim() && !consulta.paciente_cuil) {
-        setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
-        setFinalizando(false);
-        return;
-      }
-
-      const docs: { tipo: string; contenido: string }[] = [];
-      if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-      if (indicaciones.trim())
-        docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-      if (certificado.trim())
-        docs.push({ tipo: "certificado", contenido: certificado.trim() });
-      // Si no hay docs pero hay diagnostico, crear indicaciones con el diagnostico
-      if (docs.length === 0)
-        docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
-
-      await supabase.from("documentos").insert(
-        docs.map((d) => ({
-          consulta_id: consultaId,
-          turno_id: null,
-          paciente_id: paciente.id,
-          medico_id: medico.id,
-          tipo: d.tipo,
+      // La API route maneja documentos + estado + email de documentos disponibles
+      const res = await fetch(`/api/consulta/${consultaId}/completar`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           diagnostico: diagnostico.trim(),
-          contenido: d.contenido,
-        }))
-      );
+          receta: receta.trim() || undefined,
+          indicaciones: indicaciones.trim() || undefined,
+          certificado: certificado.trim() || undefined,
+        }),
+      });
 
-      // Finalizar y limpiar borrador
-      await supabase
-        .from("consultas")
-        .update({ estado: "completada", doc_borrador: null })
-        .eq("id", consultaId);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Error al finalizar. Intentá de nuevo.");
+        setFinalizando(false);
+        return;
+      }
 
       window.location.href = "/dashboard";
     } catch {
-      setError("Error al finalizar. Intenta de nuevo.");
+      setError("Error al finalizar. Intentá de nuevo.");
       setFinalizando(false);
     }
   }

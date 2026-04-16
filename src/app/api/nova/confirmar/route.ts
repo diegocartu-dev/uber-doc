@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarEmailTurnoCancelado } from "@/lib/email/enviar";
 
 function generarSlots(
   horaInicio: string,
@@ -264,6 +265,11 @@ export async function POST(req: NextRequest) {
           exito: false,
           mensaje: `Error al cancelar: ${error.message}`,
         });
+      }
+
+      // Fire and forget — solo si el turno tenía paciente asignado
+      if (turno.estado !== "disponible" && turno.estado !== "bloqueado") {
+        enviarEmailTurnoCancelado(turno_id, "medico").catch(console.error);
       }
 
       return NextResponse.json({

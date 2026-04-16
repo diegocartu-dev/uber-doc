@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarEmailTurnoConfirmado } from "@/lib/email/enviar";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -77,6 +78,10 @@ export async function confirmarPagoTurno(turnoId: string) {
     .eq("estado", "reservado_pendiente");
 
   if (error) return { error: `Error al confirmar: ${error.message}` };
+
+  // Fire and forget — no bloquea el flujo del usuario
+  enviarEmailTurnoConfirmado(turnoId).catch(console.error);
+
   return { success: true };
 }
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { enviarEmailTurnoCancelado } from "@/lib/email/enviar";
 
 export async function actualizarDisponibilidad(data: {
   disponible: boolean;
@@ -136,5 +137,9 @@ export async function cancelarTurnoPaciente(turnoId: string) {
     .eq("estado", "confirmado");
 
   if (error) return { error: error.message };
+
+  // Fire and forget — no bloquea el flujo del usuario
+  enviarEmailTurnoCancelado(turnoId, "paciente").catch(console.error);
+
   return { success: true };
 }
