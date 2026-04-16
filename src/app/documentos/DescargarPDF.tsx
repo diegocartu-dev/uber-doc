@@ -13,13 +13,23 @@ type Documento = {
   paciente_nombre: string;
   paciente_dni: string;
   paciente_cuil: string;
+  paciente_sexo_dni?: string | null;
+  paciente_fecha_nacimiento?: string | null;
+  paciente_obra_social?: string | null;
+  paciente_nro_afiliado?: string | null;
+  paciente_tiene_cobertura?: boolean | null;
 };
 
 const tipoLabel: Record<string, string> = {
-  receta: "RECETA MÉDICA",
-  indicaciones: "INDICACIONES MÉDICAS",
-  certificado: "CERTIFICADO MÉDICO",
+  receta: "RECETA MEDICA",
+  indicaciones: "INDICACIONES MEDICAS",
+  certificado: "CERTIFICADO MEDICO",
 };
+
+function formatFechaNacimiento(fecha: string): string {
+  const [anio, mes, dia] = fecha.split("-");
+  return `${parseInt(dia)}/${parseInt(mes)}/${anio}`;
+}
 
 export default function DescargarPDF({ documento }: { documento: Documento }) {
   function generar() {
@@ -30,7 +40,20 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
       timeZone: "America/Argentina/Buenos_Aires",
     });
 
-    const titulo = tipoLabel[documento.tipo] ?? "DOCUMENTO MÉDICO";
+    const titulo = tipoLabel[documento.tipo] ?? "DOCUMENTO MEDICO";
+
+    // Bloque paciente extra: sexo, fecha nac, cobertura
+    const sexoLine = documento.paciente_sexo_dni
+      ? `<div class="row"><span><strong>Sexo (DNI):</strong> ${documento.paciente_sexo_dni === "femenino" ? "F" : "M"}</span>${documento.paciente_fecha_nacimiento ? `<span><strong>Fecha nac.:</strong> ${formatFechaNacimiento(documento.paciente_fecha_nacimiento)}</span>` : ""}</div>`
+      : (documento.paciente_fecha_nacimiento
+        ? `<div class="row"><span><strong>Fecha nac.:</strong> ${formatFechaNacimiento(documento.paciente_fecha_nacimiento)}</span></div>`
+        : "");
+
+    const coberturaTexto = documento.paciente_tiene_cobertura && documento.paciente_obra_social
+      ? documento.paciente_obra_social + (documento.paciente_nro_afiliado ? ` — Af. ${documento.paciente_nro_afiliado}` : "")
+      : "Particular";
+
+    const coberturaLine = `<div class="row"><span><strong>Cobertura:</strong> ${coberturaTexto}</span></div>`;
 
     const contenido = `
 <!DOCTYPE html>
@@ -38,13 +61,14 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
 <head>
   <meta charset="utf-8">
   <title>${titulo}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Georgia, serif; max-width: 700px; margin: 40px auto; padding: 40px; color: #1a1a1a; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 700px; margin: 40px auto; padding: 40px; color: #1a1a1a; }
     .header { text-align: center; border-bottom: 2px solid #1D9E75; padding-bottom: 20px; margin-bottom: 30px; }
-    .header h1 { font-size: 18px; letter-spacing: 2px; color: #1D9E75; margin: 0; }
+    .header h1 { font-size: 18px; letter-spacing: 2px; color: #1D9E75; margin: 0; font-weight: 600; }
     .header p { font-size: 12px; color: #666; margin: 4px 0; }
     .section { margin: 20px 0; }
-    .section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 6px; }
+    .section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 6px; font-weight: 600; }
     .section p { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; }
     .paciente { background: #f8f9fa; padding: 12px 16px; border-radius: 6px; font-size: 13px; }
     .paciente .row { display: flex; justify-content: space-between; margin: 2px 0; }
@@ -52,7 +76,9 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     .firma { margin-top: 50px; text-align: right; }
     .firma .linea { border-top: 1px solid #333; width: 200px; margin-left: auto; margin-bottom: 4px; }
     .firma p { font-size: 12px; color: #666; margin: 2px 0; }
-    @media print { body { margin: 0; padding: 20px; } }
+    .no-print { margin: 30px auto 0; display: block; padding: 10px 24px; background: #378ADD; color: white; border: none; border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; }
+    .no-print:hover { background: #2d7bc4; }
+    @media print { body { margin: 0; padding: 20px; } .no-print { display: none !important; } }
   </style>
 </head>
 <body>
@@ -68,10 +94,12 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
       <span><strong>${documento.paciente_cuil ? "CUIL" : "DNI"}:</strong> ${documento.paciente_cuil || documento.paciente_dni}</span>
     </div>
     ${documento.paciente_cuil && documento.paciente_dni ? `<div class="row"><span><strong>DNI:</strong> ${documento.paciente_dni}</span></div>` : ""}
+    ${sexoLine}
+    ${coberturaLine}
   </div>
 
   <div class="section">
-    <h3>Diagnóstico</h3>
+    <h3>Diagnostico</h3>
     <p>${documento.diagnostico}</p>
   </div>
 
@@ -89,9 +117,11 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
 
   <div class="footer">
     <p>Documento generado por Docto — Plataforma de telemedicina habilitada Ley 27.553</p>
-    <p>ReNaPDiS: En trámite</p>
+    <p>ReNaPDiS: En tramite</p>
     <p>Este documento no reemplaza una consulta presencial cuando sea necesaria</p>
   </div>
+
+  <button class="no-print" onclick="window.print()">Imprimir / Guardar como PDF</button>
 </body>
 </html>`;
 
@@ -100,7 +130,6 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     const win = window.open(url, "_blank");
     if (win) {
       win.onload = () => {
-        win.print();
         URL.revokeObjectURL(url);
       };
     }

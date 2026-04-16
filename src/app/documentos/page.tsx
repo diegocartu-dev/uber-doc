@@ -52,6 +52,13 @@ export default async function DocumentosPage() {
 
   if (!paciente) redirect("/dashboard");
 
+  // Datos medicos del paciente para el PDF (query separado, no tocar el SELECT principal)
+  const { data: perfilMedico } = await supabase
+    .from("pacientes")
+    .select("sexo_dni, fecha_nacimiento, tiene_cobertura, obra_social, nro_afiliado")
+    .eq("id", paciente.id)
+    .single();
+
   // Verificar si hay consulta activa
   const { data: consultaActiva } = await supabase
     .from("consultas")
@@ -112,6 +119,11 @@ export default async function DocumentosPage() {
       paciente_nombre: paciente.nombre_completo,
       paciente_dni: paciente.dni ?? "",
       paciente_cuil: paciente.cuil ?? "",
+      paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
+      paciente_fecha_nacimiento: perfilMedico?.fecha_nacimiento ?? null,
+      paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,
+      paciente_obra_social: perfilMedico?.obra_social ?? null,
+      paciente_nro_afiliado: perfilMedico?.nro_afiliado ?? null,
     };
   });
 
