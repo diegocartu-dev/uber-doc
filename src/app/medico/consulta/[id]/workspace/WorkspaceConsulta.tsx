@@ -10,6 +10,7 @@ declare global {
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DailyIframe from "@daily-co/daily-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
@@ -225,6 +226,8 @@ export default function WorkspaceConsulta({
   const [modoEscritura, setModoEscritura] = useState(false);
   const [diagError, setDiagError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const callFrameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
 
   // --- Auto-save ---
   const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
@@ -253,6 +256,32 @@ export default function WorkspaceConsulta({
     const i = setInterval(calcular, 1000);
     return () => clearInterval(i);
   }, [horaInicio]);
+
+  // --- Daily.co SDK: escuchar left-meeting para ocultar iframe inmediatamente ---
+  useEffect(() => {
+    if (!iframeRef.current || !dailyUrl) return;
+
+    const callFrame = DailyIframe.createFrame(iframeRef.current, {
+      showLeaveButton: false,
+      showFullscreenButton: true,
+      iframeStyle: { width: "100%", height: "100%", border: "none" },
+    });
+    callFrameRef.current = callFrame;
+
+    callFrame.join({
+      url: dailyUrl,
+      ...(dailyToken ? { token: dailyToken } : {}),
+    });
+
+    callFrame.on("left-meeting", () => {
+      setIframeVisible(false);
+    });
+
+    return () => {
+      callFrame.destroy();
+      callFrameRef.current = null;
+    };
+  }, [dailyUrl, dailyToken]);
 
   // Helper: validar diagnóstico antes de finalizar
   function validarDiagnostico(): boolean {
@@ -450,7 +479,7 @@ export default function WorkspaceConsulta({
         >
           {iframeUrl ? (
             <iframe
-              src={iframeUrl}
+              ref={iframeRef}
               allow="camera; microphone; autoplay; display-capture; fullscreen"
               referrerPolicy="no-referrer-when-downgrade"
               style={{ width: "100%", height: "100%", border: "none", display: iframeVisible ? "block" : "none" }}

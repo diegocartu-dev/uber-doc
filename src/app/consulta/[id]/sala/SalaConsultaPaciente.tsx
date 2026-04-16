@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DailyIframe from "@daily-co/daily-js";
 import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
@@ -73,6 +74,8 @@ export default function SalaConsultaPaciente({
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const inicioRef = useRef(Date.now());
   const yaRedirigioRef = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const callFrameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
 
   // --- Obtener meeting token ---
   useEffect(() => {
@@ -101,6 +104,29 @@ export default function SalaConsultaPaciente({
 
     obtenerToken();
   }, [consultaId, salaVideoUrl]);
+
+  // --- Daily.co SDK: escuchar left-meeting para ocultar iframe inmediatamente ---
+  useEffect(() => {
+    if (!iframeRef.current || !iframeUrl) return;
+
+    const callFrame = DailyIframe.createFrame(iframeRef.current, {
+      showLeaveButton: false,
+      showFullscreenButton: true,
+      iframeStyle: { width: "100%", height: "100%", border: "none" },
+    });
+    callFrameRef.current = callFrame;
+
+    callFrame.join({ url: iframeUrl });
+
+    callFrame.on("left-meeting", () => {
+      setIframeVisible(false);
+    });
+
+    return () => {
+      callFrame.destroy();
+      callFrameRef.current = null;
+    };
+  }, [iframeUrl]);
 
   // --- Timer ---
   useEffect(() => {
@@ -379,7 +405,7 @@ export default function SalaConsultaPaciente({
       <div className="flex-1 relative">
         {iframeUrl ? (
           <iframe
-            src={iframeUrl}
+            ref={iframeRef}
             allow="camera; microphone; autoplay; display-capture; fullscreen"
             referrerPolicy="no-referrer-when-downgrade"
             className="absolute inset-0 w-full h-full border-0"
