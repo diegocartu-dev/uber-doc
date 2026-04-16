@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 export async function registrarMedico(formData: FormData) {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export async function registrarMedico(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const titulo = formData.get("titulo") as string;
-  const nombre_completo = formData.get("nombre_completo") as string;
+  const nombre_completo = capitalizarNombre(formData.get("nombre_completo") as string);
   const especialidad = formData.get("especialidad") as string;
   const tipo_matricula = formData.get("tipo_matricula") as string;
   const numero_matricula = formData.get("numero_matricula") as string;

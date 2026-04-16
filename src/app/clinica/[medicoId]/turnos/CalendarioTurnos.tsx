@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { reservarTurno, limpiarReservasExpiradas } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
@@ -98,7 +99,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
         <p className="mt-2 text-sm text-gray-500">
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
-        <p className="mt-1 text-sm text-gray-500">Dr. {medico.nombre} · {medico.especialidad}</p>
+        <p className="mt-1 text-sm text-gray-500">Dr. {capitalizarNombre(medico.nombre)} · {medico.especialidad}</p>
         <a href="/dashboard" className="mt-6 inline-block rounded-lg bg-[#1D9E75] px-6 py-2.5 text-sm font-medium text-white">
           Volver al inicio
         </a>
@@ -211,7 +212,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">Dr. {medico.nombre}</span>
+              <span className="font-medium text-gray-900">Dr. {capitalizarNombre(medico.nombre)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>
@@ -326,7 +327,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
 
             <div className="mt-4 space-y-1.5 text-sm">
               <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
-              <p className="text-gray-700">Dr. {medico.nombre}</p>
+              <p className="text-gray-700">Dr. {capitalizarNombre(medico.nombre)}</p>
               <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
             </div>
 

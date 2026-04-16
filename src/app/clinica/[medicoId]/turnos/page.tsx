@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CalendarioTurnos from "./CalendarioTurnos";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 export default async function TurnosPage({
   params,
@@ -49,7 +50,7 @@ export default async function TurnosPage({
       <main className="mx-auto max-w-lg px-6 py-8">
         <div>
           <p className="text-xs font-medium tracking-wide text-gray-400">AGENDAR TURNO</p>
-          <p className="mt-2 text-lg font-medium text-gray-900">Dr. {medico.nombre_completo}</p>
+          <p className="mt-2 text-lg font-medium text-gray-900">Dr. {capitalizarNombre(medico.nombre_completo)}</p>
           <p className="mt-0.5 text-sm text-gray-500">
             {medico.especialidad} · {medico.duracion_consulta} min · ${medico.precio_consulta?.toLocaleString("es-AR")}
           </p>
@@ -59,7 +60,7 @@ export default async function TurnosPage({
           turnos={turnos ?? []}
           medico={{
             id: medico.id,
-            nombre: medico.nombre_completo,
+            nombre: capitalizarNombre(medico.nombre_completo),
             especialidad: medico.especialidad,
             duracion: medico.duracion_consulta,
             precio: medico.precio_consulta,

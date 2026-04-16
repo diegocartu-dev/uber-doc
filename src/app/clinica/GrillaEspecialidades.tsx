@@ -9,6 +9,7 @@ import {
   UserRound, FlaskConical,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Medico = {
   id: string;
@@ -444,7 +445,7 @@ export default function GrillaEspecialidades({
 
               {medicosMatch.length > 0 && (
                 <p className="mt-1 text-xs" style={{ color: "var(--color-text-link)" }}>
-                  {medicosMatch.map((m) => m.nombre_completo).join(", ")}
+                  {medicosMatch.map((m) => capitalizarNombre(m.nombre_completo)).join(", ")}
                 </p>
               )}
 
@@ -525,7 +526,7 @@ export default function GrillaEspecialidades({
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium" style={{ color: "var(--color-text-primary)" }}>
-                            {m.nombre_completo}
+                            {capitalizarNombre(m.nombre_completo)}
                           </p>
                           <span
                             className="inline-block h-2 w-2 rounded-full"

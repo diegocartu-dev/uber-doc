@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { capitalizarNombre } from "@/lib/utils/texto";
 
 export async function completarPerfil(formData: FormData) {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export async function completarPerfil(formData: FormData) {
 
   if (!user) redirect("/");
 
-  const nombre_completo = (formData.get("nombre_completo") as string)?.trim();
+  const nombre_completo = capitalizarNombre((formData.get("nombre_completo") as string)?.trim());
   const dni = (formData.get("dni") as string)?.trim();
   const fecha_nacimiento = (formData.get("fecha_nacimiento") as string)?.trim();
   const telefono = (formData.get("telefono") as string)?.trim();
