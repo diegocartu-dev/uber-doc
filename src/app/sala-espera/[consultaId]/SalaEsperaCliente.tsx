@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 import { Video, CheckCircle } from "lucide-react";
+
+const POLL_INTERVAL = 5000;
 
 type Props = {
   consultaId: string;
@@ -44,53 +45,42 @@ export default function SalaEsperaCliente({
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
 
-  // Realtime: filtro por PK (id) → válido en Supabase Realtime
-  useEffect(() => {
-    const supabase = createClient();
+  // Polling: 5s interval contra /api/consulta-estado
+  const poll = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json() as { estado: string; sala_video_url: string | null };
 
-    function handleCambio(row: { estado: string; sala_video_url: string | null }) {
       if (
-        (row.estado === "aceptada" || row.estado === "pagada" || row.estado === "en_curso") &&
+        (data.estado === "aceptada" || data.estado === "pagada" || data.estado === "en_curso") &&
         prevEstadoRef.current === "esperando"
       ) {
         soundConsultaAceptada();
         setPosicion(0);
         setTiempoEstimado(0);
       }
-      if (row.sala_video_url && !salaVideoUrlRef.current) {
+      if (data.sala_video_url && !salaVideoUrlRef.current) {
         soundVideoLista();
       }
-      prevEstadoRef.current = row.estado;
-      setEstado(row.estado);
-      if (row.sala_video_url) {
-        salaVideoUrlRef.current = row.sala_video_url;
-        setSalaVideoUrl(row.sala_video_url);
+      prevEstadoRef.current = data.estado;
+      setEstado(data.estado);
+      if (data.sala_video_url) {
+        salaVideoUrlRef.current = data.sala_video_url;
+        setSalaVideoUrl(data.sala_video_url);
       }
+    } catch {
+      // red error — próximo ciclo reintenta
     }
-
-    // Sync inicial para no perder cambios ocurridos antes de suscribirse
-    supabase
-      .from("consultas")
-      .select("estado, sala_video_url")
-      .eq("id", consultaId)
-      .single()
-      .then(({ data }) => {
-        if (data) handleCambio(data as { estado: string; sala_video_url: string | null });
-      });
-
-    const channel = supabase
-      .channel(`sala-espera-${consultaId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
-        (payload) => {
-          handleCambio(payload.new as { estado: string; sala_video_url: string | null });
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [consultaId]);
+
+  useEffect(() => {
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [poll]);
 
   const aceptada = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
 
