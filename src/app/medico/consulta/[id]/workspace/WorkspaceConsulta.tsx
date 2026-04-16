@@ -218,6 +218,7 @@ export default function WorkspaceConsulta({
   const [error, setError] = useState<string | null>(videoErrorProp);
   const [timerSeg, setTimerSeg] = useState(0);
   const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // Mobile: dos modos explícitos. false = video, true = escritura.
   const [modoEscritura, setModoEscritura] = useState(false);
@@ -495,13 +496,7 @@ export default function WorkspaceConsulta({
                   <LoadingButton
                     type="button"
                     isLoading={finalizando}
-                    onClick={() => {
-                      const confirmado = window.confirm(
-                        "Finalizar la consulta y generar los documentos para el paciente?"
-                      );
-                      if (!confirmado) return;
-                      finalizarConsulta();
-                    }}
+                    onClick={() => setShowConfirmDialog(true)}
                     className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
                     style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
                   >
@@ -714,11 +709,7 @@ export default function WorkspaceConsulta({
                 isLoading={finalizando}
                 onClick={() => {
                   if (!validarDiagnostico()) return;
-                  const confirmado = window.confirm(
-                    "Finalizar la consulta y generar los documentos para el paciente?"
-                  );
-                  if (!confirmado) return;
-                  finalizarConsulta();
+                  setShowConfirmDialog(true);
                 }}
                 className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
@@ -736,6 +727,87 @@ export default function WorkspaceConsulta({
           </div>
         </div>
       </div>
+
+      {/* Dialog de confirmación — reemplaza window.confirm() que Chrome suprime en páginas con iframes cross-origin */}
+      {showConfirmDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                color: "#111",
+                marginBottom: "8px",
+              }}
+            >
+              Finalizar consulta
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#666",
+                marginBottom: "24px",
+              }}
+            >
+              ¿Finalizar y generar los documentos para el paciente?
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  finalizarConsulta();
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#1D9E75",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
