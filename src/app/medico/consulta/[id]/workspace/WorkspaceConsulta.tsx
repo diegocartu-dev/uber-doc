@@ -321,7 +321,7 @@ export default function WorkspaceConsulta({
       if (docs.length === 0)
         docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-      await supabase.from("documentos").insert(
+      const { error: insertError } = await supabase.from("documentos").insert(
         docs.map((d) => ({
           consulta_id: consultaId,
           turno_id: null,
@@ -333,11 +333,23 @@ export default function WorkspaceConsulta({
         }))
       );
 
+      if (insertError) {
+        setError("Error al guardar los documentos. Intenta de nuevo.");
+        setFinalizando(false);
+        return;
+      }
+
       // Finalizar y limpiar borrador
-      await supabase
+      const { error: updateError } = await supabase
         .from("consultas")
         .update({ estado: "completada", doc_borrador: null })
         .eq("id", consultaId);
+
+      if (updateError) {
+        setError("Error al cerrar la consulta. Intenta de nuevo.");
+        setFinalizando(false);
+        return;
+      }
 
       window.location.href = "/dashboard";
     } catch {
