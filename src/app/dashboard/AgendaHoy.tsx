@@ -13,7 +13,7 @@ type Turno = {
 
 const estadoConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   confirmado: { bg: "transparent", text: "#888780", dot: "#888780", label: "Confirmado" },
-  en_espera: { bg: "#f0fdf4", text: "#1D9E75", dot: "#1D9E75", label: "En espera" },
+  en_espera: { bg: "#eff6ff", text: "#378ADD", dot: "#378ADD", label: "En espera" },
   en_curso: { bg: "#eff6ff", text: "#378ADD", dot: "#378ADD", label: "En curso" },
   completado: { bg: "transparent", text: "#d1d5db", dot: "#d1d5db", label: "Completado" },
 };

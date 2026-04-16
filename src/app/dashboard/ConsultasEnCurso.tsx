@@ -87,7 +87,7 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
         return (
           <div
             key={c.id}
-            className="rounded-xl border-l-4 border-[#1D9E75] bg-white p-6"
+            className="rounded-xl border-l-4 border-[#378ADD] bg-white p-6"
             style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}
           >
             {/* Header */}
@@ -161,14 +161,14 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
                 c.estado === "en_curso" ? (
                   <TouchButton
                     onClick={() => handleIniciar(c.id)}
-                    className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64]"
+                    className="rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5]"
                   >
                     Volver al workspace
                   </TouchButton>
                 ) : (
                   <TouchButton
                     onClick={() => handleIniciar(c.id)}
-                    className="rounded-lg bg-[#1D9E75] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#178a64]"
+                    className="rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5]"
                   >
                     Iniciar consulta
                   </TouchButton>

@@ -29,7 +29,7 @@ export default function NovaWidget({
       className="mb-6 rounded-xl bg-white p-4 md:p-5 md:px-6"
       style={{
         border: "0.5px solid #e5e7eb",
-        borderLeft: "3px solid #1D9E75",
+        borderLeft: "3px solid #378ADD",
       }}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -46,7 +46,7 @@ export default function NovaWidget({
         </div>
         <button
           onClick={() => router.push("/medico/nova")}
-          className="mt-3 w-full min-h-[44px] rounded-lg bg-[#1D9E75] px-4 py-2 text-sm font-medium text-white active:scale-95 transition-transform lg:mt-0 lg:w-auto"
+          className="mt-3 w-full min-h-[44px] rounded-lg bg-[#378ADD] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-transform lg:mt-0 lg:w-auto"
         >
           Hablar con Nova
         </button>

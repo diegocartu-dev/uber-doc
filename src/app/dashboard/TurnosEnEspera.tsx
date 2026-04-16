@@ -95,19 +95,19 @@ export default function TurnosEnEspera({
         <div
           key={t.id}
           className="rounded-xl bg-white p-5"
-          style={{ border: "1px solid #1D9E75" }}
+          style={{ border: "1px solid #378ADD" }}
         >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#1D9E75]" />
-                <span className="text-xs font-medium tracking-wide text-[#1D9E75]">TURNO EN ESPERA</span>
+                <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#378ADD]" />
+                <span className="text-xs font-medium tracking-wide text-[#378ADD]">TURNO EN ESPERA</span>
                 <span className="text-sm font-medium text-[#D85A30]">
                   <Contador desde={t.entradoEn} />
                 </span>
               </div>
               {t.paciente_tabla_id ? (
-                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-lg font-medium text-gray-900 hover:text-[#1D9E75]">{capitalizarNombre(t.paciente_nombre)}</a>
+                <a href={`/medico/paciente/${t.paciente_tabla_id}`} className="mt-2 block text-lg font-medium text-gray-900 hover:text-[#378ADD]">{capitalizarNombre(t.paciente_nombre)}</a>
               ) : (
                 <p className="mt-2 text-lg font-medium text-gray-900">{capitalizarNombre(t.paciente_nombre)}</p>
               )}
@@ -126,7 +126,7 @@ export default function TurnosEnEspera({
               <button
                 onClick={() => handleIniciar(t.id)}
                 disabled={isPending}
-                className="shrink-0 rounded-lg bg-[#1D9E75] px-6 py-3 text-base font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
+                className="shrink-0 rounded-lg bg-[#378ADD] px-6 py-3 text-base font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
               >
                 {isPending ? "Iniciando..." : "Iniciar turno"}
               </button>

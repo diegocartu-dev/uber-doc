@@ -512,7 +512,7 @@ export default function WorkspaceConsulta({
                 <button
                   type="button"
                   onClick={() => setModoEscritura(true)}
-                  className="rounded-xl bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+                  className="rounded-xl bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
                   style={{ minHeight: "44px" }}
                 >
                   Documentar

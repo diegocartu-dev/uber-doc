@@ -37,8 +37,8 @@ export default function BloqueConsultaInmediata({
       className={`space-y-4 rounded-xl p-5 ${inactiva ? "bg-gray-50" : ""}`}
       style={{
         border: "0.5px solid #e5e7eb",
-        borderLeft: `4px solid ${inactiva ? "#888780" : "#1D9E75"}`,
-        background: inactiva ? undefined : "rgba(29, 158, 117, 0.06)",
+        borderLeft: `4px solid ${inactiva ? "#888780" : "#378ADD"}`,
+        background: inactiva ? undefined : "rgba(55, 138, 221, 0.06)",
         boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)",
       }}
     >
@@ -47,7 +47,7 @@ export default function BloqueConsultaInmediata({
         <h2 className={titleClass}>Consulta inmediata</h2>
         <span
           className="text-xs font-semibold"
-          style={{ color: inactiva ? "#888780" : "#1D9E75" }}
+          style={{ color: inactiva ? "#888780" : "#378ADD" }}
         >
           {inactiva ? "Inactiva" : "Activa"}
         </span>

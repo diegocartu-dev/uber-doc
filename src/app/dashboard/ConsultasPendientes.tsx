@@ -92,7 +92,7 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   {c.paciente_tabla_id ? (
-                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-base font-medium text-gray-900 hover:text-[#1D9E75]">{nombre}</a>
+                    <a href={`/medico/paciente/${c.paciente_tabla_id}`} className="text-base font-medium text-gray-900 hover:text-[#378ADD]">{nombre}</a>
                   ) : (
                     <p className="text-base font-medium text-gray-900">{nombre}</p>
                   )}
