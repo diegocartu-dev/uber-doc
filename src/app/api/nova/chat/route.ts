@@ -5,6 +5,11 @@ import Anthropic from "@anthropic-ai/sdk";
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
+function fechaLegible(fechaISO: string): string {
+  const d = new Date(fechaISO + "T12:00:00");
+  return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
+}
+
 function getAhoraAR(): { fecha: string; horaISO: string; contexto: string } {
   // Construir fecha/hora en zona Argentina (GMT-3, sin DST)
   const ahora = new Date();
@@ -416,7 +421,7 @@ Turnos disponibles: ${slotsResumen}`;
                   // Herramienta destructiva: el texto ya se emitió vía streaming.
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
-                    crear_slots: `Crear turnos el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos (${toolInput.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"})`,
+                    crear_slots: `Crear turnos el ${fechaLegible(toolInput.fecha as string)} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos (${toolInput.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"})`,
                     bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
                     cancelar_turno: `Cancelar turno ${toolInput.turno_id}`,
                   };

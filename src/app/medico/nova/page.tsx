@@ -552,6 +552,20 @@ export default function NovaChat() {
                   {msg.content}
                 </p>
 
+                {/* Chip canal + duración */}
+                {!!msg.confirmacion?.datos?.canal_origen && (
+                  <div className="flex gap-2 mt-2 mb-3">
+                    <span className="text-xs font-medium rounded-full px-3 py-1" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+                      {(msg.confirmacion.datos.canal_origen as string) === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"}
+                    </span>
+                    {!!msg.confirmacion.datos.duracion && (
+                      <span className="text-xs font-medium rounded-full px-3 py-1" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+                        {String(msg.confirmacion.datos.duracion)} min
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Botones confirmacion */}
                 {msg.confirmacion && !msg.confirmado && (
                   <div className="mt-2.5 flex gap-2">
