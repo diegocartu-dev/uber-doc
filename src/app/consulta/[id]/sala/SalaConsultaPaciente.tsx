@@ -42,77 +42,66 @@ function VideoArea() {
     { onlySubscribed: false }
   );
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <GridLayout tracks={tracks} style={{ height: "100%" }}>
-          <ParticipantTile />
-        </GridLayout>
-      </div>
-      <PacienteMicCamControls />
-    </div>
+    <GridLayout tracks={tracks} style={{ height: "100%" }}>
+      <ParticipantTile />
+    </GridLayout>
   );
 }
 
-function PacienteMicCamControls() {
+// Iconos SVG reutilizables
+function MicIcon({ on }: { on: boolean }) {
+  return on ? (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>
+    </svg>
+  ) : (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+      <path d="M5 10v2a7 7 0 0 0 12 5.66"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>
+    </svg>
+  );
+}
+
+function CamIcon({ on }: { on: boolean }) {
+  return on ? (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
+    </svg>
+  ) : (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l6-4v11l-6-4V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1"/>
+      <line x1="2" x2="22" y1="2" y2="22"/>
+    </svg>
+  );
+}
+
+// Hook para controles mic/cam — debe usarse dentro de LiveKitRoom
+function useMicCam() {
   const { localParticipant } = useLocalParticipant();
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
 
-  async function toggleMic() {
+  const toggleMic = useCallback(async () => {
     const next = !micOn;
     await localParticipant.setMicrophoneEnabled(next);
     setMicOn(next);
-  }
+  }, [micOn, localParticipant]);
 
-  async function toggleCam() {
+  const toggleCam = useCallback(async () => {
     const next = !camOn;
     await localParticipant.setCameraEnabled(next);
     setCamOn(next);
-  }
+  }, [camOn, localParticipant]);
 
-  return (
-    <div
-      className="flex items-center justify-center gap-3 px-4 py-2"
-      style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
-    >
-      <button
-        type="button"
-        onClick={toggleMic}
-        className={`rounded-full p-3 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
-        style={{ minHeight: "44px", minWidth: "44px" }}
-      >
-        {micOn ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>
-          </svg>
-        ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
-            <path d="M5 10v2a7 7 0 0 0 12 5.66"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
-            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>
-          </svg>
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={toggleCam}
-        className={`rounded-full p-3 transition ${camOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
-        style={{ minHeight: "44px", minWidth: "44px" }}
-      >
-        {camOn ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
-          </svg>
-        ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l6-4v11l-6-4V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1"/>
-            <line x1="2" x2="22" y1="2" y2="22"/>
-          </svg>
-        )}
-      </button>
-    </div>
-  );
+  return { micOn, camOn, toggleMic, toggleCam };
+}
+
+// Render prop wrapper para mic/cam
+function MicCamProvider({ children }: { children: (controls: { micOn: boolean; camOn: boolean; toggleMic: () => void; toggleCam: () => void }) => React.ReactNode }) {
+  const controls = useMicCam();
+  return <>{children(controls)}</>;
 }
 
 // ---------------------------------------------------------------------------
@@ -476,24 +465,68 @@ export default function SalaConsultaPaciente({
         </div>
       </div>
 
-      {/* Video LiveKit */}
-      <div className="flex-1 relative">
-        {livekitToken && roomName && livekitUrl ? (
-          <div className="absolute inset-0" style={{ display: videoVisible ? "block" : "none" }}>
-            <LiveKitRoom
-              serverUrl={livekitUrl}
-              token={livekitToken}
-              connect={true}
-              onDisconnected={handleDisconnected}
-              style={{ height: "100%" }}
-              data-lk-theme="default"
-            >
-              <RoomAudioRenderer />
+      {/* Video + footer — todo dentro de LiveKitRoom para que hooks mic/cam funcionen */}
+      {livekitToken && roomName && livekitUrl ? (
+        <div className="flex flex-1 flex-col min-h-0" style={{ display: videoVisible ? "flex" : "none" }}>
+          <LiveKitRoom
+            serverUrl={livekitUrl}
+            token={livekitToken}
+            connect={true}
+            onDisconnected={handleDisconnected}
+            style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+            data-lk-theme="default"
+          >
+            <RoomAudioRenderer />
+
+            {/* Video area */}
+            <div className="flex-1 min-h-0">
               <VideoArea />
-            </LiveKitRoom>
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
+            </div>
+
+            {/* Footer: mic + cam + info + salir */}
+            <MicCamProvider>
+              {({ micOn, camOn, toggleMic, toggleCam }) => (
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+                >
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={toggleMic}
+                      className={`rounded-full p-3 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                      style={{ minHeight: "44px", minWidth: "44px" }}
+                    >
+                      <MicIcon on={micOn} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleCam}
+                      className={`rounded-full p-3 transition ${camOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                      style={{ minHeight: "44px", minWidth: "44px" }}
+                    >
+                      <CamIcon on={camOn} />
+                    </button>
+                    <p className="text-xs text-white/40 hidden sm:block">
+                      Tu médico te está atendiendo · {especialidad}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard")}
+                    className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
+                    style={{ minHeight: "44px" }}
+                  >
+                    Salir
+                  </button>
+                </div>
+              )}
+            </MicCamProvider>
+          </LiveKitRoom>
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               {tokenError ? (
                 <p className="text-sm text-red-400">{tokenError}</p>
@@ -525,26 +558,25 @@ export default function SalaConsultaPaciente({
               )}
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Footer con info + salir */}
-      <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
-      >
-        <p className="text-xs text-white/40">
-          Tu médico te está atendiendo · {especialidad}
-        </p>
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard")}
-          className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
-          style={{ minHeight: "44px" }}
-        >
-          Salir
-        </button>
-      </div>
+          {/* Footer sin controles (aún no hay LiveKit) */}
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+          >
+            <p className="text-xs text-white/40">
+              Conectando...
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
+              style={{ minHeight: "44px" }}
+            >
+              Salir
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
