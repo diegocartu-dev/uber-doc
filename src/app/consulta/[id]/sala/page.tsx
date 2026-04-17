@@ -40,8 +40,8 @@ export default async function SalaPage({
   return (
     <SalaConsultaPaciente
       consultaId={consultaId}
-      salaVideoUrl={consulta.sala_video_url}
-      medicoNombre={medico?.nombre_completo ?? "tu medico"}
+      roomName={consulta.sala_video_url}
+      medicoNombre={medico?.nombre_completo ?? "tu médico"}
       especialidad={consulta.especialidad}
     />
   );

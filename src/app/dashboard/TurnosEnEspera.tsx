@@ -45,21 +45,8 @@ export default function TurnosEnEspera({
 
   function handleIniciar(turnoId: string) {
     startTransition(async () => {
-      const supabase = createClient();
-      await supabase
-        .from("turnos")
-        .update({ estado: "en_curso", iniciado_en: new Date().toISOString() })
-        .eq("id", turnoId);
-
-      const res = await fetch("/api/videollamada-turno", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consultaId: turnoId }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        await supabase.from("turnos").update({ sala_video_url: data.url }).eq("id", turnoId);
-      }
+      // La creacion de sala LiveKit y la transicion de estado
+      // se hacen en el server component de /turno/[turnoId]/video
       window.location.href = `/turno/${turnoId}/video`;
     });
   }

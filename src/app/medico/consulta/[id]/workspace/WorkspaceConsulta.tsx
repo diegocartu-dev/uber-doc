@@ -10,7 +10,16 @@ declare global {
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import DailyIframe from "@daily-co/daily-js";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  GridLayout,
+  ParticipantTile,
+  useTracks,
+  ControlBar,
+} from "@livekit/components-react";
+import "@livekit/components-styles";
+import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
@@ -174,8 +183,8 @@ type DocBorrador = {
 type Props = {
   consultaId: string;
   medicoId: string;
-  dailyUrl: string | null;
-  dailyToken: string | null;
+  livekitToken: string | null;
+  roomName: string | null;
   videoError: string | null;
   horaInicio: string;
   consulta: {
@@ -192,14 +201,33 @@ type Props = {
 };
 
 // ---------------------------------------------------------------------------
+// Video area — tracks de LiveKit
+// ---------------------------------------------------------------------------
+
+function VideoArea() {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  );
+  return (
+    <GridLayout tracks={tracks} style={{ height: "100%" }}>
+      <ParticipantTile />
+    </GridLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
 export default function WorkspaceConsulta({
   consultaId,
   medicoId,
-  dailyUrl,
-  dailyToken,
+  livekitToken,
+  roomName,
   videoError: videoErrorProp,
   horaInicio,
   consulta,
@@ -226,8 +254,7 @@ export default function WorkspaceConsulta({
   const [modoEscritura, setModoEscritura] = useState(false);
   const [diagError, setDiagError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const callFrameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
+  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   // --- Auto-save ---
   const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
@@ -242,8 +269,6 @@ export default function WorkspaceConsulta({
 
   // --- Datos derivados ---
   const edad = calcularEdad(consulta.paciente_nacimiento);
-  const iframeUrl =
-    dailyUrl && dailyToken ? `${dailyUrl}?t=${dailyToken}` : dailyUrl;
 
   // --- Timer ---
   useEffect(() => {
@@ -256,32 +281,6 @@ export default function WorkspaceConsulta({
     const i = setInterval(calcular, 1000);
     return () => clearInterval(i);
   }, [horaInicio]);
-
-  // --- Daily.co SDK: escuchar left-meeting para ocultar iframe inmediatamente ---
-  useEffect(() => {
-    if (!iframeRef.current || !dailyUrl) return;
-
-    const callFrame = DailyIframe.createFrame(iframeRef.current, {
-      showLeaveButton: false,
-      showFullscreenButton: true,
-      iframeStyle: { width: "100%", height: "100%", border: "none" },
-    });
-    callFrameRef.current = callFrame;
-
-    callFrame.join({
-      url: dailyUrl,
-      ...(dailyToken ? { token: dailyToken } : {}),
-    });
-
-    callFrame.on("left-meeting", () => {
-      setIframeVisible(false);
-    });
-
-    return () => {
-      callFrame.destroy();
-      callFrameRef.current = null;
-    };
-  }, [dailyUrl, dailyToken]);
 
   // Helper: validar diagnóstico antes de finalizar
   function validarDiagnostico(): boolean {
@@ -303,13 +302,23 @@ export default function WorkspaceConsulta({
       return;
     }
 
-    // 1. Ocultar iframe inmediatamente — evita que Daily siga consumiendo media
+    // 1. Ocultar video inmediatamente
     setIframeVisible(false);
 
-    // 2. Navegar al dashboard sin esperar Supabase
+    // 2. Eliminar sala LiveKit → desconecta al paciente
+    if (roomName) {
+      fetch("/api/livekit/crear-sala", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomName }),
+      }).catch(() => {});
+    }
+
+    // 3. Navegar al dashboard sin esperar Supabase
     router.push("/dashboard");
 
-    // 3. Guardar documentos y cerrar consulta en background (fire-and-forget)
+    // 4. Guardar documentos y cerrar consulta en background (fire-and-forget)
     (async () => {
       try {
         const supabase = createClient();
@@ -477,13 +486,21 @@ export default function WorkspaceConsulta({
               : "min-h-0"
           }`}
         >
-          {iframeUrl ? (
-            <iframe
-              ref={iframeRef}
-              allow="camera; microphone; autoplay; display-capture; fullscreen"
-              referrerPolicy="no-referrer-when-downgrade"
-              style={{ width: "100%", height: "100%", border: "none", display: iframeVisible ? "block" : "none" }}
-            />
+          {livekitToken && roomName && livekitUrl ? (
+            <div style={{ height: "100%", display: iframeVisible ? "block" : "none" }}>
+              <LiveKitRoom
+                serverUrl={livekitUrl}
+                token={livekitToken}
+                connect={true}
+                onDisconnected={() => setIframeVisible(false)}
+                style={{ height: "100%" }}
+                data-lk-theme="default"
+              >
+                <RoomAudioRenderer />
+                <VideoArea />
+                <ControlBar controls={{ leave: false, screenShare: true }} variation="minimal" />
+              </LiveKitRoom>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full">
               <p className="text-sm text-white/50">

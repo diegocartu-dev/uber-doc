@@ -2,7 +2,16 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import DailyIframe from "@daily-co/daily-js";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  GridLayout,
+  ParticipantTile,
+  useTracks,
+  ControlBar,
+} from "@livekit/components-react";
+import "@livekit/components-styles";
+import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
@@ -19,10 +28,25 @@ type Documento = {
 
 type Props = {
   consultaId: string;
-  salaVideoUrl: string | null;
+  roomName: string | null;
   medicoNombre: string;
   especialidad: string;
 };
+
+function VideoArea() {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  );
+  return (
+    <GridLayout tracks={tracks} style={{ height: "100%" }}>
+      <ParticipantTile />
+    </GridLayout>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -59,31 +83,30 @@ function tipoLabel(tipo: string): string {
 
 export default function SalaConsultaPaciente({
   consultaId,
-  salaVideoUrl,
+  roomName,
   medicoNombre,
   especialidad,
 }: Props) {
   const router = useRouter();
+  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   const [estado, setEstado] = useState<string>("en_curso");
-  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
-  const [iframeVisible, setIframeVisible] = useState(true);
+  const [livekitToken, setLivekitToken] = useState<string | null>(null);
+  const [videoVisible, setVideoVisible] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [timerSeg, setTimerSeg] = useState(0);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const inicioRef = useRef(Date.now());
   const yaRedirigioRef = useRef(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const callFrameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
 
-  // --- Obtener meeting token ---
+  // --- Obtener token LiveKit ---
   useEffect(() => {
-    if (!salaVideoUrl) return;
+    if (!roomName) return;
 
     async function obtenerToken() {
       try {
-        const res = await fetch("/api/videollamada", {
+        const res = await fetch("/api/livekit/token", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -95,38 +118,23 @@ export default function SalaConsultaPaciente({
           return;
         }
         const data = await res.json();
-        const url = data.token ? `${data.url}?t=${data.token}` : data.url;
-        setIframeUrl(url);
+        setLivekitToken(data.token);
       } catch {
         setTokenError("Error de conexion al obtener video");
       }
     }
 
     obtenerToken();
-  }, [consultaId, salaVideoUrl]);
+  }, [consultaId, roomName]);
 
-  // --- Daily.co SDK: escuchar left-meeting para ocultar iframe inmediatamente ---
-  useEffect(() => {
-    if (!iframeRef.current || !iframeUrl) return;
-
-    const callFrame = DailyIframe.createFrame(iframeRef.current, {
-      showLeaveButton: false,
-      showFullscreenButton: true,
-      iframeStyle: { width: "100%", height: "100%", border: "none" },
-    });
-    callFrameRef.current = callFrame;
-
-    callFrame.join({ url: iframeUrl });
-
-    callFrame.on("left-meeting", () => {
-      setIframeVisible(false);
-    });
-
-    return () => {
-      callFrame.destroy();
-      callFrameRef.current = null;
-    };
-  }, [iframeUrl]);
+  // --- LiveKit: desconexion detectada (medico elimino la sala) ---
+  function handleDisconnected() {
+    setVideoVisible(false);
+    if (!yaRedirigioRef.current) {
+      yaRedirigioRef.current = true;
+      router.push("/mis-consultas");
+    }
+  }
 
   // --- Timer ---
   useEffect(() => {
@@ -177,7 +185,7 @@ export default function SalaConsultaPaciente({
           if (!row.estado) return;
           setEstado(row.estado);
           if (row.estado === "completada") {
-            setIframeVisible(false);
+            setVideoVisible(false);
             fetchDocumentos();
           }
         }
@@ -200,7 +208,7 @@ export default function SalaConsultaPaciente({
         if (data.estado === "completada") {
           yaRedirigioRef.current = true;
           clearInterval(interval);
-          setIframeVisible(false);
+          setVideoVisible(false);
           router.push("/mis-consultas");
         }
       } catch {
@@ -401,16 +409,23 @@ export default function SalaConsultaPaciente({
         </div>
       </div>
 
-      {/* Video iframe */}
+      {/* Video LiveKit */}
       <div className="flex-1 relative">
-        {iframeUrl ? (
-          <iframe
-            ref={iframeRef}
-            allow="camera; microphone; autoplay; display-capture; fullscreen"
-            referrerPolicy="no-referrer-when-downgrade"
-            className="absolute inset-0 w-full h-full border-0"
-            style={{ display: iframeVisible ? "block" : "none" }}
-          />
+        {livekitToken && roomName && livekitUrl ? (
+          <div className="absolute inset-0" style={{ display: videoVisible ? "block" : "none" }}>
+            <LiveKitRoom
+              serverUrl={livekitUrl}
+              token={livekitToken}
+              connect={true}
+              onDisconnected={handleDisconnected}
+              style={{ height: "100%" }}
+              data-lk-theme="default"
+            >
+              <RoomAudioRenderer />
+              <VideoArea />
+              <ControlBar controls={{ leave: false, screenShare: false }} variation="minimal" />
+            </LiveKitRoom>
+          </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -453,7 +468,7 @@ export default function SalaConsultaPaciente({
         style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
       >
         <p className="text-xs text-white/40">
-          Tu medico te esta atendiendo · {especialidad}
+          Tu médico te está atendiendo · {especialidad}
         </p>
       </div>
     </div>

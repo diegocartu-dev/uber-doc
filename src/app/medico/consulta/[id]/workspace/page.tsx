@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import WorkspaceConsulta from "./WorkspaceConsulta";
+import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 
-const DAILY_API_KEY = process.env.DAILY_API_KEY;
-const DAILY_API_URL = "https://api.daily.co/v1";
+const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
 
 export default async function WorkspacePage({
   params,
@@ -18,7 +20,7 @@ export default async function WorkspacePage({
 
   if (!user) redirect("/auth/login");
 
-  // Solo médicos
+  // Solo medicos
   const { data: medico } = await supabase
     .from("medicos")
     .select("id, nombre_completo")
@@ -46,73 +48,34 @@ export default async function WorkspacePage({
     .eq("user_id", consulta.paciente_id)
     .single();
 
-  // Crear/obtener sala Daily.co directamente (sin self-fetch que falla en Vercel)
-  let dailyUrl: string | null = null;
-  let dailyToken: string | null = null;
+  // --- Crear/obtener sala LiveKit ---
+  let livekitToken: string | null = null;
+  let roomName: string | null = null;
   let videoError: string | null = null;
 
-  if (!DAILY_API_KEY) {
-    videoError = "Daily.co no está configurado en el servidor.";
+  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+    videoError = "LiveKit no esta configurado en el servidor.";
   } else {
     try {
-      const roomName = `consulta-${consultaId}`;
+      roomName = `consulta-${consultaId}`;
+      const httpUrl = LIVEKIT_URL.replace("wss://", "https://").replace("ws://", "http://");
 
-      // Intentar obtener sala existente
-      const getRes = await fetch(`${DAILY_API_URL}/rooms/${roomName}`, {
-        headers: { Authorization: `Bearer ${DAILY_API_KEY}` },
+      // Crear sala (idempotente — si ya existe, no falla)
+      const svc = new RoomServiceClient(httpUrl, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+      await svc.createRoom({ name: roomName, emptyTimeout: 7200, maxParticipants: 2 });
+
+      // Generar token para el medico
+      const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+        identity: `medico-${medico.id}`,
+        name: medico.nombre_completo || "Medico",
+        ttl: "2h",
       });
+      at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
+      livekitToken = await at.toJwt();
 
-      let room;
-      if (getRes.ok) {
-        room = await getRes.json();
-      } else {
-        // Crear nueva sala privada
-        const exp = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
-        const createRes = await fetch(`${DAILY_API_URL}/rooms`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${DAILY_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: roomName,
-            privacy: "private",
-            properties: { exp, enable_chat: true, enable_screenshare: true, max_participants: 2, lang: "es" },
-          }),
-        });
-        if (!createRes.ok) {
-          const err = await createRes.json();
-          throw new Error(err.info || err.error || "Error al crear sala");
-        }
-        room = await createRes.json();
-      }
-
-      dailyUrl = room.url;
-
-      // Generar meeting token
-      const tokenRes = await fetch(`${DAILY_API_URL}/meeting-tokens`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${DAILY_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          properties: {
-            room_name: roomName,
-            user_name: "Médico",
-            user_id: user.id,
-            exp: Math.floor(Date.now() / 1000) + 2 * 60 * 60,
-          },
-        }),
-      });
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
-        dailyToken = tokenData.token ?? null;
-      }
-
-      // Actualizar sala_video_url y estado en consulta
+      // Actualizar sala_video_url y estado
       const updateData: Record<string, string> = {};
-      if (!consulta.sala_video_url) updateData.sala_video_url = room.url;
+      if (!consulta.sala_video_url) updateData.sala_video_url = roomName;
       if (consulta.estado === "pagada") updateData.estado = "en_curso";
       if (Object.keys(updateData).length > 0) {
         await supabase.from("consultas").update(updateData).eq("id", consultaId);
@@ -122,15 +85,14 @@ export default async function WorkspacePage({
     }
   }
 
-  // Si la sala se creó y el estado era "pagada", el endpoint ya lo cambió a "en_curso"
   const horaInicio = consulta.created_at;
 
   return (
     <WorkspaceConsulta
       consultaId={consultaId}
       medicoId={medico.id}
-      dailyUrl={dailyUrl}
-      dailyToken={dailyToken}
+      livekitToken={livekitToken}
+      roomName={roomName}
       videoError={videoError}
       horaInicio={horaInicio}
       consulta={{
