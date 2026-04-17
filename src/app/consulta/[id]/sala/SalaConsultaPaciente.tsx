@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  GridLayout,
-  ParticipantTile,
+  VideoTrack,
   useTracks,
   useLocalParticipant,
 } from "@livekit/components-react";
-
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 
@@ -41,10 +39,34 @@ function VideoArea() {
     ],
     { onlySubscribed: false }
   );
+  const cols = tracks.length > 1 ? "grid-cols-2" : "grid-cols-1";
   return (
-    <GridLayout tracks={tracks} style={{ height: "100%" }}>
-      <ParticipantTile />
-    </GridLayout>
+    <div className={`grid ${cols} gap-1 h-full w-full`}>
+      {tracks.map((trackRef) => (
+        <div
+          key={`${trackRef.participant.identity}-${trackRef.source}`}
+          className="relative bg-gray-800 overflow-hidden flex items-center justify-center"
+        >
+          {trackRef.publication && !trackRef.publication.isMuted ? (
+            <VideoTrack
+              trackRef={trackRef}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2">
+              <div className="h-20 w-20 rounded-full bg-gray-600 flex items-center justify-center">
+                <span className="text-2xl text-gray-300">
+                  {trackRef.participant.name?.[0]?.toUpperCase() || "?"}
+                </span>
+              </div>
+            </div>
+          )}
+          <span className="absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-xs text-white">
+            {trackRef.participant.name || "Participante"}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
