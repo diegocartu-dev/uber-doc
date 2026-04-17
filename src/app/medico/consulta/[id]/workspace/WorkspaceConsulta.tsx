@@ -16,7 +16,7 @@ import {
   GridLayout,
   ParticipantTile,
   useTracks,
-  ControlBar,
+  useLocalParticipant,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { Track } from "livekit-client";
@@ -201,7 +201,7 @@ type Props = {
 };
 
 // ---------------------------------------------------------------------------
-// Video area — tracks de LiveKit
+// Video area — tracks de LiveKit + controles propios mic/cam
 // ---------------------------------------------------------------------------
 
 function VideoArea() {
@@ -213,9 +213,78 @@ function VideoArea() {
     { onlySubscribed: false }
   );
   return (
-    <GridLayout tracks={tracks} style={{ height: "100%" }}>
-      <ParticipantTile />
-    </GridLayout>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <GridLayout tracks={tracks} style={{ height: "100%" }}>
+          <ParticipantTile />
+        </GridLayout>
+      </div>
+      <MicCamControls />
+    </div>
+  );
+}
+
+function MicCamControls() {
+  const { localParticipant } = useLocalParticipant();
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
+
+  async function toggleMic() {
+    const next = !micOn;
+    await localParticipant.setMicrophoneEnabled(next);
+    setMicOn(next);
+  }
+
+  async function toggleCam() {
+    const next = !camOn;
+    await localParticipant.setCameraEnabled(next);
+    setCamOn(next);
+  }
+
+  return (
+    <div
+      className="flex items-center justify-center gap-3 px-4 py-2"
+      style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
+    >
+      <button
+        type="button"
+        onClick={toggleMic}
+        className={`rounded-full p-3 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+        style={{ minHeight: "44px", minWidth: "44px" }}
+        title={micOn ? "Silenciar" : "Activar micrófono"}
+      >
+        {micOn ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+            <path d="M5 10v2a7 7 0 0 0 12 5.66"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>
+          </svg>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={toggleCam}
+        className={`rounded-full p-3 transition ${camOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+        style={{ minHeight: "44px", minWidth: "44px" }}
+        title={camOn ? "Apagar cámara" : "Encender cámara"}
+      >
+        {camOn ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l6-4v11l-6-4V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1"/>
+            <line x1="2" x2="22" y1="2" y2="22"/>
+          </svg>
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -249,6 +318,7 @@ export default function WorkspaceConsulta({
   const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showSalirDialog, setShowSalirDialog] = useState(false);
 
   // Mobile: dos modos explícitos. false = video, true = escritura.
   const [modoEscritura, setModoEscritura] = useState(false);
@@ -475,6 +545,15 @@ export default function WorkspaceConsulta({
                 Volver al video
               </button>
             )}
+            {/* Botón salir — siempre visible */}
+            <button
+              type="button"
+              onClick={() => setShowSalirDialog(true)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
+              style={{ minHeight: "44px", minWidth: "44px" }}
+            >
+              Salir
+            </button>
           </div>
         </div>
 
@@ -498,7 +577,6 @@ export default function WorkspaceConsulta({
               >
                 <RoomAudioRenderer />
                 <VideoArea />
-                <ControlBar controls={{ leave: false, screenShare: true }} variation="minimal" />
               </LiveKitRoom>
             </div>
           ) : (
@@ -525,7 +603,7 @@ export default function WorkspaceConsulta({
                   {consulta.motivo_consulta || consulta.especialidad}
                 </p>
               </div>
-              <div className="ml-3 shrink-0 flex flex-col items-end gap-2">
+              <div className="ml-3 shrink-0 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setModoEscritura(true)}
@@ -534,32 +612,30 @@ export default function WorkspaceConsulta({
                 >
                   Documentar
                 </button>
-                {diagnostico.trim() && (
-                  <LoadingButton
-                    type="button"
-                    isLoading={finalizando}
-                    onClick={() => setShowConfirmDialog(true)}
-                    className="px-4 text-sm font-medium transition-all duration-300 active:scale-95 active:opacity-80 disabled:opacity-50"
-                    style={{ color: "#E24B4A", fontSize: "14px", minHeight: "44px", minWidth: "44px" }}
-                  >
-                    Finalizar consulta
-                  </LoadingButton>
-                )}
+                <LoadingButton
+                  type="button"
+                  isLoading={finalizando}
+                  onClick={() => {
+                    if (!validarDiagnostico()) return;
+                    setShowConfirmDialog(true);
+                  }}
+                  className="rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: "#E24B4A", minHeight: "44px" }}
+                >
+                  Finalizar
+                </LoadingButton>
               </div>
             </div>
           </div>
         )}
 
-        {/* Footer controles desktop */}
+        {/* Footer desktop: timer (controles están dentro del video) */}
         <div
-          className="hidden md:flex items-center justify-center gap-3 px-4 py-3"
+          className="hidden md:flex items-center justify-center gap-3 px-4 py-2"
           style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
         >
           <span className="text-xs tabular-nums text-white/40">
             {formatTimer(timerSeg)}
-          </span>
-          <span className="text-xs text-white/30">
-            Controles de audio/video en el iframe
           </span>
         </div>
       </div>
@@ -926,6 +1002,103 @@ export default function WorkspaceConsulta({
                 }}
               >
                 Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog de salir — médico: ofrece finalizar o solo salir */}
+      {showSalirDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                color: "#111",
+                marginBottom: "8px",
+              }}
+            >
+              Salir de la consulta
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#666",
+                marginBottom: "24px",
+              }}
+            >
+              ¿Qué querés hacer?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                onClick={() => {
+                  setShowSalirDialog(false);
+                  if (!validarDiagnostico()) return;
+                  setShowConfirmDialog(true);
+                }}
+                style={{
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#1D9E75",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Finalizar y generar documentos
+              </button>
+              <button
+                onClick={() => {
+                  setShowSalirDialog(false);
+                  router.push("/dashboard");
+                }}
+                style={{
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  color: "#666",
+                  cursor: "pointer",
+                }}
+              >
+                Salir sin finalizar
+              </button>
+              <button
+                onClick={() => setShowSalirDialog(false)}
+                style={{
+                  padding: "8px",
+                  border: "none",
+                  background: "none",
+                  fontSize: "13px",
+                  color: "#999",
+                  cursor: "pointer",
+                }}
+              >
+                Volver a la consulta
               </button>
             </div>
           </div>
