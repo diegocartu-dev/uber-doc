@@ -636,7 +636,7 @@ export default function WorkspaceConsulta({
                             setShowConfirmDialog(true);
                           }}
                           className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
-                          style={{ backgroundColor: "#7BAFD4", minHeight: "48px" }}
+                          style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
                         >
                           Finalizar consulta
                         </LoadingButton>
@@ -848,7 +848,7 @@ export default function WorkspaceConsulta({
                 type="button"
                 isLoading={guardadoManual === 'saving'}
                 onClick={guardarDocumentos}
-                className="w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#6A9FC4] active:scale-95 active:opacity-80 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
                 {guardadoManual === 'saved' ? "\u2713 Guardado" : "Guardar documentos"}
@@ -869,7 +869,7 @@ export default function WorkspaceConsulta({
                   setShowConfirmDialog(true);
                 }}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "#E57373", minHeight: "48px" }}
+                style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
               >
                 Finalizar y generar documentos
               </LoadingButton>
@@ -883,7 +883,7 @@ export default function WorkspaceConsulta({
                   if (!validarDiagnostico()) return;
                   setShowConfirmDialog(true);
                 }}
-                className="w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#6A9FC4] active:scale-95 active:opacity-80 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
                 Finalizar y generar documentos
@@ -1048,7 +1048,7 @@ export default function WorkspaceConsulta({
                   padding: "12px",
                   borderRadius: "10px",
                   border: "none",
-                  background: "#7BAFD4",
+                  background: "#378ADD",
                   color: "white",
                   fontSize: "14px",
                   fontWeight: 500,
@@ -1115,7 +1115,7 @@ export default function WorkspaceConsulta({
                   padding: "12px",
                   borderRadius: "10px",
                   border: "none",
-                  background: "#7BAFD4",
+                  background: "#378ADD",
                   color: "white",
                   fontSize: "14px",
                   fontWeight: 500,

@@ -351,7 +351,7 @@ export default function FormularioModelo({
         <button
           onClick={handleGuardar}
           disabled={isPending}
-          className="flex-1 flex items-center justify-center rounded-lg bg-[#7BAFD4] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#6A9FC4] disabled:opacity-50 active:scale-95 active:opacity-80 transition-all duration-100"
+          className="flex-1 flex items-center justify-center rounded-lg bg-[#378ADD] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 active:opacity-80 transition-all duration-100"
         >
           {isPending ? "Guardando..." : "Guardar modelo"}
         </button>

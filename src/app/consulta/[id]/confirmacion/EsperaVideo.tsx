@@ -126,7 +126,7 @@ export default function EsperaVideo({
         <a
           href={`/consulta/${consultaId}/sala`}
           className="mt-8 block w-full rounded-xl py-4 px-8 text-center text-lg font-semibold text-white shadow-sm transition-all duration-300 active:scale-95 animate-[softPulse_2s_ease-in-out_infinite]"
-          style={{ backgroundColor: "#7BAFD4", minHeight: "44px" }}
+          style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
         >
           Entrar a la videollamada
         </a>

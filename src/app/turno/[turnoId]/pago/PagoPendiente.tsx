@@ -82,7 +82,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
         </div>
         <h2 className="mt-4 text-lg font-medium text-gray-900">Tu reserva expiró</h2>
         <p className="mt-2 text-sm text-gray-500">El tiempo para completar el pago se agotó. El turno volvió a estar disponible.</p>
-        <a href={returnUrl} className="mt-6 inline-block rounded-lg bg-[#7BAFD4] px-6 py-2.5 text-sm font-medium text-white">
+        <a href={returnUrl} className="mt-6 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
           {returnUrl.startsWith("/dr/") ? "Volver al consultorio" : "Volver al calendario"}
         </a>
       </div>
@@ -141,7 +141,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
       <LoadingButton
         onClick={handlePagar}
         isLoading={isPending}
-        className="mt-6 w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#6A9FC4] disabled:opacity-50 active:scale-95 transition-all duration-100"
+        className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
       >
         Simular pago aprobado
       </LoadingButton>

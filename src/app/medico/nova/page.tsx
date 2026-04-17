@@ -502,7 +502,7 @@ export default function NovaChat() {
       {hablando && (
         <div
           className="flex h-10 shrink-0 items-center justify-between px-4"
-          style={{ background: "linear-gradient(90deg, #7BAFD4, #6A9FC4)" }}
+          style={{ background: "linear-gradient(90deg, #378ADD, #2e6fb5)" }}
         >
           <div className="flex items-center gap-2">
             <div className="flex items-end gap-[3px]">
@@ -571,7 +571,7 @@ export default function NovaChat() {
                   <div className="mt-2.5 flex gap-2">
                     <button
                       onClick={() => confirmarAccion(msg.id, "si")}
-                      className="rounded-lg bg-[#7BAFD4] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-transform"
+                      className="rounded-lg bg-[#378ADD] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-transform"
                     >
                       Confirmar
                     </button>
@@ -683,7 +683,7 @@ export default function NovaChat() {
             disabled={!hayTexto || enviando}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
               hayTexto && !enviando
-                ? "bg-[#1D9E75] text-white"
+                ? "bg-[#378ADD] text-white"
                 : "bg-[#e5e7eb] text-white"
             }`}
           >

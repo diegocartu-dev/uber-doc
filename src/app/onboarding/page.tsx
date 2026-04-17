@@ -138,7 +138,7 @@ export default async function OnboardingPage({
           <button
             type="submit"
             className="w-full rounded-[var(--radius-md)] text-sm font-semibold text-white shadow-sm active:scale-[0.97] transition-all duration-100"
-            style={{ height: 44, backgroundColor: "#7BAFD4" }}
+            style={{ height: 44, backgroundColor: "#378ADD" }}
           >
             Continuar
           </button>
