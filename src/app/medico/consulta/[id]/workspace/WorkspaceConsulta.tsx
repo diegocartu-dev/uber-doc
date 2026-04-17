@@ -822,8 +822,20 @@ export default function WorkspaceConsulta({
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
-            {/* Mobile modo escritura: Guardar documentos + Volver a la llamada */}
+            {/* Mobile modo escritura: Finalizar + Guardar + Volver */}
             <div className="md:hidden flex flex-col gap-2">
+              <LoadingButton
+                type="button"
+                isLoading={finalizando}
+                onClick={() => {
+                  if (!validarDiagnostico()) return;
+                  setShowConfirmDialog(true);
+                }}
+                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
+                style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
+              >
+                Finalizar y generar documentos
+              </LoadingButton>
               <LoadingButton
                 type="button"
                 isLoading={guardadoManual === 'saving'}
