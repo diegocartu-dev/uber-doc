@@ -210,33 +210,75 @@ function VideoArea() {
     ],
     { onlySubscribed: false }
   );
-  const cols = tracks.length > 1 ? "grid-cols-2" : "grid-cols-1";
+
+  // Separar local vs remoto para layout PiP
+  const remoteTracks = tracks.filter((t) => !t.participant.isLocal);
+  const localTracks = tracks.filter((t) => t.participant.isLocal);
+  const remoteTrack = remoteTracks[0] || null;
+  const localTrack = localTracks[0] || null;
+
   return (
-    <div className={`grid ${cols} gap-1 h-full w-full`}>
-      {tracks.map((trackRef) => (
-        <div
-          key={`${trackRef.participant.identity}-${trackRef.source}`}
-          className="relative bg-gray-800 overflow-hidden flex items-center justify-center"
-        >
-          {trackRef.publication && !trackRef.publication.isMuted ? (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Remoto — pantalla completa */}
+      <div style={{ position: "absolute", inset: 0 }} className="bg-gray-800 flex items-center justify-center">
+        {remoteTrack ? (
+          remoteTrack.publication && !remoteTrack.publication.isMuted ? (
             <VideoTrack
-              trackRef={trackRef}
+              trackRef={remoteTrack}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center gap-2">
               <div className="h-20 w-20 rounded-full bg-gray-600 flex items-center justify-center">
                 <span className="text-2xl text-gray-300">
-                  {trackRef.participant.name?.[0]?.toUpperCase() || "?"}
+                  {remoteTrack.participant.name?.[0]?.toUpperCase() || "?"}
                 </span>
               </div>
+              <span className="text-xs text-white/50">
+                {remoteTrack.participant.name || "Participante"}
+              </span>
+            </div>
+          )
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2">
+            <div className="h-20 w-20 rounded-full bg-gray-600 flex items-center justify-center">
+              <span className="text-2xl text-gray-300">?</span>
+            </div>
+            <span className="text-xs text-white/50">Esperando paciente...</span>
+          </div>
+        )}
+      </div>
+
+      {/* Local — PiP esquina inferior derecha */}
+      {localTrack && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 12,
+            right: 12,
+            width: 120,
+            height: 90,
+            borderRadius: 8,
+            overflow: "hidden",
+            zIndex: 10,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+          }}
+          className="bg-gray-700 flex items-center justify-center"
+        >
+          {localTrack.publication && !localTrack.publication.isMuted ? (
+            <VideoTrack
+              trackRef={localTrack}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full w-full">
+              <span className="text-xs text-gray-300">
+                {localTrack.participant.name?.[0]?.toUpperCase() || "Yo"}
+              </span>
             </div>
           )}
-          <span className="absolute bottom-2 left-2 rounded bg-black/50 px-2 py-0.5 text-xs text-white">
-            {trackRef.participant.name || "Participante"}
-          </span>
         </div>
-      ))}
+      )}
     </div>
   );
 }
