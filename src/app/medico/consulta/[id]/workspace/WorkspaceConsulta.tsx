@@ -18,7 +18,7 @@ import {
   useTracks,
   useLocalParticipant,
 } from "@livekit/components-react";
-import "@livekit/components-styles";
+
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
@@ -553,7 +553,6 @@ export default function WorkspaceConsulta({
               connect={true}
               onDisconnected={() => setIframeVisible(false)}
               style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
-              data-lk-theme="default"
             >
               <RoomAudioRenderer />
 
@@ -572,7 +571,7 @@ export default function WorkspaceConsulta({
               <MicCamProvider>
                 {({ micOn, camOn, toggleMic, toggleCam }) => (
                   <>
-                    {/* MOBILE footer: 2 filas. Solo visible en modo video */}
+                    {/* MOBILE footer: 3 filas. Solo visible en modo video */}
                     {!modoEscritura && (
                       <div
                         className="md:hidden px-4 py-3 space-y-3"
@@ -597,29 +596,28 @@ export default function WorkspaceConsulta({
                             <CamIcon on={camOn} />
                           </button>
                         </div>
-                        {/* Fila 2: Documentar + Finalizar full width */}
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setModoEscritura(true)}
-                            className="flex-1 rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
-                            style={{ minHeight: "48px" }}
-                          >
-                            Documentar
-                          </button>
-                          <LoadingButton
-                            type="button"
-                            isLoading={finalizando}
-                            onClick={() => {
-                              if (!validarDiagnostico()) return;
-                              setShowConfirmDialog(true);
-                            }}
-                            className="flex-1 rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
-                            style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
-                          >
-                            Finalizar
-                          </LoadingButton>
-                        </div>
+                        {/* Fila 2: Documentar full width */}
+                        <button
+                          type="button"
+                          onClick={() => setModoEscritura(true)}
+                          className="w-full rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
+                          style={{ minHeight: "48px" }}
+                        >
+                          Documentar
+                        </button>
+                        {/* Fila 3: Finalizar full width */}
+                        <LoadingButton
+                          type="button"
+                          isLoading={finalizando}
+                          onClick={() => {
+                            if (!validarDiagnostico()) return;
+                            setShowConfirmDialog(true);
+                          }}
+                          className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
+                          style={{ backgroundColor: "#1D9E75", minHeight: "48px" }}
+                        >
+                          Finalizar consulta
+                        </LoadingButton>
                       </div>
                     )}
 

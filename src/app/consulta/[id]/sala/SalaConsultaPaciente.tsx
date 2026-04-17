@@ -10,7 +10,7 @@ import {
   useTracks,
   useLocalParticipant,
 } from "@livekit/components-react";
-import "@livekit/components-styles";
+
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 
@@ -474,7 +474,6 @@ export default function SalaConsultaPaciente({
             connect={true}
             onDisconnected={handleDisconnected}
             style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
-            data-lk-theme="default"
           >
             <RoomAudioRenderer />
 
