@@ -100,7 +100,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
         <p className="mt-1 text-sm text-gray-500">Dr. {capitalizarNombre(medico.nombre)} · {medico.especialidad}</p>
-        <a href="/dashboard" className="mt-6 inline-block rounded-lg bg-[#1D9E75] px-6 py-2.5 text-sm font-medium text-white">
+        <a href="/dashboard" className="mt-6 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
           Volver al inicio
         </a>
       </div>
@@ -311,7 +311,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
             </button>
             <button
               onClick={() => setMostrarConfirmacion(true)}
-              className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+              className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
             >
               Confirmar turno →
             </button>
@@ -353,7 +353,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
               <LoadingButton
                 onClick={handleConfirmar}
                 isLoading={isPending}
-                className="flex-1 rounded-lg bg-[#1D9E75] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#178a64] disabled:opacity-50 active:scale-95 transition-all duration-100"
+                className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
               >
                 Confirmar y pagar
               </LoadingButton>

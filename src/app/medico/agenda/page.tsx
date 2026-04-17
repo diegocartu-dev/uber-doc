@@ -88,7 +88,7 @@ export default async function AgendaPage({
             <div className="mt-6">
               <Link
                 href="/medico/agenda?nuevo=1"
-                className="mb-4 flex items-center justify-center rounded-xl bg-[#1D9E75] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#178a64] active:scale-[0.98] transition-all duration-100"
+                className="mb-4 flex items-center justify-center rounded-xl bg-[#378ADD] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100"
               >
                 + Nuevo modelo de agenda
               </Link>

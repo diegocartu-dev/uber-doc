@@ -114,7 +114,7 @@ export default async function ConfirmacionTurnoPage({
               return (
                 <Link
                   href={`/turno/${turnoId}/espera`}
-                  className="block w-full rounded-xl bg-[#1D9E75] px-6 py-3 text-center text-sm font-medium text-white"
+                  className="block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-medium text-white"
                 >
                   Ir a sala de espera
                 </Link>

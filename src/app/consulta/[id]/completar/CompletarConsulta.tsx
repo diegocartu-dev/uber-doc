@@ -256,7 +256,7 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
         <LoadingButton
           isLoading={finalizando}
           onClick={() => finalizar()}
-          className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+          className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
         >
           Finalizar y generar documentos
         </LoadingButton>
