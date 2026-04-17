@@ -273,8 +273,8 @@ function CamIcon({ on }: { on: boolean }) {
 // Hook para controles mic/cam — usado por el footer FUERA de LiveKitRoom
 function useMicCam() {
   const { localParticipant } = useLocalParticipant();
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
+  const [camOn, setCamOn] = useState(false);
 
   const toggleMic = useCallback(async () => {
     const next = !micOn;
@@ -573,6 +573,8 @@ export default function WorkspaceConsulta({
               serverUrl={livekitUrl}
               token={livekitToken}
               connect={true}
+              audio={false}
+              video={false}
               onDisconnected={() => setIframeVisible(false)}
               style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
             >
