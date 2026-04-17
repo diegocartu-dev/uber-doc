@@ -636,7 +636,7 @@ export default function WorkspaceConsulta({
                             setShowConfirmDialog(true);
                           }}
                           className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
-                          style={{ backgroundColor: "#1D9E75", minHeight: "48px" }}
+                          style={{ backgroundColor: "#7BAFD4", minHeight: "48px" }}
                         >
                           Finalizar consulta
                         </LoadingButton>
@@ -842,25 +842,13 @@ export default function WorkspaceConsulta({
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
-            {/* Mobile modo escritura: Finalizar + Guardar + Volver */}
+            {/* Mobile modo escritura: Guardar + Volver + Finalizar */}
             <div className="md:hidden flex flex-col gap-2">
-              <LoadingButton
-                type="button"
-                isLoading={finalizando}
-                onClick={() => {
-                  if (!validarDiagnostico()) return;
-                  setShowConfirmDialog(true);
-                }}
-                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
-              >
-                Finalizar y generar documentos
-              </LoadingButton>
               <LoadingButton
                 type="button"
                 isLoading={guardadoManual === 'saving'}
                 onClick={guardarDocumentos}
-                className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#6A9FC4] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
                 {guardadoManual === 'saved' ? "\u2713 Guardado" : "Guardar documentos"}
@@ -873,6 +861,18 @@ export default function WorkspaceConsulta({
               >
                 Volver a la llamada
               </button>
+              <LoadingButton
+                type="button"
+                isLoading={finalizando}
+                onClick={() => {
+                  if (!validarDiagnostico()) return;
+                  setShowConfirmDialog(true);
+                }}
+                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
+                style={{ backgroundColor: "#E57373", minHeight: "48px" }}
+              >
+                Finalizar y generar documentos
+              </LoadingButton>
             </div>
 
             {/* Desktop: finalizar + cancelar */}
@@ -883,7 +883,7 @@ export default function WorkspaceConsulta({
                   if (!validarDiagnostico()) return;
                   setShowConfirmDialog(true);
                 }}
-                className="w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#178a64] active:scale-95 active:opacity-80 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#6A9FC4] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
                 Finalizar y generar documentos
@@ -1048,7 +1048,7 @@ export default function WorkspaceConsulta({
                   padding: "12px",
                   borderRadius: "10px",
                   border: "none",
-                  background: "#1D9E75",
+                  background: "#7BAFD4",
                   color: "white",
                   fontSize: "14px",
                   fontWeight: 500,
@@ -1115,7 +1115,7 @@ export default function WorkspaceConsulta({
                   padding: "12px",
                   borderRadius: "10px",
                   border: "none",
-                  background: "#1D9E75",
+                  background: "#7BAFD4",
                   color: "white",
                   fontSize: "14px",
                   fontWeight: 500,

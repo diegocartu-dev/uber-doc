@@ -400,7 +400,7 @@ export default function SalaConsultaPaciente({
             {/* Botón volver */}
             <a
               href="/dashboard"
-              className="mt-8 block w-full rounded-xl bg-[#1D9E75] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#178a64] active:scale-95 transition-all duration-100"
+              className="mt-8 block w-full rounded-xl bg-[#7BAFD4] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#6A9FC4] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
               Volver al inicio

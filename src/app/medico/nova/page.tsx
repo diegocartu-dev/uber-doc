@@ -502,7 +502,7 @@ export default function NovaChat() {
       {hablando && (
         <div
           className="flex h-10 shrink-0 items-center justify-between px-4"
-          style={{ background: "linear-gradient(90deg, #1D9E75, #178a64)" }}
+          style={{ background: "linear-gradient(90deg, #7BAFD4, #6A9FC4)" }}
         >
           <div className="flex items-center gap-2">
             <div className="flex items-end gap-[3px]">
@@ -571,7 +571,7 @@ export default function NovaChat() {
                   <div className="mt-2.5 flex gap-2">
                     <button
                       onClick={() => confirmarAccion(msg.id, "si")}
-                      className="rounded-lg bg-[#1D9E75] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-transform"
+                      className="rounded-lg bg-[#7BAFD4] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-transform"
                     >
                       Confirmar
                     </button>

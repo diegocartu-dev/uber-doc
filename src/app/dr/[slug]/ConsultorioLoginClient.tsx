@@ -116,7 +116,7 @@ export default function ConsultorioLoginClient({ slug }: Props) {
             type="submit"
             isLoading={loadingMagic}
             className="w-full rounded-[var(--radius-md)] text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
-            style={{ height: 44, backgroundColor: "#1D9E75" }}
+            style={{ height: 44, backgroundColor: "#7BAFD4" }}
           >
             Enviame un link para entrar
           </LoadingButton>
