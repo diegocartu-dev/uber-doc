@@ -61,7 +61,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const [lunesActual, setLunesActual] = useState(() => getLunes(hoy));
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string; canal_origen: string | null }[]>([]);
+  const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState(hoyStr);
 
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -180,7 +180,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ESTADOS_VISIBLES);
+      const { data } = await supabase.from("turnos").select("fecha, estado").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ESTADOS_VISIBLES);
       setTurnosMes(data ?? []);
     }
     load();
@@ -207,14 +207,15 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
     reservadosPorDia.get(t.fecha)!.push(t);
   }
 
-  const diasConDisp = new Set<string>(); const diasConRes = new Set<string>();
-  const canalesPorDia = new Map<string, Set<string>>();
+  const diasConDisp = new Set<string>();
+  const diasConConfirmado = new Set<string>();
+  const diasConCancelado = new Set<string>();
   for (const t of turnosMes) {
     if (t.estado === "disponible") diasConDisp.add(t.fecha);
-    if (ESTADOS_OCUPADOS.includes(t.estado)) diasConRes.add(t.fecha);
-    if (!canalesPorDia.has(t.fecha)) canalesPorDia.set(t.fecha, new Set());
-    canalesPorDia.get(t.fecha)!.add(t.canal_origen ?? "default");
+    if (t.estado === "confirmado" || t.estado === "en_espera" || t.estado === "reservado_pendiente") diasConConfirmado.add(t.fecha);
+    if (t.estado === "cancelado_medico" || t.estado === "cancelado_paciente") diasConCancelado.add(t.fecha);
   }
+  const diasConAlgo = new Set([...diasConDisp, ...diasConConfirmado, ...diasConCancelado]);
 
   const primerDia = new Date(anioVisible, mesVisible, 1);
   const startPad = primerDia.getDay() === 0 ? 6 : primerDia.getDay() - 1;
@@ -239,18 +240,14 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-[#378ADD] inline-block" />
-          <span className="text-[11px] text-gray-500">Clínica Virtual</span>
+          <span className="text-[11px] text-gray-500">Disponible</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-[#D85A30] inline-block" />
-          <span className="text-[11px] text-gray-500">Consultorio Particular</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#E8E0F7", border: "1px solid #6B4FA0" }} />
+          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#6B4FA0" }} />
           <span className="text-[11px] text-gray-500">Confirmado</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#FFF3E0", border: "1px solid #D85A30" }} />
+          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#D85A30" }} />
           <span className="text-[11px] text-gray-500">Cancelado</span>
         </div>
       </div>
@@ -281,14 +278,14 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                 style={esHoy ? { background: "#1D9E75", color: "white", borderRadius: "50%", width: "44px", height: "44px", margin: "auto" }
                   : esSeleccionado ? { background: "#E1F5EE", borderRadius: "50%", width: "44px", height: "44px", margin: "auto", color: "#1D9E75", fontWeight: 600 }
                   : enSemana ? { background: "#E1F5EE", borderRadius: "4px", color: "#1a1a1a" }
-                  : { color: (diasConDisp.has(fecha) || diasConRes.has(fecha)) ? "#1a1a1a" : "#d1d5db" }}
+                  : { color: diasConAlgo.has(fecha) ? "#1a1a1a" : "#d1d5db" }}
               >
                 {dia}
-                {canalesPorDia.has(fecha) && !esHoy && (
+                {diasConAlgo.has(fecha) && !esHoy && (
                   <span className="absolute bottom-0.5 flex gap-0.5">
-                    {[...canalesPorDia.get(fecha)!].map((canal) => (
-                      <span key={canal} className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: colorPorCanal(canal === "default" ? null : canal).bg }} />
-                    ))}
+                    {diasConDisp.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#378ADD" }} />}
+                    {diasConConfirmado.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6B4FA0" }} />}
+                    {diasConCancelado.has(fecha) && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#D85A30" }} />}
                   </span>
                 )}
               </button>

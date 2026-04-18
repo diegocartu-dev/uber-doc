@@ -53,7 +53,7 @@ export default async function AgendaPage({
   return (
     <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
       <AppNavbar userName={fullName} userRole="medico" />
-      <div className="flex flex-1 flex-col md:grid md:grid-cols-[60fr_40fr] md:overflow-hidden">
+      <div className="flex flex-1 flex-col md:grid md:grid-cols-[40fr_60fr] md:overflow-hidden">
       {/*
         Mobile: flex-col apilado — PanelDerecho primero (agenda), luego modelos
         Desktop: grid 2 columnas — modelos izquierda, agenda derecha (order classes)
