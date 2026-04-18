@@ -119,7 +119,40 @@ export async function actualizarOcultoClinica(oculto: boolean) {
   return { success: true };
 }
 
-export async function cancelarTurnoPaciente(turnoId: string) {
+export async function cancelarTurnosMedico(
+  turnoIds: string[],
+  motivo?: string
+): Promise<{ success?: boolean; cancelados: number; errores: string[] }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { cancelados: 0, errores: ["No autenticado."] };
+
+  const { data: medico } = await supabase
+    .from("medicos").select("id").eq("user_id", user.id).maybeSingle();
+  if (!medico) return { cancelados: 0, errores: ["Perfil médico no encontrado."] };
+
+  const { cancelarTurnoPorMedico } = await import("@/lib/cancelaciones");
+
+  let cancelados = 0;
+  const errores: string[] = [];
+
+  for (const turnoId of turnoIds) {
+    const resultado = await cancelarTurnoPorMedico(turnoId, medico.id, motivo);
+    if (resultado.ok) {
+      cancelados++;
+    } else {
+      errores.push(`${turnoId}: ${resultado.error}`);
+    }
+  }
+
+  revalidatePath("/medico/agenda");
+  return { success: cancelados > 0, cancelados, errores };
+}
+
+export async function cancelarTurnoPaciente(
+  turnoId: string,
+  motivo?: string
+): Promise<{ success?: boolean; reembolso?: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
@@ -128,13 +161,9 @@ export async function cancelarTurnoPaciente(turnoId: string) {
     .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
   if (!paciente) return { error: "Paciente no encontrado." };
 
-  const { error } = await supabase
-    .from("turnos")
-    .update({ estado: "cancelado_paciente" })
-    .eq("id", turnoId)
-    .eq("paciente_id", paciente.id)
-    .eq("estado", "confirmado");
+  const { cancelarTurnoPorPaciente } = await import("@/lib/cancelaciones");
+  const resultado = await cancelarTurnoPorPaciente(turnoId, paciente.id, motivo);
 
-  if (error) return { error: error.message };
-  return { success: true };
+  if (!resultado.ok) return { error: resultado.error };
+  return { success: true, reembolso: resultado.reembolso };
 }
