@@ -12,7 +12,6 @@ type Medicamento = {
   droga: string;
   presentacion: string;
   laboratorio: string;
-  categoria: string;
 };
 
 export type MedicamentoReceta = {
