@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarEmailTurnoCancelado } from "@/lib/email";
 
 function generarSlots(
   horaInicio: string,
@@ -265,6 +266,8 @@ export async function POST(req: NextRequest) {
           mensaje: `Error al cancelar: ${error.message}`,
         });
       }
+
+      enviarEmailTurnoCancelado(turno_id, "medico").catch(console.error);
 
       return NextResponse.json({
         exito: true,
