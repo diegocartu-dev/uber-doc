@@ -66,9 +66,31 @@ export async function GET(req: NextRequest) {
     detalle.push({ tabla, cerradas: ids.length, ids });
   }
 
+  // ─── Reembolso automático: créditos de médico vencidos (45 días) ───
+  const hace45dias = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: creditosVencidos } = await supabase
+    .from("turnos")
+    .select("id")
+    .eq("estado", "cancelado_medico")
+    .eq("reintegro_estado", "pendiente")
+    .lt("updated_at", hace45dias);
+
+  let reembolsados = 0;
+  if (creditosVencidos && creditosVencidos.length > 0) {
+    const ids = creditosVencidos.map((t) => t.id);
+    const { error: errReembolso } = await supabase
+      .from("turnos")
+      .update({ reintegro_estado: "reembolsado" })
+      .in("id", ids);
+
+    if (!errReembolso) reembolsados = ids.length;
+  }
+
   return NextResponse.json({
     ok: true,
     total_cerradas: totalCerradas,
+    creditos_reembolsados: reembolsados,
     detalle,
   });
 }

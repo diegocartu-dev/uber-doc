@@ -208,11 +208,11 @@ export default function CalendarioTurnos({
                   onClick={() => { setDiaSeleccionado(fecha); setTurnoSeleccionado(null); }}
                   className={`flex h-9 w-9 items-center justify-center rounded-lg text-xs transition-all duration-100 ${
                     seleccionado
-                      ? "bg-[#1D9E75] text-white font-medium"
+                      ? "bg-[#378ADD] text-white font-medium"
                       : tieneTurnos
-                        ? "bg-[#1D9E75]/10 text-[#1D9E75] font-medium hover:bg-[#1D9E75]/20"
+                        ? "bg-[#378ADD]/10 text-[#378ADD] font-medium hover:bg-[#378ADD]/20"
                         : "text-gray-300 cursor-default"
-                  } ${esHoy && !seleccionado ? "ring-1 ring-[#1D9E75]" : ""}`}
+                  } ${esHoy && !seleccionado ? "ring-1 ring-[#378ADD]" : ""}`}
                 >
                   {dia}
                 </button>
@@ -235,7 +235,7 @@ export default function CalendarioTurnos({
                   <button
                     key={t.id}
                     onClick={() => setTurnoSeleccionado(t)}
-                    className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-[#1D9E75]/10 hover:text-[#1D9E75] active:scale-95 transition-all duration-100"
+                    className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-[#378ADD]/10 hover:text-[#378ADD] active:scale-95 transition-all duration-100"
                     style={{ border: "0.5px solid #e5e7eb" }}
                   >
                     {t.hora_inicio.slice(0, 5)}
@@ -257,7 +257,7 @@ export default function CalendarioTurnos({
                   <button
                     key={t.id}
                     onClick={() => setTurnoSeleccionado(t)}
-                    className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-[#1D9E75]/10 hover:text-[#1D9E75] active:scale-95 transition-all duration-100"
+                    className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-[#378ADD]/10 hover:text-[#378ADD] active:scale-95 transition-all duration-100"
                     style={{ border: "0.5px solid #e5e7eb" }}
                   >
                     {t.hora_inicio.slice(0, 5)}
@@ -338,7 +338,7 @@ export default function CalendarioTurnos({
                       onClick={() => toggleRecordatorio(r.value)}
                       className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
                         r.activo
-                          ? "bg-[#1D9E75] text-white"
+                          ? "bg-[#378ADD] text-white"
                           : "bg-gray-50 text-gray-500"
                       }`}
                       style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
@@ -363,7 +363,7 @@ export default function CalendarioTurnos({
                       onClick={() => setCanal(c.value)}
                       className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
                         canal === c.value
-                          ? "bg-[#1D9E75] text-white"
+                          ? "bg-[#378ADD] text-white"
                           : "bg-gray-50 text-gray-500"
                       }`}
                       style={{ border: canal === c.value ? "none" : "0.5px solid #e5e7eb" }}
