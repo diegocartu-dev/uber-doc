@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/cerrar-huerfanas",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 */6 * * *"
     }
   ]
 }
