@@ -7,6 +7,16 @@ type ResultadoCancelacion = {
   error?: string;
 };
 
+export type CreditoPendiente = {
+  turno_id: string;
+  fecha_cancelacion: string;
+  fecha_vencimiento: string;
+  monto: number | null;
+  reprogramaciones: number;
+};
+
+const DIAS_CREDITO = 45;
+
 function esMasDe48hAntes(fecha: string, horaInicio: string): boolean {
   const turnoDate = new Date(`${fecha}T${horaInicio}:00-03:00`);
   const ahora = new Date();
@@ -40,13 +50,12 @@ export async function cancelarTurnoPorPaciente(
     .update({
       estado: "cancelado_paciente",
       motivo_cancelacion: motivo || null,
-      reintegro_estado: reembolso ? "acreditado" : null,
+      reintegro_estado: reembolso ? "reembolsado" : null,
     })
     .eq("id", turnoId);
 
   if (error) return { ok: false, reembolso: false, error: error.message };
 
-  // Devolver slot al pool: crear nuevo turno disponible
   await supabase.from("turnos").insert({
     medico_id: turno.medico_id,
     fecha: turno.fecha,
@@ -58,7 +67,6 @@ export async function cancelarTurnoPorPaciente(
 
   enviarEmailTurnoCancelado(turnoId, "paciente").catch(console.error);
 
-  // Mensaje sistema
   await insertarMensajeSistema(
     turnoId,
     pacienteId,
@@ -127,19 +135,24 @@ export async function reprogramarTurno(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = createAdminClient();
 
-  // Verificar turno original cancelado por médico con crédito pendiente
   const { data: origen } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, medico_id, reprogramaciones, reintegro_estado")
+    .select("id, estado, paciente_id, medico_id, reprogramaciones, reintegro_estado, updated_at")
     .eq("id", turnoOrigenId)
     .single();
 
   if (!origen) return { ok: false, error: "Turno original no encontrado." };
   if (origen.paciente_id !== pacienteId) return { ok: false, error: "No te pertenece." };
   if (origen.reintegro_estado !== "pendiente") return { ok: false, error: "Sin crédito disponible." };
-  if ((origen.reprogramaciones ?? 0) >= 2) return { ok: false, error: "Máximo 2 reprogramaciones por médico alcanzado." };
+  if ((origen.reprogramaciones ?? 0) >= 2) return { ok: false, error: "Máximo 2 reprogramaciones alcanzado." };
 
-  // Verificar nuevo turno disponible
+  // Verificar vencimiento del crédito (45 días desde cancelación)
+  const fechaCancelacion = new Date(origen.updated_at);
+  const fechaVencimiento = new Date(fechaCancelacion.getTime() + DIAS_CREDITO * 24 * 60 * 60 * 1000);
+  if (new Date() > fechaVencimiento) {
+    return { ok: false, error: "El crédito venció. Se procesará tu reembolso automáticamente." };
+  }
+
   const { data: nuevo } = await supabase
     .from("turnos")
     .select("id, estado, medico_id")
@@ -149,14 +162,13 @@ export async function reprogramarTurno(
   if (!nuevo || nuevo.estado !== "disponible") return { ok: false, error: "Turno no disponible." };
   if (nuevo.medico_id !== origen.medico_id) return { ok: false, error: "Solo podés reprogramar con el mismo médico." };
 
-  // Reservar nuevo turno con crédito (optimistic lock via .select para detectar 0 filas)
+  // Reservar nuevo turno (optimistic lock en estado)
   const { data: updated, error: errNuevo } = await supabase
     .from("turnos")
     .update({
       estado: "confirmado",
       paciente_id: pacienteId,
       turno_origen_id: turnoOrigenId,
-      reprogramaciones: (origen.reprogramaciones ?? 0) + 1,
     })
     .eq("id", nuevoTurnoId)
     .eq("estado", "disponible")
@@ -165,13 +177,26 @@ export async function reprogramarTurno(
   if (errNuevo) return { ok: false, error: errNuevo.message };
   if (!updated || updated.length === 0) return { ok: false, error: "Este turno ya fue tomado por otro paciente." };
 
-  // Marcar crédito como usado
-  await supabase
+  // Marcar crédito como usado + incrementar contador en turno ORIGEN (optimistic lock)
+  const { data: creditoUsado } = await supabase
     .from("turnos")
-    .update({ reintegro_estado: "acreditado" })
-    .eq("id", turnoOrigenId);
+    .update({
+      reintegro_estado: "usado_reprogramacion",
+      reprogramaciones: (origen.reprogramaciones ?? 0) + 1,
+    })
+    .eq("id", turnoOrigenId)
+    .eq("reintegro_estado", "pendiente")
+    .select("id");
 
-  // Mensaje sistema
+  if (!creditoUsado || creditoUsado.length === 0) {
+    // Rollback: devolver el nuevo turno a disponible
+    await supabase
+      .from("turnos")
+      .update({ estado: "disponible", paciente_id: null, turno_origen_id: null })
+      .eq("id", nuevoTurnoId);
+    return { ok: false, error: "El crédito ya fue utilizado." };
+  }
+
   const { data: nuevoTurno } = await supabase
     .from("turnos")
     .select("fecha, hora_inicio")
@@ -188,6 +213,40 @@ export async function reprogramarTurno(
   }
 
   return { ok: true };
+}
+
+// Detectar créditos pendientes por DB (no query param)
+export async function obtenerCreditosPendientes(
+  pacienteId: string,
+  medicoId: string
+): Promise<CreditoPendiente[]> {
+  const supabase = createAdminClient();
+
+  const { data } = await supabase
+    .from("turnos")
+    .select("id, updated_at, monto, reprogramaciones")
+    .eq("paciente_id", pacienteId)
+    .eq("medico_id", medicoId)
+    .eq("estado", "cancelado_medico")
+    .eq("reintegro_estado", "pendiente")
+    .order("updated_at", { ascending: false });
+
+  if (!data) return [];
+
+  const ahora = new Date();
+  return data
+    .map((t) => {
+      const fechaCancelacion = new Date(t.updated_at);
+      const fechaVencimiento = new Date(fechaCancelacion.getTime() + DIAS_CREDITO * 24 * 60 * 60 * 1000);
+      return {
+        turno_id: t.id,
+        fecha_cancelacion: t.updated_at,
+        fecha_vencimiento: fechaVencimiento.toISOString(),
+        monto: t.monto,
+        reprogramaciones: t.reprogramaciones ?? 0,
+      };
+    })
+    .filter((c) => new Date(c.fecha_vencimiento) > ahora && c.reprogramaciones < 2);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
