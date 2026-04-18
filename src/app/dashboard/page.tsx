@@ -70,6 +70,7 @@ export default async function DashboardPage({
   let ingresosHoy = 0;
   let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string; canal_origen?: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
+  let proximosTurnos: { id: string; fecha: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
   let turnoEnCurso: { id: string; hora_inicio: string; paciente_nombre: string } | null = null;
   let modelosActivosList: { id: string; nombre: string }[] = [];
 
@@ -284,6 +285,28 @@ export default async function DashboardPage({
         }));
       }
 
+      // Próximos turnos (después de hoy, max 5)
+      const { data: proximosData } = await supabase
+        .from("turnos")
+        .select("id, fecha, hora_inicio, hora_fin, estado, paciente_id")
+        .eq("medico_id", data.id).gt("fecha", hoy)
+        .in("estado", ["confirmado", "en_espera"])
+        .order("fecha", { ascending: true })
+        .order("hora_inicio", { ascending: true })
+        .limit(5);
+
+      if (proximosData && proximosData.length > 0) {
+        const pacIdsP = [...new Set(proximosData.map((t) => t.paciente_id).filter(Boolean))];
+        const { data: pacsP } = pacIdsP.length > 0
+          ? await supabase.from("pacientes").select("id, nombre_completo").in("id", pacIdsP)
+          : { data: [] };
+        const nombresP = new Map((pacsP ?? []).map((p) => [p.id, p.nombre_completo]));
+        proximosTurnos = proximosData.map((t) => ({
+          id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio, hora_fin: t.hora_fin,
+          estado: t.estado, paciente_nombre: nombresP.get(t.paciente_id) ?? "Paciente",
+        }));
+      }
+
     }
   }
 
@@ -359,7 +382,7 @@ export default async function DashboardPage({
         )}
 
         {/* Lista del día */}
-        <AgendaHoy turnos={turnosHoy} />
+        <AgendaHoy turnos={turnosHoy} proximosTurnos={proximosTurnos} />
 
         {/* Pie — historial full-width */}
         <div className="border-t border-gray-100 pt-3 mt-4">

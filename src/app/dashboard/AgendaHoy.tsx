@@ -11,6 +11,8 @@ type Turno = {
   paciente_nombre: string;
 };
 
+type TurnoProximo = Turno & { fecha: string };
+
 const estadoConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   confirmado: { bg: "transparent", text: "#888780", dot: "#888780", label: "Confirmado" },
   en_espera: { bg: "#eff6ff", text: "#378ADD", dot: "#378ADD", label: "En espera" },
@@ -18,7 +20,15 @@ const estadoConfig: Record<string, { bg: string; text: string; dot: string; labe
   completado: { bg: "transparent", text: "#d1d5db", dot: "#d1d5db", label: "Completado" },
 };
 
-export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
+const MESES_CORTO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+function formatFechaCorta(f: string) {
+  const d = new Date(f + "T12:00:00");
+  const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  return `${dias[d.getDay()]} ${d.getDate()} de ${MESES_CORTO[d.getMonth()]}`;
+}
+
+export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Turno[]; proximosTurnos?: TurnoProximo[] }) {
   const [alertas, setAlertas] = useState<{ id: string; nombre: string; hora: string; minutos: number }[]>([]);
   const [permisoNotif, setPermisoNotif] = useState(false);
 
@@ -73,11 +83,43 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
     }
   }, [turnos.filter((t) => t.estado === "en_espera").length, permisoNotif]);
 
+  const bloqueProximos = proximosTurnos.length > 0 ? (
+    <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+      <p className="text-xs font-medium tracking-wide text-gray-400">PRÓXIMOS TURNOS</p>
+      <div className="mt-3 space-y-1">
+        {proximosTurnos.map((t) => {
+          const config = estadoConfig[t.estado] ?? estadoConfig.confirmado;
+          return (
+            <div key={t.id} className="flex items-center justify-between rounded-lg p-2.5">
+              <div className="flex items-center gap-3">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#E8E0F7", border: "1.5px solid #6B4FA0" }} />
+                <div>
+                  <p className="text-[13px] font-medium text-gray-900">
+                    {formatFechaCorta(t.fecha)} · {t.hora_inicio.slice(0, 5)}
+                  </p>
+                  <p className="text-[12px]" style={{ color: config.text }}>
+                    {capitalizarNombre(t.paciente_nombre)}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-medium" style={{ color: "#6B4FA0" }}>
+                {config.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
   if (turnos.length === 0) {
     return (
-      <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-        <p className="text-sm font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
-        <p className="mt-3 text-sm text-gray-400">Sin turnos programados para hoy</p>
+      <div className="space-y-3">
+        <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+          <p className="text-sm font-medium tracking-wide text-gray-400">AGENDA DE HOY</p>
+          <p className="mt-3 text-sm text-gray-400">Sin turnos programados para hoy</p>
+        </div>
+        {bloqueProximos}
       </div>
     );
   }
@@ -131,7 +173,6 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
               );
             })}
           </div>
-          {/* Gradient fade — solo visible en mobile cuando hay suficientes turnos */}
           {turnos.length >= 5 && (
             <div
               className="pointer-events-none sticky bottom-0 h-10 lg:hidden"
@@ -140,6 +181,8 @@ export default function AgendaHoy({ turnos }: { turnos: Turno[] }) {
           )}
         </div>
       </div>
+
+      {bloqueProximos}
     </div>
   );
 }

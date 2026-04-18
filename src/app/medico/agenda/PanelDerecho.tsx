@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { cancelarTurnosMedico } from "@/app/dashboard/actions";
 
@@ -22,6 +23,7 @@ function colorPorCanal(canalOrigen: string | null | undefined): { bg: string; bo
 }
 
 const ESTADOS_OCUPADOS = ["reservado_pendiente", "confirmado", "en_espera"];
+const ESTADOS_VISIBLES = ["disponible", ...ESTADOS_OCUPADOS, "cancelado_medico", "cancelado_paciente"];
 
 const DIAS_LABEL = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const DIAS_SEMANA_LARGO = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
@@ -65,7 +67,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [dialogCancelar, setDialogCancelar] = useState(false);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
-  const [cancelResult, setCancelResult] = useState<{ cancelados: number; mensaje: string } | null>(null);
+  const [cancelResult, setCancelResult] = useState<{ cancelados: number; mensaje: string; fechas: string[] } | null>(null);
   const [, startCancelTransition] = useTransition();
   const [cancelandoMedico, setCancelandoMedico] = useState(false);
 
@@ -87,12 +89,14 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
     setCancelandoMedico(true);
     startCancelTransition(async () => {
       const ids = [...seleccionados];
+      const fechasCanceladas = [...new Set(turnos.filter((t) => seleccionados.has(t.id)).map((t) => t.fecha))];
       const res = await cancelarTurnosMedico(ids, motivoCancelacion || undefined);
       if (res.success) {
-        setTurnos((prev) => prev.filter((t) => !seleccionados.has(t.id)));
+        setTurnos((prev) => prev.map((t) => seleccionados.has(t.id) ? { ...t, estado: "cancelado_medico", paciente_nombre: null } : t));
         setCancelResult({
           cancelados: res.cancelados,
           mensaje: `${res.cancelados} turno${res.cancelados > 1 ? "s" : ""} cancelado${res.cancelados > 1 ? "s" : ""}. Los pacientes fueron notificados y su crédito queda disponible para reprogramar.`,
+          fechas: fechasCanceladas,
         });
         setSeleccionados(new Set());
       }
@@ -176,7 +180,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", ...ESTADOS_OCUPADOS]);
+      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ESTADOS_VISIBLES);
       setTurnosMes(data ?? []);
     }
     load();
@@ -184,13 +188,13 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
 
   const slotMap = new Map<string, Turno>();
   for (const t of turnos) {
-    if (t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado)) {
+    if (ESTADOS_VISIBLES.includes(t.estado)) {
       slotMap.set(`${t.fecha}-${t.hora_inicio}`, t);
     }
   }
 
   const horasUnicas = [...new Set(turnos
-    .filter((t) => t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado))
+    .filter((t) => ESTADOS_VISIBLES.includes(t.estado))
     .map((t) => t.hora_inicio)
   )].sort();
 
@@ -218,7 +222,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
 
   // Slots del dia seleccionado (para vista mobile)
   const slotsDia = turnos
-    .filter((t) => t.fecha === selectedDate && (t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado)))
+    .filter((t) => t.fecha === selectedDate && ESTADOS_VISIBLES.includes(t.estado))
     .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
 
   const B = "0.5px solid #e5e7eb";
@@ -244,6 +248,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#E8E0F7", border: "1px solid #6B4FA0" }} />
           <span className="text-[11px] text-gray-500">Confirmado</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#FFF3E0", border: "1px solid #D85A30" }} />
+          <span className="text-[11px] text-gray-500">Cancelado</span>
         </div>
       </div>
 
@@ -310,6 +318,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                   <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ border: `1.5px dashed ${colorPorCanal(t.canal_origen).border}`, color: colorPorCanal(t.canal_origen).text }}>
                     Disponible
                   </div>
+                ) : (t.estado === "cancelado_medico" || t.estado === "cancelado_paciente") ? (
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ background: "#FFF3E0", color: "#D85A30", border: "1px solid #D85A3040" }}>
+                    Cancelado
+                  </div>
                 ) : (t.estado === "confirmado" || t.estado === "en_espera") ? (
                   <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>
                     {t.paciente_nombre ?? "Confirmado"}
@@ -363,11 +375,17 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                     if (t.estado === "disponible") {
                       return <div key={fecha} style={{ height: "30px", background: `${colorPorCanal(t.canal_origen).bg}20`, borderLeft: `2px solid ${colorPorCanal(t.canal_origen).border}` }} />;
                     }
+                    const esCancelado = t.estado === "cancelado_medico" || t.estado === "cancelado_paciente";
                     const esConfirmado = t.estado === "confirmado" || t.estado === "en_espera";
                     return (
-                      <div key={fecha} className="flex items-center justify-center" style={{ height: "30px", background: esConfirmado ? "#E8E0F7" : colorPorCanal(t.canal_origen).bg, overflow: "hidden", padding: "0 2px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 500, color: esConfirmado ? "#6B4FA0" : "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {t.paciente_nombre ?? "Reservado"}
+                      <div key={fecha} className="flex items-center justify-center" style={{
+                        height: "30px", overflow: "hidden", padding: "0 2px",
+                        background: esCancelado ? "#FFF3E0" : esConfirmado ? "#E8E0F7" : colorPorCanal(t.canal_origen).bg,
+                      }}>
+                        <span style={{ fontSize: "11px", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          color: esCancelado ? "#D85A30" : esConfirmado ? "#6B4FA0" : "#fff",
+                        }}>
+                          {esCancelado ? "Cancelado" : t.paciente_nombre ?? "Reservado"}
                         </span>
                       </div>
                     );
@@ -438,7 +456,22 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
             {cancelResult ? (
               <>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Turnos cancelados</h3>
-                <p className="text-sm text-gray-600 mb-5">{cancelResult.mensaje}</p>
+                <p className="text-sm text-gray-600 mb-3">{cancelResult.mensaje}</p>
+                <div className="rounded-lg p-3 mb-5 text-sm" style={{ background: "#FFF3E0", border: "1px solid #D85A3040" }}>
+                  <p style={{ color: "#7A3A1A" }}>
+                    Recordá revisar tu agenda — si no vas a atender este día, bloqueá los turnos disponibles restantes.
+                  </p>
+                  {cancelResult.fechas.length > 0 && (
+                    <Link
+                      href="/medico/agenda"
+                      className="mt-2 inline-block text-sm font-medium"
+                      style={{ color: "#378ADD" }}
+                      onClick={() => setDialogCancelar(false)}
+                    >
+                      Ver Mi agenda →
+                    </Link>
+                  )}
+                </div>
                 <button
                   onClick={() => setDialogCancelar(false)}
                   className="w-full rounded-lg bg-[#378ADD] py-3 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all min-h-[48px]"
