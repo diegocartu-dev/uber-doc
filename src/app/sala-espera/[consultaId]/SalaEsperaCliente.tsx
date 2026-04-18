@@ -191,10 +191,10 @@ export default function SalaEsperaCliente({
         </div>
       </div>
 
-      {/* Botón para unirse a la videollamada */}
+      {/* Botón para unirse a la videollamada — pasa por info-medica primero */}
       {salaVideoUrl && (
         <a
-          href={`/consulta/${consultaId}/video`}
+          href={`/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`}
           className="mt-6 block w-full rounded-[var(--radius-lg)] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm active:scale-[0.97] transition-all duration-100"
           style={{ backgroundColor: "var(--color-primary)" }}
         >
