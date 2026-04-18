@@ -56,9 +56,10 @@ function formatTimer(seg: number): string {
 function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
   const lineas: string[] = [];
   for (const med of meds) {
-    const droga = med.droga ?? "";
-    const nombre = med.nombre ?? "";
-    const presentacion = med.presentacion ?? "";
+    const droga = (med.droga ?? "").trim();
+    const nombre = (med.nombre ?? "").trim();
+    const presentacion = (med.presentacion ?? "").trim();
+    if (!droga && !nombre) continue;
     let linea = `${droga} (${nombre}) - ${presentacion}`;
     const posologia: string[] = [];
     if ((med.dosis ?? "").trim()) posologia.push(med.dosis.trim());
