@@ -7,6 +7,8 @@ type Campos = {
   receta: string;
   indicaciones: string;
   certificado: string;
+  // Campos extra para el borrador (ej: medicamentos estructurados)
+  [key: string]: unknown;
 };
 
 type Estado = "idle" | "saving" | "saved" | "error";

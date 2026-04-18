@@ -21,6 +21,7 @@ import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
+import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -46,6 +47,38 @@ function formatTimer(seg: number): string {
   const m = Math.floor(seg / 60);
   const s = seg % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Serialización de medicamentos estructurados a texto para PDF/documentos
+// ---------------------------------------------------------------------------
+
+function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
+  const lineas: string[] = [];
+  for (const med of meds) {
+    let linea = `${med.droga} (${med.nombre}) - ${med.presentacion}`;
+    const posologia: string[] = [];
+    if (med.dosis.trim()) posologia.push(med.dosis.trim());
+    if (med.frecuencia.trim()) posologia.push(med.frecuencia.trim());
+    if (med.duracion.trim()) posologia.push(med.duracion.trim());
+    if (posologia.length > 0) linea += `\n  ${posologia.join(" | ")}`;
+    lineas.push(linea);
+  }
+  if (textoLibre.trim()) {
+    if (lineas.length > 0) lineas.push("");
+    lineas.push(textoLibre.trim());
+  }
+  return lineas.join("\n");
+}
+
+function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]; textoLibre: string } {
+  if (borrador?.medicamentos_structured && Array.isArray(borrador.medicamentos_structured)) {
+    return {
+      meds: borrador.medicamentos_structured,
+      textoLibre: borrador.receta_texto_libre ?? "",
+    };
+  }
+  return { meds: [], textoLibre: borrador?.receta ?? "" };
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +209,8 @@ type DocBorrador = {
   indicaciones?: string;
   certificado?: string;
   updated_at?: string;
+  medicamentos_structured?: MedicamentoReceta[];
+  receta_texto_libre?: string;
 } | null;
 
 type Props = {
@@ -357,7 +392,10 @@ export default function WorkspaceConsulta({
   // --- Estado campos clinicos ---
   const borrador = consulta.doc_borrador;
   const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
-  const [receta, setReceta] = useState(borrador?.receta ?? "");
+  const parsedMeds = parsearMedicamentosBorrador(borrador);
+  const [medicamentos, setMedicamentos] = useState<MedicamentoReceta[]>(parsedMeds.meds);
+  const [recetaTextoLibre, setRecetaTextoLibre] = useState(parsedMeds.textoLibre);
+  const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
 
@@ -383,6 +421,8 @@ export default function WorkspaceConsulta({
     receta,
     indicaciones,
     certificado,
+    medicamentos_structured: medicamentos,
+    receta_texto_libre: recetaTextoLibre,
   });
 
   // --- Dictado ---
@@ -532,6 +572,8 @@ export default function WorkspaceConsulta({
             receta,
             indicaciones,
             certificado,
+            medicamentos_structured: medicamentos,
+            receta_texto_libre: recetaTextoLibre,
             updated_at: new Date().toISOString(),
           },
         }),
@@ -850,15 +892,14 @@ export default function WorkspaceConsulta({
             onIniciar={() => iniciarDictado("diagnostico", (fn) => setDiagnostico((prev) => { const val = fn(prev); if (val.trim()) { setDiagError(false); setError(null); } return val; }))}
             onDetener={detenerDictado}
           />
-          <CampoDictado
-            label="RECETA"
-            campo="receta"
-            value={receta}
-            setter={setReceta}
-            placeholder="Medicamentos, dosis, frecuencia..."
+          <MedicamentoAutocomplete
+            medicamentos={medicamentos}
+            onMedicamentosChange={setMedicamentos}
+            textoLibre={recetaTextoLibre}
+            onTextoLibreChange={setRecetaTextoLibre}
             dictando={dictando}
-            onIniciar={() => iniciarDictado("receta", setReceta)}
-            onDetener={detenerDictado}
+            onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
+            onDetenerDictado={detenerDictado}
           />
           <CampoDictado
             label="INDICACIONES"

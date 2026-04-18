@@ -145,21 +145,22 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
             )}
           </div>
 
-          {/* Actions */}
-          <div className="mt-6 space-y-3">
-            <button
-              onClick={handleConfirmar}
-              className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-            >
-              Confirmar y entrar
-            </button>
-            <button
-              onClick={() => setModo("edicion")}
-              className="w-full text-center text-sm text-[#888780] hover:text-gray-600"
-            >
-              Editar datos
-            </button>
-          </div>
+        </div>
+
+        {/* CTA sticky bottom */}
+        <div className="sticky bottom-0 bg-white px-6 pb-6 pt-4" style={{ boxShadow: "0 -4px 12px rgba(0,0,0,0.04)" }}>
+          <button
+            onClick={handleConfirmar}
+            className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+          >
+            Confirmar y entrar
+          </button>
+          <button
+            onClick={() => setModo("edicion")}
+            className="mt-3 w-full text-center text-sm text-[#888780] hover:text-gray-600"
+          >
+            Editar datos
+          </button>
         </div>
       </div>
     );
@@ -307,26 +308,27 @@ export default function InfoMedicaForm({ paciente, redirect }: Props) {
           </div>
         </div>
 
-        {/* CTA */}
-        <div className="mt-8 pb-6">
-          <button
-            onClick={handleGuardar}
-            disabled={!formValido || saving}
-            className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                Guardando...
-              </span>
-            ) : (
-              "Guardar y entrar"
-            )}
-          </button>
-        </div>
+      </div>
+
+      {/* CTA sticky bottom */}
+      <div className="sticky bottom-0 bg-white px-6 pb-6 pt-4" style={{ boxShadow: "0 -4px 12px rgba(0,0,0,0.04)" }}>
+        <button
+          onClick={handleGuardar}
+          disabled={!formValido || saving}
+          className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {saving ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              Guardando...
+            </span>
+          ) : (
+            "Guardar y entrar"
+          )}
+        </button>
       </div>
     </div>
   );
