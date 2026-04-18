@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { reservarTurno, limpiarReservasExpiradas } from "./actions";
+import { reservarTurno, limpiarReservasExpiradas, reprogramarConCredito } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { capitalizarNombre } from "@/lib/utils/texto";
+import type { CreditoPendiente } from "@/lib/cancelaciones";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
@@ -17,7 +18,31 @@ function formatFechaLarga(fecha: string) {
   return `${DIAS_SEMANA[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
-export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinica_virtual" }: { turnos: Turno[]; medico: Medico; canalOrigen?: "clinica_virtual" | "consultorio_privado" }) {
+function formatFechaVencimiento(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function diasRestantes(fechaVencimiento: string): number {
+  const diff = new Date(fechaVencimiento).getTime() - Date.now();
+  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
+}
+
+export default function CalendarioTurnos({
+  turnos,
+  medico,
+  canalOrigen = "clinica_virtual",
+  credito = null,
+}: {
+  turnos: Turno[];
+  medico: Medico;
+  canalOrigen?: "clinica_virtual" | "consultorio_privado";
+  credito?: CreditoPendiente | null;
+}) {
   const hoy = new Date();
   const [mes, setMes] = useState(hoy.getMonth());
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -30,30 +55,25 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
   const [exito, setExito] = useState(false);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
 
-  // Limpiar reservas expiradas al cargar
   useEffect(() => { limpiarReservasExpiradas(); }, []);
 
-  // Filtrar turnos pasados y con menos de 1h de anticipación
   const ahora = new Date();
   const hoyStr = ahora.toISOString().split("T")[0];
-  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 0; // TEMP: sin anticipación mínima para testing
+  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 0;
 
   const turnosFiltrados = turnos.filter((t) => {
     if (t.fecha > hoyStr) return true;
     if (t.fecha < hoyStr) return false;
-    // Es hoy — verificar hora
     const [h, m] = t.hora_inicio.split(":").map(Number);
     return h * 60 + m >= enUnaHora;
   });
 
-  // Agrupar turnos por fecha
   const turnosPorFecha = new Map<string, Turno[]>();
   for (const t of turnosFiltrados) {
     if (!turnosPorFecha.has(t.fecha)) turnosPorFecha.set(t.fecha, []);
     turnosPorFecha.get(t.fecha)!.push(t);
   }
 
-  // Calendario
   const primerDia = new Date(anio, mes, 1);
   const ultimoDia = new Date(anio, mes + 1, 0);
   const startPad = primerDia.getDay();
@@ -76,18 +96,29 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
   function handleConfirmar() {
     if (!turnoSeleccionado) return;
     setError(null);
-    startTransition(async () => {
-      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
-      if (result?.error) { setError(result.error); return; }
-      // Redirect a página de pago con contador de 5 min
-      window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
-    });
+
+    if (credito) {
+      startTransition(async () => {
+        const result = await reprogramarConCredito(credito.turno_id, turnoSeleccionado.id);
+        if (result?.error) { setError(result.error); return; }
+        setExito(true);
+        setMostrarConfirmacion(false);
+      });
+    } else {
+      startTransition(async () => {
+        const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
+        if (result?.error) { setError(result.error); return; }
+        window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
+      });
+    }
   }
 
-  // Turnos del día seleccionado
   const turnosDelDia = diaSeleccionado ? (turnosPorFecha.get(diaSeleccionado) ?? []) : [];
   const turnosManana = turnosDelDia.filter((t) => t.hora_inicio < "13:00");
   const turnosTarde = turnosDelDia.filter((t) => t.hora_inicio >= "13:00");
+
+  const diasCreditoRestantes = credito ? diasRestantes(credito.fecha_vencimiento) : 0;
+  const creditoUrgente = credito && diasCreditoRestantes <= 6;
 
   if (exito) {
     return (
@@ -95,11 +126,16 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#1D9E75]/10">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
-        <h2 className="mt-4 text-lg font-medium text-gray-900">¡Turno confirmado!</h2>
+        <h2 className="mt-4 text-lg font-medium text-gray-900">
+          {credito ? "¡Turno reprogramado!" : "¡Turno confirmado!"}
+        </h2>
         <p className="mt-2 text-sm text-gray-500">
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
         <p className="mt-1 text-sm text-gray-500">Dr. {capitalizarNombre(medico.nombre)} · {medico.especialidad}</p>
+        {credito && (
+          <p className="mt-2 text-sm font-medium text-[#1D9E75]">Se aplicó tu crédito — sin costo adicional</p>
+        )}
         <a href="/dashboard" className="mt-6 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
           Volver al inicio
         </a>
@@ -109,53 +145,82 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
 
   return (
     <div className="mt-6">
+      {/* Banner de crédito */}
+      {credito && (
+        <div
+          className="mb-4 rounded-xl p-4"
+          style={{
+            background: creditoUrgente ? "#FFF3E0" : "#EBF3FC",
+            borderLeft: `3px solid ${creditoUrgente ? "#D85A30" : "#378ADD"}`,
+          }}
+        >
+          <p className="text-sm font-medium" style={{ color: creditoUrgente ? "#7A3A1A" : "#1a4a7a" }}>
+            Tenés un crédito{credito.monto ? ` por $${credito.monto.toLocaleString("es-AR")}` : ""} — elegí una nueva fecha sin costo
+          </p>
+          <p className="mt-1 text-xs" style={{ color: creditoUrgente ? "#9A5A3A" : "#5A7A9A" }}>
+            Válido hasta el {formatFechaVencimiento(credito.fecha_vencimiento)}
+            {credito.reprogramaciones > 0 && ` · ${2 - credito.reprogramaciones} reprogramación${2 - credito.reprogramaciones === 1 ? "" : "es"} restante${2 - credito.reprogramaciones === 1 ? "" : "s"}`}
+          </p>
+        </div>
+      )}
+
+      {/* Sin slots disponibles + crédito → reembolso */}
+      {credito && turnosFiltrados.length === 0 && (
+        <div className="rounded-xl bg-white p-5 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
+          <p className="text-sm text-gray-600">No hay turnos disponibles con este médico en este momento.</p>
+          <p className="mt-2 text-sm text-gray-500">Tu crédito sigue vigente hasta el {formatFechaVencimiento(credito.fecha_vencimiento)}. Si no se libera disponibilidad, el reembolso se procesa automáticamente.</p>
+          <a href="/dashboard" className="mt-4 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
+            Volver al inicio
+          </a>
+        </div>
+      )}
+
       {/* Calendario */}
-      <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-        {/* Header mes */}
-        <div className="flex items-center justify-between">
-          <button onClick={prevMes} className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">←</button>
-          <p className="text-sm font-medium text-gray-900">{MESES[mes]} {anio}</p>
-          <button onClick={nextMes} className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">→</button>
-        </div>
+      {turnosFiltrados.length > 0 && (
+        <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+          <div className="flex items-center justify-between">
+            <button onClick={prevMes} className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">←</button>
+            <p className="text-sm font-medium text-gray-900">{MESES[mes]} {anio}</p>
+            <button onClick={nextMes} className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">→</button>
+          </div>
 
-        {/* Días de la semana */}
-        <div className="mt-4 grid grid-cols-7 gap-1">
-          {DIAS_SEMANA.map((d) => (
-            <div key={d} className="text-center text-[10px] font-medium text-gray-400">{d}</div>
-          ))}
-        </div>
+          <div className="mt-4 grid grid-cols-7 gap-1">
+            {DIAS_SEMANA.map((d) => (
+              <div key={d} className="text-center text-[10px] font-medium text-gray-400">{d}</div>
+            ))}
+          </div>
 
-        {/* Días del mes */}
-        <div className="mt-1 grid grid-cols-7 gap-1">
-          {Array.from({ length: startPad }).map((_, i) => (
-            <div key={`pad-${i}`} />
-          ))}
-          {Array.from({ length: totalDias }).map((_, i) => {
-            const dia = i + 1;
-            const fecha = `${anio}-${(mes + 1).toString().padStart(2, "0")}-${dia.toString().padStart(2, "0")}`;
-            const tieneTurnos = turnosPorFecha.has(fecha);
-            const esHoy = fecha === hoy.toISOString().split("T")[0];
-            const seleccionado = diaSeleccionado === fecha;
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {Array.from({ length: startPad }).map((_, i) => (
+              <div key={`pad-${i}`} />
+            ))}
+            {Array.from({ length: totalDias }).map((_, i) => {
+              const dia = i + 1;
+              const fecha = `${anio}-${(mes + 1).toString().padStart(2, "0")}-${dia.toString().padStart(2, "0")}`;
+              const tieneTurnos = turnosPorFecha.has(fecha);
+              const esHoy = fecha === hoy.toISOString().split("T")[0];
+              const seleccionado = diaSeleccionado === fecha;
 
-            return (
-              <button
-                key={dia}
-                disabled={!tieneTurnos}
-                onClick={() => { setDiaSeleccionado(fecha); setTurnoSeleccionado(null); }}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg text-xs transition-all duration-100 ${
-                  seleccionado
-                    ? "bg-[#1D9E75] text-white font-medium"
-                    : tieneTurnos
-                      ? "bg-[#1D9E75]/10 text-[#1D9E75] font-medium hover:bg-[#1D9E75]/20"
-                      : "text-gray-300 cursor-default"
-                } ${esHoy && !seleccionado ? "ring-1 ring-[#1D9E75]" : ""}`}
-              >
-                {dia}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={dia}
+                  disabled={!tieneTurnos}
+                  onClick={() => { setDiaSeleccionado(fecha); setTurnoSeleccionado(null); }}
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg text-xs transition-all duration-100 ${
+                    seleccionado
+                      ? "bg-[#1D9E75] text-white font-medium"
+                      : tieneTurnos
+                        ? "bg-[#1D9E75]/10 text-[#1D9E75] font-medium hover:bg-[#1D9E75]/20"
+                        : "text-gray-300 cursor-default"
+                  } ${esHoy && !seleccionado ? "ring-1 ring-[#1D9E75]" : ""}`}
+                >
+                  {dia}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Horarios disponibles */}
       {diaSeleccionado && !turnoSeleccionado && (
@@ -207,7 +272,9 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
       {/* Confirmación */}
       {turnoSeleccionado && (
         <div className="mt-4 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-          <p className="text-xs font-medium tracking-wide text-gray-400">CONFIRMAR TURNO</p>
+          <p className="text-xs font-medium tracking-wide text-gray-400">
+            {credito ? "CONFIRMAR REPROGRAMACIÓN" : "CONFIRMAR TURNO"}
+          </p>
 
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
@@ -232,71 +299,82 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Valor</span>
-              <span className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
+              {credito ? (
+                <span className="font-medium">
+                  <span className="text-gray-400 line-through mr-2">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
+                  <span className="text-[#1D9E75]">$0 (crédito aplicado)</span>
+                </span>
+              ) : (
+                <span className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
+              )}
             </div>
           </div>
 
-          {/* Recordatorios — multiselección */}
-          <div className="mt-4" style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: "12px" }}>
-            <p className="text-xs text-gray-400">Recordatorios</p>
-            <div className="mt-2 flex gap-2">
-              {(() => {
-                const todosActivos = cuando.length === 3 && ["24h", "1h", "15m"].every((v) => cuando.includes(v));
-                const toggleRecordatorio = (value: string) => {
-                  if (value === "todos") {
-                    setCuando(todosActivos ? [] : ["24h", "1h", "15m"]);
-                  } else {
-                    setCuando((prev) =>
-                      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-                    );
-                  }
-                };
-                return [
-                  { value: "todos", label: "Todos", activo: todosActivos },
-                  { value: "24h", label: "24hs", activo: cuando.includes("24h") },
-                  { value: "1h", label: "1 hora", activo: cuando.includes("1h") },
-                  { value: "15m", label: "15 min", activo: cuando.includes("15m") },
-                ].map((r) => (
-                <button
-                  key={r.value}
-                  onClick={() => toggleRecordatorio(r.value)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
-                    r.activo
-                      ? "bg-[#1D9E75] text-white"
-                      : "bg-gray-50 text-gray-500"
-                  }`}
-                  style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
-                >
-                  {r.label}
-                </button>
-              ));
-              })()}
-            </div>
-          </div>
+          {/* Recordatorios — solo para flujo normal (no reprogramación) */}
+          {!credito && (
+            <>
+              <div className="mt-4" style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: "12px" }}>
+                <p className="text-xs text-gray-400">Recordatorios</p>
+                <div className="mt-2 flex gap-2">
+                  {(() => {
+                    const todosActivos = cuando.length === 3 && ["24h", "1h", "15m"].every((v) => cuando.includes(v));
+                    const toggleRecordatorio = (value: string) => {
+                      if (value === "todos") {
+                        setCuando(todosActivos ? [] : ["24h", "1h", "15m"]);
+                      } else {
+                        setCuando((prev) =>
+                          prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+                        );
+                      }
+                    };
+                    return [
+                      { value: "todos", label: "Todos", activo: todosActivos },
+                      { value: "24h", label: "24hs", activo: cuando.includes("24h") },
+                      { value: "1h", label: "1 hora", activo: cuando.includes("1h") },
+                      { value: "15m", label: "15 min", activo: cuando.includes("15m") },
+                    ].map((r) => (
+                    <button
+                      key={r.value}
+                      onClick={() => toggleRecordatorio(r.value)}
+                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
+                        r.activo
+                          ? "bg-[#1D9E75] text-white"
+                          : "bg-gray-50 text-gray-500"
+                      }`}
+                      style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
+                    >
+                      {r.label}
+                    </button>
+                  ));
+                  })()}
+                </div>
+              </div>
 
-          <div className="mt-3">
-            <p className="text-xs text-gray-400">Canal</p>
-            <div className="mt-2 flex gap-2">
-              {[
-                { value: "ambos", label: "Ambos" },
-                { value: "email", label: "Email" },
-                { value: "whatsapp", label: "WhatsApp" },
-              ].map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => setCanal(c.value)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
-                    canal === c.value
-                      ? "bg-[#1D9E75] text-white"
-                      : "bg-gray-50 text-gray-500"
-                  }`}
-                  style={{ border: canal === c.value ? "none" : "0.5px solid #e5e7eb" }}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
+              <div className="mt-3">
+                <p className="text-xs text-gray-400">Canal</p>
+                <div className="mt-2 flex gap-2">
+                  {[
+                    { value: "ambos", label: "Ambos" },
+                    { value: "email", label: "Email" },
+                    { value: "whatsapp", label: "WhatsApp" },
+                  ].map((c) => (
+                    <button
+                      key={c.value}
+                      onClick={() => setCanal(c.value)}
+                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
+                        canal === c.value
+                          ? "bg-[#1D9E75] text-white"
+                          : "bg-gray-50 text-gray-500"
+                      }`}
+                      style={{ border: canal === c.value ? "none" : "0.5px solid #e5e7eb" }}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {error && (
             <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">{error}</div>
@@ -313,7 +391,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
               onClick={() => setMostrarConfirmacion(true)}
               className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
             >
-              Confirmar turno →
+              {credito ? "Confirmar turno →" : "Confirmar turno →"}
             </button>
           </div>
         </div>
@@ -323,20 +401,40 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
       {mostrarConfirmacion && turnoSeleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <p className="text-sm font-medium text-gray-900">Confirmá tu turno</p>
+            <p className="text-sm font-medium text-gray-900">
+              {credito ? "Confirmá tu reprogramación" : "Confirmá tu turno"}
+            </p>
 
             <div className="mt-4 space-y-1.5 text-sm">
               <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
               <p className="text-gray-700">Dr. {capitalizarNombre(medico.nombre)}</p>
-              <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
+              {credito ? (
+                <p className="font-medium">
+                  <span className="text-gray-400 line-through mr-2">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
+                  <span className="text-[#1D9E75]">$0 (crédito aplicado)</span>
+                </p>
+              ) : (
+                <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
+              )}
             </div>
 
             <div className="mt-4 rounded-lg bg-gray-50 p-3" style={{ border: "0.5px solid #e5e7eb" }}>
-              <p className="text-xs font-medium text-gray-500">ℹ️ Condiciones:</p>
-              <ul className="mt-1.5 space-y-1 text-[11px] text-gray-500">
-                <li>· Cancelación sin costo hasta 48 hs antes</li>
-                <li>· Si el profesional cancela, se reintegra el 100% del monto</li>
-              </ul>
+              {credito ? (
+                <>
+                  <p className="text-xs font-medium text-gray-500">Crédito aplicado</p>
+                  <p className="mt-1.5 text-[11px] text-gray-500">
+                    Este turno usa tu crédito disponible por la cancelación del médico. No se realiza ningún cobro adicional.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-medium text-gray-500">Condiciones:</p>
+                  <ul className="mt-1.5 space-y-1 text-[11px] text-gray-500">
+                    <li>· Cancelación sin costo hasta 48 hs antes</li>
+                    <li>· Si el profesional cancela, se reintegra el 100% del monto</li>
+                  </ul>
+                </>
+              )}
             </div>
 
             {error && (
@@ -355,7 +453,7 @@ export default function CalendarioTurnos({ turnos, medico, canalOrigen = "clinic
                 isLoading={isPending}
                 className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
               >
-                Confirmar y pagar
+                {credito ? "Confirmar turno" : "Confirmar y pagar"}
               </LoadingButton>
             </div>
           </div>

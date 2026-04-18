@@ -101,6 +101,28 @@ export async function entrarSalaEspera(turnoId: string) {
   return { success: true };
 }
 
+export async function reprogramarConCredito(
+  turnoOrigenId: string,
+  nuevoTurnoId: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { data: paciente } = await supabase
+    .from("pacientes").select("id").eq("user_id", user.id).limit(1).maybeSingle();
+  if (!paciente) return { error: "Paciente no encontrado." };
+
+  const { reprogramarTurno } = await import("@/lib/cancelaciones");
+  const resultado = await reprogramarTurno(turnoOrigenId, nuevoTurnoId, paciente.id);
+
+  if (!resultado.ok) return { error: resultado.error };
+
+  enviarEmailTurnoConfirmado(nuevoTurnoId).catch(console.error);
+
+  return { success: true };
+}
+
 export async function expirarTurno(turnoId: string) {
   const supabase = await createClient();
   const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
