@@ -130,6 +130,7 @@ export async function cancelarTurnosMedico(
   const { data: medico } = await supabase
     .from("medicos").select("id").eq("user_id", user.id).maybeSingle();
   if (!medico) return { cancelados: 0, errores: ["Perfil médico no encontrado."] };
+  if (turnoIds.length === 0 || turnoIds.length > 50) return { cancelados: 0, errores: ["Seleccioná entre 1 y 50 turnos."] };
 
   const { cancelarTurnoPorMedico } = await import("@/lib/cancelaciones");
 

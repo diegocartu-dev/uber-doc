@@ -16,9 +16,7 @@ type Turno = {
 };
 
 function esMasDe48h(fecha: string, horaInicio: string): boolean {
-  const [anio, mes, dia] = fecha.split("-").map(Number);
-  const [hh, mm] = horaInicio.split(":").map(Number);
-  const turnoDate = new Date(anio, mes - 1, dia, hh, mm);
+  const turnoDate = new Date(`${fecha}T${horaInicio}:00-03:00`);
   return turnoDate.getTime() - Date.now() > 48 * 60 * 60 * 1000;
 }
 

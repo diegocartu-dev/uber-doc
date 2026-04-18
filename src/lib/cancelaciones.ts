@@ -8,9 +8,7 @@ type ResultadoCancelacion = {
 };
 
 function esMasDe48hAntes(fecha: string, horaInicio: string): boolean {
-  const [anio, mes, dia] = fecha.split("-").map(Number);
-  const [hh, mm] = horaInicio.split(":").map(Number);
-  const turnoDate = new Date(anio, mes - 1, dia, hh, mm);
+  const turnoDate = new Date(`${fecha}T${horaInicio}:00-03:00`);
   const ahora = new Date();
   const diffMs = turnoDate.getTime() - ahora.getTime();
   return diffMs > 48 * 60 * 60 * 1000;
@@ -25,7 +23,7 @@ export async function cancelarTurnoPorPaciente(
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, fecha, hora_inicio, medico_id, monto")
+    .select("id, estado, paciente_id, fecha, hora_inicio, hora_fin, medico_id, monto")
     .eq("id", turnoId)
     .single();
 
@@ -53,7 +51,7 @@ export async function cancelarTurnoPorPaciente(
     medico_id: turno.medico_id,
     fecha: turno.fecha,
     hora_inicio: turno.hora_inicio,
-    hora_fin: turno.hora_inicio, // se recalcula abajo
+    hora_fin: turno.hora_fin,
     estado: "disponible",
     monto: turno.monto,
   });
@@ -151,8 +149,8 @@ export async function reprogramarTurno(
   if (!nuevo || nuevo.estado !== "disponible") return { ok: false, error: "Turno no disponible." };
   if (nuevo.medico_id !== origen.medico_id) return { ok: false, error: "Solo podés reprogramar con el mismo médico." };
 
-  // Reservar nuevo turno con crédito
-  const { error: errNuevo } = await supabase
+  // Reservar nuevo turno con crédito (optimistic lock via .select para detectar 0 filas)
+  const { data: updated, error: errNuevo } = await supabase
     .from("turnos")
     .update({
       estado: "confirmado",
@@ -161,9 +159,11 @@ export async function reprogramarTurno(
       reprogramaciones: (origen.reprogramaciones ?? 0) + 1,
     })
     .eq("id", nuevoTurnoId)
-    .eq("estado", "disponible");
+    .eq("estado", "disponible")
+    .select("id");
 
   if (errNuevo) return { ok: false, error: errNuevo.message };
+  if (!updated || updated.length === 0) return { ok: false, error: "Este turno ya fue tomado por otro paciente." };
 
   // Marcar crédito como usado
   await supabase
@@ -199,12 +199,13 @@ async function insertarMensajeSistema(
   contenido: string
 ): Promise<void> {
   const supabase = createAdminClient();
-  await supabase.from("mensajes_sistema").insert({
+  const { error } = await supabase.from("mensajes_sistema").insert({
     turno_id: turnoId,
     paciente_id: pacienteId,
     medico_id: medicoId,
     contenido,
   });
+  if (error) console.error("Error insertando mensaje sistema:", error.message);
 }
 
 function formatearFechaCorta(fecha: string): string {
