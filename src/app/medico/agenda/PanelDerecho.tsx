@@ -21,6 +21,8 @@ function colorPorCanal(canalOrigen: string | null | undefined): { bg: string; bo
   }
 }
 
+const ESTADOS_OCUPADOS = ["reservado_pendiente", "confirmado", "en_espera"];
+
 const DIAS_LABEL = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const DIAS_SEMANA_LARGO = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -174,28 +176,26 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", "reservado_pendiente"]);
+      const { data } = await supabase.from("turnos").select("fecha, estado, canal_origen").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ["disponible", ...ESTADOS_OCUPADOS]);
       setTurnosMes(data ?? []);
     }
     load();
   }, [medicoId, mesVisible, anioVisible]);
 
-  // Index: solo disponible y reservado_pendiente
   const slotMap = new Map<string, Turno>();
   for (const t of turnos) {
-    if (t.estado === "disponible" || t.estado === "reservado_pendiente") {
+    if (t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado)) {
       slotMap.set(`${t.fecha}-${t.hora_inicio}`, t);
     }
   }
 
-  // Horas unicas extraidas de los turnos reales (grilla adaptativa)
   const horasUnicas = [...new Set(turnos
-    .filter((t) => t.estado === "disponible" || t.estado === "reservado_pendiente")
+    .filter((t) => t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado))
     .map((t) => t.hora_inicio)
   )].sort();
 
   const disponibles = turnos.filter((t) => t.estado === "disponible").length;
-  const reservados = turnos.filter((t) => t.estado === "reservado_pendiente");
+  const reservados = turnos.filter((t) => ESTADOS_OCUPADOS.includes(t.estado));
 
   const reservadosPorDia = new Map<string, Turno[]>();
   for (const t of reservados) {
@@ -207,7 +207,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const canalesPorDia = new Map<string, Set<string>>();
   for (const t of turnosMes) {
     if (t.estado === "disponible") diasConDisp.add(t.fecha);
-    if (t.estado === "reservado_pendiente") diasConRes.add(t.fecha);
+    if (ESTADOS_OCUPADOS.includes(t.estado)) diasConRes.add(t.fecha);
     if (!canalesPorDia.has(t.fecha)) canalesPorDia.set(t.fecha, new Set());
     canalesPorDia.get(t.fecha)!.add(t.canal_origen ?? "default");
   }
@@ -218,7 +218,7 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
 
   // Slots del dia seleccionado (para vista mobile)
   const slotsDia = turnos
-    .filter((t) => t.fecha === selectedDate && (t.estado === "disponible" || t.estado === "reservado_pendiente"))
+    .filter((t) => t.fecha === selectedDate && (t.estado === "disponible" || ESTADOS_OCUPADOS.includes(t.estado)))
     .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
 
   const B = "0.5px solid #e5e7eb";
@@ -228,7 +228,8 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
       {/* Metricas */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#9FE1CB", color: "#085041" }}>● {disponibles} disponibles</span>
-        <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.length} reservados</span>
+        <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>● {reservados.filter((t) => t.estado === "confirmado" || t.estado === "en_espera").length} confirmados</span>
+        <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.filter((t) => t.estado === "reservado_pendiente").length} pendientes</span>
         <button onClick={goHoy} className="rounded-full bg-[#378ADD] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
@@ -239,6 +240,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-[#D85A30] inline-block" />
           <span className="text-[11px] text-gray-500">Consultorio Particular</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full inline-block" style={{ background: "#E8E0F7", border: "1px solid #6B4FA0" }} />
+          <span className="text-[11px] text-gray-500">Confirmado</span>
         </div>
       </div>
 
@@ -305,6 +310,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                   <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ border: `1.5px dashed ${colorPorCanal(t.canal_origen).border}`, color: colorPorCanal(t.canal_origen).text }}>
                     Disponible
                   </div>
+                ) : (t.estado === "confirmado" || t.estado === "en_espera") ? (
+                  <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>
+                    {t.paciente_nombre ?? "Confirmado"}
+                  </div>
                 ) : (
                   <div className="flex-1 rounded-lg py-2.5 px-3 text-[13px] text-white font-medium" style={{ background: colorPorCanal(t.canal_origen).bg }}>
                     {t.paciente_nombre ?? "Reservado"}
@@ -354,9 +363,10 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                     if (t.estado === "disponible") {
                       return <div key={fecha} style={{ height: "30px", background: `${colorPorCanal(t.canal_origen).bg}20`, borderLeft: `2px solid ${colorPorCanal(t.canal_origen).border}` }} />;
                     }
+                    const esConfirmado = t.estado === "confirmado" || t.estado === "en_espera";
                     return (
-                      <div key={fecha} className="flex items-center justify-center" style={{ height: "30px", background: colorPorCanal(t.canal_origen).bg, overflow: "hidden", padding: "0 2px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 500, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div key={fecha} className="flex items-center justify-center" style={{ height: "30px", background: esConfirmado ? "#E8E0F7" : colorPorCanal(t.canal_origen).bg, overflow: "hidden", padding: "0 2px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 500, color: esConfirmado ? "#6B4FA0" : "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {t.paciente_nombre ?? "Reservado"}
                         </span>
                       </div>
@@ -402,6 +412,11 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
                       <span className="text-[12px] text-gray-500">
                         {t.hora_inicio} hs · {t.paciente_nombre ?? "Paciente"}
                         <span className="ml-1.5 font-medium text-[#1D9E75]">${(t.monto ?? precio).toLocaleString("es-AR")}</span>
+                        {(t.estado === "confirmado" || t.estado === "en_espera") && (
+                          <span className="ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>
+                            {t.estado === "en_espera" ? "En espera" : "Confirmado"}
+                          </span>
+                        )}
                       </span>
                     </label>
                   ))}
