@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { cancelarTurnosMedico } from "@/app/dashboard/actions";
 
 type Turno = {
   id: string; fecha: string; hora_inicio: string; hora_fin: string;
@@ -58,6 +59,44 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
   const [cargando, setCargando] = useState(true);
   const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string; canal_origen: string | null }[]>([]);
   const [selectedDate, setSelectedDate] = useState(hoyStr);
+
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [dialogCancelar, setDialogCancelar] = useState(false);
+  const [motivoCancelacion, setMotivoCancelacion] = useState("");
+  const [cancelResult, setCancelResult] = useState<{ cancelados: number; mensaje: string } | null>(null);
+  const [, startCancelTransition] = useTransition();
+  const [cancelandoMedico, setCancelandoMedico] = useState(false);
+
+  function toggleSeleccion(id: string) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function abrirDialogCancelar() {
+    setMotivoCancelacion("");
+    setCancelResult(null);
+    setDialogCancelar(true);
+  }
+
+  function confirmarCancelacionMedico() {
+    setCancelandoMedico(true);
+    startCancelTransition(async () => {
+      const ids = [...seleccionados];
+      const res = await cancelarTurnosMedico(ids, motivoCancelacion || undefined);
+      if (res.success) {
+        setTurnos((prev) => prev.filter((t) => !seleccionados.has(t.id)));
+        setCancelResult({
+          cancelados: res.cancelados,
+          mensaje: `${res.cancelados} turno${res.cancelados > 1 ? "s" : ""} cancelado${res.cancelados > 1 ? "s" : ""}. Los pacientes fueron notificados y su crédito queda disponible para reprogramar.`,
+        });
+        setSeleccionados(new Set());
+      }
+      setCancelandoMedico(false);
+    });
+  }
 
   const mesVisible = lunesActual.getMonth();
   const anioVisible = lunesActual.getFullYear();
@@ -332,7 +371,18 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
 
       {/* Turnos reservados */}
       <div className="rounded-xl bg-white p-4" style={{ border: B }}>
-        <p className="text-[11px] font-medium tracking-wider text-gray-500">TURNOS RESERVADOS</p>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-medium tracking-wider text-gray-500">TURNOS RESERVADOS</p>
+          {seleccionados.size > 0 && (
+            <button
+              onClick={abrirDialogCancelar}
+              className="rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all active:scale-95 min-h-[36px]"
+              style={{ color: "#E24B4A", border: "1px solid #E24B4A" }}
+            >
+              Cancelar seleccionados ({seleccionados.size})
+            </button>
+          )}
+        </div>
         {reservados.length === 0 ? (
           <p className="mt-3 text-[12px] text-gray-400">Sin turnos reservados esta semana</p>
         ) : (
@@ -340,12 +390,20 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
             {[...reservadosPorDia.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([fecha, ts]) => (
               <div key={fecha}>
                 <p className="text-[12px] font-medium text-gray-700">{formatFechaLarga(fecha)}</p>
-                <div className="mt-1 space-y-0.5">
+                <div className="mt-1 space-y-1">
                   {ts.map((t) => (
-                    <p key={t.id} className="text-[12px] text-gray-500">
-                      {t.hora_inicio} hs · {t.paciente_nombre ?? "Paciente"}
-                      <span className="ml-1.5 font-medium text-[#1D9E75]">${(t.monto ?? precio).toLocaleString("es-AR")}</span>
-                    </p>
+                    <label key={t.id} className="flex items-center gap-2 cursor-pointer py-0.5 min-h-[36px]">
+                      <input
+                        type="checkbox"
+                        checked={seleccionados.has(t.id)}
+                        onChange={() => toggleSeleccion(t.id)}
+                        className="h-4 w-4 rounded border-gray-300 accent-[#378ADD]"
+                      />
+                      <span className="text-[12px] text-gray-500">
+                        {t.hora_inicio} hs · {t.paciente_nombre ?? "Paciente"}
+                        <span className="ml-1.5 font-medium text-[#1D9E75]">${(t.monto ?? precio).toLocaleString("es-AR")}</span>
+                      </span>
+                    </label>
                   ))}
                 </div>
               </div>
@@ -353,6 +411,65 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
           </div>
         )}
       </div>
+
+      {/* Dialog cancelación médico */}
+      {dialogCancelar && (
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black/40 p-4"
+          style={{ zIndex: 9999 }}
+          onClick={() => !cancelandoMedico && !cancelResult && setDialogCancelar(false)}
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            {cancelResult ? (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Turnos cancelados</h3>
+                <p className="text-sm text-gray-600 mb-5">{cancelResult.mensaje}</p>
+                <button
+                  onClick={() => setDialogCancelar(false)}
+                  className="w-full rounded-lg bg-[#378ADD] py-3 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all min-h-[48px]"
+                >
+                  Entendido
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  ¿Cancelar {seleccionados.size} turno{seleccionados.size > 1 ? "s" : ""}?
+                </h3>
+                <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: "#FFF3E0", border: "1px solid #D85A3040" }}>
+                  <p style={{ color: "#7A3A1A" }}>
+                    Los pacientes recibirán un <strong>crédito para reprogramar</strong> con vos. Si no reprograman en 48hs, se les reembolsa automáticamente.
+                  </p>
+                </div>
+                <textarea
+                  value={motivoCancelacion}
+                  onChange={(e) => setMotivoCancelacion(e.target.value)}
+                  placeholder="Motivo de cancelación (opcional, se muestra al paciente)"
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none mb-4 resize-none"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDialogCancelar(false)}
+                    disabled={cancelandoMedico}
+                    className="flex-1 rounded-lg border border-gray-200 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition-all min-h-[48px]"
+                  >
+                    Volver
+                  </button>
+                  <button
+                    onClick={confirmarCancelacionMedico}
+                    disabled={cancelandoMedico}
+                    className="flex-1 rounded-lg py-3 text-sm font-medium text-white active:scale-[0.98] transition-all min-h-[48px] disabled:opacity-60"
+                    style={{ background: "#E24B4A", border: "1px solid #E24B4A" }}
+                  >
+                    {cancelandoMedico ? "Cancelando..." : "Confirmar"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

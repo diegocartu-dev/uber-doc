@@ -12,26 +12,49 @@ type Turno = {
   estado: string;
   especialidad: string;
   medico_nombre: string;
+  monto?: number | null;
 };
+
+function esMasDe48h(fecha: string, horaInicio: string): boolean {
+  const turnoDate = new Date(`${fecha}T${horaInicio}:00-03:00`);
+  return turnoDate.getTime() - Date.now() > 48 * 60 * 60 * 1000;
+}
 
 export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos: Turno[] }) {
   const [turnos, setTurnos] = useState(turnosIniciales);
   const [cancelando, setCancelando] = useState<string | null>(null);
+  const [dialogTurno, setDialogTurno] = useState<Turno | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [resultado, setResultado] = useState<{ reembolso?: boolean; mensaje?: string } | null>(null);
   const [, startTransition] = useTransition();
 
   const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoyStr = `${ahora.getFullYear()}-${(ahora.getMonth() + 1).toString().padStart(2, "0")}-${ahora.getDate().toString().padStart(2, "0")}`;
 
-  const turnosHoy = turnos.filter((t) => t.fecha === hoyStr);
-  const turnosProximos = turnos.filter((t) => t.fecha > hoyStr);
+  const turnosActivos = turnos.filter((t) => t.estado === "confirmado" || t.estado === "en_espera");
+  const turnosHoy = turnosActivos.filter((t) => t.fecha === hoyStr);
+  const turnosProximos = turnosActivos.filter((t) => t.fecha > hoyStr);
 
-  function handleCancelar(turnoId: string) {
-    if (!confirm("¿Cancelar este turno?")) return;
+  function abrirDialogCancelar(turno: Turno) {
+    setDialogTurno(turno);
+    setMotivo("");
+    setResultado(null);
+  }
+
+  function confirmarCancelacion() {
+    if (!dialogTurno) return;
+    const turnoId = dialogTurno.id;
     setCancelando(turnoId);
     startTransition(async () => {
-      const res = await cancelarTurnoPaciente(turnoId);
+      const res = await cancelarTurnoPaciente(turnoId, motivo || undefined);
       if (!res.error) {
         setTurnos((prev) => prev.filter((t) => t.id !== turnoId));
+        setResultado({
+          reembolso: res.reembolso,
+          mensaje: res.reembolso
+            ? "Tu turno fue cancelado y el reembolso fue procesado."
+            : "Tu turno fue cancelado. No aplica reembolso por ser menos de 48hs de anticipación.",
+        });
       }
       setCancelando(null);
     });
@@ -80,7 +103,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
               </span>
               {t.estado === "confirmado" && (
                 <button
-                  onClick={() => handleCancelar(t.id)}
+                  onClick={() => abrirDialogCancelar(t)}
                   disabled={cancelando === t.id}
                   className="text-xs text-gray-400 hover:text-[#E24B4A] disabled:opacity-50 transition-colors"
                 >
@@ -96,26 +119,121 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
 
   if (turnos.length === 0) return null;
 
+  const conReembolso = dialogTurno ? esMasDe48h(dialogTurno.fecha, dialogTurno.hora_inicio) : false;
+
   return (
-    <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-      {turnosHoy.length > 0 && (
-        <>
-          <p className="text-xs font-medium tracking-wide text-gray-400">HOY</p>
-          <div className="mt-2 space-y-2">{turnosHoy.map(renderTurno)}</div>
-        </>
-      )}
-      {turnosProximos.length > 0 && (
-        <div className={turnosHoy.length > 0 ? "mt-5" : ""}>
-          <p className="text-xs font-medium tracking-wide text-gray-400">PRÓXIMOS</p>
-          <div className="mt-2 space-y-2">{turnosProximos.map(renderTurno)}</div>
+    <>
+      <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+        {turnosHoy.length > 0 && (
+          <>
+            <p className="text-xs font-medium tracking-wide text-gray-400">HOY</p>
+            <div className="mt-2 space-y-2">{turnosHoy.map(renderTurno)}</div>
+          </>
+        )}
+        {turnosProximos.length > 0 && (
+          <div className={turnosHoy.length > 0 ? "mt-5" : ""}>
+            <p className="text-xs font-medium tracking-wide text-gray-400">PRÓXIMOS</p>
+            <div className="mt-2 space-y-2">{turnosProximos.map(renderTurno)}</div>
+          </div>
+        )}
+        <a
+          href="/paciente/historial"
+          className="mt-4 block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          Ver consultas anteriores
+        </a>
+      </div>
+
+      {/* Dialog de cancelación */}
+      {dialogTurno && (
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black/40 p-4"
+          style={{ zIndex: 9999 }}
+          onClick={() => !cancelando && !resultado && setDialogTurno(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {resultado ? (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">{resultado.reembolso ? "✓" : "ℹ"}</span>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Turno cancelado
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-5">{resultado.mensaje}</p>
+                <button
+                  onClick={() => setDialogTurno(null)}
+                  className="w-full rounded-lg bg-[#378ADD] py-3 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all min-h-[48px]"
+                >
+                  Entendido
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  ¿Cancelar este turno?
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Dr. {capitalizarNombre(dialogTurno.medico_nombre)} ·{" "}
+                  {new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", {
+                    day: "numeric", month: "long",
+                    timeZone: "America/Argentina/Buenos_Aires",
+                  })}{" "}
+                  a las {dialogTurno.hora_inicio.slice(0, 5)}
+                </p>
+
+                {/* Política de reembolso */}
+                <div
+                  className="rounded-lg p-3 mb-4 text-sm"
+                  style={{
+                    background: conReembolso ? "#E1F5EE" : "#FFF3E0",
+                    border: conReembolso ? "1px solid #1D9E7540" : "1px solid #D85A3040",
+                  }}
+                >
+                  {conReembolso ? (
+                    <p style={{ color: "#085041" }}>
+                      Cancelás con más de 48hs de anticipación. <strong>Tu reembolso será procesado automáticamente.</strong>
+                    </p>
+                  ) : (
+                    <p style={{ color: "#7A3A1A" }}>
+                      Cancelás con menos de 48hs de anticipación. <strong>No aplica reembolso</strong> según nuestra política.
+                    </p>
+                  )}
+                </div>
+
+                <textarea
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Motivo de cancelación (opcional)"
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none mb-4 resize-none"
+                />
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDialogTurno(null)}
+                    disabled={!!cancelando}
+                    className="flex-1 rounded-lg border border-gray-200 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition-all min-h-[48px]"
+                  >
+                    Volver
+                  </button>
+                  <button
+                    onClick={confirmarCancelacion}
+                    disabled={!!cancelando}
+                    className="flex-1 rounded-lg py-3 text-sm font-medium text-white active:scale-[0.98] transition-all min-h-[48px] disabled:opacity-60"
+                    style={{ background: "#E24B4A", border: "1px solid #E24B4A" }}
+                  >
+                    {cancelando ? "Cancelando..." : "Confirmar cancelación"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
-      <a
-        href="/paciente/historial"
-        className="mt-4 block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
-      >
-        Ver consultas anteriores
-      </a>
-    </div>
+    </>
   );
 }

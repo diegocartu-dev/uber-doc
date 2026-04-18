@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarEmailTurnoCancelado } from "@/lib/email";
+
 
 function generarSlots(
   horaInicio: string,
@@ -238,40 +238,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (accion === "cancelar_turno") {
-      const { turno_id } = datos as { turno_id: string };
+      const { turno_id, motivo } = datos as { turno_id: string; motivo?: string };
 
-      const { data: turno, error: fetchErr } = await supabase
-        .from("turnos")
-        .select("id, estado")
-        .eq("id", turno_id)
-        .eq("medico_id", medicoDbId)
-        .single();
+      const { cancelarTurnoPorMedico } = await import("@/lib/cancelaciones");
+      const resultado = await cancelarTurnoPorMedico(turno_id, medicoDbId, motivo);
 
-      if (fetchErr || !turno) {
+      if (!resultado.ok) {
         return NextResponse.json({
           exito: false,
-          mensaje: "Turno no encontrado o no pertenece a este médico",
+          mensaje: resultado.error ?? "Error al cancelar",
         });
       }
-
-      const { error } = await supabase
-        .from("turnos")
-        .update({ estado: "cancelado_medico" })
-        .eq("id", turno_id)
-        .eq("medico_id", medicoDbId);
-
-      if (error) {
-        return NextResponse.json({
-          exito: false,
-          mensaje: `Error al cancelar: ${error.message}`,
-        });
-      }
-
-      enviarEmailTurnoCancelado(turno_id, "medico").catch(console.error);
 
       return NextResponse.json({
         exito: true,
-        mensaje: `Turno cancelado correctamente`,
+        mensaje: "Turno cancelado correctamente. El paciente fue notificado y tiene crédito para reprogramar.",
       });
     }
 
