@@ -56,15 +56,18 @@ function formatTimer(seg: number): string {
 function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
   const lineas: string[] = [];
   for (const med of meds) {
-    let linea = `${med.droga} (${med.nombre}) - ${med.presentacion}`;
+    const droga = med.droga ?? "";
+    const nombre = med.nombre ?? "";
+    const presentacion = med.presentacion ?? "";
+    let linea = `${droga} (${nombre}) - ${presentacion}`;
     const posologia: string[] = [];
-    if (med.dosis.trim()) posologia.push(med.dosis.trim());
-    if (med.frecuencia.trim()) posologia.push(med.frecuencia.trim());
-    if (med.duracion.trim()) posologia.push(med.duracion.trim());
+    if ((med.dosis ?? "").trim()) posologia.push(med.dosis.trim());
+    if ((med.frecuencia ?? "").trim()) posologia.push(med.frecuencia.trim());
+    if ((med.duracion ?? "").trim()) posologia.push(med.duracion.trim());
     if (posologia.length > 0) linea += `\n  ${posologia.join(" | ")}`;
     lineas.push(linea);
   }
-  if (textoLibre.trim()) {
+  if ((textoLibre ?? "").trim()) {
     if (lineas.length > 0) lineas.push("");
     lineas.push(textoLibre.trim());
   }
@@ -73,8 +76,18 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
 
 function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]; textoLibre: string } {
   if (borrador?.medicamentos_structured && Array.isArray(borrador.medicamentos_structured)) {
+    // Sanitizar: asegurar que cada medicamento tenga todas las propiedades como string
+    const meds = borrador.medicamentos_structured.map((m: any) => ({
+      id: m.id ?? `med_${Date.now()}_${Math.random()}`,
+      nombre: m.nombre ?? "",
+      droga: m.droga ?? "",
+      presentacion: m.presentacion ?? "",
+      dosis: m.dosis ?? "",
+      frecuencia: m.frecuencia ?? "",
+      duracion: m.duracion ?? "",
+    }));
     return {
-      meds: borrador.medicamentos_structured,
+      meds,
       textoLibre: borrador.receta_texto_libre ?? "",
     };
   }
@@ -462,6 +475,8 @@ export default function WorkspaceConsulta({
       setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
       return;
     }
+
+    setFinalizando(true);
 
     // 1. Ocultar video inmediatamente
     setIframeVisible(false);
