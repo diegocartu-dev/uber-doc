@@ -136,7 +136,7 @@ export default function CalendarioTurnos({
         {credito && (
           <p className="mt-2 text-sm font-medium text-[#1D9E75]">Se aplicó tu crédito — sin costo adicional</p>
         )}
-        <a href="/dashboard" className="mt-6 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
+        <a href="/dashboard" className="mt-6 inline-flex items-center justify-center rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white min-h-[48px]">
           Volver al inicio
         </a>
       </div>
@@ -145,8 +145,8 @@ export default function CalendarioTurnos({
 
   return (
     <div className="mt-6">
-      {/* Banner de crédito */}
-      {credito && (
+      {/* Banner de crédito (oculto si no hay slots) */}
+      {credito && turnosFiltrados.length > 0 && (
         <div
           className="mb-4 rounded-xl p-4"
           style={{
@@ -383,15 +383,15 @@ export default function CalendarioTurnos({
           <div className="mt-5 flex gap-3">
             <button
               onClick={() => setTurnoSeleccionado(null)}
-              className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200"
+              className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200 min-h-[48px]"
             >
               Volver
             </button>
             <button
               onClick={() => setMostrarConfirmacion(true)}
-              className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
+              className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100 min-h-[48px]"
             >
-              {credito ? "Confirmar turno →" : "Confirmar turno →"}
+              Confirmar turno →
             </button>
           </div>
         </div>
@@ -444,14 +444,14 @@ export default function CalendarioTurnos({
             <div className="mt-5 flex gap-3">
               <button
                 onClick={() => { setMostrarConfirmacion(false); setError(null); }}
-                className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200"
+                className="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200 min-h-[48px]"
               >
                 Cancelar
               </button>
               <LoadingButton
                 onClick={handleConfirmar}
                 isLoading={isPending}
-                className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
+                className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100 min-h-[48px]"
               >
                 {credito ? "Confirmar turno" : "Confirmar y pagar"}
               </LoadingButton>
