@@ -276,7 +276,7 @@ export default function MedicamentoAutocomplete({
       {/* Medicamentos agregados */}
       {medicamentos.length > 0 && (
         <div className="mt-2">
-          {medicamentos.map((med, i) => (
+          {medicamentos.map((med) => (
             <LineaMedicamento
               key={med.id}
               med={med}
