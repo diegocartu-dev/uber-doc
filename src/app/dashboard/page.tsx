@@ -15,7 +15,12 @@ import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
 import { Building2 } from "lucide-react";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aviso?: string }>;
+}) {
+  const { aviso } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -385,6 +390,11 @@ export default async function DashboardPage() {
         initialTurnosActivosHoy={hayTurnosActivosHoy}
       >
         <div className="min-h-full bg-[#f8f9fa]">
+          {aviso === "sin-cuil" && (
+            <div className="bg-[#BA7517]/10 px-4 py-3 text-center text-sm text-[#BA7517]" style={{ borderBottom: "1px solid #BA7517" }}>
+              El paciente no complet&oacute; su CUIL &mdash; la receta no fue incluida en los documentos.
+            </div>
+          )}
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
             <div className="mx-auto max-w-7xl px-4 lg:px-6">

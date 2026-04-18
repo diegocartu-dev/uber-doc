@@ -470,11 +470,7 @@ export default function WorkspaceConsulta({
   async function finalizarConsulta() {
     if (!validarDiagnostico()) return;
 
-    // Validación CUIL síncrona antes de cualquier async
-    if (receta.trim() && !consulta.paciente_cuil) {
-      setError("El paciente no tiene CUIL registrado. No es posible generar una receta (Ley 27.553). Pedile que complete sus datos desde /mis-datos.");
-      return;
-    }
+    const sinCuil = receta.trim() && !consulta.paciente_cuil;
 
     setFinalizando(true);
 
@@ -492,7 +488,7 @@ export default function WorkspaceConsulta({
     }
 
     // 3. Navegar al dashboard sin esperar Supabase
-    router.push("/dashboard");
+    router.push(sinCuil ? "/dashboard?aviso=sin-cuil" : "/dashboard");
 
     // 4. Guardar documentos y cerrar consulta en background (fire-and-forget)
     (async () => {
@@ -524,7 +520,7 @@ export default function WorkspaceConsulta({
         if (!paciente || !medico) return;
 
         const docs: { tipo: string; contenido: string }[] = [];
-        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (receta.trim() && !sinCuil) docs.push({ tipo: "receta", contenido: receta.trim() });
         if (indicaciones.trim())
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
         if (certificado.trim())

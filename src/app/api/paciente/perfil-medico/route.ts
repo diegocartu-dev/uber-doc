@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+function calcularCuil(dni: string, sexo: "masculino" | "femenino"): string | null {
+  const dniClean = dni.replace(/\D/g, "");
+  if (dniClean.length < 7 || dniClean.length > 8) return null;
+  const dniPadded = dniClean.padStart(8, "0");
+  const prefijo = sexo === "masculino" ? "20" : "27";
+  const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  const digitos = (prefijo + dniPadded).split("").map(Number);
+  const suma = digitos.reduce((acc, d, i) => acc + d * pesos[i], 0);
+  const resto = suma % 11;
+  let verificador: number;
+  if (resto === 0) {
+    verificador = 0;
+  } else if (resto === 1) {
+    if (sexo === "masculino") {
+      const digitos23 = ("23" + dniPadded).split("").map(Number);
+      const suma23 = digitos23.reduce((acc, d, i) => acc + d * pesos[i], 0);
+      verificador = 11 - (suma23 % 11);
+      return `23-${dniPadded}-${verificador}`;
+    }
+    verificador = 4;
+    return `27-${dniPadded}-${verificador}`;
+  } else {
+    verificador = 11 - resto;
+  }
+  return `${prefijo}-${dniPadded}-${verificador}`;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -30,13 +57,16 @@ export async function POST(req: NextRequest) {
   // Buscar registro del paciente por user_id
   const { data: paciente, error: fetchError } = await supabase
     .from("pacientes")
-    .select("id")
+    .select("id, dni")
     .eq("user_id", user.id)
     .single();
 
   if (fetchError || !paciente) {
     return NextResponse.json({ error: "Paciente no encontrado." }, { status: 404 });
   }
+
+  // Calcular CUIL automáticamente a partir de DNI + sexo
+  const cuil = paciente.dni ? calcularCuil(paciente.dni, sexo_dni) : null;
 
   // Construir update
   const updateData: Record<string, unknown> = {
@@ -45,6 +75,7 @@ export async function POST(req: NextRequest) {
     tiene_cobertura: !!tiene_cobertura,
     obra_social: tiene_cobertura ? obra_social.trim() : null,
     nro_afiliado: tiene_cobertura && nro_afiliado ? nro_afiliado.trim() : null,
+    cuil,
     perfil_medico_completado: true,
   };
 
