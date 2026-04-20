@@ -5,6 +5,15 @@ export function pushSoportado(): boolean {
     && "Notification" in window;
 }
 
+export function esIOSSinPWA(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent;
+  const esIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const esStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    || window.matchMedia("(display-mode: standalone)").matches;
+  return esIOS && !esStandalone;
+}
+
 export function pushYaActivo(): boolean {
   return pushSoportado() && Notification.permission === "granted";
 }
