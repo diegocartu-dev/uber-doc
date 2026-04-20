@@ -1,12 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createHmac, timingSafeEqual } from "crypto";
+
+function verificarFirmaMP(req: NextRequest, body: unknown): boolean {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) return false;
+
+  const xSignature = req.headers.get("x-signature");
+  const xRequestId = req.headers.get("x-request-id");
+  if (!xSignature || !xRequestId) return false;
+
+  const parts = Object.fromEntries(
+    xSignature.split(",").map((p) => {
+      const [k, ...v] = p.split("=");
+      return [k.trim(), v.join("=")];
+    })
+  );
+
+  const ts = parts["ts"];
+  const v1 = parts["v1"];
+  if (!ts || !v1) return false;
+
+  const dataId = (body as { data?: { id?: string } })?.data?.id;
+  const manifest = `id:${dataId ?? ""};request-id:${xRequestId};ts:${ts};`;
+
+  const hmac = createHmac("sha256", secret).update(manifest).digest("hex");
+
+  try {
+    return timingSafeEqual(Buffer.from(hmac), Buffer.from(v1));
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    if (!verificarFirmaMP(req, body)) {
+      return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+    }
+
     const { action, data } = body;
 
-    // Solo procesar eventos de pago relevantes
     if (action !== "payment.created" && action !== "payment.updated") {
       return NextResponse.json({ received: true });
     }
@@ -15,7 +51,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Verificar estado del pago con Mercado Pago
     const mpToken = process.env.MP_ACCESS_TOKEN;
     if (!mpToken) {
       return NextResponse.json({ received: true });
@@ -38,7 +73,6 @@ export async function POST(req: NextRequest) {
       const consultaId = payment.external_reference;
       const supabaseAdmin = createAdminClient();
 
-      // Solo transicionar de "aceptada" a "pagada" — evitar reprocessing
       await supabaseAdmin
         .from("consultas")
         .update({ estado: "pagada" })
@@ -48,7 +82,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch {
-    // Siempre responder 200 para que MP no reintente indefinidamente
     return NextResponse.json({ received: true });
   }
 }

@@ -135,6 +135,18 @@ export async function reprogramarConCredito(
 
 export async function expirarTurno(turnoId: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { data: paciente } = await supabase
+    .from("pacientes").select("id").eq("user_id", user.id).limit(1).maybeSingle();
+  if (!paciente) return { error: "Paciente no encontrado." };
+
+  const { data: turno } = await supabase
+    .from("turnos").select("id, paciente_id").eq("id", turnoId).single();
+  if (!turno) return { error: "Turno no encontrado." };
+  if (turno.paciente_id !== paciente.id) return { error: "Este turno no te pertenece." };
+
   const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
   if (error) return { error: error.message };
   return { success: true };
