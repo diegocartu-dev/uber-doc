@@ -31,8 +31,7 @@ function parseFecha(fecha: string | null): { dia: string; mes: string; anio: str
 type Estado = "A" | "B" | "C";
 
 function calcularEstado(paciente: PacienteData): Estado {
-  if (!paciente?.perfil_medico_completado) return "A";
-  if (!paciente?.fecha_nacimiento || !paciente?.sexo_dni) return "C";
+  if (!paciente?.fecha_nacimiento || !paciente?.sexo_dni) return "A";
   return "B";
 }
 
