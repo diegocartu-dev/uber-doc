@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/recordatorios",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/recordatorios-10min",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
