@@ -67,14 +67,20 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
           <div className="flex justify-between">
             <span className="text-gray-500">Cobertura</span>
             <span className="font-medium text-gray-900">
-              {paciente.tiene_cobertura ? (paciente.obra_social ?? "Sí") : "Particular"}
+              {paciente.tiene_cobertura ? "Sí" : "Particular"}
             </span>
           </div>
-          {paciente.tiene_cobertura && paciente.nro_afiliado && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Nro. afiliado</span>
-              <span className="font-medium text-gray-900">{paciente.nro_afiliado}</span>
-            </div>
+          {paciente.tiene_cobertura && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Obra social</span>
+                <span className="font-medium text-gray-900">{paciente.obra_social?.trim() || "No especificado"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Nro. afiliado</span>
+                <span className="font-medium text-gray-900">{paciente.nro_afiliado?.trim() || "No especificado"}</span>
+              </div>
+            </>
           )}
         </div>
       </div>
