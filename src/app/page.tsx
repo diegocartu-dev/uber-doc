@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Stethoscope } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function Home({
   searchParams,
@@ -26,17 +27,28 @@ export default async function Home({
 
     if (medico) redirect("/dashboard");
 
-    const { data: paciente } = await supabase
+    const admin = createAdminClient();
+    const { data: paciente } = await admin
       .from("pacientes")
       .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
       .eq("user_id", user.id)
       .maybeSingle();
 
+    if (!paciente) {
+      const fullName = user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "";
+      await admin.from("pacientes").insert({
+        user_id: user.id,
+        nombre_completo: fullName,
+        email: user.email ?? null,
+      });
+      redirect("/onboarding");
+    }
+
     const perfilCompleto =
-      paciente?.nombre_completo?.trim() &&
-      paciente?.dni?.trim() &&
-      paciente?.fecha_nacimiento &&
-      paciente?.sexo_dni;
+      paciente.nombre_completo?.trim() &&
+      paciente.dni?.trim() &&
+      paciente.fecha_nacimiento &&
+      paciente.sexo_dni;
 
     redirect(perfilCompleto ? "/clinica" : "/onboarding");
   }
