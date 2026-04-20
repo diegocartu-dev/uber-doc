@@ -95,12 +95,27 @@ export async function DELETE(req: NextRequest) {
   const { roomName } = await req.json();
   if (!roomName) return NextResponse.json({ error: "Falta roomName." }, { status: 400 });
 
+  const match = roomName.match(/^(consulta|turno)-(.+)$/);
+  if (!match) return NextResponse.json({ error: "roomName inválido." }, { status: 400 });
+
+  const [, tipo, resourceId] = match;
+  const tabla = tipo === "turno" ? "turnos" : "consultas";
+
+  const { data: medico } = await supabase
+    .from("medicos").select("id").eq("user_id", user.id).single();
+  if (!medico) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  const { data: recurso } = await supabase
+    .from(tabla).select("id, medico_id").eq("id", resourceId).single();
+  if (!recurso || recurso.medico_id !== medico.id) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  }
+
   try {
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
     await svc.deleteRoom(roomName);
     return NextResponse.json({ ok: true });
   } catch {
-    // La sala puede ya no existir — OK
     return NextResponse.json({ ok: true });
   }
 }

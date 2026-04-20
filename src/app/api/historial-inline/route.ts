@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+  const { data: medico } = await supabase
+    .from("medicos").select("id").eq("user_id", user.id).single();
+  if (!medico || medico.id !== medicoId) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+
   if (tipo === "consulta") {
     const { data } = await supabase
       .from("consultas")

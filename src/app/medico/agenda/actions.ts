@@ -239,11 +239,17 @@ async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClie
 
 export async function toggleModelo(modeloId: string, activo: boolean) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
 
-  // Obtener medico_id antes de actualizar
+  const { data: medico } = await supabase
+    .from("medicos").select("id").eq("user_id", user.id).single();
+  if (!medico) return { error: "No sos médico." };
+
   const { data: modelo } = await supabase
     .from("agenda_modelos").select("medico_id").eq("id", modeloId).single();
   if (!modelo) return { error: "Modelo no encontrado." };
+  if (modelo.medico_id !== medico.id) return { error: "No autorizado." };
 
   const { error } = await supabase
     .from("agenda_modelos")
@@ -251,19 +257,24 @@ export async function toggleModelo(modeloId: string, activo: boolean) {
     .eq("id", modeloId);
   if (error) return { error: error.message };
 
-  // Recalcular bloqueos después de toggle
-  await recalcularBloqueos(supabase, modelo.medico_id);
+  await recalcularBloqueos(supabase, medico.id);
 
   return { success: true };
 }
 
 export async function eliminarModelo(modeloId: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
 
-  // Obtener medico_id antes de eliminar
+  const { data: medico } = await supabase
+    .from("medicos").select("id").eq("user_id", user.id).single();
+  if (!medico) return { error: "No sos médico." };
+
   const { data: modelo } = await supabase
     .from("agenda_modelos").select("medico_id").eq("id", modeloId).single();
   if (!modelo) return { error: "Modelo no encontrado." };
+  if (modelo.medico_id !== medico.id) return { error: "No autorizado." };
 
   const { error } = await supabase
     .from("agenda_modelos")
@@ -271,8 +282,7 @@ export async function eliminarModelo(modeloId: string) {
     .eq("id", modeloId);
   if (error) return { error: error.message };
 
-  // Recalcular bloqueos después de eliminar (los turnos del modelo eliminado se borran por CASCADE)
-  await recalcularBloqueos(supabase, modelo.medico_id);
+  await recalcularBloqueos(supabase, medico.id);
 
   return { success: true };
 }

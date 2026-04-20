@@ -9,12 +9,28 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { data } = await supabase
+  const { data: medico } = await supabase
+    .from("medicos")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  let query = supabase
     .from("turnos")
     .select("estado, sala_video_url")
-    .eq("id", turnoId)
-    .single();
+    .eq("id", turnoId);
 
-  if (!data) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (medico) {
+    query = query.eq("medico_id", medico.id);
+  } else {
+    const { data: paciente } = await supabase
+      .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+    if (!paciente) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    query = query.eq("paciente_id", paciente.id);
+  }
+
+  const { data } = await query.single();
+
+  if (!data) return NextResponse.json({ error: "No encontrado" }, { status: 403 });
   return NextResponse.json(data);
 }

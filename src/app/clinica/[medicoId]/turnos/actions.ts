@@ -89,12 +89,22 @@ export async function entrarSalaEspera(turnoId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
 
-  // UPDATE directo con service_role para bypass RLS Y emitir Realtime
+  const { data: paciente } = await supabase
+    .from("pacientes").select("id").eq("user_id", user.id).limit(1).maybeSingle();
+  if (!paciente) return { error: "Paciente no encontrado." };
+
+  const { data: turno } = await supabase
+    .from("turnos").select("id, paciente_id, estado").eq("id", turnoId).single();
+  if (!turno) return { error: "Turno no encontrado." };
+  if (turno.paciente_id !== paciente.id) return { error: "Este turno no te pertenece." };
+  if (turno.estado !== "confirmado") return { error: "Este turno no está confirmado." };
+
   const supabaseAdmin = createAdminClient();
   const { error } = await supabaseAdmin
     .from("turnos")
     .update({ estado: "en_espera" })
     .eq("id", turnoId)
+    .eq("paciente_id", paciente.id)
     .eq("estado", "confirmado");
 
   if (error) return { error: error.message };
