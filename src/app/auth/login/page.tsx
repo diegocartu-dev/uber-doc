@@ -152,6 +152,12 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+          ¿No tenés cuenta?{" "}
+          <Link href="/auth/register" className="font-medium" style={{ color: "var(--color-text-link)" }}>
+            Creá una acá
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-sm" style={{ color: "var(--color-text-tertiary)" }}>
           ¿Olvidaste tu contraseña? Escribinos a{" "}
           <a href="mailto:soporte@docto.com.ar" className="font-medium" style={{ color: "var(--color-text-link)" }}>
             soporte@docto.com.ar
