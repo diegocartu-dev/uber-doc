@@ -48,7 +48,7 @@ export default function CalendarioTurnos({
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null);
-  const [cuando, setCuando] = useState<string[]>(["24h", "1h", "15m"]);
+  const [cuando, setCuando] = useState<string[]>(["24h", "10m"]);
   const [canal, setCanal] = useState("ambos");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -317,10 +317,10 @@ export default function CalendarioTurnos({
                 <p className="text-xs text-gray-400">Recordatorios</p>
                 <div className="mt-2 flex gap-2">
                   {(() => {
-                    const todosActivos = cuando.length === 3 && ["24h", "1h", "15m"].every((v) => cuando.includes(v));
+                    const todosActivos = cuando.length === 2 && ["24h", "10m"].every((v) => cuando.includes(v));
                     const toggleRecordatorio = (value: string) => {
                       if (value === "todos") {
-                        setCuando(todosActivos ? [] : ["24h", "1h", "15m"]);
+                        setCuando(todosActivos ? [] : ["24h", "10m"]);
                       } else {
                         setCuando((prev) =>
                           prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
@@ -330,8 +330,7 @@ export default function CalendarioTurnos({
                     return [
                       { value: "todos", label: "Todos", activo: todosActivos },
                       { value: "24h", label: "24hs", activo: cuando.includes("24h") },
-                      { value: "1h", label: "1 hora", activo: cuando.includes("1h") },
-                      { value: "15m", label: "15 min", activo: cuando.includes("15m") },
+                      { value: "10m", label: "10 min", activo: cuando.includes("10m") },
                     ].map((r) => (
                     <button
                       key={r.value}
@@ -356,7 +355,7 @@ export default function CalendarioTurnos({
                   {[
                     { value: "ambos", label: "Ambos" },
                     { value: "email", label: "Email" },
-                    { value: "whatsapp", label: "WhatsApp" },
+                    { value: "notificaciones", label: "Notificaciones Docto" },
                   ].map((c) => (
                     <button
                       key={c.value}
