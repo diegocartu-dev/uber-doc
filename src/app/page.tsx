@@ -68,13 +68,21 @@ export default async function Home({
       </div>
 
       {/* CTA */}
-      <div className="mt-10">
+      <div className="mt-10 flex flex-col items-center gap-3">
         <Link
           href="/auth/login"
           className="inline-flex items-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:opacity-90"
           style={{ background: "#378ADD" }}
         >
           Iniciar sesión
+          <span aria-hidden="true">→</span>
+        </Link>
+        <Link
+          href="/auth/register"
+          className="inline-flex items-center gap-2 rounded-xl px-8 py-3 text-sm font-semibold transition-all active:scale-[0.98] hover:opacity-90"
+          style={{ color: "#378ADD", border: "1.5px solid #378ADD" }}
+        >
+          ¿Primera vez? Creá tu cuenta
           <span aria-hidden="true">→</span>
         </Link>
       </div>
