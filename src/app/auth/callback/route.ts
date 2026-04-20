@@ -44,20 +44,30 @@ export async function GET(request: Request) {
   }
 
   // Crear registro paciente si no existe (bypass RLS con admin client)
+  // Solo para usuarios que NO son médicos
   if (data.user) {
     const admin = createAdminClient();
-    const { data: existente } = await admin
-      .from("pacientes")
+    const { data: esMedico } = await admin
+      .from("medicos")
       .select("id")
       .eq("user_id", data.user.id)
       .maybeSingle();
 
-    if (!existente) {
-      const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
-      await admin.from("pacientes").insert({
-        user_id: data.user.id,
-        nombre_completo: fullName,
-      });
+    if (!esMedico) {
+      const { data: existente } = await admin
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      if (!existente) {
+        const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
+        await admin.from("pacientes").insert({
+          user_id: data.user.id,
+          nombre_completo: fullName,
+          email: data.user.email ?? null,
+        });
+      }
     }
   }
 
