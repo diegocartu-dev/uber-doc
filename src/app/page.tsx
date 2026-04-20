@@ -28,7 +28,7 @@ export default async function Home({
 
     const { data: paciente } = await supabase
       .from("pacientes")
-      .select("nombre_completo, dni, fecha_nacimiento, telefono")
+      .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -36,7 +36,7 @@ export default async function Home({
       paciente?.nombre_completo?.trim() &&
       paciente?.dni?.trim() &&
       paciente?.fecha_nacimiento &&
-      paciente?.telefono?.trim();
+      paciente?.sexo_dni;
 
     redirect(perfilCompleto ? "/clinica" : "/onboarding");
   }

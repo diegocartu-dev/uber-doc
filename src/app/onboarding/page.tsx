@@ -15,7 +15,7 @@ export default async function OnboardingPage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, telefono")
+    .select("nombre_completo, dni, fecha_nacimiento, telefono, sexo_dni")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -25,7 +25,7 @@ export default async function OnboardingPage({
     paciente?.nombre_completo?.trim() &&
     paciente?.dni?.trim() &&
     paciente?.fecha_nacimiento &&
-    paciente?.telefono?.trim();
+    paciente?.sexo_dni;
 
   if (perfilCompleto) {
     const dest =
@@ -120,14 +120,41 @@ export default async function OnboardingPage({
           </div>
 
           <div>
+            <label className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+              Sexo según DNI
+            </label>
+            <div className="mt-1 flex gap-3">
+              {([
+                { value: "masculino", label: "Masculino" },
+                { value: "femenino", label: "Femenino" },
+              ] as const).map((opt) => (
+                <label
+                  key={opt.value}
+                  className="flex flex-1 cursor-pointer items-center justify-center rounded-[var(--radius-md)] border px-3 text-[15px] font-medium transition-all has-[:checked]:border-[#378ADD] has-[:checked]:bg-[#378ADD]/5 has-[:checked]:text-[#378ADD]"
+                  style={{ height: 44, borderColor: "var(--color-border-strong)", color: "var(--color-text-primary)" }}
+                >
+                  <input
+                    type="radio"
+                    name="sexo_dni"
+                    value={opt.value}
+                    required
+                    defaultChecked={paciente?.sexo_dni === opt.value}
+                    className="sr-only"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label htmlFor="telefono" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
-              Tel&eacute;fono
+              Teléfono <span className="font-normal text-gray-400">(opcional)</span>
             </label>
             <input
               id="telefono"
               name="telefono"
               type="tel"
-              required
               defaultValue={paciente?.telefono ?? ""}
               className={inputClass}
               style={inputStyle}

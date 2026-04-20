@@ -23,7 +23,7 @@ export default async function ConsultorioPrivadoPage({
 
   const { data: pacienteCheck } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, telefono")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -32,7 +32,7 @@ export default async function ConsultorioPrivadoPage({
       pacienteCheck?.nombre_completo?.trim() &&
       pacienteCheck?.dni?.trim() &&
       pacienteCheck?.fecha_nacimiento &&
-      pacienteCheck?.telefono?.trim();
+      pacienteCheck?.sexo_dni;
     if (!perfilCompleto) redirect(`/onboarding?redirectTo=/dr/${slug}/consultorio`);
   }
 

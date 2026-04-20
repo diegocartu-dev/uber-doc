@@ -13,10 +13,11 @@ export async function completarPerfil(formData: FormData) {
   const nombre_completo = capitalizarNombre((formData.get("nombre_completo") as string)?.trim());
   const dni = (formData.get("dni") as string)?.trim();
   const fecha_nacimiento = (formData.get("fecha_nacimiento") as string)?.trim();
-  const telefono = (formData.get("telefono") as string)?.trim();
+  const sexo_dni = (formData.get("sexo_dni") as string)?.trim() || null;
+  const telefono = (formData.get("telefono") as string)?.trim() || null;
   const redirectTo = (formData.get("redirectTo") as string) ?? "/";
 
-  if (!nombre_completo || !dni || !fecha_nacimiento || !telefono) {
+  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni) {
     redirect(`/onboarding?error=campos_requeridos`);
   }
 
@@ -26,7 +27,7 @@ export async function completarPerfil(formData: FormData) {
   const { error } = await supabase
     .from("pacientes")
     .upsert(
-      { user_id: user.id, nombre_completo, dni, fecha_nacimiento, telefono },
+      { user_id: user.id, nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono },
       { onConflict: "user_id" }
     );
 
