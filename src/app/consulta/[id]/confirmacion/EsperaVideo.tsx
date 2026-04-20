@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import BotonPush from "@/components/BotonPush";
 
 // Boton reutilizable "Volver"
 function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
@@ -181,6 +182,8 @@ export default function EsperaVideo({
             </p>
           </div>
         </div>
+
+        <BotonPush rol="paciente" variante="popup" />
 
         <VolverAlInicio returnUrl={returnUrl} />
       </div>

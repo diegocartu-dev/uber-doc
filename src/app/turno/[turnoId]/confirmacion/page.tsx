@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
+import BotonPush from "@/components/BotonPush";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -98,6 +99,8 @@ export default async function ConfirmacionTurnoPage({
             Si el profesional cancela, se reintegra el 100% del monto.
           </p>
         </div>
+
+        <BotonPush rol="paciente" variante="popup" />
 
         <div className="mt-6 space-y-3">
           {(() => {

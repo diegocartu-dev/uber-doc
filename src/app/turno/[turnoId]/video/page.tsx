@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import WorkspaceConsulta from "@/app/medico/consulta/[id]/workspace/WorkspaceConsulta";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
+import { pushAlPaciente } from "@/lib/push";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -37,6 +38,12 @@ export default async function VideoTurnoPage({
   // Transicionar a en_curso
   if (turno.estado !== "en_curso") {
     await supabase.from("turnos").update({ estado: "en_curso", iniciado_en: new Date().toISOString() }).eq("id", turnoId);
+    pushAlPaciente(turno.paciente_id, {
+      title: "🟢 Docto",
+      body: `El Dr. ${medicoData?.nombre_completo ?? "tu médico"} está listo. Ingresá ahora a tu consulta.`,
+      url: `/turno/${turnoId}/espera`,
+      tag: `inicio-${turnoId}`,
+    }).catch(() => {});
   }
 
   // Datos del paciente

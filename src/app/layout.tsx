@@ -27,7 +27,18 @@ export default function RootLayout({
       lang="es-AR"
       className={`${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#378ADD" />
+      </head>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){})}`,
+          }}
+        />
+      </body>
     </html>
   );
 }

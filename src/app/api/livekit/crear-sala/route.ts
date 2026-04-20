@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
+import { enviarPush, pushAlPaciente } from "@/lib/push";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   // Verificar que existe
   const { data: consulta } = await supabase
     .from(tabla)
-    .select("id, estado, medico_id, sala_video_url")
+    .select("id, estado, medico_id, paciente_id, sala_video_url")
     .eq("id", consultaId)
     .single();
 
@@ -66,10 +67,27 @@ export async function POST(req: NextRequest) {
     // Guardar roomName en sala_video_url y transicionar estado
     const updateData: Record<string, string> = {};
     if (!consulta.sala_video_url) updateData.sala_video_url = roomName;
-    if (tipo === "consulta" && consulta.estado === "pagada") updateData.estado = "en_curso";
-    if (tipo === "turno" && consulta.estado !== "en_curso") updateData.estado = "en_curso";
+    const transicionaEnCurso =
+      (tipo === "consulta" && consulta.estado === "pagada") ||
+      (tipo === "turno" && consulta.estado !== "en_curso");
+    if (transicionaEnCurso) updateData.estado = "en_curso";
     if (Object.keys(updateData).length > 0) {
       await supabase.from(tabla).update(updateData).eq("id", consultaId);
+    }
+
+    if (transicionaEnCurso) {
+      const pacienteId = (consulta as { paciente_id: string }).paciente_id;
+      const pushPayload = {
+        title: "🟢 Docto",
+        body: `El Dr. ${medico.nombre_completo} está listo. Ingresá ahora a tu consulta.`,
+        url: tipo === "turno" ? `/turno/${consultaId}/espera` : `/consulta/${consultaId}/video`,
+        tag: `inicio-${consultaId}`,
+      };
+      if (tipo === "consulta") {
+        enviarPush(pacienteId, pushPayload).catch(() => {});
+      } else {
+        pushAlPaciente(pacienteId, pushPayload).catch(() => {});
+      }
     }
 
     return NextResponse.json({ roomName, token });

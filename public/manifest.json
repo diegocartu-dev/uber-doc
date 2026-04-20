@@ -1,0 +1,16 @@
+{
+  "name": "Docto",
+  "short_name": "Docto",
+  "description": "Consultas médicas al instante",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#378ADD",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoCancelado } from "@/lib/email";
+import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -74,6 +75,15 @@ export async function cancelarTurnoPorPaciente(
     `Cancelaste el turno del ${formatearFechaCorta(turno.fecha)}. ${reembolso ? "Tu reembolso fue procesado." : "No aplica reembolso (menos de 48hs de anticipación)."}`
   );
 
+  const { data: pacNombre } = await supabase
+    .from("pacientes").select("nombre_completo").eq("id", pacienteId).single();
+  pushAlMedico(turno.medico_id, {
+    title: "🔴 Docto",
+    body: `${pacNombre?.nombre_completo ?? "Un paciente"} canceló su turno del ${formatearFechaCorta(turno.fecha)}`,
+    url: "/medico/agenda",
+    tag: `cancelado-pac-${turnoId}`,
+  }).catch(() => {});
+
   return { ok: true, reembolso };
 }
 
@@ -123,6 +133,13 @@ export async function cancelarTurnoPorMedico(
       medicoId,
       `El Dr/a. ${medico?.nombre_completo ?? "médico"} canceló el turno del ${formatearFechaCorta(turno.fecha)}. Podés reprogramar desde docto.com.ar/dr/${slug}`
     );
+
+    pushAlPaciente(turno.paciente_id, {
+      title: "🔴 Docto",
+      body: `Tu turno del ${formatearFechaCorta(turno.fecha)} fue cancelado. Podés reprogramar.`,
+      url: `/dr/${slug}`,
+      tag: `cancelado-${turnoId}`,
+    }).catch(() => {});
   }
 
   return { ok: true, reembolso: true };

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
+import { pushAlMedico } from "@/lib/push";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -55,10 +56,9 @@ export async function confirmarPagoTurno(turnoId: string) {
     .from("pacientes").select("id").eq("user_id", user.id).limit(1).maybeSingle();
   if (!paciente) return { error: "Paciente no encontrado." };
 
-  // Verificar que el turno pertenece al paciente y está pendiente
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, reservado_hasta")
+    .select("id, estado, paciente_id, reservado_hasta, medico_id, fecha")
     .eq("id", turnoId)
     .single();
 
@@ -81,6 +81,15 @@ export async function confirmarPagoTurno(turnoId: string) {
 
   enviarEmailTurnoConfirmado(turnoId).catch(console.error);
 
+  const { data: pacNombre } = await supabase
+    .from("pacientes").select("nombre_completo").eq("id", paciente.id).single();
+  pushAlMedico(turno.medico_id, {
+    title: "🟢 Docto",
+    body: `${pacNombre?.nombre_completo ?? "Un paciente"} reservó un turno para el ${turno.fecha}`,
+    url: "/medico/agenda",
+    tag: `reserva-${turnoId}`,
+  }).catch(() => {});
+
   return { success: true };
 }
 
@@ -94,7 +103,7 @@ export async function entrarSalaEspera(turnoId: string) {
   if (!paciente) return { error: "Paciente no encontrado." };
 
   const { data: turno } = await supabase
-    .from("turnos").select("id, paciente_id, estado").eq("id", turnoId).single();
+    .from("turnos").select("id, paciente_id, estado, medico_id").eq("id", turnoId).single();
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.paciente_id !== paciente.id) return { error: "Este turno no te pertenece." };
   if (turno.estado !== "confirmado") return { error: "Este turno no está confirmado." };
@@ -108,6 +117,16 @@ export async function entrarSalaEspera(turnoId: string) {
     .eq("estado", "confirmado");
 
   if (error) return { error: error.message };
+
+  const { data: pacNombre } = await supabase
+    .from("pacientes").select("nombre_completo").eq("id", paciente.id).single();
+  pushAlMedico(turno.medico_id, {
+    title: "🟢 Docto",
+    body: `${pacNombre?.nombre_completo ?? "Un paciente"} está esperando tu consulta`,
+    url: "/dashboard",
+    tag: `espera-${turnoId}`,
+  }, true).catch(() => {});
+
   return { success: true };
 }
 

@@ -545,6 +545,13 @@ export default function WorkspaceConsulta({
           .from("consultas")
           .update({ estado: "completada", doc_borrador: null })
           .eq("id", consultaId);
+
+        fetch("/api/push/notificar-documentos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ pacienteId: paciente.id, consultaId }),
+        }).catch(() => {});
       } catch {
         // Background: no hay UI para mostrar error, falla silenciosamente
       }

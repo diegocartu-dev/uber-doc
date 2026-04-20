@@ -14,6 +14,7 @@ import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
 import { Building2 } from "lucide-react";
+import BotonPush from "@/components/BotonPush";
 
 export default async function DashboardPage({
   searchParams,
@@ -452,6 +453,11 @@ export default async function DashboardPage({
               nombreMedico={fullName}
               turnosHoy={turnosHoy.length}
             />
+
+            {/* Activar notificaciones push */}
+            <div className="mt-4">
+              <BotonPush rol="medico" />
+            </div>
 
             {/* Métricas full width */}
             <MetricasMedico
