@@ -173,36 +173,14 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
               </>
             ) : (
               <>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   ¿Cancelar este turno?
                 </h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  Dr. {capitalizarNombre(dialogTurno.medico_nombre)} ·{" "}
-                  {new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", {
-                    day: "numeric", month: "long",
-                    timeZone: "America/Argentina/Buenos_Aires",
-                  })}{" "}
-                  a las {dialogTurno.hora_inicio.slice(0, 5)}
+                <p className="text-sm text-gray-600 mb-4">
+                  {conReembolso
+                    ? `Cancelás tu turno con el Dr. ${capitalizarNombre(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Te enviaremos un email con las opciones disponibles.`
+                    : `Cancelás tu turno con el Dr. ${capitalizarNombre(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Por nuestra política, no aplica reembolso en cancelaciones con menos de 48hs de anticipación.`}
                 </p>
-
-                {/* Política de reembolso */}
-                <div
-                  className="rounded-lg p-3 mb-4 text-sm"
-                  style={{
-                    background: conReembolso ? "#E1F5EE" : "#FFF3E0",
-                    border: conReembolso ? "1px solid #1D9E7540" : "1px solid #D85A3040",
-                  }}
-                >
-                  {conReembolso ? (
-                    <p style={{ color: "#085041" }}>
-                      Cancelás con más de 48hs de anticipación. <strong>Tu reembolso será procesado automáticamente.</strong>
-                    </p>
-                  ) : (
-                    <p style={{ color: "#7A3A1A" }}>
-                      Cancelás con menos de 48hs de anticipación. <strong>No aplica reembolso</strong> según nuestra política.
-                    </p>
-                  )}
-                </div>
 
                 <textarea
                   value={motivo}
