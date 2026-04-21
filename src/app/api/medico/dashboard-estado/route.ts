@@ -138,13 +138,12 @@ export async function GET(req: NextRequest) {
     canal_origen: (t as { canal_origen?: string }).canal_origen ?? null,
   }));
 
-  // 4. Turnos activos hoy (confirmado/en_espera) para saber si bloquear CI
+  // 4. Turnos en_curso ahora mismo → bloquear CI
   const { count: turnosActivosHoy } = await supabase
     .from("turnos")
     .select("id", { count: "exact", head: true })
     .eq("medico_id", medicoId)
-    .eq("fecha", hoy)
-    .in("estado", ["confirmado", "en_espera"]);
+    .eq("estado", "en_curso");
 
   return NextResponse.json({
     consultas_pendientes,

@@ -313,7 +313,7 @@ export default async function DashboardPage({
 
   const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
   const hayAlgoEnCurso = consultasEnCurso.length > 0 || turnoEnCurso !== null;
-  const hayTurnosActivosHoy = turnosHoy.some((t) => t.estado === "confirmado" || t.estado === "en_espera");
+  const hayTurnosActivosHoy = turnosHoy.some((t) => t.estado === "en_curso");
   const hayUrgenciaTurnos = turnosEsperaCompletos.length > 0 || turnoEnCurso !== null;
   const hayUrgenciaConsulta = consultasPendientes.length > 0 || consultasEnCurso.length > 0;
 

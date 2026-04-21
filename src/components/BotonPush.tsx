@@ -19,15 +19,30 @@ export default function BotonPush({ rol, variante = "boton", onResult }: Props) 
   useEffect(() => {
     if (esIOSSinPWA()) {
       setEstado("ios-sin-pwa");
-    } else if (!pushSoportado()) {
-      setEstado("no-soportado");
-    } else if (pushRechazado()) {
-      setEstado("rechazado");
-    } else if (pushYaActivo()) {
-      setEstado("ya-activo");
-    } else {
-      setEstado("push-listo");
+      return;
     }
+    if (!pushSoportado()) {
+      setEstado("no-soportado");
+      return;
+    }
+    if (pushRechazado()) {
+      setEstado("rechazado");
+      return;
+    }
+
+    // Permission granted doesn't mean we have a subscription in backend.
+    // Check if there's an active SW push subscription locally.
+    if (pushYaActivo()) {
+      navigator.serviceWorker?.ready
+        .then((reg) => reg.pushManager.getSubscription())
+        .then((sub) => {
+          setEstado(sub ? "ya-activo" : "push-listo");
+        })
+        .catch(() => setEstado("push-listo"));
+      return;
+    }
+
+    setEstado("push-listo");
   }, []);
 
   async function activar() {
