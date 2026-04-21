@@ -14,11 +14,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad")
+    .select("nombre_completo, especialidad, verificado, estado_registro")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!medico) return { title: "Médico no encontrado — Docto" };
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") return { title: "Médico no encontrado — Docto" };
 
   return {
     title: `Dr. ${capitalizarNombre(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
@@ -37,11 +37,11 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!medico) notFound();
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") notFound();
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();
