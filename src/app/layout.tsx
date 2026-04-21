@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   description: "Tu doctor, a un click de distancia. Consultas medicas online por videollamada, chat y recetas digitales.",
   icons: {
     icon: "/favicon.svg",
+    apple: "/icon-192.png",
   },
 };
 
