@@ -60,17 +60,16 @@ export default function BotonPush({ rol, variante = "boton", onResult }: Props) 
       <div className={variante === "popup" ? "mt-4" : ""}>
         <div className="rounded-xl bg-[#f8f9fa] p-4" style={{ border: "0.5px solid #e5e7eb" }}>
           <p className="text-sm font-medium text-gray-900">
-            Nunca te pierdas un paciente
+            Instalá Docto en tu iPhone
           </p>
           <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">
-            Activá las notificaciones para saber al instante cuando alguien está esperando.
-            En iPhone: tocá{" "}
+            Tocá{" "}
             <span className="inline-flex items-center align-middle">
               <svg className="h-4 w-4 text-[#378ADD]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
               </svg>
             </span>{" "}
-            compartir → <strong>Agregar a inicio</strong> → abrí Docto desde el ícono.
+            compartir → <strong>Agregar a inicio</strong>. Así podés activar las notificaciones.
           </p>
         </div>
       </div>
