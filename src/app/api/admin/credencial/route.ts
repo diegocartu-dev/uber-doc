@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const ADMIN_EMAILS = ["diegocartu@gmail.com", "diegocartu@me.com"];
+import { verificarAdmin } from "@/lib/admin";
 
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  }
+  const user = await verificarAdmin();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const path = req.nextUrl.searchParams.get("path");
-  if (!path) {
-    return NextResponse.json({ error: "Path requerido" }, { status: 400 });
+  if (!path || path.includes("..") || !/^[a-zA-Z0-9_\-\/]+\.\w+$/.test(path)) {
+    return NextResponse.json({ error: "Path inválido" }, { status: 400 });
   }
 
   const admin = createAdminClient();
