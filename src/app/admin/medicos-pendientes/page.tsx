@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AdminMedicosClient from "./AdminMedicosClient";
 
-const ADMIN_EMAILS = ["diegocartu@gmail.com"];
+const ADMIN_EMAILS = ["diegocartu@gmail.com", "diegocartu@me.com"];
 
 export default async function AdminMedicosPendientesPage() {
   const supabase = await createClient();
