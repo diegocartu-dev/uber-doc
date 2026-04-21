@@ -152,7 +152,7 @@ export async function registrarMedico(formData: FormData) {
   const ahora = new Date().toISOString();
   let dbError = null;
   for (let i = 0; i < 3; i++) {
-    const { error } = await supabase.from("medicos").insert({
+    const { error } = await supabaseAdmin.from("medicos").insert({
       user_id: authData.user.id,
       titulo,
       nombre_completo,
