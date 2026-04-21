@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const ADMIN_EMAILS = ["diegocartu@gmail.com"];
+const ADMIN_EMAILS = ["diegocartu@gmail.com", "diegocartu@me.com"];
 
 async function verificarAdmin() {
   const supabase = await createClient();
