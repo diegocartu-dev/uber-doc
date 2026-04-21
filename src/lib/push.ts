@@ -1,11 +1,16 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY ?? "";
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY ?? "";
+let vapidConfigured = false;
 
-if (VAPID_PUBLIC && VAPID_PRIVATE) {
-  webpush.setVapidDetails("mailto:soporte@docto.com.ar", VAPID_PUBLIC, VAPID_PRIVATE);
+function ensureVapid() {
+  if (vapidConfigured) return true;
+  const pub = process.env.VAPID_PUBLIC_KEY ?? "";
+  const priv = process.env.VAPID_PRIVATE_KEY ?? "";
+  if (!pub || !priv) return false;
+  webpush.setVapidDetails("mailto:soporte@docto.com.ar", pub, priv);
+  vapidConfigured = true;
+  return true;
 }
 
 type PushPayload = {
@@ -16,7 +21,7 @@ type PushPayload = {
 };
 
 export async function enviarPush(userId: string, payload: PushPayload): Promise<boolean> {
-  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return false;
+  if (!ensureVapid()) return false;
 
   const supabase = createAdminClient();
   const { data: sub } = await supabase
