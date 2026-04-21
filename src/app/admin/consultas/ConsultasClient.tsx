@@ -68,10 +68,16 @@ export default function ConsultasClient() {
     setForzando(null);
   }
 
+  function csvEscape(val: string) {
+    let safe = val;
+    if (/^[=+\-@\t\r]/.test(safe)) safe = "'" + safe;
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+
   function exportCsv() {
     const header = "ID,Tipo,Estado,Médico,Paciente,Inicio,Especialidad\n";
     const rows = items.map((i) =>
-      [i.id, i.tipo, i.estado, `"${i.medico}"`, `"${i.paciente}"`, i.inicio, `"${i.especialidad}"`].join(",")
+      [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.inicio), csvEscape(i.especialidad)].join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

@@ -7,8 +7,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const path = req.nextUrl.searchParams.get("path");
-  if (!path) {
-    return NextResponse.json({ error: "Path requerido" }, { status: 400 });
+  if (!path || path.includes("..") || !/^[a-zA-Z0-9_\-\/]+\.\w+$/.test(path)) {
+    return NextResponse.json({ error: "Path inválido" }, { status: 400 });
   }
 
   const admin = createAdminClient();

@@ -168,5 +168,16 @@ export async function PATCH(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await admin.from("alertas_admin").insert({
+    tipo: "cierre_forzado",
+    titulo: `Cierre forzado de ${tipo} por admin`,
+    entidad_tipo: "consulta",
+    entidad_id: id,
+    severidad: "media",
+    estado: "resuelta",
+    resuelta_por: user.email,
+    resuelta_at: new Date().toISOString(),
+  });
+
   return NextResponse.json({ ok: true });
 }

@@ -24,9 +24,10 @@ interface Props {
   pendingMedicos: number;
   pendingAlertas: number;
   adminEmail: string;
+  onNavigate?: () => void;
 }
 
-export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmail }: Props) {
+export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmail, onNavigate }: Props) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -64,6 +65,7 @@ export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmai
             <Link
               key={href}
               href={href}
+              onClick={onNavigate}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? "bg-[#378ADD]/10 text-[#378ADD]"

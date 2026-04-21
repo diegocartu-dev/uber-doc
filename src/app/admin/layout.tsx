@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ADMIN_EMAILS } from "@/lib/admin";
-import AdminSidebar from "./AdminSidebar";
+import AdminShell from "./AdminShell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -22,15 +22,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   ]);
 
   return (
-    <div className="flex h-screen bg-[#F8F9FA]">
-      <AdminSidebar
-        pendingMedicos={pendingMedicos ?? 0}
-        pendingAlertas={pendingAlertas ?? 0}
-        adminEmail={user.email ?? ""}
-      />
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
-    </div>
+    <AdminShell
+      pendingMedicos={pendingMedicos ?? 0}
+      pendingAlertas={pendingAlertas ?? 0}
+      adminEmail={user.email ?? ""}
+    >
+      {children}
+    </AdminShell>
   );
 }

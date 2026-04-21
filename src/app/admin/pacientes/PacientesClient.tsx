@@ -171,26 +171,23 @@ export default function PacientesClient({ pacientes: initial }: { pacientes: Pac
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setPanelPaciente(p)}
-                        className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                        title="Ver perfil"
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
                       >
-                        <Eye size={16} />
+                        <Eye size={14} /> Ver
                       </button>
                       {estado === "activo" && (
                         <>
                           <button
                             onClick={() => setConfirmando({ id: p.id, accion: "pausar" })}
-                            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-orange-50 hover:text-[#D85A30]"
-                            title="Pausar"
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-orange-50 hover:text-[#D85A30]"
                           >
-                            <PauseCircle size={16} />
+                            <PauseCircle size={14} /> Pausar
                           </button>
                           <button
                             onClick={() => setConfirmando({ id: p.id, accion: "bloquear" })}
-                            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-[#E24B4A]"
-                            title="Bloquear"
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-red-50 hover:text-[#E24B4A]"
                           >
-                            <ShieldOff size={16} />
+                            <ShieldOff size={14} /> Bloquear
                           </button>
                         </>
                       )}
@@ -198,10 +195,10 @@ export default function PacientesClient({ pacientes: initial }: { pacientes: Pac
                         <button
                           onClick={() => handleAccion(p.id, "reactivar")}
                           disabled={procesando === p.id}
-                          className="rounded-lg p-1.5 text-gray-400 transition hover:bg-emerald-50 hover:text-[#1D9E75]"
-                          title="Reactivar"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-blue-50 hover:text-[#378ADD]"
                         >
-                          {procesando === p.id ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                          {procesando === p.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                          Reactivar
                         </button>
                       )}
                     </div>

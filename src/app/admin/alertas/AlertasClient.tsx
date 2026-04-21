@@ -174,7 +174,7 @@ export default function AlertasClient() {
                       <div className="mt-3 flex gap-2">
                         <button
                           onClick={() => setResolviendo({ id: a.id, accion: "resolver" })}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#1D9E75] px-3 py-1.5 text-xs font-medium text-[#1D9E75] transition hover:bg-emerald-50"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50"
                         >
                           <CheckCircle size={14} /> Resolver
                         </button>

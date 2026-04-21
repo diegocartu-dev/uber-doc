@@ -31,7 +31,7 @@ export default function DashboardAdminClient({ metrics, diasSemana }: Props) {
       {/* Metric cards */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard icon={CalendarCheck} label="Consultas hoy" value={metrics.consultasHoy} color="#378ADD" />
-        <MetricCard icon={Stethoscope} label="Médicos activos" value={metrics.medicosActivos} sub={`${metrics.totalMedicos} registrados`} color="#1D9E75" />
+        <MetricCard icon={Stethoscope} label="Médicos activos" value={metrics.medicosActivos} sub={`${metrics.totalMedicos} registrados`} color="#378ADD" />
         <MetricCard icon={Users} label="Pacientes" value={metrics.totalPacientes} color="#378ADD" />
         <MetricCard icon={Activity} label="En curso ahora" value={metrics.enCursoAhora} color={metrics.enCursoAhora > 0 ? "#378ADD" : "#888780"} />
       </div>

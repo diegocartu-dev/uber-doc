@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     .limit(100);
 
   if (q) {
-    query = query.or(`nombre_completo.ilike.%${q}%,email.ilike.%${q}%,dni.ilike.%${q}%`);
+    const safe = q.replace(/[,.()"'\\]/g, "");
+    query = query.or(`nombre_completo.ilike.%${safe}%,email.ilike.%${safe}%,dni.ilike.%${safe}%`);
   }
 
   const { data, error } = await query;
