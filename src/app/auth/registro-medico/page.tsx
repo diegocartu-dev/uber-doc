@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Stethoscope, X } from "lucide-react";
+import { useState, useRef } from "react";
+import { Stethoscope, X, Upload, CheckCircle, ChevronLeft } from "lucide-react";
 import { registrarMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 
@@ -85,17 +85,93 @@ const PROVINCIAS = [
   "Tucumán",
 ];
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
 export default function RegistroMedicoPage() {
+  const [paso, setPaso] = useState(1);
   const [tipoMatricula, setTipoMatricula] = useState("MN");
+  const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
   const [checkMatricula, setCheckMatricula] = useState(false);
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalMatricula, setModalMatricula] = useState(false);
+  const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function validarPaso1(): boolean {
+    const form = formRef.current;
+    if (!form) return false;
+    const fields = ["titulo", "nombre_completo", "email", "password", "dni"];
+    for (const name of fields) {
+      const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
+      if (!el || !el.value.trim()) {
+        setError(`Completá el campo "${el?.labels?.[0]?.textContent || name}".`);
+        el?.focus();
+        return false;
+      }
+    }
+    const pwd = (form.elements.namedItem("password") as HTMLInputElement).value;
+    if (pwd.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
+      return false;
+    }
+    const dni = (form.elements.namedItem("dni") as HTMLInputElement).value;
+    if (!/^\d{7,8}$/.test(dni)) {
+      setError("El DNI debe tener 7 u 8 dígitos numéricos.");
+      return false;
+    }
+    return true;
+  }
+
+  function validarPaso2(): boolean {
+    const form = formRef.current;
+    if (!form) return false;
+    const numero = (form.elements.namedItem("numero_matricula") as HTMLInputElement)?.value;
+    if (!numero?.trim()) {
+      setError("Ingresá tu número de matrícula.");
+      return false;
+    }
+    if (tipoMatricula === "MP") {
+      const prov = (form.elements.namedItem("provincia") as HTMLSelectElement)?.value;
+      if (!prov) {
+        setError("Seleccioná la provincia de tu matrícula.");
+        return false;
+      }
+    }
+    const cuit = (form.elements.namedItem("cuit") as HTMLInputElement)?.value;
+    if (!cuit?.trim()) {
+      setError("Ingresá tu CUIT.");
+      return false;
+    }
+    const esp = (form.elements.namedItem("especialidad") as HTMLSelectElement)?.value;
+    if (!esp) {
+      setError("Seleccioná tu especialidad.");
+      return false;
+    }
+    const domicilio = (form.elements.namedItem("domicilio") as HTMLInputElement)?.value;
+    if (!domicilio?.trim()) {
+      setError("Ingresá tu domicilio profesional.");
+      return false;
+    }
+    return true;
+  }
+
+  function siguiente() {
+    setError(null);
+    if (paso === 1 && validarPaso1()) setPaso(2);
+    else if (paso === 2 && validarPaso2()) setPaso(3);
+  }
+
+  function anterior() {
+    setError(null);
+    setPaso((p) => Math.max(1, p - 1));
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (paso < 3) { siguiente(); return; }
     setLoading(true);
     setError(null);
 
@@ -109,354 +185,319 @@ export default function RegistroMedicoPage() {
   }
 
   const inputClass =
-    "mt-1 block w-full rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
+    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
   const labelClass = "block text-[13px] font-medium";
+  const pasoTitulos = ["Tu cuenta", "Tu matrícula", "Tu consulta"];
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2">
+        <Link href="/" className="mb-6 flex items-center justify-center gap-2">
           <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
+        {/* Progress indicator */}
+        <div className="mb-6 flex items-center justify-center gap-2">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="flex items-center gap-2">
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                  n === paso
+                    ? "bg-[#378ADD] text-white"
+                    : n < paso
+                      ? "bg-[#378ADD]/20 text-[#378ADD]"
+                      : "bg-gray-100 text-gray-400"
+                }`}
+              >
+                {n < paso ? "\u2713" : n}
+              </div>
+              {n < 3 && (
+                <div className={`h-0.5 w-6 rounded transition-colors ${n < paso ? "bg-[#378ADD]/40" : "bg-gray-200"}`} />
+              )}
+            </div>
+          ))}
+        </div>
+
         <h2 className="text-center text-xl font-semibold text-gray-900">
-          Registro de médico
+          {pasoTitulos[paso - 1]}
         </h2>
         <p className="mt-1 text-center text-sm text-gray-500">
-          Completá tus datos para comenzar a atender pacientes
+          Paso {paso} de 3
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
               {error}
             </div>
           )}
 
-          {/* Título profesional */}
-          <div>
-            <label htmlFor="titulo" className={labelClass}>
-              Título profesional
-            </label>
-            <select
-              id="titulo"
-              name="titulo"
-              required
-              className={inputClass}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Seleccioná tu título
-              </option>
-              <option value="Dr.">Dr.</option>
-              <option value="Dra.">Dra.</option>
-            </select>
-          </div>
-
-          {/* Nombre completo */}
-          <div>
-            <label htmlFor="nombre_completo" className={labelClass}>
-              Nombre completo
-            </label>
-            <input
-              id="nombre_completo"
-              name="nombre_completo"
-              type="text"
-              required
-              className={inputClass}
-              placeholder="Juan Pérez"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label htmlFor="email" className={labelClass}>
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              className={inputClass}
-              placeholder="doctor@email.com"
-            />
-          </div>
-
-          {/* Contraseña */}
-          <div>
-            <label htmlFor="password" className={labelClass}>
-              Contraseña
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              className={inputClass}
-              placeholder="Mínimo 6 caracteres"
-            />
-          </div>
-
-          {/* Especialidad */}
-          <div>
-            <label htmlFor="especialidad" className={labelClass}>
-              Especialidad
-            </label>
-            <select
-              id="especialidad"
-              name="especialidad"
-              required
-              className={inputClass}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Seleccioná tu especialidad
-              </option>
-              {ESPECIALIDADES.map((esp) => (
-                <option key={esp} value={esp}>
-                  {esp}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tipo de matrícula */}
-          <div>
-            <label htmlFor="tipo_matricula" className={labelClass}>
-              Tipo de matrícula
-            </label>
-            <select
-              id="tipo_matricula"
-              name="tipo_matricula"
-              required
-              className={inputClass}
-              value={tipoMatricula}
-              onChange={(e) => setTipoMatricula(e.target.value)}
-            >
-              <option value="MN">MN - Matrícula Nacional</option>
-              <option value="MP">MP - Matrícula Provincial</option>
-            </select>
-          </div>
-
-          {/* Número de matrícula */}
-          <div>
-            <label htmlFor="numero_matricula" className={labelClass}>
-              Número de matrícula
-            </label>
-            <input
-              id="numero_matricula"
-              name="numero_matricula"
-              type="text"
-              required
-              className={inputClass}
-              placeholder="Ej: 123456"
-            />
-          </div>
-
-          {/* Provincia (solo si es MP) */}
-          {tipoMatricula === "MP" && (
+          {/* ═══ PASO 1: Tu cuenta ═══ */}
+          <div className={paso === 1 ? "space-y-4" : "hidden"}>
             <div>
-              <label htmlFor="provincia" className={labelClass}>
-                Provincia
-              </label>
+              <label htmlFor="titulo" className={labelClass}>Título profesional</label>
+              <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
+                <option value="" disabled>Seleccioná tu título</option>
+                <option value="Dr.">Dr.</option>
+                <option value="Dra.">Dra.</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="nombre_completo" className={labelClass}>Nombre completo</label>
+              <input id="nombre_completo" name="nombre_completo" type="text" required className={inputClass} placeholder="Juan Pérez" />
+            </div>
+
+            <div>
+              <label htmlFor="email" className={labelClass}>Email</label>
+              <input id="email" name="email" type="email" required className={inputClass} placeholder="doctor@email.com" />
+            </div>
+
+            <div>
+              <label htmlFor="password" className={labelClass}>Contraseña</label>
+              <input id="password" name="password" type="password" required minLength={8} className={inputClass} placeholder="Mínimo 8 caracteres" />
+            </div>
+
+            <div>
+              <label htmlFor="dni" className={labelClass}>DNI</label>
+              <input id="dni" name="dni" type="text" required inputMode="numeric" pattern="\d{7,8}" maxLength={8} className={inputClass} placeholder="12345678" />
+              <p className="mt-1 text-xs text-gray-400">7 u 8 dígitos, sin puntos</p>
+            </div>
+          </div>
+
+          {/* ═══ PASO 2: Tu matrícula ═══ */}
+          <div className={paso === 2 ? "space-y-4" : "hidden"}>
+            <div>
+              <label htmlFor="tipo_matricula" className={labelClass}>Tipo de matrícula</label>
               <select
-                id="provincia"
-                name="provincia"
+                id="tipo_matricula"
+                name="tipo_matricula"
                 required
                 className={inputClass}
-                defaultValue=""
+                value={tipoMatricula}
+                onChange={(e) => {
+                  setTipoMatricula(e.target.value);
+                  if (e.target.value === "MP") setTieneMatriculaExtra(false);
+                }}
               >
-                <option value="" disabled>
-                  Seleccioná tu provincia
-                </option>
-                {PROVINCIAS.map((prov) => (
-                  <option key={prov} value={prov}>
-                    {prov}
-                  </option>
+                <option value="MN">MN - Matrícula Nacional</option>
+                <option value="MP">MP - Matrícula Provincial</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="numero_matricula" className={labelClass}>Número de matrícula</label>
+              <input id="numero_matricula" name="numero_matricula" type="text" required className={inputClass} placeholder="Ej: 123456" />
+            </div>
+
+            {tipoMatricula === "MP" && (
+              <div>
+                <label htmlFor="provincia" className={labelClass}>Provincia</label>
+                <select id="provincia" name="provincia" required className={inputClass} defaultValue="">
+                  <option value="" disabled>Seleccioná tu provincia</option>
+                  {PROVINCIAS.map((prov) => (
+                    <option key={prov} value={prov}>{prov}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
+              <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
+                <option value="" disabled>Seleccioná tu especialidad</option>
+                {ESPECIALIDADES.map((esp) => (
+                  <option key={esp} value={esp}>{esp}</option>
                 ))}
               </select>
             </div>
-          )}
 
-          {/* CUIT */}
-          <div>
-            <label htmlFor="cuit" className={labelClass}>
-              CUIT
-            </label>
-            <input
-              id="cuit"
-              name="cuit"
-              type="text"
-              required
-              className={inputClass}
-              placeholder="20-12345678-9"
-            />
-          </div>
+            <div>
+              <label htmlFor="cuit" className={labelClass}>CUIT</label>
+              <input id="cuit" name="cuit" type="text" required className={inputClass} placeholder="20-12345678-9" />
+            </div>
 
-          {/* Domicilio profesional */}
-          <div>
-            <label htmlFor="domicilio" className={labelClass}>
-              Domicilio profesional
-            </label>
-            <input
-              id="domicilio"
-              name="domicilio"
-              type="text"
-              required
-              className={inputClass}
-              placeholder="Calle, número, ciudad"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Requerido por Ley 17.132 para figurar en recetas médicas
-            </p>
-          </div>
+            <div>
+              <label htmlFor="domicilio" className={labelClass}>Domicilio profesional</label>
+              <input id="domicilio" name="domicilio" type="text" required className={inputClass} placeholder="Calle, número, ciudad" />
+              <p className="mt-1 text-xs text-gray-400">Requerido por Ley 17.132 para recetas</p>
+            </div>
 
-          {/* Matrícula provincial */}
-          <div>
-            <label htmlFor="matricula_provincial" className={labelClass}>
-              Matrícula provincial <span className="text-gray-400">(opcional)</span>
-            </label>
-            <input
-              id="matricula_provincial"
-              name="matricula_provincial"
-              type="text"
-              className={inputClass}
-              placeholder="MP 45678"
-            />
-          </div>
+            {/* Matrícula adicional — solo si MN y el médico tiene otra provincial */}
+            {tipoMatricula === "MN" && (
+              <div>
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={tieneMatriculaExtra}
+                    onChange={(e) => setTieneMatriculaExtra(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  También tengo matrícula provincial
+                </label>
+                {tieneMatriculaExtra && (
+                  <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
+                    <div>
+                      <label htmlFor="matricula_provincial" className={labelClass}>
+                        Número de matrícula provincial
+                      </label>
+                      <input id="matricula_provincial" name="matricula_provincial" type="text" className={inputClass} placeholder="MP 45678" />
+                    </div>
+                    <div>
+                      <label htmlFor="provincia_matricula" className={labelClass}>Provincia</label>
+                      <select id="provincia_matricula" name="provincia_matricula" className={inputClass} defaultValue="">
+                        <option value="">Seleccioná</option>
+                        {PROVINCIAS.map((prov) => (
+                          <option key={prov} value={prov}>{prov}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Provincia de la matrícula */}
-          <div>
-            <label htmlFor="provincia_matricula" className={labelClass}>
-              Provincia de la matrícula <span className="text-gray-400">(opcional)</span>
-            </label>
-            <input
-              id="provincia_matricula"
-              name="provincia_matricula"
-              type="text"
-              className={inputClass}
-              placeholder="Buenos Aires"
-            />
-          </div>
-
-          {/* Precio de consulta */}
-          <div>
-            <label htmlFor="precio_consulta" className={labelClass}>
-              Valor de consulta
-            </label>
-            <div className="relative mt-1">
-              <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
-                $
-              </span>
-              <input
-                id="precio_consulta"
-                name="precio_consulta"
-                type="number"
-                required
-                min={1}
-                className={inputClass + " pl-7"}
-                placeholder="15000"
-              />
+            <div>
+              <label htmlFor="foto_credencial" className={labelClass}>Foto de credencial de matrícula</label>
+              <div className="mt-1">
+                <label
+                  htmlFor="foto_credencial"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-4 text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
+                >
+                  {fotoCredencial ? (
+                    <>
+                      <CheckCircle size={18} className="text-[#1D9E75]" />
+                      <span className="text-gray-700">{fotoCredencial.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={18} />
+                      <span>Subir imagen o PDF de tu credencial</span>
+                    </>
+                  )}
+                </label>
+                <input
+                  id="foto_credencial"
+                  name="foto_credencial"
+                  type="file"
+                  accept="image/*,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file && file.size > MAX_FILE_SIZE) {
+                      setError("El archivo no puede superar 5 MB.");
+                      e.target.value = "";
+                      return;
+                    }
+                    setError(null);
+                    setFotoCredencial(file);
+                  }}
+                />
+                <p className="mt-1 text-xs text-gray-400">JPG, PNG o PDF. Máximo 5 MB.</p>
+              </div>
             </div>
           </div>
 
-          {/* Duración de consulta */}
-          <div>
-            <label htmlFor="duracion_consulta" className={labelClass}>
-              Duración de consulta
-            </label>
-            <select
-              id="duracion_consulta"
-              name="duracion_consulta"
-              required
-              className={inputClass}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Seleccioná la duración
-              </option>
-              <option value="20">20 minutos</option>
-              <option value="30">30 minutos</option>
-              <option value="45">45 minutos</option>
-            </select>
+          {/* ═══ PASO 3: Tu consulta ═══ */}
+          <div className={paso === 3 ? "space-y-4" : "hidden"}>
+            <div>
+              <label htmlFor="precio_consulta" className={labelClass}>Valor de consulta</label>
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
+                <input id="precio_consulta" name="precio_consulta" type="number" required min={1} className={inputClass + " pl-7"} placeholder="15000" />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="duracion_consulta" className={labelClass}>Duración de consulta</label>
+              <select id="duracion_consulta" name="duracion_consulta" required className={inputClass} defaultValue="">
+                <option value="" disabled>Seleccioná la duración</option>
+                <option value="20">20 minutos</option>
+                <option value="30">30 minutos</option>
+                <option value="45">45 minutos</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="modalidad_atencion" className={labelClass}>Modalidad de atención</label>
+              <select id="modalidad_atencion" name="modalidad_atencion" required className={inputClass} defaultValue="">
+                <option value="" disabled>Seleccioná la modalidad</option>
+                <option value="programada">Programada</option>
+                <option value="inmediata">Inmediata</option>
+                <option value="ambas">Ambas</option>
+              </select>
+            </div>
+
+            {/* Términos y condiciones */}
+            <div className="space-y-3 pt-2">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={checkTerminos}
+                  onChange={(e) => setCheckTerminos(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">
+                  Leí y acepto los{" "}
+                  <button type="button" onClick={() => setModalTerminos(true)} className="font-medium underline">
+                    términos y condiciones
+                  </button>{" "}
+                  de Docto
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={checkMatricula}
+                  onChange={(e) => setCheckMatricula(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">
+                  Declaro que la información de mi matrícula profesional es
+                  verídica y que soy responsable de mis actos médicos como{" "}
+                  <button type="button" onClick={() => setModalMatricula(true)} className="font-medium underline">
+                    profesional independiente
+                  </button>
+                </span>
+              </label>
+            </div>
           </div>
 
-          {/* Modalidad de atención */}
-          <div>
-            <label htmlFor="modalidad_atencion" className={labelClass}>
-              Modalidad de atención
-            </label>
-            <select
-              id="modalidad_atencion"
-              name="modalidad_atencion"
-              required
-              className={inputClass}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Seleccioná la modalidad
-              </option>
-              <option value="programada">Programada</option>
-              <option value="inmediata">Inmediata</option>
-              <option value="ambas">Ambas</option>
-            </select>
+          {/* Navegación entre pasos */}
+          <div className="flex gap-3 pt-2">
+            {paso > 1 && (
+              <button
+                type="button"
+                onClick={anterior}
+                className="flex h-11 items-center gap-1 rounded-[var(--radius-md)] border border-gray-200 px-4 text-sm font-medium text-gray-600 transition hover:bg-gray-50 active:scale-[0.97]"
+              >
+                <ChevronLeft size={16} />
+                Atrás
+              </button>
+            )}
+
+            {paso < 3 ? (
+              <button
+                type="button"
+                onClick={siguiente}
+                className="flex-1 h-11 rounded-[var(--radius-md)] bg-[#378ADD] text-sm font-semibold text-white shadow-sm transition hover:bg-[#2d75c4] active:scale-[0.97]"
+              >
+                Siguiente
+              </button>
+            ) : (
+              <LoadingButton
+                type="submit"
+                isLoading={loading}
+                disabled={!checkTerminos || !checkMatricula}
+                className="flex-1 h-11 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "#378ADD" }}
+              >
+                Completar registro
+              </LoadingButton>
+            )}
           </div>
-
-          {/* Términos y condiciones */}
-          <div className="space-y-3">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={checkTerminos}
-                onChange={(e) => setCheckTerminos(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-              />
-              <span className="text-sm text-gray-700">
-                Leí y acepto los{" "}
-                <button
-                  type="button"
-                  onClick={() => setModalTerminos(true)}
-                  className="font-medium underline"
-                >
-                  términos y condiciones
-                </button>{" "}
-                de Docto
-              </span>
-            </label>
-
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={checkMatricula}
-                onChange={(e) => setCheckMatricula(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-              />
-              <span className="text-sm text-gray-700">
-                Declaro que la información de mi matrícula profesional es
-                verídica y que soy responsable de mis actos médicos como{" "}
-                <button
-                  type="button"
-                  onClick={() => setModalMatricula(true)}
-                  className="font-medium underline"
-                >
-                  profesional independiente
-                </button>
-              </span>
-            </label>
-          </div>
-
-          <LoadingButton
-            type="submit"
-            isLoading={loading}
-            disabled={!checkTerminos || !checkMatricula}
-            className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
-            style={{ backgroundColor: "var(--color-primary)" }}
-          >
-            Registrarme como medico
-          </LoadingButton>
         </form>
 
         {/* Modal términos */}
@@ -467,10 +508,7 @@ export default function RegistroMedicoPage() {
                 <h2 className="text-lg font-semibold text-gray-900">
                   Términos y condiciones
                 </h2>
-                <button
-                  onClick={() => setModalTerminos(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+                <button onClick={() => setModalTerminos(false)} className="text-gray-400 hover:text-gray-600">
                   <X size={20} strokeWidth={1.75} />
                 </button>
               </div>
@@ -493,7 +531,7 @@ export default function RegistroMedicoPage() {
               <button
                 onClick={() => setModalTerminos(false)}
                 className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-                style={{ backgroundColor: "var(--color-primary)" }}
+                style={{ backgroundColor: "#378ADD" }}
               >
                 Cerrar
               </button>
@@ -509,10 +547,7 @@ export default function RegistroMedicoPage() {
                 <h2 className="text-lg font-semibold text-gray-900">
                   Declaración de responsabilidad profesional
                 </h2>
-                <button
-                  onClick={() => setModalMatricula(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+                <button onClick={() => setModalMatricula(false)} className="text-gray-400 hover:text-gray-600">
                   <X size={20} strokeWidth={1.75} />
                 </button>
               </div>
@@ -533,7 +568,7 @@ export default function RegistroMedicoPage() {
               <button
                 onClick={() => setModalMatricula(false)}
                 className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-                style={{ backgroundColor: "var(--color-primary)" }}
+                style={{ backgroundColor: "#378ADD" }}
               >
                 Cerrar
               </button>
@@ -543,10 +578,7 @@ export default function RegistroMedicoPage() {
 
         <p className="mt-6 text-center text-sm text-gray-600">
           ¿Ya tenés cuenta?{" "}
-          <Link
-            href="/auth/login"
-            className="font-medium" style={{ color: "var(--color-text-link)" }}
-          >
+          <Link href="/auth/login" className="font-medium" style={{ color: "var(--color-text-link)" }}>
             Iniciá sesión
           </Link>
         </p>

@@ -33,7 +33,9 @@ export default async function ClinicaPage() {
   const { data: medicos } = await supabase
     .from("medicos")
     .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta")
-    .eq("oculto_clinica", false);
+    .eq("oculto_clinica", false)
+    .eq("verificado", true)
+    .eq("estado_registro", "aprobado");
 
   // Contar consultas en espera por médico para estimar tiempos
   const { data: consultasEspera } = await supabase
