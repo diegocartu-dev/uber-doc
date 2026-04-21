@@ -13,7 +13,8 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
-import { Building2, Clock, ShieldX, ShieldAlert } from "lucide-react";
+import { Building2 } from "lucide-react";
+import PantallaVerificacion from "./PantallaVerificacion";
 import BotonPush from "@/components/BotonPush";
 
 export default async function DashboardPage({
@@ -323,79 +324,17 @@ export default async function DashboardPage({
   // RENDER: MÉDICO
   // ═══════════════════════════════════════
   if (role === "medico" && medico && !medico.verificado) {
-    const estadoConfig: Record<string, { titulo: string; desc: string; icon: typeof Clock; color: string; bgColor: string; showContact: boolean }> = {
-      pendiente_revision: {
-        titulo: "Tu cuenta está siendo revisada",
-        desc: "Estamos verificando tu matrícula profesional. Te avisamos por email cuando esté activa. Este proceso suele tomar menos de 24 horas.",
-        icon: Clock,
-        color: "#BA7517",
-        bgColor: "rgba(186, 117, 23, 0.1)",
-        showContact: false,
-      },
-      rechazado: {
-        titulo: "Tu registro fue rechazado",
-        desc: "No pudimos verificar tu matrícula profesional. Si creés que es un error, contactanos para resolverlo.",
-        icon: ShieldX,
-        color: "#E24B4A",
-        bgColor: "rgba(226, 75, 74, 0.1)",
-        showContact: true,
-      },
-      suspendido: {
-        titulo: "Tu cuenta está suspendida",
-        desc: "Tu cuenta fue suspendida temporalmente. Contactanos para más información.",
-        icon: ShieldAlert,
-        color: "#E24B4A",
-        bgColor: "rgba(226, 75, 74, 0.1)",
-        showContact: true,
-      },
-    };
-
-    const estado = estadoConfig[medico.estado_registro] ?? estadoConfig.pendiente_revision;
-    const IconComponent = estado.icon;
-
     return (
-      <div className="min-h-full bg-[#f8f9fa]">
-        <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
-          <div className="mx-auto max-w-7xl px-4 lg:px-6">
-            <div className="flex h-14 items-center justify-between">
-              <span className="text-lg font-medium text-gray-900">Docto</span>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-500">{fullName}</span>
-                <LogoutButton />
-              </div>
-            </div>
-          </div>
-        </nav>
-        <div className="mx-auto max-w-lg px-6 py-16 text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: estado.bgColor }}>
-            <IconComponent size={28} strokeWidth={1.75} style={{ color: estado.color }} />
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900">{estado.titulo}</h2>
-          <p className="mt-3 text-sm leading-relaxed text-gray-500">{estado.desc}</p>
-
-          {estado.showContact && (
-            <a
-              href={`mailto:soporte@docto.com.ar?subject=${encodeURIComponent(`Registro ${medico.estado_registro} — ${fullName}`)}`}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
-            >
-              Contactar soporte
-            </a>
-          )}
-
-          <div className="mt-8 rounded-xl bg-white p-5 text-left" style={{ border: "1px solid #e5e7eb" }}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Tu información registrada</p>
-            <div className="mt-3 space-y-2 text-sm">
-              <p><span className="text-gray-400">Nombre:</span> <span className="text-gray-700">{fullName}</span></p>
-              <p><span className="text-gray-400">Email:</span> <span className="text-gray-700">{user.email}</span></p>
-              <p><span className="text-gray-400">Especialidad:</span> <span className="text-gray-700">{medico.especialidad ?? "—"}</span></p>
-              <p><span className="text-gray-400">Matrícula:</span> <span className="text-gray-700">{medico.tipo_matricula} {medico.numero_matricula}</span></p>
-              {medico.foto_credencial_url && (
-                <p><span className="text-gray-400">Credencial:</span> <span className="text-[#1D9E75]">Recibida</span></p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PantallaVerificacion
+        fullName={fullName}
+        email={user.email ?? ""}
+        estadoRegistro={medico.estado_registro}
+        especialidad={medico.especialidad}
+        tipoMatricula={medico.tipo_matricula}
+        numeroMatricula={medico.numero_matricula}
+        fotoCredencialUrl={medico.foto_credencial_url}
+        userId={user.id}
+      />
     );
   }
 
