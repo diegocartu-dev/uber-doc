@@ -45,7 +45,7 @@ export default function DisponibilidadMedico({
 
   const capacidad = calcularCapacidad(desde, hasta, duracion);
 
-  // Auto-desactivar consulta inmediata cuando hay turnos activos hoy
+  // Auto-desactivar CI solo cuando hay un turno en_curso
   useEffect(() => {
     if (bloqueado && !autoDesactivadoRef.current) {
       autoDesactivadoRef.current = true;
