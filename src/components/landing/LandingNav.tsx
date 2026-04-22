@@ -47,7 +47,7 @@ export default function LandingNav() {
           <a href="#medicos" className="landing-nav-link" style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}>
             Para médicos
           </a>
-          <Link href="/auth/login" className="landing-nav-link" style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+          <Link href="/auth/login" style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}>
             Iniciar sesión
           </Link>
           <Link

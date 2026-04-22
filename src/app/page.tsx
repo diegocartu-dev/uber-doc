@@ -156,7 +156,7 @@ export default async function Home({
             <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)" }}>
               {trustItems.map((item, i) => (
                 <span key={i} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                  <item.icon size={15} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
+                  <item.icon size={15} strokeWidth={1.75} style={{ color: "#3F7A52" }} />
                   {item.text}
                 </span>
               ))}
@@ -167,7 +167,7 @@ export default async function Home({
           <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
             <div style={{
               position: "absolute", inset: "-40px -20px",
-              background: "radial-gradient(circle at 60% 40%, rgba(55, 138, 221, 0.12), transparent 60%)",
+              background: "radial-gradient(circle at 60% 40%, rgba(161, 206, 164, 0.35), transparent 60%)",
               zIndex: 0, borderRadius: "50%",
             }} />
             <div style={{ position: "relative", zIndex: 1 }}>
@@ -272,7 +272,7 @@ export default async function Home({
         <div style={{
           position: "absolute", top: -120, right: -120,
           width: 480, height: 480, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(55, 138, 221, 0.10), transparent 65%)",
+          background: "radial-gradient(circle, rgba(161, 206, 164, 0.25), transparent 65%)",
           pointerEvents: "none",
         }} />
 
@@ -324,10 +324,10 @@ export default async function Home({
                 <div key={i} style={{ display: "flex", gap: 12 }}>
                   <div style={{
                     flexShrink: 0, width: 22, height: 22, borderRadius: 999,
-                    background: "var(--color-success-soft)",
+                    background: "#E9F4EA",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <Check size={13} strokeWidth={2.5} style={{ color: "var(--color-success)" }} />
+                    <Check size={13} strokeWidth={2.5} style={{ color: "#3F7A52" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>{f.t}</div>
@@ -366,7 +366,7 @@ export default async function Home({
           <div>
             <div style={{
               fontSize: 12, fontWeight: 600, letterSpacing: "0.08em",
-              textTransform: "uppercase" as const, color: "var(--color-success)", marginBottom: 14,
+              textTransform: "uppercase" as const, color: "#A1CEA4", marginBottom: 14,
             }}>
               Para médicos
             </div>
@@ -420,7 +420,7 @@ export default async function Home({
               }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 10,
-                  background: "rgba(55, 138, 221, 0.15)",
+                  background: "rgba(161, 206, 164, 0.15)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   marginBottom: 14,
                 }}>
@@ -507,7 +507,7 @@ function MedicoIcon({ name }: { name: string }) {
     users: ShieldCheck,
   };
   const Icon = iconMap[name] || FileText;
-  return <Icon size={18} strokeWidth={1.75} style={{ color: "rgba(55, 138, 221, 0.9)" }} />;
+  return <Icon size={18} strokeWidth={1.75} style={{ color: "#A1CEA4" }} />;
 }
 
 function PhoneMockup({ children }: { children: React.ReactNode }) {
