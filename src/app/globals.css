@@ -147,3 +147,27 @@ body {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
+
+/* Landing page */
+.landing-pulse-dot {
+  animation: landing-pulse 1.6s ease-in-out infinite;
+}
+@keyframes landing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (max-width: 900px) {
+  .landing-nav-link { display: none; }
+  .landing-hero-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+  .landing-metrics-grid { grid-template-columns: 1fr 1fr !important; gap: 20px !important; }
+  .landing-steps-grid { grid-template-columns: 1fr !important; }
+  .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+  .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+  .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+}
+@media (max-width: 560px) {
+  .landing-nav-links { gap: 12px !important; }
+  .landing-metrics-grid { grid-template-columns: 1fr !important; }
+  .landing-footer-grid { grid-template-columns: 1fr !important; }
+}
