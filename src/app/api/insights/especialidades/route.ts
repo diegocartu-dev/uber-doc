@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
-  const dias = parseInt(req.nextUrl.searchParams.get("dias") ?? "30", 10);
+  const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "30", 10) || 30, 1), 365);
   const desde = fechaAR(dias);
   const admin = createAdminClient();
 

@@ -89,6 +89,13 @@ export default function InsightsHoyClient() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-xl font-semibold text-white">Hoy</h1>
+        <p className="text-sm text-white/40">
+          {new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}
+        </p>
+      </div>
+
       {/* FILA 1 — Las 3 preguntas */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Crecimiento */}
@@ -188,7 +195,7 @@ export default function InsightsHoyClient() {
               <thead>
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
                   <th className="px-5 py-3">Médico</th>
-                  <th className="px-5 py-3">Paciente</th>
+                  <th className="hidden px-5 py-3 sm:table-cell">Paciente</th>
                   <th className="hidden px-5 py-3 lg:table-cell">Especialidad</th>
                   <th className="px-5 py-3">Canal</th>
                   <th className="px-5 py-3">Precio</th>
@@ -199,12 +206,12 @@ export default function InsightsHoyClient() {
               <tbody className="divide-y divide-white/5">
                 {data.actividad.map((a) => (
                   <tr key={`${a.tipo}-${a.id}`} className="hover:bg-white/[0.02]">
-                    <td className="px-5 py-3 font-medium text-white/90">{a.medico}</td>
-                    <td className="px-5 py-3 text-white/60">{a.paciente}</td>
+                    <td className="max-w-[140px] truncate px-5 py-3 font-medium text-white/90">{a.medico}</td>
+                    <td className="hidden max-w-[140px] truncate px-5 py-3 text-white/60 sm:table-cell">{a.paciente}</td>
                     <td className="hidden px-5 py-3 text-white/40 lg:table-cell">{a.especialidad || "—"}</td>
                     <td className="px-5 py-3">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        a.tipo === "CI" ? "bg-[#378ADD]/20 text-[#378ADD]" : "bg-purple-500/20 text-purple-400"
+                        a.tipo === "CI" ? "bg-[#378ADD]/20 text-[#378ADD]" : "bg-white/10 text-white/60"
                       }`}>
                         {a.tipo}
                       </span>

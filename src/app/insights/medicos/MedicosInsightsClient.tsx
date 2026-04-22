@@ -87,13 +87,13 @@ export default function MedicosInsightsClient() {
               <thead>
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
                   <SortHeader label="Médico" sortKey="nombre" current={sortKey} asc={sortAsc} onClick={toggleSort} />
-                  <th className="px-4 py-3">Especialidad</th>
+                  <th className="hidden px-4 py-3 md:table-cell">Especialidad</th>
                   <SortHeader label="Consultas" sortKey="consultas" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <SortHeader label="GMV" sortKey="gmv" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Comisión</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Espera CI</th>
-                  <SortHeader label="No-shows" sortKey="noShows" current={sortKey} asc={sortAsc} onClick={toggleSort} />
-                  <SortHeader label="Cancel." sortKey="canceladas" current={sortKey} asc={sortAsc} onClick={toggleSort} />
+                  <SortHeader label="No-shows" sortKey="noShows" current={sortKey} asc={sortAsc} onClick={toggleSort} className="hidden md:table-cell" />
+                  <SortHeader label="Cancel." sortKey="canceladas" current={sortKey} asc={sortAsc} onClick={toggleSort} className="hidden md:table-cell" />
                   <SortHeader label="Retención" sortKey="retencion" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Última act.</th>
                 </tr>
@@ -107,17 +107,17 @@ export default function MedicosInsightsClient() {
                         <span className="font-medium text-white/90">{m.nombre}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-white/50">{m.especialidad}</td>
+                    <td className="hidden px-4 py-3 text-white/50 md:table-cell">{m.especialidad}</td>
                     <td className="px-4 py-3 text-white/70">{m.consultas}</td>
                     <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.gmv)}</td>
                     <td className="hidden px-4 py-3 text-[#378ADD] lg:table-cell">{formatARS(m.comision)}</td>
                     <td className="hidden px-4 py-3 text-white/50 lg:table-cell">
                       {m.esperaPromMs ? formatMs(m.esperaPromMs) : "—"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 md:table-cell">
                       <span className={m.noShows > 0 ? "text-[#D85A30]" : "text-white/40"}>{m.noShows}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 md:table-cell">
                       <span className={m.canceladas > 2 ? "text-[#D85A30]" : "text-white/40"}>{m.canceladas}</span>
                     </td>
                     <td className="px-4 py-3">
@@ -143,11 +143,11 @@ export default function MedicosInsightsClient() {
   );
 }
 
-function SortHeader({ label, sortKey, current, asc, onClick }: {
-  label: string; sortKey: SortKey; current: SortKey; asc: boolean; onClick: (k: SortKey) => void;
+function SortHeader({ label, sortKey, current, asc, onClick, className }: {
+  label: string; sortKey: SortKey; current: SortKey; asc: boolean; onClick: (k: SortKey) => void; className?: string;
 }) {
   return (
-    <th className="px-4 py-3">
+    <th className={`px-4 py-3 ${className ?? ""}`}>
       <button onClick={() => onClick(sortKey)} className="flex items-center gap-1 hover:text-white/60">
         {label}
         <ArrowUpDown size={12} className={current === sortKey ? "text-[#378ADD]" : "text-white/20"} />
