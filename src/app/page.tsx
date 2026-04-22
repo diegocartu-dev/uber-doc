@@ -193,7 +193,7 @@ export default async function Home({
       {/* ============ COMO FUNCIONA ============ */}
       <section id="como-funciona" style={{ padding: "96px 24px", background: "#fff" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ maxWidth: 640, marginBottom: 56 }}>
+          <div className="section-header" style={{ maxWidth: 640, marginBottom: 56 }}>
             <div
               style={{
                 fontSize: 12,
@@ -558,15 +558,33 @@ export default async function Home({
           animation: landing-pulse 1.6s infinite;
         }
         @media (max-width: 900px) {
-          .landing-root { scroll-snap-type: y proximity; }
-          .landing-root > section { scroll-snap-align: start; }
-          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
-          .landing-steps-grid { grid-template-columns: 1fr !important; }
-          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
-          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
-          .landing-medico-cards { grid-template-columns: 1fr !important; }
+          .landing-root { scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
+          .landing-root > section {
+            scroll-snap-align: start;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          }
+          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+          .landing-steps-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
           .landing-phone-hero { display: none !important; }
           .landing-phone-inmediata { display: none !important; }
+
+          /* Compact padding for mobile full-page sections */
+          .landing-root > section { padding: 40px 20px !important; }
+          .landing-root > section .section-header { margin-bottom: 24px !important; }
+
+          /* Compact step cards */
+          .landing-steps-grid > div { padding: 16px 18px 18px !important; gap: 8px !important; }
+          .landing-steps-grid > div h3 { font-size: 18px !important; margin: 4px 0 0 !important; }
+          .landing-steps-grid > div p { font-size: 13px !important; }
+
+          /* Compact medico cards */
+          .landing-medico-cards > div { padding: 14px 16px !important; }
         }
         @media (max-width: 720px) {
           .landing-hero-grid h1 { font-size: 32px !important; }
