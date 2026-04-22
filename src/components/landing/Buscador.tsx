@@ -156,6 +156,7 @@ export default function Buscador() {
         )}
       </div>
       <button
+        className="buscador-btn"
         style={{
           background: "var(--color-primary)",
           color: "#fff",
@@ -170,11 +171,18 @@ export default function Buscador() {
           whiteSpace: "nowrap",
           cursor: "pointer",
           fontFamily: "inherit",
+          flexShrink: 0,
         }}
       >
-        Buscar médico
+        <span className="buscador-btn-text">Buscar médico</span>
         <ArrowRight size={16} />
       </button>
+      <style>{`
+        @media (max-width: 720px) {
+          .buscador-btn { padding: 12px !important; }
+          .buscador-btn-text { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
