@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Docto - Telemedicina",
-  description: "Tu doctor, a un click de distancia. Consultas medicas online por videollamada, chat y recetas digitales.",
+  title: "Docto — Consultas médicas online al instante | Telemedicina Argentina",
+  description: "Consultá con un médico por videollamada en minutos. Recetas digitales, turnos programados y consulta inmediata. Plataforma de telemedicina segura.",
   icons: {
     icon: "/favicon.svg",
     apple: "/icon-192.png",
