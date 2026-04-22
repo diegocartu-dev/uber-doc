@@ -77,6 +77,12 @@
   --color-text-inverse: #FFFFFF;
   --color-text-link: #2D75C4;
 
+  /* Landing design tokens */
+  --color-brand-indigo: #6B8DE3;
+  --color-success-fill: #A1CEA4;
+  --color-success-tint: #E9F4EA;
+  --color-dark: #0F1720;
+
   /* Overlays */
   --color-overlay: rgba(0, 0, 0, 0.5);
   --color-overlay-light: rgba(0, 0, 0, 0.2);
