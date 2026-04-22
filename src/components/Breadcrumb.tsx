@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react";
 
 type Crumb = { label: string; href?: string };
 
-const INDIGO = "#6B8DE3";
+const BRAND = "var(--color-brand)";
 
 function buildCrumbs(pathname: string): Crumb[] | null {
   // Normalizar segmentos dinámicos
@@ -64,7 +64,7 @@ export default function Breadcrumb() {
                 <Link
                   href={crumb.href}
                   className="text-[12px] font-medium hover:underline underline-offset-2 transition-opacity hover:opacity-80"
-                  style={{ color: INDIGO }}
+                  style={{ color: BRAND }}
                 >
                   {crumb.label}
                 </Link>
@@ -72,7 +72,7 @@ export default function Breadcrumb() {
                 <span
                   className="text-[12px]"
                   style={{
-                    color: isLast ? "#374151" : INDIGO,
+                    color: isLast ? "#374151" : BRAND,
                     fontWeight: isLast ? 500 : 400,
                   }}
                 >

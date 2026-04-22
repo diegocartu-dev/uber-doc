@@ -44,7 +44,7 @@ export default async function OnboardingPage({
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center justify-center gap-2">
-          <Stethoscope size={28} strokeWidth={2} color="#1D9E75" />
+          <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
           <span className="text-2xl font-bold" style={{ color: "#1a1a1a" }}>docto</span>
         </div>
 

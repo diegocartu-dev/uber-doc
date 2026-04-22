@@ -1,6 +1,6 @@
 # DOCTO — DESIGN TOKENS v2.0
 
-**Cambio principal v2.0:** Color de marca migrado a indigo suave #6B8DE3. Decidido por Diego (CEO) el 2026-04-08.
+**Cambio principal v2.1:** Color de marca unificado a azul #378ADD. Decidido por Diego (CEO) el 2026-04-22. Reemplaza el indigo #6B8DE3 de v2.0.
 
 Documento de referencia para implementacion. Cada valor es definitivo. Si no esta aca, no existe.
 
@@ -8,44 +8,44 @@ Documento de referencia para implementacion. Cada valor es definitivo. Si no est
 
 ## 1. PALETA DE COLORES
 
-### 1.1 Color de marca — Indigo Docto
+### 1.1 Color de marca — Azul Docto
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--color-brand` | `#6B8DE3` | Indigo suave. CTAs principales, botones primarios, links, identidad de marca |
-| `--color-brand-light` | `#EEF1FC` | Fondo claro marca. Backgrounds sutiles, hover states ligeros |
-| `--color-brand-medium` | `#B8C8F2` | Acento medio. Bordes activos, selecciones, tags de marca |
-| `--color-brand-dark` | `#4A63A8` | Oscuro. Texto sobre fondos claros, hover de botones, pressed states |
+| `--color-brand` | `#378ADD` | Azul Docto. CTAs principales, botones primarios, links, identidad de marca |
+| `--color-brand-light` | `#EBF3FC` | Fondo claro marca. Backgrounds sutiles, hover states ligeros |
+| `--color-brand-medium` | `#A8CBF0` | Acento medio. Bordes activos, selecciones, tags de marca |
+| `--color-brand-dark` | `#2D75C4` | Oscuro. Texto sobre fondos claros, hover de botones, pressed states |
 
 ### 1.2 Colores semanticos (base)
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--color-primary` | `#6B8DE3` | Indigo marca. CTAs principales, links, acciones primarias |
-| `--color-info` | `#378ADD` | Celeste. Turnos programados, reservas, pagos confirmados (1) |
+| `--color-primary` | `#378ADD` | Azul marca. CTAs principales, links, acciones primarias |
+| `--color-info` | `#378ADD` | Azul. Turnos programados, reservas, pagos confirmados |
 | `--color-success` | `#1D9E75` | Verde. Disponible, activo, completado, consulta inmediata |
 | `--color-warning` | `#D85A30` | Naranja. Alertas que requieren atencion |
 | `--color-danger` | `#E24B4A` | Rojo. Errores, cancelaciones, acciones destructivas |
 | `--color-pending` | `#BA7517` | Amarillo. Estados pendientes de accion |
 | `--color-muted` | `#888780` | Gris. Bloqueado, inactivo, deshabilitado |
 
-**(1) Sobre el celeste #378ADD en turnos:** Se mantiene UNICAMENTE para el rol semantico de info/turnos/reservas. Es visualmente distinto del indigo marca (celeste es frio/saturado, indigo tiene componente purpura). El celeste NUNCA aparece como CTA, boton primario, link, ni elemento de marca. Solo en badges de estado, indicadores de turno, y contextos informativos.
+**Nota:** primary e info comparten el mismo azul #378ADD. Primary es el rol de marca/CTA, info es el rol semantico de turnos/reservas. Son el mismo color por decision de diseño.
 
 ### 1.3 Variantes de cada color semantico
 
-**Indigo (primary — color de marca)**
+**Azul (primary — color de marca)**
 
 | Token | Hex | Uso |
 |---|---|---|
-| `--color-primary` | `#6B8DE3` | Default |
-| `--color-primary-hover` | `#4A63A8` | Hover en botones (indigo oscuro) |
-| `--color-primary-active` | `#3D5290` | Active/pressed |
-| `--color-primary-disabled` | `#6B8DE3` + opacity 40% | Disabled |
-| `--color-primary-soft` | `#EEF1FC` | Fondo de badges, alerts, banners de marca |
-| `--color-primary-soft-hover` | `#DDE4F8` | Hover sobre fondo soft |
-| `--color-primary-border` | `#B8C8F2` | Bordes sutiles en contexto indigo |
+| `--color-primary` | `#378ADD` | Default |
+| `--color-primary-hover` | `#2D75C4` | Hover en botones |
+| `--color-primary-active` | `#2461A8` | Active/pressed |
+| `--color-primary-disabled` | `#378ADD` + opacity 40% | Disabled |
+| `--color-primary-soft` | `#EBF3FC` | Fondo de badges, alerts, banners de marca |
+| `--color-primary-soft-hover` | `#D6E7F9` | Hover sobre fondo soft |
+| `--color-primary-border` | `#A8CBF0` | Bordes sutiles en contexto azul |
 
-**Celeste (info — turnos/reservas — NO es color de marca)**
+**Azul (info — turnos/reservas — mismos valores que primary)**
 
 | Token | Hex | Uso |
 |---|---|---|
@@ -134,7 +134,7 @@ Documento de referencia para implementacion. Cada valor es definitivo. Si no est
 | `--color-text-tertiary` | `#9CA3AF` | Placeholders, metadata, timestamps |
 | `--color-text-disabled` | `#D1D5DB` | Texto deshabilitado |
 | `--color-text-inverse` | `#FFFFFF` | Texto sobre fondos oscuros/colores |
-| `--color-text-link` | `#4A63A8` | Links. INDIGO OSCURO para accesibilidad (~5.5:1 contraste) |
+| `--color-text-link` | `#2D75C4` | Links. Azul oscuro para accesibilidad |
 
 ### 1.6 Overlays
 
@@ -281,7 +281,7 @@ Regla: interactivo = `md` (8px), contenedor = `lg` (12px).
 | `--shadow-sm` | `0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)` | Cards flotantes, dropdowns |
 | `--shadow-md` | `0 4px 12px rgba(0, 0, 0, 0.08)` | Modales, popovers |
 | `--shadow-lg` | `0 8px 24px rgba(0, 0, 0, 0.12)` | Modales importantes, toasts |
-| `--shadow-focus` | `0 0 0 3px rgba(107, 141, 227, 0.25)` | Focus ring (indigo marca) |
+| `--shadow-focus` | `0 0 0 3px rgba(55, 138, 221, 0.25)` | Focus ring (azul marca) |
 | `--shadow-focus-danger` | `0 0 0 3px rgba(226, 75, 74, 0.2)` | Focus ring en inputs con error |
 
 Filosofia: la mayoria de cards usan borde + hover sombra, no sombra permanente. Solo modales/dropdowns/toasts tienen sombra base.
@@ -327,13 +327,13 @@ Mobile-first obligatorio. 80% del uso es mobile.
 
 | Variante | Background | Text | Border | Hover bg | Active bg |
 |---|---|---|---|---|---|
-| `primary` | `#6B8DE3` | `#FFFFFF` | none | `#4A63A8` | `#3D5290` |
-| `secondary` | transparent | `#4A63A8` | 1px `#B8C8F2` | `#EEF1FC` | `#DDE4F8` |
+| `primary` | `#378ADD` | `#FFFFFF` | none | `#2D75C4` | `#2461A8` |
+| `secondary` | transparent | `#2D75C4` | 1px `#A8CBF0` | `#EBF3FC` | `#D6E7F9` |
 | `ghost` | transparent | `#4B5563` | none | `#F1F3F5` | `#E5E7EB` |
 | `danger` | `#E24B4A` | `#FFFFFF` | none | `#CC3B3A` | `#B52F2E` |
 | `danger-ghost` | transparent | `#E24B4A` | none | `#FDF0F0` | `#FAE0E0` |
 
-**Nota contraste boton primary:** #6B8DE3 fondo + #FFFFFF texto = ~3.5:1. Cumple WCAG AA para texto bold 14px+ (botones usan 600 weight). Para mas contraste usar `#4A63A8` como fondo.
+**Nota contraste boton primary:** #378ADD fondo + #FFFFFF texto = ~3.9:1. Cumple WCAG AA para texto bold 14px+ (botones usan 600 weight).
 
 **Disabled**: opacity 0.4, cursor not-allowed, sin hover.
 
@@ -375,11 +375,11 @@ Mobile-first obligatorio. 80% del uso es mobile.
 |---|---|---|---|
 | Default | 1px #D1D5DB | none | #FFFFFF |
 | Hover | 1px #9CA3AF | none | #FFFFFF |
-| Focus | 1.5px #6B8DE3 | `--shadow-focus` | #FFFFFF |
+| Focus | 1.5px #378ADD | `--shadow-focus` | #FFFFFF |
 | Error | 1.5px #E24B4A | `--shadow-focus-danger` | #FFFFFF |
 | Disabled | 1px #E5E7EB | none | #F1F3F5 |
 
-**Focus ring INDIGO MARCA** `#6B8DE3`.
+**Focus ring AZUL MARCA** `#378ADD`.
 
 **Label**: 13px/500, color `#4B5563`, margin-bottom 6px.
 **Error message**: 12px/400, color `#E24B4A`, margin-top 6px.
@@ -398,7 +398,7 @@ Mobile-first obligatorio. 80% del uso es mobile.
 |---|---|---|---|
 | Disponible/Activo | `#E8F5F0` | `#1D9E75` | `#1D9E75` animado |
 | Reservado/Pagado | `#EBF3FC` | `#378ADD` | `#378ADD` |
-| En curso | `#EEF1FC` | `#4A63A8` | `#6B8DE3` pulse |
+| En curso | `#EBF3FC` | `#2D75C4` | `#378ADD` pulse |
 | Pendiente | `#FEF6E8` | `#BA7517` | `#BA7517` |
 | Alerta | `#FDF0EB` | `#D85A30` | `#D85A30` |
 | Cancelado/Error | `#FDF0F0` | `#E24B4A` | ninguno |
@@ -466,7 +466,7 @@ Border-radius: full. Background: `#F1F3F5`. Fallback: iniciales uppercase.
 
 ### 6.1 Composicion
 
-- Icono: `Stethoscope` de Lucide, 24px, strokeWidth 2, color `#6B8DE3`
+- Icono: `Stethoscope` de Lucide, 24px, strokeWidth 2, color `#378ADD`
 - Wordmark: "docto" en Inter 700, 18px, color `#111827`, lowercase
 - Gap icono-texto: 8px
 - Alineacion: centrado vertical
@@ -479,7 +479,7 @@ Border-radius: full. Background: `#F1F3F5`. Fallback: iniciales uppercase.
 
 ### 6.3 Favicon
 
-Stethoscope de Lucide simplificado a 32x32, `#6B8DE3` sobre fondo transparente.
+Stethoscope de Lucide simplificado a 32x32, `#378ADD` sobre fondo transparente.
 
 ---
 
@@ -488,8 +488,8 @@ Stethoscope de Lucide simplificado a 32x32, `#6B8DE3` sobre fondo transparente.
 ### 7.1 CERO emojis
 Sin excepciones. Todo se reemplaza por Lucide.
 
-### 7.2 Indigo marca protagonista
-CTA principal de CUALQUIER pantalla = indigo `#6B8DE3`. Verde `#1D9E75` solo para estados (disponible, activo, completado). Celeste `#378ADD` solo para turnos/reservas (semantico, no de marca).
+### 7.2 Azul marca protagonista
+CTA principal de CUALQUIER pantalla = azul `#378ADD`. Verde `#1D9E75` solo para estados (disponible, activo, completado) y Consulta Inmediata. Nunca verde en botones, logos, ni branding.
 
 ### 7.3 Asimetria en layouts
 Evitar grids de N columnas identicas. Usar card hero + secundarias, stacking asimetrico.
@@ -504,7 +504,7 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
 ### 7.5 Microinteracciones
 - Botones: `active:scale-[0.97]` + transition 100ms
 - Cards clickeables: `hover:shadow-xs` + transition 150ms
-- Focus ring: `--shadow-focus` (3px indigo translucido)
+- Focus ring: `--shadow-focus` (3px azul translucido)
 
 ### 7.6 Feedback tactil
 `-webkit-tap-highlight-color: transparent` + escala propia. TouchButton actual: bajar de 0.93 a 0.97.
@@ -518,11 +518,11 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
 ### 7.8 Contraste y accesibilidad
 
 - Todo texto sobre blanco: minimo 4.5:1 (WCAG AA)
-- `#6B8DE3` (indigo marca) sobre blanco = ~3.5:1 — NO USAR como texto body. OK para texto grande (18px+), bold (14px+ 600), y fondos de boton
-- `#4A63A8` (indigo oscuro) sobre blanco = ~5.5:1 — USAR para links, texto inline, labels de color
+- `#378ADD` (azul marca) sobre blanco = ~3.9:1 — OK para texto grande (18px+), bold (14px+ 600), y fondos de boton
+- `#2D75C4` (azul oscuro) sobre blanco = ~5.0:1 — USAR para links, texto inline, labels de color
 - `#1D9E75` sobre blanco = 3.9:1 — SOLO para texto grande (18px+) o bold (14px+)
 - Para texto chico verde, usar sobre `#E8F5F0`
-- Texto blanco sobre fondo `#6B8DE3` = ~3.5:1 — OK para botones (texto 14px/600 bold)
+- Texto blanco sobre fondo `#378ADD` = ~3.9:1 — OK para botones (texto 14px/600 bold)
 
 ### 7.9 Animaciones
 
@@ -538,13 +538,13 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
 
 ## 8. MIGRACION — PROBLEMAS A CORREGIR
 
-### 8.1 Criticos (color de marca)
+### 8.1 Criticos (color de marca) — COMPLETADO v2.1
 
-1. **Reemplazar `#378ADD` donde funcione como CTA/boton/link/marca** por `#6B8DE3` (indigo)
-2. **Mantener `#378ADD` SOLO donde represente estado de turno/reserva** (badges, indicadores)
-3. **Reemplazar `blue-600/700/500` de Tailwind** por indigo marca
-4. **Actualizar focus rings** a indigo `rgba(107, 141, 227, 0.25)`
-5. **Links inline**: cambiar a `#4A63A8` (indigo oscuro) por accesibilidad
+1. ~~Reemplazar `#6B8DE3` por `#378ADD`~~ HECHO (2026-04-22)
+2. ~~Actualizar focus rings a azul `rgba(55, 138, 221, 0.25)`~~ HECHO
+3. ~~Links inline: cambiar a `#2D75C4` (azul oscuro)~~ HECHO
+4. **Reemplazar `blue-600/700/500` de Tailwind** por azul marca (si queda alguno)
+5. **Verde `#1D9E75` SOLO para estados activos y Consulta Inmediata** — nunca en botones, logos, branding
 
 ### 8.2 Criticos (identidad)
 
@@ -571,19 +571,19 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
 
 ```css
 :root {
-  /* Color de marca — Indigo Docto */
-  --color-brand: #6B8DE3;
-  --color-brand-light: #EEF1FC;
-  --color-brand-medium: #B8C8F2;
-  --color-brand-dark: #4A63A8;
+  /* Color de marca — Azul Docto */
+  --color-brand: #378ADD;
+  --color-brand-light: #EBF3FC;
+  --color-brand-medium: #A8CBF0;
+  --color-brand-dark: #2D75C4;
 
   /* Colores semanticos */
-  --color-primary: #6B8DE3;
-  --color-primary-hover: #4A63A8;
-  --color-primary-active: #3D5290;
-  --color-primary-soft: #EEF1FC;
-  --color-primary-soft-hover: #DDE4F8;
-  --color-primary-border: #B8C8F2;
+  --color-primary: #378ADD;
+  --color-primary-hover: #2D75C4;
+  --color-primary-active: #2461A8;
+  --color-primary-soft: #EBF3FC;
+  --color-primary-soft-hover: #D6E7F9;
+  --color-primary-border: #A8CBF0;
 
   --color-info: #378ADD;
   --color-info-hover: #2D75C4;
@@ -642,7 +642,7 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
   --color-text-tertiary: #9CA3AF;
   --color-text-disabled: #D1D5DB;
   --color-text-inverse: #FFFFFF;
-  --color-text-link: #4A63A8;
+  --color-text-link: #2D75C4;
 
   /* Overlays */
   --color-overlay: rgba(0, 0, 0, 0.5);
@@ -680,7 +680,7 @@ No bordes + sombras + color en el mismo elemento. Elegir UNA senal:
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --shadow-focus: 0 0 0 3px rgba(107, 141, 227, 0.25);
+  --shadow-focus: 0 0 0 3px rgba(55, 138, 221, 0.25);
   --shadow-focus-danger: 0 0 0 3px rgba(226, 75, 74, 0.2);
 }
 ```

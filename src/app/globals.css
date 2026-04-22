@@ -4,19 +4,19 @@
   --background: #ffffff;
   --foreground: #111827;
 
-  /* Color de marca — Indigo Docto */
-  --color-brand: #6B8DE3;
-  --color-brand-light: #EEF1FC;
-  --color-brand-medium: #B8C8F2;
-  --color-brand-dark: #4A63A8;
+  /* Color de marca — Azul Docto */
+  --color-brand: #378ADD;
+  --color-brand-light: #EBF3FC;
+  --color-brand-medium: #A8CBF0;
+  --color-brand-dark: #2D75C4;
 
   /* Colores semanticos */
-  --color-primary: #6B8DE3;
-  --color-primary-hover: #4A63A8;
-  --color-primary-active: #3D5290;
-  --color-primary-soft: #EEF1FC;
-  --color-primary-soft-hover: #DDE4F8;
-  --color-primary-border: #B8C8F2;
+  --color-primary: #378ADD;
+  --color-primary-hover: #2D75C4;
+  --color-primary-active: #2461A8;
+  --color-primary-soft: #EBF3FC;
+  --color-primary-soft-hover: #D6E7F9;
+  --color-primary-border: #A8CBF0;
 
   --color-info: #378ADD;
   --color-info-hover: #2D75C4;
@@ -75,7 +75,7 @@
   --color-text-tertiary: #9CA3AF;
   --color-text-disabled: #D1D5DB;
   --color-text-inverse: #FFFFFF;
-  --color-text-link: #4A63A8;
+  --color-text-link: #2D75C4;
 
   /* Overlays */
   --color-overlay: rgba(0, 0, 0, 0.5);
@@ -113,15 +113,15 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --shadow-focus: 0 0 0 3px rgba(107, 141, 227, 0.25);
+  --shadow-focus: 0 0 0 3px rgba(55, 138, 221, 0.25);
   --shadow-focus-danger: 0 0 0 3px rgba(226, 75, 74, 0.2);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-primary: #6B8DE3;
-  --color-primary-hover: #4A63A8;
+  --color-primary: #378ADD;
+  --color-primary-hover: #2D75C4;
   --color-info: #378ADD;
   --color-success: #1D9E75;
   --color-warning: #D85A30;

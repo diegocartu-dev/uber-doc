@@ -57,7 +57,7 @@ export default async function Home({
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
       {/* Logo + badge */}
       <div className="flex items-center gap-2 mb-10">
-        <Stethoscope size={28} strokeWidth={2} color="#1D9E75" />
+        <Stethoscope size={28} strokeWidth={2} color="var(--color-brand)" />
         <span className="text-2xl font-bold lowercase" style={{ color: "#1a1a1a" }}>
           docto
         </span>
