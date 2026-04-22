@@ -207,6 +207,7 @@ export default async function Home({
               Cómo funciona
             </div>
             <h2
+              className="landing-section-title"
               style={{
                 fontSize: "clamp(30px, 3.2vw, 42px)",
                 lineHeight: 1.1,
@@ -347,6 +348,7 @@ export default async function Home({
             </div>
 
             <h2
+              className="landing-section-title"
               style={{
                 fontSize: "clamp(30px, 3.2vw, 42px)",
                 lineHeight: 1.1,
@@ -451,6 +453,7 @@ export default async function Home({
               Para médicos
             </div>
             <h2
+              className="landing-section-title"
               style={{
                 fontSize: "clamp(28px, 3vw, 40px)",
                 lineHeight: 1.12,
@@ -568,7 +571,7 @@ export default async function Home({
           animation: landing-pulse 1.6s infinite;
         }
         @media (max-width: 900px) {
-          .landing-root { scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
+          html { scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
           .landing-root > section {
             scroll-snap-align: start;
             min-height: 100dvh;
@@ -589,7 +592,7 @@ export default async function Home({
           .landing-root > section .section-header { margin-bottom: 24px !important; }
 
           /* Section titles bigger on mobile */
-          .section-header h2 { font-size: 28px !important; }
+          .landing-section-title { font-size: 28px !important; }
 
           /* Step cards: icon + number in one row, compact */
           .step-card { padding: 14px 16px 16px !important; gap: 6px !important; }
