@@ -24,8 +24,6 @@ export default function Footer() {
           docto
         </span>
         <span aria-hidden="true">|</span>
-        <span>Docto Telemedicina S.A.S. - CUIT 30-71654321-0</span>
-        <span aria-hidden="true">|</span>
         <Link
           href="#"
           className="underline-offset-2 transition-colors hover:underline"
