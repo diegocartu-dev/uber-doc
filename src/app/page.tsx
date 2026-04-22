@@ -226,6 +226,7 @@ export default async function Home({
             {steps.map((s) => (
               <div
                 key={s.n}
+                className="step-card"
                 style={{
                   padding: "28px 26px 30px",
                   border: "1px solid var(--color-border-default)",
@@ -236,8 +237,9 @@ export default async function Home({
                   gap: 14,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div className="step-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span
+                    className="step-card-num"
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
@@ -249,6 +251,7 @@ export default async function Home({
                     {s.n} / 03
                   </span>
                   <div
+                    className="step-card-icon"
                     style={{
                       width: 42,
                       height: 42,
@@ -265,7 +268,7 @@ export default async function Home({
                 <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", margin: "8px 0 0" }}>
                   {s.title}
                 </h3>
-                <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: 0 }}>
+                <p className="step-card-desc" style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: 0 }}>
                   {s.description}
                 </p>
               </div>
@@ -471,9 +474,10 @@ export default async function Home({
               cobrar por consulta y decidir cuándo trabajás.
             </p>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div className="medicos-cta-row" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <Link
-                href="/auth/register"
+                href="/auth/registro-medico"
+                className="medicos-cta-btn"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -487,11 +491,12 @@ export default async function Home({
                   textDecoration: "none",
                 }}
               >
-                Sumate a Docto
+                Sumate
                 <ArrowRight size={16} />
               </Link>
-              <a
-                href="#"
+              <Link
+                href="/auth/registro-medico"
+                className="medicos-cta-btn"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -506,8 +511,8 @@ export default async function Home({
                   background: "transparent",
                 }}
               >
-                Más información
-              </a>
+                Más info
+              </Link>
             </div>
           </div>
 
@@ -515,6 +520,7 @@ export default async function Home({
             {medicoCards.map((f) => (
               <div
                 key={f.title}
+                className="medico-card"
                 style={{
                   padding: "22px 20px",
                   border: "1px solid rgba(255,255,255,0.1)",
@@ -523,6 +529,7 @@ export default async function Home({
                 }}
               >
                 <div
+                  className="medico-card-icon"
                   style={{
                     width: 36,
                     height: 36,
@@ -532,13 +539,16 @@ export default async function Home({
                     alignItems: "center",
                     justifyContent: "center",
                     marginBottom: 14,
+                    flexShrink: 0,
                   }}
                 >
                   <f.icon size={18} style={{ color: "#A1CEA4" }} />
                 </div>
-                <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>
-                  {f.description}
+                <div className="medico-card-content">
+                  <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>
+                    {f.description}
+                  </div>
                 </div>
               </div>
             ))}
@@ -578,13 +588,24 @@ export default async function Home({
           .landing-root > section { padding: 40px 20px !important; }
           .landing-root > section .section-header { margin-bottom: 24px !important; }
 
-          /* Compact step cards */
-          .landing-steps-grid > div { padding: 16px 18px 18px !important; gap: 8px !important; }
-          .landing-steps-grid > div h3 { font-size: 18px !important; margin: 4px 0 0 !important; }
-          .landing-steps-grid > div p { font-size: 13px !important; }
+          /* Section titles bigger on mobile */
+          .section-header h2 { font-size: 28px !important; }
 
-          /* Compact medico cards */
-          .landing-medico-cards > div { padding: 14px 16px !important; }
+          /* Step cards: icon + number in one row, compact */
+          .step-card { padding: 14px 16px 16px !important; gap: 6px !important; }
+          .step-card-header { gap: 10px; }
+          .step-card-icon { width: 32px !important; height: 32px !important; }
+          .step-card h3 { font-size: 16px !important; margin: 2px 0 0 !important; }
+          .step-card-desc { font-size: 13px !important; line-height: 1.4 !important; }
+
+          /* Medico cards: icon inline with title */
+          .medico-card { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px !important; padding: 12px 14px !important; }
+          .medico-card-icon { margin-bottom: 0 !important; width: 32px !important; height: 32px !important; }
+          .medico-card-content { flex: 1; }
+
+          /* CTA buttons in row */
+          .medicos-cta-row { flex-wrap: nowrap !important; }
+          .medicos-cta-btn { padding: 10px 16px !important; font-size: 13px !important; }
         }
         @media (max-width: 720px) {
           .landing-hero-grid h1 { font-size: 32px !important; }
