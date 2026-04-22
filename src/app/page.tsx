@@ -157,7 +157,7 @@ export default async function Home({
             </div>
 
             {/* TrustLine */}
-            <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)" }}>
+            <div className="landing-trust-line" style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <ShieldCheck size={15} style={{ color: "#3F7A52" }} />
                 Matrícula verificada
@@ -375,7 +375,7 @@ export default async function Home({
               te atiende el primero disponible, y si hace falta te lleva la receta al toque.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
+            <div className="inmediata-features" style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
               {inmediataFeatures.map((f) => (
                 <div key={f.title} style={{ display: "flex", gap: 12 }}>
                   <div
@@ -393,10 +393,10 @@ export default async function Home({
                     <Check size={13} style={{ color: "#3F7A52" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
+                    <div className="feat-title" style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
                       {f.title}
                     </div>
-                    <div style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                    <div className="feat-desc" style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
                       {f.description}
                     </div>
                   </div>
@@ -571,47 +571,71 @@ export default async function Home({
           animation: landing-pulse 1.6s infinite;
         }
         @media (max-width: 900px) {
-          html { scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; }
-          .landing-root > section {
-            scroll-snap-align: start;
-            min-height: 100dvh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-          }
-          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
-          .landing-steps-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
-          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
-          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
+          /* Grids a 1 columna */
+          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
+          .landing-steps-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
+          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 8px !important; }
           .landing-phone-hero { display: none !important; }
           .landing-phone-inmediata { display: none !important; }
 
-          /* Compact padding for mobile full-page sections */
-          .landing-root > section { padding: 40px 20px !important; }
-          .landing-root > section .section-header { margin-bottom: 24px !important; }
+          /* Secciones compactas — sin min-height, sin centrado vertical */
+          .landing-root > section { padding: 32px 20px !important; }
+          .section-header { margin-bottom: 16px !important; }
 
-          /* Section titles bigger on mobile */
-          .landing-section-title { font-size: 28px !important; }
+          /* Títulos de sección */
+          .landing-section-title { font-size: 26px !important; line-height: 1.15 !important; margin-bottom: 8px !important; }
 
-          /* Step cards: icon + number in one row, compact */
-          .step-card { padding: 14px 16px 16px !important; gap: 6px !important; }
-          .step-card-header { gap: 10px; }
-          .step-card-icon { width: 32px !important; height: 32px !important; }
-          .step-card h3 { font-size: 16px !important; margin: 2px 0 0 !important; }
-          .step-card-desc { font-size: 13px !important; line-height: 1.4 !important; }
+          /* H1 hero */
+          .landing-hero-grid h1 { font-size: 30px !important; margin-bottom: 12px !important; }
 
-          /* Medico cards: icon inline with title */
-          .medico-card { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px !important; padding: 12px 14px !important; }
-          .medico-card-icon { margin-bottom: 0 !important; width: 32px !important; height: 32px !important; }
+          /* Subhead hero */
+          .landing-hero-grid p { font-size: 15px !important; margin-bottom: 20px !important; }
+
+          /* Trust line vertical */
+          .landing-trust-line { flex-direction: column !important; gap: 6px !important; }
+
+          /* Step cards: ultra compactas — ícono + num + título en una fila */
+          .step-card {
+            padding: 12px 14px !important;
+            gap: 0 !important;
+            flex-direction: row !important;
+            align-items: center !important;
+          }
+          .step-card-header {
+            flex-direction: row-reverse !important;
+            align-items: center !important;
+            gap: 8px !important;
+            margin-right: 12px !important;
+            flex-shrink: 0 !important;
+          }
+          .step-card-icon { width: 28px !important; height: 28px !important; }
+          .step-card-num { font-size: 11px !important; }
+          .step-card h3 { font-size: 14px !important; font-weight: 600 !important; margin: 0 !important; }
+          .step-card-desc { display: none !important; }
+
+          /* Medico cards: ícono inline con título */
+          .medico-card {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 12px !important;
+            padding: 10px 14px !important;
+          }
+          .medico-card-icon { margin-bottom: 0 !important; width: 28px !important; height: 28px !important; }
           .medico-card-content { flex: 1; }
+          .medico-card-content > div:last-child { font-size: 12px !important; }
 
-          /* CTA buttons in row */
-          .medicos-cta-row { flex-wrap: nowrap !important; }
+          /* Botones en fila */
+          .medicos-cta-row { flex-wrap: nowrap !important; margin-bottom: 12px !important; }
           .medicos-cta-btn { padding: 10px 16px !important; font-size: 13px !important; }
-        }
-        @media (max-width: 720px) {
-          .landing-hero-grid h1 { font-size: 32px !important; }
+
+          /* Consulta inmediata: features compactas */
+          .inmediata-features { gap: 10px !important; margin-bottom: 20px !important; }
+          .inmediata-features > div { gap: 8px !important; }
+          .inmediata-features .feat-title { font-size: 14px !important; }
+          .inmediata-features .feat-desc { font-size: 12px !important; }
         }
       `}</style>
     </div>
