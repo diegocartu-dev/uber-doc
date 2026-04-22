@@ -117,7 +117,7 @@ export default async function Home({
   ];
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fff" }}>
+    <div className="landing-root" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fff", overflowX: "hidden" }}>
       <LandingNav />
 
       {/* ============ HERO ============ */}
@@ -511,7 +511,7 @@ export default async function Home({
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="landing-medico-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             {medicoCards.map((f) => (
               <div
                 key={f.title}
@@ -558,10 +558,13 @@ export default async function Home({
           animation: landing-pulse 1.6s infinite;
         }
         @media (max-width: 900px) {
+          .landing-root { scroll-snap-type: y proximity; }
+          .landing-root > section { scroll-snap-align: start; }
           .landing-hero-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-steps-grid { grid-template-columns: 1fr !important; }
           .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .landing-medico-cards { grid-template-columns: 1fr !important; }
           .landing-phone-hero { display: none !important; }
           .landing-phone-inmediata { display: none !important; }
         }
