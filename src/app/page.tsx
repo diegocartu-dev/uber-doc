@@ -173,7 +173,7 @@ export default async function Home({
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
+          <div className="landing-phone-hero" style={{ display: "flex", justifyContent: "center", position: "relative" }}>
             <div
               style={{
                 position: "absolute",
@@ -310,7 +310,7 @@ export default async function Home({
             position: "relative",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "center" }}>
+          <div className="landing-phone-inmediata" style={{ display: "flex", justifyContent: "center" }}>
             <PhoneMockupInmediata />
           </div>
 
@@ -562,6 +562,11 @@ export default async function Home({
           .landing-steps-grid { grid-template-columns: 1fr !important; }
           .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+          .landing-phone-hero { display: none !important; }
+          .landing-phone-inmediata { display: none !important; }
+        }
+        @media (max-width: 720px) {
+          .landing-hero-grid h1 { font-size: 32px !important; }
         }
       `}</style>
     </div>
