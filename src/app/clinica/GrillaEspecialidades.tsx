@@ -343,7 +343,7 @@ export default function GrillaEspecialidades({
                   placeholder="tu@email.com"
                   className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-sm focus:outline-none"
                   style={{ border: "1px solid var(--color-border-strong)", color: "var(--color-text-primary)" }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "#6B8DE3"; e.currentTarget.style.boxShadow = "0 0 0 1px #6B8DE3"; }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "0 0 0 1px var(--color-primary)"; }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
                 />
                 <button
@@ -353,9 +353,9 @@ export default function GrillaEspecialidades({
                     }
                   }}
                   className="rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-                  style={{ backgroundColor: "#6B8DE3" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#4A63A8"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
+                  style={{ backgroundColor: "var(--color-primary)" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--color-primary-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--color-primary)"; }}
                 >
                   Avisarme
                 </button>
@@ -457,9 +457,9 @@ export default function GrillaEspecialidades({
                     disabled={botonConsultaDeshabilitado}
                     onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
                     className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "#6B8DE3" }}
-                    onMouseEnter={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "#4A63A8"; }}
-                    onMouseLeave={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
+                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "var(--color-primary)" }}
+                    onMouseEnter={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary-hover)"; }}
+                    onMouseLeave={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary)"; }}
                   >
                     Consulta ahora
                   </button>
@@ -565,9 +565,9 @@ export default function GrillaEspecialidades({
                             disabled={!disponibleAhora}
                             onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
                             className="rounded-[var(--radius-md)] px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-                            style={{ backgroundColor: disponibleAhora ? "#6B8DE3" : "var(--color-muted)" }}
-                            onMouseEnter={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "#4A63A8"; }}
-                            onMouseLeave={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "#6B8DE3"; }}
+                            style={{ backgroundColor: disponibleAhora ? "var(--color-primary)" : "var(--color-muted)" }}
+                            onMouseEnter={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "var(--color-primary-hover)"; }}
+                            onMouseLeave={(e) => { if (disponibleAhora) e.currentTarget.style.backgroundColor = "var(--color-primary)"; }}
                           >
                             Consulta ahora
                           </button>

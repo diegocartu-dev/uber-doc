@@ -28,7 +28,7 @@ export default function ConsultorioPrivadoClient({
           );
         }}
         className="w-full rounded-[var(--radius-md)] py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-        style={{ backgroundColor: puedeInmediata ? "#6B8DE3" : "var(--color-muted)" }}
+        style={{ backgroundColor: puedeInmediata ? "var(--color-primary)" : "var(--color-muted)" }}
       >
         Consulta ahora
       </button>

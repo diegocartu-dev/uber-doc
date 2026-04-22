@@ -66,7 +66,7 @@ export default function AppNavbar({ userName, userRole, showMenu = true, logoHre
                   Iniciar sesion
                 </Link>
                 <Link
-                  href="/"
+                  href="/auth/register"
                   className="rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white transition-colors active:scale-[0.97]"
                   style={{ backgroundColor: "var(--color-primary)" }}
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--color-primary-hover)")}
