@@ -125,8 +125,9 @@ export default async function Home({
         <div className="landing-hero-grid" style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 48, alignItems: "center" }}>
           <div>
             <h1
+              className="landing-hero-h1"
               style={{
-                fontSize: "clamp(40px, 5.4vw, 64px)",
+                fontSize: "clamp(34px, 5.4vw, 64px)",
                 lineHeight: 1.05,
                 fontWeight: 700,
                 letterSpacing: "-0.035em",
@@ -140,6 +141,7 @@ export default async function Home({
             </h1>
 
             <p
+              className="hero-sub-desktop"
               style={{
                 fontSize: 18,
                 lineHeight: 1.55,
@@ -150,6 +152,19 @@ export default async function Home({
             >
               Reservá turno con médicos con matrícula verificada y recibí tu receta con validez legal.
               Desde donde estés, sin obra social de por medio.
+            </p>
+            <p
+              className="hero-sub-mobile"
+              style={{
+                fontSize: 16,
+                lineHeight: 1.5,
+                color: "var(--color-text-secondary)",
+                margin: "0 0 24px",
+                maxWidth: 560,
+                display: "none",
+              }}
+            >
+              Médicos verificados. Receta digital. Sin obra social.
             </p>
 
             <div style={{ marginBottom: 18 }}>
@@ -531,27 +546,27 @@ export default async function Home({
                   background: "rgba(255,255,255,0.03)",
                 }}
               >
-                <div
-                  className="medico-card-icon"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: "rgba(161, 206, 164, 0.15)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 14,
-                    flexShrink: 0,
-                  }}
-                >
-                  <f.icon size={18} style={{ color: "#A1CEA4" }} />
-                </div>
-                <div className="medico-card-content">
-                  <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
-                  <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>
-                    {f.description}
+                <div className="medico-card-head" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  <div
+                    className="medico-card-icon"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      background: "rgba(161, 206, 164, 0.15)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <f.icon size={18} style={{ color: "#A1CEA4" }} />
                   </div>
+                  <div className="medico-card-title-inline" style={{ fontSize: 14.5, fontWeight: 600, display: "none" }}>{f.title}</div>
+                </div>
+                <div className="medico-card-title" style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
+                <div className="medico-card-desc" style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>
+                  {f.description}
                 </div>
               </div>
             ))}
@@ -570,72 +585,66 @@ export default async function Home({
         .landing-pulse {
           animation: landing-pulse 1.6s infinite;
         }
+
+        /* Mobile-only subhead hidden by default (set via inline display:none) */
+
         @media (max-width: 900px) {
-          /* Grids a 1 columna */
-          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
-          .landing-steps-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
-          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
-          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
-          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .landing-hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .landing-steps-grid { grid-template-columns: 1fr !important; }
+          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+          .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+        }
+
+        @media (max-width: 720px) {
+          /* Hero */
+          .landing-hero-h1 { font-size: 32px !important; line-height: 1.08 !important; letter-spacing: -0.03em !important; }
+          .hero-sub-desktop { display: none !important; }
+          .hero-sub-mobile { display: block !important; }
+
+          /* Kill device mockups */
           .landing-phone-hero { display: none !important; }
-          .landing-phone-inmediata { display: none !important; }
-
-          /* Secciones compactas — sin min-height, sin centrado vertical */
-          .landing-root > section { padding: 32px 20px !important; }
-          .section-header { margin-bottom: 16px !important; }
-
-          /* Títulos de sección */
-          .landing-section-title { font-size: 26px !important; line-height: 1.15 !important; margin-bottom: 8px !important; }
-
-          /* H1 hero */
-          .landing-hero-grid h1 { font-size: 30px !important; margin-bottom: 12px !important; }
-
-          /* Subhead hero */
-          .landing-hero-grid p { font-size: 15px !important; margin-bottom: 20px !important; }
+          .landing-inmediata-grid > :first-child { display: none !important; }
+          .landing-inmediata-grid { grid-template-columns: 1fr !important; }
 
           /* Trust line vertical */
-          .landing-trust-line { flex-direction: column !important; gap: 6px !important; }
+          .landing-trust-line { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
 
-          /* Step cards: ultra compactas — ícono + num + título en una fila */
-          .step-card {
-            padding: 12px 14px !important;
-            gap: 0 !important;
-            flex-direction: row !important;
-            align-items: center !important;
+          /* STEPS (Cómo funciona) — número + ícono misma línea + título + descripción */
+          .step-card { padding: 18px 18px 20px !important; gap: 10px !important; }
+          .step-card-header { justify-content: flex-start !important; gap: 12px !important; }
+          .step-card-header > span { font-size: 14px !important; }
+          .step-card-header > div { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
+          .step-card h3 { font-size: 18px !important; margin: 4px 0 0 !important; }
+          .step-card-desc {
+            font-size: 14px !important; line-height: 1.45 !important;
+            display: -webkit-box !important;
+            -webkit-line-clamp: 2 !important;
+            -webkit-box-orient: vertical !important;
+            overflow: hidden !important;
           }
-          .step-card-header {
-            flex-direction: row-reverse !important;
-            align-items: center !important;
-            gap: 8px !important;
-            margin-right: 12px !important;
-            flex-shrink: 0 !important;
-          }
-          .step-card-icon { width: 28px !important; height: 28px !important; }
-          .step-card-num { font-size: 11px !important; }
-          .step-card h3 { font-size: 14px !important; font-weight: 600 !important; margin: 0 !important; }
-          .step-card-desc { display: none !important; }
 
-          /* Medico cards: ícono inline con título */
-          .medico-card {
-            display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
-            gap: 12px !important;
-            padding: 10px 14px !important;
-          }
-          .medico-card-icon { margin-bottom: 0 !important; width: 28px !important; height: 28px !important; }
-          .medico-card-content { flex: 1; }
-          .medico-card-content > div:last-child { font-size: 12px !important; }
+          /* MÉDICOS cards — ícono inline con título */
+          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .medico-card { padding: 14px 16px !important; }
+          .medico-card-head { margin-bottom: 4px !important; gap: 10px !important; }
+          .medico-card-icon { width: 28px !important; height: 28px !important; border-radius: 8px !important; }
+          .medico-card-title-inline { display: block !important; font-size: 14px !important; }
+          .medico-card-title { display: none !important; }
+          .medico-card-desc { font-size: 12.5px !important; line-height: 1.4 !important; }
 
-          /* Botones en fila */
-          .medicos-cta-row { flex-wrap: nowrap !important; margin-bottom: 12px !important; }
-          .medicos-cta-btn { padding: 10px 16px !important; font-size: 13px !important; }
+          /* CTAs "Sumate" + "Más info" — misma fila compactos */
+          .medicos-cta-row { flex-wrap: nowrap !important; gap: 8px !important; }
+          .medicos-cta-btn { padding: 10px 14px !important; font-size: 13px !important; flex: 1; justify-content: center; white-space: nowrap; }
+        }
 
-          /* Consulta inmediata: features compactas */
-          .inmediata-features { gap: 10px !important; margin-bottom: 20px !important; }
-          .inmediata-features > div { gap: 8px !important; }
-          .inmediata-features .feat-title { font-size: 14px !important; }
-          .inmediata-features .feat-desc { font-size: 12px !important; }
+        @media (max-width: 560px) {
+          .landing-hero-grid { gap: 12px !important; }
+        }
+
+        /* Scroll-snap por secciones en mobile */
+        @media (max-width: 720px) {
+          html { scroll-snap-type: y proximity; scroll-behavior: smooth; }
+          .landing-root > section, .landing-root > footer { scroll-snap-align: start; scroll-snap-stop: always; }
         }
       `}</style>
     </div>
