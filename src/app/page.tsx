@@ -193,7 +193,7 @@ export default async function Home({
       </section>
 
       {/* ============ CÓMO FUNCIONA — Inmediata + Turnos lado a lado ============ */}
-      <section id="como-funciona" style={{ padding: "96px 24px", background: "var(--color-bg-secondary)", position: "relative", overflow: "hidden" }}>
+      <section id="como-funciona" style={{ padding: "96px 24px 0", background: "var(--color-bg-secondary)", position: "relative", overflow: "hidden" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           {/* Eyebrow centrado */}
           <div style={{ textAlign: "center", marginBottom: 56 }}>
