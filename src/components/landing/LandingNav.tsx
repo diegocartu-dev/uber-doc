@@ -73,12 +73,13 @@ export default function LandingNav() {
             <Link
               href="/auth/login"
               className="landing-nav-login"
-              style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}
+              style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500, whiteSpace: "nowrap" }}
             >
               Iniciar sesión
             </Link>
             <Link
               href="/auth/register"
+              className="landing-nav-register"
               style={{
                 fontSize: 13,
                 fontWeight: 600,
@@ -86,6 +87,7 @@ export default function LandingNav() {
                 background: "var(--color-primary)",
                 padding: "9px 16px",
                 borderRadius: 8,
+                whiteSpace: "nowrap",
               }}
             >
               Crear cuenta
@@ -99,8 +101,9 @@ export default function LandingNav() {
           .landing-nav-mid { display: none !important; }
         }
         @media (max-width: 560px) {
-          .landing-nav-links { gap: 12px !important; }
-          .landing-nav-login { display: none !important; }
+          .landing-nav-links { gap: 10px !important; }
+          .landing-nav-login { font-size: 13px !important; }
+          .landing-nav-register { font-size: 12px !important; padding: 8px 12px !important; }
         }
       `}</style>
     </>
