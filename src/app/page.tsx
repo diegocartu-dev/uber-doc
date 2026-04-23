@@ -8,9 +8,9 @@ import {
   Video,
   Check,
   ArrowRight,
-  Calendar,
-  FileSignature,
-  Users,
+  Building2,
+  Zap,
+  Sparkles,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -109,11 +109,10 @@ export default async function Home({
     },
   ];
 
-  const medicoCards = [
-    { icon: Wallet, title: "Cobrás por consulta", description: "Sin mensualidades. Nos llevamos una comisión solo cuando atendés." },
-    { icon: Calendar, title: "Agenda flexible", description: "Publicás tus horarios y los cambiás cuando quieras. Vos mandás." },
-    { icon: FileSignature, title: "Receta digital", description: "Firma electrónica con validez legal, sin papel ni trámites." },
-    { icon: Users, title: "Pacientes verificados", description: "DNI + cobertura confirmados antes de reservar turno." },
+  const medicoPoints = [
+    { icon: Building2, title: "Consultorio Particular", description: "Tu link, tus pacientes, tu precio." },
+    { icon: Zap, title: "Consulta Inmediata", description: "Monetizá cualquier momento libre, desde donde estés." },
+    { icon: Sparkles, title: "Nova IA", description: "Recetas y documentación generadas en segundos." },
   ];
 
   return (
@@ -513,7 +512,7 @@ export default async function Home({
                 <ArrowRight size={16} />
               </Link>
               <Link
-                href="/auth/registro-medico"
+                href="/medicos"
                 className="medicos-cta-btn"
                 style={{
                   display: "inline-flex",
@@ -529,44 +528,31 @@ export default async function Home({
                   background: "transparent",
                 }}
               >
-                Más info
+                Conocé más
               </Link>
             </div>
           </div>
 
-          <div className="landing-medico-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {medicoCards.map((f) => (
-              <div
-                key={f.title}
-                className="medico-card"
-                style={{
-                  padding: "22px 20px",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 14,
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div className="medico-card-head" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                  <div
-                    className="medico-card-icon"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: "rgba(161, 206, 164, 0.15)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <f.icon size={18} style={{ color: "#A1CEA4" }} />
-                  </div>
-                  <div className="medico-card-title-inline" style={{ fontSize: 14.5, fontWeight: 600, display: "none" }}>{f.title}</div>
+          <div className="landing-medico-points" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {medicoPoints.map((p) => (
+              <div key={p.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: "rgba(161, 206, 164, 0.15)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <p.icon size={20} style={{ color: "#A1CEA4" }} />
                 </div>
-                <div className="medico-card-title" style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
-                <div className="medico-card-desc" style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>
-                  {f.description}
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{p.title}</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>{p.description}</div>
                 </div>
               </div>
             ))}
@@ -623,14 +609,8 @@ export default async function Home({
             overflow: hidden !important;
           }
 
-          /* MÉDICOS cards — ícono inline con título */
-          .landing-medico-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
-          .medico-card { padding: 14px 16px !important; }
-          .medico-card-head { margin-bottom: 4px !important; gap: 10px !important; }
-          .medico-card-icon { width: 28px !important; height: 28px !important; border-radius: 8px !important; }
-          .medico-card-title-inline { display: block !important; font-size: 14px !important; }
-          .medico-card-title { display: none !important; }
-          .medico-card-desc { font-size: 12.5px !important; line-height: 1.4 !important; }
+          /* MÉDICOS points — compact on mobile */
+          .landing-medico-points { gap: 14px !important; }
 
           /* CTAs "Sumate" + "Más info" — misma fila compactos */
           .medicos-cta-row { flex-wrap: nowrap !important; gap: 8px !important; }
