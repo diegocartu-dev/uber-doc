@@ -3,9 +3,6 @@ import {
   ShieldCheck,
   FileText,
   Wallet,
-  Search,
-  CalendarCheck,
-  Video,
   Check,
   ArrowRight,
   Building2,
@@ -69,27 +66,6 @@ export default async function Home({
   }
 
   /* ---------- Landing pag. para usuarios NO autenticados ---------- */
-
-  const steps = [
-    {
-      icon: Search,
-      title: "Elegí especialidad",
-      description:
-        "Buscá por especialidad o nombre del profesional. Filtrá por disponibilidad inmediata o reservá turno programado.",
-    },
-    {
-      icon: CalendarCheck,
-      title: "Reservá y pagá",
-      description:
-        "Elegí atenderte ahora o un horario en la agenda del médico. Pagás con Mercado Pago y listo.",
-    },
-    {
-      icon: Video,
-      title: "Consulta por videollamada",
-      description:
-        "A la hora del turno, entrás a la sala de espera desde el navegador. Tus indicaciones, recetas y certificados siempre en tu perfil.",
-    },
-  ];
 
   const turnosFeatures = [
     {
@@ -216,10 +192,11 @@ export default async function Home({
         </div>
       </section>
 
-      {/* ============ COMO FUNCIONA ============ */}
-      <section id="como-funciona" style={{ padding: "96px 24px", background: "#fff" }}>
+      {/* ============ CÓMO FUNCIONA — Inmediata + Turnos lado a lado ============ */}
+      <section id="como-funciona" style={{ padding: "96px 24px", background: "var(--color-bg-secondary)", position: "relative", overflow: "hidden" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div className="section-header" style={{ maxWidth: 640, marginBottom: 56 }}>
+          {/* Eyebrow centrado */}
+          <div style={{ textAlign: "center", marginBottom: 56 }}>
             <div
               style={{
                 fontSize: 18,
@@ -227,327 +204,228 @@ export default async function Home({
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
                 color: "var(--color-primary)",
-                marginBottom: 14,
               }}
             >
               Cómo funciona
             </div>
-            <h2
-              className="landing-section-title"
-              style={{
-                fontSize: "clamp(30px, 3.2vw, 42px)",
-                lineHeight: 1.1,
-                fontWeight: 700,
-                letterSpacing: "-0.03em",
-                margin: 0,
-              }}
-            >
-              Tres pasos y estás hablando con tu médico.
-            </h2>
           </div>
 
-          <div className="landing-steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
-            {steps.map((s) => (
+          {/* Dos columnas */}
+          <div className="landing-como-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48 }}>
+            {/* COLUMNA IZQUIERDA — Consulta Inmediata */}
+            <div>
               <div
-                key={s.title}
-                className="step-card"
+                className="landing-pulse-badge"
                 style={{
-                  padding: "28px 26px 30px",
-                  border: "1px solid var(--color-border-default)",
-                  borderRadius: 16,
-                  background: "#fff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  background: "var(--color-success-tint)",
+                  color: "#3F7A52",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 16,
                 }}
               >
-                <div
-                  className="step-card-icon"
+                <span
+                  className="landing-pulse"
                   style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "var(--color-bg-tertiary)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#3F7A52",
+                    display: "inline-block",
                   }}
-                >
-                  <s.icon size={20} style={{ color: "var(--color-primary)" }} />
-                </div>
-                <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", margin: "8px 0 0" }}>
-                  {s.title}
-                </h3>
-                <p className="step-card-desc" style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: 0 }}>
-                  {s.description}
-                </p>
+                />
+                Consulta inmediata
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* ============ TURNOS PROGRAMADOS ============ */}
-      <section
-        id="turnos"
-        style={{
-          padding: "96px 24px",
-          background: "var(--color-bg-secondary)",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          className="landing-turnos-grid"
-          style={{
-            maxWidth: 1200,
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "1.1fr 0.9fr",
-            gap: 64,
-            alignItems: "center",
-            position: "relative",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--color-primary)",
-                marginBottom: 14,
-              }}
-            >
-              Turnos programados
-            </div>
-
-            <h2
-              className="landing-section-title"
-              style={{
-                fontSize: "clamp(30px, 3.2vw, 42px)",
-                lineHeight: 1.1,
-                fontWeight: 700,
-                letterSpacing: "-0.03em",
-                margin: "0 0 18px",
-              }}
-            >
-              Elegí tu médico, reservá tu horario.
-            </h2>
-
-            <p
-              style={{
-                fontSize: 17,
-                lineHeight: 1.55,
-                color: "var(--color-text-secondary)",
-                margin: "0 0 28px",
-                maxWidth: 520,
-              }}
-            >
-              Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda,
-              y pagá de forma segura. Confirmación inmediata.
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
-              {turnosFeatures.map((f) => (
-                <div key={f.title} style={{ display: "flex", gap: 12 }}>
-                  <div
-                    style={{
-                      flexShrink: 0,
-                      width: 22,
-                      height: 22,
-                      borderRadius: 999,
-                      background: "var(--color-success-tint)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Check size={13} style={{ color: "#1D9E75" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
-                      {f.title}
-                    </div>
-                    <div style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                      {f.description}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <Link
-              href="/clinica"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                background: "var(--color-primary)",
-                color: "#fff",
-                padding: "13px 22px",
-                borderRadius: 10,
-                fontSize: 14.5,
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
-              Buscar turno
-              <ArrowRight size={16} />
-            </Link>
-          </div>
-
-          <div className="landing-phone-turnos" style={{ display: "flex", justifyContent: "center" }}>
-            <PhoneMockupTurnos />
-          </div>
-        </div>
-      </section>
-
-      {/* ============ CONSULTA INMEDIATA ============ */}
-      <section
-        id="inmediata"
-        style={{
-          padding: "96px 24px",
-          background: "var(--color-bg-secondary)",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Radial glow */}
-        <div
-          style={{
-            position: "absolute",
-            top: -120,
-            right: -120,
-            width: 480,
-            height: 480,
-            borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(161, 206, 164, 0.25), transparent 65%)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <div
-          className="landing-inmediata-grid"
-          style={{
-            maxWidth: 1200,
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "0.9fr 1.1fr",
-            gap: 64,
-            alignItems: "center",
-            position: "relative",
-          }}
-        >
-          <div className="landing-phone-inmediata" style={{ display: "flex", justifyContent: "center" }}>
-            <PhoneMockupInmediata />
-          </div>
-
-          <div>
-            <div
-              className="landing-pulse-badge"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "8px 16px",
-                borderRadius: 999,
-                background: "var(--color-success-tint)",
-                color: "#3F7A52",
-                fontSize: 18,
-                fontWeight: 600,
-                marginBottom: 20,
-              }}
-            >
-              <span
-                className="landing-pulse"
+              <h2
+                className="landing-section-title"
                 style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: "#3F7A52",
-                  display: "inline-block",
+                  fontSize: "clamp(24px, 2.5vw, 32px)",
+                  lineHeight: 1.12,
+                  fontWeight: 700,
+                  letterSpacing: "-0.03em",
+                  margin: "0 0 14px",
                 }}
-              />
-              Consulta inmediata
-            </div>
+              >
+                ¿No podés esperar?
+                <br />
+                Conectate con un médico <span style={{ color: "#3F7A52" }}>ahora</span>.
+              </h2>
 
-            <h2
-              className="landing-section-title"
-              style={{
-                fontSize: "clamp(30px, 3.2vw, 42px)",
-                lineHeight: 1.1,
-                fontWeight: 700,
-                letterSpacing: "-0.03em",
-                margin: "0 0 18px",
-              }}
-            >
-              ¿No podés esperar?
-              <br />
-              Conectate con un médico <span style={{ color: "#3F7A52" }}>ahora</span>.
-            </h2>
+              <p
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.55,
+                  color: "var(--color-text-secondary)",
+                  margin: "0 0 22px",
+                }}
+              >
+                Médicos de guardia virtual listos para atenderte. Entrás a la sala de espera,
+                te atiende el primero disponible, y si hace falta te lleva la receta al toque.
+              </p>
 
-            <p
-              style={{
-                fontSize: 17,
-                lineHeight: 1.55,
-                color: "var(--color-text-secondary)",
-                margin: "0 0 28px",
-                maxWidth: 520,
-              }}
-            >
-              Médicos de guardia virtual listos para atenderte. Entrás a la sala de espera,
-              te atiende el primero disponible, y si hace falta te lleva la receta al toque.
-            </p>
-
-            <div className="inmediata-features" style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
-              {inmediataFeatures.map((f) => (
-                <div key={f.title} style={{ display: "flex", gap: 12 }}>
-                  <div
-                    style={{
-                      flexShrink: 0,
-                      width: 22,
-                      height: 22,
-                      borderRadius: 999,
-                      background: "var(--color-success-tint)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Check size={13} style={{ color: "#3F7A52" }} />
-                  </div>
-                  <div>
-                    <div className="feat-title" style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
-                      {f.title}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+                {inmediataFeatures.map((f) => (
+                  <div key={f.title} style={{ display: "flex", gap: 10 }}>
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        width: 20,
+                        height: 20,
+                        borderRadius: 999,
+                        background: "var(--color-success-tint)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginTop: 1,
+                      }}
+                    >
+                      <Check size={12} style={{ color: "#3F7A52" }} />
                     </div>
-                    <div className="feat-desc" style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                      {f.description}
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 1 }}>
+                        {f.title}
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                        {f.description}
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+
+              <Link
+                href="/clinica"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "var(--color-primary)",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  marginBottom: 32,
+                }}
+              >
+                Ver médicos disponibles
+                <ArrowRight size={15} />
+              </Link>
+
+              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center" }}>
+                <div style={{ transform: "scale(0.72)", transformOrigin: "top center" }}>
+                  <PhoneMockupInmediata />
                 </div>
-              ))}
+              </div>
             </div>
 
-            <Link
-              href="/clinica"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                background: "var(--color-primary)",
-                color: "#fff",
-                padding: "13px 22px",
-                borderRadius: 10,
-                fontSize: 14.5,
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
-              Ver médicos disponibles ahora
-              <ArrowRight size={16} />
-            </Link>
+            {/* COLUMNA DERECHA — Turnos Programados */}
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  background: "rgba(55, 138, 221, 0.1)",
+                  color: "var(--color-primary)",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 16,
+                }}
+              >
+                Turnos programados
+              </div>
+
+              <h2
+                className="landing-section-title"
+                style={{
+                  fontSize: "clamp(24px, 2.5vw, 32px)",
+                  lineHeight: 1.12,
+                  fontWeight: 700,
+                  letterSpacing: "-0.03em",
+                  margin: "0 0 14px",
+                }}
+              >
+                Elegí tu médico, reservá tu horario.
+              </h2>
+
+              <p
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.55,
+                  color: "var(--color-text-secondary)",
+                  margin: "0 0 22px",
+                }}
+              >
+                Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda,
+                y pagá de forma segura. Confirmación inmediata.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+                {turnosFeatures.map((f) => (
+                  <div key={f.title} style={{ display: "flex", gap: 10 }}>
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        width: 20,
+                        height: 20,
+                        borderRadius: 999,
+                        background: "var(--color-success-tint)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginTop: 1,
+                      }}
+                    >
+                      <Check size={12} style={{ color: "#1D9E75" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 1 }}>
+                        {f.title}
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                        {f.description}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Link
+                href="/clinica"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "var(--color-primary)",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  marginBottom: 32,
+                }}
+              >
+                Buscar turno
+                <ArrowRight size={15} />
+              </Link>
+
+              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center" }}>
+                <div style={{ transform: "scale(0.72)", transformOrigin: "top center" }}>
+                  <PhoneMockupTurnos />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -688,9 +566,7 @@ export default async function Home({
 
         @media (max-width: 900px) {
           .landing-hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
-          .landing-steps-grid { grid-template-columns: 1fr !important; }
-          .landing-turnos-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
-          .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
+          .landing-como-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
         }
 
@@ -702,30 +578,15 @@ export default async function Home({
 
           /* Kill device mockups */
           .landing-phone-hero { display: none !important; }
-          .landing-phone-turnos { display: none !important; }
-          .landing-turnos-grid { grid-template-columns: 1fr !important; }
-          .landing-inmediata-grid > :first-child { display: none !important; }
-          .landing-inmediata-grid { grid-template-columns: 1fr !important; }
+          .landing-phone-col { display: none !important; }
 
           /* Trust line vertical */
           .landing-trust-line { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
 
-          /* STEPS (Cómo funciona) */
-          .step-card { padding: 18px 18px 20px !important; gap: 10px !important; }
-          .step-card-icon { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
-          .step-card h3 { font-size: 18px !important; margin: 4px 0 0 !important; }
-          .step-card-desc {
-            font-size: 14px !important; line-height: 1.45 !important;
-            display: -webkit-box !important;
-            -webkit-line-clamp: 2 !important;
-            -webkit-box-orient: vertical !important;
-            overflow: hidden !important;
-          }
-
           /* MÉDICOS points — compact on mobile */
           .landing-medico-points { gap: 14px !important; }
 
-          /* CTAs "Sumate" + "Más info" — misma fila compactos */
+          /* CTAs "Sumate" + "Conocé más" — misma fila compactos */
           .medicos-cta-row { flex-wrap: nowrap !important; gap: 8px !important; }
           .medicos-cta-btn { padding: 10px 14px !important; font-size: 13px !important; flex: 1; justify-content: center; white-space: nowrap; }
         }
