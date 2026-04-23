@@ -72,25 +72,22 @@ export default async function Home({
 
   const steps = [
     {
-      n: "01",
       icon: Search,
       title: "Elegí especialidad",
       description:
-        "Buscá por especialidad, síntoma o nombre del profesional. Filtrá por disponibilidad inmediata o reservá turno programado.",
+        "Buscá por especialidad o nombre del profesional. Filtrá por disponibilidad inmediata o reservá turno programado.",
     },
     {
-      n: "02",
       icon: CalendarCheck,
       title: "Reservá y pagá",
       description:
-        "Elegí un horario en la agenda del médico. Pagás con tarjeta — sin pasar por tu obra social. Recibís confirmación al toque.",
+        "Elegí atenderte ahora o un horario en la agenda del médico. Pagás con Mercado Pago y listo.",
     },
     {
-      n: "03",
       icon: Video,
-      title: "Consulta por video",
+      title: "Consulta por videollamada",
       description:
-        'A la hora del turno, entrás a la sala de espera desde el navegador o la app. Si hay receta, queda lista en "Mis documentos".',
+        "A la hora del turno, entrás a la sala de espera desde el navegador. Tus indicaciones, recetas y certificados siempre en tu perfil.",
     },
   ];
 
@@ -242,20 +239,17 @@ export default async function Home({
                 lineHeight: 1.1,
                 fontWeight: 700,
                 letterSpacing: "-0.03em",
-                margin: "0 0 14px",
+                margin: 0,
               }}
             >
-              De la búsqueda al turno en menos de 2 minutos.
+              Tres pasos y estás hablando con tu médico.
             </h2>
-            <p style={{ fontSize: 16, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: 0 }}>
-              Sin derivaciones, sin autorizaciones, sin llamadas. Tres pasos y hablás con un médico.
-            </p>
           </div>
 
           <div className="landing-steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
             {steps.map((s) => (
               <div
-                key={s.n}
+                key={s.title}
                 className="step-card"
                 style={{
                   padding: "28px 26px 30px",
@@ -267,33 +261,19 @@ export default async function Home({
                   gap: 14,
                 }}
               >
-                <div className="step-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span
-                    className="step-card-num"
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "var(--color-text-tertiary)",
-                      letterSpacing: "0.05em",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {s.n} / 03
-                  </span>
-                  <div
-                    className="step-card-icon"
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 10,
-                      background: "var(--color-bg-tertiary)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <s.icon size={20} style={{ color: "var(--color-primary)" }} />
-                  </div>
+                <div
+                  className="step-card-icon"
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 10,
+                    background: "var(--color-bg-tertiary)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <s.icon size={20} style={{ color: "var(--color-primary)" }} />
                 </div>
                 <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", margin: "8px 0 0" }}>
                   {s.title}
@@ -730,11 +710,9 @@ export default async function Home({
           /* Trust line vertical */
           .landing-trust-line { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
 
-          /* STEPS (Cómo funciona) — número + ícono misma línea + título + descripción */
+          /* STEPS (Cómo funciona) */
           .step-card { padding: 18px 18px 20px !important; gap: 10px !important; }
-          .step-card-header { justify-content: flex-start !important; gap: 12px !important; }
-          .step-card-header > span { font-size: 14px !important; }
-          .step-card-header > div { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
+          .step-card-icon { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
           .step-card h3 { font-size: 18px !important; margin: 4px 0 0 !important; }
           .step-card-desc {
             font-size: 14px !important; line-height: 1.45 !important;
