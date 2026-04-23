@@ -74,11 +74,11 @@ export default async function Home({
     },
     {
       title: "Recordatorio automático",
-      description: "Te avisamos 24hs y 10 minutos antes del turno.",
+      description: "",
     },
     {
       title: "Cancelación flexible",
-      description: "Más de 48hs antes, reintegro automático.",
+      description: "",
     },
   ];
 
@@ -89,11 +89,11 @@ export default async function Home({
     },
     {
       title: "Pagás solo si te atienden",
-      description: "Si ningún médico toma tu consulta en 30 min, se te reintegra automáticamente.",
+      description: "",
     },
     {
-      title: "Receta al instante",
-      description: 'Si el médico indica medicación, queda firmada digitalmente en "Mis documentos".',
+      title: "Receta digital, indicaciones y certificado",
+      description: "En tu mail y en tu perfil de Docto.",
     },
   ];
 
@@ -162,15 +162,15 @@ export default async function Home({
             <div className="landing-trust-line" style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <ShieldCheck size={15} style={{ color: "#3F7A52" }} />
-                Matrícula verificada
+                Profesionales verificados
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <FileText size={15} style={{ color: "#3F7A52" }} />
-                Recetas con validez legal
+                Receta digital
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <Wallet size={15} style={{ color: "#3F7A52" }} />
-                Sin obra social de por medio
+                Atención directa, sin intermediarios
               </span>
             </div>
           </div>
@@ -265,8 +265,8 @@ export default async function Home({
                   margin: "0 0 22px",
                 }}
               >
-                Médicos de guardia virtual listos para atenderte. Entrás a la sala de espera,
-                te atiende el primero disponible, y si hace falta te lleva la receta al toque.
+                Médicos disponibles para atención espontánea.
+                Entrás a la sala de espera y te atienden.
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
@@ -288,12 +288,14 @@ export default async function Home({
                       <Check size={12} style={{ color: "#3F7A52" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: f.description ? 1 : 0 }}>
                         {f.title}
                       </div>
-                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                        {f.description}
-                      </div>
+                      {f.description && (
+                        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                          {f.description}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -389,12 +391,14 @@ export default async function Home({
                       <Check size={12} style={{ color: "#1D9E75" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: f.description ? 1 : 0 }}>
                         {f.title}
                       </div>
-                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                        {f.description}
-                      </div>
+                      {f.description && (
+                        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                          {f.description}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
