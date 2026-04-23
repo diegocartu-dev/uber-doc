@@ -40,6 +40,8 @@ export default function Footer() {
           Privacidad
         </Link>
         <span aria-hidden="true">|</span>
+        <span>AAIP RL-2026-36086505</span>
+        <span aria-hidden="true">|</span>
         <a
           href="mailto:soporte@docto.com.ar"
           className="underline-offset-2 transition-colors hover:underline"

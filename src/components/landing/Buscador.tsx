@@ -68,7 +68,7 @@ export default function Buscador() {
           <Search size={18} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
           <input
             type="text"
-            placeholder="Especialidad, síntoma o nombre del médico"
+            placeholder="Especialidad o nombre del médico"
             value={esp || q}
             onChange={(e) => {
               setQ(e.target.value);

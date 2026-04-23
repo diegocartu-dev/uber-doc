@@ -1,4 +1,4 @@
-import { Heart, Brain, Baby, Eye, Activity, Pill } from "lucide-react";
+import { Heart, Brain, Baby, Eye, Activity, Pill, Clock, ChevronRight } from "lucide-react";
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -231,6 +231,116 @@ export function PhoneMockupInmediata() {
             </div>
           </div>
         ))}
+      </div>
+    </PhoneFrame>
+  );
+}
+
+const turnoSlots = [
+  { time: "09:00", available: true },
+  { time: "09:30", available: false },
+  { time: "10:00", available: true },
+  { time: "10:30", available: true },
+  { time: "11:00", available: false },
+  { time: "11:30", available: true },
+  { time: "14:00", available: true },
+  { time: "14:30", available: false },
+];
+
+const turnoDays = [
+  { day: "Lun", num: "28", active: false },
+  { day: "Mar", num: "29", active: true },
+  { day: "Mié", num: "30", active: false },
+  { day: "Jue", num: "1", active: false },
+  { day: "Vie", num: "2", active: false },
+];
+
+export function PhoneMockupTurnos() {
+  return (
+    <PhoneFrame>
+      <div style={{ padding: "52px 16px 16px", height: "100%", background: "#F8F9FA" }}>
+        {/* Doctor header */}
+        <div style={{
+          background: "#fff",
+          borderRadius: 12,
+          padding: 14,
+          border: "1px solid #E5E7EB",
+          marginBottom: 12,
+        }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%", background: "#F1F3F5",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 600, color: "#4B5563",
+            }}>
+              LG
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Dr. Lucas García</div>
+              <div style={{ fontSize: 10, color: "#9CA3AF" }}>Cardiología · MP 31845</div>
+            </div>
+            <ChevronRight size={14} style={{ color: "#9CA3AF" }} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#4B5563" }}>
+            <Clock size={10} style={{ color: "#378ADD" }} />
+            Consulta 30 min · $8.500
+          </div>
+        </div>
+
+        {/* Day selector */}
+        <div style={{
+          display: "flex", gap: 6, marginBottom: 12,
+          justifyContent: "space-between",
+        }}>
+          {turnoDays.map((d) => (
+            <div key={d.num} style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: 10,
+              background: d.active ? "#378ADD" : "#fff",
+              border: d.active ? "none" : "1px solid #E5E7EB",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 8, color: d.active ? "rgba(255,255,255,0.7)" : "#9CA3AF", fontWeight: 500 }}>{d.day}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: d.active ? "#fff" : "#111827" }}>{d.num}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Time label */}
+        <div style={{
+          fontSize: 9, fontWeight: 600, letterSpacing: "0.06em",
+          textTransform: "uppercase", color: "#9CA3AF", marginBottom: 8,
+        }}>
+          Horarios disponibles
+        </div>
+
+        {/* Slots grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {turnoSlots.map((s) => (
+            <div key={s.time} style={{
+              padding: "10px 0",
+              borderRadius: 8,
+              background: s.available ? "#fff" : "#F8F9FA",
+              border: s.available ? "1px solid #378ADD" : "1px solid #E5E7EB",
+              textAlign: "center",
+              fontSize: 11,
+              fontWeight: 600,
+              color: s.available ? "#378ADD" : "#D1D5DB",
+            }}>
+              {s.time}
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div style={{
+          marginTop: 12, background: "#378ADD", color: "#fff",
+          borderRadius: 8, padding: "10px 0",
+          fontSize: 11, fontWeight: 600, textAlign: "center",
+        }}>
+          Confirmar turno
+        </div>
       </div>
     </PhoneFrame>
   );
