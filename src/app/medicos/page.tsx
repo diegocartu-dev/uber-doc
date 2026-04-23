@@ -139,9 +139,8 @@ export default async function MedicosLanding() {
             maxWidth: 560,
           }}>
             Sin obra social de por medio. Sin abono mensual.
-            Sin nadie que te fije el precio. Tus honorarios
-            van directo a tu Mercado Pago antes de que el
-            paciente entre a la sala.
+            Vos fijás tus honorarios. Van directo a tu
+            Mercado Pago antes de que el paciente entre a la sala.
           </p>
           <Link
             href="/auth/registro-medico"
