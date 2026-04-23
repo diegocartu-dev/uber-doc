@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
     "/dashboard",
     "/mis-datos",
     "/mis-consultas",
-    "/medico",
+    "/medico/",
     "/consulta",
     "/turno",
     "/clinica",
