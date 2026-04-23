@@ -34,6 +34,7 @@ export default async function MedicosLanding() {
     {
       icon: Building2,
       color: "#D85A30",
+      promesaColor: "#D85A30",
       title: "Consultorio Particular",
       promesa: "Tus pacientes te eligen a vos, no a \u201Cun médico disponible\u201D",
       descripcion: "Tu link personal, tu perfil, tu agenda, tus honorarios.",
@@ -41,6 +42,7 @@ export default async function MedicosLanding() {
     {
       icon: Zap,
       color: "#378ADD",
+      promesaColor: "#1D9E75",
       title: "Consulta Inmediata",
       promesa: "Prendés un switch y empezás a generar ingresos",
       descripcion: "Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran.",
@@ -48,6 +50,7 @@ export default async function MedicosLanding() {
     {
       icon: Calendar,
       color: "#378ADD",
+      promesaColor: "#378ADD",
       title: "Turnos Programados",
       promesa: "Tu agenda, tu ritmo, tus horarios disponibles al mundo",
       descripcion: "Confirmación y recordatorios automáticos. Vos solo atendés.",
@@ -204,7 +207,7 @@ export default async function MedicosLanding() {
                 <div style={{ fontSize: 17, fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 6 }}>
                   {f.title}
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 500, color: f.color, lineHeight: 1.4, marginBottom: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: f.promesaColor, lineHeight: 1.4, marginBottom: 10 }}>
                   {f.promesa}
                 </div>
                 <div style={{ fontSize: 14, lineHeight: 1.55, color: "var(--color-text-secondary)" }}>
