@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function Footer() {
   return (
     <footer
-      className="mt-20 w-full flex items-center justify-center"
+      className="w-full flex items-center justify-center"
       style={{
         backgroundColor: "var(--color-bg-tertiary)",
         minHeight: "48px",
@@ -39,6 +39,8 @@ export default function Footer() {
         >
           Privacidad
         </Link>
+        <span aria-hidden="true">|</span>
+        <span>AAIP RL-2026-36086505</span>
         <span aria-hidden="true">|</span>
         <a
           href="mailto:soporte@docto.com.ar"
