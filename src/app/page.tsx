@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import LandingNav from "@/components/landing/LandingNav";
 import Buscador from "@/components/landing/Buscador";
-import { PhoneMockupHero, PhoneMockupInmediata } from "@/components/landing/PhoneMockup";
+import { PhoneMockupHero, PhoneMockupInmediata, PhoneMockupTurnos } from "@/components/landing/PhoneMockup";
 import Footer from "@/components/Footer";
 
 export default async function Home({
@@ -91,6 +91,21 @@ export default async function Home({
       title: "Consulta por video",
       description:
         'A la hora del turno, entrás a la sala de espera desde el navegador o la app. Si hay receta, queda lista en "Mis documentos".',
+    },
+  ];
+
+  const turnosFeatures = [
+    {
+      title: "Hasta 45 días de anticipación",
+      description: "Planificá tu consulta cuando más te convenga.",
+    },
+    {
+      title: "Recordatorio automático",
+      description: "Te avisamos 24hs y 10 minutos antes del turno.",
+    },
+    {
+      title: "Cancelación flexible",
+      description: "Más de 48hs antes, reintegro automático.",
     },
   ];
 
@@ -210,7 +225,7 @@ export default async function Home({
           <div className="section-header" style={{ maxWidth: 640, marginBottom: 56 }}>
             <div
               style={{
-                fontSize: 12,
+                fontSize: 18,
                 fontWeight: 600,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -292,6 +307,123 @@ export default async function Home({
         </div>
       </section>
 
+      {/* ============ TURNOS PROGRAMADOS ============ */}
+      <section
+        id="turnos"
+        style={{
+          padding: "96px 24px",
+          background: "var(--color-bg-secondary)",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="landing-turnos-grid"
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "1.1fr 0.9fr",
+            gap: 64,
+            alignItems: "center",
+            position: "relative",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--color-primary)",
+                marginBottom: 14,
+              }}
+            >
+              Turnos programados
+            </div>
+
+            <h2
+              className="landing-section-title"
+              style={{
+                fontSize: "clamp(30px, 3.2vw, 42px)",
+                lineHeight: 1.1,
+                fontWeight: 700,
+                letterSpacing: "-0.03em",
+                margin: "0 0 18px",
+              }}
+            >
+              Elegí tu médico, reservá tu horario.
+            </h2>
+
+            <p
+              style={{
+                fontSize: 17,
+                lineHeight: 1.55,
+                color: "var(--color-text-secondary)",
+                margin: "0 0 28px",
+                maxWidth: 520,
+              }}
+            >
+              Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda,
+              y pagá de forma segura. Confirmación inmediata.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 32 }}>
+              {turnosFeatures.map((f) => (
+                <div key={f.title} style={{ display: "flex", gap: 12 }}>
+                  <div
+                    style={{
+                      flexShrink: 0,
+                      width: 22,
+                      height: 22,
+                      borderRadius: 999,
+                      background: "var(--color-success-tint)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Check size={13} style={{ color: "#1D9E75" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
+                      {f.title}
+                    </div>
+                    <div style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                      {f.description}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Link
+              href="/clinica"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "var(--color-primary)",
+                color: "#fff",
+                padding: "13px 22px",
+                borderRadius: 10,
+                fontSize: 14.5,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Buscar turno
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div className="landing-phone-turnos" style={{ display: "flex", justifyContent: "center" }}>
+            <PhoneMockupTurnos />
+          </div>
+        </div>
+      </section>
+
       {/* ============ CONSULTA INMEDIATA ============ */}
       <section
         id="inmediata"
@@ -339,11 +471,11 @@ export default async function Home({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
-                padding: "6px 12px",
+                padding: "8px 16px",
                 borderRadius: 999,
                 background: "var(--color-success-tint)",
                 color: "#3F7A52",
-                fontSize: 12,
+                fontSize: 18,
                 fontWeight: 600,
                 marginBottom: 20,
               }}
@@ -456,7 +588,7 @@ export default async function Home({
           <div>
             <div
               style={{
-                fontSize: 12,
+                fontSize: 18,
                 fontWeight: 600,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -577,6 +709,7 @@ export default async function Home({
         @media (max-width: 900px) {
           .landing-hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
           .landing-steps-grid { grid-template-columns: 1fr !important; }
+          .landing-turnos-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-inmediata-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
         }
@@ -589,6 +722,8 @@ export default async function Home({
 
           /* Kill device mockups */
           .landing-phone-hero { display: none !important; }
+          .landing-phone-turnos { display: none !important; }
+          .landing-turnos-grid { grid-template-columns: 1fr !important; }
           .landing-inmediata-grid > :first-child { display: none !important; }
           .landing-inmediata-grid { grid-template-columns: 1fr !important; }
 
