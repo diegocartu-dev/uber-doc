@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Stethoscope } from "lucide-react";
 
 const ESPECIALIDADES = [
@@ -25,6 +26,7 @@ export default function Buscador() {
   const [esp, setEsp] = useState("");
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -157,6 +159,7 @@ export default function Buscador() {
       </div>
       <button
         className="buscador-btn"
+        onClick={() => router.push("/auth/login")}
         style={{
           background: "var(--color-primary)",
           color: "#fff",
@@ -174,7 +177,7 @@ export default function Buscador() {
           flexShrink: 0,
         }}
       >
-        <span className="buscador-btn-text">Buscar médico</span>
+        <span className="buscador-btn-text">Accedé a un profesional</span>
         <ArrowRight size={16} />
       </button>
       <style>{`
