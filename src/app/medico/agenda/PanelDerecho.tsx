@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cancelarTurnosMedico } from "@/app/dashboard/actions";
 
@@ -55,6 +56,7 @@ function formatFechaDia(f: string) {
 
 
 export default function PanelDerecho({ medicoId, precio }: { medicoId: string; precio: number }) {
+  const router = useRouter();
   const hoy = new Date();
   const hoyStr = fStr(hoy);
 
@@ -236,6 +238,14 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>● {reservados.filter((t) => t.estado === "confirmado" || t.estado === "en_espera").length} confirmados</span>
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.filter((t) => t.estado === "reservado_pendiente").length} pendientes</span>
         <button onClick={goHoy} className="rounded-full bg-[#378ADD] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
+        <button
+          onClick={() => router.push("/medico/nova")}
+          className="ml-auto flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#378ADD] min-h-[44px] md:min-h-0 transition hover:bg-[#378ADD] hover:text-white active:scale-95"
+          style={{ border: "1px solid #378ADD" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Nova
+        </button>
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
         <div className="flex items-center gap-1.5">

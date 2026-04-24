@@ -69,18 +69,11 @@ export default async function AgendaPage({
       {/* Panel modelos — mobile segundo, desktop primero (order-1) */}
       <div className="order-2 md:order-1 overflow-y-auto">
         <div className="p-4 md:p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-[20px] md:text-[22px] font-semibold text-gray-900">Mi agenda</h1>
               <p className="mt-1 text-[13px] text-gray-500">Modelos de disponibilidad para turnos programados</p>
             </div>
-            <Link
-              href="/medico/nova"
-              className="shrink-0 flex items-center gap-1.5 rounded-lg bg-[#378ADD] px-3.5 py-2 text-[13px] font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              Nova
-            </Link>
           </div>
 
           {mostrarFormulario ? (
