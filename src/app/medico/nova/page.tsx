@@ -348,19 +348,27 @@ export default function NovaChat() {
   // Desbloquear audio en el contexto de gesto del usuario (click/touch)
   const desbloquearAudio = useCallback(() => {
     if (audioDesbloqueado.current) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    // Reproducir silencio para desbloquear autoplay en iOS/Safari
-    audio.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYZN3kSiAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYZN3kSiAAAAAAAAAAAAAAAAAAAA";
-    audio.volume = 0;
-    audio.play().then(() => {
-      audio.pause();
-      audio.volume = 1;
-      audio.currentTime = 0;
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
       audioDesbloqueado.current = true;
-    }).catch(() => {
-      // No se pudo desbloquear — se intentará de nuevo en el próximo gesto
-    });
+
+      const audio = audioRef.current;
+      if (audio) {
+        audio.muted = true;
+        audio.play().then(() => {
+          audio.pause();
+          audio.muted = false;
+          audio.currentTime = 0;
+        }).catch(() => {});
+      }
+    } catch {
+      // Fallback: intentar de nuevo en el próximo gesto
+    }
   }, []);
 
   const reproducirTTS = useCallback(async (texto: string) => {
@@ -496,14 +504,15 @@ export default function NovaChat() {
   // ── Mic toggle ──
 
   const toggleMic = useCallback(() => {
+    desbloquearAudio();
     if (dictando) {
-      beepUI(440, 120); // tono bajo = stop
+      beepUI(440, 120);
       detenerDictado();
     } else {
-      beepUI(880, 80);  // tono alto = start
+      beepUI(880, 80);
       iniciarDictado(setInput);
     }
-  }, [dictando, iniciarDictado, detenerDictado]);
+  }, [dictando, iniciarDictado, detenerDictado, desbloquearAudio]);
 
   // ── Enviar con Enter ──
 

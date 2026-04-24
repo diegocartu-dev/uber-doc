@@ -27,7 +27,7 @@ export default async function AgendaPage({
 
   const { data: modelos } = await supabase
     .from("agenda_modelos")
-    .select("id, nombre, fecha_inicio, fecha_fin, activo, prioridad, canal_origen, created_at")
+    .select("id, nombre, fecha_inicio, fecha_fin, activo, prioridad, canal_origen, duracion_turno, precio, created_at")
     .eq("medico_id", medico.id)
     .order("created_at", { ascending: false });
 
@@ -72,7 +72,7 @@ export default async function AgendaPage({
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-[20px] md:text-[22px] font-semibold text-gray-900">Mi agenda</h1>
-              <p className="mt-1 text-[13px] text-gray-500">Modelos de disponibilidad para turnos programados</p>
+              <p className="mt-1 text-[13px] text-gray-500">Mis agendas</p>
             </div>
           </div>
 
@@ -90,7 +90,7 @@ export default async function AgendaPage({
                 href="/medico/agenda?nuevo=1"
                 className="mb-4 flex items-center justify-center rounded-xl bg-[#378ADD] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100"
               >
-                + Nuevo modelo de agenda
+                + Nueva agenda
               </Link>
 
               <div className="space-y-4">

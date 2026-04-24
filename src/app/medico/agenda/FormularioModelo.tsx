@@ -6,7 +6,7 @@
 // - Preview de turnos generados antes de guardar
 // - Selector de bloqueos dentro del modelo
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { guardarModelo } from "./actions";
 
 type Modelo = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; activo: boolean; prioridad: number };
@@ -50,8 +50,11 @@ export default function FormularioModelo({
   const [soloConsultorioPrivado, setSoloConsultorioPrivado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const formRef = useRef<HTMLDivElement>(null);
 
-
+  useEffect(() => {
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   function toggleDia(num: number) {
     setDias((prev) => {
@@ -205,8 +208,8 @@ export default function FormularioModelo({
   }
 
   return (
-    <div className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
-      <h2 className="text-sm font-medium text-gray-900">Nuevo modelo de agenda</h2>
+    <div ref={formRef} className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
+      <h2 className="text-sm font-medium text-gray-900">Nueva agenda</h2>
 
       {error && (
         <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
