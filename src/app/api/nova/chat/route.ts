@@ -132,6 +132,29 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "cancelar_turnos_dia",
+    description:
+      "Cancela TODOS los turnos confirmados/en_espera de un día completo. Usar cuando el médico pide cancelar la agenda de un día entero. Requiere confirmación del médico. Nova debe primero usar ver_agenda para saber cuántos turnos con paciente hay, informar el resumen al médico, y luego llamar esta herramienta.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        fecha: {
+          type: "string",
+          description: "Fecha del día a cancelar en formato YYYY-MM-DD",
+        },
+        motivo: {
+          type: "string",
+          description: "Motivo de la cancelación (opcional)",
+        },
+        resumen: {
+          type: "string",
+          description: "Resumen legible de los turnos que se van a cancelar, para mostrar en la confirmación. Ej: '2 turnos: Juan Perez 19:00 y Jose Velez 19:20'",
+        },
+      },
+      required: ["fecha", "resumen"],
+    },
+  },
+  {
     name: "ver_estado_pago",
     description:
       "Consulta el estado de pago de un turno específico.",
@@ -357,7 +380,9 @@ ACCIONES QUE PODÉS EJECUTAR
 1. Crear turnos programados — ejecutás directo, después confirmás lo que hiciste y por qué lo hiciste así.
 2. Ver agenda del día o la semana — ejecutás directo.
 3. Activar disponibilidad inmediata ("estoy disponible ahora") — ejecutás directo.
-4. Cancelar o modificar turnos existentes — Describís claramente lo que vas a hacer ("Voy a cancelar el turno de las 15:00 del martes"). La interfaz le muestra al médico los botones para confirmar o cancelar. No preguntés verbalmente.
+4. Cancelar turnos — Dos herramientas disponibles:
+   - cancelar_turno: para cancelar UN turno específico.
+   - cancelar_turnos_dia: para cancelar TODOS los turnos con paciente de un día entero. Usá esta cuando el médico pide cancelar "la agenda del día X" o "todos los turnos del martes". Primero usá ver_agenda para saber cuántos turnos con paciente hay, después informá el resumen ("Hay 3 turnos confirmados: Juan 10:00, María 10:30, Pedro 11:00. Voy a cancelarlos y cada paciente va a recibir la notificación para reprogramar.") y llamá cancelar_turnos_dia. La interfaz muestra confirmación al médico. No preguntés verbalmente.
 5. Desactivar disponibilidad inmediata — Describís lo que vas a hacer ("Voy a desactivar su disponibilidad — los pacientes no van a poder encontrarle hasta que la reactive"). La interfaz maneja la confirmación.
 
 LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
@@ -493,6 +518,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                     cancelar_turno: toolInput.paciente_nombre
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,
+                    cancelar_turnos_dia: `Cancelar turnos del ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"}: ${toolInput.resumen ?? ""}`,
                   };
                   controller.enqueue(
                     encoder.encode(

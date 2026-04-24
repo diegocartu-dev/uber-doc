@@ -256,6 +256,50 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (accion === "cancelar_turnos_dia") {
+      const { fecha, motivo } = datos as { fecha: string; motivo?: string };
+
+      const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!fechaRegex.test(fecha)) {
+        return NextResponse.json({ exito: false, mensaje: "Formato de fecha inválido" }, { status: 400 });
+      }
+
+      const { data: turnosDia } = await supabase
+        .from("turnos")
+        .select("id")
+        .eq("medico_id", medicoDbId)
+        .eq("fecha", fecha)
+        .in("estado", ["confirmado", "en_espera"]);
+
+      if (!turnosDia || turnosDia.length === 0) {
+        return NextResponse.json({
+          exito: true,
+          mensaje: "No hay turnos con pacientes para cancelar ese día.",
+        });
+      }
+
+      const { cancelarTurnoPorMedico } = await import("@/lib/cancelaciones");
+
+      let cancelados = 0;
+      const errores: string[] = [];
+
+      for (const turno of turnosDia) {
+        const resultado = await cancelarTurnoPorMedico(turno.id, medicoDbId, motivo);
+        if (resultado.ok) {
+          cancelados++;
+        } else {
+          errores.push(resultado.error ?? "Error desconocido");
+        }
+      }
+
+      return NextResponse.json({
+        exito: cancelados > 0,
+        mensaje: errores.length > 0
+          ? `${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}. ${errores.length} error${errores.length !== 1 ? "es" : ""}.`
+          : `${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}. Cada paciente fue notificado y tiene crédito para reprogramar.`,
+      });
+    }
+
     return NextResponse.json(
       { exito: false, mensaje: "Acción no reconocida" },
       { status: 400 }
