@@ -103,13 +103,29 @@ const novaTools: Anthropic.Tool[] = [
   {
     name: "cancelar_turno",
     description:
-      "Cancela un turno específico por su ID. Requiere confirmación del médico antes de ejecutar.",
+      "Cancela un turno específico por su ID. Requiere confirmación del médico antes de ejecutar. IMPORTANTE: siempre incluí paciente_nombre, fecha y hora para que la confirmación sea clara.",
     input_schema: {
       type: "object" as const,
       properties: {
         turno_id: {
           type: "string",
           description: "UUID del turno a cancelar",
+        },
+        motivo: {
+          type: "string",
+          description: "Motivo de la cancelación (opcional, si el médico lo mencionó)",
+        },
+        paciente_nombre: {
+          type: "string",
+          description: "Nombre del paciente del turno (para mostrar en la confirmación)",
+        },
+        fecha: {
+          type: "string",
+          description: "Fecha del turno YYYY-MM-DD (para mostrar en la confirmación)",
+        },
+        hora: {
+          type: "string",
+          description: "Hora del turno HH:MM (para mostrar en la confirmación)",
         },
       },
       required: ["turno_id"],
@@ -460,7 +476,9 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                   const accionDescripcion: Record<string, string> = {
                     crear_slots: `Crear turnos el ${fechaLegible(toolInput.fecha as string)} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos (${toolInput.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"})`,
                     bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
-                    cancelar_turno: `Cancelar turno ${toolInput.turno_id}`,
+                    cancelar_turno: toolInput.paciente_nombre
+                      ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
+                      : `Cancelar turno ${toolInput.turno_id}`,
                   };
                   controller.enqueue(
                     encoder.encode(
