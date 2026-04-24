@@ -178,10 +178,10 @@ async function ejecutarTool(
     if (pacienteIds.length > 0) {
       const { data: pacs } = await supabase
         .from("pacientes")
-        .select("user_id, nombre_completo")
-        .in("user_id", pacienteIds);
+        .select("id, nombre_completo")
+        .in("id", pacienteIds);
       pacMap = new Map(
-        (pacs ?? []).map((p) => [p.user_id, p.nombre_completo])
+        (pacs ?? []).map((p) => [p.id, p.nombre_completo])
       );
     }
 
@@ -245,29 +245,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- Contexto dinámico — queries en paralelo ---
+    // --- Contexto dinámico ---
 
     const { fecha: hoy, contexto: ahoraContexto } = getAhoraAR();
+
+    // Lookup medicos.id (PK) desde auth user_id — turnos.medico_id referencia medicos.id, NO auth.users.id
+    const { data: medicoRow } = await supabase
+      .from("medicos")
+      .select("id, nombre_completo, titulo")
+      .eq("user_id", medico_id)
+      .single();
+
+    if (!medicoRow) {
+      return new Response(
+        JSON.stringify({ error: "Perfil médico no encontrado" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const medicoDbId = medicoRow.id;
 
     // Fecha límite: 45 días (horizonte máximo de turnos programados)
     const limite45d = new Date(new Date(hoy).getTime() + 45 * 86400000);
     const padD = (n: number) => n.toString().padStart(2, "0");
     const fechaLimite = `${limite45d.getFullYear()}-${padD(limite45d.getMonth() + 1)}-${padD(limite45d.getDate())}`;
 
-    const [perfilResult, medicoResult, agendaResult, slotsResult, proximosResult] = await Promise.all([
+    const [perfilResult, agendaResult, slotsResult, proximosResult] = await Promise.all([
       supabase.from("nova_perfiles").select("*").eq("medico_id", medico_id).single(),
-      supabase.from("medicos").select("nombre_completo, titulo").eq("user_id", medico_id).single(),
       supabase.from("turnos")
         .select("id, hora_inicio, hora_fin, estado, paciente_id")
-        .eq("medico_id", medico_id).eq("fecha", hoy)
+        .eq("medico_id", medicoDbId).eq("fecha", hoy)
         .order("hora_inicio", { ascending: true }),
       supabase.from("turnos")
         .select("id, hora_inicio, hora_fin")
-        .eq("medico_id", medico_id).eq("fecha", hoy).eq("estado", "disponible")
+        .eq("medico_id", medicoDbId).eq("fecha", hoy).eq("estado", "disponible")
         .order("hora_inicio", { ascending: true }),
       supabase.from("turnos")
         .select("fecha, estado")
-        .eq("medico_id", medico_id)
+        .eq("medico_id", medicoDbId)
         .gt("fecha", hoy).lte("fecha", fechaLimite)
         .in("estado", ["disponible", "confirmado", "en_espera", "reservado_pendiente"])
         .order("fecha", { ascending: true }),
@@ -283,13 +298,12 @@ export async function POST(req: NextRequest) {
       perfilNova = nuevoPerfil;
     }
 
-    const medico = medicoResult.data;
     const agendaHoy = agendaResult.data;
     const slotsDisponibles = slotsResult.data;
     const proximosTurnos = proximosResult.data;
 
-    const tituloDr = medico?.titulo ?? "Dr.";
-    const nombreMedico = medico?.nombre_completo ?? "Doctor/a";
+    const tituloDr = medicoRow.titulo ?? "Dr.";
+    const nombreMedico = medicoRow.nombre_completo ?? "Doctor/a";
     const apellidoMedico = nombreMedico.trim().split(/\s+/).slice(-1)[0];
 
     const agendaResumen =
@@ -454,7 +468,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
 
                 if (TOOLS_SOLO_LECTURA.includes(toolName)) {
                   // Ejecutar directamente y continuar loop para que Claude formule respuesta
-                  const resultado = await ejecutarTool(toolName, toolInput, medico_id, supabase);
+                  const resultado = await ejecutarTool(toolName, toolInput, medicoDbId, supabase);
                   messages = [
                     ...messages,
                     { role: "assistant", content: response.content },
