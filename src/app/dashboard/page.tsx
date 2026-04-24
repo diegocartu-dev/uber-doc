@@ -489,7 +489,7 @@ export default async function DashboardPage({
             <MetricasMedico
               medicoId={medico.id}
               inicial={{
-                turnos: turnosHoy.length,
+                turnos: turnosHoy.filter((t) => t.estado === "confirmado" || t.estado === "en_espera").length,
                 enEspera: turnosEsperaCompletos.length + consultasPendientes.length,
                 completadas: completadasHoy,
                 ingresos: ingresosHoy,

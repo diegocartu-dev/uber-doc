@@ -33,9 +33,9 @@ export default function MetricasMedico({
 
   const items = [
     { label: "Ingresos", value: `$${metricas.ingresos.toLocaleString("es-AR")}`, color: "#378ADD" },
-    { label: "Completadas", value: metricas.completadas, color: "#888780" },
+    { label: "Atendidos", value: metricas.completadas, color: "#888780" },
     { label: "En espera", value: metricas.enEspera, color: metricas.enEspera > 0 ? "#D85A30" : "#888780" },
-    { label: "Turnos", value: metricas.turnos, color: "#378ADD" },
+    { label: "Turnos pendientes", value: metricas.turnos, color: "#378ADD" },
   ];
 
   return (

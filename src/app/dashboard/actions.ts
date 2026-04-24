@@ -74,8 +74,8 @@ export async function fetchMetricasMedico(
   const { count: turnosCount } = await supabase
     .from("turnos").select("id", { count: "exact", head: true })
     .eq("medico_id", medicoId)
-    .gte("fecha", fechaDesde).lte("fecha", fechaHasta)
-    .in("estado", ["confirmado", "en_espera", "en_curso", "completado"]);
+    .gte("fecha", hoy).lte("fecha", fechaHasta)
+    .in("estado", ["confirmado", "en_espera"]);
 
   const { count: turnosEspera } = await supabase
     .from("turnos").select("id", { count: "exact", head: true })
