@@ -169,9 +169,25 @@ const novaTools: Anthropic.Tool[] = [
       required: ["turno_id"],
     },
   },
+  {
+    name: "mostrar_opciones",
+    description:
+      "Muestra botones clickeables al médico para que elija entre opciones. Usá esta herramienta cuando necesités una respuesta entre opciones concretas: disambiguación de fechas, sí/no, elegir entre acciones, etc. SIEMPRE usá esta herramienta en vez de preguntar verbalmente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        opciones: {
+          type: "array",
+          items: { type: "string" },
+          description: "Lista de opciones que el médico puede elegir. Ej: ['29 de abril', '29 de mayo'] o ['Sí, cancelar', 'No, mantener']",
+        },
+      },
+      required: ["opciones"],
+    },
+  },
 ];
 
-const TOOLS_SOLO_LECTURA = ["ver_agenda", "ver_estado_pago"];
+const TOOLS_SOLO_LECTURA = ["ver_agenda", "ver_estado_pago", "mostrar_opciones"];
 
 async function ejecutarTool(
   toolName: string,
@@ -241,6 +257,10 @@ async function ejecutarTool(
       pago_id: turno.pago_id,
       reintegro_estado: turno.reintegro_estado,
     };
+  }
+
+  if (toolName === "mostrar_opciones") {
+    return { mostradas: true, opciones: toolInput.opciones };
   }
 
   return { error: "Herramienta no reconocida" };
@@ -388,15 +408,25 @@ ACCIONES QUE PODÉS EJECUTAR
 LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
 El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide cambiarlo le explicás que eso se hace desde la configuración de su perfil, no a través tuyo.
 
-REGLA DE CONFIRMACIÓN
+REGLA DE CONFIRMACIÓN — UNA SOLA VEZ
 Creación y consultas: ejecutás directo, después avisás qué hiciste.
-Cancelaciones, modificaciones y desactivar disponibilidad: describís lo que vas a hacer en tono informativo y afirmativo, sin preguntar. La interfaz muestra botones de confirmación al médico. No escribas "¿confirma?" ni "¿está seguro?" — eso lo maneja la UI, no vos.
+Cancelaciones, modificaciones y desactivar disponibilidad: describís lo que vas a hacer e INMEDIATAMENTE llamás la herramienta. La interfaz muestra botones Confirmar/Cancelar automáticamente. NUNCA pidas confirmación verbal ("¿avanzamos?", "¿confirma?", "¿está seguro?", "¿cancelamos?") — eso lo manejan los botones de la UI. Si describiste la acción, llamá la herramienta en el mismo turno. El médico confirma con UN SOLO toque en el botón.
+Ejemplo correcto: "Hay un turno de José Vélez el 29/04 a las 19:20. Voy a cancelarlo y él va a recibir una notificación para reprogramar." → [llamás cancelar_turnos_dia] → UI muestra [Confirmar] [Cancelar]
+Ejemplo INCORRECTO: "¿Avanzamos con la cancelación?" (sin llamar la herramienta) → médico escribe "sí" → recién ahí llamás la herramienta. Esto NUNCA debe pasar.
 
 CREAR TURNOS — DATO OBLIGATORIO
 Cuando el médico pide crear turnos y no menciona la duración de cada consulta, siempre preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué lo necesitás. Si ya tenés ese dato en el perfil, lo usás sin preguntar.
 
+BOTONES SIEMPRE — HERRAMIENTA mostrar_opciones
+Cuando necesités que el médico elija entre opciones concretas (fecha ambigua, sí/no, qué acción tomar), SIEMPRE usá la herramienta mostrar_opciones. NUNCA hagas una pregunta de opciones solo con texto — el médico debe poder tocar un botón para responder.
+Ejemplos de cuándo usar mostrar_opciones:
+- "¿Se refiere al 29 de abril o al 29 de mayo?" → mostrar_opciones(["29 de abril", "29 de mayo"])
+- "¿Quiere crear turnos para Clínica Virtual o Consultorio Particular?" → mostrar_opciones(["Clínica Virtual", "Consultorio Particular"])
+- "¿Quiere que le cuente sobre su agenda o crear turnos nuevos?" → mostrar_opciones(["Ver mi agenda", "Crear turnos"])
+El médico siempre puede escribir en vez de tocar el botón, pero el botón debe estar ahí.
+
 AMBIGÜEDAD INMEDIATA VS PROGRAMADO
-Si el médico pide algo que puede interpretarse como disponibilidad inmediata o como turno programado, siempre preguntás antes de actuar. Una sola pregunta, clara y directa. Nunca asumís.
+Si el médico pide algo que puede interpretarse como disponibilidad inmediata o como turno programado, siempre preguntás antes de actuar usando mostrar_opciones. Una sola pregunta, clara y directa. Nunca asumís.
 Ejemplos de pedidos ambiguos: "quiero atender hoy a las 6", "poneme para ahora", "abrí un turno para dentro de una hora".
 
 CONFLICTOS DE AGENDA
@@ -433,7 +463,7 @@ Los turnos tienen un campo canal_origen que puede ser 'clinica_virtual' o 'consu
 
 REGLA CRÍTICA: VERIFICAR ANTES DE ASUMIR
 Antes de decir que un día no tiene turnos, SIEMPRE usá la herramienta ver_agenda para verificar. El resumen de contexto es orientativo — la herramienta es la fuente de verdad. Si el médico menciona una fecha futura (ej: "el 29", "el martes"), usá ver_agenda con esa fecha antes de responder.
-Si el médico dice solo "el 29" y hay turnos tanto el 29 de este mes como el del próximo, preguntá a qué fecha se refiere antes de actuar.
+Si el médico dice solo "el 29" y hay turnos tanto el 29 de este mes como el del próximo, usá mostrar_opciones(["29 de abril", "29 de mayo"]) para que elija.
 
 CONTEXTO ACTUAL
 Fecha y hora: ${ahoraContexto}
@@ -492,23 +522,32 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                 const toolInput = toolBlock.input as Record<string, unknown>;
 
                 if (TOOLS_SOLO_LECTURA.includes(toolName)) {
-                  // Ejecutar directamente y continuar loop para que Claude formule respuesta
                   const resultado = await ejecutarTool(toolName, toolInput, medicoDbId, supabase);
-                  messages = [
-                    ...messages,
-                    { role: "assistant", content: response.content },
-                    {
-                      role: "user",
-                      content: [
-                        {
-                          type: "tool_result",
-                          tool_use_id: toolBlock.id,
-                          content: JSON.stringify(resultado),
-                        },
-                      ],
-                    },
-                  ];
-                  // continuar = true → siguiente iteración del while
+
+                  if (toolName === "mostrar_opciones") {
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ type: "opciones", opciones: toolInput.opciones })}\n\n`
+                      )
+                    );
+                    continuar = false;
+                  } else {
+                    messages = [
+                      ...messages,
+                      { role: "assistant", content: response.content },
+                      {
+                        role: "user",
+                        content: [
+                          {
+                            type: "tool_result",
+                            tool_use_id: toolBlock.id,
+                            content: JSON.stringify(resultado),
+                          },
+                        ],
+                      },
+                    ];
+                  }
+                  // continuar = true para tools de lectura normales, false para mostrar_opciones
                 } else {
                   // Herramienta destructiva: el texto ya se emitió vía streaming.
                   // Solo emitir evento de confirmación para la UI.
