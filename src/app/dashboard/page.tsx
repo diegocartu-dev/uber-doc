@@ -14,6 +14,7 @@ import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
 import { Building2 } from "lucide-react";
+import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import BotonPush from "@/components/BotonPush";
 
@@ -53,7 +54,7 @@ export default async function DashboardPage({
     disponible_hasta: string | null; duracion_consulta: number; precio_consulta: number;
     oculto_clinica: boolean; verificado: boolean; estado_registro: string;
     especialidad: string; tipo_matricula: string; numero_matricula: string;
-    foto_credencial_url: string | null;
+    foto_credencial_url: string | null; slug: string | null;
   } | null = null;
 
   let consultasPendientes: {
@@ -160,7 +161,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -466,6 +467,13 @@ export default async function DashboardPage({
           </nav>
 
           <div className="mx-auto max-w-7xl px-6 py-6">
+            {/* Consultorio Particular — solo si tiene slug */}
+            {medico.slug && (
+              <div className="mb-4">
+                <CardConsultorio slug={medico.slug} />
+              </div>
+            )}
+
             {/* Nova widget */}
             <NovaWidget
               nombreMedico={fullName}
