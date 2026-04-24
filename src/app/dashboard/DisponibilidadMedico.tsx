@@ -31,7 +31,7 @@ export default function DisponibilidadMedico({
   pacientesEnEspera,
   ocultoClinica,
 }: Props) {
-  const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado } = useDashboardMedico();
+  const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
   const [oculto, setOculto] = useState(ocultoClinica);
   const [guardandoOculto, setGuardandoOculto] = useState(false);
@@ -61,10 +61,15 @@ export default function DisponibilidadMedico({
     }
   }, [bloqueado, disponibleDesde, disponibleHasta, setDisponibleCtx]);
 
+  const guardandoToggleRef = useRef(false);
+
   async function handleToggle() {
+    if (guardandoToggleRef.current) return;
     const nuevoEstado = !activo;
     setDisponibleCtx(nuevoEstado);
     setGuardando(true);
+    guardandoToggleRef.current = true;
+    bloquearPollDisponible.current = true;
     setMensaje(null);
 
     const result = await actualizarDisponibilidad({
@@ -73,6 +78,8 @@ export default function DisponibilidadMedico({
       disponible_hasta: hasta,
     });
 
+    guardandoToggleRef.current = false;
+    bloquearPollDisponible.current = false;
     setGuardando(false);
     if (result?.error) {
       setDisponibleCtx(!nuevoEstado);

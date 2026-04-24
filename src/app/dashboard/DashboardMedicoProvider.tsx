@@ -50,8 +50,10 @@ type DashboardCtx = {
   disponible: boolean;
   turnosActivosHoy: boolean;
   setDisponible: (v: boolean) => void;
+  bloquearPollDisponible: React.MutableRefObject<boolean>;
 };
 
+const defaultBloquear = { current: false };
 const Ctx = createContext<DashboardCtx>({
   pendientes: [],
   enCurso: [],
@@ -59,6 +61,7 @@ const Ctx = createContext<DashboardCtx>({
   disponible: false,
   turnosActivosHoy: false,
   setDisponible: () => {},
+  bloquearPollDisponible: defaultBloquear,
 });
 
 export function useDashboardMedico() {
@@ -87,6 +90,7 @@ export default function DashboardMedicoProvider({
   const [turnosEspera, setTurnosEspera] = useState(initialTurnosEspera);
   const [disponible, setDisponible] = useState(initialDisponible);
   const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
+  const bloquearPollDisponible = useRef(false);
 
   const prevPendientesCount = useRef(initialPendientes.length);
   const prevTurnosCount = useRef(initialTurnosEspera.length);
@@ -105,7 +109,9 @@ export default function DashboardMedicoProvider({
 
       setPendientes(data.consultas_pendientes);
       setEnCurso(data.consultas_en_curso);
-      setDisponible(data.disponible);
+      if (!bloquearPollDisponible.current) {
+        setDisponible(data.disponible);
+      }
       setTurnosActivosHoy((data.turnos_activos_hoy ?? 0) > 0);
 
       // Preserve entradoEn for known turnos
@@ -180,7 +186,7 @@ export default function DashboardMedicoProvider({
   }, [pendientes.length, turnosEspera.length]);
 
   return (
-    <Ctx.Provider value={{ pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy, setDisponible: handleSetDisponible }}>
+    <Ctx.Provider value={{ pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy, setDisponible: handleSetDisponible, bloquearPollDisponible }}>
       {children}
     </Ctx.Provider>
   );

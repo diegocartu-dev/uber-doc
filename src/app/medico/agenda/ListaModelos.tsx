@@ -19,6 +19,8 @@ type Modelo = {
   activo: boolean;
   prioridad: number;
   canal_origen: string | null;
+  duracion_turno: number | null;
+  precio: number | null;
   franjas: Franja[];
 };
 
@@ -34,16 +36,18 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
   const [modelos, setModelos] = useState(modelosIniciales);
   const [isPending, startTransition] = useTransition();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [eliminarId, setEliminarId] = useState<string | null>(null);
 
   function handleToggle(id: string, activo: boolean) {
     setModelos((prev) => prev.map((m) => m.id === id ? { ...m, activo } : m));
     startTransition(async () => { await toggleModelo(id, activo); });
   }
 
-  function handleEliminar(id: string) {
-    if (!confirm("Eliminar este modelo de agenda?")) return;
-    setModelos((prev) => prev.filter((m) => m.id !== id));
-    startTransition(async () => { await eliminarModelo(id); });
+  function confirmarEliminar() {
+    if (!eliminarId) return;
+    setModelos((prev) => prev.filter((m) => m.id !== eliminarId));
+    startTransition(async () => { await eliminarModelo(eliminarId); });
+    setEliminarId(null);
   }
 
   function toggleExpand(id: string) {
@@ -59,14 +63,39 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
     return (
       <div className="rounded-xl bg-white p-8 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto" }}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-        <p className="mt-3 text-[14px] text-gray-500">No tenes modelos de agenda.</p>
-        <p className="mt-1 text-[13px] text-gray-400">Crea uno para recibir turnos programados.</p>
+        <p className="mt-3 text-[14px] text-gray-500">No tenés agendas creadas.</p>
+        <p className="mt-1 text-[13px] text-gray-400">Creá una para recibir turnos programados.</p>
       </div>
     );
   }
 
   return (
     <>
+      {/* Dialog eliminar */}
+      {eliminarId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEliminarId(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[16px] font-semibold text-gray-900">Eliminar agenda</p>
+            <p className="mt-2 text-[14px] text-gray-500">¿Estás seguro? Los turnos disponibles de esta agenda se van a eliminar.</p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={confirmarEliminar}
+                className="flex-1 min-h-[44px] rounded-lg text-[14px] font-medium text-[#E24B4A] transition hover:bg-red-50"
+                style={{ border: "1px solid #E24B4A" }}
+              >
+                Eliminar
+              </button>
+              <button
+                onClick={() => setEliminarId(null)}
+                className="flex-1 min-h-[44px] rounded-lg bg-gray-100 text-[14px] font-medium text-gray-600 transition hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modelos.map((m) => {
         const diasActivos = [...new Set(m.franjas.map((f) => f.dia_semana))].sort();
         const isExpanded = expandedIds.has(m.id);
@@ -91,8 +120,14 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
             >
               <div className="flex-1 min-w-0">
                 <p className="text-[16px] md:text-[18px] font-semibold text-gray-900 truncate">{m.nombre.charAt(0).toUpperCase() + m.nombre.slice(1)}</p>
-                <div className="mt-1">
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <OrigenBadge canalOrigen={m.canal_origen} />
+                  {m.duracion_turno && (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">{m.duracion_turno} min</span>
+                  )}
+                  {m.precio != null && m.precio > 0 && (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">${m.precio.toLocaleString("es-AR")}</span>
+                  )}
                 </div>
                 <p className="mt-0.5 text-[13px] text-gray-500">
                   {formatFecha(m.fecha_inicio)} — {formatFecha(m.fecha_fin)}
@@ -149,10 +184,10 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
               {/* Eliminar */}
               <div className="mt-4">
                 <button
-                  onClick={() => handleEliminar(m.id)}
+                  onClick={() => setEliminarId(m.id)}
                   className="min-h-[44px] rounded-lg px-4 text-[13px] text-[#E24B4A] font-medium hover:bg-red-50 transition-colors"
                 >
-                  Eliminar modelo
+                  Eliminar agenda
                 </button>
               </div>
             </div>
