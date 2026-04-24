@@ -33,7 +33,7 @@ const novaTools: Anthropic.Tool[] = [
   {
     name: "ver_agenda",
     description:
-      "Consulta los turnos del médico para una fecha específica. Devuelve la lista de turnos con horario, estado y datos del paciente si aplica.",
+      "Consulta los turnos del médico para una fecha específica (cualquier fecha, no solo hoy). Devuelve la lista de turnos con horario, estado y datos del paciente si aplica. SIEMPRE usar esta herramienta antes de afirmar que un día no tiene turnos o antes de cancelar/modificar turnos.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -233,7 +233,12 @@ export async function POST(req: NextRequest) {
 
     const { fecha: hoy, contexto: ahoraContexto } = getAhoraAR();
 
-    const [perfilResult, medicoResult, agendaResult, slotsResult] = await Promise.all([
+    // Fecha límite: 45 días (horizonte máximo de turnos programados)
+    const limite45d = new Date(new Date(hoy).getTime() + 45 * 86400000);
+    const padD = (n: number) => n.toString().padStart(2, "0");
+    const fechaLimite = `${limite45d.getFullYear()}-${padD(limite45d.getMonth() + 1)}-${padD(limite45d.getDate())}`;
+
+    const [perfilResult, medicoResult, agendaResult, slotsResult, proximosResult] = await Promise.all([
       supabase.from("nova_perfiles").select("*").eq("medico_id", medico_id).single(),
       supabase.from("medicos").select("nombre_completo, titulo").eq("user_id", medico_id).single(),
       supabase.from("turnos")
@@ -244,6 +249,12 @@ export async function POST(req: NextRequest) {
         .select("id, hora_inicio, hora_fin")
         .eq("medico_id", medico_id).eq("fecha", hoy).eq("estado", "disponible")
         .order("hora_inicio", { ascending: true }),
+      supabase.from("turnos")
+        .select("fecha, estado")
+        .eq("medico_id", medico_id)
+        .gt("fecha", hoy).lte("fecha", fechaLimite)
+        .in("estado", ["disponible", "confirmado", "en_espera", "reservado_pendiente"])
+        .order("fecha", { ascending: true }),
     ]);
 
     let perfilNova = perfilResult.data;
@@ -259,6 +270,7 @@ export async function POST(req: NextRequest) {
     const medico = medicoResult.data;
     const agendaHoy = agendaResult.data;
     const slotsDisponibles = slotsResult.data;
+    const proximosTurnos = proximosResult.data;
 
     const tituloDr = medico?.titulo ?? "Dr.";
     const nombreMedico = medico?.nombre_completo ?? "Doctor/a";
@@ -273,6 +285,26 @@ export async function POST(req: NextRequest) {
       slotsDisponibles && slotsDisponibles.length > 0
         ? slotsDisponibles.map((s) => `${s.hora_inicio}-${s.hora_fin}`).join(", ")
         : "Sin slots disponibles hoy";
+
+    // Resumen compacto próximos 45 días: agrupar por fecha con conteo por estado
+    let proximosResumen = "Sin turnos futuros";
+    if (proximosTurnos && proximosTurnos.length > 0) {
+      const porFecha = new Map<string, { disponibles: number; confirmados: number }>();
+      for (const t of proximosTurnos) {
+        const entry = porFecha.get(t.fecha) ?? { disponibles: 0, confirmados: 0 };
+        if (t.estado === "disponible") entry.disponibles++;
+        else entry.confirmados++;
+        porFecha.set(t.fecha, entry);
+      }
+      proximosResumen = Array.from(porFecha.entries())
+        .map(([f, c]) => {
+          const parts: string[] = [];
+          if (c.confirmados > 0) parts.push(`${c.confirmados} confirmado${c.confirmados > 1 ? "s" : ""}`);
+          if (c.disponibles > 0) parts.push(`${c.disponibles} disponible${c.disponibles > 1 ? "s" : ""}`);
+          return `${f}: ${parts.join(", ")}`;
+        })
+        .join(" | ");
+    }
 
     const systemPrompt = `Sos Nova, la asistente personal del ${tituloDr} ${nombreMedico} dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
 
@@ -344,11 +376,16 @@ Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 CANALES DE ATENCIÓN
 Los turnos tienen un campo canal_origen que puede ser 'clinica_virtual' o 'consultorio_privado'. Cuando respondás sobre agenda, diferenciá los canales cuando corresponda: los turnos de 'consultorio_privado' son del consultorio particular del médico, los de 'clinica_virtual' son de la Clínica Virtual de Docto. Ejemplos: "Tenés 3 turnos en tu Consultorio Particular esta semana y 5 en la Clínica Virtual." o "Estás oculto de la Clínica Virtual, solo tus pacientes particulares pueden verte."
 
+REGLA CRÍTICA: VERIFICAR ANTES DE ASUMIR
+Antes de decir que un día no tiene turnos, SIEMPRE usá la herramienta ver_agenda para verificar. El resumen de contexto es orientativo — la herramienta es la fuente de verdad. Si el médico menciona una fecha futura (ej: "el 29", "el martes"), usá ver_agenda con esa fecha antes de responder.
+Si el médico dice solo "el 29" y hay turnos tanto el 29 de este mes como el del próximo, preguntá a qué fecha se refiere antes de actuar.
+
 CONTEXTO ACTUAL
 Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
-Turnos disponibles: ${slotsResumen}`;
+Turnos disponibles hoy: ${slotsResumen}
+Próximos 45 días (resumen): ${proximosResumen}`;
 
     // --- Claude API con streaming ---
 
