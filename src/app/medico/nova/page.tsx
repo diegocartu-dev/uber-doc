@@ -25,6 +25,8 @@ type MensajeChat = {
     datos: Record<string, unknown>;
   };
   confirmado?: "si" | "no" | null;
+  opciones?: string[];
+  opcionElegida?: string | null;
 };
 
 // ── Beep de UI con AudioContext (sin assets externos) ──
@@ -278,6 +280,26 @@ export default function NovaChat() {
                 });
               }
 
+              if (event.type === "opciones") {
+                if (primerChunk) {
+                  setPensando(false);
+                  primerChunk = false;
+                }
+                const opcs = event.opciones as string[];
+                setMensajes((prev) => {
+                  const existing = prev.find((m) => m.id === novaId);
+                  if (existing) {
+                    return prev.map((m) =>
+                      m.id === novaId ? { ...m, opciones: opcs, opcionElegida: null } : m
+                    );
+                  }
+                  return [
+                    ...prev,
+                    { id: novaId, role: "nova" as const, content: novaTexto, opciones: opcs, opcionElegida: null },
+                  ];
+                });
+              }
+
               if (event.type === "done") {
                 setPensando(false);
                 // TTS solo en respuestas cortas/conversacionales (≤200 chars)
@@ -459,6 +481,18 @@ export default function NovaChat() {
     [mensajes, medicoId]
   );
 
+  const elegirOpcion = useCallback(
+    (msgId: string, opcion: string) => {
+      setMensajes((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, opcionElegida: opcion } : m
+        )
+      );
+      enviarMensaje(opcion);
+    },
+    [enviarMensaje]
+  );
+
   // ── Mic toggle ──
 
   const toggleMic = useCallback(() => {
@@ -589,6 +623,25 @@ export default function NovaChat() {
                 )}
                 {msg.confirmado === "no" && (
                   <p className="mt-2 text-xs text-[#6b7280]">Cancelado</p>
+                )}
+
+                {/* Botones de opciones (disambiguación) */}
+                {msg.opciones && !msg.opcionElegida && (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {msg.opciones.map((op) => (
+                      <button
+                        key={op}
+                        onClick={() => elegirOpcion(msg.id, op)}
+                        className="rounded-lg px-4 py-2 text-[13px] font-medium text-[#378ADD] active:scale-95 transition-transform"
+                        style={{ border: "1px solid #378ADD" }}
+                      >
+                        {op}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {msg.opcionElegida && (
+                  <p className="mt-2 text-xs text-[#1D9E75]">{msg.opcionElegida}</p>
                 )}
               </div>
             </div>
