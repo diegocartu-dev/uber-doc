@@ -14,7 +14,7 @@ export default async function TurnosPage({
   const { medicoId } = await params;
   const sp = await searchParams;
   const canalOrigen = sp.canal === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
-  const fromUrl = sp.from;
+  const fromUrl = sp.from && sp.from.startsWith("/") && !sp.from.startsWith("//") && !sp.from.includes("://") ? sp.from : null;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

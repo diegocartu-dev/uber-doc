@@ -29,14 +29,14 @@ export default async function OnboardingPage({
 
   if (perfilCompleto && !edit) {
     const dest =
-      redirectTo && redirectTo.startsWith("/") && !redirectTo.includes("://")
+      redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("://")
         ? redirectTo
         : "/";
     redirect(dest);
   }
 
   const safeRedirect =
-    redirectTo && redirectTo.startsWith("/") && !redirectTo.includes("://")
+    redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("://")
       ? redirectTo
       : "/";
 
