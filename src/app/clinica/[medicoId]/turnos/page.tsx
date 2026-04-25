@@ -19,17 +19,17 @@ export default async function TurnosPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: perfilPac } = await supabase
+  const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
+    .select("id, nombre_completo, dni, fecha_nacimiento, sexo_dni")
     .eq("user_id", user.id)
     .maybeSingle();
 
   const perfilCompleto =
-    perfilPac?.nombre_completo?.trim() &&
-    perfilPac?.dni?.trim() &&
-    perfilPac?.fecha_nacimiento &&
-    perfilPac?.sexo_dni;
+    paciente?.nombre_completo?.trim() &&
+    paciente?.dni?.trim() &&
+    paciente?.fecha_nacimiento &&
+    paciente?.sexo_dni;
 
   if (!perfilCompleto) {
     redirect(`/onboarding?redirectTo=/clinica/${medicoId}/turnos${sp.canal ? `?canal=${sp.canal}` : ""}`);
@@ -43,12 +43,7 @@ export default async function TurnosPage({
 
   if (!medico) redirect("/clinica");
 
-  // Detectar créditos pendientes por DB
-  const { data: paciente } = await supabase
-    .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
-  const creditos = paciente
-    ? await obtenerCreditosPendientes(paciente.id, medicoId)
-    : [];
+  const creditos = await obtenerCreditosPendientes(paciente!.id, medicoId);
   const credito = creditos.length > 0 ? creditos[0] : null;
 
   // Traer turnos disponibles futuros
