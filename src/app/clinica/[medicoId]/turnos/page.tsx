@@ -14,10 +14,26 @@ export default async function TurnosPage({
   const { medicoId } = await params;
   const sp = await searchParams;
   const canalOrigen = sp.canal === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
-  const fromUrl = sp.from;
+  const fromUrl = sp.from && sp.from.startsWith("/") && !sp.from.startsWith("//") && !sp.from.includes("://") ? sp.from : null;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: perfilPac } = await supabase
+    .from("pacientes")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const perfilCompleto =
+    perfilPac?.nombre_completo?.trim() &&
+    perfilPac?.dni?.trim() &&
+    perfilPac?.fecha_nacimiento &&
+    perfilPac?.sexo_dni;
+
+  if (!perfilCompleto) {
+    redirect(`/onboarding?redirectTo=/clinica/${medicoId}/turnos${sp.canal ? `?canal=${sp.canal}` : ""}`);
+  }
 
   const { data: medico } = await supabase
     .from("medicos")

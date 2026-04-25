@@ -44,7 +44,7 @@ export async function completarPerfil(formData: FormData) {
   const redirectTo = (formData.get("redirectTo") as string) ?? "/";
 
   const safeRedirect =
-    redirectTo.startsWith("/") && !redirectTo.includes("://") ? redirectTo : "/";
+    redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("://") ? redirectTo : "/";
 
   const tieneCobertura = (formData.get("tiene_cobertura") as string) === "true";
   const obra_social = (formData.get("obra_social") as string)?.trim() || null;

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginPaciente } from "../../helpers/auth";
-import { PACIENTE_INCOMPLETO, PACIENTE_NORMAL, PACIENTE_DNI_INVALIDO } from "../../fixtures/cuentas-prueba";
+import { PACIENTE_INCOMPLETO, PACIENTE_NORMAL, PACIENTE_DNI_INVALIDO, MEDICO_TEST } from "../../fixtures/cuentas-prueba";
 
 test.describe("Onboarding paciente", () => {
   test("TEST 01 — campos vacíos muestran errores inline, no llega al servidor", async ({ page }) => {
@@ -78,5 +78,16 @@ test.describe("Onboarding paciente", () => {
 
     expect(page.url()).not.toContain("/onboarding");
     expect(page.url()).not.toContain("error=");
+  });
+
+  test("TEST 07 — paciente sin perfil completo es redirigido al intentar reservar turno", async ({ page }) => {
+    await loginPaciente(page, PACIENTE_INCOMPLETO.email, PACIENTE_INCOMPLETO.password);
+
+    await page.goto(`/clinica/${MEDICO_TEST.id}/turnos`);
+
+    await page.waitForURL(/\/onboarding/, { timeout: 15000 });
+
+    expect(page.url()).toContain("/onboarding");
+    expect(page.url()).not.toContain("error");
   });
 });

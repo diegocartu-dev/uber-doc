@@ -4,6 +4,7 @@ export const MEDICO_TEST = {
   nombre: "Dr. Docto Test",
   especialidad: "Clínica Médica",
   slug: "docto-test",
+  id: "f52f79f9-0526-4b6a-a4c0-837f26fe7e19",
 };
 
 export const PACIENTES_TEST = [
