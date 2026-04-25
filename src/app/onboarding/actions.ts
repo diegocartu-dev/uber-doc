@@ -43,18 +43,26 @@ export async function completarPerfil(formData: FormData) {
   const sexo_dni = (formData.get("sexo_dni") as string)?.trim() || null;
   const redirectTo = (formData.get("redirectTo") as string) ?? "/";
 
+  const safeRedirect =
+    redirectTo.startsWith("/") && !redirectTo.includes("://") ? redirectTo : "/";
+
   const tieneCobertura = (formData.get("tiene_cobertura") as string) === "true";
   const obra_social = (formData.get("obra_social") as string)?.trim() || null;
   const nro_afiliado = (formData.get("nro_afiliado") as string)?.trim() || null;
 
   if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni) {
-    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(redirectTo)}`);
+    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
-  const safeRedirect =
-    redirectTo.startsWith("/") && !redirectTo.includes("://") ? redirectTo : "/";
+  if (!/^\d{7,8}$/.test(dni)) {
+    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
+  }
 
-  const cuil = calcularCuil(dni, sexo_dni as "masculino" | "femenino");
+  if (sexo_dni !== "masculino" && sexo_dni !== "femenino") {
+    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
+  }
+
+  const cuil = calcularCuil(dni, sexo_dni);
 
   const { error } = await supabase
     .from("pacientes")
@@ -76,10 +84,11 @@ export async function completarPerfil(formData: FormData) {
     );
 
   if (error) {
+    console.error("Onboarding upsert failed:", error.message, { userId: user.id });
     const msg = error.message?.includes("pacientes_dni_unique")
       ? "dni_duplicado"
-      : `db:${error.message}`;
-    redirect(`/onboarding?error=${encodeURIComponent(msg)}&redirectTo=${encodeURIComponent(redirectTo)}`);
+      : "error_guardado";
+    redirect(`/onboarding?error=${msg}&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
   redirect(safeRedirect);

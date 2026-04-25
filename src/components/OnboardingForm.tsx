@@ -86,10 +86,8 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           {serverError === "campos_requeridos"
             ? "Nombre, DNI, fecha de nacimiento y sexo son obligatorios."
             : serverError === "dni_duplicado"
-              ? "Este DNI ya está registrado con otra cuenta. Si creés que es un error, escribinos a soporte@docto.com.ar."
-              : serverError.startsWith("db:")
-                ? `Error al guardar: ${serverError.slice(3)}`
-                : "Ocurrió un error. Intentá de nuevo."}
+              ? "No pudimos guardar tu información. Si el problema persiste, escribinos a soporte@docto.com.ar."
+              : "Ocurrió un error. Intentá de nuevo."}
         </div>
       )}
 
