@@ -82,7 +82,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
   return (
     <>
       {serverError && (
-        <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+        <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-[#E24B4A]">
           {serverError === "campos_requeridos"
             ? "Nombre, DNI, fecha de nacimiento y sexo son obligatorios."
             : serverError === "dni_duplicado"
@@ -170,11 +170,10 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
             {(["femenino", "masculino"] as const).map((opt) => (
               <label
                 key={opt}
-                className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border px-3 text-[15px] font-medium transition-all has-[:checked]:border-[#378ADD] has-[:checked]:bg-[#378ADD]/10 has-[:checked]:text-[#378ADD]"
+                className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border px-3 text-[15px] font-medium text-gray-500 transition-all has-[:checked]:border-[#378ADD] has-[:checked]:bg-[#378ADD]/10 has-[:checked]:text-[#378ADD]"
                 style={{
                   height: 44,
                   borderColor: errors.sexo_dni ? "#E24B4A" : "#e5e7eb",
-                  color: "#6b7280",
                 }}
               >
                 <input
