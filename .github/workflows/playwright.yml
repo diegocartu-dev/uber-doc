@@ -1,0 +1,69 @@
+name: Quality Gate — Playwright
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # 3AM Argentina (UTC-3) = 6AM UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+env:
+  PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL || 'https://uber-doc.vercel.app' }}
+
+jobs:
+  test:
+    name: Etapa 1 — Tests críticos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install chromium
+
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+  report:
+    name: Reporte diario por email
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: test-results/
+
+      - name: Send email report
+        run: node scripts/send-test-report.mjs
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPORT_EMAIL: diegocartu@gmail.com
