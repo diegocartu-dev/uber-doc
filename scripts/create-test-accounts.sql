@@ -45,7 +45,7 @@ BEGIN
     v_user_id, 'medico.test@docto.com.ar', 'Dr. Docto Test', 'Clínica Médica', 'docto-test',
     'MN', 'TEST-000', 'Dr.', 'ambas',
     10, 30, true, true,
-    'aprobado', false, true
+    'aprobado', true, true
   )
   ON CONFLICT (user_id) DO UPDATE SET
     nombre_completo = EXCLUDED.nombre_completo,
