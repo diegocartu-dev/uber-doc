@@ -65,6 +65,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     }
 
     setSubmitting(true);
+    setTimeout(() => setSubmitting(false), 15000);
   }
 
   const inputClass =
@@ -262,6 +263,12 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
           {submitting ? "Guardando..." : "Guardar y continuar"}
         </button>
+
+        {submitting && (
+          <p className="mt-3 text-center text-xs text-gray-400">
+            Guardando tus datos, esperá un momento...
+          </p>
+        )}
       </form>
     </>
   );
