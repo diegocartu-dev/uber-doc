@@ -62,6 +62,7 @@ export async function completarPerfil(formData: FormData) {
       {
         user_id: user.id,
         nombre_completo,
+        email: user.email ?? null,
         dni,
         fecha_nacimiento,
         sexo_dni,
@@ -74,7 +75,12 @@ export async function completarPerfil(formData: FormData) {
       { onConflict: "user_id" }
     );
 
-  if (error) redirect(`/onboarding?error=server&redirectTo=${encodeURIComponent(redirectTo)}`);
+  if (error) {
+    const msg = error.message?.includes("pacientes_dni_unique")
+      ? "dni_duplicado"
+      : `db:${error.message}`;
+    redirect(`/onboarding?error=${encodeURIComponent(msg)}&redirectTo=${encodeURIComponent(redirectTo)}`);
+  }
 
   redirect(safeRedirect);
 }
