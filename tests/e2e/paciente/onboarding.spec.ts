@@ -81,8 +81,6 @@ test.describe("Onboarding paciente", () => {
   });
 
   test("TEST 07 — paciente sin perfil completo es redirigido al intentar reservar turno", async ({ page }) => {
-    // paciente.test3 tiene perfil_medico_completado = false (fecha_nacimiento null).
-    // Al intentar acceder a la página de turnos, debe redirigir a /onboarding.
     await loginPaciente(page, PACIENTE_INCOMPLETO.email, PACIENTE_INCOMPLETO.password);
 
     await page.goto(`/clinica/${MEDICO_TEST.id}/turnos`);
