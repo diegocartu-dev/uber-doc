@@ -19,6 +19,22 @@ export default async function TurnosPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const { data: perfilPac } = await supabase
+    .from("pacientes")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const perfilCompleto =
+    perfilPac?.nombre_completo?.trim() &&
+    perfilPac?.dni?.trim() &&
+    perfilPac?.fecha_nacimiento &&
+    perfilPac?.sexo_dni;
+
+  if (!perfilCompleto) {
+    redirect(`/onboarding?redirectTo=/clinica/${medicoId}/turnos${sp.canal ? `?canal=${sp.canal}` : ""}`);
+  }
+
   const { data: medico } = await supabase
     .from("medicos")
     .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta")
