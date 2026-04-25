@@ -266,7 +266,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
 
         {submitting && (
           <p className="mt-3 text-center text-xs text-gray-400">
-            Redirigiendo, esperá un momento...
+            Guardando tus datos, esperá un momento...
           </p>
         )}
       </form>
