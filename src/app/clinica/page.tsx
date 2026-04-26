@@ -44,7 +44,8 @@ export default async function ClinicaPage() {
     .select("medico_id")
     .eq("estado", "disponible")
     .eq("canal_origen", "clinica_virtual")
-    .gte("fecha", hoy);
+    .gte("fecha", hoy)
+    .limit(500);
 
   // Contar consultas en espera por médico para estimar tiempos
   const { data: consultasEspera } = await supabase
