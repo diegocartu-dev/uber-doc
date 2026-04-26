@@ -103,6 +103,10 @@ function useDictado() {
   const recRef = useRef<any>(null);
   const [dictando, setDictando] = useState<string | null>(null);
 
+  const soportado =
+    typeof window !== "undefined" &&
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
   const iniciar = useCallback(
     (campo: string, setter: (fn: (prev: string) => string) => void) => {
       if (typeof window === "undefined") return;
@@ -142,7 +146,7 @@ function useDictado() {
     setDictando(null);
   }, []);
 
-  return { dictando, iniciar, detener };
+  return { dictando, iniciar, detener, soportado };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +166,7 @@ function CampoDictado({
   dictando,
   onIniciar,
   onDetener,
+  soportado = true,
 }: {
   label: string;
   campo: string;
@@ -175,8 +180,10 @@ function CampoDictado({
   dictando: string | null;
   onIniciar: () => void;
   onDetener: () => void;
+  soportado?: boolean;
 }) {
   const activo = dictando === campo;
+  const [mostrarAviso, setMostrarAviso] = useState(false);
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between">
@@ -184,22 +191,39 @@ function CampoDictado({
           {label}
           {required && " *"}
         </p>
-        <button
-          type="button"
-          onMouseDown={onIniciar}
-          onMouseUp={onDetener}
-          onTouchStart={onIniciar}
-          onTouchEnd={onDetener}
-          className={`rounded-md px-2 py-1 text-xs transition ${
-            activo
-              ? "bg-red-100 text-red-600"
-              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-          }`}
-          style={{ minHeight: "44px", minWidth: "44px" }}
-        >
-          {activo ? "Dictando..." : "Dictar"}
-        </button>
+        {soportado ? (
+          <button
+            type="button"
+            onMouseDown={onIniciar}
+            onMouseUp={onDetener}
+            onTouchStart={onIniciar}
+            onTouchEnd={onDetener}
+            className={`rounded-md px-2 py-1 text-xs transition ${
+              activo
+                ? "bg-red-100 text-red-600"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+            style={{ minHeight: "44px", minWidth: "44px" }}
+          >
+            {activo ? "Dictando..." : "Dictar"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-disabled="true"
+            onClick={() => setMostrarAviso(true)}
+            className="rounded-md px-2 py-1 text-xs bg-gray-100 text-gray-500"
+            style={{ minHeight: "44px", minWidth: "44px", opacity: 0.4, cursor: "not-allowed" }}
+          >
+            Dictar
+          </button>
+        )}
       </div>
+      {!soportado && mostrarAviso && (
+        <p style={{ fontSize: "12px", color: "#888780", marginTop: "4px" }}>
+          El dictado por voz no está disponible en este navegador. Usá Chrome en una computadora para esta función.
+        </p>
+      )}
       <textarea
         ref={textareaRef}
         value={value}
@@ -440,7 +464,7 @@ export default function WorkspaceConsulta({
   });
 
   // --- Dictado ---
-  const { dictando, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
+  const { dictando, iniciar: iniciarDictado, detener: detenerDictado, soportado: dictadoSoportado } = useDictado();
 
   // --- Datos derivados ---
   const edad = calcularEdad(consulta.paciente_nacimiento);
@@ -910,6 +934,7 @@ export default function WorkspaceConsulta({
             dictando={dictando}
             onIniciar={() => iniciarDictado("diagnostico", (fn) => setDiagnostico((prev) => { const val = fn(prev); if (val.trim()) { setDiagError(false); setError(null); } return val; }))}
             onDetener={detenerDictado}
+            soportado={dictadoSoportado}
           />
           <MedicamentoAutocomplete
             medicamentos={medicamentos}
@@ -929,6 +954,7 @@ export default function WorkspaceConsulta({
             dictando={dictando}
             onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
             onDetener={detenerDictado}
+            soportado={dictadoSoportado}
           />
           <CampoDictado
             label="CERTIFICADO"
@@ -939,6 +965,7 @@ export default function WorkspaceConsulta({
             dictando={dictando}
             onIniciar={() => iniciarDictado("certificado", setCertificado)}
             onDetener={detenerDictado}
+            soportado={dictadoSoportado}
           />
 
           {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
