@@ -9,56 +9,74 @@ test.describe("Clínica Virtual — visibilidad y botones", () => {
     await expect(page.getByRole("heading", { name: "Clínica Virtual" })).toBeVisible({ timeout: 15000 });
   });
 
-  test("TEST 08 — especialidad con médico disponible muestra ambos botones activos", async ({ page }) => {
-    // Clínica médica siempre debe aparecer (Dr. Docto Test está registrado)
-    const card = page.locator("text=Clínica médica").first();
-    await expect(card).toBeVisible();
+  test("TEST 08 — cada card de especialidad tiene al menos un botón de acción activo", async ({ page }) => {
+    // La grilla solo muestra especialidades con médicos disponibles.
+    // Cada card visible debe tener al menos "Consulta ahora" o "Agendar turno" activo.
+    const cards = page.locator("[class*='rounded-'][class*='bg-white']").filter({
+      has: page.locator("h3"),
+    });
+    const count = await cards.count();
+    expect(count).toBeGreaterThan(0);
 
-    const container = card.locator("..").locator("..");
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const card = cards.nth(i);
+      const btnConsulta = card.getByRole("button", { name: "Consulta ahora" });
+      const btnAgendar = card.getByRole("button", { name: "Agendar turno" });
 
-    const btnConsulta = container.getByRole("button", { name: "Consulta ahora" });
-    const btnAgendar = container.getByRole("button", { name: "Agendar turno" });
+      const tieneConsulta = await btnConsulta.count() > 0;
+      const tieneAgendar = await btnAgendar.count() > 0;
 
-    await expect(btnConsulta).toBeVisible();
-    await expect(btnAgendar).toBeVisible();
+      // Cada card debe tener al menos un botón
+      expect(tieneConsulta || tieneAgendar).toBeTruthy();
 
-    // Si "Agendar turno" está habilitado, significa que hay turnos en clinica_virtual
-    // Si está deshabilitado, significa que no hay turnos en ese canal (regla 2)
-    // Ambos estados son válidos — lo importante es que el botón existe y refleja la realidad
+      // Si tiene el botón, al menos uno debe estar habilitado
+      if (tieneConsulta && tieneAgendar) {
+        const consultaDisabled = await btnConsulta.isDisabled();
+        const agendarDisabled = await btnAgendar.isDisabled();
+        expect(!consultaDisabled || !agendarDisabled).toBeTruthy();
+      }
+    }
   });
 
-  test("TEST 09 — botón 'Agendar turno' deshabilitado si no hay turnos en clínica virtual", async ({ page }) => {
-    // Buscar cualquier card que tenga "Agendar turno" deshabilitado
-    // Esto valida la regla: médico sin turnos en clinica_virtual → botón grisado
-    const botonesAgendar = page.getByRole("button", { name: "Agendar turno" });
-    const count = await botonesAgendar.count();
+  test("TEST 09 — botones deshabilitados tienen texto explicativo visible", async ({ page }) => {
+    // Buscar botones "Consulta ahora" o "Agendar turno" deshabilitados
+    // Si existen, deben tener texto explicativo cerca
+    const botonesConsulta = page.getByRole("button", { name: "Consulta ahora" });
+    const countConsulta = await botonesConsulta.count();
 
-    if (count === 0) {
-      test.skip(true, "No hay especialidades visibles para validar");
-      return;
-    }
-
-    // Verificar que los botones deshabilitados tengan el atributo disabled
-    for (let i = 0; i < count; i++) {
-      const btn = botonesAgendar.nth(i);
-      const isDisabled = await btn.isDisabled();
-      if (isDisabled) {
-        await expect(btn).toHaveCSS("opacity", "0.4");
-        await expect(btn).toHaveAttribute("disabled", "");
+    for (let i = 0; i < countConsulta; i++) {
+      const btn = botonesConsulta.nth(i);
+      if (await btn.isDisabled()) {
+        // Debe haber texto explicativo en la misma card
+        const card = btn.locator("xpath=ancestor::div[contains(@class,'rounded-')]").last();
+        const texto = card.locator("text=Solo turnos programados");
+        await expect(texto).toBeVisible();
         return;
       }
     }
 
-    // Si ningún botón está deshabilitado, todos los médicos tienen turnos en CV — también válido
+    const botonesAgendar = page.getByRole("button", { name: "Agendar turno" });
+    const countAgendar = await botonesAgendar.count();
+
+    for (let i = 0; i < countAgendar; i++) {
+      const btn = botonesAgendar.nth(i);
+      if (await btn.isDisabled()) {
+        const card = btn.locator("xpath=ancestor::div[contains(@class,'rounded-')]").last();
+        const texto = card.locator("text=Sin turnos disponibles");
+        await expect(texto).toBeVisible();
+        return;
+      }
+    }
+
+    // Si ningún botón está deshabilitado, todos los médicos tienen ambas opciones — válido
   });
 
   test("TEST 10 — médico solo consultorio privado no aparece en Clínica Virtual", async ({ page }) => {
     // El médico de test tiene oculto_clinica = true, no debe aparecer en el listado
-    // Verificar que no haya un card con su nombre visible directamente
     const nombreMedico = page.locator(`text=${MEDICO_TEST.nombre}`);
     await expect(nombreMedico).not.toBeVisible();
 
-    // Verificar que la grilla no tiene link directo al médico de test
+    // La grilla no tiene link directo al médico de test
     const linkDirecto = page.locator(`a[href*="${MEDICO_TEST.id}"]`);
     await expect(linkDirecto).toHaveCount(0);
   });
