@@ -12,6 +12,33 @@ function resend(): Resend {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+async function conRetry<T>(
+  fn: () => Promise<T>,
+  contexto: string,
+  maxReintentos = 2
+): Promise<T> {
+  for (let intento = 1; intento <= maxReintentos; intento++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = (err as any)?.statusCode ?? (err as any)?.status;
+      if (status && status >= 400 && status < 500 && status !== 429) {
+        console.error(`[email] error no-retryable (${status}) para ${contexto}:`, err);
+        throw err;
+      }
+      if (intento < maxReintentos) {
+        const delayMs = 500 * intento;
+        console.log(`[email] reintento ${intento}/${maxReintentos} para ${contexto} (espera ${delayMs}ms)`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        console.error(`[email] FALLO DEFINITIVO para ${contexto} tras ${maxReintentos} intentos:`, err);
+        throw err;
+      }
+    }
+  }
+  throw new Error("unreachable");
+}
+
 function formatearFecha(fechaStr: string): string {
   const d = new Date(fechaStr + "T12:00:00");
   return d.toLocaleDateString("es-AR", {
@@ -212,17 +239,23 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
 
     const ics = generarICS(datos, "REQUEST");
 
-    await resend().emails.send({
-      from: FROM,
-      to: datos.pacienteEmail,
-      subject: `Turno confirmado con Dr/a. ${datos.medicoNombre} — ${formatearFecha(datos.fecha)}`,
-      html,
-      attachments: [{ filename: "turno-docto.ics", content: Buffer.from(ics).toString("base64") }],
-    });
+    const idempotencyKey = `${turnoId}-confirmado`;
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: datos.pacienteEmail,
+        subject: `Turno confirmado con Dr/a. ${datos.medicoNombre} — ${formatearFecha(datos.fecha)}`,
+        html,
+        headers: { "Idempotency-Key": idempotencyKey },
+        attachments: [{ filename: "turno-docto.ics", content: Buffer.from(ics).toString("base64") }],
+      }),
+      turnoId
+    );
 
     console.log("[email] turno confirmado enviado:", turnoId);
   } catch (err) {
-    console.error("[email] enviarEmailTurnoConfirmado falló:", err);
+    console.error("[email] enviarEmailTurnoConfirmado falló (agotados reintentos):", err);
   }
 }
 
@@ -259,17 +292,23 @@ export async function enviarEmailTurnoCancelado(
       ? `Turno cancelado — Dr/a. ${datos.medicoNombre} (${formatearFecha(datos.fecha)})`
       : `Confirmaci\u00f3n de cancelaci\u00f3n — turno del ${formatearFecha(datos.fecha)}`;
 
-    await resend().emails.send({
-      from: FROM,
-      to: datos.pacienteEmail,
-      subject: asunto,
-      html,
-      attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
-    });
+    const idempotencyKey = `${turnoId}-cancelado`;
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: datos.pacienteEmail,
+        subject: asunto,
+        html,
+        headers: { "Idempotency-Key": idempotencyKey },
+        attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
+      }),
+      turnoId
+    );
 
     console.log("[email] turno cancelado enviado:", turnoId, canceladoPor);
   } catch (err) {
-    console.error("[email] enviarEmailTurnoCancelado falló:", err);
+    console.error("[email] enviarEmailTurnoCancelado falló (agotados reintentos):", err);
   }
 }
 
