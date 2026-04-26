@@ -15,14 +15,19 @@ function resend(): Resend {
 async function conRetry<T>(
   fn: () => Promise<T>,
   contexto: string,
-  maxReintentos = 3
+  maxReintentos = 2
 ): Promise<T> {
   for (let intento = 1; intento <= maxReintentos; intento++) {
     try {
       return await fn();
     } catch (err) {
+      const status = (err as any)?.statusCode ?? (err as any)?.status;
+      if (status && status >= 400 && status < 500 && status !== 429) {
+        console.error(`[email] error no-retryable (${status}) para ${contexto}:`, err);
+        throw err;
+      }
       if (intento < maxReintentos) {
-        const delayMs = Math.pow(2, intento - 1) * 1000;
+        const delayMs = 500 * intento;
         console.log(`[email] reintento ${intento}/${maxReintentos} para ${contexto} (espera ${delayMs}ms)`);
         await new Promise((r) => setTimeout(r, delayMs));
       } else {
@@ -234,12 +239,15 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
 
     const ics = generarICS(datos, "REQUEST");
 
+    const idempotencyKey = `${turnoId}-confirmado`;
+
     await conRetry(
       () => resend().emails.send({
         from: FROM,
         to: datos.pacienteEmail,
         subject: `Turno confirmado con Dr/a. ${datos.medicoNombre} — ${formatearFecha(datos.fecha)}`,
         html,
+        headers: { "Idempotency-Key": idempotencyKey },
         attachments: [{ filename: "turno-docto.ics", content: Buffer.from(ics).toString("base64") }],
       }),
       turnoId
@@ -284,12 +292,15 @@ export async function enviarEmailTurnoCancelado(
       ? `Turno cancelado — Dr/a. ${datos.medicoNombre} (${formatearFecha(datos.fecha)})`
       : `Confirmaci\u00f3n de cancelaci\u00f3n — turno del ${formatearFecha(datos.fecha)}`;
 
+    const idempotencyKey = `${turnoId}-cancelado`;
+
     await conRetry(
       () => resend().emails.send({
         from: FROM,
         to: datos.pacienteEmail,
         subject: asunto,
         html,
+        headers: { "Idempotency-Key": idempotencyKey },
         attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
       }),
       turnoId
