@@ -37,7 +37,7 @@ function normalizar(texto: string): string {
 
 function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
-  if (q.length < 2) return [];
+  if (q.length < 1) return [];
 
   const resultados: { med: Medicamento; score: number }[] = [];
 
@@ -45,10 +45,10 @@ function buscar(query: string): Medicamento[] {
     const nombre = normalizar(med.nombre);
     const droga = normalizar(med.droga);
 
-    // Score: nombre empieza con query > droga empieza > contiene nombre > contiene droga
-    if (nombre.startsWith(q)) {
+    // Score: droga empieza con query > nombre empieza > contiene nombre > contiene droga
+    if (droga.startsWith(q)) {
       resultados.push({ med, score: 4 });
-    } else if (droga.startsWith(q)) {
+    } else if (nombre.startsWith(q)) {
       resultados.push({ med, score: 3 });
     } else if (nombre.includes(q)) {
       resultados.push({ med, score: 2 });
@@ -172,12 +172,15 @@ export default function MedicamentoAutocomplete({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const activo = dictando === "receta";
 
-  // Buscar al escribir
+  // Buscar al escribir — debounce 150ms para ~8000 medicamentos
   useEffect(() => {
-    const results = buscar(query);
-    setSugerencias(results);
-    setShowSugerencias(results.length > 0 && query.length >= 2);
-    setSelectedIndex(-1);
+    const timer = setTimeout(() => {
+      const results = buscar(query);
+      setSugerencias(results);
+      setShowSugerencias(results.length > 0 && query.length >= 1);
+      setSelectedIndex(-1);
+    }, 150);
+    return () => clearTimeout(timer);
   }, [query]);
 
   // Cerrar dropdown al hacer click fuera
@@ -197,11 +200,13 @@ export default function MedicamentoAutocomplete({
   }, []);
 
   // Agregar medicamento del vademécum
+  // Formato receta: "Droga presentación (Nombre comercial)"
   const agregarMedicamento = useCallback(
     (med: Medicamento) => {
+      const nombreReceta = `${med.droga} ${med.presentacion} (${med.nombre})`;
       const nuevo: MedicamentoReceta = {
         id: uid(),
-        nombre: med.nombre,
+        nombre: nombreReceta,
         droga: med.droga,
         presentacion: med.presentacion,
         dosis: "",
@@ -297,7 +302,7 @@ export default function MedicamentoAutocomplete({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => {
-                if (sugerencias.length > 0 && query.length >= 2) {
+                if (sugerencias.length > 0 && query.length >= 1) {
                   setShowSugerencias(true);
                 }
               }}
