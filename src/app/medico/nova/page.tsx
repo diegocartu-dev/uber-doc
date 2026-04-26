@@ -614,13 +614,21 @@ export default function NovaChat() {
                   <div className="mt-2.5 flex gap-2">
                     <button
                       onClick={() => confirmarAccion(msg.id, "si")}
-                      className="rounded-lg bg-[#378ADD] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-transform"
+                      disabled={pensando}
+                      className="flex items-center gap-2 rounded-lg bg-[#378ADD] px-4 py-2 text-[13px] font-medium text-white active:scale-95 transition-all disabled:opacity-70"
                     >
-                      Confirmar
+                      {pensando && (
+                        <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                          <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {pensando ? "Confirmando..." : "Confirmar"}
                     </button>
                     <button
                       onClick={() => confirmarAccion(msg.id, "no")}
-                      className="rounded-lg bg-transparent px-4 py-2 text-[13px] font-medium text-[#6b7280] active:scale-95 transition-transform"
+                      disabled={pensando}
+                      className="rounded-lg bg-transparent px-4 py-2 text-[13px] font-medium text-[#6b7280] active:scale-95 transition-all disabled:opacity-50"
                       style={{ border: "0.5px solid #e5e7eb" }}
                     >
                       Cancelar

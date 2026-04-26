@@ -354,8 +354,14 @@ export default function FormularioModelo({
         <button
           onClick={handleGuardar}
           disabled={isPending}
-          className="flex-1 flex items-center justify-center rounded-lg bg-[#378ADD] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 active:opacity-80 transition-all duration-100"
+          className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-70 active:scale-95 active:opacity-80 transition-all duration-100"
         >
+          {isPending && (
+            <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+              <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          )}
           {isPending ? "Guardando..." : "Guardar modelo"}
         </button>
       </div>
