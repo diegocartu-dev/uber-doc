@@ -39,18 +39,22 @@ function generarNumeroReceta(id: string, createdAt: string): string {
   return `REC-${anio}-${hash}`;
 }
 
-function generarBarcodeDataUrl(texto: string): string {
-  const canvas = document.createElement("canvas");
-  bwipjs.toCanvas(canvas, {
-    bcid: "code128",
-    text: texto,
-    scale: 3,
-    height: 10,
-    includetext: true,
-    textxalign: "center",
-    textsize: 9,
-  });
-  return canvas.toDataURL("image/png");
+function generarBarcodeDataUrl(texto: string): string | null {
+  try {
+    const canvas = document.createElement("canvas");
+    bwipjs.toCanvas(canvas, {
+      bcid: "code128",
+      text: texto,
+      scale: 3,
+      height: 10,
+      includetext: false,
+      textxalign: "center",
+    });
+    return canvas.toDataURL("image/png");
+  } catch (e) {
+    console.error("Error generando barcode:", e);
+    return null;
+  }
 }
 
 export default function DescargarPDF({ documento }: { documento: Documento }) {
@@ -63,8 +67,9 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     });
 
     const titulo = tipoLabel[documento.tipo] ?? "DOCUMENTO MEDICO";
-    const nroReceta = generarNumeroReceta(documento.id, documento.created_at);
-    const barcodeDataUrl = generarBarcodeDataUrl(nroReceta);
+    const esReceta = documento.tipo === "receta";
+    const nroReceta = esReceta ? generarNumeroReceta(documento.id, documento.created_at) : null;
+    const barcodeDataUrl = nroReceta ? generarBarcodeDataUrl(nroReceta) : null;
 
     // Bloque paciente extra: sexo, fecha nac, cobertura
     const sexoLine = documento.paciente_sexo_dni
@@ -101,11 +106,11 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     .firma .linea { border-top: 1px solid #333; width: 200px; margin-left: auto; margin-bottom: 4px; }
     .firma p { font-size: 12px; color: #666; margin: 2px 0; }
     .barcode { margin-top: 40px; text-align: center; }
-    .barcode img { max-width: 240px; height: auto; }
-    .barcode .nro { font-size: 10px; color: #999; margin-top: 4px; }
+    .barcode img { max-width: 280px; height: auto; }
+    .barcode .nro { font-family: 'Inter', sans-serif; font-size: 11px; color: #666; margin-top: 6px; letter-spacing: 0.5px; }
     .no-print { margin: 30px auto 0; display: block; padding: 10px 24px; background: #378ADD; color: white; border: none; border-radius: 8px; font-size: 14px; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; }
     .no-print:hover { background: #2d7bc4; }
-    @media print { body { margin: 0; padding: 20px; } .no-print { display: none !important; } }
+    @media print { body { margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none !important; } }
   </style>
 </head>
 <body>
@@ -142,10 +147,10 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     ${documento.medico_domicilio ? `<p>${documento.medico_domicilio}</p>` : ""}
   </div>
 
-  <div class="barcode">
-    <img src="${barcodeDataUrl}" alt="Código de barras ${nroReceta}" />
+  ${nroReceta ? `<div class="barcode">
+    ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Código de barras ${nroReceta}" />` : ""}
     <div class="nro">${nroReceta}</div>
-  </div>
+  </div>` : ""}
 
   <div class="footer">
     <p>Documento generado por Docto — Plataforma de telemedicina habilitada Ley 27.553</p>
