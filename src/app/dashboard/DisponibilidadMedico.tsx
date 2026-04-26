@@ -163,14 +163,25 @@ export default function DisponibilidadMedico({
               handleToggle();
             }}
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              bloqueado ? "cursor-not-allowed bg-gray-200" : "cursor-pointer"
+              bloqueado ? "cursor-not-allowed bg-gray-200" : guardando ? "cursor-wait" : "cursor-pointer"
             } ${activo && !bloqueado ? "bg-[#378ADD]" : !bloqueado ? "bg-gray-300" : ""}`}
           >
-            <span
-              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                activo && !bloqueado ? "translate-x-5.5" : "translate-x-0.5"
-              }`}
-            />
+            {guardando && !bloqueado ? (
+              <span className={`inline-flex h-4 w-4 items-center justify-center transition-transform ${
+                activo ? "translate-x-5.5" : "translate-x-0.5"
+              }`}>
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke={activo ? "#378ADD" : "#888780"} strokeWidth="3" opacity="0.25" />
+                  <path d="M12 2a10 10 0 019.95 9" stroke={activo ? "#378ADD" : "#888780"} strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              </span>
+            ) : (
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                  activo && !bloqueado ? "translate-x-5.5" : "translate-x-0.5"
+                }`}
+              />
+            )}
           </button>
         </div>
         <span className="text-xs text-gray-400">{abierto ? "▲" : "▼"}</span>
@@ -303,8 +314,14 @@ export default function DisponibilidadMedico({
             <button
               onClick={handleGuardar}
               disabled={guardando}
-              className="rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#2e6fb5] disabled:opacity-50"
+              className={`flex items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#2e6fb5] disabled:opacity-70`}
             >
+              {guardando && (
+                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                  <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              )}
               {guardando ? "Guardando..." : "Guardar"}
             </button>
             {mensaje && (
