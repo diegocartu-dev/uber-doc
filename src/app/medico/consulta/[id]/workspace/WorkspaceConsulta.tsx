@@ -183,7 +183,6 @@ function CampoDictado({
   soportado?: boolean;
 }) {
   const activo = dictando === campo;
-  const [mostrarAviso, setMostrarAviso] = useState(false);
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between">
@@ -211,17 +210,16 @@ function CampoDictado({
           <button
             type="button"
             aria-disabled="true"
-            onClick={() => setMostrarAviso(true)}
             className="rounded-md px-2 py-1 text-xs bg-gray-100 text-gray-500"
-            style={{ minHeight: "44px", minWidth: "44px", opacity: 0.4, cursor: "not-allowed" }}
+            style={{ minHeight: "44px", minWidth: "44px", opacity: 0.5, cursor: "not-allowed" }}
           >
-            Dictar
+            No disponible
           </button>
         )}
       </div>
-      {!soportado && mostrarAviso && (
-        <p style={{ fontSize: "12px", color: "#888780", marginTop: "4px" }}>
-          El dictado por voz no está disponible en este navegador. Usá Chrome en una computadora para esta función.
+      {!soportado && (
+        <p style={{ fontSize: "13px", color: "#888780", marginTop: "4px" }}>
+          Dictado no disponible en Safari. Usá Chrome en computadora.
         </p>
       )}
       <textarea
