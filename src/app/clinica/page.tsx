@@ -37,6 +37,16 @@ export default async function ClinicaPage() {
     .eq("verificado", true)
     .eq("estado_registro", "aprobado");
 
+  // Contar turnos disponibles en clínica virtual por médico (para decidir visibilidad del botón "Agendar turno")
+  const hoy = new Date().toISOString().split("T")[0];
+  const { data: turnosDisponibles } = await supabase
+    .from("turnos")
+    .select("medico_id")
+    .eq("estado", "disponible")
+    .eq("canal_origen", "clinica_virtual")
+    .gte("fecha", hoy)
+    .limit(500);
+
   // Contar consultas en espera por médico para estimar tiempos
   const { data: consultasEspera } = await supabase
     .from("consultas")
@@ -58,6 +68,7 @@ export default async function ClinicaPage() {
         <GrillaEspecialidades
           medicos={medicos ?? []}
           consultasEspera={consultasEspera ?? []}
+          turnosClinicaVirtual={turnosDisponibles ?? []}
         />
       </main>
     </div>

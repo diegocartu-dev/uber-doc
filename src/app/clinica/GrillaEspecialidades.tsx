@@ -24,6 +24,7 @@ type Medico = {
 };
 
 type ConsultaEspera = { medico_id: string };
+type TurnoClinicaVirtual = { medico_id: string };
 
 type Especialidad = { nombre: string; icon: LucideIcon };
 
@@ -162,20 +163,14 @@ function estaEnHorario(medico: Medico): boolean {
 
 function calcularDisponibilidad(
   especialidad: string,
-  medicos: Medico[]
+  medicos: Medico[],
+  medicosConTurnos: Set<string>
 ): Disponibilidad {
   const medicosDeLaEsp = medicos.filter(
     (m) => m.especialidad === especialidad
   );
 
-  if (especialidad === "Cl\u00ednica m\u00e9dica" && medicosDeLaEsp.length === 0) {
-    return "programada";
-  }
-
   if (medicosDeLaEsp.length === 0) return "sin_medicos";
-
-  const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
-  if (disponiblesAhora.length > 0) return "disponible";
 
   const tieneInmediata = medicosDeLaEsp.some(
     (m) =>
@@ -183,6 +178,13 @@ function calcularDisponibilidad(
       m.modalidad_atencion === "inmediata" ||
       m.modalidad_atencion === "ambas"
   );
+  const tieneTurnos = medicosDeLaEsp.some((m) => medicosConTurnos.has(m.id));
+
+  if (!tieneInmediata && !tieneTurnos) return "sin_medicos";
+
+  const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
+  if (disponiblesAhora.length > 0) return "disponible";
+
   if (tieneInmediata) return "espera";
 
   return "programada";
@@ -206,9 +208,11 @@ function formatPrecio(precio: number) {
 export default function GrillaEspecialidades({
   medicos,
   consultasEspera,
+  turnosClinicaVirtual,
 }: {
   medicos: Medico[];
   consultasEspera: ConsultaEspera[];
+  turnosClinicaVirtual: TurnoClinicaVirtual[];
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [emailLead, setEmailLead] = useState("");
@@ -263,6 +267,8 @@ export default function GrillaEspecialidades({
   // Mostrar captura de lead si busca especialidad sin médicos y no hay resultados con médicos
   const mostrarLeadCapture = termino && especialidadBuscadaSinMedicos && espVisibles.length === 0;
 
+  const medicosConTurnos = new Set(turnosClinicaVirtual.map((t) => t.medico_id));
+
   const esperasPorMedico = new Map<string, number>();
   for (const c of consultasEspera) {
     esperasPorMedico.set(
@@ -274,7 +280,9 @@ export default function GrillaEspecialidades({
   const medicosDelModal = modalEspecialidad
     ? medicos.filter((m) =>
         m.especialidad === modalEspecialidad &&
-        (modalModo === "turno" || m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
+        (modalModo === "turno"
+          ? medicosConTurnos.has(m.id)
+          : m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
       )
     : [];
 
@@ -372,7 +380,7 @@ export default function GrillaEspecialidades({
       {/* Grilla */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {espVisibles.map((esp) => {
-          const estado = calcularDisponibilidad(esp.nombre, medicos);
+          const estado = calcularDisponibilidad(esp.nombre, medicos, medicosConTurnos);
           const { color, texto } = semaforo(estado);
           const esSinMedicos = estado === "sin_medicos";
 
@@ -382,6 +390,11 @@ export default function GrillaEspecialidades({
               (m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
           );
           const botonConsultaDeshabilitado = !tieneInmediata;
+
+          const tieneTurnosCV = medicos.some(
+            (m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id)
+          );
+          const botonAgendarDeshabilitado = !tieneTurnosCV;
 
           const medicosMatch =
             termino && espPorMedico.has(esp.nombre)
@@ -451,21 +464,11 @@ export default function GrillaEspecialidades({
 
               {esSinMedicos ? (
                 <p className="mt-4 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Sin disponibilidad</p>
-              ) : (
-                <div className="mt-4 flex gap-2">
-                  <button
-                    disabled={botonConsultaDeshabilitado}
-                    onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
-                    className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
-                    style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "var(--color-primary)" }}
-                    onMouseEnter={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary-hover)"; }}
-                    onMouseLeave={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary)"; }}
-                  >
-                    Consulta ahora
-                  </button>
+              ) : estado === "programada" ? (
+                <div className="mt-4">
                   <button
                     onClick={() => {
-                      const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre);
+                      const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id));
                       if (medicosEsp.length === 1) {
                         router.push(`/clinica/${medicosEsp[0].id}/turnos`);
                       } else {
@@ -473,7 +476,7 @@ export default function GrillaEspecialidades({
                         setModalEspecialidad(esp.nombre);
                       }
                     }}
-                    className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
+                    className="w-full rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
                     style={{
                       border: "1px solid var(--color-border-strong)",
                       color: "var(--color-text-secondary)",
@@ -481,6 +484,51 @@ export default function GrillaEspecialidades({
                   >
                     Agendar turno
                   </button>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <div className="flex gap-2">
+                    <button
+                      disabled={botonConsultaDeshabilitado}
+                      onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
+                      className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97] transition-all duration-100"
+                      style={{ backgroundColor: botonConsultaDeshabilitado ? "var(--color-muted)" : "var(--color-primary)" }}
+                      onMouseEnter={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary-hover)"; }}
+                      onMouseLeave={(e) => { if (!botonConsultaDeshabilitado) e.currentTarget.style.backgroundColor = "var(--color-primary)"; }}
+                    >
+                      Consulta ahora
+                    </button>
+                    <button
+                      disabled={botonAgendarDeshabilitado}
+                      onClick={() => {
+                        if (botonAgendarDeshabilitado) return;
+                        const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id));
+                        if (medicosEsp.length === 1) {
+                          router.push(`/clinica/${medicosEsp[0].id}/turnos`);
+                        } else {
+                          setModalModo("turno");
+                          setModalEspecialidad(esp.nombre);
+                        }
+                      }}
+                      className="flex-1 rounded-[var(--radius-md)] px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 hover:bg-[var(--color-bg-tertiary)]"
+                      style={{
+                        border: "1px solid var(--color-border-strong)",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      Agendar turno
+                    </button>
+                  </div>
+                  {botonConsultaDeshabilitado && (
+                    <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
+                      Solo turnos programados para esta especialidad
+                    </p>
+                  )}
+                  {botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
+                    <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
+                      Sin turnos disponibles, consultá ahora
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -555,7 +603,7 @@ export default function GrillaEspecialidades({
                         <a
                           href={`/clinica/${m.id}/turnos`}
                           className="shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white"
-                          style={{ backgroundColor: "var(--color-success)" }}
+                          style={{ backgroundColor: "var(--color-primary)" }}
                         >
                           Ver turnos
                         </a>
@@ -571,13 +619,15 @@ export default function GrillaEspecialidades({
                           >
                             Consulta ahora
                           </button>
-                          <a
-                            href={`/clinica/${m.id}/turnos`}
-                            className="rounded-[var(--radius-md)] px-3 py-1.5 text-center text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
-                            style={{ backgroundColor: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)" }}
-                          >
-                            Agendar turno
-                          </a>
+                          {medicosConTurnos.has(m.id) && (
+                            <a
+                              href={`/clinica/${m.id}/turnos`}
+                              className="rounded-[var(--radius-md)] px-3 py-1.5 text-center text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
+                              style={{ backgroundColor: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)" }}
+                            >
+                              Agendar turno
+                            </a>
+                          )}
                         </div>
                       )}
                     </div>
