@@ -200,10 +200,11 @@ export default function MedicamentoAutocomplete({
   }, []);
 
   // Agregar medicamento del vademécum
-  // Formato receta: "Droga presentación (Nombre comercial)"
+  // Formato receta: "Droga (Nombre comercial)" — presentación va en campo separado
   const agregarMedicamento = useCallback(
     (med: Medicamento) => {
-      const nombreReceta = `${med.droga} ${med.presentacion} (${med.nombre})`;
+      const droga = med.droga?.trim() || med.nombre;
+      const nombreReceta = droga !== med.nombre ? `${droga} (${med.nombre})` : med.nombre;
       const nuevo: MedicamentoReceta = {
         id: uid(),
         nombre: nombreReceta,
