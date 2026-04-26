@@ -60,7 +60,7 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
     const nombre = (med.nombre ?? "").trim();
     const presentacion = (med.presentacion ?? "").trim();
     if (!droga && !nombre) continue;
-    let linea = `${droga} (${nombre}) - ${presentacion}`;
+    let linea = presentacion ? `${nombre} - ${presentacion}` : nombre;
     const posologia: string[] = [];
     if ((med.dosis ?? "").trim()) posologia.push(med.dosis.trim());
     if ((med.frecuencia ?? "").trim()) posologia.push(med.frecuencia.trim());
