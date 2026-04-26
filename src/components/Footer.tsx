@@ -1,55 +1,97 @@
 import Link from "next/link";
+import { Stethoscope, ShieldCheck } from "lucide-react";
+
+const linkMap: Record<string, string> = {
+  "Buscar médico": "/clinica",
+  "Consulta inmediata": "/clinica",
+  "Mis consultas": "/mis-consultas",
+  "Sumate a Docto": "/auth/registro-medico",
+};
+
+const footerCols = [
+  { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas", "Ayuda"] },
+  { title: "Médicos", links: ["Sumate a Docto", "Cómo cobramos", "Panel profesional", "Receta digital"] },
+  { title: "Empresa", links: ["Sobre nosotros", "Blog", "Prensa", "Contacto"] },
+  { title: "Legal", links: ["Términos", "Privacidad", "Aviso médico", "Política de reembolsos"] },
+];
 
 export default function Footer() {
   return (
-    <footer
-      className="mt-20 w-full flex items-center justify-center"
-      style={{
-        backgroundColor: "var(--color-bg-tertiary)",
-        minHeight: "48px",
-        padding: "12px 24px",
-      }}
-    >
-      <div
-        className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center"
-        style={{
-          fontSize: "12px",
-          color: "var(--color-text-tertiary)",
-        }}
-      >
-        <span
-          className="font-semibold"
-          style={{ color: "var(--color-text-secondary)" }}
+    <footer style={{
+      background: "var(--color-bg-tertiary)",
+      padding: "64px 24px 32px",
+      borderTop: "1px solid var(--color-border-default)",
+    }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div
+          className="landing-footer-grid"
+          style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(4, 1fr)", gap: 40, marginBottom: 48 }}
         >
-          docto
-        </span>
-        <span aria-hidden="true">|</span>
-        <Link
-          href="#"
-          className="underline-offset-2 transition-colors hover:underline"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Términos
-        </Link>
-        <span aria-hidden="true">|</span>
-        <Link
-          href="#"
-          className="underline-offset-2 transition-colors hover:underline"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Privacidad
-        </Link>
-        <span aria-hidden="true">|</span>
-        <span>AAIP RL-2026-36086505</span>
-        <span aria-hidden="true">|</span>
-        <a
-          href="mailto:soporte@docto.com.ar"
-          className="underline-offset-2 transition-colors hover:underline"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          soporte@docto.com.ar
-        </a>
+          <div>
+            <div className="flex items-center gap-2">
+              <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
+              <span style={{ fontSize: 20, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.02em" }} className="lowercase">
+                docto
+              </span>
+            </div>
+            <p style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: "16px 0 20px", maxWidth: 280 }}>
+              Plataforma de telemedicina argentina. Conectamos pacientes con médicos para consultas virtuales.
+            </p>
+          </div>
+          {footerCols.map((c) => (
+            <div key={c.title}>
+              <div style={{
+                fontSize: 12, fontWeight: 600, letterSpacing: "0.06em",
+                textTransform: "uppercase", color: "var(--color-text-tertiary)", marginBottom: 14,
+              }}>
+                {c.title}
+              </div>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                {c.links.map((l) => {
+                  const href = linkMap[l];
+                  return (
+                    <li key={l}>
+                      {href ? (
+                        <Link href={href} style={{ fontSize: 13.5, color: "var(--color-text-secondary)", textDecoration: "none" }}>{l}</Link>
+                      ) : (
+                        <span style={{ fontSize: 13.5, color: "var(--color-text-tertiary)" }}>{l}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          borderTop: "1px solid var(--color-border-default)", paddingTop: 22,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          flexWrap: "wrap", gap: 14,
+        }}>
+          <div style={{ fontSize: 12.5, color: "var(--color-text-tertiary)" }}>
+            © 2026 Docto Telemedicina S.A.S. · Buenos Aires, Argentina
+          </div>
+          <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", display: "flex", gap: 14, alignItems: "center" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <ShieldCheck size={13} strokeWidth={1.75} />
+              Superintendencia de Servicios de Salud
+            </span>
+            <span>·</span>
+            <span>AAIP RL-2026-36086505</span>
+            <span>·</span>
+            <span>Hecho en Argentina</span>
+          </div>
+        </div>
       </div>
+      <style>{`
+        @media (max-width: 900px) {
+          .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+        }
+        @media (max-width: 560px) {
+          .landing-footer-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </footer>
   );
 }

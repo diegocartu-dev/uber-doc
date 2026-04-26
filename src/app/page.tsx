@@ -5,9 +5,9 @@ import {
   Wallet,
   Check,
   ArrowRight,
-  Building2,
-  Zap,
-  Sparkles,
+  CalendarCheck,
+  Users,
+  Stethoscope,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -97,10 +97,11 @@ export default async function Home({
     },
   ];
 
-  const medicoPoints = [
-    { icon: Building2, title: "Consultorio Particular", description: "Tu link, tus pacientes, tu precio." },
-    { icon: Zap, title: "Consulta Inmediata", description: "Monetizá cualquier momento libre, desde donde estés." },
-    { icon: Sparkles, title: "Nova IA", description: "Recetas y documentación generadas en segundos." },
+  const medicoFeatures = [
+    { icon: Wallet, title: "Cobrás por consulta", description: "Sin mensualidades. Nos llevamos una comisión solo cuando atendés." },
+    { icon: CalendarCheck, title: "Agenda flexible", description: "Publicás tus horarios y los cambiás cuando quieras. Vos mandás." },
+    { icon: FileText, title: "Receta digital", description: "Firma electrónica con validez legal, sin papel ni trámites." },
+    { icon: Users, title: "Pacientes verificados", description: "DNI + cobertura confirmados antes de reservar turno." },
   ];
 
   return (
@@ -527,27 +528,30 @@ export default async function Home({
             </div>
           </div>
 
-          <div className="landing-medico-points" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {medicoPoints.map((p) => (
-              <div key={p.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div className="landing-medico-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {medicoFeatures.map((f) => (
+              <div key={f.title} style={{
+                padding: "22px 20px",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 14,
+                background: "rgba(255,255,255,0.03)",
+              }}>
                 <div
                   style={{
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     borderRadius: 10,
                     background: "rgba(161, 206, 164, 0.15)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    flexShrink: 0,
+                    marginBottom: 14,
                   }}
                 >
-                  <p.icon size={20} style={{ color: "#A1CEA4" }} />
+                  <f.icon size={18} style={{ color: "#A1CEA4" }} />
                 </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{p.title}</div>
-                  <div style={{ fontSize: 14, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>{p.description}</div>
-                </div>
+                <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>{f.description}</div>
               </div>
             ))}
           </div>
@@ -587,8 +591,8 @@ export default async function Home({
           /* Trust line vertical */
           .landing-trust-line { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
 
-          /* MÉDICOS points — compact on mobile */
-          .landing-medico-points { gap: 14px !important; }
+          /* MÉDICOS cards — single column on mobile */
+          .landing-medico-cards { grid-template-columns: 1fr !important; }
 
           /* CTAs "Sumate" + "Conocé más" — misma fila compactos */
           .medicos-cta-row { flex-wrap: nowrap !important; gap: 8px !important; }
