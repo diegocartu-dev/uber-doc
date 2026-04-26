@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { X, User, FileText, LogOut } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { X, User, FileText, LogOut, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -15,8 +14,21 @@ type Props = {
 
 export default function MenuDrawer({ open, onClose, userName, userRole }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const drawerRef = useRef<HTMLDivElement>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [loadingHref, setLoadingHref] = useState<string | null>(null);
+  const prevPathname = useRef(pathname);
+
+  // Close drawer when pathname changes (navigation resolved)
+  useEffect(() => {
+    if (prevPathname.current !== pathname && loadingHref) {
+      setLoadingHref(null);
+      onClose();
+    }
+    prevPathname.current = pathname;
+  }, [pathname, loadingHref, onClose]);
 
   // Close on Escape
   useEffect(() => {
@@ -35,16 +47,24 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
     } else {
       document.body.style.overflow = "";
       setConfirmLogout(false);
+      setLoggingOut(false);
     }
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
   async function handleLogout() {
+    setLoggingOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     onClose();
     router.push("/");
     router.refresh();
+  }
+
+  function handleNavigate(href: string) {
+    if (loadingHref) return;
+    setLoadingHref(href);
+    router.push(href);
   }
 
   const initials = userName
@@ -62,7 +82,7 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
       <div
         className="absolute inset-0"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.3)" }}
-        onClick={onClose}
+        onClick={loadingHref || loggingOut ? undefined : onClose}
       />
 
       {/* Drawer */}
@@ -82,7 +102,8 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
           </span>
           <button
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] transition-colors hover:bg-[var(--color-bg-tertiary)]"
+            disabled={!!loadingHref || loggingOut}
+            className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] transition-colors hover:bg-[var(--color-bg-tertiary)] disabled:opacity-50"
             aria-label="Cerrar menú"
           >
             <X size={20} strokeWidth={1.75} color="var(--color-text-secondary)" />
@@ -117,10 +138,24 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
 
         {/* Navigation items */}
         <div className="py-2">
-          <DrawerLink href="/mis-datos" icon={<User size={20} strokeWidth={1.75} />} label="Mis datos" onClick={onClose} />
+          <DrawerLink
+            href="/mis-datos"
+            icon={<User size={20} strokeWidth={1.75} />}
+            label="Mis datos"
+            loading={loadingHref === "/mis-datos"}
+            disabled={!!loadingHref}
+            onClick={() => handleNavigate("/mis-datos")}
+          />
 
           {userRole === "paciente" && (
-            <DrawerLink href="/mis-consultas" icon={<FileText size={20} strokeWidth={1.75} />} label="Mis consultas" onClick={onClose} />
+            <DrawerLink
+              href="/mis-consultas"
+              icon={<FileText size={20} strokeWidth={1.75} />}
+              label="Mis consultas"
+              loading={loadingHref === "/mis-consultas"}
+              disabled={!!loadingHref}
+              onClick={() => handleNavigate("/mis-consultas")}
+            />
           )}
         </div>
 
@@ -132,7 +167,8 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
           {!confirmLogout ? (
             <button
               onClick={() => setConfirmLogout(true)}
-              className="flex w-full items-center gap-3 px-5 transition-colors hover:bg-[var(--color-danger-soft)]"
+              disabled={!!loadingHref}
+              className="flex w-full items-center gap-3 px-5 transition-colors hover:bg-[var(--color-danger-soft)] disabled:opacity-50"
               style={{ minHeight: 48, color: "var(--color-danger)" }}
             >
               <LogOut size={20} strokeWidth={1.75} />
@@ -146,14 +182,17 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={handleLogout}
-                  className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white transition-colors"
+                  disabled={loggingOut}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white transition-colors disabled:opacity-70"
                   style={{ backgroundColor: "var(--color-danger)" }}
                 >
-                  Sí, salir
+                  {loggingOut && <Loader2 size={16} className="animate-spin" />}
+                  {loggingOut ? "Saliendo..." : "Sí, salir"}
                 </button>
                 <button
                   onClick={() => setConfirmLogout(false)}
-                  className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-medium transition-colors"
+                  disabled={loggingOut}
+                  className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   style={{
                     border: "1px solid var(--color-border-strong)",
                     color: "var(--color-text-secondary)",
@@ -181,22 +220,26 @@ function DrawerLink({
   href,
   icon,
   label,
+  loading,
+  disabled,
   onClick,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
+  loading: boolean;
+  disabled: boolean;
   onClick: () => void;
 }) {
   return (
-    <Link
-      href={href}
+    <button
       onClick={onClick}
-      className="flex items-center gap-3 px-5 transition-colors hover:bg-[var(--color-bg-tertiary)]"
+      disabled={disabled}
+      className={`flex w-full items-center gap-3 px-5 transition-colors hover:bg-[var(--color-bg-tertiary)] disabled:pointer-events-none ${loading ? "opacity-70" : ""}`}
       style={{ minHeight: 48, color: "var(--color-text-secondary)" }}
     >
-      {icon}
+      {loading ? <Loader2 size={20} strokeWidth={1.75} className="animate-spin" /> : icon}
       <span className="text-sm font-medium">{label}</span>
-    </Link>
+    </button>
   );
 }
