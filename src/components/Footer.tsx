@@ -1,4 +1,12 @@
+import Link from "next/link";
 import { Stethoscope, ShieldCheck } from "lucide-react";
+
+const linkMap: Record<string, string> = {
+  "Buscar médico": "/clinica",
+  "Consulta inmediata": "/clinica",
+  "Mis consultas": "/mis-consultas",
+  "Sumate a Docto": "/auth/registro-medico",
+};
 
 const footerCols = [
   { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas", "Ayuda"] },
@@ -39,11 +47,18 @@ export default function Footer() {
                 {c.title}
               </div>
               <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-                {c.links.map((l) => (
-                  <li key={l}>
-                    <a href="#" style={{ fontSize: 13.5, color: "var(--color-text-secondary)", textDecoration: "none" }}>{l}</a>
-                  </li>
-                ))}
+                {c.links.map((l) => {
+                  const href = linkMap[l];
+                  return (
+                    <li key={l}>
+                      {href ? (
+                        <Link href={href} style={{ fontSize: 13.5, color: "var(--color-text-secondary)", textDecoration: "none" }}>{l}</Link>
+                      ) : (
+                        <span style={{ fontSize: 13.5, color: "var(--color-text-tertiary)" }}>{l}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -55,7 +70,7 @@ export default function Footer() {
           flexWrap: "wrap", gap: 14,
         }}>
           <div style={{ fontSize: 12.5, color: "var(--color-text-tertiary)" }}>
-            © 2026 Docto Telemedicina S.A.S. · Buenos Aires, Argentina · CUIT 30-71654321-0
+            © 2026 Docto Telemedicina S.A.S. · Buenos Aires, Argentina
           </div>
           <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", display: "flex", gap: 14, alignItems: "center" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
