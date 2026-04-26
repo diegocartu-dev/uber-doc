@@ -69,6 +69,14 @@ export default function Footer() {
           </div>
         </div>
       </div>
+      <style>{`
+        @media (max-width: 900px) {
+          .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+        }
+        @media (max-width: 560px) {
+          .landing-footer-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </footer>
   );
 }

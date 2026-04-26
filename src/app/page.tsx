@@ -576,7 +576,6 @@ export default async function Home({
           .landing-hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
           .landing-como-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
           .landing-medicos-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
-          .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
         }
 
         @media (max-width: 720px) {
@@ -602,7 +601,6 @@ export default async function Home({
 
         @media (max-width: 560px) {
           .landing-hero-grid { gap: 12px !important; }
-          .landing-footer-grid { grid-template-columns: 1fr !important; }
         }
 
         /* Scroll-snap por secciones en mobile */
