@@ -4,7 +4,7 @@ import { useDashboardMedico } from "./DashboardMedicoProvider";
 import NotificacionEspera from "@/components/NotificacionEspera";
 
 export function BadgeEsperando() {
-  const { totalEsperando, enVideollamada } = useDashboardMedico();
+  const { totalEsperando, enVideollamada, badgeFlash } = useDashboardMedico();
 
   if (totalEsperando === 0) return null;
 
@@ -20,11 +20,13 @@ export function BadgeEsperando() {
         height: 20,
         padding: "0 6px",
         borderRadius: 10,
-        background: "#E24B4A",
+        background: "#D85A30",
         color: "#fff",
         fontSize: 11,
         fontWeight: 700,
         lineHeight: 1,
+        transition: "transform 0.3s ease",
+        transform: badgeFlash ? "scale(1.4)" : "scale(1)",
       }}
     >
       {totalEsperando}

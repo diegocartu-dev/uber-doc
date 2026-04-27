@@ -74,10 +74,10 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a", margin: 0 }}>
+          <p style={{ fontSize: 16, fontWeight: 600, color: "#1a1a1a", margin: 0 }}>
             {pacienteNombre} está esperando
           </p>
-          <p style={{ fontSize: 13, color: "#888780", margin: "2px 0 0" }}>
+          <p style={{ fontSize: 14, color: "#888780", margin: "2px 0 0" }}>
             {mins < 1 ? "Recién ingresó" : `${mins} min en sala de espera`}
           </p>
         </div>
@@ -89,8 +89,8 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
             color: "#fff",
             border: 0,
             borderRadius: 10,
-            padding: "8px 14px",
-            fontSize: 13,
+            padding: "10px 16px",
+            fontSize: 14,
             fontWeight: 600,
             textDecoration: "none",
             whiteSpace: "nowrap",

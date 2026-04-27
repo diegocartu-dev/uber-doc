@@ -65,6 +65,7 @@ type DashboardCtx = {
   popupData: PopupData;
   dismissPopup: () => void;
   totalEsperando: number;
+  badgeFlash: boolean;
 };
 
 const defaultBloquear = { current: false };
@@ -82,6 +83,7 @@ const Ctx = createContext<DashboardCtx>({
   popupData: null,
   dismissPopup: () => {},
   totalEsperando: 0,
+  badgeFlash: false,
 });
 
 export function useDashboardMedico() {
@@ -139,8 +141,9 @@ export default function DashboardMedicoProvider({
   const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
   const bloquearPollDisponible = useRef(false);
   const [popupData, setPopupData] = useState<PopupData>(null);
-  const [popupDismissed, setPopupDismissed] = useState(false);
   const [silenciado, setSilenciadoState] = useState(false);
+  const silenciadoRef = useRef(false);
+  const [badgeFlash, setBadgeFlash] = useState(false);
 
   const prevPendientesCount = useRef(initialPendientes.length);
   const prevTurnosCount = useRef(initialTurnosEspera.length);
@@ -151,12 +154,15 @@ export default function DashboardMedicoProvider({
 
   useEffect(() => {
     try {
-      setSilenciadoState(localStorage.getItem(SILENCIADO_KEY) === "true");
+      const stored = localStorage.getItem(SILENCIADO_KEY) === "true";
+      setSilenciadoState(stored);
+      silenciadoRef.current = stored;
     } catch {}
   }, []);
 
   const setSilenciado = useCallback((v: boolean) => {
     setSilenciadoState(v);
+    silenciadoRef.current = v;
     try { localStorage.setItem(SILENCIADO_KEY, String(v)); } catch {}
   }, []);
 
@@ -165,8 +171,9 @@ export default function DashboardMedicoProvider({
   }, []);
 
   const dismissPopup = useCallback(() => {
-    setPopupDismissed(true);
     setPopupData(null);
+    setBadgeFlash(true);
+    setTimeout(() => setBadgeFlash(false), 600);
   }, []);
 
   // Post-videollamada: trigger inmediato al montar si viene de finalizar consulta
@@ -211,7 +218,6 @@ export default function DashboardMedicoProvider({
         const pends = data.consultas_pendientes ?? [];
         const turnos = data.turnos_espera ?? [];
         if (pends.length > 0 || turnos.length > 0) {
-          setPopupDismissed(false);
           setPopupData(getFirstWaiting(pends, turnos));
           soundPacienteEsperando();
         }
@@ -224,8 +230,7 @@ export default function DashboardMedicoProvider({
           data.consultas_pendientes.length > prevPendientesCount.current ||
           data.turnos_espera.length > prevTurnosCount.current
         ) {
-          if (!silenciado) soundPacienteEsperando();
-          setPopupDismissed(false);
+          if (!silenciadoRef.current) soundPacienteEsperando();
           setPopupData(getFirstWaiting(data.consultas_pendientes, data.turnos_espera));
         }
       }
@@ -235,7 +240,7 @@ export default function DashboardMedicoProvider({
     } catch {
       // silently ignore network errors
     }
-  }, [silenciado]);
+  }, []);
 
   // Polling de fallback
   useEffect(() => {
@@ -292,11 +297,9 @@ export default function DashboardMedicoProvider({
     }
   }, [totalEsperando, enVideollamada]);
 
-  // Limpiar popup si ya no hay pacientes esperando
   useEffect(() => {
     if (totalEsperando === 0) {
       setPopupData(null);
-      setPopupDismissed(false);
     }
   }, [totalEsperando]);
 
@@ -306,7 +309,7 @@ export default function DashboardMedicoProvider({
       setDisponible: handleSetDisponible, bloquearPollDisponible,
       enVideollamada, silenciado, setSilenciado,
       popupData: enVideollamada ? null : popupData,
-      dismissPopup, totalEsperando,
+      dismissPopup, totalEsperando, badgeFlash,
     }}>
       {children}
     </Ctx.Provider>

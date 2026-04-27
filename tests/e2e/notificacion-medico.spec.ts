@@ -62,7 +62,6 @@ test.describe("Notificación proactiva al médico", () => {
 
     await page.goto("/dashboard");
     const badge = page.locator('[data-testid="badge-esperando"]');
-    await expect(badge).not.toBeVisible({ timeout: 2000 }).catch(() => {});
     await expect(badge).toBeVisible({ timeout: 10000 });
     await expect(badge).toHaveText("1");
   });
