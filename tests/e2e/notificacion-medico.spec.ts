@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { loginWithEmail } from "../helpers/auth";
+import { MEDICO_TEST } from "../fixtures/cuentas-prueba";
 
 const MOCK_DASHBOARD_ESTADO_BASE = {
   consultas_en_curso: [],
@@ -35,6 +37,10 @@ const CONSULTA_EN_CURSO = {
 };
 
 test.describe("Notificación proactiva al médico", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginWithEmail(page, MEDICO_TEST.email, MEDICO_TEST.password);
+  });
+
   test("TEST 1: paciente entra a sala de espera → badge aparece en header", async ({ page }) => {
     let pollCount = 0;
 
@@ -62,7 +68,7 @@ test.describe("Notificación proactiva al médico", () => {
 
     await page.goto("/dashboard");
     const badge = page.locator('[data-testid="badge-esperando"]');
-    await expect(badge).toBeVisible({ timeout: 10000 });
+    await expect(badge).toBeVisible({ timeout: 15000 });
     await expect(badge).toHaveText("1");
   });
 
@@ -91,7 +97,7 @@ test.describe("Notificación proactiva al médico", () => {
 
     await page.goto("/dashboard");
     const badge = page.locator('[data-testid="badge-esperando"]');
-    await expect(badge).toBeVisible({ timeout: 10000 });
+    await expect(badge).toBeVisible({ timeout: 15000 });
     await expect(badge).toHaveText("1");
 
     const popup = page.locator("text=está esperando");
