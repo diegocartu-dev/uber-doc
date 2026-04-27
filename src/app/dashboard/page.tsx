@@ -13,6 +13,7 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
+import { BadgeEsperando, BotonSilenciar, PopupEsperando } from "./NotificacionMedicoUI";
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
@@ -21,9 +22,9 @@ import BotonPush from "@/components/BotonPush";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ aviso?: string }>;
+  searchParams: Promise<{ aviso?: string; from?: string }>;
 }) {
-  const { aviso } = await searchParams;
+  const { aviso, from } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -431,8 +432,10 @@ export default async function DashboardPage({
         initialTurnosEspera={turnosEsperaCompletos.map((t) => ({ ...t, entradoEn: Date.now() }))}
         initialDisponible={medico.disponible}
         initialTurnosActivosHoy={hayTurnosActivosHoy}
+        postVideollamada={from === "videollamada"}
       >
         <div className="min-h-full bg-[#f8f9fa]">
+          <PopupEsperando />
           {aviso === "sin-cuil" && (
             <div className="bg-[#BA7517]/10 px-4 py-3 text-center text-sm text-[#BA7517]" style={{ borderBottom: "1px solid #BA7517" }}>
               El paciente no complet&oacute; su CUIL &mdash; la receta no fue incluida en los documentos.
@@ -445,12 +448,14 @@ export default async function DashboardPage({
               <div className="flex h-14 items-center justify-between">
                 <div className="flex items-center gap-4 lg:gap-5">
                   <span className="text-lg font-medium text-gray-900">Docto</span>
+                  <BadgeEsperando />
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
                     <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 lg:gap-4">
+                  <BotonSilenciar />
                   <Link href="/medico/nova" className="text-sm font-medium text-[#378ADD] hover:text-[#2e6fb5] transition-colors">
                     Nova
                   </Link>
