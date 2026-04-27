@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { completarPerfil } from "@/app/onboarding/actions";
+import ModalTerminos from "@/components/ModalTerminos";
 
 type PacienteData = {
   nombre_completo: string | null;
@@ -31,6 +32,8 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
   const [tieneCobertura, setTieneCobertura] = useState(paciente?.tiene_cobertura ?? false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [checkTerminos, setCheckTerminos] = useState(false);
+  const [modalTerminos, setModalTerminos] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   function validate(): FieldErrors {
@@ -250,10 +253,32 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           </div>
         </div>
 
+        <div className="pt-2">
+          <label className="flex items-start gap-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={checkTerminos}
+              onChange={(e) => setCheckTerminos(e.target.checked)}
+              className="mt-0.5 h-5 w-5 rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-700">
+              Leí y acepto los{" "}
+              <button type="button" onClick={() => setModalTerminos(true)} className="font-medium underline" style={{ color: "#378ADD" }}>
+                Términos y Condiciones
+              </button>{" "}
+              de Docto
+            </span>
+          </label>
+        </div>
+
+        {checkTerminos && (
+          <input type="hidden" name="terminos_aceptados" value="true" />
+        )}
+
         <button
           type="submit"
-          disabled={submitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] py-3.5 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-70"
+          disabled={submitting || !checkTerminos}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] py-3.5 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting && (
             <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -270,6 +295,8 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           </p>
         )}
       </form>
+
+      <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} />
     </>
   );
 }

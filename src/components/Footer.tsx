@@ -6,6 +6,7 @@ const linkMap: Record<string, string> = {
   "Consulta inmediata": "/clinica",
   "Mis consultas": "/mis-consultas",
   "Sumate a Docto": "/auth/registro-medico",
+  "Términos": "/terminos",
 };
 
 const footerCols = [

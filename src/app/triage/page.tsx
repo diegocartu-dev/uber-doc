@@ -195,7 +195,7 @@ function TriageContent() {
               className="mt-4 h-96 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-5 text-sm leading-relaxed text-gray-700"
             >
               <h2 className="mb-3 text-base font-semibold text-gray-900">
-                TÉRMINOS Y CONDICIONES DE USO — UBER DOC
+                TÉRMINOS Y CONDICIONES DE USO — DOCTO
               </h2>
               <p className="mb-2 text-xs text-gray-500">
                 Última actualización: marzo 2026
