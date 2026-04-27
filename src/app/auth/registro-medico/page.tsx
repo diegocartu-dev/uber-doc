@@ -5,6 +5,7 @@ import { useState, useRef } from "react";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft } from "lucide-react";
 import { registrarMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
+import ModalTerminos from "@/components/ModalTerminos";
 
 const ESPECIALIDADES = [
   "Alergia e inmunología",
@@ -500,44 +501,7 @@ export default function RegistroMedicoPage() {
           </div>
         </form>
 
-        {/* Modal términos */}
-        {modalTerminos && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Términos y condiciones
-                </h2>
-                <button onClick={() => setModalTerminos(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={20} strokeWidth={1.75} />
-                </button>
-              </div>
-              <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
-                <h3 className="font-semibold">1. Aceptación de términos de uso</h3>
-                <p className="mt-1">Al registrarse como profesional médico en Docto, usted acepta estos términos en su totalidad. La plataforma actúa como intermediaria tecnológica entre profesionales de la salud y pacientes.</p>
-
-                <h3 className="mt-3 font-semibold">2. Protección de datos médicos (Ley 25.326)</h3>
-                <p className="mt-1">Los datos de los pacientes atendidos a través de la plataforma son tratados conforme a la Ley 25.326 de Protección de Datos Personales. Usted se compromete a mantener la confidencialidad de la información médica y a no compartirla con terceros no autorizados.</p>
-
-                <h3 className="mt-3 font-semibold">3. Ejercicio de la telemedicina</h3>
-                <p className="mt-1">Las consultas se realizan conforme a las normativas vigentes de telemedicina en Argentina. El profesional es responsable de evaluar si la teleconsulta es apropiada para cada caso y derivar a atención presencial cuando lo considere necesario, conforme a la Ley 26.529 de Derechos del Paciente.</p>
-
-                <h3 className="mt-3 font-semibold">4. Responsabilidad de Docto</h3>
-                <p className="mt-1">Docto actúa exclusivamente como plataforma tecnológica intermediaria. No ejerce dirección, supervisión ni control sobre el criterio médico de los profesionales. Cada médico es responsable de sus actos profesionales conforme a la Ley 17.132.</p>
-
-                <h3 className="mt-3 font-semibold">5. Política de privacidad</h3>
-                <p className="mt-1">Los datos profesionales proporcionados se utilizan para la prestación del servicio y la verificación de credenciales. La información de consultas se almacena de forma segura y encriptada.</p>
-              </div>
-              <button
-                onClick={() => setModalTerminos(false)}
-                className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-                style={{ backgroundColor: "#378ADD" }}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        )}
+        <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} />
 
         {/* Modal declaracion de matricula */}
         {modalMatricula && (

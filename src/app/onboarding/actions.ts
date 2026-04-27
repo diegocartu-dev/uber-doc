@@ -49,6 +49,7 @@ export async function completarPerfil(formData: FormData) {
   const tieneCobertura = (formData.get("tiene_cobertura") as string) === "true";
   const obra_social = (formData.get("obra_social") as string)?.trim() || null;
   const nro_afiliado = (formData.get("nro_afiliado") as string)?.trim() || null;
+  const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
 
   if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
@@ -79,6 +80,7 @@ export async function completarPerfil(formData: FormData) {
         nro_afiliado: tieneCobertura ? nro_afiliado : null,
         cuil,
         perfil_medico_completado: true,
+        ...(terminosAceptados ? { terminos_aceptados_at: new Date().toISOString() } : {}),
       },
       { onConflict: "user_id" }
     );
