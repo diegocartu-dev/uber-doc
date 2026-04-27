@@ -28,10 +28,34 @@ jobs:
 
       - run: npx playwright install chromium
 
+      - name: Resolve Vercel Preview URL for PRs
+        if: github.event_name == 'pull_request'
+        id: preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          for i in $(seq 1 60); do
+            DEPLOY_ID=$(gh api "repos/${{ github.repository }}/deployments?sha=$SHA&environment=Preview" \
+              --jq '.[0].id // empty' 2>/dev/null)
+            if [ -n "$DEPLOY_ID" ]; then
+              ENV_URL=$(gh api "repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses" \
+                --jq '[.[] | select(.state=="success")] | .[0].environment_url // empty' 2>/dev/null)
+              if [ -n "$ENV_URL" ]; then
+                echo "url=$ENV_URL" >> "$GITHUB_OUTPUT"
+                echo "✅ Preview URL: $ENV_URL"
+                exit 0
+              fi
+            fi
+            echo "⏳ Waiting for Vercel preview ($i/60)..."
+            sleep 5
+          done
+          echo "⚠️ Preview not found, falling back to production"
+
       - name: Run Playwright tests
         run: npx playwright test --project=chromium
         env:
-          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.url || env.PLAYWRIGHT_BASE_URL }}
 
       - uses: actions/upload-artifact@v4
         if: always()

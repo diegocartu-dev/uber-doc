@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { loginWithEmail } from "../helpers/auth";
-import { MEDICO_TEST } from "../fixtures/cuentas-prueba";
+import { loginWithEmail } from "../../helpers/auth";
+import { MEDICO_TEST } from "../../fixtures/cuentas-prueba";
 
 const MOCK_DASHBOARD_ESTADO_BASE = {
   consultas_en_curso: [],
