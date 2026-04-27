@@ -254,12 +254,12 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
         </div>
 
         <div className="pt-2">
-          <label className="flex items-start gap-3">
+          <label className="flex items-start gap-3 py-2 cursor-pointer">
             <input
               type="checkbox"
               checked={checkTerminos}
               onChange={(e) => setCheckTerminos(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300"
+              className="mt-0.5 h-5 w-5 rounded border-gray-300"
             />
             <span className="text-sm text-gray-700">
               Leí y acepto los{" "}
@@ -278,7 +278,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
         <button
           type="submit"
           disabled={submitting || !checkTerminos}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] py-3.5 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] py-3.5 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting && (
             <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">

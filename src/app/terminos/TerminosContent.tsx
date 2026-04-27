@@ -1,12 +1,16 @@
-export default function TerminosContent() {
+export default function TerminosContent({ hideTitle = false }: { hideTitle?: boolean }) {
   return (
     <article className="prose prose-sm prose-gray max-w-none">
-      <h1 className="text-center text-2xl font-bold text-gray-900">
-        Términos y Condiciones de Uso
-      </h1>
-      <p className="text-center text-sm text-gray-500">
-        Versión vigente desde el 26 de abril de 2026
-      </p>
+      {!hideTitle && (
+        <>
+          <h1 className="text-center text-2xl font-bold text-gray-900">
+            Términos y Condiciones de Uso
+          </h1>
+          <p className="text-center text-sm text-gray-500">
+            Versión vigente desde el 26 de abril de 2026
+          </p>
+        </>
+      )}
 
       <div className="my-6 rounded-lg bg-blue-50 p-4 text-sm font-medium text-gray-800">
         IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un servicio de emergencias ni urgencias médicas. Ante una urgencia o emergencia, llamá al SAME (107) o concurrí al centro de salud más cercano.

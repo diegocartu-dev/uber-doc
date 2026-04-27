@@ -51,7 +51,7 @@ export async function completarPerfil(formData: FormData) {
   const nro_afiliado = (formData.get("nro_afiliado") as string)?.trim() || null;
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
 
-  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni) {
+  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !terminosAceptados) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 

@@ -62,8 +62,15 @@ export async function registrarMedico(formData: FormData) {
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
   const provincia_matricula = (formData.get("provincia_matricula") as string) || null;
 
+  const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
+  const declaracionMatricula = (formData.get("declaracion_matricula") as string) === "true";
+
   if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
+  }
+
+  if (!terminosAceptados || !declaracionMatricula) {
+    return { error: "Debés aceptar los términos y condiciones y la declaración de matrícula." };
   }
 
   if (titulo !== "Dr." && titulo !== "Dra.") {
@@ -169,8 +176,8 @@ export async function registrarMedico(formData: FormData) {
       domicilio,
       dni,
       matricula_provincial,
-      terminos_aceptados_at: ahora,
-      declaracion_matricula_at: ahora,
+      ...(terminosAceptados ? { terminos_aceptados_at: ahora } : {}),
+      ...(declaracionMatricula ? { declaracion_matricula_at: ahora } : {}),
       slug,
       foto_credencial_url,
       verificado: false,
