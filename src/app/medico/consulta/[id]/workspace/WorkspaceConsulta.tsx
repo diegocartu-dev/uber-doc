@@ -511,7 +511,7 @@ export default function WorkspaceConsulta({
     }
 
     // 3. Navegar al dashboard sin esperar Supabase
-    router.push(sinCuil ? "/dashboard?aviso=sin-cuil" : "/dashboard");
+    router.push(sinCuil ? "/dashboard?aviso=sin-cuil&from=videollamada" : "/dashboard?from=videollamada");
 
     // 4. Guardar documentos y cerrar consulta en background (fire-and-forget)
     (async () => {
@@ -1256,7 +1256,7 @@ export default function WorkspaceConsulta({
               <button
                 onClick={() => {
                   setShowSalirDialog(false);
-                  router.push("/dashboard");
+                  router.push("/dashboard?from=videollamada");
                 }}
                 style={{
                   padding: "12px",
