@@ -50,7 +50,7 @@ function normalizar(texto: string): string {
 
 function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
-  if (q.length < 1) return [];
+  if (q.length < 3) return [];
 
   const resultados: { med: Medicamento; score: number }[] = [];
 
@@ -214,7 +214,7 @@ export default function MedicamentoAutocomplete({
     const timer = setTimeout(() => {
       const results = buscar(query);
       setSugerencias(results);
-      setShowSugerencias(results.length > 0 && query.length >= 1);
+      setShowSugerencias(results.length > 0 && query.length >= 3);
       setSelectedIndex(-1);
     }, 150);
     return () => clearTimeout(timer);
@@ -342,7 +342,7 @@ export default function MedicamentoAutocomplete({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => {
-                if (sugerencias.length > 0 && query.length >= 1) {
+                if (sugerencias.length > 0 && query.length >= 3) {
                   setShowSugerencias(true);
                 }
               }}
