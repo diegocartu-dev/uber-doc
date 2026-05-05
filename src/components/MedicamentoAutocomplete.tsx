@@ -22,7 +22,20 @@ export type MedicamentoReceta = {
   dosis: string;
   frecuencia: string;
   duracion: string;
+  cantidad: string;
+  unidad: string;
 };
+
+export const UNIDADES_MEDICAMENTO = [
+  "comprimidos",
+  "cápsulas",
+  "ml",
+  "sobres",
+  "gotas",
+  "parches",
+  "unidades",
+  "otro",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Búsqueda fuzzy simple — normaliza acentos y busca substring
@@ -44,20 +57,18 @@ function buscar(query: string): Medicamento[] {
   for (const med of vademecum as Medicamento[]) {
     const nombre = normalizar(med.nombre);
     const droga = normalizar(med.droga);
+    const matchDroga = droga.includes(q);
+    const matchNombre = nombre.includes(q);
 
-    // Score: droga empieza con query > nombre empieza > contiene nombre > contiene droga
-    if (droga.startsWith(q)) {
-      resultados.push({ med, score: 4 });
-    } else if (nombre.startsWith(q)) {
-      resultados.push({ med, score: 3 });
-    } else if (nombre.includes(q)) {
-      resultados.push({ med, score: 2 });
-    } else if (droga.includes(q)) {
-      resultados.push({ med, score: 1 });
-    }
+    if (!matchDroga && !matchNombre) continue;
+    // Match en droga (IFA) tiene prioridad sobre nombre comercial
+    resultados.push({ med, score: matchDroga ? 2 : 1 });
   }
 
-  resultados.sort((a, b) => b.score - a.score);
+  resultados.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.med.nombre.localeCompare(b.med.nombre, "es");
+  });
   return resultados.slice(0, 8).map((r) => r.med);
 }
 
@@ -139,6 +150,32 @@ function LineaMedicamento({
           style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
         />
       </div>
+
+      {/* Cantidad + unidad (requerido por ReNaPDiS) */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <input
+          type="number"
+          inputMode="numeric"
+          min="1"
+          value={med.cantidad}
+          onChange={(e) => onChange({ ...med, cantidad: e.target.value })}
+          placeholder="Cantidad"
+          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+        />
+        <select
+          value={med.unidad || "comprimidos"}
+          onChange={(e) => onChange({ ...med, unidad: e.target.value })}
+          className="rounded-md border bg-white px-2 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+        >
+          {UNIDADES_MEDICAMENTO.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }
@@ -213,6 +250,8 @@ export default function MedicamentoAutocomplete({
         dosis: "",
         frecuencia: "",
         duracion: "",
+        cantidad: "",
+        unidad: "comprimidos",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");

@@ -61,6 +61,9 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
     const presentacion = (med.presentacion ?? "").trim();
     if (!droga && !nombre) continue;
     let linea = presentacion ? `${nombre} - ${presentacion}` : nombre;
+    const cantidad = (med.cantidad ?? "").trim();
+    const unidad = (med.unidad ?? "").trim();
+    if (cantidad && unidad) linea += `\n  Cantidad: ${cantidad} ${unidad}`;
     const posologia: string[] = [];
     if ((med.dosis ?? "").trim()) posologia.push(med.dosis.trim());
     if ((med.frecuencia ?? "").trim()) posologia.push(med.frecuencia.trim());
@@ -86,6 +89,8 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       dosis: m.dosis ?? "",
       frecuencia: m.frecuencia ?? "",
       duracion: m.duracion ?? "",
+      cantidad: m.cantidad ?? "",
+      unidad: m.unidad ?? "comprimidos",
     }));
     return {
       meds,
