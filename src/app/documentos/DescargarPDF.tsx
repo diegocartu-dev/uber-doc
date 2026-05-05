@@ -154,7 +154,9 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
 
   <div class="footer">
     <p>Documento generado por Docto — Plataforma de telemedicina habilitada Ley 27.553</p>
-    <p>ReNaPDiS: En trámite</p>
+    ${esReceta ? `<p>Firmado electr&oacute;nicamente por el profesional. La validez de la firma puede verificarse seg&uacute;n Ley 25.506.</p>
+    <p>Este documento ha sido firmado &mdash;electr&oacute;nica o digitalmente seg&uacute;n corresponda&mdash; por Dr. ${documento.medico_nombre}</p>
+    <p>Esta receta fue creada por un emisor inscripto y validado en el Registro de Recetarios Electr&oacute;nicos del Ministerio de Salud de la Naci&oacute;n - RL-2026-36086505-APN-DNPDP#AAIP</p>` : ""}
     <p>Este documento no reemplaza una consulta presencial cuando sea necesaria</p>
   </div>
 

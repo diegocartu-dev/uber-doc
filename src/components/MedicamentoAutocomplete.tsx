@@ -19,9 +19,6 @@ export type MedicamentoReceta = {
   nombre: string;
   droga: string;
   presentacion: string;
-  dosis: string;
-  frecuencia: string;
-  duracion: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -37,27 +34,32 @@ function normalizar(texto: string): string {
 
 function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
-  if (q.length < 1) return [];
+  if (q.length < 3) return [];
 
+  // Ranking ponderado:
+  //   100 — droga.startsWith(q)        (match exacto al inicio del IFA)
+  //    70 — droga.includes(q)          (IFA en posición intermedia, ej. asociaciones)
+  //    50 — nombre.startsWith(q)       (match exacto al inicio de marca comercial)
+  //    30 — nombre.includes(q)         (marca comercial en posición intermedia)
+  // Esto evita basura tipo "Oxibutinina" para query "Ibu" o "Dispositivo PARA insulina".
   const resultados: { med: Medicamento; score: number }[] = [];
 
   for (const med of vademecum as Medicamento[]) {
     const nombre = normalizar(med.nombre);
     const droga = normalizar(med.droga);
-
-    // Score: droga empieza con query > nombre empieza > contiene nombre > contiene droga
-    if (droga.startsWith(q)) {
-      resultados.push({ med, score: 4 });
-    } else if (nombre.startsWith(q)) {
-      resultados.push({ med, score: 3 });
-    } else if (nombre.includes(q)) {
-      resultados.push({ med, score: 2 });
-    } else if (droga.includes(q)) {
-      resultados.push({ med, score: 1 });
-    }
+    let score = 0;
+    if (droga.startsWith(q)) score = 100;
+    else if (droga.includes(q)) score = 70;
+    else if (nombre.startsWith(q)) score = 50;
+    else if (nombre.includes(q)) score = 30;
+    if (score === 0) continue;
+    resultados.push({ med, score });
   }
 
-  resultados.sort((a, b) => b.score - a.score);
+  resultados.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.med.nombre.localeCompare(b.med.nombre, "es");
+  });
   return resultados.slice(0, 8).map((r) => r.med);
 }
 
@@ -76,69 +78,32 @@ function uid(): string {
 
 function LineaMedicamento({
   med,
-  onChange,
   onRemove,
 }: {
   med: MedicamentoReceta;
-  onChange: (updated: MedicamentoReceta) => void;
   onRemove: () => void;
 }) {
+  const titulo = med.presentacion ? `${med.nombre} - ${med.presentacion}` : med.nombre;
   return (
     <div
-      className="rounded-lg bg-white px-3 py-2.5 mb-2"
+      className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2.5 mb-2"
       style={{ border: "0.5px solid #e5e7eb" }}
     >
-      {/* Header: nombre + botón eliminar */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-900 truncate">
-            {med.nombre}
-          </p>
-          <p className="text-xs text-gray-500">
-            {med.droga} - {med.presentacion}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-          style={{ minHeight: "32px", minWidth: "32px" }}
-          aria-label="Eliminar medicamento"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Campos de posología */}
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        <input
-          type="text"
-          value={med.dosis}
-          onChange={(e) => onChange({ ...med, dosis: e.target.value })}
-          placeholder="Dosis"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-        <input
-          type="text"
-          value={med.frecuencia}
-          onChange={(e) => onChange({ ...med, frecuencia: e.target.value })}
-          placeholder="Frecuencia"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-        <input
-          type="text"
-          value={med.duracion}
-          onChange={(e) => onChange({ ...med, duracion: e.target.value })}
-          placeholder="Duración"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-      </div>
+      <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
+        {titulo}
+      </p>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+        style={{ minHeight: "32px", minWidth: "32px" }}
+        aria-label="Eliminar medicamento"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -177,7 +142,7 @@ export default function MedicamentoAutocomplete({
     const timer = setTimeout(() => {
       const results = buscar(query);
       setSugerencias(results);
-      setShowSugerencias(results.length > 0 && query.length >= 1);
+      setShowSugerencias(results.length > 0 && query.length >= 3);
       setSelectedIndex(-1);
     }, 150);
     return () => clearTimeout(timer);
@@ -210,9 +175,6 @@ export default function MedicamentoAutocomplete({
         nombre: nombreReceta,
         droga: med.droga,
         presentacion: med.presentacion,
-        dosis: "",
-        frecuencia: "",
-        duracion: "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
@@ -240,13 +202,6 @@ export default function MedicamentoAutocomplete({
     } else if (e.key === "Escape") {
       setShowSugerencias(false);
     }
-  }
-
-  // Actualizar un medicamento
-  function updateMed(id: string, updated: MedicamentoReceta) {
-    onMedicamentosChange(
-      medicamentos.map((m) => (m.id === id ? updated : m))
-    );
   }
 
   // Eliminar medicamento
@@ -285,7 +240,6 @@ export default function MedicamentoAutocomplete({
             <LineaMedicamento
               key={med.id}
               med={med}
-              onChange={(updated) => updateMed(med.id, updated)}
               onRemove={() => removeMed(med.id)}
             />
           ))}
@@ -303,7 +257,7 @@ export default function MedicamentoAutocomplete({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => {
-                if (sugerencias.length > 0 && query.length >= 1) {
+                if (sugerencias.length > 0 && query.length >= 3) {
                   setShowSugerencias(true);
                 }
               }}

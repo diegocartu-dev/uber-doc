@@ -56,17 +56,10 @@ function formatTimer(seg: number): string {
 function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
   const lineas: string[] = [];
   for (const med of meds) {
-    const droga = (med.droga ?? "").trim();
     const nombre = (med.nombre ?? "").trim();
     const presentacion = (med.presentacion ?? "").trim();
-    if (!droga && !nombre) continue;
-    let linea = presentacion ? `${nombre} - ${presentacion}` : nombre;
-    const posologia: string[] = [];
-    if ((med.dosis ?? "").trim()) posologia.push(med.dosis.trim());
-    if ((med.frecuencia ?? "").trim()) posologia.push(med.frecuencia.trim());
-    if ((med.duracion ?? "").trim()) posologia.push(med.duracion.trim());
-    if (posologia.length > 0) linea += `\n  ${posologia.join(" | ")}`;
-    lineas.push(linea);
+    if (!nombre) continue;
+    lineas.push(presentacion ? `${nombre} - ${presentacion}` : nombre);
   }
   if ((textoLibre ?? "").trim()) {
     if (lineas.length > 0) lineas.push("");
@@ -83,9 +76,6 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       nombre: m.nombre ?? "",
       droga: m.droga ?? "",
       presentacion: m.presentacion ?? "",
-      dosis: m.dosis ?? "",
-      frecuencia: m.frecuencia ?? "",
-      duracion: m.duracion ?? "",
     }));
     return {
       meds,
