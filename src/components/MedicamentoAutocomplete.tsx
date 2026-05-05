@@ -19,26 +19,7 @@ export type MedicamentoReceta = {
   nombre: string;
   droga: string;
   presentacion: string;
-  dosis: string;
-  frecuencia: string;
-  duracion: string;
-  cantidad: string;
-  unidad: string;
-  posologia: string;
 };
-
-const POSOLOGIA_MAX = 300;
-
-export const UNIDADES_MEDICAMENTO = [
-  "comprimidos",
-  "cápsulas",
-  "ml",
-  "sobres",
-  "gotas",
-  "parches",
-  "unidades",
-  "otro",
-] as const;
 
 // ---------------------------------------------------------------------------
 // Búsqueda fuzzy simple — normaliza acentos y busca substring
@@ -97,125 +78,32 @@ function uid(): string {
 
 function LineaMedicamento({
   med,
-  onChange,
   onRemove,
 }: {
   med: MedicamentoReceta;
-  onChange: (updated: MedicamentoReceta) => void;
   onRemove: () => void;
 }) {
+  const titulo = med.presentacion ? `${med.nombre} - ${med.presentacion}` : med.nombre;
   return (
     <div
-      className="rounded-lg bg-white px-3 py-2.5 mb-2"
+      className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2.5 mb-2"
       style={{ border: "0.5px solid #e5e7eb" }}
     >
-      {/* Header: nombre + botón eliminar */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-900 truncate">
-            {med.nombre}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-          style={{ minHeight: "32px", minWidth: "32px" }}
-          aria-label="Eliminar medicamento"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Presentación (autocompletada del vademécum, editable) */}
-      <div className="mt-2">
-        <label className="block text-[10px] font-medium tracking-wide text-gray-400 mb-1">
-          PRESENTACIÓN
-        </label>
-        <input
-          type="text"
-          value={med.presentacion}
-          onChange={(e) => onChange({ ...med, presentacion: e.target.value })}
-          placeholder="Ej: comp.recub. 500mg x 30"
-          className="w-full rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-      </div>
-
-      {/* Campos de posología */}
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        <input
-          type="text"
-          value={med.dosis}
-          onChange={(e) => onChange({ ...med, dosis: e.target.value })}
-          placeholder="Dosis"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-        <input
-          type="text"
-          value={med.frecuencia}
-          onChange={(e) => onChange({ ...med, frecuencia: e.target.value })}
-          placeholder="Frecuencia"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-        <input
-          type="text"
-          value={med.duracion}
-          onChange={(e) => onChange({ ...med, duracion: e.target.value })}
-          placeholder="Duración"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-      </div>
-
-      {/* Cantidad + unidad (requerido por ReNaPDiS) */}
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <input
-          type="number"
-          inputMode="numeric"
-          min="1"
-          value={med.cantidad}
-          onChange={(e) => onChange({ ...med, cantidad: e.target.value })}
-          placeholder="Cantidad"
-          className="rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        />
-        <select
-          value={med.unidad || "comprimidos"}
-          onChange={(e) => onChange({ ...med, unidad: e.target.value })}
-          className="rounded-md border bg-white px-2 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
-        >
-          {UNIDADES_MEDICAMENTO.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Posología / indicaciones de uso */}
-      <div className="mt-2">
-        <label className="block text-[10px] font-medium tracking-wide text-gray-400 mb-1">
-          POSOLOGIA / INDICACIONES DE USO
-        </label>
-        <textarea
-          value={med.posologia ?? ""}
-          onChange={(e) =>
-            onChange({ ...med, posologia: e.target.value.slice(0, POSOLOGIA_MAX) })
-          }
-          maxLength={POSOLOGIA_MAX}
-          rows={2}
-          placeholder="Ej: 1 comprimido cada 8 hs durante 7 días, con las comidas"
-          className="w-full resize-none rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-          style={{ border: "0.5px solid #e5e7eb", minHeight: "44px" }}
-        />
-      </div>
+      <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
+        {titulo}
+      </p>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+        style={{ minHeight: "32px", minWidth: "32px" }}
+        aria-label="Eliminar medicamento"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -287,12 +175,6 @@ export default function MedicamentoAutocomplete({
         nombre: nombreReceta,
         droga: med.droga,
         presentacion: med.presentacion,
-        dosis: "",
-        frecuencia: "",
-        duracion: "",
-        cantidad: "",
-        unidad: "comprimidos",
-        posologia: "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
@@ -320,13 +202,6 @@ export default function MedicamentoAutocomplete({
     } else if (e.key === "Escape") {
       setShowSugerencias(false);
     }
-  }
-
-  // Actualizar un medicamento
-  function updateMed(id: string, updated: MedicamentoReceta) {
-    onMedicamentosChange(
-      medicamentos.map((m) => (m.id === id ? updated : m))
-    );
   }
 
   // Eliminar medicamento
@@ -365,7 +240,6 @@ export default function MedicamentoAutocomplete({
             <LineaMedicamento
               key={med.id}
               med={med}
-              onChange={(updated) => updateMed(med.id, updated)}
               onRemove={() => removeMed(med.id)}
             />
           ))}
