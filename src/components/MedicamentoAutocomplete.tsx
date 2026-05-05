@@ -52,17 +52,24 @@ function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
   if (q.length < 3) return [];
 
+  // Ranking ponderado:
+  //   100 — droga.startsWith(q)        (match exacto al inicio del IFA)
+  //    70 — droga.includes(q)          (IFA en posición intermedia, ej. asociaciones)
+  //    50 — nombre.startsWith(q)       (match exacto al inicio de marca comercial)
+  //    30 — nombre.includes(q)         (marca comercial en posición intermedia)
+  // Esto evita basura tipo "Oxibutinina" para query "Ibu" o "Dispositivo PARA insulina".
   const resultados: { med: Medicamento; score: number }[] = [];
 
   for (const med of vademecum as Medicamento[]) {
     const nombre = normalizar(med.nombre);
     const droga = normalizar(med.droga);
-    const matchDroga = droga.includes(q);
-    const matchNombre = nombre.includes(q);
-
-    if (!matchDroga && !matchNombre) continue;
-    // Match en droga (IFA) tiene prioridad sobre nombre comercial
-    resultados.push({ med, score: matchDroga ? 2 : 1 });
+    let score = 0;
+    if (droga.startsWith(q)) score = 100;
+    else if (droga.includes(q)) score = 70;
+    else if (nombre.startsWith(q)) score = 50;
+    else if (nombre.includes(q)) score = 30;
+    if (score === 0) continue;
+    resultados.push({ med, score });
   }
 
   resultados.sort((a, b) => {
