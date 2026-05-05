@@ -69,6 +69,8 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
     if ((med.frecuencia ?? "").trim()) posologia.push(med.frecuencia.trim());
     if ((med.duracion ?? "").trim()) posologia.push(med.duracion.trim());
     if (posologia.length > 0) linea += `\n  ${posologia.join(" | ")}`;
+    const indicaciones = (med.posologia ?? "").trim();
+    if (indicaciones) linea += `\n  Indicaciones: ${indicaciones}`;
     lineas.push(linea);
   }
   if ((textoLibre ?? "").trim()) {
@@ -91,6 +93,7 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       duracion: m.duracion ?? "",
       cantidad: m.cantidad ?? "",
       unidad: m.unidad ?? "comprimidos",
+      posologia: m.posologia ?? "",
     }));
     return {
       meds,

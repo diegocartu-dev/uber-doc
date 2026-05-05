@@ -24,7 +24,10 @@ export type MedicamentoReceta = {
   duracion: string;
   cantidad: string;
   unidad: string;
+  posologia: string;
 };
+
+const POSOLOGIA_MAX = 300;
 
 export const UNIDADES_MEDICAMENTO = [
   "comprimidos",
@@ -195,6 +198,24 @@ function LineaMedicamento({
           ))}
         </select>
       </div>
+
+      {/* Posología / indicaciones de uso */}
+      <div className="mt-2">
+        <label className="block text-[10px] font-medium tracking-wide text-gray-400 mb-1">
+          POSOLOGIA / INDICACIONES DE USO
+        </label>
+        <textarea
+          value={med.posologia ?? ""}
+          onChange={(e) =>
+            onChange({ ...med, posologia: e.target.value.slice(0, POSOLOGIA_MAX) })
+          }
+          maxLength={POSOLOGIA_MAX}
+          rows={2}
+          placeholder="Ej: 1 comprimido cada 8 hs durante 7 días, con las comidas"
+          className="w-full resize-none rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          style={{ border: "0.5px solid #e5e7eb", minHeight: "44px" }}
+        />
+      </div>
     </div>
   );
 }
@@ -271,6 +292,7 @@ export default function MedicamentoAutocomplete({
         duracion: "",
         cantidad: "",
         unidad: "comprimidos",
+        posologia: "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
