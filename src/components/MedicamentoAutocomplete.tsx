@@ -105,9 +105,6 @@ function LineaMedicamento({
           <p className="text-sm font-medium text-gray-900 truncate">
             {med.nombre}
           </p>
-          <p className="text-xs text-gray-500">
-            {med.droga} - {med.presentacion}
-          </p>
         </div>
         <button
           type="button"
@@ -121,6 +118,21 @@ function LineaMedicamento({
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
+      </div>
+
+      {/* Presentación (autocompletada del vademécum, editable) */}
+      <div className="mt-2">
+        <label className="block text-[10px] font-medium tracking-wide text-gray-400 mb-1">
+          PRESENTACIÓN
+        </label>
+        <input
+          type="text"
+          value={med.presentacion}
+          onChange={(e) => onChange({ ...med, presentacion: e.target.value })}
+          placeholder="Ej: comp.recub. 500mg x 30"
+          className="w-full rounded-md border px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+        />
       </div>
 
       {/* Campos de posología */}
