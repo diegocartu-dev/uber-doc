@@ -113,6 +113,13 @@ export default async function FichaPacientePage({
 
   if (!paciente) redirect("/dashboard");
 
+  // Datos médicos extendidos (sexo, cobertura) — query separado para no romper SELECT principal
+  const { data: perfilMedico } = await supabase
+    .from("pacientes")
+    .select("sexo_dni, tiene_cobertura")
+    .eq("id", pacienteId)
+    .single();
+
   const edad = calcularEdad(paciente.fecha_nacimiento);
 
   // Obtener user_id del paciente para buscar en consultas
@@ -165,6 +172,11 @@ export default async function FichaPacientePage({
     paciente_nombre: paciente.nombre_completo,
     paciente_dni: paciente.dni ?? "",
     paciente_cuil: paciente.cuil ?? "",
+    paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
+    paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
+    paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,
+    paciente_obra_social: paciente.obra_social ?? null,
+    paciente_nro_afiliado: paciente.nro_afiliado ?? null,
   }));
 
   const docsPorTurno = new Map<string, typeof docsTurnosCompletos>();
@@ -197,6 +209,11 @@ export default async function FichaPacientePage({
     paciente_nombre: paciente.nombre_completo,
     paciente_dni: paciente.dni ?? "",
     paciente_cuil: paciente.cuil ?? "",
+    paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
+    paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
+    paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,
+    paciente_obra_social: paciente.obra_social ?? null,
+    paciente_nro_afiliado: paciente.nro_afiliado ?? null,
   }));
 
   for (const doc of documentosCompletos) {
