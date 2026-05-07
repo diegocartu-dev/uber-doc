@@ -120,6 +120,7 @@ export default function MedicamentoAutocomplete({
   dictando,
   onIniciarDictado,
   onDetenerDictado,
+  dictadoDisponible = true,
 }: {
   medicamentos: MedicamentoReceta[];
   onMedicamentosChange: (meds: MedicamentoReceta[]) => void;
@@ -128,6 +129,7 @@ export default function MedicamentoAutocomplete({
   dictando: string | null;
   onIniciarDictado: () => void;
   onDetenerDictado: () => void;
+  dictadoDisponible?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [sugerencias, setSugerencias] = useState<Medicamento[]>([]);
@@ -216,21 +218,23 @@ export default function MedicamentoAutocomplete({
         <p className="text-xs font-medium tracking-wide text-gray-400">
           RECETA
         </p>
-        <button
-          type="button"
-          onMouseDown={onIniciarDictado}
-          onMouseUp={onDetenerDictado}
-          onTouchStart={onIniciarDictado}
-          onTouchEnd={onDetenerDictado}
-          className={`rounded-md px-2 py-1 text-xs transition ${
-            activo
-              ? "bg-red-100 text-red-600"
-              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-          }`}
-          style={{ minHeight: "44px", minWidth: "44px" }}
-        >
-          {activo ? "Dictando..." : "Dictar"}
-        </button>
+        {dictadoDisponible && (
+          <button
+            type="button"
+            onMouseDown={onIniciarDictado}
+            onMouseUp={onDetenerDictado}
+            onTouchStart={onIniciarDictado}
+            onTouchEnd={onDetenerDictado}
+            className={`rounded-md px-2 py-1 text-xs transition ${
+              activo
+                ? "bg-red-100 text-red-600"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+            style={{ minHeight: "44px", minWidth: "44px" }}
+          >
+            {activo ? "Dictando..." : "Dictar"}
+          </button>
+        )}
       </div>
 
       {/* Medicamentos agregados */}

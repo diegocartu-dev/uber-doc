@@ -160,6 +160,7 @@ function CampoDictado({
   onIniciar,
   onDetener,
   soportado = true,
+  dictadoDisponible = true,
 }: {
   label: string;
   campo: string;
@@ -174,6 +175,7 @@ function CampoDictado({
   onIniciar: () => void;
   onDetener: () => void;
   soportado?: boolean;
+  dictadoDisponible?: boolean;
 }) {
   const activo = dictando === campo;
   return (
@@ -183,7 +185,7 @@ function CampoDictado({
           {label}
           {required && " *"}
         </p>
-        {soportado ? (
+        {!dictadoDisponible ? null : soportado ? (
           <button
             type="button"
             onMouseDown={onIniciar}
@@ -377,10 +379,11 @@ function CamIcon({ on }: { on: boolean }) {
 }
 
 // Hook para controles mic/cam — usado por el footer FUERA de LiveKitRoom
-function useMicCam() {
+function useMicCam(modo?: ModoWorkspace) {
   const { localParticipant } = useLocalParticipant();
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
+  const previousMicOnRef = useRef<boolean | null>(null);
 
   const toggleMic = useCallback(async () => {
     const next = !micOn;
@@ -394,12 +397,44 @@ function useMicCam() {
     setCamOn(next);
   }, [camOn, localParticipant]);
 
+  // Auto-mute LiveKit al entrar a modo escritura (libera mic para Web Speech).
+  // Restaurar al salir.
+  useEffect(() => {
+    if (modo === undefined) return;
+    let cancelled = false;
+
+    if (modo === "escritura") {
+      if (previousMicOnRef.current === null) {
+        previousMicOnRef.current = micOn;
+        if (micOn) {
+          (async () => {
+            await localParticipant.setMicrophoneEnabled(false);
+            if (!cancelled) setMicOn(false);
+          })();
+        }
+      }
+    } else if (previousMicOnRef.current !== null) {
+      const restoreTo = previousMicOnRef.current;
+      previousMicOnRef.current = null;
+      if (restoreTo) {
+        (async () => {
+          await localParticipant.setMicrophoneEnabled(true);
+          if (!cancelled) setMicOn(true);
+        })();
+      }
+    }
+
+    return () => { cancelled = true; };
+    // micOn es captura puntual al cambiar de modo; no debe re-disparar el efecto
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo, localParticipant]);
+
   return { micOn, camOn, toggleMic, toggleCam };
 }
 
 // Wrapper que provee controles mic/cam via render prop
-function MicCamProvider({ children }: { children: (controls: { micOn: boolean; camOn: boolean; toggleMic: () => void; toggleCam: () => void }) => React.ReactNode }) {
-  const controls = useMicCam();
+function MicCamProvider({ modo, children }: { modo?: ModoWorkspace; children: (controls: { micOn: boolean; camOn: boolean; toggleMic: () => void; toggleCam: () => void }) => React.ReactNode }) {
+  const controls = useMicCam(modo);
   return <>{children(controls)}</>;
 }
 
@@ -721,7 +756,7 @@ export default function WorkspaceConsulta({
               </div>
 
               {/* Footer con controles — render prop para acceder a mic/cam */}
-              <MicCamProvider>
+              <MicCamProvider modo={modo}>
                 {({ micOn, camOn, toggleMic, toggleCam }) => (
                   <>
                     {/* MOBILE footer: 3 filas. Solo visible en modo video */}
@@ -994,6 +1029,7 @@ export default function WorkspaceConsulta({
             onIniciar={() => iniciarDictado("diagnostico", (fn) => setDiagnostico((prev) => { const val = fn(prev); if (val.trim()) { setDiagError(false); setError(null); } return val; }))}
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
+            dictadoDisponible={modo === "escritura"}
           />
           <MedicamentoAutocomplete
             medicamentos={medicamentos}
@@ -1003,6 +1039,7 @@ export default function WorkspaceConsulta({
             dictando={dictando}
             onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
             onDetenerDictado={detenerDictado}
+            dictadoDisponible={modo === "escritura"}
           />
           <CampoDictado
             label="INDICACIONES"
@@ -1014,6 +1051,7 @@ export default function WorkspaceConsulta({
             onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
+            dictadoDisponible={modo === "escritura"}
           />
           <CampoDictado
             label="CERTIFICADO"
@@ -1025,6 +1063,7 @@ export default function WorkspaceConsulta({
             onIniciar={() => iniciarDictado("certificado", setCertificado)}
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
+            dictadoDisponible={modo === "escritura"}
           />
 
           {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
