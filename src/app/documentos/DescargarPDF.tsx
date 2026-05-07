@@ -71,18 +71,36 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
     const nroReceta = esReceta ? generarNumeroReceta(documento.id, documento.created_at) : null;
     const barcodeDataUrl = nroReceta ? generarBarcodeDataUrl(nroReceta) : null;
 
-    // Bloque paciente extra: sexo, fecha nac, cobertura
-    const sexoLine = documento.paciente_sexo_dni
-      ? `<div class="row"><span><strong>Sexo (DNI):</strong> ${documento.paciente_sexo_dni === "femenino" ? "F" : "M"}</span>${documento.paciente_fecha_nacimiento ? `<span><strong>Fecha nac.:</strong> ${formatFechaNacimiento(documento.paciente_fecha_nacimiento)}</span>` : ""}</div>`
-      : (documento.paciente_fecha_nacimiento
-        ? `<div class="row"><span><strong>Fecha nac.:</strong> ${formatFechaNacimiento(documento.paciente_fecha_nacimiento)}</span></div>`
-        : "");
+    // ─── Bloque paciente — Decreto 63/2024 ────────────────────────────────
+    // Layout dos columnas. Reglas:
+    //   1. Nombre solo (fila completa).
+    //   2. DNI (izq) + CUIL (der). Si no hay CUIL → solo DNI alineado izq.
+    //   3. Sexo (izq) + Fecha nac. (der). Si falta uno, el otro queda solo
+    //      alineado a la izquierda. Si faltan los dos, la fila no se renderiza.
+    //   4. Cobertura:
+    //      - Particular → "Cobertura: Particular" en fila simple.
+    //      - Con OS → "Cobertura: <OS>" izq + "Nro de afiliado: <nro>" der
+    //        (si no hay nro, solo OS alineado izq).
+    const dni = (documento.paciente_dni ?? "").trim();
+    const cuil = (documento.paciente_cuil ?? "").trim();
+    const dniCuilLine = dni
+      ? `<div class="row"><span><strong>DNI:</strong> ${dni}</span>${cuil ? `<span><strong>CUIL:</strong> ${cuil}</span>` : ""}</div>`
+      : (cuil ? `<div class="row"><span><strong>CUIL:</strong> ${cuil}</span></div>` : "");
 
-    const coberturaTexto = documento.paciente_tiene_cobertura && documento.paciente_obra_social
-      ? documento.paciente_obra_social + (documento.paciente_nro_afiliado ? ` — Af. ${documento.paciente_nro_afiliado}` : "")
-      : "Particular";
+    const sexoCell = documento.paciente_sexo_dni
+      ? `<span><strong>Sexo (DNI):</strong> ${documento.paciente_sexo_dni === "femenino" ? "F" : "M"}</span>`
+      : "";
+    const fechaNacCell = documento.paciente_fecha_nacimiento
+      ? `<span><strong>Fecha nac.:</strong> ${formatFechaNacimiento(documento.paciente_fecha_nacimiento)}</span>`
+      : "";
+    const sexoLine = (sexoCell || fechaNacCell)
+      ? `<div class="row">${sexoCell}${fechaNacCell}</div>`
+      : "";
 
-    const coberturaLine = `<div class="row"><span><strong>Cobertura:</strong> ${coberturaTexto}</span></div>`;
+    const tieneCobertura = documento.paciente_tiene_cobertura && documento.paciente_obra_social;
+    const coberturaLine = tieneCobertura
+      ? `<div class="row"><span><strong>Cobertura:</strong> ${documento.paciente_obra_social}</span>${documento.paciente_nro_afiliado ? `<span><strong>Nro de afiliado:</strong> ${documento.paciente_nro_afiliado}</span>` : ""}</div>`
+      : `<div class="row"><span><strong>Cobertura:</strong> Particular</span></div>`;
 
     const contenido = `
 <!DOCTYPE html>
@@ -121,11 +139,8 @@ export default function DescargarPDF({ documento }: { documento: Documento }) {
   </div>
 
   <div class="paciente">
-    <div class="row">
-      <span><strong>Paciente:</strong> ${documento.paciente_nombre}</span>
-      <span><strong>${documento.paciente_cuil ? "CUIL" : "DNI"}:</strong> ${documento.paciente_cuil || documento.paciente_dni}</span>
-    </div>
-    ${documento.paciente_cuil && documento.paciente_dni ? `<div class="row"><span><strong>DNI:</strong> ${documento.paciente_dni}</span></div>` : ""}
+    <div class="row"><span><strong>Paciente:</strong> ${documento.paciente_nombre}</span></div>
+    ${dniCuilLine}
     ${sexoLine}
     ${coberturaLine}
   </div>
