@@ -3,30 +3,29 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 const BETA_COOKIE = "docto_beta_access";
 
-// Rutas que NUNCA pasan por Beta Guard (webhooks, crons, assets, propia pantalla).
-// Los assets de Next y favicon ya están excluidos por el matcher de abajo;
-// estos son los que sí caen al middleware pero queremos dejar pasar.
-const BETA_BYPASS = [
-  "/api/webhooks",
-  "/api/mp",
-  "/api/cron",
-  "/manifest",
-  "/icons",
-  "/sw.js",
-  "/beta-access",
-  "/api/beta-login",
+// Rutas EXACTAS de creación de cuenta que el guard protege.
+// Todo lo demás queda público (home, login, dashboards privados con su propia
+// auth, /api/webhooks, crons, etc).
+const BETA_PROTECTED = [
+  "/auth/register",         // registro paciente
+  "/auth/registro-medico",  // registro médico
+  "/api/pre-registro",      // endpoint de pre-registro
 ];
+
+function isBetaProtected(pathname: string): boolean {
+  return BETA_PROTECTED.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+}
 
 function passesBetaGuard(request: NextRequest): boolean {
   const password = process.env.BETA_PASSWORD;
 
   // Sin BETA_PASSWORD seteada → guard desactivado (modo lanzamiento).
-  // Cuando se quiera reactivar el guard, agregar la env var en Vercel.
   if (!password) return true;
 
-  const { pathname } = request.nextUrl;
-
-  if (BETA_BYPASS.some((p) => pathname.startsWith(p))) return true;
+  // Solo intercepta rutas de creación de cuenta. El resto pasa libre.
+  if (!isBetaProtected(request.nextUrl.pathname)) return true;
 
   const cookie = request.cookies.get(BETA_COOKIE);
   return cookie?.value === password;
