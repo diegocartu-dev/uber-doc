@@ -312,6 +312,40 @@ export async function enviarEmailTurnoCancelado(
   }
 }
 
+export async function enviarDocumentoMedico(params: {
+  pacienteEmail: string;
+  pacienteNombre: string;
+  medicoNombre: string;
+  fecha: string;
+  archivo: { filename: string; content: string };
+}): Promise<void> {
+  const { pacienteEmail, pacienteNombre, medicoNombre, fecha, archivo } = params;
+
+  const html = wrapHtml("Documento de tu consulta — Docto", `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Documento de tu consulta</h1>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+      Hola ${pacienteNombre},
+    </p>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+      El Dr. ${medicoNombre} te comparti&oacute; un documento de tu consulta del ${fecha}.
+    </p>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+      Encontr&aacute;s el archivo adjunto a este email.
+    </p>
+    <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">&mdash; Docto</p>
+  `);
+
+  await resend().emails.send({
+    from: FROM,
+    to: pacienteEmail,
+    subject: `El Dr. ${medicoNombre} te envió un documento de tu consulta`,
+    html,
+    attachments: [{ filename: archivo.filename, content: archivo.content }],
+  });
+
+  console.log("[email] documento médico enviado a:", pacienteEmail);
+}
+
 export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void> {
   try {
     const datos = await obtenerDatosTurno(turnoId);

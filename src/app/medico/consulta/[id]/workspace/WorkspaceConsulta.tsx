@@ -22,6 +22,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
+import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
+
+type ModoWorkspace = "video" | "escritura" | "estudios";
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -435,8 +438,9 @@ export default function WorkspaceConsulta({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
 
-  // Mobile: dos modos explícitos. false = video, true = escritura.
-  const [modoEscritura, setModoEscritura] = useState(false);
+  // Mobile: tres modos explícitos.
+  const [modo, setModo] = useState<ModoWorkspace>("video");
+  const modoEscritura = modo !== "video";
   const [diagError, setDiagError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
@@ -453,6 +457,9 @@ export default function WorkspaceConsulta({
 
   // --- Dictado ---
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado, soportado: dictadoSoportado } = useDictado();
+
+  // --- Estudios count ---
+  const estudiosCount = useEstudiosCount(consultaId);
 
   // --- Datos derivados ---
   const edad = calcularEdad(consulta.paciente_nacimiento);
@@ -474,7 +481,7 @@ export default function WorkspaceConsulta({
     if (diagnostico.trim()) return true;
     setError("Completá el diagnóstico antes de finalizar la consulta.");
     setDiagError(true);
-    setModoEscritura(true);
+    setModo("escritura");
     setTimeout(() => diagRef.current?.focus(), 350); // después de la transición CSS
     return false;
   }
@@ -558,6 +565,14 @@ export default function WorkspaceConsulta({
           .update({ estado: "completada", doc_borrador: null })
           .eq("id", consultaId);
 
+        // Borrar estudios temporales del paciente
+        fetch("/api/consulta/borrar-estudios-temp", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ consultaId }),
+        }).catch(() => {});
+
         fetch("/api/push/notificar-documentos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -631,14 +646,14 @@ export default function WorkspaceConsulta({
       <div
         className={`relative flex w-full flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
           modoEscritura
-            ? "h-[80px] min-h-[80px]"
+            ? "h-[52px] min-h-[52px]"
             : "h-[75dvh] min-h-[200px]"
         } md:h-auto md:min-h-0 md:w-[60%] md:flex-1`}
       >
         {/* Barra compacta modo escritura (solo mobile) */}
         <div
           className={`flex items-center justify-between px-4 ${
-            modoEscritura ? "py-2" : "py-3"
+            modoEscritura ? "py-1" : "py-3"
           } md:py-3`}
           style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}
         >
@@ -662,19 +677,18 @@ export default function WorkspaceConsulta({
             {modoEscritura && (
               <button
                 type="button"
-                onClick={() => setModoEscritura(false)}
-                className="md:hidden rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition"
-                style={{ minHeight: "44px", minWidth: "44px" }}
+                onClick={() => setModo("video")}
+                className="md:hidden rounded-lg px-2.5 py-1 text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition min-h-[36px]"
               >
-                Volver al video
+                Video
               </button>
             )}
-            {/* Botón salir — siempre visible */}
+            {/* Botón salir — siempre visible. Mobile en modoEscritura: 36px alto. Resto: 44px */}
             <button
               type="button"
               onClick={() => setShowSalirDialog(true)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
-              style={{ minHeight: "44px", minWidth: "44px" }}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition ${modoEscritura ? "min-h-[36px] md:min-h-[44px]" : "min-h-[44px]"}`}
+              style={{ minWidth: "44px" }}
             >
               Salir
             </button>
@@ -735,15 +749,30 @@ export default function WorkspaceConsulta({
                             <CamIcon on={camOn} />
                           </button>
                         </div>
-                        {/* Fila 2: Documentar full width */}
-                        <button
-                          type="button"
-                          onClick={() => setModoEscritura(true)}
-                          className="w-full rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
-                          style={{ minHeight: "48px" }}
-                        >
-                          Documentar
-                        </button>
+                        {/* Fila 2: Barra de modos */}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setModo("escritura")}
+                            className="flex-1 rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
+                            style={{ minHeight: "48px" }}
+                          >
+                            Documentar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModo("estudios")}
+                            className="flex-1 rounded-xl bg-white/10 py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100 relative"
+                            style={{ minHeight: "48px" }}
+                          >
+                            Estudios
+                            {estudiosCount > 0 && (
+                              <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#D85A30] px-1.5 text-[10px] font-bold text-white">
+                                {estudiosCount}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                         {/* Fila 3: Finalizar full width */}
                         <LoadingButton
                           type="button"
@@ -810,6 +839,48 @@ export default function WorkspaceConsulta({
         }`}
         style={{ borderLeft: "0.5px solid #e5e7eb" }}
       >
+        {/* Desktop: Barra de modos */}
+        <div
+          className="hidden md:flex items-center gap-1 px-4 py-2"
+          style={{ borderBottom: "0.5px solid #e5e7eb" }}
+        >
+          <button
+            type="button"
+            onClick={() => setModo(modo === "estudios" ? "escritura" : "video")}
+            className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
+              modo !== "estudios"
+                ? "bg-[#378ADD] text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            Documentación
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo("estudios")}
+            className={`rounded-lg px-4 py-2 text-xs font-medium transition relative ${
+              modo === "estudios"
+                ? "bg-[#378ADD] text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            Estudios
+            {estudiosCount > 0 && modo !== "estudios" && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#D85A30] px-1 text-[10px] font-bold text-white">
+                {estudiosCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Contenido: Estudios o Documentación */}
+        {modo === "estudios" ? (
+          <PanelEstudios
+            consultaId={consultaId}
+            estadoConsulta="en_curso"
+            createdAt={horaInicio}
+          />
+        ) : (
         <div className="p-5">
           {/* Info paciente (solo desktop) */}
           <div className="hidden md:block">
@@ -974,9 +1045,9 @@ export default function WorkspaceConsulta({
               </LoadingButton>
               <button
                 type="button"
-                onClick={() => setModoEscritura(false)}
-                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80"
-                style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
+                onClick={() => setModo("video")}
+                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
+                style={{ backgroundColor: "transparent", color: "#378ADD", border: "1px solid #378ADD", minHeight: "44px" }}
               >
                 Volver a la llamada
               </button>
@@ -1017,6 +1088,7 @@ export default function WorkspaceConsulta({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Dialog de cancelación — reemplaza window.confirm() que Chrome suprime en páginas con iframes cross-origin */}

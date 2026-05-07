@@ -27,6 +27,9 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Nombre completo").clear();
     await page.getByLabel("DNI").clear();
 
+    // Aceptar términos para habilitar el botón submit
+    await page.getByRole("checkbox").check();
+
     await page.getByRole("button", { name: /guardar/i }).click();
 
     await expect(page.locator("text=Ingresá tu nombre completo.")).toBeVisible();
@@ -50,6 +53,9 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Fecha de nacimiento").fill("1990-05-15");
     await page.getByLabel("Femenino").check();
 
+    // Aceptar términos para habilitar el botón submit
+    await page.getByRole("checkbox").check();
+
     await page.getByRole("button", { name: /guardar/i }).click();
 
     await page.waitForURL((url) => !url.pathname.includes("/onboarding"), { timeout: 15000 });
@@ -71,6 +77,9 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("DNI").fill(PACIENTE_DNI_INVALIDO.dni);
     await page.getByLabel("Fecha de nacimiento").fill("1991-12-05");
     await page.getByLabel("Masculino").check();
+
+    // Aceptar términos para habilitar el botón submit
+    await page.getByRole("checkbox").check();
 
     await page.getByRole("button", { name: /guardar/i }).click();
 

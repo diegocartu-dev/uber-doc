@@ -11,6 +11,7 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
+import EstudiosPaciente from "@/components/EstudiosPaciente";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -217,6 +218,7 @@ export default function SalaConsultaPaciente({
   const [timerSeg, setTimerSeg] = useState(0);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
+  const [showEstudios, setShowEstudios] = useState(false);
   const inicioRef = useRef(Date.now());
   const yaRedirigioRef = useRef(false);
 
@@ -576,14 +578,28 @@ export default function SalaConsultaPaciente({
                       Tu médico te está atendiendo · {especialidad}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/dashboard")}
-                    className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
-                    style={{ minHeight: "44px" }}
-                  >
-                    Salir
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEstudios(!showEstudios)}
+                      className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
+                        showEstudios
+                          ? "bg-[#378ADD] text-white"
+                          : "text-white/60 hover:text-white hover:bg-white/10"
+                      }`}
+                      style={{ minHeight: "44px" }}
+                    >
+                      Estudios
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/dashboard")}
+                      className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
+                      style={{ minHeight: "44px" }}
+                    >
+                      Salir
+                    </button>
+                  </div>
                 </div>
               )}
             </MicCamProvider>
@@ -641,6 +657,29 @@ export default function SalaConsultaPaciente({
             </button>
           </div>
         </>
+      )}
+
+      {/* Panel de estudios — slide up overlay */}
+      {showEstudios && estado === "en_curso" && (
+        <div
+          className="absolute inset-x-0 bottom-0 z-50 max-h-[60dvh] overflow-y-auto rounded-t-2xl bg-white shadow-xl"
+          style={{ borderTop: "2px solid #378ADD" }}
+        >
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
+            <p className="text-sm font-medium text-gray-900">Estudios</p>
+            <button
+              type="button"
+              onClick={() => setShowEstudios(false)}
+              className="text-xs text-gray-400 hover:text-gray-600"
+              style={{ minHeight: "44px", minWidth: "44px" }}
+            >
+              Cerrar
+            </button>
+          </div>
+          <div className="px-4 pb-6">
+            <EstudiosPaciente consultaId={consultaId} />
+          </div>
+        </div>
       )}
     </div>
   );

@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         }),
         url: pac?.id ? `/medico/paciente/${pac.id}` : "#",
         canal_origen: c.canal_origen ?? null,
+        created_at_raw: c.created_at,
       };
     }));
   }

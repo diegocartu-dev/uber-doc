@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 import { Video, CheckCircle } from "lucide-react";
+import EstudiosPaciente from "@/components/EstudiosPaciente";
 
 const POLL_INTERVAL = 5000;
 
@@ -225,6 +226,9 @@ export default function SalaEsperaCliente({
           Simular pago aprobado
         </button>
       )}
+
+      {/* Estudios del paciente */}
+      <EstudiosPaciente consultaId={consultaId} />
 
       <p className="mt-6 text-xs text-gray-400">
         No cierres esta pestaña
