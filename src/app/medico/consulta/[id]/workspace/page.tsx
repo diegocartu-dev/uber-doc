@@ -23,7 +23,7 @@ export default async function WorkspacePage({
   // Solo medicos
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo")
+    .select("id, nombre_completo, nova_evolucion_activa")
     .eq("user_id", user.id)
     .single();
 
@@ -86,6 +86,9 @@ export default async function WorkspacePage({
   }
 
   const horaInicio = consulta.created_at;
+  const novaActiva =
+    !!medico.nova_evolucion_activa &&
+    process.env.NOVA_EVOLUCION_ENABLED === "true";
 
   return (
     <WorkspaceConsulta
@@ -95,6 +98,7 @@ export default async function WorkspacePage({
       roomName={roomName}
       videoError={videoError}
       horaInicio={horaInicio}
+      novaActiva={novaActiva}
       consulta={{
         especialidad: consulta.especialidad,
         motivo_consulta: consulta.motivo_consulta,

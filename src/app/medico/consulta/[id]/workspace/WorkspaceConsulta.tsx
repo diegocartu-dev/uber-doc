@@ -20,6 +20,7 @@ import {
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+import { useNovaRecording } from "@/hooks/useNovaRecording";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
 import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
@@ -237,6 +238,7 @@ type DocBorrador = {
   receta?: string;
   indicaciones?: string;
   certificado?: string;
+  evolucion?: string;
   updated_at?: string;
   medicamentos_structured?: MedicamentoReceta[];
   receta_texto_libre?: string;
@@ -249,6 +251,7 @@ type Props = {
   roomName: string | null;
   videoError: string | null;
   horaInicio: string;
+  novaActiva?: boolean;
   consulta: {
     especialidad: string;
     motivo_consulta: string | null;
@@ -414,6 +417,7 @@ export default function WorkspaceConsulta({
   roomName,
   videoError: videoErrorProp,
   horaInicio,
+  novaActiva = false,
   consulta,
 }: Props) {
   const router = useRouter();
@@ -427,6 +431,7 @@ export default function WorkspaceConsulta({
   const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+  const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
 
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
@@ -437,12 +442,16 @@ export default function WorkspaceConsulta({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
+  const [novaProcessing, setNovaProcessing] = useState(false);
+  const [novaSuggested, setNovaSuggested] = useState(false);
 
   // Mobile: tres modos explícitos.
   const [modo, setModo] = useState<ModoWorkspace>("video");
   const modoEscritura = modo !== "video";
   const [diagError, setDiagError] = useState(false);
+  const [evolucionError, setEvolucionError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
+  const evolucionRef = useRef<HTMLTextAreaElement>(null);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   // --- Auto-save ---
@@ -451,12 +460,24 @@ export default function WorkspaceConsulta({
     receta,
     indicaciones,
     certificado,
+    evolucion,
     medicamentos_structured: medicamentos,
     receta_texto_libre: recetaTextoLibre,
   });
 
   // --- Dictado ---
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado, soportado: dictadoSoportado } = useDictado();
+
+  // --- Nova recording ---
+  const nova = useNovaRecording(consultaId);
+  const novaStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (novaActiva && !novaStartedRef.current) {
+      novaStartedRef.current = true;
+      nova.startRecording();
+    }
+  }, [novaActiva]);
 
   // --- Estudios count ---
   const estudiosCount = useEstudiosCount(consultaId);
@@ -476,19 +497,64 @@ export default function WorkspaceConsulta({
     return () => clearInterval(i);
   }, [horaInicio]);
 
-  // Helper: validar diagnóstico antes de finalizar
-  function validarDiagnostico(): boolean {
-    if (diagnostico.trim()) return true;
-    setError("Completá el diagnóstico antes de finalizar la consulta.");
-    setDiagError(true);
-    setModo("escritura");
-    setTimeout(() => diagRef.current?.focus(), 350); // después de la transición CSS
-    return false;
+  function validarCamposObligatorios(): boolean {
+    if (!diagnostico.trim()) {
+      setError("Completá el diagnóstico antes de finalizar la consulta.");
+      setDiagError(true);
+      setModo("escritura");
+      setTimeout(() => diagRef.current?.focus(), 350);
+      return false;
+    }
+    if (!evolucion.trim()) {
+      setError("Completá la Evolución antes de finalizar.");
+      setEvolucionError(true);
+      setModo("escritura");
+      setTimeout(() => evolucionRef.current?.focus(), 350);
+      return false;
+    }
+    return true;
+  }
+
+  async function intentarFinalizar() {
+    if (!diagnostico.trim()) {
+      setError("Completá el diagnóstico antes de finalizar la consulta.");
+      setDiagError(true);
+      setModo("escritura");
+      setTimeout(() => diagRef.current?.focus(), 350);
+      return;
+    }
+
+    if (novaActiva && nova.isRecording) {
+      setNovaProcessing(true);
+      setModo("escritura");
+      const resultado = await nova.stopAndProcess();
+      setNovaProcessing(false);
+      if (resultado) {
+        setEvolucion(resultado);
+        setEvolucionError(false);
+        setError(null);
+        setNovaSuggested(true);
+      } else {
+        setNovaSuggested(false);
+      }
+      setShowConfirmDialog(true);
+      return;
+    }
+
+    if (!evolucion.trim()) {
+      setError("Completá la Evolución antes de finalizar.");
+      setEvolucionError(true);
+      setModo("escritura");
+      setTimeout(() => evolucionRef.current?.focus(), 350);
+      return;
+    }
+
+    setShowConfirmDialog(true);
   }
 
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
-    if (!validarDiagnostico()) return;
+    if (!validarCamposObligatorios()) return;
 
     const sinCuil = receta.trim() && !consulta.paciente_cuil;
 
@@ -562,7 +628,7 @@ export default function WorkspaceConsulta({
 
         await supabase
           .from("consultas")
-          .update({ estado: "completada", doc_borrador: null })
+          .update({ estado: "completada", doc_borrador: null, evolucion: evolucion.trim() })
           .eq("id", consultaId);
 
         // Borrar estudios temporales del paciente
@@ -618,6 +684,7 @@ export default function WorkspaceConsulta({
             receta,
             indicaciones,
             certificado,
+            evolucion,
             medicamentos_structured: medicamentos,
             receta_texto_libre: recetaTextoLibre,
             updated_at: new Date().toISOString(),
@@ -670,6 +737,12 @@ export default function WorkspaceConsulta({
             </span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            {novaActiva && nova.isRecording && (
+              <span className="flex items-center gap-1.5 text-xs text-white/60">
+                <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-500" />
+                Nova activa
+              </span>
+            )}
             <span className="text-xs tabular-nums text-white/50">
               {formatTimer(timerSeg)}
             </span>
@@ -776,15 +849,12 @@ export default function WorkspaceConsulta({
                         {/* Fila 3: Finalizar full width */}
                         <LoadingButton
                           type="button"
-                          isLoading={finalizando}
-                          onClick={() => {
-                            if (!validarDiagnostico()) return;
-                            setShowConfirmDialog(true);
-                          }}
+                          isLoading={finalizando || novaProcessing}
+                          onClick={intentarFinalizar}
                           className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
                           style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
                         >
-                          Finalizar consulta
+                          {novaProcessing ? "Nova está procesando..." : "Finalizar consulta"}
                         </LoadingButton>
                       </div>
                     )}
@@ -1026,6 +1096,30 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
           />
+          <CampoDictado
+            label="EVOLUCION"
+            campo="evolucion"
+            value={evolucion}
+            setter={(v) => { setEvolucion(v); if (v.trim()) { setEvolucionError(false); setError(null); } }}
+            placeholder="Registrá la evolución del paciente en esta consulta..."
+            rows={4}
+            required
+            hasError={evolucionError}
+            textareaRef={evolucionRef}
+            dictando={dictando}
+            onIniciar={() => iniciarDictado("evolucion", (fn) => setEvolucion((prev) => { const val = fn(prev); if (val.trim()) { setEvolucionError(false); setError(null); } return val; }))}
+            onDetener={detenerDictado}
+            soportado={dictadoSoportado}
+          />
+          {novaProcessing && (
+            <p className="mt-2 text-xs text-[#378ADD]">Nova está procesando la consulta...</p>
+          )}
+          {novaSuggested && evolucion.trim() && !novaProcessing && (
+            <p className="mt-2 text-xs text-[#BA7517]">Sugerencia de Nova — revisá antes de confirmar</p>
+          )}
+          {!novaSuggested && novaActiva && !novaProcessing && nova.state === "done" && !evolucion.trim() && (
+            <p className="mt-2 text-xs text-gray-400">Nova no pudo sugerir — completá manualmente</p>
+          )}
 
           {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
           <div
@@ -1053,30 +1147,24 @@ export default function WorkspaceConsulta({
               </button>
               <LoadingButton
                 type="button"
-                isLoading={finalizando}
-                onClick={() => {
-                  if (!validarDiagnostico()) return;
-                  setShowConfirmDialog(true);
-                }}
+                isLoading={finalizando || novaProcessing}
+                onClick={intentarFinalizar}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
               >
-                Finalizar y generar documentos
+                {novaProcessing ? "Nova está procesando..." : "Finalizar y generar documentos"}
               </LoadingButton>
             </div>
 
             {/* Desktop: finalizar + cancelar */}
             <div className="hidden md:flex md:flex-col md:gap-2">
               <LoadingButton
-                isLoading={finalizando}
-                onClick={() => {
-                  if (!validarDiagnostico()) return;
-                  setShowConfirmDialog(true);
-                }}
+                isLoading={finalizando || novaProcessing}
+                onClick={intentarFinalizar}
                 className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
                 style={{ minHeight: "44px" }}
               >
-                Finalizar y generar documentos
+                {novaProcessing ? "Nova está procesando..." : "Finalizar y generar documentos"}
               </LoadingButton>
               <button
                 onClick={() => setShowCancelDialog(true)}
@@ -1299,8 +1387,7 @@ export default function WorkspaceConsulta({
               <button
                 onClick={() => {
                   setShowSalirDialog(false);
-                  if (!validarDiagnostico()) return;
-                  setShowConfirmDialog(true);
+                  intentarFinalizar();
                 }}
                 style={{
                   padding: "12px",
