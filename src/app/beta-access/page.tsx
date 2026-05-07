@@ -30,9 +30,7 @@ export default function BetaAccessPage() {
           <h1
             className={`text-3xl font-bold leading-tight text-gray-900 ${spaceGrotesk.className}`}
           >
-            Muy pronto,
-            <br />
-            el mejor.
+            Muy pronto tu Médico al instante!!
           </h1>
           <p className="mt-3 text-sm text-gray-500">
             Estamos preparando algo increíble para médicos y pacientes.
