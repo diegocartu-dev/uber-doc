@@ -183,6 +183,18 @@ export default function EsperaVideo({
           </div>
         </div>
 
+        {/* Info block estudios */}
+        <div
+          className="mt-6 rounded-xl border border-[#378ADD]/30 bg-[#378ADD]/5 px-5 py-4 text-left"
+        >
+          <p className="text-sm font-medium text-gray-900">
+            ¿Tenés estudios para mostrarle a tu médico?
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            Podés subirlos cuando estés en la sala de espera antes de tu consulta.
+          </p>
+        </div>
+
         <BotonPush rol="paciente" variante="popup" />
 
         <VolverAlInicio returnUrl={returnUrl} />
