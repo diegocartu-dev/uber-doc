@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 
 type Props = {
   pacienteNombre: string;
@@ -19,6 +21,8 @@ function minutosEsperando(desde: string): number {
 export default function NotificacionEspera({ pacienteNombre, esperandoDesde, consultaId, tipo, onDismiss }: Props) {
   const [mins, setMins] = useState(() => minutosEsperando(esperandoDesde));
   const [visible, setVisible] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -30,6 +34,13 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
   }, [esperandoDesde]);
 
   const href = tipo === "turno" ? `/turno/${consultaId}/video` : `/medico/consulta/${consultaId}/workspace`;
+
+  function handleAceptar() {
+    startTransition(async () => {
+      await aceptarConsulta(consultaId);
+      router.push(href);
+    });
+  }
 
   return (
     <div
@@ -82,23 +93,45 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
           </p>
         </div>
 
-        <Link
-          href={href}
-          style={{
-            background: "#378ADD",
-            color: "#fff",
-            border: 0,
-            borderRadius: 10,
-            padding: "10px 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}
-        >
-          Atender ahora
-        </Link>
+        {tipo === "consulta" ? (
+          <button
+            onClick={handleAceptar}
+            disabled={isPending}
+            style={{
+              background: "#378ADD",
+              color: "#fff",
+              border: 0,
+              borderRadius: 10,
+              padding: "10px 16px",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: isPending ? "default" : "pointer",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              opacity: isPending ? 0.7 : 1,
+            }}
+          >
+            {isPending ? "Aceptando..." : "Aceptar"}
+          </button>
+        ) : (
+          <Link
+            href={href}
+            style={{
+              background: "#378ADD",
+              color: "#fff",
+              border: 0,
+              borderRadius: 10,
+              padding: "10px 16px",
+              fontSize: 14,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            Atender ahora
+          </Link>
+        )}
 
         <button
           onClick={onDismiss}

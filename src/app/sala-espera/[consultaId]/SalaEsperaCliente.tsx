@@ -227,8 +227,8 @@ export default function SalaEsperaCliente({
         </button>
       )}
 
-      {/* Estudios del paciente */}
-      <EstudiosPaciente consultaId={consultaId} />
+      {/* Estudios del paciente — solo visible una vez que pagó */}
+      {estado !== "esperando" && <EstudiosPaciente consultaId={consultaId} />}
 
       <p className="mt-6 text-xs text-gray-400">
         No cierres esta pestaña

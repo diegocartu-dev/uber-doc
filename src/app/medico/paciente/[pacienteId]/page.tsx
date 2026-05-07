@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
 import OrigenBadge from "@/components/OrigenBadge";
 import AppNavbar from "@/components/AppNavbar";
+import EnviarDocumentoAdicional from "@/components/EnviarDocumentoAdicional";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -293,6 +294,11 @@ export default async function FichaPacientePage({
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* Enviar documento adicional — solo dentro de las 48hs */}
+                {c.estado === "completada" && (
+                  <EnviarDocumentoAdicional consultaId={c.id} consultaCreatedAt={c.created_at} />
                 )}
               </div>
             );
