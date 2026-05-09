@@ -27,6 +27,7 @@ interface Medico {
   disponible: boolean;
   notas_admin: string | null;
   slug: string | null;
+  categoria: string | null;
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -47,9 +48,11 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
   const [copiado, setCopiado] = useState<string | null>(null);
   const [panelMedico, setPanelMedico] = useState<Medico | null>(null);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
+  const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
   const filtered = medicos.filter((m) => {
     if (m.estado_registro !== tab) return false;
+    if (filtroCategoria && m.categoria !== filtroCategoria) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -141,6 +144,34 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
           className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
         />
       </div>
+
+      {/* Filtro categoria - solo en tab aprobado */}
+      {tab === "aprobado" && (
+        <div className="mt-3 flex gap-2">
+          {[
+            { key: null, label: "Todos" },
+            { key: "founder", label: "Founder" },
+            { key: "tradicional", label: "Tradicional" },
+          ].map(({ key, label }) => {
+            const count = key
+              ? medicos.filter((m) => m.estado_registro === "aprobado" && m.categoria === key).length
+              : medicos.filter((m) => m.estado_registro === "aprobado").length;
+            return (
+              <button
+                key={label}
+                onClick={() => setFiltroCategoria(key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  filtroCategoria === key
+                    ? "bg-[#378ADD] text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Message */}
       {mensaje && (
@@ -325,6 +356,15 @@ function MedicoRow({
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-900">{m.nombre_completo}</h3>
             <StatusBadge status={m.estado_registro} />
+            {m.categoria && (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                m.categoria === "founder"
+                  ? "bg-blue-50 text-[#378ADD]"
+                  : "bg-gray-100 text-gray-600"
+              }`}>
+                {m.categoria === "founder" ? "Founder" : "Tradicional"}
+              </span>
+            )}
           </div>
           <p className="mt-0.5 text-xs text-gray-500">
             {m.especialidad} · {m.tipo_matricula} {m.numero_matricula} · {m.email}

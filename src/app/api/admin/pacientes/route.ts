@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verificarAdmin } from "@/lib/admin-auth";
+import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
+import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const adminUser = await getAdminUser(user.id);
 
   if (accion === "pausar") {
     if (!motivo) return NextResponse.json({ error: "Motivo obligatorio" }, { status: 400 });
@@ -50,6 +52,16 @@ export async function PATCH(req: NextRequest) {
       .update({ estado_cuenta: "pausado", motivo_estado: motivo, estado_hasta: estadoHasta })
       .eq("id", pacienteId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (adminUser) {
+      await logAdminAction({
+        adminUserId: adminUser.id,
+        accion: ADMIN_ACTIONS.PAUSAR_PACIENTE,
+        recursoTipo: "paciente",
+        recursoId: pacienteId,
+        motivo,
+        payloadNuevo: { estado: "pausado", duracion },
+      });
+    }
     return NextResponse.json({ ok: true, estado: "pausado" });
   }
 
@@ -60,6 +72,15 @@ export async function PATCH(req: NextRequest) {
       .update({ estado_cuenta: "bloqueado", motivo_estado: motivo, estado_hasta: null })
       .eq("id", pacienteId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (adminUser) {
+      await logAdminAction({
+        adminUserId: adminUser.id,
+        accion: ADMIN_ACTIONS.BLOQUEAR_PACIENTE,
+        recursoTipo: "paciente",
+        recursoId: pacienteId,
+        motivo,
+      });
+    }
     return NextResponse.json({ ok: true, estado: "bloqueado" });
   }
 
@@ -69,8 +90,16 @@ export async function PATCH(req: NextRequest) {
       .update({ estado_cuenta: "activo", motivo_estado: null, estado_hasta: null })
       .eq("id", pacienteId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (adminUser) {
+      await logAdminAction({
+        adminUserId: adminUser.id,
+        accion: ADMIN_ACTIONS.REACTIVAR_PACIENTE,
+        recursoTipo: "paciente",
+        recursoId: pacienteId,
+      });
+    }
     return NextResponse.json({ ok: true, estado: "activo" });
   }
 
-  return NextResponse.json({ error: "Acción no reconocida" }, { status: 400 });
+  return NextResponse.json({ error: "Accion no reconocida" }, { status: 400 });
 }
