@@ -1,7 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardAdminClient from "./DashboardAdminClient";
+import MobileControlCenter from "./MobileControlCenter";
+
+function isMobileUA(ua: string): boolean {
+  return /Mobile|Android|iPhone|iPad/i.test(ua);
+}
 
 function hoyAR() {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -16,7 +22,20 @@ function hace7dias() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ force?: string }>;
+}) {
+  const params = await searchParams;
+  const headersList = await headers();
+  const ua = headersList.get("user-agent") || "";
+  const isMobile = isMobileUA(ua) && params.force !== "desktop";
+
+  if (isMobile) {
+    return <MobileControlCenter />;
+  }
+
   const admin = createAdminClient();
   const hoy = hoyAR();
   const desde7 = hace7dias();
