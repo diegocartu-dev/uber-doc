@@ -53,6 +53,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|auth/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // auth/callback excluido para no interferir con PKCE flow de Supabase.
+    // auth/register y auth/registro-medico DEBEN pasar por el middleware
+    // para que el beta guard los intercepte.
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
