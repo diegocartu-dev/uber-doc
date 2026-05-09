@@ -9,15 +9,17 @@ import {
   Users,
   MessageSquare,
   Bell,
+  Settings,
   LogOut,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null },
-  { href: "/admin/medicos", label: "Médicos", icon: Stethoscope, badgeKey: "medicos" as const },
+  { href: "/admin/medicos", label: "Medicos", icon: Stethoscope, badgeKey: "medicos" as const },
   { href: "/admin/pacientes", label: "Pacientes", icon: Users, badgeKey: null },
   { href: "/admin/consultas", label: "Consultas", icon: MessageSquare, badgeKey: null },
   { href: "/admin/alertas", label: "Alertas", icon: Bell, badgeKey: "alertas" as const },
+  { href: "/admin/configuracion", label: "Configuracion", icon: Settings, badgeKey: null },
 ];
 
 interface Props {

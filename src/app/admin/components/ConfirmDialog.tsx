@@ -7,7 +7,7 @@ interface Props {
   title: string;
   description?: string;
   confirmLabel: string;
-  variant: "danger" | "warning";
+  variant: "danger" | "warning" | "primary";
   requireReason?: boolean;
   reasonPlaceholder?: string;
   onConfirm: (reason?: string) => void;
@@ -25,6 +25,11 @@ const variantStyles = {
     bg: "bg-amber-50",
     border: "border-[#BA7517]/30",
     btn: "bg-[#D85A30] hover:bg-[#c04e28]",
+  },
+  primary: {
+    bg: "bg-blue-50",
+    border: "border-[#378ADD]/30",
+    btn: "bg-[#378ADD] hover:bg-[#2d75c4]",
   },
 };
 
