@@ -28,7 +28,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "bloqueado", label: "Bloqueados" },
 ];
 
-export default function PacientesClient({ pacientes: initial }: { pacientes: Paciente[] }) {
+export default function PacientesClient({ pacientes: initial, totalInicial = 0 }: { pacientes: Paciente[]; totalInicial?: number }) {
   const [pacientes, setPacientes] = useState(initial);
   const [tab, setTab] = useState<Tab>("todos");
   const [search, setSearch] = useState("");
@@ -38,6 +38,10 @@ export default function PacientesClient({ pacientes: initial }: { pacientes: Pac
   const [duracion, setDuracion] = useState<string>("7d");
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
   const [buscando, setBuscando] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(totalInicial);
+  const pageSize = 50;
+  const totalPages = Math.ceil(total / pageSize);
 
   const filtered = pacientes.filter((p) => {
     if (tab === "pausado" && (p.estado_cuenta ?? "activo") !== "pausado") return false;
@@ -51,15 +55,27 @@ export default function PacientesClient({ pacientes: initial }: { pacientes: Pac
     );
   });
 
-  async function buscarServer() {
-    if (!search) return;
+  async function buscarServer(p?: number) {
+    const targetPage = p ?? page;
     setBuscando(true);
     try {
-      const res = await fetch(`/api/admin/pacientes?q=${encodeURIComponent(search)}`);
+      const params = new URLSearchParams({ page: targetPage.toString(), pageSize: pageSize.toString() });
+      if (search) params.set("q", search);
+      if (tab !== "todos") params.set("estado", tab);
+      const res = await fetch(`/api/admin/pacientes?${params}`);
       const data = await res.json();
-      if (data.pacientes) setPacientes(data.pacientes);
+      if (data.pacientes) {
+        setPacientes(data.pacientes);
+        setTotal(data.total ?? 0);
+        setPage(targetPage);
+      }
     } catch { /* ignore */ }
     setBuscando(false);
+  }
+
+  function irAPagina(p: number) {
+    if (p < 1 || p > totalPages) return;
+    buscarServer(p);
   }
 
   async function handleAccion(pacienteId: string, accion: string, motivo?: string) {
@@ -209,6 +225,49 @@ export default function PacientesClient({ pacientes: initial }: { pacientes: Pac
           </tbody>
         </table>
       </div>
+
+      {/* Paginacion */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            {total} pacientes · Pagina {page} de {totalPages}
+          </p>
+          <div className="flex gap-1">
+            <button
+              onClick={() => irAPagina(page - 1)}
+              disabled={page <= 1 || buscando}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+            >
+              Anterior
+            </button>
+            {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+              const p = page <= 3 ? i + 1 : page - 2 + i;
+              if (p > totalPages) return null;
+              return (
+                <button
+                  key={p}
+                  onClick={() => irAPagina(p)}
+                  disabled={buscando}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                    p === page
+                      ? "bg-[#378ADD] text-white"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => irAPagina(page + 1)}
+              disabled={page >= totalPages || buscando}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-30 hover:bg-gray-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm dialogs */}
       {confirmando && (

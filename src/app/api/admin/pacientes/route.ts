@@ -8,22 +8,38 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const q = req.nextUrl.searchParams.get("q") ?? "";
+  const page = parseInt(req.nextUrl.searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(req.nextUrl.searchParams.get("pageSize") || "50", 10);
+  const estadoFiltro = req.nextUrl.searchParams.get("estado");
   const admin = createAdminClient();
+
+  const offset = (page - 1) * pageSize;
 
   let query = admin
     .from("pacientes")
-    .select("id, user_id, nombre_completo, email, dni, fecha_nacimiento, obra_social, estado_cuenta, motivo_estado, estado_hasta, created_at")
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .select("id, user_id, nombre_completo, email, dni, fecha_nacimiento, obra_social, estado_cuenta, motivo_estado, estado_hasta, created_at", { count: "exact" })
+    .order("created_at", { ascending: false });
 
   if (q) {
     const safe = q.replace(/[,.()"'\\]/g, "");
     query = query.or(`nombre_completo.ilike.%${safe}%,email.ilike.%${safe}%,dni.ilike.%${safe}%`);
   }
 
-  const { data, error } = await query;
+  if (estadoFiltro && estadoFiltro !== "todos") {
+    query = query.eq("estado_cuenta", estadoFiltro);
+  }
+
+  query = query.range(offset, offset + pageSize - 1);
+
+  const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ pacientes: data ?? [] });
+  return NextResponse.json({
+    pacientes: data ?? [],
+    total: count ?? 0,
+    page,
+    pageSize,
+    totalPages: Math.ceil((count ?? 0) / pageSize),
+  });
 }
 
 export async function PATCH(req: NextRequest) {
