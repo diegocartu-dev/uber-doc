@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verificarAdmin } from "@/lib/admin";
+import { verificarAdmin } from "@/lib/admin-auth";
 
 function fechaAR(offset = 0) {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));

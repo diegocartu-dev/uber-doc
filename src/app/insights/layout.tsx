@@ -2,14 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ADMIN_EMAILS } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin-auth";
 import InsightsNav from "./InsightsNav";
 
 export default async function InsightsLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user || !ADMIN_EMAILS.includes((user.email ?? "").toLowerCase())) {
+  if (!user || !(await isAdmin(user.id))) {
     redirect("/dashboard");
   }
 

@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ADMIN_EMAILS } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin-auth";
 import AdminShell from "./AdminShell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
+  if (!user || !(await isAdmin(user.id))) {
     redirect("/dashboard");
   }
 
