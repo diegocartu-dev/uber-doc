@@ -630,6 +630,7 @@ export default function GrillaEspecialidades({
                         </a>
                       ) : (
                         <div className="flex shrink-0 flex-col gap-1.5">
+                          {flagCiActiva && (
                           <button
                             disabled={!disponibleAhora}
                             onClick={() => handleElegirMedico(m.id, modalEspecialidad!)}
@@ -640,6 +641,7 @@ export default function GrillaEspecialidades({
                           >
                             Consulta ahora
                           </button>
+                          )}
                           {medicosConTurnos.has(m.id) && (
                             <a
                               href={`/clinica/${m.id}/turnos`}

@@ -55,7 +55,7 @@ function formatFechaDia(f: string) {
 }
 
 
-export default function PanelDerecho({ medicoId, precio }: { medicoId: string; precio: number }) {
+export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { medicoId: string; precio: number; flagNovaAi?: boolean }) {
   const router = useRouter();
   const hoy = new Date();
   const hoyStr = fStr(hoy);
@@ -238,14 +238,16 @@ export default function PanelDerecho({ medicoId, precio }: { medicoId: string; p
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>● {reservados.filter((t) => t.estado === "confirmado" || t.estado === "en_espera").length} confirmados</span>
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.filter((t) => t.estado === "reservado_pendiente").length} pendientes</span>
         <button onClick={goHoy} className="rounded-full bg-[#378ADD] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
-        <button
-          onClick={() => router.push("/medico/nova")}
-          className="ml-auto flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold text-white min-h-[44px] md:min-h-0 transition-all hover:brightness-110 active:scale-95 shadow-sm"
-          style={{ background: "linear-gradient(135deg, #1D9E75, #17b583)" }}
-        >
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-white/80" />
-          Nova
-        </button>
+        {flagNovaAi && (
+          <button
+            onClick={() => router.push("/medico/nova")}
+            className="ml-auto flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold text-white min-h-[44px] md:min-h-0 transition-all hover:brightness-110 active:scale-95 shadow-sm"
+            style={{ background: "linear-gradient(135deg, #1D9E75, #17b583)" }}
+          >
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-white/80" />
+            Nova
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
         <div className="flex items-center gap-1.5">

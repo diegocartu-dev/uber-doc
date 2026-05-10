@@ -5,6 +5,7 @@ import ListaModelos from "./ListaModelos";
 import FormularioModelo from "./FormularioModelo";
 import PanelDerecho from "./PanelDerecho";
 import AppNavbar from "@/components/AppNavbar";
+import { getFlag } from "@/lib/feature-flags";
 
 export default async function AgendaPage({
   searchParams,
@@ -62,7 +63,7 @@ export default async function AgendaPage({
       {/* Panel calendario/grilla — mobile primero, desktop segundo (order-2) */}
       <div className="order-1 md:order-2 overflow-y-auto bg-[#f8f9fa] md:border-l md:border-gray-200">
         <div className="p-4 md:p-6">
-          <PanelDerecho medicoId={medico.id} precio={medico.precio_consulta} />
+          <PanelDerecho medicoId={medico.id} precio={medico.precio_consulta} flagNovaAi={await getFlag("nova_ai")} />
         </div>
       </div>
 
