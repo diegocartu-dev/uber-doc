@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verificarAdmin } from "@/lib/admin-auth";
+import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
+import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 
 function hoyAR() {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -178,6 +179,18 @@ export async function PATCH(req: NextRequest) {
     resuelta_por: user.email,
     resuelta_at: new Date().toISOString(),
   });
+
+  // Audit log inmutable
+  const adminUser = await getAdminUser(user.id);
+  if (adminUser) {
+    await logAdminAction({
+      adminUserId: adminUser.id,
+      accion: ADMIN_ACTIONS.FORZAR_CIERRE_CONSULTA,
+      recursoTipo: "consulta",
+      recursoId: id,
+      payloadNuevo: { tipo, estado: tipo === "consulta" ? "completada" : "completado" },
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

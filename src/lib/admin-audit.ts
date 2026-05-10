@@ -60,7 +60,11 @@ export async function logAdminAction(params: AuditLogParams): Promise<void> {
     });
   } catch (error) {
     // CRITICAL: si el audit log falla, no se rompe la accion que lo invoca.
-    console.error("[admin-audit] Error registrando audit log:", error, params);
+    console.error("[admin-audit] Error registrando audit log:", error, {
+      accion: params.accion,
+      recursoTipo: params.recursoTipo,
+      recursoId: params.recursoId,
+    });
   }
 }
 
