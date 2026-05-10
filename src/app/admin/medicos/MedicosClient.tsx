@@ -436,7 +436,8 @@ function MedicoRow({
           confirmLabel="Si, reactivar"
           variant="primary"
           requireReason
-          reasonPlaceholder="Motivo de la reactivacion (min 10 caracteres)..."
+          minReasonLength={10}
+          reasonPlaceholder="Motivo de la reactivacion..."
           onConfirm={(motivo) => onAccion("reactivar", motivo)}
           onCancel={onCancelConfirm}
           isLoading={procesando}

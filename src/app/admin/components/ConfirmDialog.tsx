@@ -9,6 +9,7 @@ interface Props {
   confirmLabel: string;
   variant: "danger" | "warning" | "primary";
   requireReason?: boolean;
+  minReasonLength?: number;
   reasonPlaceholder?: string;
   onConfirm: (reason?: string) => void;
   onCancel: () => void;
@@ -39,6 +40,7 @@ export default function ConfirmDialog({
   confirmLabel,
   variant,
   requireReason = false,
+  minReasonLength = 0,
   reasonPlaceholder = "Motivo...",
   onConfirm,
   onCancel,
@@ -46,20 +48,28 @@ export default function ConfirmDialog({
 }: Props) {
   const [reason, setReason] = useState("");
   const styles = variantStyles[variant];
-  const canConfirm = !requireReason || reason.trim().length > 0;
+  const minLen = minReasonLength || (requireReason ? 1 : 0);
+  const canConfirm = !requireReason || reason.trim().length >= minLen;
 
   return (
     <div className={`mt-4 rounded-lg border ${styles.border} ${styles.bg} p-4`}>
       <p className="text-sm font-medium text-gray-900">{title}</p>
       {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
       {requireReason && (
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={reasonPlaceholder}
-          rows={2}
-          className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-        />
+        <div className="mt-3">
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={reasonPlaceholder}
+            rows={2}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          />
+          {minLen > 1 && reason.trim().length > 0 && reason.trim().length < minLen && (
+            <p className="mt-1 text-xs text-[#BA7517]">
+              Faltan {minLen - reason.trim().length} caracteres
+            </p>
+          )}
+        </div>
       )}
       <div className="mt-3 flex gap-3">
         <button

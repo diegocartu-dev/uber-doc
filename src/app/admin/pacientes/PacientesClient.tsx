@@ -281,23 +281,9 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
           <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             {confirmando.accion === "pausar" && (
               <>
-                <p className="text-sm font-medium text-gray-900">¿Pausar paciente?</p>
-                <p className="mt-1 text-xs text-gray-500">El paciente no podrá iniciar nuevas consultas.</p>
-                <div className="mt-3 flex gap-2">
-                  {["7d", "30d", "indefinido"].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setDuracion(d)}
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                        duracion === d ? "border-[#378ADD] bg-[#378ADD]/10 text-[#378ADD]" : "border-gray-200 text-gray-500 hover:bg-gray-50"
-                      }`}
-                    >
-                      {d === "7d" ? "7 días" : d === "30d" ? "30 días" : "Indefinido"}
-                    </button>
-                  ))}
-                </div>
                 <ConfirmDialog
-                  title=""
+                  title="Pausar paciente?"
+                  description="El paciente no podra iniciar nuevas consultas."
                   confirmLabel="Pausar"
                   variant="warning"
                   requireReason
@@ -306,6 +292,20 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
                   onCancel={() => setConfirmando(null)}
                   isLoading={procesando === confirmando.id}
                 />
+                <div className="mt-3 flex gap-2">
+                  <p className="text-xs text-gray-500 mr-2">Duracion:</p>
+                  {["7d", "30d", "indefinido"].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDuracion(d)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                        duracion === d ? "border-[#378ADD] bg-[#378ADD]/10 text-[#378ADD]" : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {d === "7d" ? "7 dias" : d === "30d" ? "30 dias" : "Indefinido"}
+                    </button>
+                  ))}
+                </div>
               </>
             )}
             {confirmando.accion === "bloquear" && (
@@ -328,7 +328,8 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
                 confirmLabel="Si, reactivar"
                 variant="primary"
                 requireReason
-                reasonPlaceholder="Motivo de la reactivacion (min 10 caracteres)..."
+                minReasonLength={10}
+                reasonPlaceholder="Motivo de la reactivacion..."
                 onConfirm={(motivo) => handleAccion(confirmando.id, "reactivar", motivo)}
                 onCancel={() => setConfirmando(null)}
                 isLoading={procesando === confirmando.id}
