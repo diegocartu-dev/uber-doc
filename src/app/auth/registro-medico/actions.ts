@@ -37,6 +37,13 @@ function dniEnCUIT(dni: string, cuitLimpio: string): boolean {
 }
 
 export async function registrarMedico(formData: FormData) {
+  // Feature flag: registro de médicos
+  const { getFlag } = await import("@/lib/feature-flags");
+  const registroAbierto = await getFlag("registro_medicos_publico");
+  if (!registroAbierto) {
+    return { error: "El registro de médicos está temporalmente cerrado. Volvé a intentar pronto." };
+  }
+
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (!checkRateLimit(ip)) {
