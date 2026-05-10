@@ -4,6 +4,7 @@ import { entrarSalaEspera } from "@/app/clinica/[medicoId]/turnos/actions";
 import EsperaTurno from "./EsperaTurno";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
+import { registrarEntradaSala } from "@/lib/sala-espera";
 
 export default async function EsperaTurnoPage({
   params,
@@ -29,6 +30,18 @@ export default async function EsperaTurnoPage({
   // Marcar como en_espera si está confirmado
   if (turno.estado === "confirmado") {
     await entrarSalaEspera(turnoId);
+  }
+
+  // Registrar entrada en sala de espera (idempotente, fire-and-forget)
+  const { data: pacienteTurno } = await supabase
+    .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+  if (pacienteTurno) {
+    registrarEntradaSala({
+      pacienteId: pacienteTurno.id,
+      medicoId: turno.medico_id,
+      turnoId: turno.id,
+      canalOrigen: turno.canal_origen,
+    }).catch((e) => console.error("[turno-espera] Error registrando entrada:", e));
   }
 
   const { data: medico } = await supabase

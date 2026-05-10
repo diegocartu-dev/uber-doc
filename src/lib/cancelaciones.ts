@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoCancelado } from "@/lib/email";
 import { pushAlPaciente, pushAlMedico } from "@/lib/push";
+import { cerrarEntradaSala } from "@/lib/sala-espera";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -56,6 +57,8 @@ export async function cancelarTurnoPorPaciente(
     .eq("id", turnoId);
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+
+  cerrarEntradaSala({ turnoId, motivo: "cancelado_paciente" }).catch(() => {});
 
   await supabase.from("turnos").insert({
     medico_id: turno.medico_id,
@@ -116,6 +119,8 @@ export async function cancelarTurnoPorMedico(
     .eq("id", turnoId);
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+
+  cerrarEntradaSala({ turnoId, motivo: "cancelado_medico" }).catch(() => {});
 
   enviarEmailTurnoCancelado(turnoId, "medico").catch(console.error);
 

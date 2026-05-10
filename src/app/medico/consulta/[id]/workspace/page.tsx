@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import WorkspaceConsulta from "./WorkspaceConsulta";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
+import { cerrarEntradaSala } from "@/lib/sala-espera";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -79,6 +80,9 @@ export default async function WorkspacePage({
       if (consulta.estado === "pagada") updateData.estado = "en_curso";
       if (Object.keys(updateData).length > 0) {
         await supabase.from("consultas").update(updateData).eq("id", consultaId);
+        if (updateData.estado === "en_curso") {
+          cerrarEntradaSala({ consultaId, motivo: "atendido" }).catch(() => {});
+        }
       }
     } catch (err) {
       videoError = err instanceof Error ? err.message : "Error al conectar con el servicio de video.";

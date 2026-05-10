@@ -17,7 +17,8 @@ export interface AuditLogParams {
     | "admin_user"
     | "comision"
     | "alerta"
-    | "sistema";
+    | "sistema"
+    | "sala_espera";
   recursoId?: string;
   payloadAnterior?: Record<string, unknown>;
   payloadNuevo?: Record<string, unknown>;
@@ -103,6 +104,9 @@ export const ADMIN_ACTIONS = {
   // Alertas
   RESOLVER_ALERTA: "resolver_alerta",
   IGNORAR_ALERTA: "ignorar_alerta",
+
+  // Sala de espera
+  CANCELAR_ENTRADA_SALA: "cancelar_entrada_sala",
 
   // Exportaciones
   EXPORTAR_CSV: "exportar_csv",
