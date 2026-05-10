@@ -44,6 +44,19 @@ export default async function DashboardPage({
     }
   }
 
+  // Admin puro (sin rol medico/paciente) → redirigir a panel admin
+  if (!role || (role !== "medico" && role !== "paciente")) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const adminDb = createAdminClient();
+    const { data: esAdmin } = await adminDb
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("activo", true)
+      .maybeSingle();
+    if (esAdmin) redirect("/admin");
+  }
+
   // AR timezone
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const pad = (n: number) => n.toString().padStart(2, "0");

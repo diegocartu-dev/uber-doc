@@ -23,20 +23,25 @@ export async function isAdmin(
 ): Promise<boolean> {
   if (!userId) return false;
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("admin_users")
-    .select("id, activo")
-    .eq("user_id", userId)
-    .eq("activo", true)
-    .maybeSingle();
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("admin_users")
+      .select("id, activo")
+      .eq("user_id", userId)
+      .eq("activo", true)
+      .maybeSingle();
 
-  if (error) {
-    console.error("[admin-auth] Error consultando admin_users:", error);
+    if (error) {
+      console.error("[admin-auth] Error consultando admin_users:", error);
+      return false;
+    }
+
+    return !!data;
+  } catch (err) {
+    console.error("[admin-auth] Exception en isAdmin:", err);
     return false;
   }
-
-  return !!data;
 }
 
 /**

@@ -42,6 +42,8 @@ export async function updateSession(request: NextRequest) {
     "/documentos",
     "/nova",
     "/triage",
+    "/admin",
+    "/insights",
   ];
 
   if (
