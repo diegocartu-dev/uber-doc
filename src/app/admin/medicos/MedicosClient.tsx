@@ -198,7 +198,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 procesando={procesando === m.id}
                 confirmando={confirmando?.id === m.id ? confirmando.accion : null}
                 copiado={copiado === m.id}
-                onAprobar={() => handleAccion(m.id, "aprobar")}
+                onAprobar={() => setConfirmando({ id: m.id, accion: "aprobar" })}
                 onRechazar={(motivo) => handleAccion(m.id, "rechazar", motivo)}
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
@@ -296,11 +296,21 @@ function PendienteCard({
         )}
       </div>
 
-      {confirmando === "rechazar" ? (
+      {confirmando === "aprobar" ? (
         <ConfirmDialog
-          title={`¿Rechazar el registro de ${m.nombre_completo}?`}
-          description="El médico recibirá una notificación de rechazo."
-          confirmLabel="Sí, rechazar"
+          title={`Aprobar a ${m.nombre_completo}?`}
+          description={`${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. El medico podra atender pacientes en la plataforma.`}
+          confirmLabel="Si, aprobar"
+          variant="primary"
+          onConfirm={() => onAprobar()}
+          onCancel={onCancelConfirm}
+          isLoading={procesando}
+        />
+      ) : confirmando === "rechazar" ? (
+        <ConfirmDialog
+          title={`Rechazar el registro de ${m.nombre_completo}?`}
+          description="El medico recibira una notificacion de rechazo."
+          confirmLabel="Si, rechazar"
           variant="danger"
           requireReason
           reasonPlaceholder="Motivo del rechazo..."
@@ -311,7 +321,7 @@ function PendienteCard({
       ) : (
         <div className="mt-4 flex gap-3 border-t border-gray-100 pt-4">
           <button
-            onClick={onAprobar}
+            onClick={() => onStartConfirm("aprobar")}
             disabled={procesando}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97] disabled:opacity-50"
           >
