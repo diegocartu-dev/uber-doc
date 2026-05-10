@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, User, FileText, LogOut, Loader2 } from "lucide-react";
+import { X, User, FileText, LogOut, Loader2, Shield } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -19,6 +19,7 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [loadingHref, setLoadingHref] = useState<string | null>(null);
+  const [esAdmin, setEsAdmin] = useState(false);
   const prevPathname = useRef(pathname);
 
   // Close drawer when pathname changes (navigation resolved)
@@ -29,6 +30,22 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
     }
     prevPathname.current = pathname;
   }, [pathname, loadingHref, onClose]);
+
+  // Check admin status on open
+  useEffect(() => {
+    if (!open) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase
+        .from("admin_users")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("activo", true)
+        .maybeSingle()
+        .then(({ data }) => setEsAdmin(!!data));
+    });
+  }, [open]);
 
   // Close on Escape
   useEffect(() => {
@@ -158,6 +175,23 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
             />
           )}
         </div>
+
+        {/* Admin link */}
+        {esAdmin && (
+          <>
+            <div className="mx-5 h-px" style={{ backgroundColor: "var(--color-border-subtle)" }} />
+            <div className="py-2">
+              <DrawerLink
+                href="/admin"
+                icon={<Shield size={20} strokeWidth={1.75} />}
+                label="Panel Admin"
+                loading={loadingHref === "/admin"}
+                disabled={!!loadingHref}
+                onClick={() => handleNavigate("/admin")}
+              />
+            </div>
+          </>
+        )}
 
         {/* Separator */}
         <div className="mx-5 h-px" style={{ backgroundColor: "var(--color-border-subtle)" }} />
