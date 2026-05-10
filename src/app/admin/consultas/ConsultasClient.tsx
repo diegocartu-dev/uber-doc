@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2, Download, AlertTriangle } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
+import PacientesEsperando from "./PacientesEsperando";
 
 interface ConsultaItem {
   id: string;
@@ -15,10 +16,10 @@ interface ConsultaItem {
   especialidad: string;
 }
 
-type Tab = "en_curso" | "hoy" | "historial";
+type Tab = "esperando" | "en_curso" | "hoy" | "historial";
 
 export default function ConsultasClient() {
-  const [tab, setTab] = useState<Tab>("en_curso");
+  const [tab, setTab] = useState<Tab>("esperando");
   const [items, setItems] = useState<ConsultaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [desde, setDesde] = useState("");
@@ -27,6 +28,7 @@ export default function ConsultasClient() {
   const [procesando, setProcesando] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (tab === "esperando") { setLoading(false); return; }
     const params = new URLSearchParams({ tab });
     if (tab === "historial") {
       if (desde) params.set("desde", desde);
@@ -113,6 +115,7 @@ export default function ConsultasClient() {
       {/* Tabs */}
       <div className="mt-5 flex gap-1 border-b border-gray-200">
         {([
+          { key: "esperando" as const, label: "Pacientes esperando" },
           { key: "en_curso" as const, label: "En curso ahora" },
           { key: "hoy" as const, label: "Hoy" },
           { key: "historial" as const, label: "Historial" },
@@ -136,6 +139,9 @@ export default function ConsultasClient() {
         ))}
       </div>
 
+      {/* Pacientes esperando tab */}
+      {tab === "esperando" && <PacientesEsperando />}
+
       {/* Historial filters */}
       {tab === "historial" && (
         <div className="mt-4 flex items-center gap-3">
@@ -155,8 +161,8 @@ export default function ConsultasClient() {
         </div>
       )}
 
-      {/* Content */}
-      {loading ? (
+      {/* Content (not for esperando tab) */}
+      {tab === "esperando" ? null : loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 size={24} className="animate-spin text-gray-400" />
         </div>

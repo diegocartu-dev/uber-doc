@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/limpieza-estudios-temp",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sala-espera-diaria",
+      "schedule": "59 2 * * *"
     }
   ]
 }
