@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { createClient } from "@/lib/supabase/server";
+import { getFlag } from "@/lib/feature-flags";
 
 const mp = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
 });
 
 export async function POST(req: NextRequest) {
+  // Feature flag: pagos via Mercado Pago
+  if (!(await getFlag("pago_mercado_pago"))) {
+    return NextResponse.json(
+      { error: "El cobro esta temporalmente suspendido. Volve a intentar mas tarde.", code: "FEATURE_DISABLED" },
+      { status: 503 }
+    );
+  }
+
   if (!process.env.MP_ACCESS_TOKEN) {
     console.error("[MP] MP_ACCESS_TOKEN no configurado en .env.local");
     return NextResponse.json(

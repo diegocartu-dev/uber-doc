@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getFlag } from "@/lib/feature-flags";
 
 
 function generarSlots(
@@ -27,6 +28,9 @@ function generarSlots(
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await getFlag("nova_ai"))) {
+      return NextResponse.json({ exito: false, mensaje: "Nova desactivada" }, { status: 503 });
+    }
     const { accion, datos, medico_id } = await req.json();
 
     if (!accion || !datos || !medico_id) {

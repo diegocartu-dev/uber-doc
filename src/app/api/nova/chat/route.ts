@@ -1,6 +1,7 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { getFlag } from "@/lib/feature-flags";
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -268,6 +269,14 @@ async function ejecutarTool(
 
 export async function POST(req: NextRequest) {
   try {
+    // Feature flag: Nova AI
+    if (!(await getFlag("nova_ai"))) {
+      return NextResponse.json(
+        { error: "Nova esta temporalmente desactivada. Volve a probar mas tarde.", code: "FEATURE_DISABLED" },
+        { status: 503 }
+      );
+    }
+
     const { mensajes: historial, medico_id } = await req.json();
 
     if (!historial || !Array.isArray(historial) || historial.length === 0 || !medico_id) {

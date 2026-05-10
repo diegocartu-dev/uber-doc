@@ -1,5 +1,14 @@
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getFlag } from "@/lib/feature-flags";
+
+async function emailsActivos(): Promise<boolean> {
+  try {
+    return await getFlag("email_transaccional");
+  } catch {
+    return true; // si falla el flag check, mejor enviar que perder el email
+  }
+}
 
 const FROM = "Docto <no-reply@docto.com.ar>";
 const BASE_URL = "https://docto.com.ar";
@@ -218,6 +227,7 @@ function detalleTurno(datos: DatosTurno): string {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "turno_confirmado"); return; }
   try {
     const datos = await obtenerDatosTurno(turnoId);
     if (!datos) return;
@@ -263,6 +273,7 @@ export async function enviarEmailTurnoCancelado(
   turnoId: string,
   canceladoPor: "medico" | "paciente"
 ): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "turno_cancelado"); return; }
   try {
     const datos = await obtenerDatosTurno(turnoId);
     if (!datos) return;
@@ -319,6 +330,7 @@ export async function enviarDocumentoMedico(params: {
   fecha: string;
   archivo: { filename: string; content: string };
 }): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "documento_medico"); return; }
   const { pacienteEmail, pacienteNombre, medicoNombre, fecha, archivo } = params;
 
   const html = wrapHtml("Documento de tu consulta — Docto", `
@@ -347,6 +359,7 @@ export async function enviarDocumentoMedico(params: {
 }
 
 export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "recordatorio_24h"); return; }
   try {
     const datos = await obtenerDatosTurno(turnoId);
     if (!datos) return;

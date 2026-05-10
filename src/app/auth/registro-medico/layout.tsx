@@ -9,7 +9,7 @@ export default async function RegistroMedicoLayout({
   const registroAbierto = await getFlag("registro_medicos_publico");
 
   if (!registroAbierto) {
-    redirect("/");
+    redirect("/auth/registro-cerrado");
   }
 
   return <>{children}</>;

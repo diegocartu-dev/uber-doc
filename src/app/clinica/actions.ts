@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { getFlag } from "@/lib/feature-flags";
 
 export async function crearConsulta(
   medicoId: string,
@@ -11,6 +12,11 @@ export async function crearConsulta(
   tiempoSintomas: string,
   canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
 ) {
+  // Feature flag: consulta inmediata
+  if (!(await getFlag("consulta_inmediata_global"))) {
+    return { error: "La Consulta Inmediata esta temporalmente desactivada. Volve a probar mas tarde." };
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

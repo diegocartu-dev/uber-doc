@@ -21,6 +21,15 @@ type PushPayload = {
 };
 
 export async function enviarPush(userId: string, payload: PushPayload): Promise<boolean> {
+  // Feature flag: web push
+  try {
+    const { getFlag } = await import("@/lib/feature-flags");
+    if (!(await getFlag("web_push"))) {
+      console.log("[push] skipped por flag web_push apagado:", payload.title);
+      return false;
+    }
+  } catch { /* si falla el flag check, continuar con el envio */ }
+
   if (!ensureVapid()) return false;
 
   const supabase = createAdminClient();

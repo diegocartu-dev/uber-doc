@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { pushAlMedico } from "@/lib/push";
+import { getFlag } from "@/lib/feature-flags";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -15,6 +16,11 @@ export async function limpiarReservasExpiradas() {
 }
 
 export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual") {
+  // Feature flag: turnos programados
+  if (!(await getFlag("turnos_global"))) {
+    return { error: "La reserva de turnos esta temporalmente desactivada. Volve a probar mas tarde." };
+  }
+
   const supabase = await createClient();
   const { data: { user }, error: authErr } = await supabase.auth.getUser();
   if (!user) return { error: `No autenticado: ${authErr?.message ?? "sin sesión"}` };

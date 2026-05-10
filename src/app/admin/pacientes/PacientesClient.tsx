@@ -5,6 +5,7 @@ import { Search, Eye, PauseCircle, ShieldOff, RotateCcw, Loader2 } from "lucide-
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
+import DuplicatesBanner from "../components/DuplicatesBanner";
 
 interface Paciente {
   id: string;
@@ -111,6 +112,11 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
     <div className="p-6 lg:p-8">
       <h1 className="text-xl font-semibold text-gray-900">Pacientes</h1>
 
+      {/* Banner duplicados */}
+      <div className="mt-4">
+        <DuplicatesBanner />
+      </div>
+
       {/* Tabs */}
       <div className="mt-5 flex gap-1 border-b border-gray-200">
         {TABS.map(({ key, label }) => (
@@ -209,7 +215,7 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
                       )}
                       {(estado === "pausado" || estado === "bloqueado") && (
                         <button
-                          onClick={() => handleAccion(p.id, "reactivar")}
+                          onClick={() => setConfirmando({ id: p.id, accion: "reactivar" })}
                           disabled={procesando === p.id}
                           className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-blue-50 hover:text-[#378ADD]"
                         >
@@ -304,13 +310,26 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
             )}
             {confirmando.accion === "bloquear" && (
               <ConfirmDialog
-                title="¿Bloquear paciente?"
-                description="El paciente no podrá acceder a la plataforma."
+                title="Bloquear paciente?"
+                description="El paciente no podra acceder a la plataforma."
                 confirmLabel="Bloquear"
                 variant="danger"
                 requireReason
                 reasonPlaceholder="Motivo del bloqueo..."
                 onConfirm={(motivo) => handleAccion(confirmando.id, "bloquear", motivo)}
+                onCancel={() => setConfirmando(null)}
+                isLoading={procesando === confirmando.id}
+              />
+            )}
+            {confirmando.accion === "reactivar" && (
+              <ConfirmDialog
+                title="Reactivar paciente?"
+                description="El paciente podra volver a usar la plataforma."
+                confirmLabel="Si, reactivar"
+                variant="primary"
+                requireReason
+                reasonPlaceholder="Motivo de la reactivacion (min 10 caracteres)..."
+                onConfirm={(motivo) => handleAccion(confirmando.id, "reactivar", motivo)}
                 onCancel={() => setConfirmando(null)}
                 isLoading={procesando === confirmando.id}
               />

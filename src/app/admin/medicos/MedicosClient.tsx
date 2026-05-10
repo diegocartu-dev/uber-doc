@@ -398,7 +398,7 @@ function MedicoRow({
           )}
           {(m.estado_registro === "suspendido" || m.estado_registro === "rechazado") && (
             <button
-              onClick={() => onAccion("reactivar")}
+              onClick={() => onStartConfirm("reactivar")}
               disabled={procesando}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
             >
@@ -417,13 +417,27 @@ function MedicoRow({
 
       {confirmando === "suspender" && (
         <ConfirmDialog
-          title={`¿Suspender a ${m.nombre_completo}?`}
-          description="El médico no podrá atender ni aparecer en búsquedas."
-          confirmLabel="Sí, suspender"
+          title={`Suspender a ${m.nombre_completo}?`}
+          description="El medico no podra atender ni aparecer en busquedas."
+          confirmLabel="Si, suspender"
           variant="warning"
           requireReason
-          reasonPlaceholder="Motivo de la suspensión..."
+          reasonPlaceholder="Motivo de la suspension..."
           onConfirm={(motivo) => onAccion("suspender", motivo)}
+          onCancel={onCancelConfirm}
+          isLoading={procesando}
+        />
+      )}
+
+      {confirmando === "reactivar" && (
+        <ConfirmDialog
+          title={`Reactivar a ${m.nombre_completo}?`}
+          description="El medico volvera a poder atender y aparecer en busquedas."
+          confirmLabel="Si, reactivar"
+          variant="primary"
+          requireReason
+          reasonPlaceholder="Motivo de la reactivacion (min 10 caracteres)..."
+          onConfirm={(motivo) => onAccion("reactivar", motivo)}
           onCancel={onCancelConfirm}
           isLoading={procesando}
         />

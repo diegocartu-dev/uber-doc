@@ -108,6 +108,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (accion === "reactivar") {
+    if (!motivo || motivo.trim().length < 10) {
+      return NextResponse.json({ error: "Motivo obligatorio (min 10 caracteres)" }, { status: 400 });
+    }
     const { error } = await admin
       .from("medicos")
       .update({
@@ -115,7 +118,7 @@ export async function PATCH(req: NextRequest) {
         verificado: true,
         verificado_at: ahora,
         verificado_por: user.email,
-        notas_admin: null,
+        notas_admin: motivo,
       })
       .eq("id", medicoId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -125,6 +128,7 @@ export async function PATCH(req: NextRequest) {
         accion: ADMIN_ACTIONS.REACTIVAR_MEDICO,
         recursoTipo: "medico",
         recursoId: medicoId,
+        motivo,
       });
     }
     return NextResponse.json({ ok: true, estado: "aprobado" });

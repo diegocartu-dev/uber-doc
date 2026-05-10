@@ -33,6 +33,10 @@ export default async function ConsultorioPublicoPage({
 }) {
   const { slug } = await params;
 
+  // Feature flag: consultorio particular
+  const { getFlag } = await import("@/lib/feature-flags");
+  if (!(await getFlag("consultorio_particular"))) notFound();
+
   // Fetch medico con admin client (pre-login, no RLS para anon)
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin

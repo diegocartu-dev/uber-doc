@@ -1,9 +1,13 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@/lib/supabase/server";
+import { getFlag } from "@/lib/feature-flags";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await getFlag("nova_ai"))) {
+      return NextResponse.json({ error: "Nova desactivada", code: "FEATURE_DISABLED" }, { status: 503 });
+    }
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
