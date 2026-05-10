@@ -272,7 +272,7 @@ export async function POST(req: NextRequest) {
     // Feature flag: Nova AI
     if (!(await getFlag("nova_ai"))) {
       return NextResponse.json(
-        { error: "Nova esta temporalmente desactivada. Volve a probar mas tarde.", code: "FEATURE_DISABLED" },
+        { error: "En este momento estoy en pausa actualizando mis habilidades. Volve en un rato.", code: "FEATURE_DISABLED" },
         { status: 503 }
       );
     }

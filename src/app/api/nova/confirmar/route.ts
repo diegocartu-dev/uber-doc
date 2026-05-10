@@ -29,7 +29,7 @@ function generarSlots(
 export async function POST(req: NextRequest) {
   try {
     if (!(await getFlag("nova_ai"))) {
-      return NextResponse.json({ exito: false, mensaje: "Nova desactivada" }, { status: 503 });
+      return NextResponse.json({ exito: false, mensaje: "En este momento estoy en pausa actualizando mis habilidades. Volve en un rato." }, { status: 503 });
     }
     const { accion, datos, medico_id } = await req.json();
 

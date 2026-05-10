@@ -6,7 +6,7 @@ import { getFlag } from "@/lib/feature-flags";
 export async function POST(req: NextRequest) {
   try {
     if (!(await getFlag("nova_ai"))) {
-      return NextResponse.json({ error: "Nova desactivada", code: "FEATURE_DISABLED" }, { status: 503 });
+      return NextResponse.json({ error: "En este momento estoy en pausa actualizando mis habilidades. Volve en un rato.", code: "FEATURE_DISABLED" }, { status: 503 });
     }
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

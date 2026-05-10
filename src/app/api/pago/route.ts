@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   // Feature flag: pagos via Mercado Pago
   if (!(await getFlag("pago_mercado_pago"))) {
     return NextResponse.json(
-      { error: "El cobro esta temporalmente suspendido. Volve a intentar mas tarde.", code: "FEATURE_DISABLED" },
+      { error: "Estamos ajustando los pagos. Volve a intentar en unos minutos.", code: "FEATURE_DISABLED" },
       { status: 503 }
     );
   }

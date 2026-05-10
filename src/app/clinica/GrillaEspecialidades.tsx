@@ -209,17 +209,24 @@ export default function GrillaEspecialidades({
   medicos,
   consultasEspera,
   turnosClinicaVirtual,
+  flagCiActiva = true,
+  flagTurnosActivos = true,
 }: {
   medicos: Medico[];
   consultasEspera: ConsultaEspera[];
   turnosClinicaVirtual: TurnoClinicaVirtual[];
+  flagCiActiva?: boolean;
+  flagTurnosActivos?: boolean;
 }) {
   const [busqueda, setBusqueda] = useState("");
   const [emailLead, setEmailLead] = useState("");
   const [leadEnviado, setLeadEnviado] = useState(false);
   const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(null);
-  const [modalModo, setModalModo] = useState<"inmediata" | "turno">("inmediata");
+  const [modalModo, setModalModo] = useState<"inmediata" | "turno">(flagCiActiva ? "inmediata" : "turno");
+
+  // Si ambos flags estan apagados, mostrar mensaje
+  const sinServicios = !flagCiActiva && !flagTurnosActivos;
 
   const termino = normalize(busqueda.trim());
 
@@ -292,6 +299,18 @@ export default function GrillaEspecialidades({
 
   return (
     <>
+      {/* Banners de servicios pausados */}
+      {!flagCiActiva && (
+        <div className="mb-4 rounded-lg bg-[#BA7517]/10 px-4 py-3 text-center text-sm text-[#BA7517]" style={{ border: "1px solid #BA751730" }}>
+          La Consulta Inmediata esta en pausa por unos minutos. Podes agendar un turno.
+        </div>
+      )}
+      {!flagTurnosActivos && (
+        <div className="mb-4 rounded-lg bg-[#BA7517]/10 px-4 py-3 text-center text-sm text-[#BA7517]" style={{ border: "1px solid #BA751730" }}>
+          Estamos actualizando la agenda. La reserva de turnos vuelve en breve.
+        </div>
+      )}
+
       {/* Buscador */}
       <div className="relative mb-6">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
@@ -488,6 +507,7 @@ export default function GrillaEspecialidades({
               ) : (
                 <div className="mt-4">
                   <div className="flex gap-2">
+                    {flagCiActiva && (
                     <button
                       disabled={botonConsultaDeshabilitado}
                       onClick={() => { setModalModo("inmediata"); setModalEspecialidad(esp.nombre); }}
@@ -498,6 +518,7 @@ export default function GrillaEspecialidades({
                     >
                       Consulta ahora
                     </button>
+                    )}
                     <button
                       disabled={botonAgendarDeshabilitado}
                       onClick={() => {

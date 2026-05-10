@@ -18,6 +18,7 @@ import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import BotonPush from "@/components/BotonPush";
+import { getFlag } from "@/lib/feature-flags";
 
 export default async function DashboardPage({
   searchParams,
@@ -56,6 +57,12 @@ export default async function DashboardPage({
       .maybeSingle();
     if (esAdmin) redirect("/admin");
   }
+
+  // Feature flags para UI
+  const [flagNovaAi, flagCiGlobal] = await Promise.all([
+    getFlag("nova_ai"),
+    getFlag("consulta_inmediata_global"),
+  ]);
 
   // AR timezone
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -469,9 +476,11 @@ export default async function DashboardPage({
                 </div>
                 <div className="flex items-center gap-3 lg:gap-4">
                   <BotonSilenciar />
-                  <Link href="/medico/nova" className="text-sm font-medium text-[#378ADD] hover:text-[#2e6fb5] transition-colors">
-                    Nova
-                  </Link>
+                  {flagNovaAi && (
+                    <Link href="/medico/nova" className="text-sm font-medium text-[#378ADD] hover:text-[#2e6fb5] transition-colors">
+                      Nova
+                    </Link>
+                  )}
                   <span className="hidden text-sm text-gray-500 lg:inline">{fullName}</span>
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
                   <LogoutButton />
@@ -492,11 +501,13 @@ export default async function DashboardPage({
               </div>
             )}
 
-            {/* Nova widget */}
-            <NovaWidget
-              nombreMedico={fullName}
-              turnosHoy={turnosHoy.length}
-            />
+            {/* Nova widget — solo si flag activo */}
+            {flagNovaAi && (
+              <NovaWidget
+                nombreMedico={fullName}
+                turnosHoy={turnosHoy.length}
+              />
+            )}
 
             {/* Activar notificaciones push */}
             <div className="mt-4">

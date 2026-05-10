@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppNavbar from "@/components/AppNavbar";
 import GrillaEspecialidades from "./GrillaEspecialidades";
+import { getFlag } from "@/lib/feature-flags";
 
 export default async function ClinicaPage() {
   const supabase = await createClient();
@@ -69,6 +70,8 @@ export default async function ClinicaPage() {
           medicos={medicos ?? []}
           consultasEspera={consultasEspera ?? []}
           turnosClinicaVirtual={turnosDisponibles ?? []}
+          flagCiActiva={await getFlag("consulta_inmediata_global")}
+          flagTurnosActivos={await getFlag("turnos_global")}
         />
       </main>
     </div>

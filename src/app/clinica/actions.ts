@@ -14,7 +14,7 @@ export async function crearConsulta(
 ) {
   // Feature flag: consulta inmediata
   if (!(await getFlag("consulta_inmediata_global"))) {
-    return { error: "La Consulta Inmediata esta temporalmente desactivada. Volve a probar mas tarde." };
+    return { error: "La Consulta Inmediata esta en pausa por unos minutos. Proba de nuevo enseguida." };
   }
 
   const supabase = await createClient();
