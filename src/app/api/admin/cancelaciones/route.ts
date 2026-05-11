@@ -81,17 +81,14 @@ export async function GET(req: NextRequest) {
   const range = getDateRange(periodo, desde, hasta);
   const admin = createAdminClient();
 
-  const desdeDate = range.desde.slice(0, 10);
-  const hastaDate = (range.hasta ?? "").slice(0, 10);
-
-  // Fetch cancelled turnos (filter by fecha for consistency with totalTurnos)
+  // Fetch cancelled turnos
   let turnosQuery = admin
     .from("turnos")
     .select("id, estado, fecha, hora_inicio, medico_id, paciente_id, motivo_cancelacion, reintegro_estado, updated_at")
     .in("estado", CANCEL_STATES_TURNOS)
-    .gte("fecha", desdeDate)
-    .lte("fecha", hastaDate)
-    .order("fecha", { ascending: false })
+    .gte("updated_at", range.desde)
+    .lte("updated_at", range.hasta)
+    .order("updated_at", { ascending: false })
     .limit(500);
 
   if (filtroMedico) turnosQuery = turnosQuery.eq("medico_id", filtroMedico);
@@ -108,32 +105,23 @@ export async function GET(req: NextRequest) {
 
   if (filtroMedico) consultasQuery = consultasQuery.eq("medico_id", filtroMedico);
 
-  // Fetch total turnos for the period (same fecha filter as cancelled)
-  const totalTurnosQuery = admin
+  // Fetch total turnos for the period (for rates)
+  let totalTurnosQuery = admin
     .from("turnos")
     .select("id, medico_id, estado", { count: "exact", head: false })
-    .gte("fecha", desdeDate)
-    .lte("fecha", hastaDate)
+    .gte("fecha", range.desde.slice(0, 10))
+    .lte("fecha", (range.hasta ?? "").slice(0, 10))
     .not("estado", "in", '("disponible","bloqueado")');
 
-  // Fetch total consultas for the period (for correct tasa_global denominator)
-  const totalConsultasQuery = admin
-    .from("consultas")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", range.desde)
-    .lte("created_at", range.hasta);
-
-  const [turnosResult, consultasResult, totalTurnosResult, totalConsultasResult] = await Promise.all([
+  const [turnosResult, consultasResult, totalTurnosResult] = await Promise.all([
     turnosQuery,
     consultasQuery,
     totalTurnosQuery,
-    totalConsultasQuery,
   ]);
 
   const turnosCancelados = turnosResult.data ?? [];
   const consultasCanceladas = consultasResult.data ?? [];
   const totalTurnos = totalTurnosResult.data ?? [];
-  const totalConsultasCount = totalConsultasResult.count ?? 0;
 
   // Resolve medico and paciente names
   const medicoIds = [...new Set([
@@ -176,7 +164,7 @@ export async function GET(req: NextRequest) {
       medico_id: t.medico_id,
       medico: medMap.get(t.medico_id) ?? "—",
       paciente: pacMapId.get(t.paciente_id) ?? "Paciente",
-      fecha: t.updated_at ?? `${t.fecha}T${t.hora_inicio}`,
+      fecha: t.updated_at,
       motivo: t.motivo_cancelacion ?? null,
       reembolso: t.reintegro_estado ?? null,
     });
@@ -204,7 +192,7 @@ export async function GET(req: NextRequest) {
 
   // KPIs
   const totalCancelaciones = cancelaciones.length;
-  const totalConsultasTurnos = totalTurnos.length + totalConsultasCount;
+  const totalConsultasTurnos = totalTurnos.length + consultasCanceladas.length;
   const tasaGlobal = totalConsultasTurnos > 0 ? totalCancelaciones / totalConsultasTurnos : 0;
 
   const porTipo = {

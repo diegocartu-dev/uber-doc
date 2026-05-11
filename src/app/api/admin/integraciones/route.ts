@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verificarAdmin } from "@/lib/admin-auth";
+import { isAdmin } from "@/lib/admin-auth";
 
 const TIMEOUT_MS = 3000;
-const RATE_LIMIT_MS = 10_000;
-const rateLimitMap = new Map<string, number>();
 
 type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion";
 
@@ -213,20 +212,14 @@ function checkReNaPDiS(): CheckResult {
 }
 
 export async function GET() {
-  const user = await verificarAdmin();
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const now = Date.now();
-  const lastCheck = rateLimitMap.get(user.id);
-  if (lastCheck && now - lastCheck < RATE_LIMIT_MS) {
-    return NextResponse.json(
-      { error: "Demasiadas solicitudes. Espera 10 segundos." },
-      { status: 429 }
-    );
+  if (!user || !(await isAdmin(user.id))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
-  rateLimitMap.set(user.id, now);
 
   const results = await Promise.allSettled([
     checkSupabase(),
@@ -246,7 +239,7 @@ export async function GET() {
       detalle: "Error interno del check",
       latencia_ms: null,
       checked_at: new Date().toISOString(),
-      error_tecnico: "check_interno_fallido",
+      error_tecnico: r.status === "rejected" ? String(r.reason) : undefined,
     }
   );
 
