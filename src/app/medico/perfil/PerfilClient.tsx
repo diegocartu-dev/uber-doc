@@ -138,6 +138,7 @@ export default function PerfilClient({
           <TabCobros
             mpAccount={mpAccount}
             errorParam={errorParam}
+            medicoId={medico.id}
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 
 interface MpAccount {
@@ -11,13 +11,38 @@ interface MpAccount {
   public_key: string | null;
 }
 
+function trackClient(evento: string, metadata: Record<string, unknown>) {
+  fetch("/api/funnel/track", {
+    method: "POST",
+    keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ evento, metadata }),
+  }).catch(() => {});
+}
+
+function deriveEstadoInicial(mpAccount: MpAccount | null): string {
+  if (!mpAccount || mpAccount.estado === "revocado") return "no_conectado";
+  if (mpAccount.estado === "activo" && new Date(mpAccount.expires_at) > new Date()) return "conectado";
+  return "expirado";
+}
+
 export default function TabCobros({
   mpAccount,
   errorParam,
+  medicoId,
 }: {
   mpAccount: MpAccount | null;
   errorParam: string | null;
+  medicoId: string;
 }) {
+  useEffect(() => {
+    trackClient("mp_oauth_view_tab", {
+      estado_inicial: errorParam === "mp_account_already_linked"
+        ? "cuenta_vinculada"
+        : deriveEstadoInicial(mpAccount),
+    });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
   if (errorParam === "mp_account_already_linked") {
     return <EstadoD />;
   }
@@ -31,6 +56,11 @@ export default function TabCobros({
   }
 
   return <EstadoC />;
+}
+
+function handleStartClick(desdeEstado: "A" | "C" | "D") {
+  trackClient("mp_oauth_start_click", { desde_estado: desdeEstado });
+  window.location.href = "/api/mp/oauth/start";
 }
 
 function EstadoA() {
@@ -47,13 +77,13 @@ function EstadoA() {
         necesitás conectarla. Docto nunca toca tu plata — los pagos van
         directo a vos.
       </p>
-      <a
-        href="/api/mp/oauth/start"
+      <button
+        onClick={() => handleStartClick("A")}
         className="mt-5 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
         style={{ backgroundColor: "#378ADD", minHeight: 44 }}
       >
         Conectar Mercado Pago
-      </a>
+      </button>
       <p className="mt-3 text-xs text-gray-400">
         La conexión es segura y la podés desconectar cuando quieras.
       </p>
@@ -208,13 +238,13 @@ function EstadoC() {
       <p className="mt-2 text-sm text-gray-600">
         Volvé a conectar para seguir recibiendo pagos.
       </p>
-      <a
-        href="/api/mp/oauth/start"
+      <button
+        onClick={() => handleStartClick("C")}
         className="mt-4 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
         style={{ backgroundColor: "#378ADD", minHeight: 44 }}
       >
         Reconectar
-      </a>
+      </button>
     </div>
   );
 }
@@ -240,13 +270,13 @@ function EstadoD() {
         </a>
         .
       </p>
-      <a
-        href="/api/mp/oauth/start"
+      <button
+        onClick={() => handleStartClick("D")}
         className="mt-4 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
         style={{ backgroundColor: "#378ADD", minHeight: 44 }}
       >
         Intentar con otra cuenta
-      </a>
+      </button>
     </div>
   );
 }

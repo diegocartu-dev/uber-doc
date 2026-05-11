@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { trackEvent } from "@/lib/funnel";
 
 export async function POST() {
   const supabase = await createClient();
@@ -26,14 +27,23 @@ export async function POST() {
 
   const ahora = new Date().toISOString();
 
-  await admin
+  const { count } = await admin
     .from("medicos_mp_accounts")
-    .update({
-      estado: "revocado",
-      desconectado_en: ahora,
-      updated_at: ahora,
-    })
+    .update(
+      {
+        estado: "revocado",
+        desconectado_en: ahora,
+        updated_at: ahora,
+      },
+      { count: "exact" }
+    )
     .eq("medico_id", medico.id);
+
+  await trackEvent({
+    evento: "mp_oauth_disconnect",
+    medicoId: medico.id,
+    metadata: { tenia_registro: (count ?? 0) > 0 },
+  });
 
   return NextResponse.json({ ok: true });
 }
