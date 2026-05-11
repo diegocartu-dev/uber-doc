@@ -11,6 +11,7 @@ import {
   Bell,
   Settings,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/admin/pacientes", label: "Pacientes", icon: Users, badgeKey: null },
   { href: "/admin/consultas", label: "Consultas", icon: MessageSquare, badgeKey: null },
   { href: "/admin/alertas", label: "Alertas", icon: Bell, badgeKey: "alertas" as const },
+  { href: "/admin/sereno", label: "Sereno", icon: ShieldCheck, badgeKey: null },
   { href: "/admin/configuracion", label: "Configuracion", icon: Settings, badgeKey: null },
 ];
 

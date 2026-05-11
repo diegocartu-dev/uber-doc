@@ -35,16 +35,17 @@ export async function GET(req: NextRequest) {
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...(turnos ?? []).map((t) => t.paciente_id)])];
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
-      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo").in("id", medicoIds) : { data: [] },
+      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0 ? admin.from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacienteIds) : { data: [] },
     ]);
 
-    const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
+    const testIds = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
+    const medMap = new Map((medicos ?? []).filter((m) => !m.es_cuenta_test).map((m) => [m.id, m.nombre_completo]));
     const pacMapUserId = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo]));
     const pacMapId = new Map((pacientes ?? []).map((p) => [p.id, p.nombre_completo]));
 
     const items = [
-      ...(consultas ?? []).map((c) => ({
+      ...(consultas ?? []).filter((c) => !testIds.has(c.medico_id)).map((c) => ({
         id: c.id,
         tipo: "CI" as const,
         estado: c.estado,
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
         inicio: c.created_at,
         especialidad: c.especialidad,
       })),
-      ...(turnos ?? []).map((t) => ({
+      ...(turnos ?? []).filter((t) => !testIds.has(t.medico_id)).map((t) => ({
         id: t.id,
         tipo: "Turno" as const,
         estado: t.estado,
@@ -85,25 +86,26 @@ export async function GET(req: NextRequest) {
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...(turnos ?? []).map((t) => t.paciente_id)])];
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
-      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo").in("id", medicoIds) : { data: [] },
+      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0 ? admin.from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacienteIds) : { data: [] },
     ]);
 
-    const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
-    const pacMapUserId = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo]));
-    const pacMapId = new Map((pacientes ?? []).map((p) => [p.id, p.nombre_completo]));
+    const testIds2 = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
+    const medMap2 = new Map((medicos ?? []).filter((m) => !m.es_cuenta_test).map((m) => [m.id, m.nombre_completo]));
+    const pacMapUserId2 = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo]));
+    const pacMapId2 = new Map((pacientes ?? []).map((p) => [p.id, p.nombre_completo]));
 
     const items = [
-      ...(consultas ?? []).map((c) => ({
+      ...(consultas ?? []).filter((c) => !testIds2.has(c.medico_id)).map((c) => ({
         id: c.id, tipo: "CI" as const, estado: c.estado,
-        medico: medMap.get(c.medico_id) ?? "—",
-        paciente: pacMapUserId.get(c.paciente_id) ?? "Paciente",
+        medico: medMap2.get(c.medico_id) ?? "—",
+        paciente: pacMapUserId2.get(c.paciente_id) ?? "Paciente",
         inicio: c.created_at, especialidad: c.especialidad,
       })),
-      ...(turnos ?? []).map((t) => ({
+      ...(turnos ?? []).filter((t) => !testIds2.has(t.medico_id)).map((t) => ({
         id: t.id, tipo: "Turno" as const, estado: t.estado,
-        medico: medMap.get(t.medico_id) ?? "—",
-        paciente: pacMapId.get(t.paciente_id) ?? "Paciente",
+        medico: medMap2.get(t.medico_id) ?? "—",
+        paciente: pacMapId2.get(t.paciente_id) ?? "Paciente",
         inicio: `${t.fecha}T${t.hora_inicio}`, especialidad: "",
       })),
     ];
@@ -130,16 +132,17 @@ export async function GET(req: NextRequest) {
     const pacienteIds = [...new Set((consultas ?? []).map((c) => c.paciente_id))];
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
-      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo").in("id", medicoIds) : { data: [] },
+      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0 ? admin.from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacienteIds) : { data: [] },
     ]);
 
-    const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
+    const testIds3 = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
+    const medMap3 = new Map((medicos ?? []).filter((m) => !m.es_cuenta_test).map((m) => [m.id, m.nombre_completo]));
     const pacMap = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo]));
 
-    const items = (consultas ?? []).map((c) => ({
+    const items = (consultas ?? []).filter((c) => !testIds3.has(c.medico_id)).map((c) => ({
       id: c.id, tipo: "CI" as const, estado: c.estado,
-      medico: medMap.get(c.medico_id) ?? "—",
+      medico: medMap3.get(c.medico_id) ?? "—",
       paciente: pacMap.get(c.paciente_id) ?? "Paciente",
       inicio: c.created_at, especialidad: c.especialidad,
     }));

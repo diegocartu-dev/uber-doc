@@ -36,7 +36,8 @@ export default async function ClinicaPage() {
     .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta")
     .eq("oculto_clinica", false)
     .eq("verificado", true)
-    .eq("estado_registro", "aprobado");
+    .eq("estado_registro", "aprobado")
+    .eq("es_cuenta_test", false);
 
   // Contar turnos disponibles en clínica virtual por médico (para decidir visibilidad del botón "Agendar turno")
   const hoy = new Date().toISOString().split("T")[0];

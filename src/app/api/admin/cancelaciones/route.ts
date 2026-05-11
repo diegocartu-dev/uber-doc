@@ -146,7 +146,7 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicos }, { data: pacientesById }, { data: pacientesByUserId }] = await Promise.all([
     medicoIds.length > 0
-      ? admin.from("medicos").select("id, nombre_completo").in("id", medicoIds)
+      ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds)
       : { data: [] },
     pacienteIdsFromTurnos.length > 0
       ? admin.from("pacientes").select("id, nombre_completo").in("id", pacienteIdsFromTurnos)
@@ -156,14 +156,16 @@ export async function GET(req: NextRequest) {
       : { data: [] },
   ]);
 
-  const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
+  const testMedicoIds = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
+  const medMap = new Map((medicos ?? []).filter((m) => !m.es_cuenta_test).map((m) => [m.id, m.nombre_completo]));
   const pacMapId = new Map((pacientesById ?? []).map((p) => [p.id, p.nombre_completo]));
   const pacMapUserId = new Map((pacientesByUserId ?? []).map((p) => [p.user_id, p.nombre_completo]));
 
-  // Build cancelaciones list
+  // Build cancelaciones list (exclude test accounts)
   const cancelaciones: CancelacionRow[] = [];
 
   for (const t of turnosCancelados) {
+    if (testMedicoIds.has(t.medico_id)) continue;
     const tipo = t.estado as TipoCancelacion;
     if (filtroTipo && tipo !== filtroTipo) continue;
     if (filtroModalidad && filtroModalidad !== "Turno") continue;
@@ -183,6 +185,7 @@ export async function GET(req: NextRequest) {
   }
 
   for (const c of consultasCanceladas) {
+    if (testMedicoIds.has(c.medico_id)) continue;
     if (filtroTipo && filtroTipo !== "cancelada") continue;
     if (filtroModalidad && filtroModalidad !== "CI") continue;
 
@@ -224,14 +227,14 @@ export async function GET(req: NextRequest) {
   }>();
 
   for (const t of totalTurnos) {
-    if (!t.medico_id) continue;
+    if (!t.medico_id || testMedicoIds.has(t.medico_id)) continue;
     const entry = medicoStatsMap.get(t.medico_id) ?? { total: 0, canceladas_por_el: 0, plantadas: 0, canceladas_por_pac: 0 };
     entry.total++;
     medicoStatsMap.set(t.medico_id, entry);
   }
 
   for (const t of turnosCancelados) {
-    if (!t.medico_id) continue;
+    if (!t.medico_id || testMedicoIds.has(t.medico_id)) continue;
     const entry = medicoStatsMap.get(t.medico_id) ?? { total: 0, canceladas_por_el: 0, plantadas: 0, canceladas_por_pac: 0 };
     if (t.estado === "cancelado_medico") entry.canceladas_por_el++;
     else if (t.estado === "ausente_medico") entry.plantadas++;
@@ -275,6 +278,6 @@ export async function GET(req: NextRequest) {
     cancelaciones,
     medico_stats: medicoStats,
     promedios,
-    medicos_disponibles: medicoIds.map((id) => ({ id, nombre: medMap.get(id) ?? "—" })),
+    medicos_disponibles: medicoIds.filter((id) => !testMedicoIds.has(id)).map((id) => ({ id, nombre: medMap.get(id) ?? "—" })),
   });
 }
