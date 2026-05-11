@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "crypto";
 
-export async function POST() {
+export async function GET() {
   const supabase = await createClient();
   const {
     data: { user },
