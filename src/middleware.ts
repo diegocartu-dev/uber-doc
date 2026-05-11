@@ -9,7 +9,6 @@ const BETA_COOKIE = "docto_beta_access";
 const BETA_PROTECTED = [
   "/auth/register",         // registro paciente
   "/auth/registro-medico",  // registro médico
-  "/api/pre-registro",      // endpoint de pre-registro
 ];
 
 function isBetaProtected(pathname: string): boolean {

@@ -5,6 +5,7 @@ import { Loader2, Download, AlertTriangle } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import PacientesEsperando from "./PacientesEsperando";
+import CancelacionesTab from "./CancelacionesTab";
 
 interface ConsultaItem {
   id: string;
@@ -16,7 +17,7 @@ interface ConsultaItem {
   especialidad: string;
 }
 
-type Tab = "esperando" | "en_curso" | "hoy" | "historial";
+type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 
 export default function ConsultasClient() {
   const [tab, setTab] = useState<Tab>("esperando");
@@ -28,7 +29,7 @@ export default function ConsultasClient() {
   const [procesando, setProcesando] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (tab === "esperando") { setLoading(false); return; }
+    if (tab === "esperando" || tab === "cancelaciones") { setLoading(false); return; }
     const params = new URLSearchParams({ tab });
     if (tab === "historial") {
       if (desde) params.set("desde", desde);
@@ -102,7 +103,7 @@ export default function ConsultasClient() {
     <div className="p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900">Consultas</h1>
-        {items.length > 0 && (
+        {items.length > 0 && tab !== "esperando" && tab !== "cancelaciones" && (
           <button
             onClick={exportCsv}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
@@ -119,6 +120,7 @@ export default function ConsultasClient() {
           { key: "en_curso" as const, label: "En curso ahora" },
           { key: "hoy" as const, label: "Hoy" },
           { key: "historial" as const, label: "Historial" },
+          { key: "cancelaciones" as const, label: "Cancelaciones" },
         ]).map(({ key, label }) => (
           <button
             key={key}
@@ -142,6 +144,9 @@ export default function ConsultasClient() {
       {/* Pacientes esperando tab */}
       {tab === "esperando" && <PacientesEsperando />}
 
+      {/* Cancelaciones tab */}
+      {tab === "cancelaciones" && <CancelacionesTab />}
+
       {/* Historial filters */}
       {tab === "historial" && (
         <div className="mt-4 flex items-center gap-3">
@@ -162,7 +167,7 @@ export default function ConsultasClient() {
       )}
 
       {/* Content (not for esperando tab) */}
-      {tab === "esperando" ? null : loading ? (
+      {tab === "esperando" || tab === "cancelaciones" ? null : loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 size={24} className="animate-spin text-gray-400" />
         </div>
