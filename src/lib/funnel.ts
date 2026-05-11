@@ -21,7 +21,7 @@ export async function trackEvent(params: {
       paciente_id: params.pacienteId ?? null,
       metadata: params.metadata ?? {},
     });
-  } catch {
-    console.error("Error tracking funnel event:", params.evento);
+  } catch (err) {
+    console.error("Error tracking funnel event:", params.evento, err);
   }
 }
