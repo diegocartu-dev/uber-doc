@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Loader2,
   CheckCircle,
@@ -12,42 +12,80 @@ import {
   Mail,
   Brain,
   Bell,
+  Globe,
+  Shield,
+  FileCheck,
+  Sparkles,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+
+type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion";
 
 interface Integracion {
   nombre: string;
-  icon: typeof Database;
-  estado: "ok" | "error" | "warning" | "no_configurado";
+  icono: string;
+  estado: Estado;
   detalle: string;
-  env_var?: string;
+  latencia_ms: number | null;
+  checked_at: string;
+  error_tecnico?: string;
+}
+
+const ICON_MAP: Record<string, typeof Database> = {
+  Database,
+  Video,
+  CreditCard,
+  Mail,
+  Brain,
+  Bell,
+  Globe,
+  Shield,
+  FileCheck,
+  Sparkles,
+};
+
+const STATUS_CONFIG: Record<Estado, { color: string; Icon: typeof CheckCircle; label: string }> = {
+  ok: { color: "#1D9E75", Icon: CheckCircle, label: "Activa" },
+  degradado: { color: "#BA7517", Icon: AlertTriangle, label: "Degradada" },
+  error: { color: "#D85A30", Icon: XCircle, label: "Caida" },
+  no_configurado: { color: "#888780", Icon: AlertTriangle, label: "No integrada" },
+  simulacion: { color: "#888780", Icon: AlertTriangle, label: "Simulacion" },
+};
+
+function tiempoRelativo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const seg = Math.floor(diff / 1000);
+  if (seg < 60) return `hace ${seg}s`;
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  const hrs = Math.floor(min / 60);
+  return `hace ${hrs}h`;
 }
 
 export default function IntegracionesTab() {
   const [integraciones, setIntegraciones] = useState<Integracion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedError, setExpandedError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Verificar estado de integraciones client-side
-    // Las que dependen de env vars server-side se verifican en el endpoint
-    checkIntegraciones();
-  }, []);
-
-  async function checkIntegraciones() {
-    // Las integraciones se verifican con un ping simple
-    // No exponemos secrets, solo si la config existe
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
-      const res = await fetch("/api/admin/integraciones");
+      const res = await fetch("/api/admin/integraciones", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setIntegraciones(data.integraciones ?? []);
-      } else {
-        setIntegraciones(getDefaultIntegraciones());
       }
-    } catch {
-      setIntegraciones(getDefaultIntegraciones());
-    }
+    } catch { /* retain previous state */ }
     setLoading(false);
-  }
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -59,92 +97,101 @@ export default function IntegracionesTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gray-400">
-        Estado de cada servicio externo conectado a Docto
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">
+          Estado real de cada servicio externo conectado a Docto
+        </p>
+        <button
+          onClick={() => fetchData(true)}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+        >
+          <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+          Refrescar
+        </button>
+      </div>
 
       {integraciones.map((integ) => {
-        const Icon = integ.icon;
-        const statusColor =
-          integ.estado === "ok"
-            ? "#1D9E75"
-            : integ.estado === "error"
-              ? "#E24B4A"
-              : integ.estado === "warning"
-                ? "#BA7517"
-                : "#888780";
-        const StatusIcon =
-          integ.estado === "ok"
-            ? CheckCircle
-            : integ.estado === "error"
-              ? XCircle
-              : AlertTriangle;
+        const Icon = ICON_MAP[integ.icono] ?? AlertTriangle;
+        const config = STATUS_CONFIG[integ.estado] ?? STATUS_CONFIG.no_configurado;
+        const StatusIcon = config.Icon;
+        const hasError = !!integ.error_tecnico;
+        const isExpanded = expandedError === integ.nombre;
 
         return (
-          <div
-            key={integ.nombre}
-            className="flex items-center justify-between rounded-xl bg-white p-4"
-            style={{ border: "1px solid #e5e7eb" }}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-full"
-                style={{ backgroundColor: `${statusColor}15` }}
-              >
-                <Icon size={16} style={{ color: statusColor }} />
+          <div key={integ.nombre}>
+            <div
+              className="flex items-center justify-between rounded-xl bg-white p-4"
+              style={{ border: "1px solid #e5e7eb" }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `${config.color}15` }}
+                >
+                  <Icon size={16} style={{ color: config.color }} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {integ.nombre}
+                  </p>
+                  <p className="text-xs text-gray-400">{integ.detalle}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  {integ.nombre}
-                </p>
-                <p className="text-xs text-gray-400">{integ.detalle}</p>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: config.color }}
+                    >
+                      {config.label}
+                    </span>
+                    {integ.latencia_ms !== null && (
+                      <span className="text-[10px] text-gray-300">
+                        {integ.latencia_ms}ms
+                      </span>
+                    )}
+                  </div>
+                  {integ.checked_at && (
+                    <p className="text-[10px] text-gray-300">
+                      {tiempoRelativo(integ.checked_at)}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <StatusIcon size={18} style={{ color: config.color }} />
+                  {hasError && (
+                    <button
+                      onClick={() =>
+                        setExpandedError(isExpanded ? null : integ.nombre)
+                      }
+                      className="ml-0.5 text-gray-300 hover:text-gray-500"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            <StatusIcon size={18} style={{ color: statusColor }} />
+
+            {hasError && isExpanded && (
+              <div
+                className="mx-4 rounded-b-lg border-x border-b px-4 py-2 text-xs font-mono text-gray-500"
+                style={{ borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
+              >
+                {integ.error_tecnico}
+              </div>
+            )}
           </div>
         );
       })}
     </div>
   );
-}
-
-function getDefaultIntegraciones(): Integracion[] {
-  return [
-    {
-      nombre: "Supabase",
-      icon: Database,
-      estado: "ok",
-      detalle: "Base de datos + Auth + Storage",
-    },
-    {
-      nombre: "Daily.co",
-      icon: Video,
-      estado: "ok",
-      detalle: "Videollamadas",
-    },
-    {
-      nombre: "Mercado Pago",
-      icon: CreditCard,
-      estado: "ok",
-      detalle: "Procesamiento de pagos",
-    },
-    {
-      nombre: "Resend",
-      icon: Mail,
-      estado: "warning",
-      detalle: "Email transaccional — verificar API key",
-    },
-    {
-      nombre: "Anthropic (Nova)",
-      icon: Brain,
-      estado: "ok",
-      detalle: "Asistente IA para medicos",
-    },
-    {
-      nombre: "Web Push",
-      icon: Bell,
-      estado: "warning",
-      detalle: "Notificaciones push — verificar VAPID keys",
-    },
-  ];
 }
