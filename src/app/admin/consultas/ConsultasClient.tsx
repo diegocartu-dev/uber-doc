@@ -103,7 +103,7 @@ export default function ConsultasClient() {
     <div className="p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900">Consultas</h1>
-        {items.length > 0 && (
+        {items.length > 0 && tab !== "esperando" && tab !== "cancelaciones" && (
           <button
             onClick={exportCsv}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
