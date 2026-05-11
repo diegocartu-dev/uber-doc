@@ -27,7 +27,8 @@ export async function GET() {
   const { data: medicosCount } = await admin
     .from("medicos")
     .select("categoria")
-    .eq("verificado", true);
+    .eq("verificado", true)
+    .eq("es_cuenta_test", false);
 
   const founders =
     medicosCount?.filter((m) => m.categoria === "founder").length || 0;

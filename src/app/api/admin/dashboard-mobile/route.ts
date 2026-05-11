@@ -36,7 +36,8 @@ export async function GET() {
     admin
       .from("medicos")
       .select("id", { count: "exact", head: true })
-      .eq("estado_registro", "pendiente_revision"),
+      .eq("estado_registro", "pendiente_revision")
+      .eq("es_cuenta_test", false),
     admin
       .from("alertas_admin")
       .select("id", { count: "exact", head: true })
