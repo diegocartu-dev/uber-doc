@@ -64,14 +64,22 @@ function EstadoA() {
 function EstadoB({ mpAccount }: { mpAccount: MpAccount }) {
   const [showModal, setShowModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleDisconnect() {
     setDisconnecting(true);
+    setError(null);
     try {
       const res = await fetch("/api/mp/oauth/disconnect", { method: "POST" });
       if (res.ok) {
         window.location.href = "/medico/perfil?tab=cobros";
+      } else {
+        setError("No se pudo desconectar. Probá de nuevo en unos minutos.");
+        setShowModal(false);
       }
+    } catch {
+      setError("Error de conexión. Verificá tu internet y probá de nuevo.");
+      setShowModal(false);
     } finally {
       setDisconnecting(false);
     }
@@ -88,9 +96,17 @@ function EstadoB({ mpAccount }: { mpAccount: MpAccount }) {
 
   return (
     <>
+      {error && (
+        <div
+          className="mb-4 rounded-lg px-4 py-3 text-sm font-medium text-white"
+          style={{ backgroundColor: "#E24B4A" }}
+        >
+          {error}
+        </div>
+      )}
       <div
         className="rounded-xl p-6"
-        style={{ backgroundColor: "#f0fdf4", border: "0.5px solid #bbf7d0" }}
+        style={{ backgroundColor: "#E8F5F0", border: "0.5px solid #A3D9C4" }}
       >
         <div className="flex items-center gap-2">
           <CheckCircle size={20} strokeWidth={1.75} color="#1D9E75" />
@@ -121,7 +137,7 @@ function EstadoB({ mpAccount }: { mpAccount: MpAccount }) {
             style={{
               borderColor: "#E24B4A",
               color: "#E24B4A",
-              minHeight: 40,
+              minHeight: 44,
             }}
           >
             Desconectar
@@ -181,7 +197,7 @@ function EstadoC() {
   return (
     <div
       className="rounded-xl p-6"
-      style={{ backgroundColor: "#fffbeb", border: "0.5px solid #fde68a" }}
+      style={{ backgroundColor: "#FEF6E8", border: "0.5px solid #E8C98A" }}
     >
       <div className="flex items-center gap-2">
         <AlertTriangle size={20} strokeWidth={1.75} color="#BA7517" />
@@ -207,7 +223,7 @@ function EstadoD() {
   return (
     <div
       className="rounded-xl p-6"
-      style={{ backgroundColor: "#fffbeb", border: "0.5px solid #fde68a" }}
+      style={{ backgroundColor: "#FEF6E8", border: "0.5px solid #E8C98A" }}
     >
       <div className="flex items-center gap-2">
         <AlertTriangle size={20} strokeWidth={1.75} color="#BA7517" />
