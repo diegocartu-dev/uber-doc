@@ -104,6 +104,19 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const { data: existing } = await admin
+    .from("medicos_mp_accounts")
+    .select("medico_id")
+    .eq("mp_user_id", String(tokenData.user_id))
+    .single();
+
+  if (existing && existing.medico_id !== medicoId) {
+    console.error("Cuenta MP ya vinculada a otro médico");
+    return NextResponse.redirect(
+      new URL(`${PERFIL_BASE}&error=mp_account_already_linked`, req.url)
+    );
+  }
+
   const { error: upsertError } = await admin
     .from("medicos_mp_accounts")
     .upsert(
