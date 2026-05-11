@@ -37,7 +37,8 @@ export async function POST() {
       },
       { count: "exact" }
     )
-    .eq("medico_id", medico.id);
+    .eq("medico_id", medico.id)
+    .eq("estado", "activo");
 
   await trackEvent({
     evento: "mp_oauth_disconnect",

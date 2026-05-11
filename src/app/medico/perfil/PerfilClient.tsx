@@ -47,6 +47,7 @@ export default function PerfilClient({
   const tabParam = searchParams.get("tab");
   const [tab, setTab] = useState<Tab>(tabParam === "cobros" ? "cobros" : "datos");
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "error" } | null>(null);
+  const [stickyError, setStickyError] = useState<string | null>(null);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -65,6 +66,7 @@ export default function PerfilClient({
       setToast({ msg: "Mercado Pago rechazó la conexión. Probá de nuevo en unos minutos.", type: "error" });
       setTab("cobros");
     } else if (error === "mp_account_already_linked") {
+      setStickyError("mp_account_already_linked");
       setTab("cobros");
     } else if (error) {
       setToast({ msg: "Algo salió mal con la conexión a Mercado Pago. Probá de nuevo.", type: "error" });
@@ -98,7 +100,7 @@ export default function PerfilClient({
     router.replace(url.pathname + url.search, { scroll: false });
   }
 
-  const errorParam = searchParams.get("error");
+  const errorParam = stickyError || searchParams.get("error");
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-8">
