@@ -55,6 +55,9 @@ export default function PerfilClient({
     if (success === "connected") {
       setToast({ msg: "¡Cuenta MP conectada con éxito!", type: "ok" });
       setTab("cobros");
+    } else if (success === "disconnected") {
+      setToast({ msg: "Tu cuenta de Mercado Pago fue desconectada correctamente.", type: "ok" });
+      setTab("cobros");
     } else if (error === "invalid_state") {
       setToast({ msg: "La conexión expiró o es inválida. Probá de nuevo.", type: "error" });
       setTab("cobros");

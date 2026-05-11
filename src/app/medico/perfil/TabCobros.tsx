@@ -72,7 +72,7 @@ function EstadoB({ mpAccount }: { mpAccount: MpAccount }) {
     try {
       const res = await fetch("/api/mp/oauth/disconnect", { method: "POST" });
       if (res.ok) {
-        window.location.href = "/medico/perfil?tab=cobros";
+        window.location.href = "/medico/perfil?tab=cobros&success=disconnected";
       } else {
         setError("No se pudo desconectar. Probá de nuevo en unos minutos.");
         setShowModal(false);
