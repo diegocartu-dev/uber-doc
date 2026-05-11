@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     .from("medicos_mp_accounts")
     .select("medico_id")
     .eq("mp_user_id", String(tokenData.user_id))
-    .single();
+    .maybeSingle();
 
   if (existing && existing.medico_id !== medicoId) {
     console.error("Cuenta MP ya vinculada a otro médico");
