@@ -66,6 +66,9 @@ export default function PerfilClient({
       setTab("cobros");
     } else if (error === "mp_account_already_linked") {
       setTab("cobros");
+    } else if (error) {
+      setToast({ msg: "Algo salió mal con la conexión a Mercado Pago. Probá de nuevo.", type: "error" });
+      setTab("cobros");
     }
 
     if (success || error) {
