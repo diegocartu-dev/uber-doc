@@ -29,7 +29,6 @@ jobs:
       - run: npx playwright install chromium
 
       - name: Reset cuentas de prueba
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: node scripts/sereno-reset.mjs
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}

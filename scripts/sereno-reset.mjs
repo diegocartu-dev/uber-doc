@@ -12,8 +12,39 @@ const admin = createClient(supabaseUrl, serviceKey);
 
 const MEDICO_TEST_ID = "f52f79f9-0526-4b6a-a4c0-837f26fe7e19";
 
+const TEST_PASSWORD = "DoctoTest2026!";
+const MEDICO_TEST_AUTH_ID = "05d6af2c-bcf9-48c5-a423-40648cc4d7d2";
+
+async function resetPasswords() {
+  const { data: testUsers } = await admin
+    .from("medicos")
+    .select("user_id")
+    .eq("es_cuenta_test", true);
+
+  const { data: testPacientes } = await admin
+    .from("pacientes")
+    .select("user_id")
+    .eq("es_cuenta_test", true);
+
+  const userIds = [
+    ...(testUsers || []).map((u) => u.user_id),
+    ...(testPacientes || []).map((u) => u.user_id),
+  ];
+
+  let resetCount = 0;
+  for (const uid of userIds) {
+    const { error } = await admin.auth.admin.updateUserById(uid, {
+      password: TEST_PASSWORD,
+    });
+    if (!error) resetCount++;
+  }
+  console.log(`[sereno-reset] ${resetCount}/${userIds.length} passwords reseteados`);
+}
+
 async function reset() {
   console.log("[sereno-reset] Reseteando cuentas de prueba...");
+
+  await resetPasswords();
 
   // Reset pacientes test al estado base
   const { data: pacientes } = await admin
