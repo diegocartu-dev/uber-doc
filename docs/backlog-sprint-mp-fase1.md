@@ -35,3 +35,4 @@
 - **Fix sugerido:** Cambiar mensaje a "La conexión con Mercado Pago no se completó. Volvé a empezar."
 - **Origen:** Ola 2 testing (2026-05-12)
 - **Prioridad:** Mejora UX menor, no bloqueante
+
