@@ -71,6 +71,7 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
 
   async function handleLogout() {
     setLoggingOut(true);
+    window.dispatchEvent(new Event("docto:voluntary-logout"));
     const supabase = createClient();
     await supabase.auth.signOut();
     onClose();
