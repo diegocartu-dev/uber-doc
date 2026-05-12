@@ -5,7 +5,7 @@ export async function loginWithEmail(page: Page, email: string, password: string
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await page.waitForURL("**/dashboard**", { timeout: 15000 });
+  await page.waitForURL("**/dashboard**", { timeout: 30000, waitUntil: "networkidle" });
 }
 
 export async function loginPaciente(page: Page, email: string, password: string) {
@@ -13,5 +13,5 @@ export async function loginPaciente(page: Page, email: string, password: string)
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 15000 });
+  await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 30000, waitUntil: "networkidle" });
 }
