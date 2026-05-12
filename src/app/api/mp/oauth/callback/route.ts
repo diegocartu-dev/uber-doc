@@ -72,13 +72,15 @@ export async function GET(req: NextRequest) {
           code,
           grant_type: "authorization_code",
           redirect_uri: redirectUri,
+          test_token: true,
         }),
       }
     );
 
     if (!tokenRes.ok) {
-      console.error("MP token exchange falló:", tokenRes.status);
-      await trackEvent({ evento: "mp_oauth_callback_error", medicoId: medicoId, metadata: { sub_tipo: "token_exchange_failed" } });
+      const errBody = await tokenRes.text();
+      console.error("MP token exchange falló:", tokenRes.status, errBody);
+      await trackEvent({ evento: "mp_oauth_callback_error", medicoId: medicoId, metadata: { sub_tipo: "token_exchange_failed", mp_status: tokenRes.status, mp_error: errBody.slice(0, 200) } });
       return NextResponse.redirect(
         new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
       );
