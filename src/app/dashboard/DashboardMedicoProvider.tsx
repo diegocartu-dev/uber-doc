@@ -191,6 +191,13 @@ export default function DashboardMedicoProvider({
       const res = await fetch("/api/medico/dashboard-estado", {
         credentials: "include",
       });
+      if (res.status === 401) {
+        console.error("[AUTH] 401 en polling médico", {
+          endpoint: "/api/medico/dashboard-estado",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
 

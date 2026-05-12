@@ -7,6 +7,7 @@ export default function LogoutButton() {
   const router = useRouter();
 
   async function handleLogout() {
+    window.dispatchEvent(new Event("docto:voluntary-logout"));
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
