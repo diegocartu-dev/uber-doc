@@ -11,24 +11,30 @@ export default function MedicoLayout({
 }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const isVoluntaryLogout = useRef(false);
+  const alreadyExpired = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
 
+    function handleExpired(evento: string) {
+      if (alreadyExpired.current || isVoluntaryLogout.current) return;
+      alreadyExpired.current = true;
+      setSessionExpired(true);
+      trackSessionEvent(evento);
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (event === "SIGNED_OUT" && !isVoluntaryLogout.current) {
-          setSessionExpired(true);
-          trackSessionEvent("session_expired_detected");
+        if (event === "SIGNED_OUT") {
+          handleExpired("session_expired_detected");
         }
 
         if (event === "TOKEN_REFRESHED") {
           console.log("[AUTH] Token renovado correctamente");
         }
 
-        if (!session && event !== "INITIAL_SESSION" && !isVoluntaryLogout.current) {
-          setSessionExpired(true);
-          trackSessionEvent("session_expired_detected");
+        if (!session && event !== "INITIAL_SESSION") {
+          handleExpired("session_expired_detected");
         }
       }
     );
@@ -36,9 +42,8 @@ export default function MedicoLayout({
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session && !isVoluntaryLogout.current) {
-            setSessionExpired(true);
-            trackSessionEvent("session_expired_background");
+          if (!session) {
+            handleExpired("session_expired_background");
           }
         });
       }
