@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
 
   const [{ data: medicos }, { data: consultas }, { data: turnos }] = await Promise.all([
-    admin.from("medicos").select("id, nombre_completo, especialidad, precio_consulta, disponible, verificado, estado_registro").eq("verificado", true),
+    admin.from("medicos").select("id, nombre_completo, especialidad, precio_consulta, disponible, verificado, estado_registro").eq("verificado", true).eq("es_cuenta_test", false),
     admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at").gte("created_at", desde),
     admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio").gte("fecha", desde),
   ]);

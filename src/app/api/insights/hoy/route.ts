@@ -34,9 +34,9 @@ export async function GET() {
     admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, created_at, canal_origen").gte("created_at", hace7).lte("created_at", hoy + "T00:00:00"),
     admin.from("turnos").select("id, estado, fecha").gte("fecha", hace7).lte("fecha", hoy),
-    admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("disponible", true),
+    admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false),
     admin.from("consultas").select("id", { count: "exact", head: true }).eq("estado", "esperando"),
-    admin.from("medicos").select("id, disponible_desde, disponible_hasta").eq("verificado", true).eq("disponible", true),
+    admin.from("medicos").select("id, disponible_desde, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false),
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, aceptada_at, completada_at").gte("created_at", hoy).order("created_at", { ascending: false }).limit(10),
     admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id").eq("fecha", hoy).order("hora_inicio", { ascending: false }).limit(10),
     admin.from("consultas").select("paciente_id, created_at").eq("estado", "completada").gte("created_at", hace30),
@@ -118,16 +118,17 @@ export async function GET() {
   const allPacienteIds = [...new Set([...(consultasRecientes ?? []).map(c => c.paciente_id), ...(turnosRecientes ?? []).map(t => t.paciente_id)])];
 
   const [{ data: meds }, { data: pacs }] = await Promise.all([
-    allMedicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, precio_consulta").in("id", allMedicoIds) : { data: [] },
+    allMedicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, precio_consulta, es_cuenta_test").in("id", allMedicoIds) : { data: [] },
     allPacienteIds.length > 0 ? admin.from("pacientes").select("user_id, id, nombre_completo").or(`user_id.in.(${allPacienteIds.join(",")}),id.in.(${allPacienteIds.join(",")})`) : { data: [] },
   ]);
 
-  const medMap = new Map((meds ?? []).map(m => [m.id, m]));
+  const testMedIds = new Set((meds ?? []).filter(m => m.es_cuenta_test).map(m => m.id));
+  const medMap = new Map((meds ?? []).filter(m => !m.es_cuenta_test).map(m => [m.id, m]));
   const pacMapUser = new Map((pacs ?? []).map(p => [p.user_id, p.nombre_completo]));
   const pacMapId = new Map((pacs ?? []).map(p => [p.id, p.nombre_completo]));
 
   const actividad = [
-    ...(consultasRecientes ?? []).map(c => {
+    ...(consultasRecientes ?? []).filter(c => !testMedIds.has(c.medico_id)).map(c => {
       const med = medMap.get(c.medico_id);
       return {
         id: c.id, tipo: "CI" as const, estado: c.estado,
@@ -138,7 +139,7 @@ export async function GET() {
         inicio: c.created_at,
       };
     }),
-    ...(turnosRecientes ?? []).map(t => {
+    ...(turnosRecientes ?? []).filter(t => !testMedIds.has(t.medico_id)).map(t => {
       const med = medMap.get(t.medico_id);
       return {
         id: t.id, tipo: "Turno" as const, estado: t.estado,

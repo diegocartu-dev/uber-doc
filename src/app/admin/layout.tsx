@@ -17,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const admin = createAdminClient();
 
   const [{ count: pendingMedicos }, { count: pendingAlertas }] = await Promise.all([
-    admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision"),
+    admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
     admin.from("alertas_admin").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
   ]);
 

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   let query = admin
     .from("pacientes")
     .select("id, user_id, nombre_completo, email, dni, fecha_nacimiento, obra_social, estado_cuenta, motivo_estado, estado_hasta, created_at", { count: "exact" })
+    .eq("es_cuenta_test", false)
     .order("created_at", { ascending: false });
 
   if (q) {
