@@ -1,6 +1,7 @@
 // src/lib/comisiones.ts
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/logger";
 
 export type CategoriaMedico = "founder" | "tradicional";
 
@@ -17,7 +18,7 @@ export async function getComisionForMedico(
   });
 
   if (error || data === null) {
-    console.error("[comisiones] Error obteniendo comision:", error);
+    logError("[COMISIONES]", "Error obteniendo comision", { error: error?.message });
     return 5.0;
   }
 

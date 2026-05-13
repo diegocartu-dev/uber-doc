@@ -120,12 +120,12 @@ async function handlePayment(paymentId: string): Promise<void> {
 
   const { data: existing } = await admin
     .from(tipo === "consulta" ? "consultas" : "turnos")
-    .select("pago_id")
+    .select("pago_id, mp_status")
     .eq("id", id)
     .single();
 
-  if (existing?.pago_id === paymentId) {
-    logInfo("[WEBHOOK]", "Ya procesado", { paymentId, tipo, id });
+  if (existing?.pago_id === paymentId && existing?.mp_status === status) {
+    logInfo("[WEBHOOK]", "Evento ya procesado", { paymentId, status, tipo, id });
     return;
   }
 

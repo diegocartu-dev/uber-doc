@@ -6,6 +6,7 @@ import { getFlag } from "@/lib/feature-flags";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError, logWarn } from "@/lib/logger";
+import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 
 type TipoPago = "consulta" | "turno";
 
@@ -158,8 +159,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (!mpRes.ok) {
-      const errText = await mpRes.text();
-      logError("[MP-V2]", "Error creando preferencia", { mpStatus: mpRes.status, error: errText.slice(0, 300) });
+      let errBody: unknown = null;
+      try { errBody = await mpRes.json(); } catch { errBody = { raw: "non-json response" }; }
+      logError("[MP-V2]", "Error creando preferencia", { ...sanitizeMpError(mpRes.status, errBody), medico_id: medicoId });
       return NextResponse.json(
         { error: "Error al procesar el pago con Mercado Pago." },
         { status: 502 }
@@ -169,7 +171,7 @@ export async function POST(req: NextRequest) {
     const pref = await mpRes.json();
 
     if (!pref.init_point) {
-      logError("[MP-V2]", "Respuesta sin init_point", { prefResponse: JSON.stringify(pref).slice(0, 300) });
+      logError("[MP-V2]", "Respuesta sin init_point", { ...sanitizeMpError(mpRes.status, pref), medico_id: medicoId });
       return NextResponse.json(
         { error: "Mercado Pago no devolvió URL de pago." },
         { status: 502 }
