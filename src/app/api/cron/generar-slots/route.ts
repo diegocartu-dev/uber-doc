@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logInfo, logError } from "@/lib/logger";
 
 function getHoyAR(): string {
   const ar = new Date(
@@ -169,10 +170,7 @@ export async function GET(req: NextRequest) {
         .select("id");
 
       if (errInsert) {
-        console.error(
-          `Error insertando slots modelo ${modelo.id}:`,
-          errInsert.message
-        );
+        logError("[CRON/SLOTS]", "Error insertando slots", { modeloId: modelo.id, error: errInsert.message });
       } else {
         insertados += inserted?.length ?? 0;
       }
@@ -186,9 +184,11 @@ export async function GET(req: NextRequest) {
     totalInsertados += insertados;
   }
 
-  console.log(
-    `[cron/generar-slots] ${hoy} — ${totalInsertados} slots generados para ${resumen.length} modelos`
-  );
+  logInfo("[CRON/SLOTS]", "Ejecución completada", {
+    fecha: hoy,
+    slotsGenerados: totalInsertados,
+    modelosProcesados: resumen.length,
+  });
 
   return NextResponse.json({
     ok: true,

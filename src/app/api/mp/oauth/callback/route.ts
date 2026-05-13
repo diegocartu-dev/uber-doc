@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/mp-crypto";
 import { trackEvent } from "@/lib/funnel";
+import { logInfo, logError } from "@/lib/logger";
 
 const PERFIL_BASE = "/medico/perfil?tab=cobros";
 
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   const redirectUri = process.env.MP_OAUTH_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
-    console.error("Faltan variables MP para token exchange");
+    logError("[OAUTH]", "Faltan variables MP para token exchange");
     await trackEvent({ evento: "mp_oauth_callback_error", medicoId: medicoId, metadata: { sub_tipo: "missing_env_vars" } });
     return NextResponse.redirect(
       new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     );
 
     if (!tokenRes.ok) {
-      console.error("MP token exchange falló:", tokenRes.status);
+      logError("[OAUTH]", "MP token exchange falló", { mpStatus: tokenRes.status });
       await trackEvent({ evento: "mp_oauth_callback_error", medicoId: medicoId, metadata: { sub_tipo: "token_exchange_failed" } });
       return NextResponse.redirect(
         new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
 
     tokenData = await tokenRes.json();
   } catch {
-    console.error("Error de red en token exchange");
+    logError("[OAUTH]", "Error de red en token exchange");
     await trackEvent({ evento: "mp_oauth_callback_error", medicoId, metadata: { sub_tipo: "token_exchange_failed" } });
     return NextResponse.redirect(
       new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
     accessTokenEnc = encrypt(tokenData.access_token);
     refreshTokenEnc = encrypt(tokenData.refresh_token);
   } catch {
-    console.error("Error encriptando tokens");
+    logError("[OAUTH]", "Error encriptando tokens");
     await trackEvent({ evento: "mp_oauth_callback_error", medicoId, metadata: { sub_tipo: "encryption_failed" } });
     return NextResponse.redirect(
       new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   if (existing && existing.medico_id !== medicoId) {
-    console.error("Cuenta MP ya vinculada a otro médico");
+    logError("[OAUTH]", "Cuenta MP ya vinculada a otro médico", { mp_user_id: String(tokenData.user_id) });
     await trackEvent({ evento: "mp_oauth_callback_error", medicoId, metadata: { sub_tipo: "mp_account_already_linked", mp_user_id: String(tokenData.user_id) } });
     return NextResponse.redirect(
       new URL(`${PERFIL_BASE}&error=mp_account_already_linked`, req.url)
@@ -147,7 +148,7 @@ export async function GET(req: NextRequest) {
     );
 
   if (upsertError) {
-    console.error("Error guardando cuenta MP");
+    logError("[OAUTH]", "Error guardando cuenta MP", { medicoId });
     await trackEvent({ evento: "mp_oauth_callback_error", medicoId, metadata: { sub_tipo: "upsert_failed" } });
     return NextResponse.redirect(
       new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
