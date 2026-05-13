@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-// ---------------------------------------------------------------------------
-// GET /api/cron/cerrar-huerfanas
-//
-// Safety net: cierra consultas y turnos que quedaron en_curso por mas de
-// 10 minutos sin actividad. Corre cada 5 minutos via Vercel Cron.
-//
-// Protegido con CRON_SECRET (mismo patron que generar-slots).
-// ---------------------------------------------------------------------------
+import { logInfo, logError } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -17,15 +9,12 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
-
-  // Timestamp de hace 10 minutos en UTC (Supabase almacena en UTC)
   const hace10min = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
   let totalCerradas = 0;
   const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
 
   for (const tabla of ["consultas", "turnos"] as const) {
-    // Buscar registros en_curso con updated_at anterior a 10 min
     const { data: huerfanas, error: errSelect } = await supabase
       .from(tabla)
       .select("id")
@@ -33,11 +22,8 @@ export async function GET(req: NextRequest) {
       .lt("updated_at", hace10min);
 
     if (errSelect) {
-      detalle.push({
-        tabla,
-        cerradas: 0,
-        ids: [`ERROR: ${errSelect.message}`],
-      });
+      logError("[CRON/HUERFANAS]", `Error seleccionando ${tabla}`, { error: errSelect.message });
+      detalle.push({ tabla, cerradas: 0, ids: [`ERROR: ${errSelect.message}`] });
       continue;
     }
 
@@ -47,18 +33,16 @@ export async function GET(req: NextRequest) {
     }
 
     const ids = huerfanas.map((h) => h.id);
+    const estadoFinal = tabla === "consultas" ? "completada" : "completado";
 
     const { error: errUpdate } = await supabase
       .from(tabla)
-      .update({ estado: "completada" })
+      .update({ estado: estadoFinal })
       .in("id", ids);
 
     if (errUpdate) {
-      detalle.push({
-        tabla,
-        cerradas: 0,
-        ids: [`ERROR update: ${errUpdate.message}`],
-      });
+      logError("[CRON/HUERFANAS]", `Error actualizando ${tabla}`, { error: errUpdate.message, ids });
+      detalle.push({ tabla, cerradas: 0, ids: [`ERROR update: ${errUpdate.message}`] });
       continue;
     }
 
@@ -66,7 +50,6 @@ export async function GET(req: NextRequest) {
     detalle.push({ tabla, cerradas: ids.length, ids });
   }
 
-  // ─── Reembolso automático: créditos de médico vencidos (45 días) ───
   const hace45dias = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: creditosVencidos } = await supabase
@@ -85,6 +68,14 @@ export async function GET(req: NextRequest) {
       .in("id", ids);
 
     if (!errReembolso) reembolsados = ids.length;
+  }
+
+  if (totalCerradas > 0 || reembolsados > 0) {
+    logInfo("[CRON/HUERFANAS]", "Ejecución con cambios", {
+      totalCerradas,
+      creditosReembolsados: reembolsados,
+      detalle,
+    });
   }
 
   return NextResponse.json({

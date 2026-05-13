@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailRecordatorio24h } from "@/lib/email";
+import { logInfo, logError } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -22,12 +23,11 @@ export async function GET(req: NextRequest) {
     .eq("recordatorio_24h_enviado", false);
 
   if (error) {
-    console.error("[cron/recordatorios] error al buscar turnos:", error.message);
+    logError("[CRON/RECORDATORIOS]", "Error buscando turnos", { error: error.message });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   if (!turnos || turnos.length === 0) {
-    console.log("[cron/recordatorios] sin turnos para mañana", fechaManana);
     return NextResponse.json({ ok: true, enviados: 0, fecha: fechaManana });
   }
 
@@ -43,6 +43,6 @@ export async function GET(req: NextRequest) {
     enviados++;
   }
 
-  console.log(`[cron/recordatorios] ${enviados} recordatorios enviados para ${fechaManana}`);
+  logInfo("[CRON/RECORDATORIOS]", "Recordatorios enviados", { enviados, fecha: fechaManana });
   return NextResponse.json({ ok: true, enviados, fecha: fechaManana });
 }
