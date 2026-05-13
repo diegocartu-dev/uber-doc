@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/mp-crypto";
 import { trackEvent } from "@/lib/funnel";
 import { logInfo, logError } from "@/lib/logger";
+import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 
 const PERFIL_BASE = "/medico/perfil?tab=cobros";
 
@@ -78,7 +79,9 @@ export async function GET(req: NextRequest) {
     );
 
     if (!tokenRes.ok) {
-      logError("[OAUTH]", "MP token exchange falló", { mpStatus: tokenRes.status });
+      let errBody: unknown = null;
+      try { errBody = await tokenRes.json(); } catch { errBody = { raw: "non-json response" }; }
+      logError("[OAUTH]", "MP token exchange falló", { ...sanitizeMpError(tokenRes.status, errBody), medicoId });
       await trackEvent({ evento: "mp_oauth_callback_error", medicoId: medicoId, metadata: { sub_tipo: "token_exchange_failed" } });
       return NextResponse.redirect(
         new URL(`${PERFIL_BASE}&error=token_exchange_failed`, req.url)
