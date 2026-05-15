@@ -97,8 +97,8 @@ function LineaMedicamento({
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-          style={{ minHeight: "32px", minWidth: "32px" }}
+          className="shrink-0 rounded-md p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+          style={{ minHeight: "44px", minWidth: "44px" }}
           aria-label="Eliminar medicamento"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

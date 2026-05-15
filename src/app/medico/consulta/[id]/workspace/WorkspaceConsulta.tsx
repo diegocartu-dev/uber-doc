@@ -249,7 +249,7 @@ function CampoDictado({
         onChange={(e) => setter(e.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className={`mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 ${hasError ? "focus:ring-[#E24B4A]" : "focus:ring-[#1D9E75]"}`}
+        className={`mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 ${hasError ? "focus:ring-[#E24B4A]" : "focus:ring-[#378ADD]"}`}
         style={{ border: `${hasError ? "1.5px" : "0.5px"} solid ${hasError ? "#E24B4A" : "#e5e7eb"}` }}
       />
     </div>
@@ -968,8 +968,8 @@ export default function WorkspaceConsulta({
               <button
                 type="button"
                 onClick={() => setShowModalCobertura("editar")}
-                className="rounded-md p-1.5 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
-                style={{ minHeight: "32px", minWidth: "32px" }}
+                className="rounded-md p-3 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
+                style={{ minHeight: "44px", minWidth: "44px" }}
                 title="Editar cobertura"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1048,8 +1048,8 @@ export default function WorkspaceConsulta({
               <button
                 type="button"
                 onClick={() => setShowModalCobertura("editar")}
-                className="rounded-md p-1.5 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
-                style={{ minHeight: "32px", minWidth: "32px" }}
+                className="rounded-md p-3 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
+                style={{ minHeight: "44px", minWidth: "44px" }}
                 title="Editar cobertura"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1176,7 +1176,7 @@ export default function WorkspaceConsulta({
                   setShowConfirmDialog(true);
                 }}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "#E24B4A", minHeight: "48px" }}
+                style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
               >
                 Finalizar y generar documentos
               </LoadingButton>

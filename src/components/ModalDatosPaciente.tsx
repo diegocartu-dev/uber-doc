@@ -161,16 +161,8 @@ export default function ModalDatosPaciente({
                 value={obraSocial}
                 onChange={(e) => { setObraSocial(e.target.value); setError(null); }}
                 placeholder="OSDE, PAMI, Swiss Medical..."
-                style={{
-                  marginTop: "4px",
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #e5e7eb",
-                  fontSize: "14px",
-                  outline: "none",
-                  minHeight: "44px",
-                }}
+                className="mt-1 w-full rounded-[10px] border border-[#e5e7eb] px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] focus:border-[#378ADD]"
+                style={{ minHeight: "44px" }}
               />
             </div>
 
@@ -184,16 +176,8 @@ export default function ModalDatosPaciente({
                 value={nroAfiliado}
                 onChange={(e) => { setNroAfiliado(e.target.value); setError(null); }}
                 placeholder="Número de afiliado"
-                style={{
-                  marginTop: "4px",
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #e5e7eb",
-                  fontSize: "14px",
-                  outline: "none",
-                  minHeight: "44px",
-                }}
+                className="mt-1 w-full rounded-[10px] border border-[#e5e7eb] px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] focus:border-[#378ADD]"
+                style={{ minHeight: "44px" }}
               />
             </div>
 
@@ -210,16 +194,8 @@ export default function ModalDatosPaciente({
                 value={planObraSocial}
                 onChange={(e) => setPlanObraSocial(e.target.value)}
                 placeholder="Plan 210, PMO, Plan A..."
-                style={{
-                  marginTop: "4px",
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #e5e7eb",
-                  fontSize: "14px",
-                  outline: "none",
-                  minHeight: "44px",
-                }}
+                className="mt-1 w-full rounded-[10px] border border-[#e5e7eb] px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] focus:border-[#378ADD]"
+                style={{ minHeight: "44px" }}
               />
             </div>
           </div>
