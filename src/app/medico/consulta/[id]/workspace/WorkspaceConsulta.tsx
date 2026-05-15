@@ -22,6 +22,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
+import ModalDatosPaciente from "@/components/ModalDatosPaciente";
+import { datosCoberturaCompletos, type DatosCobertura } from "@/lib/cobertura";
 import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
 
 type ModoWorkspace = "video" | "escritura" | "estudios";
@@ -57,28 +59,54 @@ function formatTimer(seg: number): string {
 // ---------------------------------------------------------------------------
 
 function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
-  const lineas: string[] = [];
-  for (const med of meds) {
+  const bloques: string[] = [];
+  for (let i = 0; i < meds.length; i++) {
+    const med = meds[i];
     const nombre = (med.nombre ?? "").trim();
-    const presentacion = (med.presentacion ?? "").trim();
     if (!nombre) continue;
-    lineas.push(presentacion ? `${nombre} - ${presentacion}` : nombre);
+
+    const lineas: string[] = [];
+    lineas.push(`${i + 1}. ${nombre.toUpperCase()}`);
+    if (med.forma_farmaceutica?.trim()) {
+      lineas.push(`   Forma farmacéutica: ${capitalizar(med.forma_farmaceutica.trim())}`);
+    }
+    if (med.presentacion?.trim()) {
+      lineas.push(`   Presentación: ${med.presentacion.trim()}`);
+    }
+    if (med.cantidad?.trim()) {
+      lineas.push(`   Cantidad: ${med.cantidad.trim()}`);
+    }
+    if (med.posologia?.trim()) {
+      lineas.push(`   Posología: ${med.posologia.trim()}`);
+    }
+    if (med.via?.trim()) {
+      lineas.push(`   Vía: ${med.via.trim()}`);
+    }
+    bloques.push(lineas.join("\n"));
   }
+
   if ((textoLibre ?? "").trim()) {
-    if (lineas.length > 0) lineas.push("");
-    lineas.push(textoLibre.trim());
+    if (bloques.length > 0) bloques.push("");
+    bloques.push(textoLibre.trim());
   }
-  return lineas.join("\n");
+  return bloques.join("\n\n");
+}
+
+function capitalizar(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]; textoLibre: string } {
   if (borrador?.medicamentos_structured && Array.isArray(borrador.medicamentos_structured)) {
-    // Sanitizar: asegurar que cada medicamento tenga todas las propiedades como string
     const meds = borrador.medicamentos_structured.map((m: any) => ({
       id: m.id ?? `med_${Date.now()}_${Math.random()}`,
       nombre: m.nombre ?? "",
       droga: m.droga ?? "",
       presentacion: m.presentacion ?? "",
+      forma_farmaceutica: m.forma_farmaceutica ?? "",
+      cantidad: m.cantidad ?? "1 envase",
+      posologia: m.posologia ?? "",
+      via: m.via ?? "",
     }));
     return {
       meds,
@@ -258,6 +286,7 @@ type Props = {
     paciente_nacimiento: string | null;
     paciente_cuil: string | null;
     paciente_id: string;
+    paciente_cobertura: DatosCobertura;
     doc_borrador?: DocBorrador;
   };
 };
@@ -437,6 +466,8 @@ export default function WorkspaceConsulta({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
+  const [showModalCobertura, setShowModalCobertura] = useState<"completar" | "editar" | null>(null);
+  const [coberturaLocal, setCoberturaLocal] = useState<DatosCobertura>(consulta.paciente_cobertura);
 
   // Mobile: tres modos explícitos.
   const [modo, setModo] = useState<ModoWorkspace>("video");
@@ -484,6 +515,51 @@ export default function WorkspaceConsulta({
     setModo("escritura");
     setTimeout(() => diagRef.current?.focus(), 350); // después de la transición CSS
     return false;
+  }
+
+  // --- Iniciar finalización — verifica cobertura si hay receta ---
+  function iniciarFinalizacion() {
+    if (!validarDiagnostico()) return;
+
+    // Si hay receta y cobertura incompleta → modal automático
+    if (receta.trim() && !datosCoberturaCompletos(coberturaLocal)) {
+      setShowConfirmDialog(false);
+      setShowModalCobertura("completar");
+      return;
+    }
+
+    // Cobertura OK o no hay receta → finalizar directo
+    setShowConfirmDialog(false);
+    finalizarConsulta();
+  }
+
+  // --- Callback del modal de cobertura ---
+  async function handleCoberturaConfirmada(datos: DatosCobertura) {
+    setCoberturaLocal(datos);
+    setShowModalCobertura(null);
+
+    // Guardar en pacientes (fire-and-forget)
+    const supabase = createClient();
+    const { data: pac } = await supabase
+      .from("pacientes")
+      .select("id")
+      .eq("user_id", consulta.paciente_id)
+      .single();
+
+    if (pac) {
+      supabase
+        .from("pacientes")
+        .update({
+          tiene_cobertura: datos.tiene_cobertura,
+          obra_social: datos.obra_social,
+          nro_afiliado: datos.nro_afiliado,
+          plan_obra_social: datos.plan_obra_social,
+        })
+        .eq("id", pac.id)
+        .then(() => {});
+    }
+
+    finalizarConsulta();
   }
 
   // --- Finalizar consulta ---
@@ -884,14 +960,36 @@ export default function WorkspaceConsulta({
         <div className="p-5">
           {/* Info paciente (solo desktop) */}
           <div className="hidden md:block">
-            <p className="text-xs font-medium tracking-wide text-gray-400">
-              PACIENTE
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium tracking-wide text-gray-400">
+                PACIENTE
+              </p>
+              {/* \u00cdcono l\u00e1piz \u2014 editar cobertura manualmente */}
+              <button
+                type="button"
+                onClick={() => setShowModalCobertura("editar")}
+                className="rounded-md p-1.5 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
+                style={{ minHeight: "32px", minWidth: "32px" }}
+                title="Editar cobertura"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+              </button>
+            </div>
             <p className="mt-2 text-lg font-medium text-gray-900">
               {consulta.paciente_nombre}
             </p>
             <p className="mt-0.5 text-sm text-gray-500">
               {[edad, consulta.especialidad].filter(Boolean).join(" \u00b7 ")}
+            </p>
+
+            {/* Cobertura resumida */}
+            <p className="mt-1 text-xs text-gray-400">
+              {coberturaLocal.tiene_cobertura === false && "Particular"}
+              {coberturaLocal.tiene_cobertura === true && coberturaLocal.obra_social && coberturaLocal.obra_social}
+              {coberturaLocal.tiene_cobertura === null && "Cobertura sin completar"}
             </p>
 
             {consulta.motivo_consulta && (
@@ -943,11 +1041,30 @@ export default function WorkspaceConsulta({
 
           {/* Info paciente mobile (visible solo en mobile, en modo escritura) */}
           <div className="md:hidden mb-4">
-            <p className="text-sm font-medium text-gray-900">
-              {consulta.paciente_nombre}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-900">
+                {consulta.paciente_nombre}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowModalCobertura("editar")}
+                className="rounded-md p-1.5 text-gray-400 hover:text-[#378ADD] hover:bg-blue-50 transition"
+                style={{ minHeight: "32px", minWidth: "32px" }}
+                title="Editar cobertura"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+              </button>
+            </div>
             <p className="text-xs text-gray-500">
               {[edad, consulta.especialidad].filter(Boolean).join(" \u00b7 ")}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-400">
+              {coberturaLocal.tiene_cobertura === false && "Particular"}
+              {coberturaLocal.tiene_cobertura === true && coberturaLocal.obra_social && coberturaLocal.obra_social}
+              {coberturaLocal.tiene_cobertura === null && "Cobertura sin completar"}
             </p>
             {consulta.motivo_consulta && (
               <p className="mt-2 text-xs text-gray-600">
@@ -1231,8 +1348,7 @@ export default function WorkspaceConsulta({
               </button>
               <button
                 onClick={() => {
-                  setShowConfirmDialog(false);
-                  finalizarConsulta();
+                  iniciarFinalizacion();
                 }}
                 style={{
                   flex: 1,
@@ -1348,6 +1464,45 @@ export default function WorkspaceConsulta({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal datos cobertura paciente */}
+      {showModalCobertura && (
+        <ModalDatosPaciente
+          modo={showModalCobertura}
+          datos={coberturaLocal}
+          pacienteNombre={consulta.paciente_nombre}
+          onConfirmar={(datos) => {
+            if (showModalCobertura === "completar") {
+              handleCoberturaConfirmada(datos);
+            } else {
+              // Modo editar — guardar y cerrar, sin finalizar
+              setCoberturaLocal(datos);
+              setShowModalCobertura(null);
+              const supabase = createClient();
+              supabase
+                .from("pacientes")
+                .select("id")
+                .eq("user_id", consulta.paciente_id)
+                .single()
+                .then(({ data: pac }) => {
+                  if (pac) {
+                    supabase
+                      .from("pacientes")
+                      .update({
+                        tiene_cobertura: datos.tiene_cobertura,
+                        obra_social: datos.obra_social,
+                        nro_afiliado: datos.nro_afiliado,
+                        plan_obra_social: datos.plan_obra_social,
+                      })
+                      .eq("id", pac.id)
+                      .then(() => {});
+                  }
+                });
+            }
+          }}
+          onCancelar={() => setShowModalCobertura(null)}
+        />
       )}
     </div>
   );

@@ -53,6 +53,11 @@ export default async function VideoTurnoPage({
     .from("pacientes").select("nombre_completo, fecha_nacimiento, cuil")
     .eq("id", turno.paciente_id).maybeSingle();
 
+  // Datos de cobertura (SELECT separado per CLAUDE.md)
+  const { data: pacienteCobertura } = await supabase
+    .from("pacientes").select("tiene_cobertura, obra_social, nro_afiliado, plan_obra_social")
+    .eq("id", turno.paciente_id).maybeSingle();
+
   // --- Crear/obtener sala LiveKit ---
   let livekitToken: string | null = null;
   let roomName: string | null = null;
@@ -102,6 +107,12 @@ export default async function VideoTurnoPage({
         paciente_nacimiento: paciente?.fecha_nacimiento ?? null,
         paciente_cuil: paciente?.cuil ?? null,
         paciente_id: turno.paciente_id ?? "",
+        paciente_cobertura: {
+          tiene_cobertura: pacienteCobertura?.tiene_cobertura ?? null,
+          obra_social: pacienteCobertura?.obra_social ?? null,
+          nro_afiliado: pacienteCobertura?.nro_afiliado ?? null,
+          plan_obra_social: pacienteCobertura?.plan_obra_social ?? null,
+        },
         doc_borrador: turno.doc_borrador ?? null,
       }}
     />

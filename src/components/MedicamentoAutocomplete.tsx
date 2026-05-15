@@ -12,6 +12,7 @@ type Medicamento = {
   droga: string;
   presentacion: string;
   laboratorio: string;
+  forma_farmaceutica?: string | null;
 };
 
 export type MedicamentoReceta = {
@@ -19,6 +20,10 @@ export type MedicamentoReceta = {
   nombre: string;
   droga: string;
   presentacion: string;
+  forma_farmaceutica: string;
+  cantidad: string;
+  posologia: string;
+  via: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -29,19 +34,13 @@ function normalizar(texto: string): string {
   return texto
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[̀-ͯ]/g, "");
 }
 
 function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
   if (q.length < 3) return [];
 
-  // Ranking ponderado:
-  //   100 — droga.startsWith(q)        (match exacto al inicio del IFA)
-  //    70 — droga.includes(q)          (IFA en posición intermedia, ej. asociaciones)
-  //    50 — nombre.startsWith(q)       (match exacto al inicio de marca comercial)
-  //    30 — nombre.includes(q)         (marca comercial en posición intermedia)
-  // Esto evita basura tipo "Oxibutinina" para query "Ibu" o "Dispositivo PARA insulina".
   const resultados: { med: Medicamento; score: number }[] = [];
 
   for (const med of vademecum as Medicamento[]) {
@@ -73,37 +72,94 @@ function uid(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Componente línea de medicamento
+// Componente: línea de medicamento expandida con campos editables
 // ---------------------------------------------------------------------------
 
 function LineaMedicamento({
   med,
+  onUpdate,
   onRemove,
 }: {
   med: MedicamentoReceta;
+  onUpdate: (updated: MedicamentoReceta) => void;
   onRemove: () => void;
 }) {
-  const titulo = med.presentacion ? `${med.nombre} - ${med.presentacion}` : med.nombre;
   return (
     <div
-      className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2.5 mb-2"
+      className="rounded-lg bg-white px-3 py-3 mb-2"
       style={{ border: "0.5px solid #e5e7eb" }}
     >
-      <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
-        {titulo}
-      </p>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-        style={{ minHeight: "32px", minWidth: "32px" }}
-        aria-label="Eliminar medicamento"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
+      {/* Header: nombre + botón eliminar */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
+          {med.nombre}
+        </p>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+          style={{ minHeight: "32px", minWidth: "32px" }}
+          aria-label="Eliminar medicamento"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Info auto-filled (read-only) */}
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+        {med.forma_farmaceutica && (
+          <span>Forma: {med.forma_farmaceutica}</span>
+        )}
+        {med.presentacion && (
+          <span>Presentación: {med.presentacion}</span>
+        )}
+      </div>
+
+      {/* Campos editables */}
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div>
+          <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+            Cantidad
+          </label>
+          <input
+            type="text"
+            value={med.cantidad}
+            onChange={(e) => onUpdate({ ...med, cantidad: e.target.value })}
+            placeholder="1 envase"
+            className="mt-0.5 w-full rounded-md bg-gray-50 px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+            style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+            Posología
+          </label>
+          <input
+            type="text"
+            value={med.posologia}
+            onChange={(e) => onUpdate({ ...med, posologia: e.target.value })}
+            placeholder="1 comp. cada 8 horas durante 7 días"
+            className="mt-0.5 w-full rounded-md bg-gray-50 px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+            style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+          />
+        </div>
+      </div>
+      <div className="mt-2">
+        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+          Vía
+        </label>
+        <input
+          type="text"
+          value={med.via}
+          onChange={(e) => onUpdate({ ...med, via: e.target.value })}
+          placeholder="Oral, con alimentos"
+          className="mt-0.5 w-full rounded-md bg-gray-50 px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+          style={{ border: "0.5px solid #e5e7eb", minHeight: "36px" }}
+        />
+      </div>
     </div>
   );
 }
@@ -165,7 +221,6 @@ export default function MedicamentoAutocomplete({
   }, []);
 
   // Agregar medicamento del vademécum
-  // Formato receta: "Droga (Nombre comercial)" — presentación va en campo separado
   const agregarMedicamento = useCallback(
     (med: Medicamento) => {
       const droga = med.droga?.trim() || med.nombre;
@@ -175,11 +230,25 @@ export default function MedicamentoAutocomplete({
         nombre: nombreReceta,
         droga: med.droga,
         presentacion: med.presentacion,
+        forma_farmaceutica: med.forma_farmaceutica ?? "",
+        cantidad: "1 envase",
+        posologia: "",
+        via: "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
       setShowSugerencias(false);
       inputRef.current?.focus();
+    },
+    [medicamentos, onMedicamentosChange]
+  );
+
+  // Actualizar un medicamento específico
+  const actualizarMedicamento = useCallback(
+    (updated: MedicamentoReceta) => {
+      onMedicamentosChange(
+        medicamentos.map((m) => (m.id === updated.id ? updated : m))
+      );
     },
     [medicamentos, onMedicamentosChange]
   );
@@ -233,13 +302,14 @@ export default function MedicamentoAutocomplete({
         </button>
       </div>
 
-      {/* Medicamentos agregados */}
+      {/* Medicamentos agregados — expandidos con campos editables */}
       {medicamentos.length > 0 && (
         <div className="mt-2">
           {medicamentos.map((med) => (
             <LineaMedicamento
               key={med.id}
               med={med}
+              onUpdate={actualizarMedicamento}
               onRemove={() => removeMed(med.id)}
             />
           ))}
@@ -303,7 +373,12 @@ export default function MedicamentoAutocomplete({
                   )}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {med.droga} - {med.presentacion}
+                  {med.droga} — {med.presentacion}
+                  {med.forma_farmaceutica && (
+                    <span className="ml-1 text-gray-400">
+                      · {med.forma_farmaceutica}
+                    </span>
+                  )}
                 </p>
               </button>
             ))}
