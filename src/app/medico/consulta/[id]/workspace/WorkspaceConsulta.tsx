@@ -73,15 +73,6 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
     if (med.presentacion?.trim()) {
       lineas.push(`   Presentación: ${med.presentacion.trim()}`);
     }
-    if (med.cantidad?.trim()) {
-      lineas.push(`   Cantidad: ${med.cantidad.trim()}`);
-    }
-    if (med.posologia?.trim()) {
-      lineas.push(`   Posología: ${med.posologia.trim()}`);
-    }
-    if (med.via?.trim()) {
-      lineas.push(`   Vía: ${med.via.trim()}`);
-    }
     bloques.push(lineas.join("\n"));
   }
 
@@ -104,9 +95,6 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       droga: m.droga ?? "",
       presentacion: m.presentacion ?? "",
       forma_farmaceutica: m.forma_farmaceutica ?? "",
-      cantidad: m.cantidad ?? "1 envase",
-      posologia: m.posologia ?? "",
-      via: m.via ?? "",
     }));
     return {
       meds,

@@ -44,7 +44,7 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
             </svg>
           </div>
           <h1 className="mt-4 text-lg font-medium text-gray-900">Tu información médica</h1>
-          <p className="mt-1.5 text-sm text-gray-400">Estos datos se usan para tu receta.</p>
+          <p className="mt-1.5 text-sm text-gray-400">Estos datos se usan para confeccionar tus recetas y documentos médicos automáticamente. Si algo está mal, editalo antes de entrar a la consulta.</p>
         </div>
 
         <div className="mt-8 rounded-xl bg-[#f8f9fa] p-5 space-y-3 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
