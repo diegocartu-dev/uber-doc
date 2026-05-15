@@ -5,7 +5,12 @@ type EventoFunnel =
   | "mp_oauth_start_click"
   | "mp_oauth_callback_success"
   | "mp_oauth_callback_error"
-  | "mp_oauth_disconnect";
+  | "mp_oauth_disconnect"
+  | "pago_creado"
+  | "pago_aprobado"
+  | "pago_rechazado"
+  | "pago_refund"
+  | "pago_chargeback";
 
 export async function trackEvent(params: {
   evento: EventoFunnel;

@@ -7,6 +7,7 @@ import { getComisionForMedico } from "@/lib/comisiones";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
+import { trackEvent } from "@/lib/funnel";
 
 type TipoPago = "consulta" | "turno";
 
@@ -186,6 +187,8 @@ export async function POST(req: NextRequest) {
       marketplaceFee,
       prefId: pref.id,
     });
+
+    trackEvent({ evento: "pago_creado", pacienteId: user.id, medicoId, metadata: { tipo, recursoId: id, monto, marketplaceFee, prefId: pref.id } });
 
     return NextResponse.json({ init_point: pref.init_point });
   } catch (err) {

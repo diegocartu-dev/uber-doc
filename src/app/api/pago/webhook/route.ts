@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createHmac, timingSafeEqual } from "crypto";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logWarn, logError } from "@/lib/logger";
+import { trackEvent } from "@/lib/funnel";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -186,6 +187,7 @@ async function handleApproved(
       );
     } else {
       logInfo("[WEBHOOK]", "Consulta pagada", { ...logCtx, transactionAmount, applicationFee, netAmount });
+      trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });
     }
   } else {
     const { data: updated } = await admin
@@ -210,6 +212,7 @@ async function handleApproved(
       );
     } else {
       logInfo("[WEBHOOK]", "Turno confirmado", { ...logCtx, transactionAmount, applicationFee, netAmount });
+      trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });
     }
   }
 }
@@ -228,6 +231,7 @@ async function handleRejected(
     .eq("id", id);
 
   logInfo("[WEBHOOK]", "Pago rechazado", logCtx);
+  trackEvent({ evento: "pago_rechazado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId } });
 }
 
 async function handleStatusOnly(
@@ -245,6 +249,9 @@ async function handleStatusOnly(
     .eq("id", id);
 
   logInfo("[WEBHOOK]", "Status actualizado", { ...logCtx, mpStatus });
+  if (mpStatus === "refunded") {
+    trackEvent({ evento: "pago_refund", pacienteId: null, metadata: { tipo, recursoId: id, paymentId } });
+  }
 }
 
 async function handleChargedBack(
@@ -267,6 +274,7 @@ async function handleChargedBack(
     `[CRÍTICO] Chargeback recibido — ${tipo} ${id}`,
     `Se recibió un chargeback de Mercado Pago.\n\nTipo: ${tipo}\nID: ${id}\nPayment ID: ${paymentId}\nMonto: $${amount}\nFecha: ${new Date().toISOString()}\n\nAcción URGENTE: revisar en panel de MP y contactar al paciente/médico.`
   );
+  trackEvent({ evento: "pago_chargeback", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: amount } });
 }
 
 async function handleDeauthorized(data: { user_id?: string } | undefined): Promise<void> {
