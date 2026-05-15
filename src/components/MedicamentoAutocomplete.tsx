@@ -12,6 +12,7 @@ type Medicamento = {
   droga: string;
   presentacion: string;
   laboratorio: string;
+  forma_farmaceutica?: string | null;
 };
 
 export type MedicamentoReceta = {
@@ -19,6 +20,7 @@ export type MedicamentoReceta = {
   nombre: string;
   droga: string;
   presentacion: string;
+  forma_farmaceutica: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -29,19 +31,13 @@ function normalizar(texto: string): string {
   return texto
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[̀-ͯ]/g, "");
 }
 
 function buscar(query: string): Medicamento[] {
   const q = normalizar(query);
   if (q.length < 3) return [];
 
-  // Ranking ponderado:
-  //   100 — droga.startsWith(q)        (match exacto al inicio del IFA)
-  //    70 — droga.includes(q)          (IFA en posición intermedia, ej. asociaciones)
-  //    50 — nombre.startsWith(q)       (match exacto al inicio de marca comercial)
-  //    30 — nombre.includes(q)         (marca comercial en posición intermedia)
-  // Esto evita basura tipo "Oxibutinina" para query "Ibu" o "Dispositivo PARA insulina".
   const resultados: { med: Medicamento; score: number }[] = [];
 
   for (const med of vademecum as Medicamento[]) {
@@ -73,7 +69,7 @@ function uid(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Componente línea de medicamento
+// Componente: línea de medicamento expandida con campos editables
 // ---------------------------------------------------------------------------
 
 function LineaMedicamento({
@@ -83,20 +79,29 @@ function LineaMedicamento({
   med: MedicamentoReceta;
   onRemove: () => void;
 }) {
-  const titulo = med.presentacion ? `${med.nombre} - ${med.presentacion}` : med.nombre;
   return (
     <div
       className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2.5 mb-2"
       style={{ border: "0.5px solid #e5e7eb" }}
     >
-      <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
-        {titulo}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-900">
+          {med.nombre}
+        </p>
+        <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+          {med.forma_farmaceutica && (
+            <span>Forma: {med.forma_farmaceutica}</span>
+          )}
+          {med.presentacion && (
+            <span>Presentación: {med.presentacion}</span>
+          )}
+        </div>
+      </div>
       <button
         type="button"
         onClick={onRemove}
-        className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-        style={{ minHeight: "32px", minWidth: "32px" }}
+        className="shrink-0 rounded-md p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+        style={{ minHeight: "44px", minWidth: "44px" }}
         aria-label="Eliminar medicamento"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -165,7 +170,6 @@ export default function MedicamentoAutocomplete({
   }, []);
 
   // Agregar medicamento del vademécum
-  // Formato receta: "Droga (Nombre comercial)" — presentación va en campo separado
   const agregarMedicamento = useCallback(
     (med: Medicamento) => {
       const droga = med.droga?.trim() || med.nombre;
@@ -175,6 +179,7 @@ export default function MedicamentoAutocomplete({
         nombre: nombreReceta,
         droga: med.droga,
         presentacion: med.presentacion,
+        forma_farmaceutica: med.forma_farmaceutica ?? "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
@@ -233,7 +238,7 @@ export default function MedicamentoAutocomplete({
         </button>
       </div>
 
-      {/* Medicamentos agregados */}
+      {/* Medicamentos agregados — expandidos con campos editables */}
       {medicamentos.length > 0 && (
         <div className="mt-2">
           {medicamentos.map((med) => (
@@ -303,7 +308,12 @@ export default function MedicamentoAutocomplete({
                   )}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {med.droga} - {med.presentacion}
+                  {med.droga} — {med.presentacion}
+                  {med.forma_farmaceutica && (
+                    <span className="ml-1 text-gray-400">
+                      · {med.forma_farmaceutica}
+                    </span>
+                  )}
                 </p>
               </button>
             ))}
