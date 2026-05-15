@@ -17,6 +17,14 @@ let cache: FlagCache | null = null;
  * Cache de 5 segundos para no consultar DB en cada request.
  */
 export async function getFlag(key: string): Promise<boolean> {
+  // Override por env var — permite forzar flags en Preview/staging
+  // sin tocar la DB compartida de producción.
+  // Ej: OVERRIDE_FLAG_PAGO_MARKETPLACE=true
+  const envKey = `OVERRIDE_FLAG_${key.toUpperCase()}`;
+  const envVal = process.env[envKey];
+  if (envVal === "true") return true;
+  if (envVal === "false") return false;
+
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.flags.get(key) ?? true;
   }
