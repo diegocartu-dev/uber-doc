@@ -29,6 +29,49 @@ import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
 type ModoWorkspace = "video" | "escritura" | "estudios";
 
 // ---------------------------------------------------------------------------
+// AccordionSection — secciones colapsables del panel de documentación
+// ---------------------------------------------------------------------------
+function AccordionSection({ title, hasContent, children }: { title: string; hasContent: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between py-1 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          <span className="text-xs font-medium tracking-wide text-gray-400">{title}</span>
+          {!open && hasContent && (
+            <span className="inline-block h-2 w-2 rounded-full bg-[#1D9E75]" />
+          )}
+        </div>
+      </button>
+      <div
+        className="overflow-hidden transition-all duration-200"
+        style={{ maxHeight: open ? 1000 : 0, opacity: open ? 1 : 0 }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
 
@@ -460,6 +503,20 @@ export default function WorkspaceConsulta({
   // Mobile: tres modos explícitos.
   const [modo, setModo] = useState<ModoWorkspace>("video");
   const modoEscritura = modo !== "video";
+  // Desktop: colapsar panel documentación
+  const [panelColapsado, setPanelColapsado] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("docto_panel_colapsado") === "true";
+    }
+    return false;
+  });
+  function togglePanel() {
+    setPanelColapsado((prev) => {
+      const next = !prev;
+      localStorage.setItem("docto_panel_colapsado", String(next));
+      return next;
+    });
+  }
   const [diagError, setDiagError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
@@ -712,7 +769,7 @@ export default function WorkspaceConsulta({
           modoEscritura
             ? "h-[52px] min-h-[52px]"
             : "h-[75dvh] min-h-[200px]"
-        } md:h-auto md:min-h-0 md:w-[60%] md:flex-1`}
+        } md:h-auto md:min-h-0 ${panelColapsado ? "md:w-full" : "md:w-[60%] md:flex-1"} transition-all duration-300 ease-in-out`}
       >
         {/* Barra compacta modo escritura (solo mobile) */}
         <div
@@ -747,6 +804,24 @@ export default function WorkspaceConsulta({
                 Video
               </button>
             )}
+            {/* Botón colapsar/expandir panel (solo desktop) */}
+            <button
+              type="button"
+              onClick={togglePanel}
+              className="hidden md:flex items-center rounded-lg px-2.5 py-1.5 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
+              style={{ minHeight: "36px" }}
+              title={panelColapsado ? "Mostrar panel" : "Expandir video"}
+            >
+              {panelColapsado ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+              )}
+            </button>
             {/* Botón salir — siempre visible. Mobile en modoEscritura: 36px alto. Resto: 44px */}
             <button
               type="button"
@@ -898,9 +973,9 @@ export default function WorkspaceConsulta({
       {/* En desktop: siempre visible (split 60/40)                        */}
       {/* ================================================================ */}
       <div
-        className={`flex-1 overflow-y-auto md:w-[40%] md:flex-none ${
-          modoEscritura ? "" : "hidden md:block"
-        }`}
+        className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out ${
+          panelColapsado ? "md:hidden" : "md:w-[40%] md:flex-none"
+        } ${modoEscritura ? "" : "hidden md:block"}`}
         style={{ borderLeft: "0.5px solid #e5e7eb" }}
       >
         {/* Desktop: Barra de modos */}
@@ -1085,7 +1160,7 @@ export default function WorkspaceConsulta({
             </div>
           )}
 
-          {/* Campos */}
+          {/* Campos — Diagnóstico siempre visible, resto en acordeón */}
           <CampoDictado
             label="DIAGNOSTICO"
             campo="diagnostico"
@@ -1100,37 +1175,49 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
           />
-          <MedicamentoAutocomplete
-            medicamentos={medicamentos}
-            onMedicamentosChange={setMedicamentos}
-            textoLibre={recetaTextoLibre}
-            onTextoLibreChange={setRecetaTextoLibre}
-            dictando={dictando}
-            onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
-            onDetenerDictado={detenerDictado}
-          />
-          <CampoDictado
-            label="INDICACIONES"
-            campo="indicaciones"
-            value={indicaciones}
-            setter={setIndicaciones}
-            placeholder="Reposo, estudios, derivaciones..."
-            dictando={dictando}
-            onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
-            onDetener={detenerDictado}
-            soportado={dictadoSoportado}
-          />
-          <CampoDictado
-            label="CERTIFICADO"
-            campo="certificado"
-            value={certificado}
-            setter={setCertificado}
-            placeholder="Certificado medico..."
-            dictando={dictando}
-            onIniciar={() => iniciarDictado("certificado", setCertificado)}
-            onDetener={detenerDictado}
-            soportado={dictadoSoportado}
-          />
+
+          {/* Acordeón: RECETA */}
+          <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
+            <MedicamentoAutocomplete
+              medicamentos={medicamentos}
+              onMedicamentosChange={setMedicamentos}
+              textoLibre={recetaTextoLibre}
+              onTextoLibreChange={setRecetaTextoLibre}
+              dictando={dictando}
+              onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
+              onDetenerDictado={detenerDictado}
+            />
+          </AccordionSection>
+
+          {/* Acordeón: INDICACIONES */}
+          <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
+            <CampoDictado
+              label=""
+              campo="indicaciones"
+              value={indicaciones}
+              setter={setIndicaciones}
+              placeholder="Reposo, estudios, derivaciones..."
+              dictando={dictando}
+              onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
+              onDetener={detenerDictado}
+              soportado={dictadoSoportado}
+            />
+          </AccordionSection>
+
+          {/* Acordeón: CERTIFICADO */}
+          <AccordionSection title="CERTIFICADO" hasContent={certificado.trim().length > 0}>
+            <CampoDictado
+              label=""
+              campo="certificado"
+              value={certificado}
+              setter={setCertificado}
+              placeholder="Certificado medico..."
+              dictando={dictando}
+              onIniciar={() => iniciarDictado("certificado", setCertificado)}
+              onDetener={detenerDictado}
+              soportado={dictadoSoportado}
+            />
+          </AccordionSection>
 
           {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
           <div

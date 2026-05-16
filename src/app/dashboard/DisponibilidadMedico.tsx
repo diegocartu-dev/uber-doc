@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { actualizarDisponibilidad, actualizarOcultoClinica } from "./actions";
+import { actualizarDisponibilidad, actualizarOcultoClinica, actualizarVisibleConsultorio } from "./actions";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Props = {
@@ -12,6 +12,7 @@ type Props = {
   precioConsulta: number;
   pacientesEnEspera: number;
   ocultoClinica: boolean;
+  visibleConsultorioParticular: boolean;
 };
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
@@ -30,11 +31,13 @@ export default function DisponibilidadMedico({
   precioConsulta,
   pacientesEnEspera,
   ocultoClinica,
+  visibleConsultorioParticular,
 }: Props) {
   const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
-  const [oculto, setOculto] = useState(ocultoClinica);
-  const [guardandoOculto, setGuardandoOculto] = useState(false);
+  const [visibleClinica, setVisibleClinica] = useState(!ocultoClinica);
+  const [visibleConsultorio, setVisibleConsultorio] = useState(visibleConsultorioParticular);
+  const [guardandoCanal, setGuardandoCanal] = useState(false);
   const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
   const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
   const [duracion, setDuracion] = useState(duracionConsulta);
@@ -44,6 +47,9 @@ export default function DisponibilidadMedico({
   const autoDesactivadoRef = useRef(false);
 
   const capacidad = calcularCapacidad(desde, hasta, duracion);
+
+  // Validación: al menos un canal seleccionado si está activo
+  const sinCanal = activo && !bloqueado && !visibleClinica && !visibleConsultorio;
 
   // Auto-desactivar CI solo cuando hay un turno en_curso
   useEffect(() => {
@@ -108,14 +114,25 @@ export default function DisponibilidadMedico({
     }
   }
 
-  async function handleToggleOculto() {
-    const nuevoEstado = !oculto;
-    setOculto(nuevoEstado);
-    setGuardandoOculto(true);
-    const result = await actualizarOcultoClinica(nuevoEstado);
-    setGuardandoOculto(false);
+  async function handleToggleClinica() {
+    const nuevoEstado = !visibleClinica;
+    setVisibleClinica(nuevoEstado);
+    setGuardandoCanal(true);
+    const result = await actualizarOcultoClinica(!nuevoEstado);
+    setGuardandoCanal(false);
     if (result?.error) {
-      setOculto(!nuevoEstado);
+      setVisibleClinica(!nuevoEstado);
+    }
+  }
+
+  async function handleToggleConsultorio() {
+    const nuevoEstado = !visibleConsultorio;
+    setVisibleConsultorio(nuevoEstado);
+    setGuardandoCanal(true);
+    const result = await actualizarVisibleConsultorio(nuevoEstado);
+    setGuardandoCanal(false);
+    if (result?.error) {
+      setVisibleConsultorio(!nuevoEstado);
     }
   }
 
@@ -139,6 +156,7 @@ export default function DisponibilidadMedico({
 
   return (
     <div className="rounded-xl">
+      {/* ── Toggle principal: Disponible para consultas ── */}
       <div
         role="button"
         tabIndex={0}
@@ -151,7 +169,7 @@ export default function DisponibilidadMedico({
             className="text-xs font-semibold"
             style={{ color: activo && !bloqueado ? "#378ADD" : "#888780" }}
           >
-            {activo && !bloqueado ? "Activa" : "Inactiva"}
+            {activo && !bloqueado ? "Disponible para consultas" : "No disponible"}
           </span>
           <button
             type="button"
@@ -195,33 +213,43 @@ export default function DisponibilidadMedico({
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs font-semibold text-gray-700">Visible en Clínica Virtual</span>
-            <span className="text-[11px]" style={{ color: oculto ? "#888780" : "#378ADD" }}>
-              {oculto ? "Oculto" : "Activo"}
-            </span>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!oculto}
-            aria-label="Visible en Clínica Virtual"
-            disabled={guardandoOculto}
-            onClick={handleToggleOculto}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
-              oculto ? "bg-gray-300" : "bg-[#378ADD]"
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                oculto ? "translate-x-0.5" : "translate-x-5.5"
-              }`}
+      {/* ── Checkboxes de canales (solo visibles si toggle ON) ── */}
+      {activo && !bloqueado && (
+        <div className="px-5 pb-3 space-y-2">
+          <label className="flex items-center gap-3 cursor-pointer py-1">
+            <input
+              type="checkbox"
+              checked={visibleClinica}
+              onChange={handleToggleClinica}
+              disabled={guardandoCanal}
+              className="h-4.5 w-4.5 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]/30 disabled:opacity-50"
             />
-          </button>
+            <div>
+              <span className="text-sm text-gray-700">Clínica Virtual</span>
+              <p className="text-[11px] text-gray-400">Aparecés en el listado público</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer py-1">
+            <input
+              type="checkbox"
+              checked={visibleConsultorio}
+              onChange={handleToggleConsultorio}
+              disabled={guardandoCanal}
+              className="h-4.5 w-4.5 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]/30 disabled:opacity-50"
+            />
+            <div>
+              <span className="text-sm text-gray-700">Consultorio Particular</span>
+              <p className="text-[11px] text-gray-400">Recibís pacientes via tu link directo</p>
+            </div>
+          </label>
+
+          {sinCanal && (
+            <p className="text-xs text-[#D85A30] mt-1 pl-7">
+              Seleccioná al menos un canal para recibir pacientes.
+            </p>
+          )}
         </div>
-      </div>
+      )}
 
       {abierto && (
         <div className="border-t border-gray-50 px-6 pb-6">
