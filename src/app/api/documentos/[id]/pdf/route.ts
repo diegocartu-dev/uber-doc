@@ -38,12 +38,25 @@ export async function GET(
   // Datos del paciente
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, cuil, sexo_dni, fecha_nacimiento, tiene_cobertura, obra_social, nro_afiliado, plan_obra_social")
+    .select("nombre_completo, dni, cuil, sexo_dni, fecha_nacimiento, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
     .eq("id", doc.paciente_id)
     .single();
 
   if (!medico || !paciente) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 500 });
+  }
+
+  // Resolve obra social name from FK if available
+  let obraSocialNombre: string | null = paciente.obra_social ?? null;
+  if (paciente.obra_social_id) {
+    const { data: os } = await supabase
+      .from("obras_sociales")
+      .select("nombre")
+      .eq("id", paciente.obra_social_id)
+      .single();
+    if (os?.nombre) obraSocialNombre = os.nombre;
+  } else if (paciente.obra_social_otra) {
+    obraSocialNombre = paciente.obra_social_otra;
   }
 
   const documento = {
@@ -62,7 +75,7 @@ export async function GET(
     paciente_sexo_dni: paciente.sexo_dni ?? null,
     paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
     paciente_tiene_cobertura: paciente.tiene_cobertura ?? false,
-    paciente_obra_social: paciente.obra_social ?? null,
+    paciente_obra_social: obraSocialNombre,
     paciente_nro_afiliado: paciente.nro_afiliado ?? null,
     paciente_plan_obra_social: paciente.plan_obra_social ?? null,
   };
