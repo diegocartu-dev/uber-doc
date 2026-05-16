@@ -492,7 +492,7 @@ function renderFooter(
 
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
-      `${leyendaRenapdis}.`,
+      leyendaRenapdis,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
