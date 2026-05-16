@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
-  // Bloquear en producción — este endpoint solo existe para testing
-  if (process.env.VERCEL_ENV === "production") {
+  // Bloquear solo si pagos reales marketplace están activos
+  const { getFlag } = await import("@/lib/feature-flags");
+  if (await getFlag("pago_marketplace")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

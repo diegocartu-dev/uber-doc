@@ -147,7 +147,7 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
                     onClick={() => handleAceptar(c.id)}
                     className="flex-1 shrink-0 rounded-lg bg-[#378ADD] px-3.5 py-2 text-xs font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 sm:w-auto min-h-[44px]"
                   >
-                    {isPending ? "..." : "Atender"}
+                    {isPending ? "..." : "Aceptar"}
                   </TouchButton>
                   <TouchButton
                     disabled={isPending}
