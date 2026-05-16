@@ -485,12 +485,10 @@ function renderFooter(
 
     // Leyenda 2: ReNaPDiS
     const renapdisRL = process.env.RENAPDIS_RL_NUMBER;
-    const renapdisExpediente = process.env.RENAPDIS_EXPEDIENTE ||
-      "EX-2026-41816871-APN-SSVEIYES#MS";
 
-    const leyendaRenapdis = renapdisRL && renapdisRL.trim()
-      ? `Esta receta fue creada por un emisor inscripto y validado en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación — RL ${renapdisRL.trim()}`
-      : `Esta receta fue creada por un emisor inscripto en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación — Inscripción en trámite (${renapdisExpediente})`;
+    const leyendaRenapdis = renapdisRL
+      ? `Esta receta fue creada por un emisor inscripto y validado en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación - ${renapdisRL}`
+      : `Esta receta fue creada por un emisor inscripto en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación — Inscripción en trámite (EX-2026-41816871-APN-SSVEIYES#MS)`;
 
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
