@@ -82,10 +82,14 @@ function formatFechaNacimiento(fecha: string): string {
   return `${parseInt(dia)}/${parseInt(mes)}/${anio}`;
 }
 
-function generarNumeroReceta(id: string, createdAt: string): string {
+function generarNumeroReceta(_id: string, createdAt: string): string {
   const anio = new Date(createdAt).getFullYear();
-  const hash = id.replace(/-/g, "").slice(0, 8).toUpperCase();
-  return `REC-${anio}-${hash}`;
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `REC-${anio}-${code}`;
 }
 
 async function generarBarcodePNG(texto: string): Promise<Buffer> {
@@ -140,7 +144,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
       renderHeader(pdf, titulo, doc.created_at);
 
       // ─── PROFESIONAL (Hallazgo 1) ───────────────────────────────────────
-      renderProfesionalBox(pdf, doc);
+      await renderProfesionalBox(pdf, doc);
 
       // ─── PACIENTE (Hallazgo 1) ───────────────────────────────────────
       renderPacienteBox(pdf, doc);
@@ -226,14 +230,16 @@ function renderHeader(pdf: PDFKit.PDFDocument, titulo: string, createdAt: string
   pdf.y = lineY + 12;
 }
 
-// Hallazgo 1 — Bloque PROFESIONAL (solo texto, sin barcode)
-function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
+// Bloque PROFESIONAL — barcode matrícula + nombre + especialidad + domicilio
+async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
   const boxX = MARGIN.left;
   const boxWidth = CONTENT_WIDTH;
   const padding = 10;
   const titleHeight = 14;
   const lineHeight = 13;
   const fontSize = 9;
+  const barcodeHeight = 22; // barcode + texto matrícula debajo
+  const barcodeSpacing = 4;
 
   const rows: string[] = [];
   rows.push(`Dr. ${doc.medico_nombre}`);
@@ -242,7 +248,7 @@ function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
     rows.push(doc.medico_domicilio);
   }
 
-  const boxHeight = padding * 2 + titleHeight + rows.length * lineHeight;
+  const boxHeight = padding * 2 + titleHeight + barcodeHeight + barcodeSpacing + rows.length * lineHeight;
   const boxY = pdf.y;
 
   // Fondo + borde
@@ -257,6 +263,17 @@ function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
     characterSpacing: 1,
   });
   currentY += titleHeight;
+
+  // Barcode matrícula dentro de la caja
+  try {
+    const matriculaBarcode = await generarBarcodePNG(doc.medico_matricula);
+    const barcodeWidth = 130;
+    pdf.image(matriculaBarcode, boxX + padding, currentY, { width: barcodeWidth, height: 16 });
+    currentY += barcodeHeight + barcodeSpacing;
+  } catch {
+    // Fallback sin barcode
+    currentY += barcodeSpacing;
+  }
 
   // Filas de texto
   for (let i = 0; i < rows.length; i++) {
