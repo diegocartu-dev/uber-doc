@@ -15,7 +15,7 @@ export default async function OnboardingPage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, nro_afiliado, telefono")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social, telefono")
     .eq("user_id", user.id)
     .maybeSingle();
 

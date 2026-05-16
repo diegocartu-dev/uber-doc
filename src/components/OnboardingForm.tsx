@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { completarPerfil } from "@/app/onboarding/actions";
 import ModalTerminos from "@/components/ModalTerminos";
+
+type ObraSocialOption = {
+  id: string;
+  nombre: string;
+  planes: { id: string; nombre: string }[];
+};
+
+type ObrasSocialesData = {
+  prepagas: ObraSocialOption[];
+  obras_sociales: ObraSocialOption[];
+};
 
 type PacienteData = {
   nombre_completo: string | null;
@@ -11,7 +22,10 @@ type PacienteData = {
   sexo_dni: string | null;
   tiene_cobertura: boolean | null;
   obra_social: string | null;
+  obra_social_id: string | null;
+  obra_social_otra: string | null;
   nro_afiliado: string | null;
+  plan_obra_social: string | null;
   telefono: string | null;
 };
 
@@ -28,13 +42,75 @@ type FieldErrors = {
   sexo_dni?: string;
 };
 
+// Special values for the select
+const VALOR_PARTICULAR = "__particular__";
+const VALOR_OTRA = "__otra__";
+
 export default function OnboardingForm({ paciente, redirectTo, error: serverError }: Props) {
-  const [tieneCobertura, setTieneCobertura] = useState(paciente?.tiene_cobertura ?? false);
+  // Determine initial cobertura state from existing data
+  const initialObraId = paciente?.obra_social_id ?? null;
+  const initialObraOtra = paciente?.obra_social_otra ?? null;
+  const initialTieneCobertura = paciente?.tiene_cobertura ?? false;
+
+  // Select value: obra_social_id, "__otra__", "__particular__", or ""
+  const initialSelectValue = initialObraId
+    ? initialObraId
+    : initialObraOtra
+      ? VALOR_OTRA
+      : initialTieneCobertura
+        ? VALOR_OTRA // tiene_cobertura=true but no ID = legacy "otra"
+        : VALOR_PARTICULAR;
+
+  const [obrasSociales, setObrasSociales] = useState<ObrasSocialesData | null>(null);
+  const [selectValue, setSelectValue] = useState(initialSelectValue);
+  const [planesDisponibles, setPlanesDisponibles] = useState<{ id: string; nombre: string }[]>([]);
+  const [planValue, setPlanValue] = useState(paciente?.plan_obra_social ?? "");
+  const [obraOtraNombre, setObraOtraNombre] = useState(initialObraOtra ?? paciente?.obra_social ?? "");
+  const [obraOtraPlan, setObraOtraPlan] = useState("");
+  const [nroAfiliado, setNroAfiliado] = useState(paciente?.nro_afiliado ?? "");
+
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
   const [modalTerminos, setModalTerminos] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Fetch obras sociales on mount
+  useEffect(() => {
+    fetch("/api/obras-sociales")
+      .then((r) => r.json())
+      .then((data: ObrasSocialesData) => {
+        setObrasSociales(data);
+        // If paciente already has an obra_social_id, find its planes
+        if (initialObraId) {
+          const all = [...data.prepagas, ...data.obras_sociales];
+          const found = all.find((os) => os.id === initialObraId);
+          if (found?.planes.length) {
+            setPlanesDisponibles(found.planes);
+          }
+        }
+      })
+      .catch(console.error);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derived state
+  const tieneCobertura = selectValue !== VALOR_PARTICULAR;
+  const esOtra = selectValue === VALOR_OTRA;
+  const esObraConcreto = tieneCobertura && !esOtra;
+
+  function handleObraChange(value: string) {
+    setSelectValue(value);
+    setPlanValue("");
+    setPlanesDisponibles([]);
+
+    if (value !== VALOR_PARTICULAR && value !== VALOR_OTRA && obrasSociales) {
+      const all = [...obrasSociales.prepagas, ...obrasSociales.obras_sociales];
+      const found = all.find((os) => os.id === value);
+      if (found?.planes.length) {
+        setPlanesDisponibles(found.planes);
+      }
+    }
+  }
 
   function validate(): FieldErrors {
     const form = formRef.current;
@@ -103,7 +179,13 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
       >
         <input type="hidden" name="redirectTo" value={redirectTo} />
         <input type="hidden" name="tiene_cobertura" value={tieneCobertura ? "true" : "false"} />
+        {/* Hidden fields for the server action */}
+        {esObraConcreto && <input type="hidden" name="obra_social_id" value={selectValue} />}
+        {esOtra && <input type="hidden" name="obra_social_otra" value={obraOtraNombre} />}
+        {esOtra && obraOtraPlan && <input type="hidden" name="plan_obra_social" value={obraOtraPlan} />}
+        {esObraConcreto && planValue && <input type="hidden" name="plan_obra_social" value={planValue} />}
 
+        {/* ── Nombre completo ── */}
         <div>
           <label htmlFor="nombre_completo" className="block text-[13px] font-medium text-gray-500">
             Nombre completo
@@ -124,6 +206,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
         </div>
 
+        {/* ── DNI ── */}
         <div>
           <label htmlFor="dni" className="block text-[13px] font-medium text-gray-500">
             DNI
@@ -147,6 +230,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
         </div>
 
+        {/* ── Fecha de nacimiento ── */}
         <div>
           <label htmlFor="fecha_nacimiento" className="block text-[13px] font-medium text-gray-500">
             Fecha de nacimiento
@@ -166,6 +250,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
         </div>
 
+        {/* ── Sexo según DNI ── */}
         <div>
           <label className="block text-[13px] font-medium text-gray-500">
             Sexo (según DNI)
@@ -198,53 +283,133 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
         </div>
 
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* ── COBERTURA MÉDICA (PR2) ── */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
         <div className="pt-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">Tengo cobertura médica</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={tieneCobertura}
-              onClick={() => setTieneCobertura(!tieneCobertura)}
-              className="relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200"
-              style={{ backgroundColor: tieneCobertura ? "#378ADD" : "#d1d5db" }}
-            >
-              <span
-                className="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200"
-                style={{
-                  transform: tieneCobertura ? "translateX(22px)" : "translateX(3px)",
-                  marginTop: 4,
-                }}
-              />
-            </button>
-          </div>
+          <label htmlFor="obra_social_select" className="block text-[13px] font-medium text-gray-500">
+            Cobertura médica
+          </label>
+          <select
+            id="obra_social_select"
+            value={selectValue}
+            onChange={(e) => handleObraChange(e.target.value)}
+            className={inputClass}
+            style={{
+              ...inputStyle,
+              appearance: "none",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 12px center",
+              paddingRight: 36,
+            }}
+          >
+            <option value={VALOR_PARTICULAR}>Particular (sin cobertura)</option>
+            {obrasSociales ? (
+              <>
+                <optgroup label="Prepagas">
+                  {obrasSociales.prepagas.map((os) => (
+                    <option key={os.id} value={os.id}>
+                      {os.nombre}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Obras Sociales">
+                  {obrasSociales.obras_sociales.map((os) => (
+                    <option key={os.id} value={os.id}>
+                      {os.nombre}
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              <option disabled>Cargando...</option>
+            )}
+            <option value={VALOR_OTRA}>Otra (no está en la lista)</option>
+          </select>
 
+          {/* ── Campos condicionales: Plan (si la OOSS tiene planes) ── */}
           <div
             className="overflow-hidden transition-all duration-200"
             style={{
-              maxHeight: tieneCobertura ? 200 : 0,
+              maxHeight: esObraConcreto && planesDisponibles.length > 0 ? 80 : 0,
+              opacity: esObraConcreto && planesDisponibles.length > 0 ? 1 : 0,
+            }}
+          >
+            <div className="mt-3">
+              <label className="mb-1.5 block text-[13px] text-gray-500">Plan</label>
+              <select
+                value={planValue}
+                onChange={(e) => setPlanValue(e.target.value)}
+                className={inputClass}
+                style={{
+                  ...inputStyle,
+                  appearance: "none",
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 12px center",
+                  paddingRight: 36,
+                }}
+              >
+                <option value="">Sin especificar</option>
+                {planesDisponibles.map((p) => (
+                  <option key={p.id} value={p.nombre}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ── Campos condicionales: Nro Afiliado (siempre si tiene cobertura) ── */}
+          <div
+            className="overflow-hidden transition-all duration-200"
+            style={{
+              maxHeight: tieneCobertura ? 80 : 0,
               opacity: tieneCobertura ? 1 : 0,
             }}
           >
-            <div className="mt-4 space-y-3">
+            <div className="mt-3">
+              <label className="mb-1.5 block text-[13px] text-gray-500">Nro. de afiliado</label>
+              <input
+                type="text"
+                name="nro_afiliado"
+                value={nroAfiliado}
+                onChange={(e) => setNroAfiliado(e.target.value)}
+                placeholder="Número de afiliado"
+                className={inputClass}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          {/* ── Campos "Otra": nombre libre + plan libre ── */}
+          <div
+            className="overflow-hidden transition-all duration-200"
+            style={{
+              maxHeight: esOtra ? 170 : 0,
+              opacity: esOtra ? 1 : 0,
+            }}
+          >
+            <div className="mt-3 space-y-3">
               <div>
-                <label className="mb-1.5 block text-[13px] text-gray-500">Obra social</label>
+                <label className="mb-1.5 block text-[13px] text-gray-500">Nombre de la obra social</label>
                 <input
                   type="text"
-                  name="obra_social"
-                  defaultValue={paciente?.obra_social ?? ""}
-                  placeholder="Ej: OSDE, Swiss Medical, PAMI..."
+                  value={obraOtraNombre}
+                  onChange={(e) => setObraOtraNombre(e.target.value)}
+                  placeholder="Ej: OSECAC, OSPRERA..."
                   className={inputClass}
                   style={inputStyle}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-[13px] text-gray-500">Nro. de afiliado</label>
+                <label className="mb-1.5 block text-[13px] text-gray-500">Plan (opcional)</label>
                 <input
                   type="text"
-                  name="nro_afiliado"
-                  defaultValue={paciente?.nro_afiliado ?? ""}
-                  placeholder="Número de afiliado"
+                  value={obraOtraPlan}
+                  onChange={(e) => setObraOtraPlan(e.target.value)}
+                  placeholder="Ej: Plan 1000, Oro..."
                   className={inputClass}
                   style={inputStyle}
                 />
@@ -253,6 +418,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           </div>
         </div>
 
+        {/* ── Términos y condiciones ── */}
         <div className="pt-2">
           <label className="flex items-start gap-3 py-2 cursor-pointer">
             <input

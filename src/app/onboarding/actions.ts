@@ -47,9 +47,16 @@ export async function completarPerfil(formData: FormData) {
     redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("://") ? redirectTo : "/";
 
   const tieneCobertura = (formData.get("tiene_cobertura") as string) === "true";
-  const obra_social = (formData.get("obra_social") as string)?.trim() || null;
+  const obra_social_id = (formData.get("obra_social_id") as string)?.trim() || null;
+  const obra_social_otra = (formData.get("obra_social_otra") as string)?.trim() || null;
   const nro_afiliado = (formData.get("nro_afiliado") as string)?.trim() || null;
+  const plan_obra_social = (formData.get("plan_obra_social") as string)?.trim() || null;
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
+
+  // Derive legacy obra_social field for backward compat (deprecated, 1 month fallback)
+  const obra_social = obra_social_id
+    ? null // Will be resolved from FK in PDF route
+    : obra_social_otra ?? null;
 
   if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !terminosAceptados) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
@@ -77,7 +84,11 @@ export async function completarPerfil(formData: FormData) {
         sexo_dni,
         tiene_cobertura: tieneCobertura,
         obra_social: tieneCobertura ? obra_social : null,
+        obra_social_id: tieneCobertura ? obra_social_id : null,
+        obra_social_otra: tieneCobertura ? obra_social_otra : null,
         nro_afiliado: tieneCobertura ? nro_afiliado : null,
+        plan_obra_social: tieneCobertura ? plan_obra_social : null,
+        cobertura_validada_en: tieneCobertura ? new Date().toISOString() : null,
         cuil,
         perfil_medico_completado: true,
         ...(terminosAceptados ? { terminos_aceptados_at: new Date().toISOString() } : {}),

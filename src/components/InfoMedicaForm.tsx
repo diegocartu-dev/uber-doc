@@ -9,7 +9,10 @@ type PacienteData = {
   sexo_dni: string | null;
   tiene_cobertura: boolean | null;
   obra_social: string | null;
+  obra_social_nombre: string | null; // resolved from FK
+  obra_social_otra: string | null;
   nro_afiliado: string | null;
+  plan_obra_social: string | null;
 };
 
 type Props = {
@@ -31,6 +34,13 @@ function formatFecha(fecha: string | null): string {
 
 export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUrl }: Props) {
   const router = useRouter();
+
+  // Resolve display name: FK name > obra_social_otra > legacy obra_social
+  const obraSocialDisplay =
+    paciente.obra_social_nombre ??
+    paciente.obra_social_otra ??
+    paciente.obra_social?.trim() ??
+    null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">
@@ -64,6 +74,10 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
             <span className="text-gray-500">Fecha de nacimiento</span>
             <span className="font-medium text-gray-900">{formatFecha(paciente.fecha_nacimiento)}</span>
           </div>
+
+          {/* ── Separador visual ── */}
+          <div className="border-t border-gray-200 my-2" />
+
           <div className="flex justify-between">
             <span className="text-gray-500">Cobertura</span>
             <span className="font-medium text-gray-900">
@@ -74,8 +88,14 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
             <>
               <div className="flex justify-between">
                 <span className="text-gray-500">Obra social</span>
-                <span className="font-medium text-gray-900">{paciente.obra_social?.trim() || "No especificado"}</span>
+                <span className="font-medium text-gray-900">{obraSocialDisplay || "No especificado"}</span>
               </div>
+              {paciente.plan_obra_social && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Plan</span>
+                  <span className="font-medium text-gray-900">{paciente.plan_obra_social}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-500">Nro. afiliado</span>
                 <span className="font-medium text-gray-900">{paciente.nro_afiliado?.trim() || "No especificado"}</span>
