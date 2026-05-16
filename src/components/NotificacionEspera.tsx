@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 
 type Props = {
   pacienteNombre: string;
@@ -19,6 +20,8 @@ function minutosEsperando(desde: string): number {
 export default function NotificacionEspera({ pacienteNombre, esperandoDesde, consultaId, tipo, onDismiss }: Props) {
   const [mins, setMins] = useState(() => minutosEsperando(esperandoDesde));
   const [visible, setVisible] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -30,6 +33,15 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
   }, [esperandoDesde]);
 
   const href = tipo === "turno" ? `/turno/${consultaId}/video` : `/medico/consulta/${consultaId}/workspace`;
+
+  function handleAceptar() {
+    startTransition(async () => {
+      const result = await aceptarConsulta(consultaId);
+      if (result?.success) {
+        router.push(href);
+      }
+    });
+  }
 
   return (
     <div
@@ -82,8 +94,10 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
           </p>
         </div>
 
-        <Link
-          href={href}
+        <button
+          type="button"
+          onClick={handleAceptar}
+          disabled={isPending}
           style={{
             background: "#378ADD",
             color: "#fff",
@@ -92,13 +106,14 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
             padding: "10px 16px",
             fontSize: 14,
             fontWeight: 600,
-            textDecoration: "none",
             whiteSpace: "nowrap",
             flexShrink: 0,
+            cursor: isPending ? "wait" : "pointer",
+            opacity: isPending ? 0.7 : 1,
           }}
         >
-          Atender ahora
-        </Link>
+          {isPending ? "..." : "Aceptar"}
+        </button>
 
         <button
           onClick={onDismiss}

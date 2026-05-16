@@ -119,6 +119,45 @@ export async function actualizarOcultoClinica(oculto: boolean) {
   return { success: true };
 }
 
+export async function actualizarVisibleConsultorio(visible: boolean) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { error } = await supabase
+    .from("medicos")
+    .update({ visible_consultorio_particular: visible })
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function rechazarConsulta(consultaId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { data: medico } = await supabase
+    .from("medicos")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!medico) return { error: "No sos médico." };
+
+  const { error } = await supabase
+    .from("consultas")
+    .update({ estado: "rechazada" })
+    .eq("id", consultaId)
+    .eq("medico_id", medico.id)
+    .eq("estado", "esperando");
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function cancelarTurnosMedico(
   turnoIds: string[],
   motivo?: string

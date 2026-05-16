@@ -14,6 +14,7 @@ type Props = {
   precioConsulta: number;
   consultasPendientesCount: number;
   ocultoClinica: boolean;
+  visibleConsultorioParticular: boolean;
 };
 
 const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
@@ -27,6 +28,7 @@ export default function BloqueConsultaInmediata({
   precioConsulta,
   consultasPendientesCount,
   ocultoClinica,
+  visibleConsultorioParticular,
 }: Props) {
   const { disponible, turnosActivosHoy } = useDashboardMedico();
 
@@ -63,6 +65,7 @@ export default function BloqueConsultaInmediata({
           precioConsulta={precioConsulta}
           pacientesEnEspera={consultasPendientesCount}
           ocultoClinica={ocultoClinica}
+          visibleConsultorioParticular={visibleConsultorioParticular}
         />
       </div>
 
