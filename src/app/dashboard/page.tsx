@@ -4,7 +4,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppNavbar from "@/components/AppNavbar";
-import LogoutButton from "./LogoutButton";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
 import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
 import TurnosEnEspera from "./TurnosEnEspera";
@@ -17,6 +16,9 @@ import { BadgeEsperando, BotonSilenciar, PopupEsperando } from "./NotificacionMe
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
+import PanelProgresoPerfil from "./PanelProgresoPerfil";
+import BannerMercadoPago from "./BannerMercadoPago";
+import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import { getFlag } from "@/lib/feature-flags";
 
@@ -76,6 +78,8 @@ export default async function DashboardPage({
     oculto_clinica: boolean; visible_consultorio_particular: boolean; verificado: boolean; estado_registro: string;
     especialidad: string; tipo_matricula: string; numero_matricula: string;
     foto_credencial_url: string | null; slug: string | null;
+    nombre_completo: string; telefono: string | null; foto_url: string | null;
+    domicilio_consultorio: string | null; perfil_completo: boolean;
   } | null = null;
 
   let consultasPendientes: {
@@ -182,7 +186,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -336,6 +340,20 @@ export default async function DashboardPage({
     }
   }
 
+  // MP account check for banner
+  let mpConectado = false;
+  if (role === "medico" && medico) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const adminDb = createAdminClient();
+    const { data: mpRow } = await adminDb
+      .from("medicos_mp_accounts")
+      .select("estado")
+      .eq("medico_id", medico.id)
+      .eq("estado", "activo")
+      .maybeSingle();
+    mpConectado = !!mpRow;
+  }
+
   const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
   const hayAlgoEnCurso = consultasEnCurso.length > 0 || turnoEnCurso !== null;
   const hayTurnosActivosHoy = turnosHoy.some((t) => t.estado === "en_curso");
@@ -442,6 +460,7 @@ export default async function DashboardPage({
         consultasPendientesCount={consultasPendientes.length}
         ocultoClinica={medico.oculto_clinica}
         visibleConsultorioParticular={medico.visible_consultorio_particular ?? true}
+        perfilCompleto={medico.perfil_completo}
       />
     );
 
@@ -483,8 +502,13 @@ export default async function DashboardPage({
                     </Link>
                   )}
                   <span className="hidden text-sm text-gray-500 lg:inline">{fullName}</span>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">{initials}</div>
-                  <LogoutButton />
+                  <AvatarDropdown
+                    initials={initials}
+                    fullName={fullName}
+                    email={user.email ?? ""}
+                    perfilCompleto={medico.perfil_completo}
+                    medicoId={medico.id}
+                  />
                 </div>
               </div>
               {/* Linea 2 — solo mobile */}
@@ -513,6 +537,21 @@ export default async function DashboardPage({
             {/* Activar notificaciones push */}
             <div className="mt-4">
               <BotonPush rol="medico" />
+            </div>
+
+            {/* Panel progreso perfil */}
+            <div className="mt-4">
+              <PanelProgresoPerfil
+                perfilCompleto={medico.perfil_completo}
+                telefono={medico.telefono}
+                fotoUrl={medico.foto_url}
+                domicilioConsultorio={medico.domicilio_consultorio}
+                nombreCompleto={medico.nombre_completo}
+                especialidad={medico.especialidad}
+                numeroMatricula={medico.numero_matricula}
+                tipoMatricula={medico.tipo_matricula}
+              />
+              <BannerMercadoPago mpConectado={mpConectado} />
             </div>
 
             {/* Métricas full width */}

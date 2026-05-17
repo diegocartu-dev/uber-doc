@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import AppNavbar from "@/components/AppNavbar";
 import PerfilClient from "./PerfilClient";
 
 export default async function PerfilMedicoPage() {
@@ -18,7 +17,7 @@ export default async function PerfilMedicoPage() {
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, nombre_completo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa"
+      "id, nombre_completo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa, telefono, domicilio_consultorio, foto_url, perfil_completo"
     )
     .eq("user_id", user.id)
     .single();
@@ -36,9 +35,8 @@ export default async function PerfilMedicoPage() {
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
-      <AppNavbar userName={medico.nombre_completo} userRole="medico" />
       <Suspense fallback={<div className="mx-auto max-w-2xl px-6 py-8" />}>
-        <PerfilClient medico={medico} mpAccount={mpAccount} />
+        <PerfilClient medico={medico} mpAccount={mpAccount} userEmail={user.email ?? ""} />
       </Suspense>
     </div>
   );

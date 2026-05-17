@@ -13,6 +13,7 @@ type Props = {
   pacientesEnEspera: number;
   ocultoClinica: boolean;
   visibleConsultorioParticular: boolean;
+  perfilCompleto?: boolean;
 };
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
@@ -32,6 +33,7 @@ export default function DisponibilidadMedico({
   pacientesEnEspera,
   ocultoClinica,
   visibleConsultorioParticular,
+  perfilCompleto = true,
 }: Props) {
   const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
@@ -71,6 +73,7 @@ export default function DisponibilidadMedico({
 
   async function handleToggle() {
     if (guardandoToggleRef.current) return;
+    if (!perfilCompleto && !activo) return; // Can't enable without complete profile
     const nuevoEstado = !activo;
     setDisponibleCtx(nuevoEstado);
     setGuardando(true);
@@ -175,13 +178,13 @@ export default function DisponibilidadMedico({
             type="button"
             role="switch"
             aria-checked={activo}
-            disabled={guardando || bloqueado}
+            disabled={guardando || bloqueado || (!perfilCompleto && !activo)}
             onClick={(e) => {
               e.stopPropagation();
               handleToggle();
             }}
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              bloqueado ? "cursor-not-allowed bg-gray-200" : guardando ? "cursor-wait" : "cursor-pointer"
+              bloqueado || (!perfilCompleto && !activo) ? "cursor-not-allowed bg-gray-200" : guardando ? "cursor-wait" : "cursor-pointer"
             } ${activo && !bloqueado ? "bg-[#378ADD]" : !bloqueado ? "bg-gray-300" : ""}`}
           >
             {guardando && !bloqueado ? (
@@ -209,6 +212,14 @@ export default function DisponibilidadMedico({
         <div className="px-5 pb-3">
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#D85A30]">
             Tenés turnos programados para hoy. Podés activar consulta inmediata cuando los completes.
+          </p>
+        </div>
+      )}
+
+      {!perfilCompleto && !activo && !bloqueado && (
+        <div className="px-5 pb-3">
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-[#D85A30]">
+            Completá tu perfil para poder activar la disponibilidad.
           </p>
         </div>
       )}
