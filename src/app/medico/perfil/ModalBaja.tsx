@@ -44,6 +44,8 @@ export default function ModalBaja({ open, onClose, medicoId }: Props) {
 
       {/* Modal — bottom sheet mobile, centered desktop */}
       <div className="fixed inset-x-0 bottom-0 z-[10000] rounded-t-2xl bg-white p-8 lg:inset-auto lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-full lg:max-w-[400px] lg:rounded-2xl">
+        {/* Drag handle mobile */}
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-300 lg:hidden" />
         {/* Close */}
         <button
           onClick={handleClose}
@@ -84,7 +86,7 @@ export default function ModalBaja({ open, onClose, medicoId }: Props) {
 
         <button
           onClick={handleClose}
-          className="mt-3 block w-full text-center text-sm font-medium text-gray-500"
+          className="mt-3 block w-full py-3 text-center text-sm font-medium text-gray-500"
         >
           Cancelar
         </button>

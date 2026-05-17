@@ -49,7 +49,7 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
       {/* Avatar button */}
       <button
         onClick={() => setOpen(!open)}
-        className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600 transition hover:bg-gray-200"
+        className="relative flex h-8 w-8 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600 transition hover:bg-gray-200"
       >
         {initials}
         {!perfilCompleto && (
@@ -75,7 +75,7 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
             <div className="mt-2 lg:mt-0">
               <button
                 onClick={() => { setOpen(false); router.push("/medico/perfil"); }}
-                className="flex w-full items-center px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
+                className="flex w-full items-center px-4 py-3.5 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
               >
                 Mi perfil
                 {!perfilCompleto && (
@@ -87,7 +87,7 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
 
               <button
                 onClick={() => { setOpen(false); handleLogout(); }}
-                className="flex w-full items-center px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
+                className="flex w-full items-center px-4 py-3.5 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
               >
                 Cerrar sesión
               </button>
@@ -96,7 +96,7 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
 
               <button
                 onClick={() => { setOpen(false); setShowBaja(true); }}
-                className="flex w-full items-center px-4 py-3 text-sm font-medium text-[#E24B4A] transition hover:bg-gray-50 lg:py-2.5"
+                className="flex w-full items-center px-4 py-3.5 min-h-[44px] text-sm font-medium text-[#E24B4A] transition hover:bg-gray-50 lg:py-2.5"
               >
                 Darme de baja
               </button>

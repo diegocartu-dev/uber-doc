@@ -14,9 +14,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
     }
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "El archivo debe ser una imagen" }, { status: 400 });
+    // Validate file type — whitelist to prevent SVG XSS
+    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: "Solo se permiten JPG, PNG o WebP" }, { status: 400 });
     }
 
     // Validate size (max 5MB)

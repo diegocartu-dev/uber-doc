@@ -52,7 +52,7 @@ export default function PanelProgresoPerfil({
       {/* Barra de progreso */}
       <div className="mt-3 h-1.5 w-full rounded-full bg-gray-100">
         <div
-          className="h-1.5 rounded-full bg-[#1D9E75] transition-all duration-500"
+          className="h-1.5 rounded-full bg-[#378ADD] transition-all duration-500"
           style={{ width: `${porcentaje}%` }}
         />
       </div>
