@@ -91,18 +91,34 @@ export async function POST(req: NextRequest) {
 
 async function handlePayment(paymentId: string): Promise<void> {
   const mpToken = process.env.MP_ACCESS_TOKEN;
-  if (!mpToken) {
-    logError("[WEBHOOK]", "MP_ACCESS_TOKEN no configurado");
+  const mpTestToken = process.env.MP_ACCESS_TOKEN_TEST;
+
+  if (!mpToken && !mpTestToken) {
+    logError("[WEBHOOK]", "Ningún MP_ACCESS_TOKEN configurado");
     return;
   }
 
-  const paymentRes = await fetch(
-    `https://api.mercadopago.com/v1/payments/${paymentId}`,
-    { headers: { Authorization: `Bearer ${mpToken}` } }
-  );
+  // Intentar con token de producción primero, fallback a test token (sandbox).
+  // Pagos sandbox no son accesibles con token de producción y viceversa.
+  let paymentRes: Response | null = null;
 
-  if (!paymentRes.ok) {
-    logError("[WEBHOOK]", "Error fetching payment", { paymentId, mpStatus: paymentRes.status });
+  if (mpToken) {
+    paymentRes = await fetch(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      { headers: { Authorization: `Bearer ${mpToken}` } }
+    );
+  }
+
+  if ((!paymentRes || !paymentRes.ok) && mpTestToken) {
+    logInfo("[WEBHOOK]", "Reintentando con test token (sandbox)", { paymentId });
+    paymentRes = await fetch(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      { headers: { Authorization: `Bearer ${mpTestToken}` } }
+    );
+  }
+
+  if (!paymentRes || !paymentRes.ok) {
+    logError("[WEBHOOK]", "Error fetching payment", { paymentId, mpStatus: paymentRes?.status ?? "no_response" });
     return;
   }
 
