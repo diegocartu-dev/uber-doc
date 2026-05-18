@@ -28,6 +28,52 @@ jobs:
 
       - run: npx playwright install chromium
 
+      - name: Wait for Vercel preview deployment
+        if: github.event_name == 'pull_request'
+        id: preview
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          echo "Waiting for Vercel preview for commit $SHA..."
+
+          for i in $(seq 1 30); do
+            DEPLOY_ID=$(gh api "repos/${{ github.repository }}/deployments?sha=$SHA&environment=Preview" \
+              --jq '.[0].id // empty' 2>/dev/null)
+
+            if [ -n "$DEPLOY_ID" ]; then
+              STATUS=$(gh api "repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses" \
+                --jq '.[0].state // empty' 2>/dev/null)
+              URL=$(gh api "repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses" \
+                --jq '.[0].environment_url // empty' 2>/dev/null)
+
+              if [ "$STATUS" = "success" ] && [ -n "$URL" ]; then
+                echo "url=$URL" >> "$GITHUB_OUTPUT"
+                echo "Preview ready: $URL"
+                exit 0
+              fi
+              echo "Deploy found (id=$DEPLOY_ID), status=$STATUS — waiting... ($i/30)"
+            else
+              echo "No deployment found yet — waiting... ($i/30)"
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Timeout waiting for Vercel preview deployment (5 min)"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set test URL
+        id: test-url
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ steps.preview.outputs.url }}" ]; then
+            echo "base_url=${{ steps.preview.outputs.url }}" >> "$GITHUB_OUTPUT"
+            echo "Testing against preview: ${{ steps.preview.outputs.url }}"
+          else
+            echo "base_url=${{ env.PLAYWRIGHT_BASE_URL }}" >> "$GITHUB_OUTPUT"
+            echo "Testing against production: ${{ env.PLAYWRIGHT_BASE_URL }}"
+          fi
+
       - name: Reset cuentas de prueba
         run: node scripts/sereno-reset.mjs
         env:
@@ -37,7 +83,7 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test --project=chromium
         env:
-          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_BASE_URL: ${{ steps.test-url.outputs.base_url }}
 
       - uses: actions/upload-artifact@v4
         if: always()
