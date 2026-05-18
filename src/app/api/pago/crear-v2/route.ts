@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
-    .select("access_token_encrypted, estado, expires_at")
+    .select("access_token_encrypted, estado, expires_at, live_mode")
     .eq("medico_id", medicoId)
     .single();
 
@@ -68,7 +68,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (new Date(mpAccount.expires_at) <= new Date()) {
+  // Sandbox mode: test sellers can't do OAuth with their own app in MP sandbox.
+  // Use the APP's test token instead. marketplace_fee still gets sent.
+  const isSandbox = mpAccount.live_mode === false;
+
+  if (!isSandbox && new Date(mpAccount.expires_at) <= new Date()) {
     await admin
       .from("medicos_mp_accounts")
       .update({ estado: "expirado", desconectado_en: new Date().toISOString() })
@@ -83,14 +87,30 @@ export async function POST(req: NextRequest) {
   }
 
   let accessToken: string;
-  try {
-    accessToken = decrypt(mpAccount.access_token_encrypted);
-  } catch {
-    logError("[MP-V2]", "Error desencriptando token", { medicoId });
-    return NextResponse.json(
-      { error: "Error interno de configuración de cobros." },
-      { status: 500 }
-    );
+
+  if (isSandbox) {
+    // In sandbox, use the APP's test token (MP_ACCESS_TOKEN_TEST)
+    // because test sellers can't authorize the same app via OAuth.
+    const appTestToken = process.env.MP_ACCESS_TOKEN_TEST;
+    if (!appTestToken) {
+      logError("[MP-V2]", "MP_ACCESS_TOKEN_TEST no configurado para sandbox", { medicoId });
+      return NextResponse.json(
+        { error: "Error interno de configuración de cobros." },
+        { status: 500 }
+      );
+    }
+    accessToken = appTestToken;
+    logInfo("[MP-V2]", "Usando APP test token (sandbox mode)", { medicoId, tipo, recursoId: id });
+  } else {
+    try {
+      accessToken = decrypt(mpAccount.access_token_encrypted);
+    } catch {
+      logError("[MP-V2]", "Error desencriptando token", { medicoId });
+      return NextResponse.json(
+        { error: "Error interno de configuración de cobros." },
+        { status: 500 }
+      );
+    }
   }
 
   const comisionPct = await getComisionForMedico(medicoId);
