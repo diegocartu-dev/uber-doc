@@ -68,13 +68,18 @@ export async function GET(req: NextRequest) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // NOTE: test_token deliberately omitted.
+        // With test_token:true, MP returns a token that acts as the APP OWNER
+        // (user 28443305), not the authorizing seller. This breaks sandbox
+        // marketplace because the collector ends up being a real user.
+        // Without it, the token authenticates as the actual authorizing user,
+        // which is correct for both production and sandbox.
         body: JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
           code,
           grant_type: "authorization_code",
           redirect_uri: redirectUri,
-          test_token: true,
         }),
       }
     );

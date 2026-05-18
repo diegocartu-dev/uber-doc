@@ -86,46 +86,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Always use the seller's OAuth token — in both production and sandbox.
+  // The OAuth callback now omits test_token:true, so the seller's token
+  // authenticates as the actual seller (test or production), not the app owner.
   let accessToken: string;
 
-  if (isSandbox) {
-    // Sandbox marketplace: use the seller test's OAuth token so MP sees the
-    // correct collector. Fall back to the APP test token only if no seller
-    // token is stored (legacy rows).
-    let sellerToken: string | null = null;
-    if (mpAccount.access_token_encrypted) {
-      try {
-        sellerToken = decrypt(mpAccount.access_token_encrypted);
-      } catch {
-        logWarn("[MP-V2]", "No se pudo desencriptar token sandbox del seller, usando APP test token", { medicoId });
-      }
-    }
-
-    if (sellerToken) {
-      accessToken = sellerToken;
-      logInfo("[MP-V2]", "Usando seller test OAuth token (sandbox mode)", { medicoId, tipo, recursoId: id });
-    } else {
-      const appTestToken = process.env.MP_ACCESS_TOKEN_TEST;
-      if (!appTestToken) {
-        logError("[MP-V2]", "MP_ACCESS_TOKEN_TEST no configurado para sandbox", { medicoId });
-        return NextResponse.json(
-          { error: "Error interno de configuración de cobros." },
-          { status: 500 }
-        );
-      }
-      accessToken = appTestToken;
-      logInfo("[MP-V2]", "Usando APP test token fallback (sandbox mode)", { medicoId, tipo, recursoId: id });
-    }
-  } else {
-    try {
-      accessToken = decrypt(mpAccount.access_token_encrypted);
-    } catch {
-      logError("[MP-V2]", "Error desencriptando token", { medicoId });
-      return NextResponse.json(
-        { error: "Error interno de configuración de cobros." },
-        { status: 500 }
-      );
-    }
+  try {
+    accessToken = decrypt(mpAccount.access_token_encrypted);
+  } catch {
+    logError("[MP-V2]", "Error desencriptando token", { medicoId });
+    return NextResponse.json(
+      { error: "Error interno de configuración de cobros." },
+      { status: 500 }
+    );
   }
 
   const comisionPct = await getComisionForMedico(medicoId);
