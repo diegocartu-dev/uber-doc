@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 interface Props {
   mpConectado: boolean;
 }
@@ -24,12 +22,12 @@ export default function BannerMercadoPago({ mpConectado }: Props) {
         Tus pacientes pagan online y vos cobrás al instante en tu cuenta.
       </p>
 
-      <Link
+      <a
         href="/api/mp/oauth/start"
         className="mt-4 block w-full rounded-lg bg-[#378ADD] px-5 py-2.5 text-center text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
       >
         Conectar ahora
-      </Link>
+      </a>
     </div>
   );
 }
