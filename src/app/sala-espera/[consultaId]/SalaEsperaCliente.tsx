@@ -203,27 +203,51 @@ export default function SalaEsperaCliente({
         </a>
       )}
 
-      {/* Botón de testing — simular pago aprobado */}
+      {/* Botón de pago — intenta pago real (crear-v2), fallback a simulación */}
       {aceptada && !salaVideoUrl && estado !== "pagada" && estado !== "en_curso" && (
         <button
           disabled={pagando}
           onClick={async () => {
             setPagando(true);
-            const res = await fetch("/api/pago/simular", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ consultaId }),
-            });
-            if (res.ok) {
-              window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
-            } else {
+            try {
+              // Intentar pago real con Mercado Pago
+              const mpRes = await fetch("/api/pago/crear-v2", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ tipo: "consulta", id: consultaId }),
+              });
+
+              if (mpRes.ok) {
+                const mpData = await mpRes.json();
+                if (mpData.init_point) {
+                  // Redirigir al checkout de Mercado Pago
+                  window.location.href = mpData.init_point;
+                  return;
+                }
+              }
+
+              // Si pago marketplace no está habilitado (503) o falla, intentar simulación
+              const simRes = await fetch("/api/pago/simular", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ consultaId }),
+              });
+              if (simRes.ok) {
+                window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
+                return;
+              }
+
+              // Ambos fallaron
+              setPagando(false);
+            } catch {
               setPagando(false);
             }
           }}
           className="mt-4 w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
         >
-          Simular pago aprobado
+          {pagando ? "Procesando..." : "Pagar consulta"}
         </button>
       )}
 
