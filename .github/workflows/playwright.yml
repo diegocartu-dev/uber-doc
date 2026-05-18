@@ -8,6 +8,10 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+permissions:
+  deployments: read
+  contents: read
+
 env:
   PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL || 'https://uber-doc.vercel.app' }}
 
@@ -32,17 +36,16 @@ jobs:
         if: github.event_name == 'pull_request'
         id: preview
         run: |
-          SHA="${{ github.event.pull_request.head.sha }}"
-          echo "Waiting for Vercel preview for commit $SHA..."
+          echo "Waiting for Vercel preview for commit $PR_SHA..."
 
           for i in $(seq 1 30); do
-            DEPLOY_ID=$(gh api "repos/${{ github.repository }}/deployments?sha=$SHA&environment=Preview" \
+            DEPLOY_ID=$(gh api "repos/$GH_REPO/deployments?sha=$PR_SHA&environment=Preview" \
               --jq '.[0].id // empty' 2>/dev/null)
 
             if [ -n "$DEPLOY_ID" ]; then
-              STATUS=$(gh api "repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses" \
+              STATUS=$(gh api "repos/$GH_REPO/deployments/$DEPLOY_ID/statuses" \
                 --jq '.[0].state // empty' 2>/dev/null)
-              URL=$(gh api "repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses" \
+              URL=$(gh api "repos/$GH_REPO/deployments/$DEPLOY_ID/statuses" \
                 --jq '.[0].environment_url // empty' 2>/dev/null)
 
               if [ "$STATUS" = "success" ] && [ -n "$URL" ]; then
@@ -62,17 +65,27 @@ jobs:
           exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPO: ${{ github.repository }}
 
       - name: Set test URL
         id: test-url
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ steps.preview.outputs.url }}" ]; then
-            echo "base_url=${{ steps.preview.outputs.url }}" >> "$GITHUB_OUTPUT"
-            echo "Testing against preview: ${{ steps.preview.outputs.url }}"
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
+            if [[ ! "$PREVIEW_URL" =~ ^https://.*\.vercel\.app/?$ ]]; then
+              echo "::error::Preview URL does not match expected Vercel domain: $PREVIEW_URL"
+              exit 1
+            fi
+            echo "base_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+            echo "Testing against preview: $PREVIEW_URL"
           else
-            echo "base_url=${{ env.PLAYWRIGHT_BASE_URL }}" >> "$GITHUB_OUTPUT"
-            echo "Testing against production: ${{ env.PLAYWRIGHT_BASE_URL }}"
+            echo "base_url=$FALLBACK_URL" >> "$GITHUB_OUTPUT"
+            echo "Testing against production: $FALLBACK_URL"
           fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          FALLBACK_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
 
       - name: Reset cuentas de prueba
         run: node scripts/sereno-reset.mjs
