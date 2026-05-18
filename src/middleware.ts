@@ -20,8 +20,9 @@ function isBetaProtected(pathname: string): boolean {
 function passesBetaGuard(request: NextRequest): boolean {
   const password = process.env.BETA_PASSWORD;
 
-  // Sin BETA_PASSWORD seteada → guard desactivado (modo lanzamiento).
-  if (!password) return true;
+  // Sin BETA_PASSWORD seteada → BLOQUEAR (fail-closed).
+  // Antes era fail-open — causó breach de 77 cuentas.
+  if (!password) return false;
 
   // Solo intercepta rutas de creación de cuenta. El resto pasa libre.
   if (!isBetaProtected(request.nextUrl.pathname)) return true;

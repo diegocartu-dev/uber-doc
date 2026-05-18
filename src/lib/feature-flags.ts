@@ -26,11 +26,11 @@ export async function getFlag(key: string): Promise<boolean> {
   if (envVal === "false") return false;
 
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return cache.flags.get(key) ?? true;
+    return cache.flags.get(key) ?? false;
   }
 
   await refreshCache();
-  return cache!.flags.get(key) ?? true;
+  return cache!.flags.get(key) ?? false;
 }
 
 /**
