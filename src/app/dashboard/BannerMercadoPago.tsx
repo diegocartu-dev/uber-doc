@@ -25,7 +25,7 @@ export default function BannerMercadoPago({ mpConectado }: Props) {
       </p>
 
       <Link
-        href="/api/mp/connect"
+        href="/api/mp/oauth/start"
         className="mt-4 block w-full rounded-lg bg-[#378ADD] px-5 py-2.5 text-center text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
       >
         Conectar ahora
