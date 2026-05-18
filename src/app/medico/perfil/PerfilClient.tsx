@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import ModalBaja from "./ModalBaja";
 import TabCobros from "./TabCobros";
 
 interface MpAccount {
@@ -45,7 +44,6 @@ export default function PerfilClient({
   const router = useRouter();
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "error" } | null>(null);
   const [stickyError, setStickyError] = useState<string | null>(null);
-  const [showBaja, setShowBaja] = useState(false);
 
   // Form state
   const [telefono, setTelefono] = useState(medico.telefono ?? "");
@@ -79,6 +77,8 @@ export default function PerfilClient({
       setToast({ msg: "Tu cuenta de Mercado Pago fue desconectada.", type: "ok" });
     } else if (error === "mp_account_already_linked") {
       setStickyError("mp_account_already_linked");
+    } else if (error === "credentials_mismatch") {
+      setStickyError("credentials_mismatch");
     } else if (error) {
       setToast({ msg: "Algo salió mal con la conexión a Mercado Pago.", type: "error" });
     }
@@ -299,12 +299,6 @@ export default function PerfilClient({
             <p className="text-xs text-gray-400">Email</p>
             <p className="mt-0.5 text-sm text-gray-700">{userEmail}</p>
           </div>
-          <button
-            onClick={() => setShowBaja(true)}
-            className="mt-5 text-sm font-medium text-[#E24B4A]"
-          >
-            Darme de baja
-          </button>
         </div>
       </main>
 
@@ -321,8 +315,6 @@ export default function PerfilClient({
         </div>
       </div>
 
-      {/* Modal baja */}
-      <ModalBaja open={showBaja} onClose={() => setShowBaja(false)} medicoId={medico.id} />
     </>
   );
 }

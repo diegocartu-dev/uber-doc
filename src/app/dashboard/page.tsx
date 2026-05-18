@@ -507,7 +507,6 @@ export default async function DashboardPage({
                     fullName={fullName}
                     email={user.email ?? ""}
                     perfilCompleto={medico.perfil_completo}
-                    medicoId={medico.id}
                   />
                 </div>
               </div>

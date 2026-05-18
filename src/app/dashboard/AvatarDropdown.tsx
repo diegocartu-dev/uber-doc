@@ -3,19 +3,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import ModalBaja from "@/app/medico/perfil/ModalBaja";
-
 interface Props {
   initials: string;
   fullName: string;
   email: string;
   perfilCompleto: boolean;
-  medicoId?: string;
 }
 
-export default function AvatarDropdown({ initials, fullName, email, perfilCompleto, medicoId }: Props) {
+export default function AvatarDropdown({ initials, fullName, email, perfilCompleto }: Props) {
   const [open, setOpen] = useState(false);
-  const [showBaja, setShowBaja] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -92,14 +88,6 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
                 Cerrar sesión
               </button>
 
-              <div className="border-t border-gray-100" />
-
-              <button
-                onClick={() => { setOpen(false); setShowBaja(true); }}
-                className="flex w-full items-center px-4 py-3.5 min-h-[44px] text-sm font-medium text-[#E24B4A] transition hover:bg-gray-50 lg:py-2.5"
-              >
-                Darme de baja
-              </button>
             </div>
 
             {/* Safe area spacer for iOS */}
@@ -108,8 +96,6 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
         </>
       )}
 
-      {/* Modal baja */}
-      <ModalBaja open={showBaja} onClose={() => setShowBaja(false)} medicoId={medicoId ?? ""} />
     </div>
   );
 }

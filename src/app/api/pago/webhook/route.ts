@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { trackEvent } from "@/lib/funnel";
+import { pushAlMedico } from "@/lib/push";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,12 +57,84 @@ function parseExternalReference(ref: string | undefined | null): { tipo: "consul
   return null;
 }
 
+async function checkRateLimit(ip: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("webhook_failed_attempts")
+    .select("attempts_count, first_attempt_at, blocked_until")
+    .eq("ip", ip)
+    .single();
+
+  if (!data) return false;
+
+  if (data.blocked_until && new Date(data.blocked_until) > new Date()) {
+    return true;
+  }
+
+  return false;
+}
+
+async function recordFailedAttempt(ip: string): Promise<void> {
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data: existing } = await admin
+    .from("webhook_failed_attempts")
+    .select("attempts_count, first_attempt_at")
+    .eq("ip", ip)
+    .single();
+
+  if (!existing) {
+    await admin.from("webhook_failed_attempts").insert({
+      ip,
+      attempts_count: 1,
+      first_attempt_at: now,
+      blocked_until: null,
+    });
+    return;
+  }
+
+  const windowStart = new Date(existing.first_attempt_at);
+  const windowEnd = new Date(windowStart.getTime() + 60 * 1000);
+
+  if (new Date() > windowEnd) {
+    await admin
+      .from("webhook_failed_attempts")
+      .update({ attempts_count: 1, first_attempt_at: now, blocked_until: null })
+      .eq("ip", ip);
+    return;
+  }
+
+  const newCount = existing.attempts_count + 1;
+  const blocked = newCount >= 10
+    ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    : null;
+
+  await admin
+    .from("webhook_failed_attempts")
+    .update({ attempts_count: newCount, blocked_until: blocked })
+    .eq("ip", ip);
+
+  if (blocked) {
+    logWarn("[WEBHOOK]", "IP bloqueada por exceso de firmas inválidas", { ip, attempts: newCount });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? req.headers.get("x-real-ip")
+      ?? "unknown";
+
+    if (await checkRateLimit(ip)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     const body = await req.json();
 
     if (!verificarFirmaMP(req, body)) {
-      logError("[WEBHOOK]", "Firma HMAC inválida");
+      logError("[WEBHOOK]", "Firma HMAC inválida", { ip });
+      await recordFailedAttempt(ip);
       return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
     }
 
@@ -180,6 +253,7 @@ async function handleApproved(
   const netAmount = Math.round((transactionAmount - applicationFee) * 100) / 100;
 
   if (tipo === "consulta") {
+    const now = new Date().toISOString();
     const { data: updated } = await admin
       .from("consultas")
       .update({
@@ -189,11 +263,12 @@ async function handleApproved(
         mp_application_fee: applicationFee,
         mp_net_amount_medico: netAmount,
         mp_payment_created_at: dateCreated,
-        estado: "pagada",
+        estado: "en_curso",
+        en_curso_at: now,
       })
       .eq("id", id)
       .eq("estado", "aceptada")
-      .select("id");
+      .select("id, medico_id");
 
     if (!updated?.length) {
       logWarn("[WEBHOOK]", "Consulta no actualizada (estado ya cambió?)", logCtx);
@@ -202,8 +277,18 @@ async function handleApproved(
         `Un pago fue aprobado por MP pero el UPDATE no afectó filas.\nEstado fuera de sincronía.\n\nConsulta ID: ${id}\nPayment ID: ${paymentId}\nMonto: $${transactionAmount}\nFecha: ${new Date().toISOString()}\n\nAcción: verificar manualmente en Supabase si la consulta ya cambió de estado.`
       );
     } else {
-      logInfo("[WEBHOOK]", "Consulta pagada", { ...logCtx, transactionAmount, applicationFee, netAmount });
+      logInfo("[WEBHOOK]", "Consulta en_curso (transición automática)", { ...logCtx, transactionAmount, applicationFee, netAmount });
       trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });
+
+      const medicoId = updated[0].medico_id;
+      if (medicoId) {
+        pushAlMedico(medicoId, {
+          title: "Nueva consulta lista",
+          body: "Un paciente pagó y está esperando. Abrí tu workspace.",
+          url: `/medico/consulta/${id}/workspace`,
+          tag: `consulta-${id}`,
+        }).catch(() => {});
+      }
     }
   } else {
     const { data: updated } = await admin

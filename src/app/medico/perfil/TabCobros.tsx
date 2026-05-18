@@ -47,6 +47,10 @@ export default function TabCobros({
     return <EstadoD />;
   }
 
+  if (errorParam === "credentials_mismatch") {
+    return <EstadoE />;
+  }
+
   if (!mpAccount || mpAccount.estado === "revocado") {
     return <EstadoA />;
   }
@@ -58,7 +62,7 @@ export default function TabCobros({
   return <EstadoC />;
 }
 
-function handleStartClick(desdeEstado: "A" | "C" | "D") {
+function handleStartClick(desdeEstado: "A" | "C" | "D" | "E") {
   trackClient("mp_oauth_start_click", { desde_estado: desdeEstado });
   window.location.href = "/api/mp/oauth/start";
 }
@@ -244,6 +248,37 @@ function EstadoC() {
         style={{ backgroundColor: "#378ADD", minHeight: 44 }}
       >
         Reconectar
+      </button>
+    </div>
+  );
+}
+
+function EstadoE() {
+  return (
+    <div
+      className="rounded-xl p-6"
+      style={{ backgroundColor: "#FEF2F2", border: "0.5px solid #E8A0A0" }}
+    >
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={20} strokeWidth={1.75} color="#E24B4A" />
+        <p className="text-base font-semibold text-gray-900">
+          No pudimos conectar tu cuenta
+        </p>
+      </div>
+      <p className="mt-2 text-sm text-gray-600" style={{ lineHeight: 1.6 }}>
+        Verificá que estés usando una cuenta de Mercado Pago real (no una cuenta
+        de prueba). Si el problema persiste, escribinos a{" "}
+        <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
+          soporte@docto.com.ar
+        </a>
+        .
+      </p>
+      <button
+        onClick={() => handleStartClick("E")}
+        className="mt-4 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
+        style={{ backgroundColor: "#378ADD", minHeight: 44 }}
+      >
+        Intentar de nuevo
       </button>
     </div>
   );
