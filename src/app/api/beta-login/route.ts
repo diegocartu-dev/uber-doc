@@ -5,8 +5,8 @@ const BETA_COOKIE = "docto_beta_access";
 export async function POST(request: Request) {
   const correct = process.env.BETA_PASSWORD;
   if (!correct) {
-    // Guard desactivado — permitir entrar y setear cookie noop por consistencia.
-    return NextResponse.json({ ok: true });
+    // Sin BETA_PASSWORD → BLOQUEAR (fail-closed). Antes era fail-open.
+    return NextResponse.json({ ok: false, error: "Beta guard no configurado" }, { status: 503 });
   }
 
   let password: string | undefined;
