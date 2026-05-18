@@ -124,12 +124,29 @@ export async function GET(req: NextRequest) {
 
   const expectedLiveMode = (process.env.VERCEL_ENV ?? process.env.NODE_ENV) === "production";
   if (tokenData.live_mode !== expectedLiveMode) {
-    logWarn("[OAUTH]", "live_mode mismatch — aceptado (sandbox activo)", {
+    const truncatedToken = tokenData.access_token.slice(0, 8) + "…";
+    logWarn("[OAUTH]", "live_mode mismatch — OAuth rechazado", {
       medicoId,
       mp_user_id: String(tokenData.user_id),
       received_live_mode: tokenData.live_mode,
       expected_live_mode: expectedLiveMode,
+      token_prefix: truncatedToken,
     });
+
+    await sendDoctoAlert(
+      "ALERTA: OAuth MP rechazado por live_mode inconsistente",
+      `Un médico intentó conectar su cuenta de Mercado Pago pero el live_mode no coincide con el entorno.\n\nMédico ID: ${medicoId}\nMP User ID: ${tokenData.user_id}\nlive_mode recibido: ${tokenData.live_mode}\nEntorno esperado: ${expectedLiveMode ? "production (live_mode=true)" : "development (live_mode=false)"}\nToken (primeros 8 chars): ${truncatedToken}\nTimestamp: ${new Date().toISOString()}\n\nEl OAuth fue rechazado automáticamente. No se guardó ningún token.`
+    );
+
+    await trackEvent({
+      evento: "mp_oauth_callback_error",
+      medicoId,
+      metadata: { sub_tipo: "live_mode_mismatch", received: tokenData.live_mode, expected: expectedLiveMode },
+    });
+
+    return NextResponse.redirect(
+      new URL(`${PERFIL_BASE}&error=credentials_mismatch`, req.url)
+    );
   }
 
   const { data: existing } = await admin
