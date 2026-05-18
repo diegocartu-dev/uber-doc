@@ -68,11 +68,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Sandbox mode: test sellers can't do OAuth with their own app in MP sandbox.
-  // Use the APP's test token instead. marketplace_fee still gets sent.
-  const isSandbox = mpAccount.live_mode === false;
-
-  if (!isSandbox && new Date(mpAccount.expires_at) <= new Date()) {
+  if (new Date(mpAccount.expires_at) <= new Date()) {
     await admin
       .from("medicos_mp_accounts")
       .update({ estado: "expirado", desconectado_en: new Date().toISOString() })
