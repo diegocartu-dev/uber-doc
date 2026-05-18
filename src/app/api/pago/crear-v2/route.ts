@@ -89,18 +89,33 @@ export async function POST(req: NextRequest) {
   let accessToken: string;
 
   if (isSandbox) {
-    // In sandbox, use the APP's test token (MP_ACCESS_TOKEN_TEST)
-    // because test sellers can't authorize the same app via OAuth.
-    const appTestToken = process.env.MP_ACCESS_TOKEN_TEST;
-    if (!appTestToken) {
-      logError("[MP-V2]", "MP_ACCESS_TOKEN_TEST no configurado para sandbox", { medicoId });
-      return NextResponse.json(
-        { error: "Error interno de configuración de cobros." },
-        { status: 500 }
-      );
+    // Sandbox marketplace: use the seller test's OAuth token so MP sees the
+    // correct collector. Fall back to the APP test token only if no seller
+    // token is stored (legacy rows).
+    let sellerToken: string | null = null;
+    if (mpAccount.access_token_encrypted) {
+      try {
+        sellerToken = decrypt(mpAccount.access_token_encrypted);
+      } catch {
+        logWarn("[MP-V2]", "No se pudo desencriptar token sandbox del seller, usando APP test token", { medicoId });
+      }
     }
-    accessToken = appTestToken;
-    logInfo("[MP-V2]", "Usando APP test token (sandbox mode)", { medicoId, tipo, recursoId: id });
+
+    if (sellerToken) {
+      accessToken = sellerToken;
+      logInfo("[MP-V2]", "Usando seller test OAuth token (sandbox mode)", { medicoId, tipo, recursoId: id });
+    } else {
+      const appTestToken = process.env.MP_ACCESS_TOKEN_TEST;
+      if (!appTestToken) {
+        logError("[MP-V2]", "MP_ACCESS_TOKEN_TEST no configurado para sandbox", { medicoId });
+        return NextResponse.json(
+          { error: "Error interno de configuración de cobros." },
+          { status: 500 }
+        );
+      }
+      accessToken = appTestToken;
+      logInfo("[MP-V2]", "Usando APP test token fallback (sandbox mode)", { medicoId, tipo, recursoId: id });
+    }
   } else {
     try {
       accessToken = decrypt(mpAccount.access_token_encrypted);
