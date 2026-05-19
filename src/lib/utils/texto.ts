@@ -21,3 +21,21 @@ export function capitalizarNombre(texto: string): string {
     })
     .join(" ");
 }
+
+/**
+ * Formatea nombre de médico con título, evitando duplicación.
+ * Si el nombre ya empieza con "Dr." o "Dra.", no agrega el título.
+ * Ejemplos:
+ *   formatNombreMedico("Carlos López")              → "Dr. Carlos López"
+ *   formatNombreMedico("Dr. Carlos López")           → "Dr. Carlos López"
+ *   formatNombreMedico("Carlos López", "Dra.")       → "Dra. Carlos López"
+ *   formatNombreMedico("Dra. Ana García", "Dra.")    → "Dra. Ana García"
+ *   formatNombreMedico("Dr. Docto Test")             → "Dr. Docto Test"
+ */
+export function formatNombreMedico(nombre: string, titulo?: string): string {
+  if (!nombre) return "";
+  const trimmed = nombre.trim();
+  if (/^Dra?\.\s/i.test(trimmed)) return capitalizarNombre(trimmed);
+  const prefix = titulo?.trim() || "Dr.";
+  return `${prefix} ${capitalizarNombre(trimmed)}`;
+}

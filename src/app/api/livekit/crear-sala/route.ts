@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { enviarPush, pushAlPaciente } from "@/lib/push";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       const pacienteId = (consulta as { paciente_id: string }).paciente_id;
       const pushPayload = {
         title: "🟢 Docto",
-        body: `El Dr. ${medico.nombre_completo} está listo. Ingresá ahora a tu consulta.`,
+        body: `El ${formatNombreMedico(medico.nombre_completo)} está listo. Ingresá ahora a tu consulta.`,
         url: tipo === "turno" ? `/turno/${consultaId}/espera` : `/consulta/${consultaId}/video`,
         tag: `inicio-${consultaId}`,
       };

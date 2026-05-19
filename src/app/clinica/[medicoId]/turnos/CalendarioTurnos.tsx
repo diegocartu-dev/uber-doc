@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { reservarTurno, limpiarReservasExpiradas, reprogramarConCredito } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { formatNombreMedico } from "@/lib/utils/texto";
 import type { CreditoPendiente } from "@/lib/cancelaciones";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
@@ -132,7 +132,7 @@ export default function CalendarioTurnos({
         <p className="mt-2 text-sm text-gray-500">
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
-        <p className="mt-1 text-sm text-gray-500">Dr. {capitalizarNombre(medico.nombre)} · {medico.especialidad}</p>
+        <p className="mt-1 text-sm text-gray-500">{formatNombreMedico(medico.nombre)} · {medico.especialidad}</p>
         {credito && (
           <p className="mt-2 text-sm font-medium text-[#1D9E75]">Se aplicó tu crédito — sin costo adicional</p>
         )}
@@ -279,7 +279,7 @@ export default function CalendarioTurnos({
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">Dr. {capitalizarNombre(medico.nombre)}</span>
+              <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>
@@ -406,7 +406,7 @@ export default function CalendarioTurnos({
 
             <div className="mt-4 space-y-1.5 text-sm">
               <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
-              <p className="text-gray-700">Dr. {capitalizarNombre(medico.nombre)}</p>
+              <p className="text-gray-700">{formatNombreMedico(medico.nombre)}</p>
               {credito ? (
                 <p className="font-medium">
                   <span className="text-gray-400 line-through mr-2">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>

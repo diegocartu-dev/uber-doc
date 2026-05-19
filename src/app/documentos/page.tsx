@@ -5,6 +5,7 @@ import DescargarPDF from "./DescargarPDF";
 import BannerConsultaActiva from "./BannerConsultaActiva";
 import { Pill, FileText, Award } from "lucide-react";
 import OrigenBadge from "@/components/OrigenBadge";
+import { formatNombreMedico } from "@/lib/utils/texto";
 import type { LucideIcon } from "lucide-react";
 
 const tipoLabel: Record<string, string> = {
@@ -224,7 +225,7 @@ export default async function DocumentosPage() {
                                 {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
                               </p>
                               <p className="mt-0.5 text-xs text-gray-500">
-                                Dr. {doc.medico_nombre}
+                                {formatNombreMedico(doc.medico_nombre)}
                               </p>
                             </div>
                           </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileText, ChevronDown, Download } from "lucide-react";
 import OrigenBadge from "@/components/OrigenBadge";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 type DocItem = {
   id: string;
@@ -141,7 +142,7 @@ export default function MisConsultasList({ items }: Props) {
                         className="text-sm font-medium truncate"
                         style={{ color: "var(--color-text-primary)" }}
                       >
-                        Dr. {item.medicoNombre}
+                        {formatNombreMedico(item.medicoNombre)}
                       </p>
                       <div className="flex items-center gap-1.5">
                         <p

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { cancelarTurnoPaciente } from "./actions";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 type Turno = {
   id: string;
@@ -86,7 +86,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                   timeZone: "America/Argentina/Buenos_Aires",
                 })} · ${t.hora_inicio.slice(0, 5)}`}
           </p>
-          <p className="mt-0.5 text-sm text-gray-500">Dr. {capitalizarNombre(t.medico_nombre)} · {t.especialidad}</p>
+          <p className="mt-0.5 text-sm text-gray-500">{formatNombreMedico(t.medico_nombre)} · {t.especialidad}</p>
         </div>
         <div className="flex items-center gap-2">
           {mostrarSala ? (
@@ -178,8 +178,8 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                   {conReembolso
-                    ? `Cancelás tu turno con el Dr. ${capitalizarNombre(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Te enviaremos un email con las opciones disponibles.`
-                    : `Cancelás tu turno con el Dr. ${capitalizarNombre(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Por nuestra política, no aplica reembolso en cancelaciones con menos de 48hs de anticipación.`}
+                    ? `Cancelás tu turno con el ${formatNombreMedico(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Te enviaremos un email con las opciones disponibles.`
+                    : `Cancelás tu turno con el ${formatNombreMedico(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Por nuestra política, no aplica reembolso en cancelaciones con menos de 48hs de anticipación.`}
                 </p>
 
                 <textarea

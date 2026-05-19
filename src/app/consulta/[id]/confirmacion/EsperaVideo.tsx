@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import BotonPush from "@/components/BotonPush";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // Boton reutilizable "Volver"
 function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
@@ -111,7 +112,7 @@ export default function EsperaVideo({
           El medico te esta esperando!
         </h1>
         <p className="mt-2 text-gray-600">
-          Tu consulta con Dr. {medicoNombre} esta lista
+          Tu consulta con {formatNombreMedico(medicoNombre)} esta lista
         </p>
 
         <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>

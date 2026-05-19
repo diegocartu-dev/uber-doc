@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlPaciente } from "@/lib/push";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     const nombreMedico = medicoMap.get(turno.medico_id) ?? "tu médico";
     const sent = await pushAlPaciente(turno.paciente_id, {
       title: "🟡 Docto",
-      body: `Tu consulta con Dr. ${nombreMedico} empieza en 10 minutos.`,
+      body: `Tu consulta con ${formatNombreMedico(nombreMedico)} empieza en 10 minutos.`,
       url: `/turno/${turno.id}/espera`,
       tag: `recordatorio-${turno.id}`,
     });

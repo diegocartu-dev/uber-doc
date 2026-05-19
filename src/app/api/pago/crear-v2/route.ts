@@ -8,6 +8,7 @@ import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { trackEvent } from "@/lib/funnel";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 type TipoPago = "consulta" | "turno";
 
@@ -263,7 +264,7 @@ async function obtenerConsulta(
   return {
     medicoId: consulta.medico_id,
     monto: medico.precio_consulta,
-    titulo: `Consulta de ${consulta.especialidad} — Dr. ${medico.nombre_completo}`,
+    titulo: `Consulta de ${consulta.especialidad} — ${formatNombreMedico(medico.nombre_completo)}`,
     descripcion: `Consulta virtual de ${medico.duracion_consulta} minutos`,
     redirectSuccess: `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`,
     redirectFailure: `/sala-espera/${consultaId}?pago=error`,
@@ -316,7 +317,7 @@ async function obtenerTurno(
   return {
     medicoId: turno.medico_id,
     monto: turno.monto,
-    titulo: `Turno programado — Dr. ${medicoNombre}`,
+    titulo: `Turno programado — ${formatNombreMedico(medicoNombre)}`,
     descripcion: `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
     redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/confirmacion`,
     redirectFailure: `/clinica/${turno.medico_id}/turnos?pago=error`,
