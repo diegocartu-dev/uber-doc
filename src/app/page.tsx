@@ -48,7 +48,7 @@ export default function EntradaGeneral() {
           style={{
             fontSize: 52,
             fontWeight: 700,
-            color: "#1A1A1A",
+            color: "var(--color-text-primary)",
             textAlign: "center",
             margin: 0,
             letterSpacing: "-0.02em",
@@ -128,13 +128,13 @@ export default function EntradaGeneral() {
       {/* Footer compacto */}
       <footer
         style={{
-          height: 48,
+          minHeight: 48,
           background: "#F8F9FA",
           borderTop: "1px solid #E5E7EB",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 24px",
+          padding: "8px 24px",
           gap: 20,
           flexWrap: "wrap",
         }}
@@ -156,6 +156,8 @@ export default function EntradaGeneral() {
       </footer>
 
       <style>{`
+        .entrada-btn:hover { opacity: 0.9; }
+        .entrada-btn:active { transform: scale(0.97); }
         @media (max-width: 640px) {
           .entrada-headline { font-size: 36px !important; }
           .entrada-botones {
