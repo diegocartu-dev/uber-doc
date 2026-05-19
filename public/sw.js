@@ -1,13 +1,15 @@
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
   const title = data.title || "Docto";
+  const isSilent = data.silent === true;
   const options = {
     body: data.body || "",
     icon: "/favicon.svg",
     badge: "/favicon.svg",
     data: { url: data.url || "/" },
     tag: data.tag || "docto-default",
-    renotify: true,
+    renotify: !isSilent,
+    silent: isSilent,
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
