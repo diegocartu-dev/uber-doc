@@ -18,6 +18,7 @@ type PushPayload = {
   body: string;
   url?: string;
   tag?: string;
+  silent?: boolean;
 };
 
 export async function enviarPush(userId: string, payload: PushPayload): Promise<boolean> {

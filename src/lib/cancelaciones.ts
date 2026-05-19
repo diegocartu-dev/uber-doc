@@ -85,6 +85,7 @@ export async function cancelarTurnoPorPaciente(
     body: `${pacNombre?.nombre_completo ?? "Un paciente"} canceló su turno del ${formatearFechaCorta(turno.fecha)}`,
     url: "/medico/agenda",
     tag: `cancelado-pac-${turnoId}`,
+    silent: true,
   }).catch(() => {});
 
   return { ok: true, reembolso };

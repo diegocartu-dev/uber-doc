@@ -94,6 +94,7 @@ export async function confirmarPagoTurno(turnoId: string) {
     body: `${pacNombre?.nombre_completo ?? "Un paciente"} reservó un turno para el ${turno.fecha}`,
     url: "/medico/agenda",
     tag: `reserva-${turnoId}`,
+    silent: true,
   }).catch(() => {});
 
   return { success: true };

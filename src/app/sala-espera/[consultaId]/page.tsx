@@ -6,6 +6,7 @@ import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 import { capitalizarNombre } from "@/lib/utils/texto";
 import { registrarEntradaSala } from "@/lib/sala-espera";
+import { pushAlMedico } from "@/lib/push";
 
 export default async function SalaEsperaPage({
   params,
@@ -49,7 +50,7 @@ export default async function SalaEsperaPage({
 
   // Registrar entrada en sala de espera (idempotente, fire-and-forget)
   const { data: paciente } = await supabase
-    .from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+    .from("pacientes").select("id, nombre_completo").eq("user_id", user.id).maybeSingle();
   if (paciente) {
     registrarEntradaSala({
       pacienteId: paciente.id,
@@ -57,6 +58,13 @@ export default async function SalaEsperaPage({
       consultaId: consulta.id,
       canalOrigen: consulta.canal_origen,
     }).catch((e) => console.error("[sala-espera] Error registrando entrada:", e));
+
+    pushAlMedico(consulta.medico_id, {
+      title: "🟢 Docto",
+      body: `${paciente.nombre_completo ?? "Un paciente"} está esperando una consulta inmediata`,
+      url: "/dashboard",
+      tag: `espera-ci-${consulta.id}`,
+    }, true).catch(() => {});
   }
 
   // Contar posición en la cola (consultas esperando antes que esta)

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getFlag } from "@/lib/feature-flags";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function crearConsulta(
   medicoId: string,
   especialidad: string,
@@ -12,7 +14,6 @@ export async function crearConsulta(
   tiempoSintomas: string,
   canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
 ) {
-  // Feature flag: consulta inmediata
   if (!(await getFlag("consulta_inmediata_global"))) {
     return { error: "La Consulta Inmediata esta en pausa por unos minutos. Proba de nuevo enseguida." };
   }
@@ -30,12 +31,45 @@ export async function crearConsulta(
     return { error: "El motivo de consulta es obligatorio." };
   }
 
+  if (!UUID_RE.test(medicoId)) {
+    return { error: "El médico seleccionado no está disponible." };
+  }
+
+  const { data: medico, error: medicoError } = await supabase
+    .from("medicos")
+    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test")
+    .eq("id", medicoId)
+    .single();
+
+  if (medicoError || !medico) {
+    return { error: "El médico seleccionado no está disponible." };
+  }
+
+  if (medico.es_cuenta_test || !medico.verificado || medico.estado_registro !== "aprobado") {
+    return { error: "El médico seleccionado no está disponible." };
+  }
+
+  if (!medico.disponible) {
+    return { error: "El médico no está disponible en este momento. Por favor, elegí otro profesional." };
+  }
+
+  const { count } = await supabase
+    .from("consultas")
+    .select("id", { count: "exact", head: true })
+    .eq("paciente_id", user.id)
+    .eq("medico_id", medicoId)
+    .in("estado", ["esperando", "aceptada", "en_curso"]);
+
+  if (count && count > 0) {
+    return { error: "Ya tenés una consulta activa con este profesional." };
+  }
+
   const { data, error } = await supabase
     .from("consultas")
     .insert({
       paciente_id: user.id,
       medico_id: medicoId,
-      especialidad,
+      especialidad: medico.especialidad,
       estado: "esperando",
       motivo_consulta: motivoConsulta.trim(),
       sintomas,
@@ -46,7 +80,8 @@ export async function crearConsulta(
     .single();
 
   if (error) {
-    return { error: error.message };
+    console.error("crearConsulta insert failed:", error.code);
+    return { error: "No se pudo crear la consulta. Por favor, intentá de nuevo." };
   }
 
   redirect(`/sala-espera/${data.id}`);
