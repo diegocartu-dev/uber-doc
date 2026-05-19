@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turnos/actions";
 import LoadingButton from "@/components/ui/LoadingButton";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 type Props = {
   turnoId: string;
@@ -105,7 +106,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Médico</span>
-            <span className="font-medium text-gray-900">Dr. {medico.nombre}</span>
+            <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Especialidad</span>

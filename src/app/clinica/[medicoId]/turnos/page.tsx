@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CalendarioTurnos from "./CalendarioTurnos";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { capitalizarNombre, formatNombreMedico } from "@/lib/utils/texto";
 import { obtenerCreditosPendientes } from "@/lib/cancelaciones";
 
 export default async function TurnosPage({
@@ -72,7 +72,7 @@ export default async function TurnosPage({
           <p className="text-xs font-medium tracking-wide text-gray-400">
             {credito ? "REPROGRAMAR TURNO" : "AGENDAR TURNO"}
           </p>
-          <p className="mt-2 text-lg font-medium text-gray-900">Dr. {capitalizarNombre(medico.nombre_completo)}</p>
+          <p className="mt-2 text-lg font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo)}</p>
           <p className="mt-0.5 text-sm text-gray-500">
             {medico.especialidad} · {medico.duracion_consulta} min · ${medico.precio_consulta?.toLocaleString("es-AR")}
           </p>

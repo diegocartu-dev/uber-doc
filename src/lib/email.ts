@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 async function emailsActivos(): Promise<boolean> {
   try {
@@ -339,7 +340,7 @@ export async function enviarDocumentoMedico(params: {
       Hola ${pacienteNombre},
     </p>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      El Dr. ${medicoNombre} te comparti&oacute; un documento de tu consulta del ${fecha}.
+      El ${formatNombreMedico(medicoNombre)} te comparti&oacute; un documento de tu consulta del ${fecha}.
     </p>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
       Encontr&aacute;s el archivo adjunto a este email.
@@ -350,7 +351,7 @@ export async function enviarDocumentoMedico(params: {
   await resend().emails.send({
     from: FROM,
     to: pacienteEmail,
-    subject: `El Dr. ${medicoNombre} te envió un documento de tu consulta`,
+    subject: `El ${formatNombreMedico(medicoNombre)} te envió un documento de tu consulta`,
     html,
     attachments: [{ filename: archivo.filename, content: archivo.content }],
   });

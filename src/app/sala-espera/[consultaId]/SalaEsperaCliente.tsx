@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 import { Video, CheckCircle } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const POLL_INTERVAL = 5000;
 
@@ -133,7 +134,7 @@ export default function SalaEsperaCliente({
           ? "Ya podés unirte a la consulta"
           : aceptada
             ? "Esperando que el médico inicie la videollamada..."
-            : `Esperando que el Dr. ${medicoNombre} acepte tu consulta...`}
+            : `Esperando que el ${formatNombreMedico(medicoNombre)} acepte tu consulta...`}
       </p>
 
       {/* Info card */}

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioLoginClient from "./ConsultorioLoginClient";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") return { title: "Médico no encontrado — Docto" };
 
   return {
-    title: `Dr. ${capitalizarNombre(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
+    title: `${formatNombreMedico(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
     robots: { index: false, follow: false },
   };
 }
@@ -89,7 +89,7 @@ export default async function ConsultorioPublicoPage({
           className="mt-5 text-xl font-semibold"
           style={{ color: "var(--color-text-primary)" }}
         >
-          Dr. {capitalizarNombre(medico.nombre_completo)}
+          {formatNombreMedico(medico.nombre_completo)}
         </h1>
         <p
           className="mt-1 text-sm"

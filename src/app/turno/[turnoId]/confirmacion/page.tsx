@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 import BotonPush from "@/components/BotonPush";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -62,7 +63,7 @@ export default async function ConfirmacionTurnoPage({
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">Dr. {medico?.nombre_completo ?? "Médico"}</span>
+              <span className="font-medium text-gray-900">{formatNombreMedico(medico?.nombre_completo ?? "Médico")}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>

@@ -12,6 +12,7 @@ import {
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -378,7 +379,7 @@ export default function SalaConsultaPaciente({
                 Consulta finalizada
               </h1>
               <p className="mt-2 text-gray-600">
-                Tu consulta con Dr. {medicoNombre} ha finalizado
+                Tu consulta con {formatNombreMedico(medicoNombre)} ha finalizado
               </p>
             </div>
 
@@ -490,7 +491,7 @@ export default function SalaConsultaPaciente({
               Consulta cancelada
             </h1>
             <p className="mt-2 text-gray-600">
-              La consulta con Dr. {medicoNombre} fue cancelada
+              La consulta con {formatNombreMedico(medicoNombre)} fue cancelada
             </p>
             <a
               href="/dashboard"
@@ -520,7 +521,7 @@ export default function SalaConsultaPaciente({
           </div>
           <div className="hidden sm:block h-4 w-px bg-white/20" />
           <p className="text-sm text-white/80 truncate">
-            Consulta con Dr. {medicoNombre}
+            Consulta con {formatNombreMedico(medicoNombre)}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

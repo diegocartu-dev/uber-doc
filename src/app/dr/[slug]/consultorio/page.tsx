@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioPrivadoClient from "./ConsultorioPrivadoClient";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 export default async function ConsultorioPrivadoPage({
   params,
@@ -104,7 +104,7 @@ export default async function ConsultorioPrivadoPage({
             className="text-lg font-medium"
             style={{ color: "var(--color-text-primary)" }}
           >
-            Bienvenido al consultorio virtual del Dr. {capitalizarNombre(medico.nombre_completo)}
+            Bienvenido al consultorio virtual del {formatNombreMedico(medico.nombre_completo)}
           </h1>
           <p
             className="mt-1 text-sm"
@@ -135,7 +135,7 @@ export default async function ConsultorioPrivadoPage({
                 className="text-lg font-semibold"
                 style={{ color: "var(--color-text-primary)" }}
               >
-                Dr. {capitalizarNombre(medico.nombre_completo)}
+                {formatNombreMedico(medico.nombre_completo)}
               </h1>
               <p
                 className="text-sm"

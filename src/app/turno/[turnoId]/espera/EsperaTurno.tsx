@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
 import { CheckCircle, XCircle, Video } from "lucide-react";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 type Props = {
   turnoId: string;
@@ -113,7 +114,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       </h1>
 
       <p className="mt-2 text-sm text-gray-600">
-        {estado === "esperando" ? `Esperando que el Dr. ${medicoNombre} inicie la consulta...`
+        {estado === "esperando" ? `Esperando que el ${formatNombreMedico(medicoNombre)} inicie la consulta...`
           : estado === "iniciando" ? "Preparando la videollamada..."
           : estado === "finalizado" ? "Los documentos están disponibles en tu perfil. Redirigiendo..."
           : estado === "cancelado" ? "Redirigiendo al inicio..."
@@ -125,7 +126,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Médico</span>
-            <span className="font-medium text-gray-900">Dr. {medicoNombre}</span>
+            <span className="font-medium text-gray-900">{formatNombreMedico(medicoNombre)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Especialidad</span>

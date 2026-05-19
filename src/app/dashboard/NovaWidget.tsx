@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 function getSaludo(): string {
   const hora = new Date(
@@ -35,7 +36,7 @@ export default function NovaWidget({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-base font-medium text-[#1a1a1a] lg:text-lg">
-            {saludo}, Dr. {nombreMedico}
+            {saludo}, {formatNombreMedico(nombreMedico)}
           </p>
           <p className="mt-1 text-sm text-[#6b7280]">
             Hoy tenes{" "}

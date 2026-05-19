@@ -21,6 +21,7 @@ import BannerMercadoPago from "./BannerMercadoPago";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import { getFlag } from "@/lib/feature-flags";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 export default async function DashboardPage({
   searchParams,
@@ -602,7 +603,7 @@ export default async function DashboardPage({
               <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-info)" }}>CONSULTA EN CURSO</span>
             </div>
             <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-              Tu consulta con Dr. {turnoEnCursoPaciente.medico_nombre} esta en curso
+              Tu consulta con {formatNombreMedico(turnoEnCursoPaciente.medico_nombre)} esta en curso
             </p>
             <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
             <Link
@@ -635,10 +636,10 @@ export default async function DashboardPage({
             </div>
             <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
               {consultaActiva.estado === "en_curso"
-                ? `Tu consulta con Dr. ${consultaActiva.medico_nombre} esta en curso`
+                ? `Tu consulta con ${formatNombreMedico(consultaActiva.medico_nombre)} esta en curso`
                 : "Tu medico te atendera en breve"}
             </p>
-            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad} - Dr. {consultaActiva.medico_nombre}</p>
+            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad} - {formatNombreMedico(consultaActiva.medico_nombre)}</p>
             <Link
               href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
               className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
@@ -660,7 +661,7 @@ export default async function DashboardPage({
                 <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-success)" }}>EN SALA DE ESPERA</span>
               </div>
               <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>Tu medico te atendera en breve</p>
-              <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Dr. {enEspera.medico_nombre} - {enEspera.hora_inicio.slice(0, 5)} hs</p>
+              <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{formatNombreMedico(enEspera.medico_nombre)} - {enEspera.hora_inicio.slice(0, 5)} hs</p>
               <Link
                 href={`/turno/${enEspera.id}/espera`}
                 className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
@@ -692,7 +693,7 @@ export default async function DashboardPage({
             <div className="mb-5 rounded-[var(--radius-lg)] bg-white p-5" style={{ border: "1px solid var(--color-border-default)" }}>
               <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>TU PROXIMO TURNO</p>
               <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con Dr. {proximoHoy.medico_nombre}
+                Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con {formatNombreMedico(proximoHoy.medico_nombre)}
               </p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>{proximoHoy.especialidad}</p>
               {mostrarSala && (

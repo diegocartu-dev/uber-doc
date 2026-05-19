@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import path from "path";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bwipjs = require("bwip-js");
@@ -120,7 +121,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
         margins: MARGIN,
         info: {
           Title: `${tipoLabel[doc.tipo] ?? "Documento"} - ${doc.paciente_nombre}`,
-          Author: `Dr. ${doc.medico_nombre}`,
+          Author: `${formatNombreMedico(doc.medico_nombre)}`,
           Creator: "Docto - Telemedicina",
         },
       });
@@ -242,7 +243,7 @@ async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) 
   const barcodeSpacing = 4;
 
   const rows: string[] = [];
-  rows.push(`Dr. ${doc.medico_nombre}`);
+  rows.push(formatNombreMedico(doc.medico_nombre));
   rows.push(`${doc.medico_especialidad} — ${doc.medico_matricula}`);
   if (doc.medico_domicilio) {
     rows.push(doc.medico_domicilio);
@@ -413,7 +414,7 @@ async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTop
 
   // Nombre del médico
   pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
-  pdf.text(`Dr. ${doc.medico_nombre}`, lineX, firmaY + 5, {
+  pdf.text(formatNombreMedico(doc.medico_nombre), lineX, firmaY + 5, {
     width: firmaWidth,
     align: "center",
   });
@@ -494,7 +495,7 @@ function renderFooter(
     // Leyenda 1: Firma electrónica
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
-      `Este documento ha sido firmado —electrónica o digitalmente según corresponda— por Dr. ${doc.medico_nombre}.`,
+      `Este documento ha sido firmado —electrónica o digitalmente según corresponda— por ${formatNombreMedico(doc.medico_nombre)}.`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
