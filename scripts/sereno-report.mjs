@@ -29,7 +29,7 @@ function walkSuites(suites) {
             title: spec.title,
             file: suite.file || spec.file || "",
             status: "passed",
-            duration_ms: duration,
+            duration_ms: Math.round(duration),
           });
         } else {
           failed++;
@@ -38,7 +38,7 @@ function walkSuites(suites) {
             file: suite.file || spec.file || "",
             status: "failed",
             error: test.results?.[0]?.error?.message?.slice(0, 500) || "Error desconocido",
-            duration_ms: duration,
+            duration_ms: Math.round(duration),
           });
         }
       }
@@ -63,7 +63,7 @@ const payload = {
   passed,
   failed,
   total: totalTests,
-  duration_ms: totalDuration,
+  duration_ms: Math.round(totalDuration),
   status: failed > 0 ? "fail" : "ok",
   details,
 };

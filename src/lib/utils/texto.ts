@@ -13,12 +13,7 @@ export function capitalizarNombre(texto: string): string {
     .trim()
     .toLowerCase()
     .split(/\s+/)
-    .map((palabra) => {
-      if (palabra === "dr." || palabra === "dra.") {
-        return palabra.charAt(0).toUpperCase() + palabra.slice(1);
-      }
-      return palabra.charAt(0).toUpperCase() + palabra.slice(1);
-    })
+    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
     .join(" ");
 }
 
@@ -36,6 +31,7 @@ export function formatNombreMedico(nombre: string, titulo?: string): string {
   if (!nombre) return "";
   const trimmed = nombre.trim();
   if (/^Dra?\.\s/i.test(trimmed)) return capitalizarNombre(trimmed);
+  if (/^Dra?\./i.test(trimmed)) return capitalizarNombre(trimmed.replace(/^(Dra?\.)/i, "$1 "));
   const prefix = titulo?.trim() || "Dr.";
   return `${prefix} ${capitalizarNombre(trimmed)}`;
 }
