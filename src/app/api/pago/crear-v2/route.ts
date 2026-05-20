@@ -266,7 +266,7 @@ async function obtenerConsulta(
     monto: medico.precio_consulta,
     titulo: `Consulta de ${consulta.especialidad} — ${formatNombreMedico(medico.nombre_completo)}`,
     descripcion: `Consulta virtual de ${medico.duracion_consulta} minutos`,
-    redirectSuccess: `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`,
+    redirectSuccess: `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/consentimiento`,
     redirectFailure: `/sala-espera/${consultaId}?pago=error`,
     redirectPending: `/sala-espera/${consultaId}?pago=pendiente`,
   };
@@ -319,7 +319,7 @@ async function obtenerTurno(
     monto: turno.monto,
     titulo: `Turno programado — ${formatNombreMedico(medicoNombre)}`,
     descripcion: `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
-    redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/confirmacion`,
+    redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/consentimiento`,
     redirectFailure: `/clinica/${turno.medico_id}/turnos?pago=error`,
     redirectPending: `/clinica/${turno.medico_id}/turnos?pago=pendiente`,
   };
