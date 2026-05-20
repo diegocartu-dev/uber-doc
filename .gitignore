@@ -45,3 +45,17 @@ docs-private/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Documentación regulatoria (NO subir a GitHub - contiene DNI y datos personales)
+RECETA DIGITAL DOCUMENTACIÓN/
+
+# Documentación regulatoria y archivos sensibles (NO subir a GitHub)
+RECETA DIGITAL DOCUMENTACIÓN/
+RECETA DIGITAL DOCUMENTACIÓN /
+DOCUMENTACION*/
+*.pdf
+*.docx
+!docs/**/*.pdf
+!docs/**/*.docx
+design_handoff_landing/
+files.zip
