@@ -63,7 +63,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
 
       <h2>5. Pagos, aranceles y política de reembolsos</h2>
       <h3>5.1 Estructura de pagos</h3>
-      <p>Los pagos se procesan a través de Mercado Pago mediante el sistema de pagos divididos. Docto retiene una comisión del 15% sobre el valor de cada consulta como contraprestación por el uso de la plataforma. El 85% restante es acreditado al profesional de la salud.</p>
+      <p>Los pagos se procesan a través de Mercado Pago mediante el sistema de pagos divididos. Docto retiene una comisión sobre el valor de cada consulta como contraprestación por el uso de la plataforma. El porcentaje de comisión depende de la categoría del profesional y se informa de forma transparente antes de la primera publicación de turnos. El resto es acreditado directamente al profesional de la salud.</p>
       <p>Los precios de cada consulta son establecidos por el profesional y se muestran claramente antes de confirmar la reserva. Al confirmar y pagar, aceptás el arancel informado.</p>
       <h3>5.2 Reembolsos — Consulta Inmediata</h3>
       <ul>
@@ -97,7 +97,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Row Level Security en la base de datos — cada usuario solo accede a sus propios datos.</li>
         <li>Autenticación segura mediante contraseña y Google OAuth.</li>
       </ul>
-      <p>Los datos no son vendidos ni cedidos a terceros con fines comerciales. El titular de los datos puede ejercer sus derechos de acceso, rectificación, actualización y supresión enviando un correo a soporte@docto.com.ar. Los datos se conservan por un plazo de 5 años desde la última actividad.</p>
+      <p>Los datos no son vendidos ni cedidos a terceros con fines comerciales. El titular de los datos puede ejercer sus derechos de acceso, rectificación, actualización y supresión enviando un correo a soporte@docto.com.ar. Los datos clínicos (diagnósticos, recetas, indicaciones, historia clínica) se conservan por un plazo mínimo de 10 años desde la última actuación, conforme al art. 18 de la Ley 26.529. Los datos de perfil e identificación se conservan por 5 años desde la última actividad o hasta que el titular solicite su supresión. Para más información, consultá nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
 
       <h2>8. Conducta del usuario y usos prohibidos</h2>
       <p>Al utilizar Docto, el usuario se compromete a no:</p>
@@ -141,9 +141,11 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </ul>
 
       <div className="mt-8 border-t border-gray-200 pt-4 text-center text-xs text-gray-400">
-        Docto — docto.com.ar — Última actualización: 26 de abril de 2026
+        Docto — docto.com.ar — Diego Oscar González, CUIT 20-25086458-3
         <br />
-        AAIP RL-2026-36086505 | soporte@docto.com.ar
+        AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
+        <br />
+        Última actualización: mayo de 2026
       </div>
     </article>
   );

@@ -7,6 +7,7 @@ const linkMap: Record<string, string> = {
   "Mis consultas": "/mis-consultas",
   "Sumate a Docto": "/auth/registro-medico",
   "Términos": "/terminos",
+  "Privacidad": "/privacidad",
 };
 
 const footerCols = [
@@ -71,15 +72,15 @@ export default function Footer() {
           flexWrap: "wrap", gap: 14,
         }}>
           <div style={{ fontSize: 12.5, color: "var(--color-text-tertiary)" }}>
-            © 2026 Docto Telemedicina S.A.S. · Buenos Aires, Argentina
+            © 2026 Docto — Diego Oscar González, CUIT 20-25086458-3 · Puerto Madero, CABA
           </div>
           <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", display: "flex", gap: 14, alignItems: "center" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <ShieldCheck size={13} strokeWidth={1.75} />
-              Superintendencia de Servicios de Salud
+              AAIP RL-2026-36086505
             </span>
             <span>·</span>
-            <span>AAIP RL-2026-36086505</span>
+            <span>ReNaPDiS Plataforma 0270</span>
             <span>·</span>
             <span>Hecho en Argentina</span>
           </div>

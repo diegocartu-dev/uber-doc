@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import vademecum from "@/data/vademecum.json";
+import { esControlado } from "@/data/controlados";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -138,6 +139,7 @@ export default function MedicamentoAutocomplete({
   const [sugerencias, setSugerencias] = useState<Medicamento[]>([]);
   const [showSugerencias, setShowSugerencias] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [bloqueadoControlado, setBloqueadoControlado] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const activo = dictando === "receta";
@@ -173,6 +175,14 @@ export default function MedicamentoAutocomplete({
   const agregarMedicamento = useCallback(
     (med: Medicamento) => {
       const droga = med.droga?.trim() || med.nombre;
+
+      if (esControlado(droga)) {
+        setBloqueadoControlado(droga);
+        setQuery("");
+        setShowSugerencias(false);
+        return;
+      }
+
       const nombreReceta = droga !== med.nombre ? `${droga} (${med.nombre})` : med.nombre;
       const nuevo: MedicamentoReceta = {
         id: uid(),
@@ -334,6 +344,55 @@ export default function MedicamentoAutocomplete({
       <p className="mt-1 text-[10px] text-gray-400">
         Buscá por nombre comercial o droga (IFA). Si no aparece, escribilo en texto libre.
       </p>
+
+      {/* Dialog de bloqueo de controlados */}
+      {bloqueadoControlado && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999, padding: 24,
+          }}
+          onClick={() => setBloqueadoControlado(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff", borderRadius: 16, padding: "28px 24px",
+              maxWidth: 420, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 600, color: "#111827", margin: 0 }}>
+                Este medicamento requiere receta especial
+              </p>
+            </div>
+            <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 12px" }}>
+              Los medicamentos con <strong>{bloqueadoControlado}</strong> están incluidos en las listas de sustancias controladas (Ley 17.818 y Ley 19.303) y requieren receta firmada digitalmente conforme al Decreto 345/2024.
+            </p>
+            <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 20px" }}>
+              Docto utiliza firma electrónica, válida para recetas comunes pero no para medicamentos controlados. Emití esta receta por el canal habitual que utilices para controlados (recetario oficial o plataforma con firma digital habilitada).
+            </p>
+            <button
+              type="button"
+              onClick={() => setBloqueadoControlado(null)}
+              style={{
+                width: "100%", padding: "12px 0", background: "#378ADD", color: "#fff",
+                fontSize: 14, fontWeight: 500, border: "none", borderRadius: 10,
+                cursor: "pointer",
+              }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

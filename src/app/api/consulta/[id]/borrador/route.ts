@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { esControlado } from "@/data/controlados";
 
 export async function PATCH(
   request: NextRequest,
@@ -57,6 +58,31 @@ export async function PATCH(
         { error: "No autorizado para esta consulta" },
         { status: 403 }
       );
+    }
+
+    // Validar que no haya medicamentos controlados en el borrador
+    const borradorAny = borrador as Record<string, unknown>;
+    if (Array.isArray(borradorAny.medicamentos_structured)) {
+      for (const med of borradorAny.medicamentos_structured) {
+        const droga = (med as Record<string, string>).droga ?? (med as Record<string, string>).nombre ?? "";
+        if (esControlado(droga)) {
+          return NextResponse.json(
+            { error: "Medicamento controlado detectado. Requiere receta con firma digital." },
+            { status: 422 }
+          );
+        }
+      }
+    }
+    if (typeof borradorAny.receta_texto_libre === "string" && borradorAny.receta_texto_libre.trim()) {
+      const palabras = (borradorAny.receta_texto_libre as string).split(/[\s,;.()\/\-]+/);
+      for (const palabra of palabras) {
+        if (palabra.length >= 4 && esControlado(palabra)) {
+          return NextResponse.json(
+            { error: "Texto libre contiene sustancia controlada. Requiere receta con firma digital." },
+            { status: 422 }
+          );
+        }
+      }
     }
 
     const { error: updateError } = await supabase
