@@ -30,7 +30,11 @@ export async function POST(req: NextRequest) {
 
   if (!result.ok) {
     return NextResponse.json(
-      { error: result.error, cooldown_restante: result.cooldown_restante },
+      {
+        error: result.error,
+        cooldown_restante: result.cooldown_restante,
+        bloqueado_hasta: result.bloqueado_hasta,
+      },
       { status: 429 }
     );
   }
