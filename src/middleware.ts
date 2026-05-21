@@ -1,11 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { updateSession } from "@/lib/supabase/middleware";
 
 const BETA_COOKIE = "docto_beta_access";
+const ACTIVITY_COOKIE = "docto_last_activity";
+const INACTIVITY_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 horas — Anexo I
+
+// Solo rutas con sesión activa en curso (video, sala de espera)
+const TIMEOUT_EXEMPT_SUFFIXES = [
+  "/sala",          // /consulta/[id]/sala — video paciente CI
+  "/video",         // /turno/[id]/video — video turno
+  "/espera",        // /turno/[id]/espera — sala de espera turno
+  "/workspace",     // /medico/consulta/[id]/workspace — video médico
+];
+
+const TIMEOUT_EXEMPT_PREFIXES = [
+  "/medico/consulta/", // workspace médico completo
+  "/sala-espera",
+  "/auth/",
+  "/api/",
+  "/beta-access",
+];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.
-// Todo lo demás queda público (home, login, dashboards privados con su propia
-// auth, /api/webhooks, crons, etc).
 const BETA_PROTECTED = [
   "/auth/register",         // registro paciente
   "/auth/registro-medico",  // registro médico
@@ -21,7 +38,6 @@ function passesBetaGuard(request: NextRequest): boolean {
   const password = process.env.BETA_PASSWORD;
 
   // Sin BETA_PASSWORD seteada → BLOQUEAR (fail-closed).
-  // Antes era fail-open — causó breach de 77 cuentas.
   if (!password) return false;
 
   // Solo intercepta rutas de creación de cuenta. El resto pasa libre.
@@ -31,8 +47,15 @@ function passesBetaGuard(request: NextRequest): boolean {
   return cookie?.value === password;
 }
 
+function isTimeoutExempt(pathname: string): boolean {
+  if (TIMEOUT_EXEMPT_PREFIXES.some((p) => pathname.startsWith(p))) return true;
+  const segments = pathname.split("/");
+  const lastSegment = "/" + (segments[segments.length - 1] || "");
+  return TIMEOUT_EXEMPT_SUFFIXES.some((s) => lastSegment === s);
+}
+
 export async function middleware(request: NextRequest) {
-  // 1. Beta Guard — si no pasa, redirigir a /beta-access antes de cualquier cosa
+  // 1. Beta Guard
   if (!passesBetaGuard(request)) {
     const url = request.nextUrl.clone();
     url.pathname = "/beta-access";
@@ -40,11 +63,64 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2. Refresh de sesión Supabase
+  // 2. Inactivity timeout — cookie HttpOnly seteada por este middleware
+  const pathname = request.nextUrl.pathname;
+  const exempt = isTimeoutExempt(pathname);
+
+  if (!exempt) {
+    const lastActivity = request.cookies.get(ACTIVITY_COOKIE)?.value;
+    const now = Date.now();
+
+    if (lastActivity) {
+      const elapsed = now - Number(lastActivity);
+      if (elapsed > INACTIVITY_TIMEOUT_MS) {
+        // Invalidar sesión Supabase server-side
+        const supabase = createServerClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            cookies: {
+              getAll() { return request.cookies.getAll(); },
+              setAll() { /* no-op for signOut */ },
+            },
+          }
+        );
+        await supabase.auth.signOut();
+
+        const url = request.nextUrl.clone();
+        url.pathname = "/auth/login";
+        url.searchParams.set("reason", "inactivity");
+        const response = NextResponse.redirect(url);
+        response.cookies.delete(ACTIVITY_COOKIE);
+        // Borrar cookies de sesión Supabase del browser
+        for (const cookie of request.cookies.getAll()) {
+          if (cookie.name.startsWith("sb-")) {
+            response.cookies.delete(cookie.name);
+          }
+        }
+        return response;
+      }
+    }
+    // No hay cookie → si hay sesión Supabase, tratar como primera actividad.
+    // Si no hay sesión, updateSession se encarga del redirect a login.
+  }
+
+  // 3. Refresh de sesión Supabase
   const response = await updateSession(request);
 
-  // 3. Header noindex para /dr/* (consultorio privado)
-  if (request.nextUrl.pathname.startsWith("/dr/")) {
+  // 4. Stamp de actividad — cookie HttpOnly, no manipulable por JS
+  if (!exempt) {
+    response.cookies.set(ACTIVITY_COOKIE, String(Date.now()), {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 24h
+    });
+  }
+
+  // 5. Header noindex para /dr/* (consultorio privado)
+  if (pathname.startsWith("/dr/")) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
 
@@ -53,9 +129,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // auth/callback excluido para no interferir con PKCE flow de Supabase.
-    // auth/register y auth/registro-medico DEBEN pasar por el middleware
-    // para que el beta guard los intercepte.
     "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
