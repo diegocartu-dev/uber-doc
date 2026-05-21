@@ -95,6 +95,10 @@ export async function firmarReceta(
     return { ok: false, error: "Solo se pueden firmar recetas en borrador" };
   }
 
+  if (!receta.consulta_id && !receta.turno_id) {
+    return { ok: false, error: "Receta sin consulta ni turno asociado" };
+  }
+
   // Verificar scope: el OTP debe corresponder a la misma consulta/turno
   if (receta.consulta_id && otp.consulta_id !== receta.consulta_id) {
     return { ok: false, error: "OTP no corresponde a esta consulta" };
