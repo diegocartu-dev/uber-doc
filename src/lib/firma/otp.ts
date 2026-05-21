@@ -44,7 +44,8 @@ export async function verificarLockout(medicoId: string): Promise<{
     .eq("medico_id", medicoId)
     .eq("usado", true)
     .gte("intentos", MAX_INTENTOS)
-    .gte("created_at", hace24h);
+    .gte("created_at", hace24h)
+    .order("created_at", { ascending: true });
 
   const totalFallidos = count ?? fallidos?.length ?? 0;
 
@@ -138,6 +139,13 @@ export async function validarOTP(
   turnoId?: string
 ): Promise<ValidarResult> {
   const supabase = createAdminClient();
+
+  // Fix 1.3: Scope obligatorio — defense-in-depth
+  // La validación está también en el endpoint, pero la función de dominio
+  // debe protegerse a sí misma contra callers futuros sin scope.
+  if (!consultaId && !turnoId) {
+    return { ok: false, error: "Debe especificar consultaId o turnoId" };
+  }
 
   // Fix 1.1: Verificar lockout antes de validar
   const lockout = await verificarLockout(medicoId);
