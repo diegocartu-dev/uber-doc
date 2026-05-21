@@ -6,6 +6,32 @@ import {
   desencriptarClavePrivada,
 } from "./crypto";
 
+const OTP_VENTANA_MS = 2 * 60 * 1000;
+
+// Fix 3.3: JSON.stringify no garantiza orden de keys.
+// JSONB en PostgreSQL puede reordenar keys al almacenar.
+// canonicalJSON ordena keys recursivamente para hash determinístico.
+function canonicalJSON(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean" || typeof value === "number") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonicalJSON).join(",") + "]";
+  }
+  if (typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const pairs = keys.map(
+      (k) => JSON.stringify(k) + ":" + canonicalJSON((value as Record<string, unknown>)[k])
+    );
+    return "{" + pairs.join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+export { canonicalJSON };
+
 type FirmaResult = {
   ok: true;
   hash: string;
@@ -18,13 +44,38 @@ type FirmaResult = {
 
 export async function firmarReceta(
   recetaId: string,
-  medicoId: string
+  medicoId: string,
+  otpId: string
 ): Promise<FirmaResult> {
   const supabase = createAdminClient();
 
+  // Fix 5.1: Verificar OTP válido antes de firmar
+  const { data: otp } = await supabase
+    .from("otp_firma")
+    .select("id, medico_id, usado, consulta_id, turno_id, created_at")
+    .eq("id", otpId)
+    .single();
+
+  if (!otp) {
+    return { ok: false, error: "OTP no encontrado" };
+  }
+
+  if (!otp.usado) {
+    return { ok: false, error: "OTP no fue validado" };
+  }
+
+  if (otp.medico_id !== medicoId) {
+    return { ok: false, error: "OTP no pertenece a este médico" };
+  }
+
+  const otpAge = Date.now() - new Date(otp.created_at).getTime();
+  if (otpAge > OTP_VENTANA_MS) {
+    return { ok: false, error: "OTP expirado para firma" };
+  }
+
   const { data: receta } = await supabase
     .from("recetas")
-    .select("id, medico_id, estado, datos_prescripcion, firma_digital")
+    .select("id, medico_id, estado, datos_prescripcion, firma_digital, consulta_id, turno_id")
     .eq("id", recetaId)
     .single();
 
@@ -44,6 +95,14 @@ export async function firmarReceta(
     return { ok: false, error: "Solo se pueden firmar recetas en borrador" };
   }
 
+  // Verificar scope: el OTP debe corresponder a la misma consulta/turno
+  if (receta.consulta_id && otp.consulta_id !== receta.consulta_id) {
+    return { ok: false, error: "OTP no corresponde a esta consulta" };
+  }
+  if (receta.turno_id && otp.turno_id !== receta.turno_id) {
+    return { ok: false, error: "OTP no corresponde a este turno" };
+  }
+
   const { data: claves } = await supabase
     .from("medico_claves")
     .select("clave_publica, clave_privada_enc")
@@ -54,7 +113,7 @@ export async function firmarReceta(
     return { ok: false, error: "Médico sin claves de firma" };
   }
 
-  const contenido = JSON.stringify(receta.datos_prescripcion);
+  const contenido = canonicalJSON(receta.datos_prescripcion);
   const hash = hashSHA256(contenido);
   const clavePrivada = desencriptarClavePrivada(claves.clave_privada_enc);
   const firma = firmar(hash, clavePrivada);
@@ -66,6 +125,7 @@ export async function firmarReceta(
     algoritmo: "RSA-SHA256",
     firmado_at: firmadoAt,
     medico_id: medicoId,
+    otp_id: otpId,
   };
 
   const { data: updated, error: updateError } = await supabase
@@ -133,7 +193,7 @@ export async function verificarFirma(
     return { valida: false, alterada: false, datos: null };
   }
 
-  const contenidoActual = JSON.stringify(receta.datos_prescripcion);
+  const contenidoActual = canonicalJSON(receta.datos_prescripcion);
   const hashActual = hashSHA256(contenidoActual);
   const alterada = hashActual !== fd.hash;
   const firmaValida = verificar(fd.hash, fd.firma, claves.clave_publica);
