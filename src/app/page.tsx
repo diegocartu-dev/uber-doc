@@ -286,7 +286,7 @@ export default async function Home({
                         marginTop: 1,
                       }}
                     >
-                      <Check size={12} style={{ color: "#3F7A52" }} />
+                      <Check size={12} style={{ color: "#1D9E75" }} />
                     </div>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: f.description ? 1 : 0 }}>
