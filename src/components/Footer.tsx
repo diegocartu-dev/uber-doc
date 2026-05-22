@@ -11,10 +11,9 @@ const linkMap: Record<string, string> = {
 };
 
 const footerCols = [
-  { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas", "Ayuda"] },
-  { title: "Médicos", links: ["Sumate a Docto", "Cómo cobramos", "Panel profesional", "Receta digital"] },
-  { title: "Empresa", links: ["Sobre nosotros", "Blog", "Prensa", "Contacto"] },
-  { title: "Legal", links: ["Términos", "Privacidad", "Aviso médico", "Política de reembolsos"] },
+  { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas"] },
+  { title: "Médicos", links: ["Sumate a Docto"] },
+  { title: "Legal", links: ["Términos", "Privacidad"] },
 ];
 
 export default function Footer() {
@@ -27,7 +26,7 @@ export default function Footer() {
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div
           className="landing-footer-grid"
-          style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(4, 1fr)", gap: 40, marginBottom: 48 }}
+          style={{ display: "grid", gridTemplateColumns: "1.6fr repeat(3, 1fr)", gap: 40, marginBottom: 48 }}
         >
           <div>
             <div className="flex items-center gap-2">
@@ -81,8 +80,6 @@ export default function Footer() {
             </span>
             <span>·</span>
             <span>ReNaPDiS Plataforma 0270</span>
-            <span>·</span>
-            <span>Hecho en Argentina</span>
           </div>
         </div>
       </div>
