@@ -157,12 +157,7 @@ export default function LoginPage() {
             Creá una acá
           </Link>
         </p>
-        <p className="mt-2 text-center text-sm" style={{ color: "var(--color-text-tertiary)" }}>
-          ¿Olvidaste tu contraseña? Escribinos a{" "}
-          <a href="mailto:soporte@docto.com.ar" className="font-medium" style={{ color: "var(--color-text-link)" }}>
-            soporte@docto.com.ar
-          </a>
-        </p>
+        {/* Email soporte removido durante beta cerrada — ver REVERTIR_PRE_LAUNCH.md */}
       </div>
     </div>
   );

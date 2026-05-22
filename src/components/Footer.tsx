@@ -72,7 +72,7 @@ export default function Footer() {
           flexWrap: "wrap", gap: 14,
         }}>
           <div style={{ fontSize: 12.5, color: "var(--color-text-tertiary)" }}>
-            © 2026 Docto — Diego Oscar González, CUIT 20-25086458-3 · Puerto Madero, CABA
+            © 2026 Docto — Hecho en Argentina
           </div>
           <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", display: "flex", gap: 14, alignItems: "center" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
