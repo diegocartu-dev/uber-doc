@@ -20,6 +20,7 @@ const TIMEOUT_EXEMPT_PREFIXES = [
   "/auth/",
   "/api/",
   "/beta-access",
+  "/verificar/",       // verificación pública de recetas — sin auth
 ];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.
@@ -119,8 +120,8 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  // 5. Header noindex para /dr/* (consultorio privado)
-  if (pathname.startsWith("/dr/")) {
+  // 5. Header noindex para rutas privadas/públicas que no deben indexarse
+  if (pathname.startsWith("/dr/") || pathname.startsWith("/verificar/")) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
 
