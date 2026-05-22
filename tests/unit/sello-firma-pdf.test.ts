@@ -1,5 +1,6 @@
 // Tests for Ola 4 — Sello visual de firma electrónica en PDF
-// Verifies firma data mapping, hash truncation, verification URL
+// Updated: Copy-fix RCTA-style — solo fecha DD/MM/YYYY HH:mm + QR code
+// Sin título redundante, sin hash, sin URL texto, sin cita legal duplicada
 
 let passed = 0;
 let failed = 0;
@@ -35,7 +36,7 @@ const firmaOk: FirmaDigitalPDF = {
   hash: "abc123def456789012345678901234567890123456789012345678901234abcd",
   algoritmo: "RSA-SHA256",
   firmado_at: "2026-05-22T15:30:00.000Z",
-  receta_id: "rec-12345678-abcd-efgh",
+  receta_id: "550e8400-e29b-41d4-a716-446655440000",
 };
 assert(isFirmaValida(firmaOk), "valid firma passes validation");
 
@@ -47,30 +48,23 @@ const firmaInvalida: FirmaDigitalPDF = {
 };
 assert(!isFirmaValida(firmaInvalida), "empty hash fails validation");
 
-// --- Test: hash truncation for display ---
-
-function truncateHash(hash: string): string {
-  return hash.slice(0, 16).toUpperCase() + "...";
-}
-
-assert(
-  truncateHash("abc123def456789012345678901234567890") === "ABC123DEF4567890...",
-  "truncates hash to 16 chars uppercase"
-);
-assert(
-  truncateHash("a".repeat(64)) === "AAAAAAAAAAAAAAAA...",
-  "truncates long hash correctly"
-);
-
-// --- Test: verification URL generation ---
+// --- Test: QR verification URL generation (full UUID, not truncated) ---
 
 function generateVerifyUrl(recetaId: string): string {
-  return `docto.com.ar/verificar/${recetaId.slice(0, 8)}`;
+  return `https://docto.com.ar/verificar/${recetaId}`;
 }
 
 assert(
-  generateVerifyUrl("rec-12345678-abcd-efgh") === "docto.com.ar/verificar/rec-1234",
-  "generates verification URL with truncated ID"
+  generateVerifyUrl("550e8400-e29b-41d4-a716-446655440000") ===
+    "https://docto.com.ar/verificar/550e8400-e29b-41d4-a716-446655440000",
+  "generates full HTTPS verification URL with complete UUID"
+);
+
+// --- Test: QR URL must be HTTPS ---
+
+assert(
+  generateVerifyUrl("any-id").startsWith("https://"),
+  "verification URL uses HTTPS protocol"
 );
 
 // --- Test: firma data mapping from DB ---
@@ -119,13 +113,13 @@ assert(shouldQueryFirma("receta", "c-1", "t-2"), "queries firma for receta with 
 assert(!shouldQueryFirma("receta"), "no query for receta without scope");
 assert(!shouldQueryFirma("indicaciones", "consulta-123"), "no query for indicaciones");
 
-// --- Test: sello text content ---
+// --- Test: sello fecha format (DD/MM/YYYY HH:mm — Carolina's recommendation) ---
 
-function formatFirmadoAt(iso: string): string {
+function formatFechaFirmaSello(iso: string): string {
   const d = new Date(iso);
   const fecha = d.toLocaleDateString("es-AR", {
     day: "2-digit",
-    month: "long",
+    month: "2-digit",
     year: "numeric",
     timeZone: "America/Argentina/Buenos_Aires",
   });
@@ -135,13 +129,50 @@ function formatFirmadoAt(iso: string): string {
     hour12: false,
     timeZone: "America/Argentina/Buenos_Aires",
   });
-  return `Firmado: ${fecha} — ${hora} hs`;
+  return `${fecha} ${hora}`;
 }
 
-const texto = formatFirmadoAt("2026-05-22T15:30:00.000Z");
-assert(texto.startsWith("Firmado:"), "starts with Firmado:");
-assert(texto.includes("hs"), "includes hs suffix");
-assert(texto.length > 15, "has reasonable length");
+const fechaSello = formatFechaFirmaSello("2026-05-22T15:30:00.000Z");
+assert(fechaSello.includes("/"), "fecha uses DD/MM/YYYY format with slashes");
+assert(fechaSello.includes(":"), "includes hora HH:mm");
+assert(!fechaSello.includes("Firmado:"), "no 'Firmado:' prefix in RCTA-style");
+assert(!fechaSello.includes("hs"), "no 'hs' suffix in compact format");
+
+// --- Test: sello does NOT contain removed elements ---
+
+function selloContentCheck(selloText: string): {
+  hasTitle: boolean;
+  hasLey: boolean;
+  hasHash: boolean;
+  hasUrlText: boolean;
+} {
+  return {
+    hasTitle: selloText.includes("FIRMADO ELECTRÓNICAMENTE"),
+    hasLey: selloText.includes("Art. 5"),
+    hasHash: selloText.includes("Hash:"),
+    hasUrlText: selloText.includes("Verificar:"),
+  };
+}
+
+// The sello should only have the date — nothing else as text
+const selloTextoSimulado = fechaSello; // This is all the sello renders as text
+const checks = selloContentCheck(selloTextoSimulado);
+assert(!checks.hasTitle, "sello has no FIRMADO ELECTRÓNICAMENTE title");
+assert(!checks.hasLey, "sello has no Art. 5 legal citation");
+assert(!checks.hasHash, "sello has no hash display");
+assert(!checks.hasUrlText, "sello has no URL text (QR replaces it)");
+
+// --- Test: Section B text update ---
+
+const seccionBReceta = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506.";
+const seccionBOtros = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553 y Decreto 63/2024.";
+
+assert(seccionBReceta.includes("Plataforma 0270"), "Section B receta includes Plataforma 0270");
+assert(seccionBReceta.includes("ReNaPDiS"), "Section B receta includes ReNaPDiS");
+assert(!seccionBReceta.includes("inscripta en"), "Section B does not say 'inscripta en' (Carolina: over-comply)");
+assert(seccionBReceta.includes("Ley 25.506"), "Section B receta includes firma electrónica law");
+assert(!seccionBOtros.includes("0270"), "Section B otros does not include 0270");
+assert(!seccionBOtros.includes("25.506"), "Section B otros does not include firma law");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

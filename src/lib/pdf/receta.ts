@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import QRCode from "qrcode";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bwipjs = require("bwip-js");
@@ -187,7 +188,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
 
       // ─── SELLO FIRMA ELECTRÓNICA — solo si la receta está firmada ───
       if (doc.firma) {
-        renderSelloFirma(pdf, doc.firma, footerTopY);
+        await renderSelloFirma(pdf, doc.firma, footerTopY);
       }
 
       // ─── FOOTER (Hallazgo 4 + 11 — leyendas ReNaPDiS) ───────────────
@@ -456,68 +457,82 @@ async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTop
   }
 }
 
+// ─── QR code generation ─────────────────────────────────────────────────────
+
+async function generarQRCodePNG(url: string): Promise<Buffer> {
+  return QRCode.toBuffer(url, {
+    type: "png",
+    width: 200,
+    margin: 1,
+    errorCorrectionLevel: "M",
+    color: {
+      dark: "#000000",
+      light: "#FFFFFF",
+    },
+  });
+}
+
 // ─── Sello visual de firma electrónica ──────────────────────────────────────
+// Rediseño RCTA-style: solo fecha de firma + QR code de verificación.
+// Sin título redundante, sin cita legal duplicada, sin hash, sin URL texto.
 // Se renderiza a la izquierda, a la misma altura que la firma manuscrita (derecha)
 
-function renderSelloFirma(
+async function renderSelloFirma(
   pdf: PDFKit.PDFDocument,
   firma: FirmaDigitalPDF,
   footerTopY: number
 ) {
-  const selloWidth = 210;
-  const selloHeight = 60;
+  const qrSize = 55;
+  const selloWidth = qrSize + 16; // QR + padding
+  const selloHeight = qrSize + 26; // QR + fecha + padding
   const selloX = MARGIN.left;
   const selloY = footerTopY - selloHeight - 10;
 
-  // Borde del sello — línea azul con fondo sutil
-  pdf
-    .roundedRect(selloX, selloY, selloWidth, selloHeight, 3)
-    .fillColor("#EBF4FF")
-    .fill();
-  pdf
-    .roundedRect(selloX, selloY, selloWidth, selloHeight, 3)
-    .strokeColor(COLORS.accent)
-    .lineWidth(0.75)
-    .stroke();
-
-  // Título del sello
-  let y = selloY + 7;
-  pdf.font("Inter-SemiBold").fontSize(7).fillColor(COLORS.accent);
-  pdf.text("FIRMADO ELECTRÓNICAMENTE", selloX + 8, y, {
-    width: selloWidth - 16,
-    characterSpacing: 0.5,
+  // Fecha y hora de firma (DD/MM/YYYY HH:mm — per Carolina's recommendation)
+  const d = new Date(firma.firmado_at);
+  const fechaFirmaDD = d.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Argentina/Buenos_Aires",
   });
-
-  // Ley
-  y += 10;
-  pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
-  pdf.text("Ley 25.506 — Art. 5 — Firma electrónica", selloX + 8, y, {
-    width: selloWidth - 16,
-  });
-
-  // Fecha/hora de firma
-  y += 9;
-  const fechaFirma = formatFecha(firma.firmado_at);
   const horaFirma = formatHora(firma.firmado_at);
-  pdf.text(`Firmado: ${fechaFirma} — ${horaFirma} hs`, selloX + 8, y, {
-    width: selloWidth - 16,
-  });
 
-  // Hash truncado para verificación visual
-  y += 9;
-  const hashCorto = firma.hash.slice(0, 16).toUpperCase();
-  pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
-  pdf.text(`Hash: ${hashCorto}...`, selloX + 8, y, {
-    width: selloWidth - 16,
-    characterSpacing: 0.3,
-  });
+  // QR code → docto.com.ar/verificar/{receta_id}
+  const verificarUrl = `https://docto.com.ar/verificar/${firma.receta_id}`;
 
-  // Verificación URL placeholder
-  y += 8;
-  pdf.font("Inter").fontSize(6).fillColor(COLORS.accent);
-  pdf.text(`Verificar: docto.com.ar/verificar/${firma.receta_id.slice(0, 8)}`, selloX + 8, y, {
-    width: selloWidth - 16,
-  });
+  try {
+    const qrBuffer = await generarQRCodePNG(verificarUrl);
+    const qrX = selloX + 8;
+    const qrY = selloY + 4;
+
+    pdf.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+
+    // Fecha debajo del QR
+    pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
+    pdf.text(
+      `${fechaFirmaDD} ${horaFirma}`,
+      selloX,
+      qrY + qrSize + 3,
+      { width: selloWidth, align: "center" }
+    );
+  } catch {
+    // Fallback sin QR: fecha + URL texto (Sofía: sin QR la fecha sola queda huérfana)
+    pdf.font("Inter").fontSize(7).fillColor(COLORS.secondary);
+    pdf.text(
+      `Firmado: ${fechaFirmaDD} ${horaFirma}`,
+      selloX + 8,
+      selloY + 10,
+      { width: 180 }
+    );
+    pdf.font("Inter").fontSize(6).fillColor(COLORS.accent);
+    pdf.text(
+      `docto.com.ar/verificar/${firma.receta_id}`,
+      selloX + 8,
+      selloY + 22,
+      { width: 180 }
+    );
+  }
 }
 
 // Barcode de receta — centrado a pie de página, abajo de todo (después del footer)
@@ -616,9 +631,9 @@ function renderFooter(
 
   pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
 
-  // Ley habilitante + firma electrónica en una sola línea
+  // Ley habilitante + firma electrónica — con referencia Plataforma 0270 ReNaPDiS
   const seccionB = esReceta
-    ? "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506."
+    ? "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506."
     : "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553 y Decreto 63/2024.";
 
   pdf.text(seccionB, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
