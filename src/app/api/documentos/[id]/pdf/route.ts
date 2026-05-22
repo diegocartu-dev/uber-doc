@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
+import type { FirmaDigitalPDF } from "@/lib/pdf/receta";
 
 export async function GET(
   req: NextRequest,
@@ -46,6 +47,47 @@ export async function GET(
     return NextResponse.json({ error: "Datos incompletos" }, { status: 500 });
   }
 
+  // Buscar firma electrónica si es receta
+  let firma: FirmaDigitalPDF | null = null;
+  if (doc.tipo === "receta" && (doc.consulta_id || doc.turno_id)) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const adminDb = createAdminClient();
+
+    // Buscar por consulta_id o turno_id
+    let query = adminDb
+      .from("recetas")
+      .select("id, firma_digital, estado")
+      .eq("estado", "emitida");
+
+    if (doc.consulta_id) {
+      query = query.eq("consulta_id", doc.consulta_id);
+    } else if (doc.turno_id) {
+      query = query.eq("turno_id", doc.turno_id);
+    }
+
+    const { data: recetas } = await query
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const receta = recetas?.[0];
+    if (receta?.firma_digital) {
+      const fd = receta.firma_digital as Record<string, unknown>;
+      // Validación defensiva del JSONB
+      if (
+        typeof fd.hash === "string" && fd.hash &&
+        typeof fd.algoritmo === "string" && fd.algoritmo &&
+        typeof fd.firmado_at === "string" && fd.firmado_at
+      ) {
+        firma = {
+          hash: fd.hash,
+          algoritmo: fd.algoritmo,
+          firmado_at: fd.firmado_at,
+          receta_id: receta.id,
+        };
+      }
+    }
+  }
+
   // Resolve obra social name from FK if available
   let obraSocialNombre: string | null = paciente.obra_social ?? null;
   if (paciente.obra_social_id) {
@@ -78,6 +120,7 @@ export async function GET(
     paciente_obra_social: obraSocialNombre,
     paciente_nro_afiliado: paciente.nro_afiliado ?? null,
     paciente_plan_obra_social: paciente.plan_obra_social ?? null,
+    firma,
   };
 
   try {
@@ -92,7 +135,7 @@ export async function GET(
       },
     });
   } catch (err) {
-    console.error("[PDF]", "Error generando PDF", err);
+    console.error("[PDF] Error generando PDF:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ error: "Error generando PDF" }, { status: 500 });
   }
 }

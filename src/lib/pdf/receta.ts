@@ -26,6 +26,14 @@ export type DocumentoPDF = {
   paciente_obra_social: string | null;
   paciente_nro_afiliado: string | null;
   paciente_plan_obra_social: string | null;
+  firma?: FirmaDigitalPDF | null;
+};
+
+export type FirmaDigitalPDF = {
+  hash: string;
+  algoritmo: string;
+  firmado_at: string;
+  receta_id: string;
 };
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -176,6 +184,11 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
 
       // ─── FIRMA (Hallazgo 5 + 10 — nombre + barcode matrícula) ─────
       await renderFirma(pdf, doc, footerTopY);
+
+      // ─── SELLO FIRMA ELECTRÓNICA — solo si la receta está firmada ───
+      if (doc.firma) {
+        renderSelloFirma(pdf, doc.firma, footerTopY);
+      }
 
       // ─── FOOTER (Hallazgo 4 + 11 — leyendas ReNaPDiS) ───────────────
       renderFooter(pdf, doc, esReceta, footerTopY);
@@ -441,6 +454,70 @@ async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTop
       align: "center",
     });
   }
+}
+
+// ─── Sello visual de firma electrónica ──────────────────────────────────────
+// Se renderiza a la izquierda, a la misma altura que la firma manuscrita (derecha)
+
+function renderSelloFirma(
+  pdf: PDFKit.PDFDocument,
+  firma: FirmaDigitalPDF,
+  footerTopY: number
+) {
+  const selloWidth = 210;
+  const selloHeight = 60;
+  const selloX = MARGIN.left;
+  const selloY = footerTopY - selloHeight - 10;
+
+  // Borde del sello — línea azul con fondo sutil
+  pdf
+    .roundedRect(selloX, selloY, selloWidth, selloHeight, 3)
+    .fillColor("#EBF4FF")
+    .fill();
+  pdf
+    .roundedRect(selloX, selloY, selloWidth, selloHeight, 3)
+    .strokeColor(COLORS.accent)
+    .lineWidth(0.75)
+    .stroke();
+
+  // Título del sello
+  let y = selloY + 7;
+  pdf.font("Inter-SemiBold").fontSize(7).fillColor(COLORS.accent);
+  pdf.text("FIRMADO ELECTRÓNICAMENTE", selloX + 8, y, {
+    width: selloWidth - 16,
+    characterSpacing: 0.5,
+  });
+
+  // Ley
+  y += 10;
+  pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
+  pdf.text("Ley 25.506 — Art. 5 — Firma electrónica", selloX + 8, y, {
+    width: selloWidth - 16,
+  });
+
+  // Fecha/hora de firma
+  y += 9;
+  const fechaFirma = formatFecha(firma.firmado_at);
+  const horaFirma = formatHora(firma.firmado_at);
+  pdf.text(`Firmado: ${fechaFirma} — ${horaFirma} hs`, selloX + 8, y, {
+    width: selloWidth - 16,
+  });
+
+  // Hash truncado para verificación visual
+  y += 9;
+  const hashCorto = firma.hash.slice(0, 16).toUpperCase();
+  pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
+  pdf.text(`Hash: ${hashCorto}...`, selloX + 8, y, {
+    width: selloWidth - 16,
+    characterSpacing: 0.3,
+  });
+
+  // Verificación URL placeholder
+  y += 8;
+  pdf.font("Inter").fontSize(6).fillColor(COLORS.accent);
+  pdf.text(`Verificar: docto.com.ar/verificar/${firma.receta_id.slice(0, 8)}`, selloX + 8, y, {
+    width: selloWidth - 16,
+  });
 }
 
 // Barcode de receta — centrado a pie de página, abajo de todo (después del footer)
