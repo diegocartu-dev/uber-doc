@@ -18,6 +18,7 @@ import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import PanelProgresoPerfil from "./PanelProgresoPerfil";
 import BannerMercadoPago from "./BannerMercadoPago";
+import BannerFirmaElectronica from "./BannerFirmaElectronica";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import { getFlag } from "@/lib/feature-flags";
@@ -341,18 +342,27 @@ export default async function DashboardPage({
     }
   }
 
-  // MP account check for banner
+  // MP account + firma electrónica check for banners
   let mpConectado = false;
+  let firmaConfigurada = false;
   if (role === "medico" && medico) {
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const adminDb = createAdminClient();
-    const { data: mpRow } = await adminDb
-      .from("medicos_mp_accounts")
-      .select("estado")
-      .eq("medico_id", medico.id)
-      .eq("estado", "activo")
-      .maybeSingle();
-    mpConectado = !!mpRow;
+    const [mpRes, firmaRes] = await Promise.all([
+      adminDb
+        .from("medicos_mp_accounts")
+        .select("estado")
+        .eq("medico_id", medico.id)
+        .eq("estado", "activo")
+        .maybeSingle(),
+      adminDb
+        .from("medico_claves")
+        .select("id")
+        .eq("medico_id", medico.id)
+        .maybeSingle(),
+    ]);
+    mpConectado = !!mpRes.data;
+    firmaConfigurada = !!firmaRes.data;
   }
 
   const initials = fullName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -552,6 +562,7 @@ export default async function DashboardPage({
                 tipoMatricula={medico.tipo_matricula}
               />
               <BannerMercadoPago mpConectado={mpConectado} />
+              <BannerFirmaElectronica firmaConfigurada={firmaConfigurada} />
             </div>
 
             {/* Métricas full width */}
