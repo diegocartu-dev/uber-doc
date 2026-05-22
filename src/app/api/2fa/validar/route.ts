@@ -27,6 +27,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Código inválido" }, { status: 400 });
   }
 
+  // Fix 1.3: Rechazar si no se proporciona consultaId ni turnoId
+  // Sin scope, el OTP sería válido para cualquier consulta del médico
+  if (!consultaId && !turnoId) {
+    return NextResponse.json(
+      { error: "Debe especificar consultaId o turnoId" },
+      { status: 400 }
+    );
+  }
+
   const result = await validarOTP(medico.id, codigo, consultaId, turnoId);
 
   if (!result.ok) {
