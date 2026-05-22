@@ -6,7 +6,10 @@ import {
   desencriptarClavePrivada,
 } from "./crypto";
 
-const OTP_VENTANA_MS = 2 * 60 * 1000;
+// Fix I-5: Ventana ampliada a 5 minutos, consistente con OTP_EXPIRY_MS.
+// Antes era 2 min midiendo desde created_at — provocaba rechazos falsos
+// cuando el médico tardaba >2min en ingresar el OTP pero <5min (válido).
+const OTP_VENTANA_MS = 5 * 60 * 1000;
 
 // Fix 3.3: JSON.stringify no garantiza orden de keys.
 // JSONB en PostgreSQL puede reordenar keys al almacenar.
@@ -42,17 +45,19 @@ type FirmaResult = {
   error: string;
 };
 
+// Fix C-3 / 5.4: Parámetros opcionales para logging de no-repudio
 export async function firmarReceta(
   recetaId: string,
   medicoId: string,
-  otpId: string
+  otpId: string,
+  meta?: { ip?: string; userAgent?: string }
 ): Promise<FirmaResult> {
   const supabase = createAdminClient();
 
   // Fix 5.1: Verificar OTP válido antes de firmar
   const { data: otp } = await supabase
     .from("otp_firma")
-    .select("id, medico_id, usado, consulta_id, turno_id, created_at")
+    .select("id, medico_id, usado, consulta_id, turno_id, created_at, consumido_para_receta_id")
     .eq("id", otpId)
     .single();
 
@@ -66,6 +71,11 @@ export async function firmarReceta(
 
   if (otp.medico_id !== medicoId) {
     return { ok: false, error: "OTP no pertenece a este médico" };
+  }
+
+  // Fix I-1: OTP one-time-use — cada OTP solo puede firmar UNA receta
+  if (otp.consumido_para_receta_id) {
+    return { ok: false, error: "Este código ya fue usado para firmar otra receta" };
   }
 
   const otpAge = Date.now() - new Date(otp.created_at).getTime();
@@ -107,14 +117,16 @@ export async function firmarReceta(
     return { ok: false, error: "OTP no corresponde a este turno" };
   }
 
+  // Fix I-3: Solo usar clave activa (no revocada)
   const { data: claves } = await supabase
     .from("medico_claves")
-    .select("clave_publica, clave_privada_enc")
+    .select("id, clave_publica, clave_privada_enc")
     .eq("medico_id", medicoId)
+    .eq("activa", true)
     .single();
 
   if (!claves) {
-    return { ok: false, error: "Médico sin claves de firma" };
+    return { ok: false, error: "Médico sin claves de firma activas" };
   }
 
   const contenido = canonicalJSON(receta.datos_prescripcion);
@@ -148,6 +160,32 @@ export async function firmarReceta(
   if (updateError || !updated || updated.length === 0) {
     return { ok: false, error: "La receta ya fue firmada o cambió de estado" };
   }
+
+  // Fix I-1: Marcar OTP como consumido para esta receta (atómico)
+  // Roberto: verificar resultado — unique index en DB es el guard real,
+  // pero logueamos si el UPDATE falla por TOCTOU.
+  const { error: otpConsumoError } = await supabase
+    .from("otp_firma")
+    .update({ consumido_para_receta_id: recetaId })
+    .eq("id", otpId)
+    .is("consumido_para_receta_id", null);
+
+  if (otpConsumoError) {
+    console.error("[firma] OTP consumption failed (receta already signed via .eq estado guard):", otpConsumoError.message);
+  }
+
+  // Fix C-3 / 5.4: Registro inmutable en firma_logs (no-repudio)
+  await supabase.from("firma_logs").insert({
+    receta_id: recetaId,
+    medico_id: medicoId,
+    hash,
+    algoritmo: "RSA-SHA256",
+    firmado_at: firmadoAt,
+    otp_id: otpId,
+    ip: meta?.ip ?? null,
+    user_agent: meta?.userAgent ?? null,
+    clave_id: claves.id,
+  });
 
   return { ok: true, hash, firma, firmado_at: firmadoAt };
 }
@@ -187,20 +225,46 @@ export async function verificarFirma(
     medico_id: string;
   };
 
-  const { data: claves } = await supabase
-    .from("medico_claves")
-    .select("clave_publica")
-    .eq("medico_id", fd.medico_id)
-    .single();
+  // Fix I-3: Buscar clave que firmó. Si hay firma_logs con clave_id, usarla.
+  // Fallback: buscar cualquier clave del médico (activa o revocada) para verificación histórica.
+  const { data: log } = await supabase
+    .from("firma_logs")
+    .select("clave_id")
+    .eq("receta_id", recetaId)
+    .limit(1)
+    .maybeSingle();
 
-  if (!claves) {
+  let clavePublica: string | null = null;
+
+  if (log?.clave_id) {
+    const { data: claveEspecifica } = await supabase
+      .from("medico_claves")
+      .select("clave_publica")
+      .eq("id", log.clave_id)
+      .single();
+    clavePublica = claveEspecifica?.clave_publica ?? null;
+  }
+
+  if (!clavePublica) {
+    // Fallback para firmas anteriores al sistema de logs
+    const { data: claves } = await supabase
+      .from("medico_claves")
+      .select("clave_publica")
+      .eq("medico_id", fd.medico_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    clavePublica = claves?.clave_publica ?? null;
+  }
+
+  if (!clavePublica) {
     return { valida: false, alterada: false, datos: null };
   }
 
   const contenidoActual = canonicalJSON(receta.datos_prescripcion);
   const hashActual = hashSHA256(contenidoActual);
   const alterada = hashActual !== fd.hash;
-  const firmaValida = verificar(fd.hash, fd.firma, claves.clave_publica);
+  const firmaValida = verificar(fd.hash, fd.firma, clavePublica);
 
   return {
     valida: firmaValida && !alterada,

@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import path from "path";
+import { createHash } from "crypto";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import QRCode from "qrcode";
 
@@ -92,13 +93,12 @@ function formatFechaNacimiento(fecha: string): string {
   return `${parseInt(dia)}/${parseInt(mes)}/${anio}`;
 }
 
-function generarNumeroReceta(_id: string, createdAt: string): string {
+// Fix I-2: Número de receta determinístico basado en hash del UUID.
+// Cada descarga del mismo documento genera el mismo número y barcode.
+function generarNumeroReceta(id: string, createdAt: string): string {
   const anio = new Date(createdAt).getFullYear();
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
+  const hash = createHash("sha256").update(id).digest("hex");
+  const code = hash.slice(0, 8).toUpperCase();
   return `REC-${anio}-${code}`;
 }
 
