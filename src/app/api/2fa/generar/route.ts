@@ -26,6 +26,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { consultaId, turnoId } = body;
 
+  // Scope obligatorio — consistente con /api/2fa/validar
+  if (!consultaId && !turnoId) {
+    return NextResponse.json(
+      { error: "Debe especificar consultaId o turnoId" },
+      { status: 400 }
+    );
+  }
+
   const result = await generarOTP(medico.id, consultaId, turnoId);
 
   if (!result.ok) {
