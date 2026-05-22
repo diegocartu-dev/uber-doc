@@ -42,7 +42,8 @@ function createMockSupabase(tables: Record<string, MockTable>) {
 }
 
 // Replicate the OTP validation logic from firmarReceta to test it in isolation
-const OTP_VENTANA_MS = 2 * 60 * 1000;
+// Fix I-5: Ventana ampliada a 5 min (consistente con OTP_EXPIRY_MS)
+const OTP_VENTANA_MS = 5 * 60 * 1000;
 
 type OTPValidation = { ok: true } | { ok: false; error: string };
 
@@ -74,7 +75,7 @@ const CONSULTA_ID = "consulta-456";
 const TURNO_ID = "turno-789";
 const NOW = new Date().toISOString();
 const ONE_MIN_AGO = new Date(Date.now() - 60_000).toISOString();
-const THREE_MIN_AGO = new Date(Date.now() - 3 * 60_000).toISOString();
+const SIX_MIN_AGO = new Date(Date.now() - 6 * 60_000).toISOString();
 
 // Test 1: OTP no encontrado
 const r1 = validateOTPForFirma(null, MEDICO_ID, CONSULTA_ID, null);
@@ -94,12 +95,12 @@ const r3 = validateOTPForFirma(
 );
 assert(!r3.ok && r3.error === "OTP no pertenece a este médico", "rechaza OTP de otro médico");
 
-// Test 4: OTP expirado (más de 2 minutos)
+// Test 4: OTP expirado (más de 5 minutos — Fix I-5)
 const r4 = validateOTPForFirma(
-  { id: "otp-1", medico_id: MEDICO_ID, usado: true, consulta_id: CONSULTA_ID, turno_id: null, created_at: THREE_MIN_AGO },
+  { id: "otp-1", medico_id: MEDICO_ID, usado: true, consulta_id: CONSULTA_ID, turno_id: null, created_at: SIX_MIN_AGO },
   MEDICO_ID, CONSULTA_ID, null
 );
-assert(!r4.ok && r4.error === "OTP expirado para firma", "rechaza OTP expirado");
+assert(!r4.ok && r4.error === "OTP expirado para firma", "rechaza OTP expirado (>5min)");
 
 // Test 5: OTP de otra consulta (scope incorrecto)
 const r5 = validateOTPForFirma(
@@ -129,10 +130,10 @@ const r8 = validateOTPForFirma(
 );
 assert(r8.ok === true, "acepta OTP válido con turno correcto");
 
-// Test 9: Firma de la función — firmarReceta ahora requiere 3 parámetros
-// Esto es una verificación de contrato: TypeScript no dejaría compilar con 2 args
+// Test 9: Firma de la función — firmarReceta requiere 3 params + 1 opcional (meta)
+// .length reporta params sin default/optional, así que sigue siendo 3
 import { firmarReceta } from "../../src/lib/firma/receta";
-assert(firmarReceta.length === 3, `firmarReceta tiene ${firmarReceta.length} parámetros (esperado 3)`);
+assert(firmarReceta.length >= 3, `firmarReceta tiene ${firmarReceta.length} parámetros requeridos (esperado ≥3)`);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

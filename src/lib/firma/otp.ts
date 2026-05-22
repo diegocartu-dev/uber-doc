@@ -194,9 +194,10 @@ export async function validarOTP(
     return { ok: false, error: "Código inválido" };
   }
 
+  // Fix I-5: Registrar validado_at para medir ventana de firma desde validación
   await supabase
     .from("otp_firma")
-    .update({ usado: true })
+    .update({ usado: true, validado_at: new Date().toISOString() })
     .eq("id", otp.id);
 
   return { ok: true, otp_id: otp.id };
