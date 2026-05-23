@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ModalBaja from "./ModalBaja";
 import TabCobros from "./TabCobros";
+import FirmaManuscrita from "./FirmaManuscrita";
 
 interface MpAccount {
   mp_user_id: string;
@@ -30,6 +31,7 @@ interface Medico {
   domicilio_consultorio: string | null;
   foto_url: string | null;
   perfil_completo: boolean;
+  firma_manuscrita_url: string | null;
 }
 
 export default function PerfilClient({
@@ -281,6 +283,9 @@ export default function PerfilClient({
             </div>
           </div>
         </div>
+
+        {/* Firma Manuscrita */}
+        <FirmaManuscrita firmaUrl={medico.firma_manuscrita_url} />
 
         {/* Mercado Pago */}
         <div className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
