@@ -79,6 +79,7 @@ export const ADMIN_ACTIONS = {
   SUSPENDER_MEDICO: "suspender_medico",
   REACTIVAR_MEDICO: "reactivar_medico",
   CAMBIAR_CATEGORIA_MEDICO: "cambiar_categoria_medico",
+  VALIDAR_REFEPS: "validar_refeps",
 
   // Pacientes
   PAUSAR_PACIENTE: "pausar_paciente",

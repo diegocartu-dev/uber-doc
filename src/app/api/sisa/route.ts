@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 5;
@@ -75,9 +76,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   }
 
-  // mode === "produccion" — placeholder for SOAP integration
-  return NextResponse.json({
-    encontrado: false,
-    error: "Integración SISA en producción no disponible aún",
-  });
+  // mode === "produccion" — validación real vía REFEPS (Bus de Interoperabilidad)
+  const resultado = await validarMedicoREFEPS(dni);
+  return NextResponse.json(resultado);
 }

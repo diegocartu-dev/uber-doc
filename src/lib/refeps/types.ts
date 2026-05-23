@@ -1,6 +1,7 @@
 // ─── Tipos FHIR Practitioner (subset relevante para REFEPS) ──────────────────
 
 export interface FHIRIdentifier {
+  use?: string;
   system?: string;
   value?: string;
   type?: {
@@ -23,8 +24,14 @@ export interface FHIRQualification {
     text?: string;
   };
   period?: { start?: string; end?: string };
-  issuer?: { reference?: string; display?: string };
-  extension?: Array<{ url?: string; valueCode?: string; valueString?: string }>;
+  issuer?: { reference?: string; display?: string; identifier?: FHIRIdentifier };
+  extension?: Array<{
+    url?: string;
+    valueCode?: string;
+    valueString?: string;
+    valueBoolean?: boolean;
+    valueCoding?: { system?: string; code?: string; display?: string };
+  }>;
 }
 
 export interface FHIRPractitioner {
@@ -35,6 +42,7 @@ export interface FHIRPractitioner {
   name?: FHIRHumanName[];
   qualification?: FHIRQualification[];
   gender?: string;
+  birthDate?: string;
 }
 
 export interface FHIRBundle {
@@ -50,9 +58,10 @@ export interface FHIRBundle {
 
 export interface REFEPSMatricula {
   numero: string;
-  tipo: string; // "Nacional", "Provincial", etc.
+  tipo: string; // Jurisdicción: "CABA", "Buenos Aires", etc.
   entidad_certificante: string;
   vigente_desde?: string;
+  habilitada?: boolean;
 }
 
 export interface REFEPSEspecialidad {

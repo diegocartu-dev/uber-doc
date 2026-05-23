@@ -19,30 +19,47 @@ function parsearPractitioner(p: FHIRPractitioner): REFEPSResult {
     (id) => id.system === IDENTIFIER_SYSTEMS.REFEPS
   )?.value;
 
-  // Extraer DNI
+  // Extraer DNI (sistema renaper en la respuesta FHIR)
   const dni = p.identifier?.find(
-    (id) => id.system === IDENTIFIER_SYSTEMS.DNI
+    (id) => id.system?.includes("renaper") || id.system?.includes("dni")
   )?.value;
 
-  // Extraer matrículas de qualifications
+  // Extraer matrículas y especialidades de qualifications
+  // Formato real FHIR del Bus: cada qualification tiene extensions para
+  // MatriculaHabilitada (boolean) y JurisdMatricula (coding con code/display)
   const matriculas: REFEPSMatricula[] = [];
   const especialidades: REFEPSEspecialidad[] = [];
 
   if (p.qualification) {
     for (const q of p.qualification) {
+      // Extraer info de extensions
+      let habilitada = false;
+      let jurisdiccion = "";
+      if (q.extension) {
+        for (const ext of q.extension) {
+          if (ext.url?.includes("MatriculaHabilitada")) {
+            habilitada = ext.valueBoolean === true;
+          }
+          if (ext.url?.includes("JurisdMatricula") && ext.valueCoding) {
+            jurisdiccion = ext.valueCoding.display ?? ext.valueCoding.code ?? "";
+          }
+        }
+      }
+
       // Qualification con identifier = matrícula
       if (q.identifier && q.identifier.length > 0) {
         for (const id of q.identifier) {
           matriculas.push({
             numero: id.value ?? "",
-            tipo: extraerTipoMatricula(id.system),
+            tipo: jurisdiccion || extraerTipoMatricula(id.system),
             entidad_certificante: q.issuer?.display ?? "",
             vigente_desde: q.period?.start,
+            habilitada,
           });
         }
       }
 
-      // Qualification con code = especialidad
+      // Qualification con code = profesión/especialidad
       if (q.code) {
         const coding = q.code.coding?.[0];
         if (coding) {
@@ -51,19 +68,6 @@ function parsearPractitioner(p: FHIRPractitioner): REFEPSResult {
             nombre: coding.display ?? q.code.text ?? "",
             vigente_desde: q.period?.start,
           });
-        }
-      }
-
-      // Especialidad en extension (formato alternativo REFEPS)
-      if (q.extension) {
-        for (const ext of q.extension) {
-          if (ext.valueString || ext.valueCode) {
-            especialidades.push({
-              codigo: ext.valueCode ?? "",
-              nombre: ext.valueString ?? ext.valueCode ?? "",
-              vigente_desde: q.period?.start,
-            });
-          }
         }
       }
     }

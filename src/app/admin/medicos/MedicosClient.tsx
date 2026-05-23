@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, XCircle, ExternalLink, FileText, Copy, Loader2, Search, Eye, Ban, RotateCcw } from "lucide-react";
+import { CheckCircle, XCircle, ExternalLink, FileText, Copy, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
@@ -28,6 +28,9 @@ interface Medico {
   notas_admin: string | null;
   slug: string | null;
   categoria: string | null;
+  refeps_validado: boolean | null;
+  refeps_data: Record<string, unknown> | null;
+  refeps_validado_at: string | null;
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -448,6 +451,43 @@ function MedicoRow({
 }
 
 function MedicoDetalle({ medico: m }: { medico: Medico }) {
+  const [validando, setValidando] = useState(false);
+  const [refepsResult, setRefepsResult] = useState<Record<string, unknown> | null>(m.refeps_data);
+  const [refepsValidado, setRefepsValidado] = useState(m.refeps_validado);
+  const [refepsError, setRefepsError] = useState<string | null>(null);
+
+  async function handleValidarRefeps() {
+    setValidando(true);
+    setRefepsError(null);
+    try {
+      const res = await fetch("/api/admin/medicos/refeps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ medicoId: m.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRefepsError(data.error || "Error desconocido");
+        return;
+      }
+      setRefepsResult(data.resultado);
+      setRefepsValidado(data.refeps_validado);
+    } catch {
+      setRefepsError("Error de conexión");
+    } finally {
+      setValidando(false);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rd = refepsResult as any;
+  const matriculasRefeps = rd?.matriculas as Array<{
+    numero: string;
+    tipo: string;
+    entidad_certificante: string;
+    habilitada?: boolean;
+  }> | undefined;
+
   return (
     <div className="space-y-6">
       <div>
@@ -469,6 +509,68 @@ function MedicoDetalle({ medico: m }: { medico: Medico }) {
           <Field label="Especialidad" value={m.especialidad} />
         </div>
       </div>
+
+      {/* REFEPS Validation */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Validación REFEPS</p>
+        <div className="mt-3">
+          {refepsValidado ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+                <ShieldCheck size={16} />
+                Matrícula verificada en REFEPS
+              </div>
+              {matriculasRefeps && matriculasRefeps.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {matriculasRefeps.map((mat, i) => (
+                    <p key={i} className="text-xs text-green-700">
+                      {mat.habilitada ? "✓" : "✗"} Matrícula {mat.numero} — {mat.tipo}
+                      {mat.entidad_certificante ? ` (${mat.entidad_certificante})` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {m.refeps_validado_at && (
+                <p className="mt-2 text-xs text-green-600">
+                  Validado: {new Date(m.refeps_validado_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+            </div>
+          ) : refepsResult && !refepsValidado ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                <ShieldAlert size={16} />
+                No encontrado en REFEPS
+              </div>
+              <p className="mt-1 text-xs text-amber-700">
+                {rd?.error === "REGISTRO_NO_ENCONTRADO"
+                  ? "El DNI no tiene matrícula registrada en REFEPS"
+                  : rd?.error || "Error en la validación"}
+              </p>
+            </div>
+          ) : null}
+
+          {refepsError && (
+            <p className="mt-2 text-xs text-red-600">{refepsError}</p>
+          )}
+
+          <button
+            onClick={handleValidarRefeps}
+            disabled={validando || !m.dni}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#378ADD] px-4 py-2 text-sm font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {validando ? (
+              <><Loader2 size={16} className="animate-spin" /> Validando...</>
+            ) : (
+              <><ShieldCheck size={16} /> {refepsValidado ? "Re-validar REFEPS" : "Validar REFEPS"}</>
+            )}
+          </button>
+          {!m.dni && (
+            <p className="mt-1 text-xs text-gray-400">El médico no tiene DNI cargado</p>
+          )}
+        </div>
+      </div>
+
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Estado</p>
         <div className="mt-3 space-y-2 text-sm">

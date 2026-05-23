@@ -4,11 +4,12 @@ import type { FHIRBundle, FHIRPractitioner } from "./types";
 // ─── Constantes del Bus de Interoperabilidad ────────────────────────────────
 
 const FHIR_BASE_URL = "https://bus.msal.gob.ar/fhir";
-const TOKEN_ENDPOINT = "https://bus.msal.gob.ar/bus-auth/auth";
+const TOKEN_ENDPOINT = "https://bus.msal.gob.ar/bus-auth/v2/auth";
 
 // Identifier systems oficiales de Argentina
+// El Bus de Interoperabilidad solo acepta búsqueda por REFEPS ID (no por DNI directo).
+// El DNI del médico se usa como valor del identifier REFEPS.
 export const IDENTIFIER_SYSTEMS = {
-  DNI: "https://www.argentina.gob.ar/salud/dni",
   REFEPS: "https://sisa.msal.gov.ar/REFEPS",
 } as const;
 
@@ -151,15 +152,28 @@ export function invalidarToken(): void {
   cachedToken = null;
 }
 
+// ─── Convertir DNI a REFEPS ID ─────────────────────────────────────────────
+// El REFEPS ID usa el formato "5410" + DNI (prefijo país Argentina)
+const REFEPS_PREFIX = "5410";
+
+export function dniToRefepsId(dni: string): string {
+  // Si ya tiene el prefijo, no duplicar
+  if (dni.startsWith(REFEPS_PREFIX) && dni.length > 10) {
+    return dni;
+  }
+  return `${REFEPS_PREFIX}${dni}`;
+}
+
 // ─── Buscar Practitioner por DNI ────────────────────────────────────────────
 
 export async function buscarPorDNI(
   dni: string
 ): Promise<FHIRPractitioner | null> {
   const token = await obtenerToken();
+  const refepsId = dniToRefepsId(dni);
 
   const url = new URL(`${FHIR_BASE_URL}/Practitioner`);
-  url.searchParams.set("identifier", `${IDENTIFIER_SYSTEMS.DNI}|${dni}`);
+  url.searchParams.set("identifier", `${IDENTIFIER_SYSTEMS.REFEPS}|${refepsId}`);
   url.searchParams.set("_format", "json");
 
   const resp = await fetch(url.toString(), {
@@ -184,6 +198,9 @@ export async function buscarPorDNI(
       signal: AbortSignal.timeout(10_000),
     });
 
+    // 404 = profesional no encontrado en REFEPS
+    if (retryResp.status === 404) return null;
+
     if (!retryResp.ok) {
       const body = await retryResp.text().catch(() => "");
       throw new Error(
@@ -194,6 +211,9 @@ export async function buscarPorDNI(
     const retryData = (await retryResp.json()) as FHIRBundle;
     return retryData.entry?.[0]?.resource ?? null;
   }
+
+  // 404 = profesional no encontrado en REFEPS
+  if (resp.status === 404) return null;
 
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
