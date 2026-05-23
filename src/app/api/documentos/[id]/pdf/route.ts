@@ -32,7 +32,7 @@ export async function GET(
   // Datos del médico
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio")
+    .select("nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio, firma_manuscrita_url")
     .eq("id", doc.medico_id)
     .single();
 
@@ -121,6 +121,7 @@ export async function GET(
     paciente_nro_afiliado: paciente.nro_afiliado ?? null,
     paciente_plan_obra_social: paciente.plan_obra_social ?? null,
     firma,
+    medico_firma_manuscrita_path: medico.firma_manuscrita_url ?? null,
   };
 
   try {

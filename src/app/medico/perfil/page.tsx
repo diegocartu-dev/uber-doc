@@ -17,7 +17,7 @@ export default async function PerfilMedicoPage() {
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, nombre_completo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa, telefono, domicilio_consultorio, foto_url, perfil_completo"
+      "id, nombre_completo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa, telefono, domicilio_consultorio, foto_url, perfil_completo, firma_manuscrita_url"
     )
     .eq("user_id", user.id)
     .single();

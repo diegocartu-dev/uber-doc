@@ -29,6 +29,7 @@ export type DocumentoPDF = {
   paciente_nro_afiliado: string | null;
   paciente_plan_obra_social: string | null;
   firma?: FirmaDigitalPDF | null;
+  medico_firma_manuscrita_path?: string | null;
 };
 
 export type FirmaDigitalPDF = {
@@ -407,34 +408,65 @@ function renderSectionLabel(pdf: PDFKit.PDFDocument, label: string) {
   pdf.moveDown(0.15);
 }
 
-// Hallazgo 5 + 10 — Firma: línea + nombre + barcode matrícula + matrícula texto
+// Hallazgo 5 + 10 — Firma: imagen manuscrita + línea + nombre + barcode matrícula
 // Posicionada justo arriba del footer, alineada a la derecha
 async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTopY: number) {
   // El bloque firma ocupa ~65pt (línea + nombre + barcode + matrícula)
-  // Se posiciona justo arriba del footer con 10pt de margen
+  // + imagen de firma manuscrita arriba si existe
   const firmaBlockHeight = 65;
-  const firmaY = footerTopY - firmaBlockHeight - 10;
+  const firmaImageHeight = 45; // altura de la imagen de firma manuscrita
+  const hasImage = !!doc.medico_firma_manuscrita_path;
+  const totalHeight = firmaBlockHeight + (hasImage ? firmaImageHeight + 5 : 0);
+  const firmaY = footerTopY - totalHeight - 10;
   const firmaWidth = 200;
   const lineX = PAGE_WIDTH - MARGIN.right - firmaWidth;
   const lineEndX = PAGE_WIDTH - MARGIN.right;
 
+  // Imagen de firma manuscrita (si existe) — apoyada sobre la línea
+  let lineY = firmaY;
+  if (hasImage) {
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const admin = createAdminClient();
+      const { data } = await admin.storage
+        .from("firmas-medicos")
+        .download(doc.medico_firma_manuscrita_path!);
+
+      if (data) {
+        const imgBuffer = Buffer.from(await data.arrayBuffer());
+        const imgWidth = 150;
+        const imgX = lineX + (firmaWidth - imgWidth) / 2;
+        pdf.image(imgBuffer, imgX, firmaY, {
+          width: imgWidth,
+          height: firmaImageHeight,
+          fit: [imgWidth, firmaImageHeight],
+          align: "center",
+          valign: "bottom",
+        });
+      }
+    } catch {
+      // Fallback silencioso — mostrar firma sin imagen
+    }
+    lineY = firmaY + firmaImageHeight + 5;
+  }
+
   // Línea de firma
   pdf
-    .moveTo(lineX, firmaY)
-    .lineTo(lineEndX, firmaY)
+    .moveTo(lineX, lineY)
+    .lineTo(lineEndX, lineY)
     .strokeColor(COLORS.primary)
     .lineWidth(0.5)
     .stroke();
 
   // Nombre del médico
   pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
-  pdf.text(formatNombreMedico(doc.medico_nombre), lineX, firmaY + 5, {
+  pdf.text(formatNombreMedico(doc.medico_nombre), lineX, lineY + 5, {
     width: firmaWidth,
     align: "center",
   });
 
   // Hallazgo 10 — Barcode Code128 de matrícula debajo del nombre
-  const barcodeY = firmaY + 20;
+  const barcodeY = lineY + 20;
   try {
     const matriculaBarcode = await generarBarcodePNG(doc.medico_matricula);
     const barcodeWidth = 120;
