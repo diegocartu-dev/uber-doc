@@ -53,13 +53,19 @@ export async function POST(req: NextRequest) {
 
   const ahora = new Date().toISOString();
 
+  // Strippear `raw` (FHIR Practitioner completo) antes de persistir.
+  // Contiene birthDate, CUIL, HTML con datos personales — todo ya parseado
+  // en los campos de arriba. No necesitamos duplicarlo en la DB.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw: _raw, ...resultadoSinRaw } = resultado;
+
   if (resultado.encontrado) {
-    // Guardar resultado exitoso
+    // Guardar resultado exitoso (sin raw)
     const { error: updateError } = await admin
       .from("medicos")
       .update({
         refeps_validado: true,
-        refeps_data: resultado,
+        refeps_data: resultadoSinRaw,
         refeps_validado_at: ahora,
       })
       .eq("id", medicoId);
@@ -90,16 +96,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       refeps_validado: true,
-      resultado,
+      resultado: resultadoSinRaw,
     });
   }
 
-  // No encontrado o error — guardar el intento igual
+  // No encontrado o error — guardar el intento igual (sin raw)
   const { error: updateError } = await admin
     .from("medicos")
     .update({
       refeps_validado: false,
-      refeps_data: resultado,
+      refeps_data: resultadoSinRaw,
       refeps_validado_at: ahora,
     })
     .eq("id", medicoId);
@@ -111,6 +117,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: false,
     refeps_validado: false,
-    resultado,
+    resultado: resultadoSinRaw,
   });
 }
