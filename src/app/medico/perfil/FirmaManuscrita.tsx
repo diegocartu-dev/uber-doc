@@ -31,12 +31,15 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
   }, [firmaUrl]);
 
   // Inicializar SignaturePad
-  const initPad = useCallback(() => {
+  const initPad = useCallback((preserveData = false) => {
     if (!canvasRef.current || firmaGuardada) return;
 
     const canvas = canvasRef.current;
     const container = canvas.parentElement;
     if (!container) return;
+
+    // Guardar trazos existentes antes de redimensionar
+    const savedData = preserveData && padRef.current ? padRef.current.toData() : null;
 
     // Ajustar tamaño al contenedor
     const rect = container.getBoundingClientRect();
@@ -63,6 +66,11 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
       setTieneTrazos(true);
     });
 
+    // Restaurar trazos después de redimensionar
+    if (savedData && savedData.length > 0) {
+      pad.fromData(savedData);
+    }
+
     padRef.current = pad;
   }, [firmaGuardada]);
 
@@ -74,10 +82,10 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
     }
   }, [modo, firmaGuardada, initPad]);
 
-  // Resize handler
+  // Resize handler — preserva trazos existentes
   useEffect(() => {
     if (modo !== "dibujar" || firmaGuardada) return;
-    const handleResize = () => initPad();
+    const handleResize = () => initPad(true);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [modo, firmaGuardada, initPad]);
@@ -199,8 +207,8 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
           </span>
         )}
         {!firmaGuardada && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-[#D85A30]">
-            <span className="h-2 w-2 rounded-full bg-[#D85A30]" />
+          <span className="inline-flex items-center gap-1.5 text-xs text-[#BA7517]">
+            <span className="h-2 w-2 rounded-full bg-[#BA7517]" />
             Pendiente
           </span>
         )}
@@ -239,8 +247,8 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
           <>
             {!firmaGuardada && !previewSrc && (
               <p className="mb-3 text-sm text-gray-500">
-                Tu firma aparece en cada receta que emitas. Cargala una sola
-                vez.
+                Tu firma aparece en cada receta que emitas. Podés cambiarla
+                cuando quieras.
               </p>
             )}
 
