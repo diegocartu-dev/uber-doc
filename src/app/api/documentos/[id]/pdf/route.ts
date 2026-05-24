@@ -136,7 +136,10 @@ export async function GET(
       },
     });
   } catch (err) {
-    console.error("[PDF] Error generando PDF:", err instanceof Error ? err.message : "unknown error");
-    return NextResponse.json({ error: "Error generando PDF" }, { status: 500 });
+    const errMsg = err instanceof Error ? err.message : "unknown error";
+    const errStack = err instanceof Error ? err.stack : "";
+    console.error("[PDF] Error generando PDF:", errMsg);
+    console.error("[PDF] Stack:", errStack);
+    return NextResponse.json({ error: "Error generando PDF", detail: errMsg }, { status: 500 });
   }
 }
