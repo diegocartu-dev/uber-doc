@@ -24,9 +24,19 @@ Editar la variable en Vercel, separando emails con coma:
 SIGNUP_WHITELIST_EMAILS=diegocartu@gmail.com,paancogliandro@gmail.com,mgiselagunther@gmail.com
 ```
 
-## Como desactivar completamente
+## Como desactivar completamente (cerrar todo post-QA)
 
-Borrar la variable `SIGNUP_WHITELIST_EMAILS` en Vercel, o dejar su valor vacio. El registro vuelve a estar abierto (sujeto al feature flag `registro_medicos_publico`).
+Dos pasos:
+
+1. Borrar la variable `SIGNUP_WHITELIST_EMAILS` en Vercel (o dejar su valor vacio)
+2. Desactivar el feature flag en Supabase:
+```sql
+UPDATE feature_flags SET activo = false WHERE key = 'registro_medicos_publico';
+```
+
+Con ambos pasos, el registro queda cerrado: el layout redirige a `/auth/registro-cerrado`.
+
+Si solo queres cerrar el registro pero dejar la whitelist configurada para futuro, solo desactiva el flag.
 
 ## Detalles tecnicos
 
@@ -42,8 +52,19 @@ Borrar la variable `SIGNUP_WHITELIST_EMAILS` en Vercel, o dejar su valor vacio. 
 |---|---|---|
 | diegocartu@gmail.com | Medico QA (Diego ficticio) | 2026-05-25 |
 
+## Dependencias
+
+La whitelist **requiere** que el feature flag `registro_medicos_publico` este activo (`activo: true`) en la tabla `feature_flags`. Sin el flag activo, el layout redirige a `/auth/registro-cerrado` antes de que el usuario llegue al form.
+
+Flujo completo:
+1. Layout verifica flag `registro_medicos_publico` → si false, redirect a registro-cerrado
+2. Server action verifica `SIGNUP_WHITELIST_EMAILS` → si el email no esta, error "beta privada"
+3. Server action verifica rate limit, validaciones, duplicados, etc.
+4. `supabase.auth.signUp()` crea el usuario
+
 ## Historial
 
 | Fecha | Accion |
 |---|---|
 | 2026-05-25 | Whitelist creada. Solo diegocartu@gmail.com habilitado para QA E2E pre-F&F. |
+| 2026-05-25 | Feature flag `registro_medicos_publico` activado para permitir acceso al form. |
