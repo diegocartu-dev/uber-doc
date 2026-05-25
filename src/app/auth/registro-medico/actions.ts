@@ -53,6 +53,20 @@ export async function registrarMedico(formData: FormData) {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
+
+  // Whitelist de beta privada — si SIGNUP_WHITELIST_EMAILS está definida,
+  // solo esos emails pueden registrarse. Vacía o ausente = registro abierto.
+  const whitelist = process.env.SIGNUP_WHITELIST_EMAILS;
+  if (whitelist) {
+    const allowed = whitelist.split(",").map((e) => e.trim().toLowerCase());
+    if (!allowed.includes(email.trim().toLowerCase())) {
+      return {
+        error:
+          "Docto está en beta privada. Tu acceso será habilitado próximamente.",
+      };
+    }
+  }
+
   const password = formData.get("password") as string;
   const titulo = formData.get("titulo") as string;
   const nombre_completo = capitalizarNombre(formData.get("nombre_completo") as string);
