@@ -176,7 +176,12 @@ export async function POST(req: NextRequest) {
 
     const pref = await mpRes.json();
 
-    if (!pref.init_point) {
+    // Use sandbox_init_point for test/sandbox accounts, init_point for production
+    const checkoutUrl = mpAccount.live_mode
+      ? pref.init_point
+      : (pref.sandbox_init_point ?? pref.init_point);
+
+    if (!checkoutUrl) {
       logError("[MP-V2]", "Respuesta sin init_point", { ...sanitizeMpError(mpRes.status, pref), medico_id: medicoId });
       return NextResponse.json(
         { error: "Mercado Pago no devolvió URL de pago." },
@@ -191,11 +196,12 @@ export async function POST(req: NextRequest) {
       monto,
       marketplaceFee,
       prefId: pref.id,
+      sandbox: !mpAccount.live_mode,
     });
 
     trackEvent({ evento: "pago_creado", pacienteId: user.id, medicoId, metadata: { tipo, recursoId: id, monto, marketplaceFee, prefId: pref.id } });
 
-    return NextResponse.json({ init_point: pref.init_point });
+    return NextResponse.json({ init_point: checkoutUrl });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logError("[MP-V2]", "Error inesperado", { error: message });
