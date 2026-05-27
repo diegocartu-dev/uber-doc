@@ -32,6 +32,9 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Migraciones SQL: Marcos no puede ejecutar desde CLI (falta SUPABASE_ACCESS_TOKEN en el entorno). Usar la Management API con el token `sbp_2a46...` para ejecutar DDL directo. Nunca pedir a Diego que toque la terminal.
 - Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
 
+## Auditoría de seguridad — Regla de evidencia empírica
+Toda auditoría de seguridad (puntual o integral) debe incluir evidencia empírica reproducible por hallazgo: el comando exacto que reproduce el problema, el output real, y clasificación clara entre "explotable hoy" / "vulnerabilidad latente" / "buena práctica pendiente". Reportes basados solo en lectura de código o policies sin tests reales no son accionables y no disparan sprints de fixes.
+
 ## Protocolo de sprint
 - **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
 - **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.

@@ -2,10 +2,10 @@
 
 **Ultima actualizacion:** 21 de mayo de 2026
 
-**Progreso operativo: 20% (Tier 1)**
-**Tier 1 — Items completados:** 0 de 15
+**Progreso operativo: 19% (Tier 1)**
+**Tier 1 — Items completados:** 0 de 16
 **Tier 1 — Items en curso:** 3
-**Tier 1 — Items pendientes:** 12
+**Tier 1 — Items pendientes:** 13
 
 Tier 2 — Inventario de crecimiento futuro: 94 items
 
@@ -15,7 +15,7 @@ Documento vivo. Se actualiza con cada PR que cierre un item.
 
 # TIER 1 — MINIMO VIABLE PARA OPERAR AL MUNDO
 
-Los 15 bloqueantes reales. La metrica de progreso del proyecto se calcula sobre esto.
+Los 16 bloqueantes reales. La metrica de progreso del proyecto se calcula sobre esto.
 No se agregan ni quitan items sin aprobacion de Diego.
 
 ## Bloqueantes regulatorios
@@ -52,6 +52,7 @@ No se agregan ni quitan items sin aprobacion de Diego.
 | 13 | Verificar AFIP RI vigente | ❌ Pendiente | — |
 | 14 | Verificar IIBB CABA + Convenio Multilateral | ❌ Pendiente | — |
 | 15 | Verificar CLAE para telemedicina | ❌ Pendiente | — |
+| 16 | Auditoria de seguridad integral pre-produccion | ❌ Pendiente | Producto considerado completo |
 
 ---
 
