@@ -21,16 +21,16 @@ COMMENT ON COLUMN medicos.email_personal IS
   'Email personal del medico (puede diferir del email de registro). Uso interno Docto. NUNCA visible al paciente.';
 
 -- ============================================================================
--- RLS: Verificar que las policies existentes de la tabla medicos NO expongan
--- estos campos a pacientes. Las policies de SELECT para pacientes deben
--- listar columnas explicitamente o estar filtradas.
+-- SEGURIDAD: Revocar SELECT en columnas privadas para roles no-admin.
+-- Esto previene que PostgREST exponga estos campos a cualquier usuario
+-- autenticado que haga SELECT * o incluya estas columnas explicitamente.
+-- Solo service_role (adminClient) puede leer estos campos.
 --
--- NOTA: Supabase PostgREST permite SELECT * por defecto si la policy USING
--- da acceso. Para restringir columnas a pacientes, se debe usar una VIEW
--- o un endpoint API que filtre los campos. La RLS de tabla no puede
--- restringir columnas individuales — solo filas.
---
--- MITIGACION: Los endpoints API que sirven datos de medicos a pacientes
--- (listado, perfil publico, cards de consulta) NUNCA incluyen estos campos
--- en sus SELECTs. Solo el endpoint /api/admin/* incluye todos los campos.
+-- Hallazgo critico de Roberto (auditoría 27/05): la RLS existente de la
+-- tabla medicos permite SELECT a cualquier authenticated. Sin REVOKE,
+-- cualquier paciente podria leer celular_personal/email_personal via
+-- PostgREST directamente.
 -- ============================================================================
+
+REVOKE SELECT (celular_personal, email_personal) ON medicos FROM authenticated;
+REVOKE SELECT (celular_personal, email_personal) ON medicos FROM anon;
