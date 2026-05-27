@@ -32,6 +32,8 @@ interface Medico {
   foto_url: string | null;
   perfil_completo: boolean;
   firma_manuscrita_url: string | null;
+  celular_personal: string | null;
+  email_personal: string | null;
 }
 
 export default function PerfilClient({
@@ -58,6 +60,8 @@ export default function PerfilClient({
   const [fotoUrl, setFotoUrl] = useState(medico.foto_url ?? "");
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [celularPersonal, setCelularPersonal] = useState(medico.celular_personal ?? "");
+  const [emailPersonal, setEmailPersonal] = useState(medico.email_personal ?? "");
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -68,6 +72,8 @@ export default function PerfilClient({
     tipoMatricula !== (medico.tipo_matricula ?? "") ||
     numeroMatricula !== (medico.numero_matricula ?? "") ||
     provincia !== (medico.provincia ?? "") ||
+    celularPersonal !== (medico.celular_personal ?? "") ||
+    emailPersonal !== (medico.email_personal ?? "") ||
     fotoFile !== null;
 
   // Handle MP OAuth callback params
@@ -138,6 +144,8 @@ export default function PerfilClient({
           tipo_matricula: tipoMatricula,
           numero_matricula: numeroMatricula,
           provincia,
+          celular_personal: celularPersonal || null,
+          email_personal: emailPersonal || null,
         }),
       });
 
@@ -159,6 +167,36 @@ export default function PerfilClient({
   const displayFoto = fotoPreview || fotoUrl;
   const initials = medico.nombre_completo.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
+  // Indicadores inline de perfil (spec Sofía 27/05)
+  // Bloqueantes = rojo, Recomendados = amarillo
+  const COLOR_BLOQUEANTE = "#E24B4A";
+  const COLOR_RECOMENDADO = "#BA7517";
+
+  function borderStyle(value: string, blocking: boolean) {
+    if (value.trim()) return {};
+    return { borderColor: blocking ? COLOR_BLOQUEANTE : COLOR_RECOMENDADO };
+  }
+
+  function MicroCopy({ value, blocking }: { value: string; blocking: boolean }) {
+    if (value.trim()) return null;
+    return (
+      <p className="mt-1 text-xs" style={{ color: blocking ? COLOR_BLOQUEANTE : COLOR_RECOMENDADO }}>
+        {blocking ? "Obligatorio para atender consultas" : "Recomendado para generar confianza"}
+      </p>
+    );
+  }
+
+  // Scroll al anchor con smooth center cuando viene del panel
+  useEffect(() => {
+    const hash = window.location.hash?.replace("#", "");
+    if (hash) {
+      const el = document.getElementById(hash);
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+      }
+    }
+  }, []);
+
   return (
     <>
       <main className="mx-auto max-w-2xl px-6 py-6 pb-28">
@@ -174,7 +212,7 @@ export default function PerfilClient({
 
         {/* Back + title */}
         <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-          ← Dashboard
+          ← Volver
         </Link>
         <p className="mt-4 text-xs font-medium tracking-wide text-gray-400">MI PERFIL</p>
 
@@ -182,7 +220,9 @@ export default function PerfilClient({
         <div id="foto" className="mt-5 flex flex-col items-center rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
           <div
             className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-lg font-medium text-gray-500"
-            style={{ border: "2px solid #e5e7eb" }}
+            style={{
+              border: displayFoto ? "2px solid #e5e7eb" : `2px dashed ${COLOR_RECOMENDADO}`,
+            }}
           >
             {displayFoto ? (
               <img src={displayFoto} alt="Foto" className="h-full w-full object-cover" />
@@ -195,8 +235,13 @@ export default function PerfilClient({
             onClick={() => fileRef.current?.click()}
             className="mt-1 text-sm font-medium text-[#378ADD]"
           >
-            Cambiar foto
+            {displayFoto ? "Cambiar foto" : "Subir foto"}
           </button>
+          {!displayFoto && (
+            <p className="mt-1 text-xs" style={{ color: COLOR_RECOMENDADO }}>
+              Recomendado para generar confianza
+            </p>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -208,7 +253,10 @@ export default function PerfilClient({
 
         {/* Datos profesionales */}
         <div id="datos" className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
-          <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">DATOS PROFESIONALES</p>
+          <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">DATOS PROFESIONALES DEL CONSULTORIO</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Estos datos aparecen en recetas, certificados y son visibles para el paciente.
+          </p>
 
           <div className="mt-5 space-y-4">
             {/* Especialidad (read-only) */}
@@ -266,8 +314,10 @@ export default function PerfilClient({
                 value={domicilio}
                 onChange={(e) => setDomicilio(e.target.value)}
                 placeholder="Av. Corrientes 1234, CABA"
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+                className="mt-1 w-full rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+                style={borderStyle(domicilio, true)}
               />
+              <MicroCopy value={domicilio} blocking={true} />
             </div>
 
             {/* Teléfono */}
@@ -278,6 +328,39 @@ export default function PerfilClient({
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
                 placeholder="11-4567-8900"
+                className="mt-1 w-full rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+                style={borderStyle(telefono, true)}
+              />
+              <MicroCopy value={telefono} blocking={true} />
+            </div>
+          </div>
+        </div>
+
+        {/* Contacto privado */}
+        <div className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
+          <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">CONTACTO PRIVADO</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Celular personal y email — solo para registro y contacto en Docto. Esta información es personal y no aparece en documentos ni se comparte con pacientes.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div>
+              <label className="text-xs text-gray-400">Celular personal</label>
+              <input
+                type="tel"
+                value={celularPersonal}
+                onChange={(e) => setCelularPersonal(e.target.value)}
+                placeholder="11-2345-6789"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">Email personal</label>
+              <input
+                type="email"
+                value={emailPersonal}
+                onChange={(e) => setEmailPersonal(e.target.value)}
+                placeholder="tu@email.com"
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
               />
             </div>

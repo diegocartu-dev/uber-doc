@@ -119,7 +119,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     const errs: FieldErrors = {};
     const nombre = (form.elements.namedItem("nombre_completo") as HTMLInputElement)?.value?.trim();
     const dni = (form.elements.namedItem("dni") as HTMLInputElement)?.value?.trim();
-    const fechaNac = (form.elements.namedItem("fecha_nacimiento") as HTMLInputElement)?.value?.trim();
+    const fechaNac = (document.getElementById("fecha_nacimiento") as HTMLInputElement)?.value?.trim();
     const sexo = (form.elements.namedItem("sexo_dni") as RadioNodeList)?.value;
 
     if (!nombre) errs.nombre_completo = "Ingresá tu nombre completo.";
@@ -128,7 +128,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     } else if (!/^\d{7,8}$/.test(dni)) {
       errs.dni = "El DNI debe tener 7 u 8 números, sin puntos.";
     }
-    if (!fechaNac) errs.fecha_nacimiento = "Seleccioná tu fecha de nacimiento.";
+    if (!fechaNac) errs.fecha_nacimiento = "Ingresá tu fecha de nacimiento (DD/MM/AAAA).";
     if (!sexo) errs.sexo_dni = "Seleccioná tu sexo según DNI.";
 
     return errs;
@@ -232,19 +232,54 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
 
         {/* ── Fecha de nacimiento ── */}
         <div>
-          <label htmlFor="fecha_nacimiento" className="block text-[13px] font-medium text-gray-500">
+          <label htmlFor="fecha_nacimiento_display" className="block text-[13px] font-medium text-gray-500">
             Fecha de nacimiento
           </label>
           <input
-            id="fecha_nacimiento"
-            name="fecha_nacimiento"
-            type="date"
-            required
-            defaultValue={paciente?.fecha_nacimiento ?? ""}
+            id="fecha_nacimiento_display"
+            type="text"
+            inputMode="numeric"
+            placeholder="DD/MM/AAAA"
+            defaultValue={
+              paciente?.fecha_nacimiento
+                ? (() => {
+                    const [y, m, d] = paciente.fecha_nacimiento.split("-");
+                    return `${d}/${m}/${y}`;
+                  })()
+                : ""
+            }
             className={inputClass}
             style={errors.fecha_nacimiento ? inputErrorStyle : inputStyle}
-            onChange={() => errors.fecha_nacimiento && setErrors((e) => ({ ...e, fecha_nacimiento: undefined }))}
+            onChange={(e) => {
+              if (errors.fecha_nacimiento) setErrors((prev) => ({ ...prev, fecha_nacimiento: undefined }));
+              // Auto-format: add slashes as user types
+              let v = e.target.value.replace(/[^\d/]/g, "");
+              const digits = v.replace(/\//g, "");
+              if (digits.length >= 2 && !v.includes("/")) {
+                v = digits.slice(0, 2) + "/" + digits.slice(2);
+              }
+              if (digits.length >= 4 && v.split("/").length < 3) {
+                const parts = v.split("/");
+                v = parts[0] + "/" + (parts[1] || "").slice(0, 2) + "/" + (parts[1] || "").slice(2);
+              }
+              if (v.length > 10) v = v.slice(0, 10);
+              e.target.value = v;
+              // Update hidden field with ISO format
+              const hidden = document.getElementById("fecha_nacimiento") as HTMLInputElement;
+              if (hidden && /^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+                const [dd, mm, yyyy] = v.split("/");
+                const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+                if (d.getDate() === Number(dd) && d.getMonth() === Number(mm) - 1 && d.getFullYear() === Number(yyyy) && d <= new Date() && d.getFullYear() > 1900) {
+                  hidden.value = `${yyyy}-${mm}-${dd}`;
+                } else {
+                  hidden.value = "";
+                }
+              } else if (hidden) {
+                hidden.value = "";
+              }
+            }}
           />
+          <input type="hidden" id="fecha_nacimiento" name="fecha_nacimiento" defaultValue={paciente?.fecha_nacimiento ?? ""} />
           {errors.fecha_nacimiento && (
             <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.fecha_nacimiento}</p>
           )}

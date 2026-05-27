@@ -30,6 +30,7 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Simplificación bold > debugging incremental.
 - NO usar `window.confirm()` ni `window.alert()` — Chrome los suprime en páginas con iframes cross-origin. Usar dialogs React inline con zIndex alto.
 - Migraciones SQL: Marcos no puede ejecutar desde CLI (falta SUPABASE_ACCESS_TOKEN en el entorno). Usar la Management API con el token `sbp_2a46...` para ejecutar DDL directo. Nunca pedir a Diego que toque la terminal.
+- Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
 
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.

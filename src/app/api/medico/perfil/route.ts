@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
     const body = await req.json();
-    const { telefono, domicilio_consultorio, tipo_matricula, numero_matricula, provincia } = body;
+    const { telefono, domicilio_consultorio, tipo_matricula, numero_matricula, provincia, celular_personal, email_personal } = body;
 
     // Only allow updating specific fields
     const updates: Record<string, string | null> = {};
@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
     if (tipo_matricula !== undefined) updates.tipo_matricula = tipo_matricula?.trim() || null;
     if (numero_matricula !== undefined) updates.numero_matricula = numero_matricula?.trim() || null;
     if (provincia !== undefined) updates.provincia = provincia?.trim() || null;
+    if (celular_personal !== undefined) updates.celular_personal = celular_personal?.trim() || null;
+    if (email_personal !== undefined) updates.email_personal = email_personal?.trim() || null;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Sin cambios" }, { status: 400 });
