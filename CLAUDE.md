@@ -32,6 +32,11 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Migraciones SQL: Marcos no puede ejecutar desde CLI (falta SUPABASE_ACCESS_TOKEN en el entorno). Usar la Management API con el token `sbp_2a46...` para ejecutar DDL directo. Nunca pedir a Diego que toque la terminal.
 - Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
 
+## Protocolo de sprint
+- **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
+- **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
+- **Extensión de alcance se reporta SIEMPRE.** Aunque sea consecuencia técnica obligatoria de otro ticket, se documenta en el reporte con razonamiento. La decisión de aprobar la extensión la toma Diego, no el implementador.
+
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
 - Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.
