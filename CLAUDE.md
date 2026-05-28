@@ -49,6 +49,18 @@ Casos detectados que motivan esta regla:
 - **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
 - **Extensión de alcance se reporta SIEMPRE.** Aunque sea consecuencia técnica obligatoria de otro ticket, se documenta en el reporte con razonamiento. La decisión de aprobar la extensión la toma Diego, no el implementador.
 
+## Documentación al cierre
+Cada vez que se termina algo (sprint, decisión de producto, hallazgo, fix, validación), se documenta en el archivo correspondiente del repo ANTES de considerarse cerrado. La memoria de Diego no es la fuente de verdad. El repo lo es.
+
+Reglas concretas:
+- **Cierre de sprint** → reporte en repo (`docs/sprints/` o donde corresponda)
+- **Decisión de producto** → registrar en CLAUDE.md o ROADMAP_OPERATIVO.md según alcance
+- **Hallazgo regulatorio o legal** → documento en `docs/legal/` o referencia cruzada en CLAUDE.md
+- **Validación importante** (ej: REFEPS de Sofía Fasce) → registrar en STATUS_REAL o doc específico
+- **Cambio de estado de un item del ROADMAP** → actualizar ROADMAP_OPERATIVO.md en el mismo commit que cierra el trabajo
+
+Un sprint o tarea NO se considera cerrado hasta que la documentación esté actualizada. "Hecho" sin doc = no hecho a efectos del registro.
+
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
 - Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.
