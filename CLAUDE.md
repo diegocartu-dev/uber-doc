@@ -35,6 +35,15 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 ## Auditoría de seguridad — Regla de evidencia empírica
 Toda auditoría de seguridad (puntual o integral) debe incluir evidencia empírica reproducible por hallazgo: el comando exacto que reproduce el problema, el output real, y clasificación clara entre "explotable hoy" / "vulnerabilidad latente" / "buena práctica pendiente". Reportes basados solo en lectura de código o policies sin tests reales no son accionables y no disparan sprints de fixes.
 
+## Verificación contra producción real
+Cualquier status, auditoría o reporte de estado debe verificar contra el entorno productivo real: Vercel env vars de producción (`npx vercel env pull`), DB de producción (queries con service role key), endpoints en vivo. NO contra archivos `.env.local`, NO contra documentación, NO de memoria.
+
+Suposiciones derivadas de archivos locales o lectura de documentación sin confirmar contra producción son inválidas y deben rehacerse.
+
+Casos detectados que motivan esta regla:
+- **28/05/2026 — Auditoría Roberto:** Reportó hallazgos críticos basados en lectura de policies RLS sin probar empíricamente contra producción. Tests manuales de Diego mostraron que los hallazgos no eran reproducibles.
+- **28/05/2026 — Status report Marcos:** Reportó REFEPS en `SISA_MODE=simulacion` basado en `.env.local`. Producción tenía `SISA_MODE=produccion` en Vercel desde hacía 5 días, con validaciones reales ejecutadas y persistidas en DB.
+
 ## Protocolo de sprint
 - **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
 - **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
