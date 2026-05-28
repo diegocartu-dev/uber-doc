@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import vademecum from "@/data/vademecum.json";
 import { esControlado } from "@/data/controlados";
 
 // ---------------------------------------------------------------------------
@@ -11,18 +10,40 @@ import { esControlado } from "@/data/controlados";
 type Medicamento = {
   nombre: string;
   droga: string;
-  presentacion: string;
-  laboratorio: string;
-  forma_farmaceutica?: string | null;
+  presentacion?: string;
+  laboratorio?: string;
+  forma_farmaceutica?: string;
+  via?: string;
+  controlado?: boolean;
 };
 
 export type MedicamentoReceta = {
   id: string;
-  nombre: string;
-  droga: string;
+  nombre: string;        // Nombre comercial
+  droga: string;          // IFA (denominación común)
   presentacion: string;
   forma_farmaceutica: string;
+  via: string;
 };
+
+// ---------------------------------------------------------------------------
+// Lazy-load del vademécum — NO se incluye en el bundle del workspace.
+// Se carga con dynamic import() la primera vez que el usuario tipea ≥3 chars.
+// Cache en variable de módulo: una sola carga por sesión del navegador.
+// ---------------------------------------------------------------------------
+
+let _vademecumCache: Medicamento[] | null = null;
+let _vademecumPromise: Promise<Medicamento[]> | null = null;
+
+function cargarVademecum(): Promise<Medicamento[]> {
+  if (_vademecumCache) return Promise.resolve(_vademecumCache);
+  if (_vademecumPromise) return _vademecumPromise;
+  _vademecumPromise = import("@/data/vademecum.json").then((mod) => {
+    _vademecumCache = mod.default as Medicamento[];
+    return _vademecumCache;
+  });
+  return _vademecumPromise;
+}
 
 // ---------------------------------------------------------------------------
 // Búsqueda fuzzy simple — normaliza acentos y busca substring
@@ -35,18 +56,19 @@ function normalizar(texto: string): string {
     .replace(/[̀-ͯ]/g, "");
 }
 
-function buscar(query: string): Medicamento[] {
+function buscarSync(query: string): Medicamento[] {
+  if (!_vademecumCache) return [];
   const q = normalizar(query);
   if (q.length < 3) return [];
 
   const resultados: { med: Medicamento; score: number }[] = [];
 
-  for (const med of vademecum as Medicamento[]) {
+  for (const med of _vademecumCache) {
     const nombre = normalizar(med.nombre);
-    const droga = normalizar(med.droga);
+    const droga = normalizar(med.droga || "");
     let score = 0;
-    if (droga.startsWith(q)) score = 100;
-    else if (droga.includes(q)) score = 70;
+    if (droga && droga.startsWith(q)) score = 100;
+    else if (droga && droga.includes(q)) score = 70;
     else if (nombre.startsWith(q)) score = 50;
     else if (nombre.includes(q)) score = 30;
     if (score === 0) continue;
@@ -88,13 +110,21 @@ function LineaMedicamento({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900">
           {med.nombre}
+          {med.droga && med.droga !== med.nombre && (
+            <span className="ml-1.5 text-xs font-normal text-gray-400">
+              ({med.droga})
+            </span>
+          )}
         </p>
         <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
           {med.forma_farmaceutica && (
             <span>Forma: {med.forma_farmaceutica}</span>
           )}
           {med.presentacion && (
-            <span>Presentación: {med.presentacion}</span>
+            <span>Presentaci&oacute;n: {med.presentacion}</span>
+          )}
+          {med.via && (
+            <span>V&iacute;a: {med.via}</span>
           )}
         </div>
       </div>
@@ -140,16 +170,31 @@ export default function MedicamentoAutocomplete({
   const [showSugerencias, setShowSugerencias] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [bloqueadoControlado, setBloqueadoControlado] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const activo = dictando === "receta";
 
-  // Buscar al escribir — debounce 150ms para ~8000 medicamentos
+  // Buscar al escribir — debounce 150ms
+  // Lazy-load: si el vademécum no está cargado, lo carga primero
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const results = buscar(query);
+    if (query.length < 3) {
+      setSugerencias([]);
+      setShowSugerencias(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      // Si no está cargado, disparar carga
+      if (!_vademecumCache) {
+        setCargando(true);
+        await cargarVademecum();
+        setCargando(false);
+      }
+
+      const results = buscarSync(query);
       setSugerencias(results);
-      setShowSugerencias(results.length > 0 && query.length >= 3);
+      setShowSugerencias(results.length > 0);
       setSelectedIndex(-1);
     }, 150);
     return () => clearTimeout(timer);
@@ -176,20 +221,21 @@ export default function MedicamentoAutocomplete({
     (med: Medicamento) => {
       const droga = med.droga?.trim() || med.nombre;
 
-      if (esControlado(droga)) {
+      // Usar flag nativo CNPM + fallback a lista manual
+      if (med.controlado || esControlado(droga)) {
         setBloqueadoControlado(droga);
         setQuery("");
         setShowSugerencias(false);
         return;
       }
 
-      const nombreReceta = droga !== med.nombre ? `${droga} (${med.nombre})` : med.nombre;
       const nuevo: MedicamentoReceta = {
         id: uid(),
-        nombre: nombreReceta,
-        droga: med.droga,
-        presentacion: med.presentacion,
-        forma_farmaceutica: med.forma_farmaceutica ?? "",
+        nombre: med.nombre,
+        droga: med.droga || "",
+        presentacion: med.presentacion || "",
+        forma_farmaceutica: med.forma_farmaceutica || "",
+        via: med.via || "",
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
@@ -280,12 +326,18 @@ export default function MedicamentoAutocomplete({
               className="w-full rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
               style={{ border: "0.5px solid #e5e7eb", minHeight: "44px" }}
             />
-            {/* Icono de búsqueda */}
+            {/* Icono de búsqueda o loading */}
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
+              {cargando ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" className="animate-spin" fill="none" stroke="#378ADD" strokeWidth="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+              )}
             </div>
           </div>
         </div>
@@ -299,7 +351,7 @@ export default function MedicamentoAutocomplete({
           >
             {sugerencias.map((med, i) => (
               <button
-                key={`${med.nombre}-${med.laboratorio}`}
+                key={`${med.nombre}-${med.laboratorio}-${med.presentacion}`}
                 type="button"
                 onClick={() => agregarMedicamento(med)}
                 className={`w-full text-left px-3 py-2.5 transition ${
@@ -311,17 +363,22 @@ export default function MedicamentoAutocomplete({
               >
                 <p className="text-sm font-medium text-gray-900">
                   {med.nombre}
-                  {med.laboratorio !== "Genérico" && (
+                  {med.laboratorio && (
                     <span className="ml-1.5 text-xs font-normal text-gray-400">
                       ({med.laboratorio})
                     </span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {med.droga} — {med.presentacion}
+                  {med.droga}{med.presentacion ? ` — ${med.presentacion}` : ""}
                   {med.forma_farmaceutica && (
                     <span className="ml-1 text-gray-400">
                       · {med.forma_farmaceutica}
+                    </span>
+                  )}
+                  {med.via && (
+                    <span className="ml-1 text-gray-400">
+                      · {med.via}
                     </span>
                   )}
                 </p>
@@ -336,7 +393,7 @@ export default function MedicamentoAutocomplete({
         value={textoLibre}
         onChange={(e) => onTextoLibreChange(e.target.value)}
         rows={2}
-        placeholder="Texto libre: medicamentos no listados, magistrales, u observaciones..."
+        placeholder="Posología e indicaciones: dosis, frecuencia, duración. Ej: Tomar 1 comp de 10 mg cada 12 hs por 7 días. También medicamentos no listados o magistrales."
         className="mt-2 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
         style={{ border: "0.5px solid #e5e7eb" }}
       />
@@ -370,14 +427,17 @@ export default function MedicamentoAutocomplete({
                 </svg>
               </div>
               <p style={{ fontSize: 16, fontWeight: 600, color: "#111827", margin: 0 }}>
-                Este medicamento requiere receta especial
+                Receta de controlados — próximamente
               </p>
             </div>
             <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 12px" }}>
-              Los medicamentos con <strong>{bloqueadoControlado}</strong> están incluidos en las listas de sustancias controladas (Ley 17.818 y Ley 19.303) y requieren receta firmada digitalmente conforme al Decreto 345/2024.
+              Los medicamentos con <strong>{bloqueadoControlado}</strong> están incluidos en las listas de psicotrópicos y estupefacientes (Ley 17.818 y Ley 19.303).
+            </p>
+            <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 12px" }}>
+              Las recetas de psicotrópicos y estupefacientes requieren un circuito de trazabilidad especial que estará disponible próximamente en Docto.
             </p>
             <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 20px" }}>
-              Docto utiliza firma electrónica, válida para recetas comunes pero no para medicamentos controlados. Emití esta receta por el canal habitual que utilices para controlados (recetario oficial o plataforma con firma digital habilitada).
+              Mientras tanto, emití esta receta por el canal habitual que utilices para controlados.
             </p>
             <button
               type="button"
