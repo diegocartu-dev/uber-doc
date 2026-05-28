@@ -101,6 +101,7 @@ function formatTimer(seg: number): string {
 // Serialización de medicamentos estructurados a texto para PDF/documentos
 // ---------------------------------------------------------------------------
 
+// Formato IFA compatible con AAIP/ReNaPDiS — cada medicamento con Rp/ + IFA + detalles
 function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
   const bloques: string[] = [];
   for (let i = 0; i < meds.length; i++) {
@@ -109,12 +110,20 @@ function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): 
     if (!nombre) continue;
 
     const lineas: string[] = [];
-    lineas.push(`${i + 1}. ${nombre.toUpperCase()}`);
+    // IFA (droga) como línea principal — formato prescripción
+    const ifa = (med.droga ?? "").trim();
+    lineas.push(`Rp/ ${ifa ? ifa.toUpperCase() : nombre.toUpperCase()}`);
+    if (ifa && nombre !== ifa) {
+      lineas.push(`    Nombre comercial: ${nombre}`);
+    }
     if (med.forma_farmaceutica?.trim()) {
-      lineas.push(`   Forma farmacéutica: ${capitalizar(med.forma_farmaceutica.trim())}`);
+      lineas.push(`    Forma farmacéutica: ${capitalizar(med.forma_farmaceutica.trim())}`);
     }
     if (med.presentacion?.trim()) {
-      lineas.push(`   Presentación: ${med.presentacion.trim()}`);
+      lineas.push(`    Presentación: ${med.presentacion.trim()}`);
+    }
+    if (med.via?.trim()) {
+      lineas.push(`    Vía: ${med.via.trim()}`);
     }
     bloques.push(lineas.join("\n"));
   }
@@ -138,6 +147,7 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       droga: m.droga ?? "",
       presentacion: m.presentacion ?? "",
       forma_farmaceutica: m.forma_farmaceutica ?? "",
+      via: m.via ?? "",
     }));
     return {
       meds,

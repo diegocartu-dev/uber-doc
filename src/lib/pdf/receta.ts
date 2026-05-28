@@ -167,13 +167,21 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
       pdf.text(doc.diagnostico, MARGIN.left, undefined, { width: CONTENT_WIDTH });
 
       // ─── CONTENIDO ────────────────────────────────────────────────────
+      // Observación #3 Martín: evitar "RECETA MÉDICA" duplicado (ya está en el header)
       pdf.moveDown(0.3);
-      renderSectionLabel(pdf, titulo);
-      pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
-      pdf.text(doc.contenido, MARGIN.left, undefined, {
-        width: CONTENT_WIDTH,
-        lineGap: 2,
-      });
+      renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo);
+
+      if (esReceta && doc.contenido.includes("Rp/")) {
+        // Receta estructurada con formato IFA — renderizar con tipografía diferenciada
+        renderRecetaEstructurada(pdf, doc.contenido);
+      } else {
+        // Texto plano (indicaciones, certificados, recetas legacy)
+        pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
+        pdf.text(doc.contenido, MARGIN.left, undefined, {
+          width: CONTENT_WIDTH,
+          lineGap: 2,
+        });
+      }
 
       // ─── Calcular posición del footer ─────────────────────────────────
       const footerHeight = esReceta ? 125 : 50;
@@ -209,6 +217,54 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
 }
 
 // ─── Render functions ─────────────────────────────────────────────────────────
+
+// Renderizado estructurado de receta con formato IFA (AAIP/ReNaPDiS compatible)
+// Parsea bloques "Rp/ IFA_NAME" seguidos de líneas indentadas con detalles
+function renderRecetaEstructurada(pdf: PDFKit.PDFDocument, contenido: string) {
+  const bloques = contenido.split(/\n\n+/);
+  let medIndex = 0;
+
+  for (const bloque of bloques) {
+    const lineas = bloque.split("\n");
+    const primeraLinea = lineas[0]?.trim() ?? "";
+
+    if (primeraLinea.startsWith("Rp/")) {
+      medIndex++;
+      const ifa = primeraLinea.replace(/^Rp\/\s*/, "").trim();
+
+      // Número + "Rp/" en azul accent
+      pdf.font("Inter-SemiBold").fontSize(10).fillColor(COLORS.accent);
+      pdf.text(`${medIndex}. Rp/`, MARGIN.left, undefined, {
+        width: CONTENT_WIDTH,
+        continued: true,
+      });
+
+      // IFA name en negro bold
+      pdf.font("Inter-Bold").fontSize(10).fillColor(COLORS.primary);
+      pdf.text(` ${ifa}`, { width: CONTENT_WIDTH });
+
+      // Líneas de detalle (nombre comercial, forma, presentación, vía)
+      for (let i = 1; i < lineas.length; i++) {
+        const detalle = lineas[i]?.trim();
+        if (!detalle) continue;
+        pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
+        pdf.text(`    ${detalle}`, MARGIN.left, undefined, {
+          width: CONTENT_WIDTH,
+        });
+      }
+
+      pdf.moveDown(0.4);
+    } else if (primeraLinea) {
+      // Texto libre (no Rp/) — renderizar como texto normal
+      pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
+      pdf.text(bloque, MARGIN.left, undefined, {
+        width: CONTENT_WIDTH,
+        lineGap: 2,
+      });
+      pdf.moveDown(0.3);
+    }
+  }
+}
 
 function renderHeader(pdf: PDFKit.PDFDocument, titulo: string, createdAt: string) {
   const fecha = formatFecha(createdAt);
