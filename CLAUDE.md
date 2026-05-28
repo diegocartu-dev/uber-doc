@@ -12,8 +12,8 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 ## Stack
 - Frontend: Next.js (App Router)
 - Backend/DB: Supabase (PostgreSQL + RLS + Realtime)
-- Video: Daily.co (integrado con DailyIframe JS SDK `@daily-co/daily-js`)
-- Pagos: Mercado Pago (simulado)
+- Video: LiveKit (`@livekit/components-react` + `livekit-client` + `livekit-server-sdk`)
+- Pagos: Mercado Pago (OAuth + split comisiones en produccion)
 - Hosting: Vercel (auto-deploy desde GitHub)
 - Repo: github.com/diegocartu-dev/uber-doc
 - Producción: uber-doc.vercel.app
@@ -23,7 +23,7 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - SIEMPRE diseñar y validar arquitectura antes de implementar.
 - Supabase RLS activo. Usar supabaseAdmin para bypass.
 - Realtime: filtros en non-PK fallan. Escuchar sin filtros, filtrar en JS.
-- Video Daily.co: Safari OK, Chrome iPhone NO.
+- Video LiveKit: Safari OK, Chrome iPhone revisar.
 - UX simple para médico de 70 años.
 - Todo se prueba en docto.com.ar, NUNCA en localhost.
 - Push a main = redeploy automático en Vercel.
@@ -70,34 +70,30 @@ Un sprint o tarea NO se considera cerrado hasta que la documentación esté actu
 - Amarillo #BA7517 (pendiente)
 - Tipografía: Inter en todo el producto, incluyendo PDFs.
 
-## Arquitectura de video — Daily.co
+## Arquitectura de video — LiveKit
+
+> **Nota (28/05/2026):** Migrado de Daily.co a LiveKit. El código ya NO usa Daily.co.
+> `@daily-co/daily-js` fue eliminado. DAILY_API_KEY en .env.local es legacy sin uso.
 
 ### Integración actual
-Los dos componentes de video (`WorkspaceConsulta.tsx` para médico, `SalaConsultaPaciente.tsx` para paciente) usan **DailyIframe JS SDK** (`@daily-co/daily-js`) con `DailyIframe.createFrame()` sobre un elemento `<iframe>` con ref. El SDK controla el iframe completo — no se usa `src` en el tag HTML.
-
-### Listener left-meeting (CRÍTICO)
-Ambos componentes escuchan `callFrame.on("left-meeting")` para ocultar el iframe inmediatamente (`setIframeVisible(false)`). Sin esto, Daily.co muestra su pantalla interna "Has abandonado la llamada" antes de que React pueda reaccionar.
+Los componentes de video usan **LiveKit React SDK** (`@livekit/components-react`) con `LiveKitRoom` + tracks de `livekit-client`. Backend genera tokens con `livekit-server-sdk` en `src/app/api/livekit/token/route.ts`. Salas se crean via `src/app/api/livekit/crear-sala/route.ts`. Webhook LiveKit en `src/app/api/livekit/webhook/route.ts`.
 
 ### Flujo de finalización del médico
 1. Médico toca "Finalizar consulta" → dialog React inline (NO `window.confirm`)
-2. Confirma → `setIframeVisible(false)` oculta iframe con CSS `display: none`
+2. Confirma → desconecta de la sala LiveKit
 3. `router.push('/dashboard')` — redirect inmediato sin esperar Supabase
 4. Guardado de documentos + update estado `completada` ocurre en background (fire-and-forget IIFE)
 5. Si el guardado falla, el médico ya está en el dashboard — falla silenciosamente
 
 ### Flujo de detección del paciente
-1. **Realtime** (Supabase channel) escucha UPDATE en consultas por PK → detecta `completada` → `setIframeVisible(false)` + muestra pantalla de cierre con documentos
-2. **Polling de respaldo** cada 5s a `/api/consulta-estado` → detecta `completada` → `setIframeVisible(false)` + `router.push('/mis-consultas')`
-3. El polling usa `useRef` (yaRedirigioRef) como flag, NO estado en dep array — si `estado` estuviera en deps, el useEffect se destruiría al cambiar y la guard lo mataría
+1. **Polling** cada 5s a `/api/consulta-estado` → detecta `completada` → muestra pantalla de cierre con documentos
+2. El polling usa `useRef` (yaRedirigioRef) como flag, NO estado en dep array — si `estado` estuviera en deps, el useEffect se destruiría al cambiar y la guard lo mataría
 
 ### Problemas conocidos y aprendizajes
 - **`window.confirm()` + iframe cross-origin = SILENCIOSAMENTE SUPRIMIDO** en Chrome/HTTPS. El confirm devuelve `false` sin mostrar nada. Toda confirmación destructiva debe usar dialog React.
-- **setState es async**: `setIframeVisible(false)` no hace efecto hasta el siguiente render. Si el redirect ocurre antes del repaint, el iframe sigue visible un instante. Por eso el SDK escucha `left-meeting` — es la señal más temprana posible.
-- **Archivo DEPRECATED**: `src/app/consulta/[id]/video/VideoLlamada.tsx` tiene la implementación original correcta con DailyIframe SDK. Fue la referencia para migrar los componentes activos.
-- **Supabase client no lanza excepciones**: devuelve `{data, error}`. Siempre verificar `error` antes de asumir éxito. El loop de finalización ocurría porque el update fallaba silenciosamente y el redirect no se ejecutaba.
+- **Supabase client no lanza excepciones**: devuelve `{data, error}`. Siempre verificar `error` antes de asumir éxito.
 
 ### Lo que NO se debe hacer
-- NUNCA usar `<iframe src={url}>` directo para Daily — el SDK debe controlar el frame con `createFrame()` + `join()`
 - NUNCA depender solo de Realtime para transiciones críticas del paciente — siempre polling como respaldo
 - NUNCA poner `estado` como dependencia del useEffect de polling — mata el interval justo cuando más se necesita
 - NUNCA hacer el guardado de documentos bloqueante para el redirect del médico — fire-and-forget
@@ -136,8 +132,12 @@ ALTER TABLE pacientes
 ### Regla de implementación
 Los SELECTs que incluyan columnas nuevas (`fecha_nacimiento`, `sexo_dni`, etc.) SOLO deben estar en archivos nuevos o en archivos que se modifican explícitamente para este sprint. NUNCA agregar columnas nuevas a SELECTs existentes que funcionan en producción — Supabase PostgREST falla si la columna no existe y el redirect al dashboard rompe toda la página.
 
-## Estado actual (16 Abril 2026)
-- MVP scope locked. Flujos core funcionando.
-- Sprint estabilización completado: polling funciona, finalización sin loop, colores corregidos.
-- PENDIENTE: Sprint perfil médico + receta (reimplementar desde main limpio), Vercel Cron, password reset, beta cerrada.
-- BUGS RESUELTOS: (1) Polling reemplazó Realtime en sala de espera. (2) Finalización usa dialog React + fire-and-forget. (3) Daily.co integrado con SDK para detectar left-meeting.
+## Estado actual (28 Mayo 2026)
+- MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
+- Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
+- REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion), validacion manual durante F&F.
+- Vademecum CNPM: 16.878 medicamentos oficiales con lazy-load y deteccion dual de controlados.
+- Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
+- Beta cerrada: registro con whitelist de emails (PR #87).
+- Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
+- Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
