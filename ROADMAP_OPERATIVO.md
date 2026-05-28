@@ -133,6 +133,16 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 5g. Onboarding personalizado primer medico beta | ❌ Pendiente |
 | 5h. Soporte medico (canal de comunicacion) | ❌ Pendiente |
 | 5i. Onboarding de psiquiatria y dermatologia | ❌ Pendiente |
+| 5j. Via de administracion prescrita por medicamento | ❌ Pendiente |
+| 5k. Posologia vinculada a cada medicamento (no texto libre global) | ❌ Pendiente |
+
+> **5j — Contexto (observacion #2 Martin, 28/05/2026):** La receta muestra la via que admite el producto
+> (ej: "inyectable IM/IV") en vez de la via que el medico prescribio (ej: solo "IM"). Requiere que el
+> medico elija via al prescribir cada medicamento.
+>
+> **5k — Contexto (observacion #4 Martin, 28/05/2026):** La posologia hoy es texto libre global al final
+> de la receta. Con muchos medicamentos puede confundir al paciente. Migrar a un campo de indicacion
+> por medicamento vinculado a cada item Rp/.
 
 ## 6. Experiencia de Paciente
 
@@ -214,6 +224,14 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 11c. API publica para terceros | ❌ Roadmap |
 | 11d. Modo offline / PWA | ❌ Roadmap |
 | 11e. Integracion con HCE de hospitales | ❌ Roadmap |
+| 11f. Recetas de controlados (psicotropicos/estupefacientes) | ❌ Roadmap |
+
+> **11f — Contexto (decision Diego, 28/05/2026):** La Res. 2214/2025 + Ley 27.553 SI habilitan
+> receta electronica de controlados en plataformas ReNaPDiS (Docto es Plataforma 0270). El bloqueo
+> actual (835 medicamentos) es decision conservadora, NO impedimento legal. Habilitar requiere
+> implementar circuito de trazabilidad especial: constancia de autorizacion + trazabilidad especial
+> segun Res. 2214/2025. Habilita especialidades clave: psiquiatria, neurologia, dolor cronico,
+> paliativos. Requiere validacion legal Carolina + circuito constancia de autorizacion. Trigger: post-F&F.
 
 ---
 

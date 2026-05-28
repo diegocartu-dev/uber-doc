@@ -1,6 +1,8 @@
 // Principios activos controlados — Ley 17.818 (estupefacientes) y Ley 19.303 (psicotrópicos)
 // Fuente: ANMAT https://www.argentina.gob.ar/anmat/regulados/controlespecial/listados
-// Requieren receta con firma digital (Decreto 345/2024) — no emitible por Docto (firma electrónica)
+// Requieren circuito de trazabilidad especial (Res. 2214/2025) — bloqueados en Docto por decisión conservadora
+// Nota: La Res. 2214/2025 + Ley 27.553 habilitan controlados en ReNaPDiS, pero Docto los bloquea hasta
+// implementar el circuito completo (constancia de autorización + trazabilidad). Ver ROADMAP item 11f.
 // Última actualización: mayo 2026
 
 const CONTROLADOS: string[] = [
