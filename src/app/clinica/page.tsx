@@ -40,7 +40,8 @@ export default async function ClinicaPage() {
     .eq("es_cuenta_test", false);
 
   // Contar turnos disponibles en clínica virtual por médico (para decidir visibilidad del botón "Agendar turno")
-  const hoy = new Date().toISOString().split("T")[0];
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
   const { data: turnosDisponibles } = await supabase
     .from("turnos")
     .select("medico_id")

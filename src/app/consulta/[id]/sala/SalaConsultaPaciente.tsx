@@ -32,6 +32,7 @@ type Props = {
   roomName: string | null;
   medicoNombre: string;
   especialidad: string;
+  horaInicio?: string | null;
 };
 
 function VideoArea() {
@@ -239,6 +240,7 @@ export default function SalaConsultaPaciente({
   roomName,
   medicoNombre,
   especialidad,
+  horaInicio,
 }: Props) {
   const router = useRouter();
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
@@ -252,7 +254,7 @@ export default function SalaConsultaPaciente({
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const [showEstudios, setShowEstudios] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
-  const inicioRef = useRef(Date.now());
+  const inicioRef = useRef(horaInicio ? new Date(horaInicio).getTime() : Date.now());
   const yaRedirigioRef = useRef(false);
 
   // --- Obtener token LiveKit ---
