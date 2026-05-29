@@ -27,12 +27,8 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Nombre completo").clear();
     await page.getByLabel("DNI").clear();
 
-    // Aceptar ambos checkboxes para habilitar el botón submit
-    const checkboxes = page.getByRole("checkbox");
-    const count = await checkboxes.count();
-    for (let i = 0; i < count; i++) {
-      await checkboxes.nth(i).check();
-    }
+    // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
+    for (const cb of await page.getByRole("checkbox").all()) await cb.check();
 
     await page.getByRole("button", { name: /guardar/i }).click();
 
