@@ -18,7 +18,7 @@ export default async function SalaPage({
   // Verificar que la consulta existe y el user es el paciente
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, estado, sala_video_url, medico_id, especialidad, paciente_id")
+    .select("id, estado, sala_video_url, medico_id, especialidad, paciente_id, updated_at")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -43,6 +43,7 @@ export default async function SalaPage({
       roomName={consulta.sala_video_url}
       medicoNombre={medico?.nombre_completo ?? "tu médico"}
       especialidad={consulta.especialidad}
+      horaInicio={consulta.updated_at}
     />
   );
 }
