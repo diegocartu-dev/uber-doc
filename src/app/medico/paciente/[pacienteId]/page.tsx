@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
 import OrigenBadge from "@/components/OrigenBadge";
 import AppNavbar from "@/components/AppNavbar";
+import PatologiaCronica from "./PatologiaCronica";
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -119,6 +120,14 @@ export default async function FichaPacientePage({
     .select("sexo_dni, tiene_cobertura")
     .eq("id", pacienteId)
     .single();
+
+  // Patología crónica (vínculo médico-paciente)
+  const { data: perfilVinculo } = await supabase
+    .from("medico_paciente_perfil")
+    .select("id, patologia_cronica")
+    .eq("medico_user_id", user.id)
+    .eq("paciente_id", pacienteId)
+    .maybeSingle();
 
   const edad = calcularEdad(paciente.fecha_nacimiento);
 
@@ -411,6 +420,14 @@ export default async function FichaPacientePage({
             )}
           </div>
         </div>
+
+        {/* Patología crónica */}
+        <PatologiaCronica
+          medicoUserId={user.id}
+          pacienteId={pacienteId}
+          perfilId={perfilVinculo?.id ?? null}
+          initialPatologias={perfilVinculo?.patologia_cronica ?? []}
+        />
 
         {/* Secciones de historial — orden según origen */}
         {desde === "turno" ? (
