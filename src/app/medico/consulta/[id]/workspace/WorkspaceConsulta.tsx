@@ -310,6 +310,7 @@ type DocBorrador = {
   receta?: string;
   indicaciones?: string;
   certificado?: string;
+  evolucion?: string;
   updated_at?: string;
   medicamentos_structured?: MedicamentoReceta[];
   receta_texto_libre?: string;
@@ -540,6 +541,7 @@ export default function WorkspaceConsulta({
   const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+  const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
 
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
@@ -571,7 +573,9 @@ export default function WorkspaceConsulta({
     });
   }
   const [diagError, setDiagError] = useState(false);
+  const [evolucionError, setEvolucionError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
+  const evolucionRef = useRef<HTMLTextAreaElement>(null);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   // --- Auto-save ---
@@ -580,6 +584,7 @@ export default function WorkspaceConsulta({
     receta,
     indicaciones,
     certificado,
+    evolucion,
     medicamentos_structured: medicamentos,
     receta_texto_libre: recetaTextoLibre,
   });
@@ -623,19 +628,28 @@ export default function WorkspaceConsulta({
     return () => clearInterval(i);
   }, [horaInicio]);
 
-  // Helper: validar diagnóstico antes de finalizar
-  function validarDiagnostico(): boolean {
-    if (diagnostico.trim()) return true;
-    setError("Completá el diagnóstico antes de finalizar la consulta.");
-    setDiagError(true);
-    setModo("escritura");
-    setTimeout(() => diagRef.current?.focus(), 350); // después de la transición CSS
-    return false;
+  // Helper: validar campos obligatorios antes de finalizar
+  function validarCamposObligatorios(): boolean {
+    if (!diagnostico.trim()) {
+      setError("Completá el diagnóstico antes de finalizar la consulta.");
+      setDiagError(true);
+      setModo("escritura");
+      setTimeout(() => diagRef.current?.focus(), 350);
+      return false;
+    }
+    if (!evolucion.trim()) {
+      setError("Completá la Evolución antes de finalizar.");
+      setEvolucionError(true);
+      setModo("escritura");
+      setTimeout(() => evolucionRef.current?.focus(), 350);
+      return false;
+    }
+    return true;
   }
 
   // --- Iniciar finalización — verifica cobertura si hay receta ---
   function iniciarFinalizacion() {
-    if (!validarDiagnostico()) return;
+    if (!validarCamposObligatorios()) return;
 
     // Si hay receta y cobertura incompleta → modal automático
     if (receta.trim() && !datosCoberturaCompletos(coberturaLocal)) {
@@ -680,7 +694,7 @@ export default function WorkspaceConsulta({
 
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
-    if (!validarDiagnostico()) return;
+    if (!validarCamposObligatorios()) return;
 
     const sinCuil = receta.trim() && !consulta.paciente_cuil;
 
@@ -754,7 +768,7 @@ export default function WorkspaceConsulta({
 
         await supabase
           .from("consultas")
-          .update({ estado: "completada", doc_borrador: null })
+          .update({ estado: "completada", doc_borrador: null, evolucion: evolucion.trim() })
           .eq("id", consultaId);
 
         // Borrar estudios temporales del paciente
@@ -810,6 +824,7 @@ export default function WorkspaceConsulta({
             receta,
             indicaciones,
             certificado,
+            evolucion,
             medicamentos_structured: medicamentos,
             receta_texto_libre: recetaTextoLibre,
             updated_at: new Date().toISOString(),
@@ -989,7 +1004,7 @@ export default function WorkspaceConsulta({
                           type="button"
                           isLoading={finalizando}
                           onClick={() => {
-                            if (!validarDiagnostico()) return;
+                            if (!validarCamposObligatorios()) return;
                             setShowConfirmDialog(true);
                           }}
                           className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
@@ -1281,6 +1296,21 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
           />
+          <CampoDictado
+            label="EVOLUCION"
+            campo="evolucion"
+            value={evolucion}
+            setter={(v) => { setEvolucion(v); if (v.trim()) { setEvolucionError(false); setError(null); } }}
+            placeholder="Registrá la evolución del paciente en esta consulta..."
+            rows={4}
+            required
+            hasError={evolucionError}
+            textareaRef={evolucionRef}
+            dictando={dictando}
+            onIniciar={() => iniciarDictado("evolucion", (fn) => setEvolucion((prev) => { const val = fn(prev); if (val.trim()) { setEvolucionError(false); setError(null); } return val; }))}
+            onDetener={detenerDictado}
+            soportado={dictadoSoportado}
+          />
 
           {/* Acordeón: RECETA */}
           <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
@@ -1353,7 +1383,7 @@ export default function WorkspaceConsulta({
                 type="button"
                 isLoading={finalizando}
                 onClick={() => {
-                  if (!validarDiagnostico()) return;
+                  if (!validarCamposObligatorios()) return;
                   setShowConfirmDialog(true);
                 }}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
@@ -1368,7 +1398,7 @@ export default function WorkspaceConsulta({
               <LoadingButton
                 isLoading={finalizando}
                 onClick={() => {
-                  if (!validarDiagnostico()) return;
+                  if (!validarCamposObligatorios()) return;
                   setShowConfirmDialog(true);
                 }}
                 className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
@@ -1596,7 +1626,7 @@ export default function WorkspaceConsulta({
               <button
                 onClick={() => {
                   setShowSalirDialog(false);
-                  if (!validarDiagnostico()) return;
+                  if (!validarCamposObligatorios()) return;
                   setShowConfirmDialog(true);
                 }}
                 style={{
