@@ -31,7 +31,8 @@ export function useAutoSaveBorrador(
         camposActuales.diagnostico.trim() ||
         camposActuales.receta.trim() ||
         camposActuales.indicaciones.trim() ||
-        camposActuales.certificado.trim();
+        camposActuales.certificado.trim() ||
+        (camposActuales.evolucion && String(camposActuales.evolucion).trim());
 
       if (!hayContenido) return;
 
@@ -87,7 +88,7 @@ export function useAutoSaveBorrador(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [campos.diagnostico, campos.receta, campos.indicaciones, campos.certificado, guardar]);
+  }, [campos.diagnostico, campos.receta, campos.indicaciones, campos.certificado, campos.evolucion, guardar]);
 
   // Cleanup on unmount
   useEffect(() => {
