@@ -124,8 +124,9 @@ export async function completarPerfil(formData: FormData) {
             version_id: version.id,
           });
         }
-      } catch {
-        // Fire-and-forget: no bloquear onboarding por fallo en registro de aceptación
+      } catch (err) {
+        // Fire-and-forget: no bloquear onboarding
+        console.error("Fallo registro aceptacion datos sensibles:", err);
       }
     })();
   }
