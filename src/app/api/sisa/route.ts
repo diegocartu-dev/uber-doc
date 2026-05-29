@@ -1,3 +1,9 @@
+/**
+ * @deprecated Esta ruta es LEGACY. La validación real de matrículas usa
+ * /api/admin/medicos/refeps → validarMedicoREFEPS() → Bus FHIR (bus.msal.gob.ar).
+ * Esta ruta se mantiene solo por backward compat del registro de médicos.
+ * NO usarla para nuevas funcionalidades.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
