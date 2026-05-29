@@ -71,7 +71,11 @@ export async function POST(req: NextRequest) {
     const transicionaEnCurso =
       (tipo === "consulta" && consulta.estado === "pagada") ||
       (tipo === "turno" && consulta.estado !== "en_curso");
-    if (transicionaEnCurso) updateData.estado = "en_curso";
+    if (transicionaEnCurso) {
+      updateData.estado = "en_curso";
+      // en_curso_at existe en consultas y turnos (migración 053 + 060)
+      updateData.en_curso_at = new Date().toISOString();
+    }
     if (Object.keys(updateData).length > 0) {
       await supabase.from(tabla).update(updateData).eq("id", consultaId);
     }
