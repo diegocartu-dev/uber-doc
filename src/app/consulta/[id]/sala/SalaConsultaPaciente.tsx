@@ -251,6 +251,7 @@ export default function SalaConsultaPaciente({
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const [showEstudios, setShowEstudios] = useState(false);
+  const [showSalirDialog, setShowSalirDialog] = useState(false);
   const inicioRef = useRef(Date.now());
   const yaRedirigioRef = useRef(false);
 
@@ -475,11 +476,11 @@ export default function SalaConsultaPaciente({
 
             {/* Botón volver */}
             <a
-              href="/dashboard"
+              href="/mis-consultas"
               className="mt-8 block w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
-              Volver al inicio
+              Volver a mis consultas
             </a>
           </div>
         </main>
@@ -525,11 +526,11 @@ export default function SalaConsultaPaciente({
               La consulta con {formatNombreMedico(medicoNombre)} fue cancelada
             </p>
             <a
-              href="/dashboard"
+              href="/mis-consultas"
               className="mt-8 inline-block rounded-xl border border-gray-300 px-8 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
-              Volver al inicio
+              Volver a mis consultas
             </a>
           </div>
         </main>
@@ -626,7 +627,7 @@ export default function SalaConsultaPaciente({
                     </button>
                     <button
                       type="button"
-                      onClick={() => router.push("/dashboard")}
+                      onClick={() => setShowSalirDialog(true)}
                       className="rounded-lg px-4 py-2 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition"
                       style={{ minHeight: "44px" }}
                     >
@@ -690,6 +691,36 @@ export default function SalaConsultaPaciente({
             </button>
           </div>
         </>
+      )}
+
+      {/* Dialog confirmación salir */}
+      {showSalirDialog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-gray-900">¿Salir de la consulta?</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Si salís ahora, vas a abandonar la videollamada con tu médico. Esta acción no se puede deshacer.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSalirDialog(false)}
+                className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                style={{ minHeight: "44px" }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/mis-consultas")}
+                className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white transition"
+                style={{ minHeight: "44px", backgroundColor: "#E24B4A", border: "1px solid #E24B4A" }}
+              >
+                Salir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Panel de estudios — slide up overlay */}
