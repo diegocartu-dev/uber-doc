@@ -24,7 +24,7 @@ export default async function EsperaTurnoPage({
 
   if (!turno) redirect("/dashboard");
   const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen, "/dashboard");
-  if (turno.estado === "en_curso") redirect(`/turno/${turnoId}/video`);
+  if (turno.estado === "en_curso") redirect(`/turno/${turnoId}/sala`);
   if (turno.estado !== "confirmado" && turno.estado !== "en_espera") redirect("/dashboard");
 
   // Marcar como en_espera si está confirmado

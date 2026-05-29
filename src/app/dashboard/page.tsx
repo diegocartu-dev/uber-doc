@@ -618,7 +618,7 @@ export default async function DashboardPage({
             </p>
             <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
             <Link
-              href={`/turno/${turnoEnCursoPaciente.id}/video`}
+              href={`/turno/${turnoEnCursoPaciente.id}/sala`}
               className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
               style={{ backgroundColor: "var(--color-info)" }}
             >

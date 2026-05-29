@@ -23,7 +23,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
   function redirigirAVideo() {
     soundVideoLista();
     setEstado("redirigiendo");
-    window.location.href = `/turno/${turnoId}/video`;
+    window.location.href = `/turno/${turnoId}/sala`;
   }
 
   // Polling cada 3s via API route
@@ -157,7 +157,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       {/* Botón fallback */}
       {mostrarFallback && (
         <a
-          href={`/turno/${turnoId}/video`}
+          href={`/turno/${turnoId}/sala`}
           className="mt-6 block w-full rounded-xl px-6 py-3 text-center text-sm font-semibold text-white active:scale-95 active:opacity-80 transition-all duration-100"
           style={{ background: "#378ADD" }}
         >

@@ -32,6 +32,7 @@ type Props = {
   roomName: string | null;
   medicoNombre: string;
   especialidad: string;
+  tipo?: "consulta" | "turno";
 };
 
 function VideoArea() {
@@ -239,7 +240,10 @@ export default function SalaConsultaPaciente({
   roomName,
   medicoNombre,
   especialidad,
+  tipo = "consulta",
 }: Props) {
+  // Estado completado difiere entre consultas ("completada") y turnos ("completado")
+  const estadoCompletado = tipo === "turno" ? "completado" : "completada";
   const router = useRouter();
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
@@ -264,7 +268,7 @@ export default function SalaConsultaPaciente({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consultaId }),
+          body: JSON.stringify({ consultaId, tipo }),
         });
         if (!res.ok) {
           const data = await res.json();
@@ -302,43 +306,46 @@ export default function SalaConsultaPaciente({
   const fetchDocumentos = useCallback(async () => {
     try {
       const supabase = createClient();
+      const colId = tipo === "turno" ? "turno_id" : "consulta_id";
       const { data } = await supabase
         .from("documentos")
         .select("id, tipo, diagnostico, contenido, created_at")
-        .eq("consulta_id", consultaId)
+        .eq(colId, consultaId)
         .order("created_at", { ascending: true });
       if (data) setDocumentos(data);
     } catch {
       // silently fail
     }
-  }, [consultaId]);
+  }, [consultaId, tipo]);
 
   // --- Realtime estado: filtro por PK (id) → válido en Supabase Realtime ---
+  const tabla = tipo === "turno" ? "turnos" : "consultas";
+
   useEffect(() => {
     const supabase = createClient();
 
     // Sync inicial por si el estado cambió antes de montar el componente
     supabase
-      .from("consultas")
+      .from(tabla)
       .select("estado")
       .eq("id", consultaId)
       .single()
       .then(({ data }) => {
         if (!data?.estado) return;
         setEstado(data.estado);
-        if (data.estado === "completada") fetchDocumentos();
+        if (data.estado === estadoCompletado) fetchDocumentos();
       });
 
     const channel = supabase
       .channel(`sala-paciente-${consultaId}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "consultas", filter: `id=eq.${consultaId}` },
+        { event: "UPDATE", schema: "public", table: tabla, filter: `id=eq.${consultaId}` },
         (payload) => {
           const row = payload.new as { estado: string };
           if (!row.estado) return;
           setEstado(row.estado);
-          if (row.estado === "completada") {
+          if (row.estado === estadoCompletado) {
             setVideoVisible(false);
             fetchDocumentos();
           }
@@ -347,19 +354,23 @@ export default function SalaConsultaPaciente({
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [consultaId, fetchDocumentos]);
+  }, [consultaId, fetchDocumentos, tabla, estadoCompletado]);
 
   // --- Polling de respaldo cada 5s (complementa Realtime) ---
+  const pollingUrl = tipo === "turno"
+    ? `/api/turno-estado?turnoId=${consultaId}`
+    : `/api/consulta-estado?consultaId=${consultaId}`;
+
   useEffect(() => {
     const interval = setInterval(async () => {
       if (yaRedirigioRef.current) return;
       try {
-        const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, {
+        const res = await fetch(pollingUrl, {
           credentials: "include",
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.estado === "completada") {
+        if (data.estado === estadoCompletado) {
           yaRedirigioRef.current = true;
           clearInterval(interval);
           setVideoVisible(false);
@@ -371,10 +382,10 @@ export default function SalaConsultaPaciente({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [consultaId, router]);
+  }, [pollingUrl, estadoCompletado, router]);
 
-  // --- Pantalla de cierre (completada) ---
-  if (estado === "completada") {
+  // --- Pantalla de cierre (completada/completado) ---
+  if (estado === estadoCompletado) {
     return (
       <div className="flex min-h-[100dvh] flex-col bg-gray-50">
         {/* Header */}
@@ -488,7 +499,10 @@ export default function SalaConsultaPaciente({
   }
 
   // --- Pantalla de cancelación ---
-  if (estado === "cancelada") {
+  const esCancelado = tipo === "turno"
+    ? (estado === "cancelado_medico" || estado === "cancelado_paciente")
+    : estado === "cancelada";
+  if (esCancelado) {
     return (
       <div className="flex min-h-[100dvh] flex-col bg-gray-50">
         <nav className="border-b border-gray-200 bg-white">
