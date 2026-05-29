@@ -62,9 +62,9 @@ interface REFEPSConfig {
 }
 
 function getConfig(): REFEPSConfig {
-  const systemId = process.env.REFEPS_SYSTEM_ID;
-  const credentialId = process.env.REFEPS_CREDENTIAL_ID;
-  const tokenSecret = process.env.REFEPS_TOKEN_SECRET;
+  const systemId = process.env.REFEPS_SYSTEM_ID?.trim();
+  const credentialId = process.env.REFEPS_CREDENTIAL_ID?.trim();
+  const tokenSecret = process.env.REFEPS_TOKEN_SECRET?.trim();
 
   if (!systemId || !credentialId || !tokenSecret) {
     throw new Error(
