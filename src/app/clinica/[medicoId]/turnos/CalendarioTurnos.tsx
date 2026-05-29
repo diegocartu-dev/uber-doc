@@ -58,8 +58,9 @@ export default function CalendarioTurnos({
   useEffect(() => { limpiarReservasExpiradas(); }, []);
 
   const ahora = new Date();
-  const hoyStr = ahora.toISOString().split("T")[0];
-  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes() + 0;
+  // Usar fecha local (no UTC) para evitar desfase después de las 21:00 ART
+  const hoyStr = `${ahora.getFullYear()}-${(ahora.getMonth() + 1).toString().padStart(2, "0")}-${ahora.getDate().toString().padStart(2, "0")}`;
+  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes();
 
   const turnosFiltrados = turnos.filter((t) => {
     if (t.fecha > hoyStr) return true;
@@ -198,7 +199,7 @@ export default function CalendarioTurnos({
               const dia = i + 1;
               const fecha = `${anio}-${(mes + 1).toString().padStart(2, "0")}-${dia.toString().padStart(2, "0")}`;
               const tieneTurnos = turnosPorFecha.has(fecha);
-              const esHoy = fecha === hoy.toISOString().split("T")[0];
+              const esHoy = fecha === hoyStr;
               const seleccionado = diaSeleccionado === fecha;
 
               return (

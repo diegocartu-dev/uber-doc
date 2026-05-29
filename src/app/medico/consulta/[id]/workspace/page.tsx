@@ -33,7 +33,7 @@ export default async function WorkspacePage({
   const { data: consulta } = await supabase
     .from("consultas")
     .select(
-      "id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas, tiempo_sintomas, doc_borrador, created_at, sala_video_url"
+      "id, estado, especialidad, paciente_id, medico_id, motivo_consulta, sintomas, tiempo_sintomas, doc_borrador, created_at, en_curso_at, sala_video_url"
     )
     .eq("id", consultaId)
     .single();
@@ -85,7 +85,10 @@ export default async function WorkspacePage({
       // Actualizar sala_video_url y estado
       const updateData: Record<string, string> = {};
       if (!consulta.sala_video_url) updateData.sala_video_url = roomName;
-      if (consulta.estado === "pagada") updateData.estado = "en_curso";
+      if (consulta.estado === "pagada") {
+        updateData.estado = "en_curso";
+        updateData.en_curso_at = new Date().toISOString();
+      }
       if (Object.keys(updateData).length > 0) {
         await supabase.from("consultas").update(updateData).eq("id", consultaId);
         if (updateData.estado === "en_curso") {
@@ -97,7 +100,7 @@ export default async function WorkspacePage({
     }
   }
 
-  const horaInicio = consulta.created_at;
+  const horaInicio = consulta.en_curso_at ?? consulta.created_at;
 
   return (
     <WorkspaceConsulta

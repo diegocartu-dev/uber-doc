@@ -33,6 +33,7 @@ type Props = {
   medicoNombre: string;
   especialidad: string;
   tipo?: "consulta" | "turno";
+  horaInicio?: string | null;
 };
 
 function VideoArea() {
@@ -241,6 +242,7 @@ export default function SalaConsultaPaciente({
   medicoNombre,
   especialidad,
   tipo = "consulta",
+  horaInicio,
 }: Props) {
   // Estado completado difiere entre consultas ("completada") y turnos ("completado")
   const estadoCompletado = tipo === "turno" ? "completado" : "completada";
@@ -255,7 +257,7 @@ export default function SalaConsultaPaciente({
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const [showEstudios, setShowEstudios] = useState(false);
-  const inicioRef = useRef(Date.now());
+  const inicioRef = useRef(horaInicio ? new Date(horaInicio).getTime() : Date.now());
   const yaRedirigioRef = useRef(false);
 
   // --- Obtener token LiveKit ---

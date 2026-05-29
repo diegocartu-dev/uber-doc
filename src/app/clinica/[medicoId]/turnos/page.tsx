@@ -46,8 +46,9 @@ export default async function TurnosPage({
   const creditos = await obtenerCreditosPendientes(paciente!.id, medicoId);
   const credito = creditos.length > 0 ? creditos[0] : null;
 
-  // Traer turnos disponibles futuros
-  const hoy = new Date().toISOString().split("T")[0];
+  // Traer turnos disponibles futuros (fecha en ART, no UTC)
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
   const { data: turnos } = await supabase
     .from("turnos")
     .select("id, fecha, hora_inicio, hora_fin, monto")
