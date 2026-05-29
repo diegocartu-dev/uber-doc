@@ -84,7 +84,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <p>Los reembolsos se acreditan al medio de pago original dentro de los plazos que establezca Mercado Pago (generalmente 3 a 10 días hábiles). Docto no tiene control sobre los tiempos internos de acreditación del procesador de pagos.</p>
 
       <h2>6. Recetas digitales</h2>
-      <p>Las recetas emitidas a través de Docto son recetas digitales con validez legal en todo el territorio nacional, en el marco de la Ley 27.553 y el Decreto 63/2024. Las recetas incluyen la firma digital del profesional y el código de identificación correspondiente.</p>
+      <p>Las recetas emitidas a través de Docto son recetas digitales con validez legal en todo el territorio nacional, en el marco de la Ley 27.553 y el Decreto 63/2024. Las recetas incluyen la firma electrónica del profesional y el código de identificación correspondiente.</p>
       <p>La emisión de una receta es una decisión exclusiva del profesional interviniente. Docto no puede garantizar que toda consulta resulte en la emisión de una receta. El paciente no tiene derecho a exigir la prescripción de medicamentos específicos.</p>
       <p>Docto se encuentra inscripto ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el expediente en trámite, y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
 
@@ -121,7 +121,6 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>El uso de la plataforma en situaciones de emergencia o urgencia.</li>
         <li>Demoras en la atención derivadas de la disponibilidad de profesionales.</li>
       </ul>
-      <p>La responsabilidad máxima de Docto ante el usuario, en cualquier circunstancia, no podrá exceder el importe abonado por la consulta en cuestión.</p>
 
       <h2>10. Propiedad intelectual</h2>
       <p>Todo el contenido de la plataforma Docto — incluyendo su diseño, código fuente, marca, logotipo, textos e interfaz — es propiedad exclusiva de Diego Oscar González y está protegido por las leyes de propiedad intelectual vigentes en Argentina. Queda prohibida la reproducción, distribución o modificación de cualquier elemento de la plataforma sin autorización expresa y por escrito.</p>
