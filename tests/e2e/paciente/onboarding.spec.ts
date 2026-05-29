@@ -34,7 +34,7 @@ test.describe("Onboarding paciente", () => {
 
     await expect(page.locator("text=Ingresá tu nombre completo.")).toBeVisible();
     await expect(page.locator("text=Ingresá tu DNI.")).toBeVisible();
-    await expect(page.locator("text=Seleccioná tu fecha de nacimiento.")).toBeVisible();
+    await expect(page.locator("text=Ingresá tu fecha de nacimiento (DD/MM/AAAA).")).toBeVisible();
 
     expect(requests).toHaveLength(0);
   });

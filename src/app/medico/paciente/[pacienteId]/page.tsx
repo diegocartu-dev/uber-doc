@@ -141,13 +141,16 @@ export default async function FichaPacientePage({
   const { data: consultasData } = pacConUserId
     ? await supabase
         .from("consultas")
-        .select("id, especialidad, estado, created_at, motivo_consulta, sintomas, canal_origen")
+        .select("id, especialidad, estado, created_at, motivo_consulta, sintomas, canal_origen, evolucion")
         .eq("medico_id", medico.id)
         .eq("paciente_id", pacConUserId.user_id)
         .order("created_at", { ascending: false })
     : { data: [] };
 
   const consultasFinal = consultasData ?? [];
+
+  // Consultas completadas para Historia Clínica
+  const consultasCompletadas = consultasFinal.filter((c) => c.estado === "completada");
 
   // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
   const { data: turnosData } = await supabase
@@ -428,6 +431,73 @@ export default async function FichaPacientePage({
           perfilId={perfilVinculo?.id ?? null}
           initialPatologias={perfilVinculo?.patologia_cronica ?? []}
         />
+
+        {/* Historia Clínica — consultas completadas con evolución */}
+        {consultasCompletadas.length > 0 && (
+          <div className="mt-8">
+            <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">
+              Historia Clínica
+            </p>
+            <div className="mt-4 space-y-6">
+              {consultasCompletadas.map((c) => {
+                const docs = docsPorConsulta.get(c.id) ?? [];
+                const recetaDocs = docs.filter((d) => d.tipo === "receta");
+                const indicacionesDocs = docs.filter((d) => d.tipo === "indicaciones");
+                const recetaTexto = recetaDocs.map((d) => d.contenido).join("\n") || null;
+                const indicacionesTexto = indicacionesDocs.map((d) => d.contenido).join("\n") || null;
+                const diagnosticoTexto = docs[0]?.diagnostico || null;
+
+                return (
+                  <div
+                    key={c.id}
+                    className="rounded-xl bg-white px-6 py-5"
+                    style={{ border: "0.5px solid #e5e7eb" }}
+                  >
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatFecha(c.created_at)} — {formatHora(c.created_at)}hs
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {c.especialidad}
+                      {c.canal_origen === "consultorio_privado"
+                        ? " · Consultorio privado"
+                        : " · Consulta Inmediata"}
+                    </p>
+
+                    <div className="mt-5 space-y-4" style={{ lineHeight: "1.7" }}>
+                      {c.evolucion && (
+                        <div>
+                          <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Evolución</p>
+                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">{c.evolucion}</p>
+                        </div>
+                      )}
+
+                      {diagnosticoTexto && (
+                        <div>
+                          <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Diagnóstico</p>
+                          <p className="mt-1 text-sm text-gray-800">{diagnosticoTexto}</p>
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Medicación</p>
+                        <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">
+                          {recetaTexto || "Sin receta"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Indicaciones</p>
+                        <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">
+                          {indicacionesTexto || "Sin indicaciones"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Secciones de historial — orden según origen */}
         {desde === "turno" ? (
