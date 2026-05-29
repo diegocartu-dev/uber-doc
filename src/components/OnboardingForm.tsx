@@ -72,6 +72,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
+  const [checkDatosSensibles, setCheckDatosSensibles] = useState(false);
   const [modalTerminos, setModalTerminos] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -472,13 +473,34 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           </label>
         </div>
 
+        {/* ── Consentimiento datos sensibles (Ley 25.326) ── */}
+        <div>
+          <label className="flex items-start gap-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={checkDatosSensibles}
+              onChange={(e) => setCheckDatosSensibles(e.target.checked)}
+              className="mt-0.5 h-5 w-5 rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-700">
+              Autorizo a Docto a tratar mis datos de salud (motivos de consulta, diagnósticos, recetas, historia clínica) conforme a la{" "}
+              <a href="/privacidad" target="_blank" rel="noopener noreferrer" className="font-medium underline" style={{ color: "#378ADD" }}>
+                Política de Privacidad
+              </a>
+            </span>
+          </label>
+        </div>
+
         {checkTerminos && (
           <input type="hidden" name="terminos_aceptados" value="true" />
+        )}
+        {checkDatosSensibles && (
+          <input type="hidden" name="datos_sensibles_aceptados" value="true" />
         )}
 
         <button
           type="submit"
-          disabled={submitting || !checkTerminos}
+          disabled={submitting || !checkTerminos || !checkDatosSensibles}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#378ADD] py-3.5 text-sm font-semibold text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting && (

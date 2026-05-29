@@ -52,13 +52,14 @@ export async function completarPerfil(formData: FormData) {
   const nro_afiliado = (formData.get("nro_afiliado") as string)?.trim() || null;
   const plan_obra_social = (formData.get("plan_obra_social") as string)?.trim() || null;
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
+  const datosSensiblesAceptados = (formData.get("datos_sensibles_aceptados") as string) === "true";
 
   // Derive legacy obra_social field for backward compat (deprecated, 1 month fallback)
   const obra_social = obra_social_id
     ? null // Will be resolved from FK in PDF route
     : obra_social_otra ?? null;
 
-  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !terminosAceptados) {
+  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !terminosAceptados || !datosSensiblesAceptados) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
@@ -102,6 +103,31 @@ export async function completarPerfil(formData: FormData) {
       ? "dni_duplicado"
       : "error_guardado";
     redirect(`/onboarding?error=${msg}&redirectTo=${encodeURIComponent(safeRedirect)}`);
+  }
+
+  // Registrar aceptación de datos sensibles (Ley 25.326) — fire-and-forget
+  if (datosSensiblesAceptados) {
+    (async () => {
+      try {
+        const { data: version } = await supabase
+          .from("versiones_textos_legales")
+          .select("id")
+          .eq("tipo", "datos_sensibles")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (version) {
+          await supabase.from("aceptaciones_legales").insert({
+            user_id: user.id,
+            tipo: "datos_sensibles",
+            version_id: version.id,
+          });
+        }
+      } catch {
+        // Fire-and-forget: no bloquear onboarding por fallo en registro de aceptación
+      }
+    })();
   }
 
   redirect(safeRedirect);

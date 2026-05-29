@@ -27,8 +27,12 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Nombre completo").clear();
     await page.getByLabel("DNI").clear();
 
-    // Aceptar términos para habilitar el botón submit
-    await page.getByRole("checkbox").check();
+    // Aceptar ambos checkboxes para habilitar el botón submit
+    const checkboxes = page.getByRole("checkbox");
+    const count = await checkboxes.count();
+    for (let i = 0; i < count; i++) {
+      await checkboxes.nth(i).check();
+    }
 
     await page.getByRole("button", { name: /guardar/i }).click();
 
@@ -53,8 +57,8 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Fecha de nacimiento").fill("1990-05-15");
     await page.getByLabel("Femenino").check();
 
-    // Aceptar términos para habilitar el botón submit
-    await page.getByRole("checkbox").check();
+    // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
+    for (const cb of await page.getByRole("checkbox").all()) await cb.check();
 
     await page.getByRole("button", { name: /guardar/i }).click();
 
@@ -78,8 +82,8 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Fecha de nacimiento").fill("1991-12-05");
     await page.getByLabel("Masculino").check();
 
-    // Aceptar términos para habilitar el botón submit
-    await page.getByRole("checkbox").check();
+    // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
+    for (const cb of await page.getByRole("checkbox").all()) await cb.check();
 
     await page.getByRole("button", { name: /guardar/i }).click();
 
