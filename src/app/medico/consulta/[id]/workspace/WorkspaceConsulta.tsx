@@ -295,7 +295,7 @@ function CampoDictado({
         rows={rows}
         placeholder={placeholder}
         className={`mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 ${hasError ? "focus:ring-[#E24B4A]" : "focus:ring-[#378ADD]"}`}
-        style={{ border: `${hasError ? "1.5px" : "0.5px"} solid ${hasError ? "#E24B4A" : "#e5e7eb"}` }}
+        style={{ border: `${activo ? "1.5px" : hasError ? "1.5px" : "0.5px"} solid ${activo ? "#378ADD" : hasError ? "#E24B4A" : "#e5e7eb"}` }}
       />
     </div>
   );
@@ -1240,7 +1240,7 @@ export default function WorkspaceConsulta({
             </p>
           )}
 
-          {/* Banner DICTADO EN CURSO */}
+          {/* Banner DICTADO EN CURSO — indica campo activo */}
           {dictando !== null && (
             <div
               className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2"
@@ -1248,26 +1248,32 @@ export default function WorkspaceConsulta({
             >
               <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: "#D85A30" }} />
               <span className="text-xs font-medium" style={{ color: "#D85A30" }}>
-                DICTADO EN CURSO
+                DICTADO EN CURSO — {
+                  dictando === "diagnostico" ? "Diagnóstico" :
+                  dictando === "evolucion" ? "Evolución" :
+                  dictando === "indicaciones" ? "Indicaciones" :
+                  dictando === "certificado" ? "Certificado" :
+                  dictando === "receta" ? "Receta" : dictando
+                }
               </span>
             </div>
           )}
 
-          {/* Hint auriculares — primera vez que se activa dictado */}
+          {/* Hint auriculares — toast flotante para no empujar contenido */}
           {showHintAuriculares && (
             <div
-              className="mt-2 flex items-start gap-2 rounded-lg px-3 py-2"
-              style={{ backgroundColor: "#378ADD10", border: "1px solid #378ADD" }}
+              className="fixed bottom-24 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-50 flex items-start gap-2 rounded-xl px-4 py-3 shadow-lg"
+              style={{ backgroundColor: "#378ADD", color: "white" }}
             >
               <span className="text-sm mt-0.5">🎧</span>
-              <p className="text-xs" style={{ color: "#378ADD" }}>
+              <p className="text-xs text-white">
                 Para mejor calidad de dictado, usá auriculares. El paciente ve un aviso mientras dictás.
               </p>
               <button
                 type="button"
                 onClick={() => setShowHintAuriculares(false)}
-                className="ml-auto shrink-0 text-xs"
-                style={{ color: "#378ADD", opacity: 0.6, minHeight: "24px", minWidth: "24px" }}
+                className="ml-auto shrink-0 text-xs text-white/60 hover:text-white"
+                style={{ minHeight: "24px", minWidth: "24px" }}
               >
                 ✕
               </button>
@@ -1360,17 +1366,8 @@ export default function WorkspaceConsulta({
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
-            {/* Mobile modo escritura: Guardar + Volver + Finalizar */}
+            {/* Mobile modo escritura: Volver + Finalizar (auto-save cubre guardado) */}
             <div className="md:hidden flex flex-col gap-2">
-              <LoadingButton
-                type="button"
-                isLoading={guardadoManual === 'saving'}
-                onClick={guardarDocumentos}
-                className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ minHeight: "44px" }}
-              >
-                {guardadoManual === 'saved' ? "\u2713 Guardado" : "Guardar documentos"}
-              </LoadingButton>
               <button
                 type="button"
                 onClick={() => setModo("video")}
