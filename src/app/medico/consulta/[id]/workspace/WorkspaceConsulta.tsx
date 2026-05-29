@@ -256,18 +256,21 @@ function CampoDictado({
         {soportado ? (
           <button
             type="button"
-            onMouseDown={onIniciar}
-            onMouseUp={onDetener}
-            onTouchStart={onIniciar}
-            onTouchEnd={onDetener}
-            className={`rounded-md px-2 py-1 text-xs transition ${
+            onClick={activo ? onDetener : onIniciar}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition ${
               activo
-                ? "bg-red-100 text-red-600"
+                ? "bg-red-600 text-white animate-pulse"
                 : "bg-gray-100 text-gray-500 hover:bg-gray-200"
             }`}
             style={{ minHeight: "44px", minWidth: "44px" }}
           >
-            {activo ? "Dictando..." : "Dictar"}
+            {/* Mic icon */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+            {activo ? "Detener" : "Dictar"}
           </button>
         ) : (
           <button
@@ -483,16 +486,32 @@ const encoder = new TextEncoder();
 
 function DictadoSignaler({ dictando }: { dictando: string | null }) {
   const { send } = useDataChannel("dictado");
+  const { localParticipant } = useLocalParticipant();
   const prevRef = useRef<boolean>(false);
+  const prevMicRef = useRef<boolean>(false);
 
   useEffect(() => {
     const activo = dictando !== null;
     if (activo === prevRef.current) return;
     prevRef.current = activo;
 
+    // Auto-mute LiveKit mic durante dictado para evitar competencia con Web Speech API
+    if (activo) {
+      prevMicRef.current = localParticipant.isMicrophoneEnabled;
+      if (localParticipant.isMicrophoneEnabled) {
+        localParticipant.setMicrophoneEnabled(false).catch(() => {});
+      }
+    } else {
+      // Restaurar estado previo del mic
+      if (prevMicRef.current) {
+        localParticipant.setMicrophoneEnabled(true).catch(() => {});
+      }
+    }
+
+    // Señalizar al paciente
     send(encoder.encode(JSON.stringify({ dictando: activo })), { reliable: true })
       .catch(() => {}); // fire-and-forget — si falla, el paciente simplemente no ve el banner
-  }, [dictando, send]);
+  }, [dictando, send, localParticipant]);
 
   return null; // componente invisible — solo lógica
 }
