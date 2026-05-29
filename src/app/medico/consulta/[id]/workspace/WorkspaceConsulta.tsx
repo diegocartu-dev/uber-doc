@@ -16,6 +16,7 @@ import {
   VideoTrack,
   useTracks,
   useLocalParticipant,
+  useDataChannel,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
@@ -474,6 +475,29 @@ function MicCamProvider({ children }: { children: (controls: { micOn: boolean; c
 }
 
 // ---------------------------------------------------------------------------
+// Señalizador de dictado — envía estado via LiveKit Data Messages al paciente
+// Debe renderizarse DENTRO de <LiveKitRoom>
+// ---------------------------------------------------------------------------
+
+const encoder = new TextEncoder();
+
+function DictadoSignaler({ dictando }: { dictando: string | null }) {
+  const { send } = useDataChannel("dictado");
+  const prevRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const activo = dictando !== null;
+    if (activo === prevRef.current) return;
+    prevRef.current = activo;
+
+    send(encoder.encode(JSON.stringify({ dictando: activo })), { reliable: true })
+      .catch(() => {}); // fire-and-forget — si falla, el paciente simplemente no ve el banner
+  }, [dictando, send]);
+
+  return null; // componente invisible — solo lógica
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
@@ -543,6 +567,24 @@ export default function WorkspaceConsulta({
 
   // --- Dictado ---
   const { dictando, iniciar: iniciarDictado, detener: detenerDictado, soportado: dictadoSoportado } = useDictado();
+
+  // --- Hint auriculares (solo la primera vez que se activa dictado) ---
+  const [showHintAuriculares, setShowHintAuriculares] = useState(false);
+  const hintMostradoRef = useRef(false);
+
+  useEffect(() => {
+    if (dictando === null) return;
+    if (hintMostradoRef.current) return;
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("dictado_hint_visto")) return;
+
+    hintMostradoRef.current = true;
+    setShowHintAuriculares(true);
+    localStorage.setItem("dictado_hint_visto", "1");
+
+    const timer = setTimeout(() => setShowHintAuriculares(false), 6000);
+    return () => clearTimeout(timer);
+  }, [dictando]);
 
   // --- Estudios count ---
   const estudiosCount = useEstudiosCount(consultaId);
@@ -857,6 +899,7 @@ export default function WorkspaceConsulta({
               style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
             >
               <RoomAudioRenderer />
+              <DictadoSignaler dictando={dictando} />
 
               {/* Video area — se oculta en mobile modo escritura */}
               <div
@@ -1161,6 +1204,40 @@ export default function WorkspaceConsulta({
               {estadoBorrador === "saved" && "Borrador guardado"}
               {estadoBorrador === "error" && "Error al guardar borrador"}
             </p>
+          )}
+
+          {/* Banner DICTADO EN CURSO */}
+          {dictando !== null && (
+            <div
+              className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ backgroundColor: "#D85A3015", border: "1px solid #D85A30" }}
+            >
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: "#D85A30" }} />
+              <span className="text-xs font-medium" style={{ color: "#D85A30" }}>
+                DICTADO EN CURSO
+              </span>
+            </div>
+          )}
+
+          {/* Hint auriculares — primera vez que se activa dictado */}
+          {showHintAuriculares && (
+            <div
+              className="mt-2 flex items-start gap-2 rounded-lg px-3 py-2"
+              style={{ backgroundColor: "#378ADD10", border: "1px solid #378ADD" }}
+            >
+              <span className="text-sm mt-0.5">🎧</span>
+              <p className="text-xs" style={{ color: "#378ADD" }}>
+                Para mejor calidad de dictado, usá auriculares. El paciente ve un aviso mientras dictás.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowHintAuriculares(false)}
+                className="ml-auto shrink-0 text-xs"
+                style={{ color: "#378ADD", opacity: 0.6, minHeight: "24px", minWidth: "24px" }}
+              >
+                ✕
+              </button>
+            </div>
           )}
 
           {/* Error */}

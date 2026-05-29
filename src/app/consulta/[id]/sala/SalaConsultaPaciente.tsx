@@ -8,6 +8,7 @@ import {
   VideoTrack,
   useTracks,
   useLocalParticipant,
+  useDataChannel,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
@@ -140,6 +141,36 @@ function CamIcon({ on }: { on: boolean }) {
       <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l6-4v11l-6-4V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1"/>
       <line x1="2" x2="22" y1="2" y2="22"/>
     </svg>
+  );
+}
+
+// Banner de dictado — escucha Data Messages del médico. Debe estar DENTRO de <LiveKitRoom>
+const decoder = new TextDecoder();
+
+function DictadoBanner({ medicoNombre }: { medicoNombre: string }) {
+  const [visible, setVisible] = useState(false);
+
+  useDataChannel("dictado", (msg) => {
+    try {
+      const data = JSON.parse(decoder.decode(msg.payload));
+      setVisible(!!data.dictando);
+    } catch {
+      // payload inválido — ignorar
+    }
+  });
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="flex items-center gap-2 px-4 py-2"
+      style={{ backgroundColor: "#D85A3020", borderBottom: "1px solid #D85A30" }}
+    >
+      <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: "#D85A30" }} />
+      <span className="text-xs font-medium text-white">
+        {formatNombreMedico(medicoNombre)} está grabando tus indicaciones
+      </span>
+    </div>
   );
 }
 
@@ -545,6 +576,7 @@ export default function SalaConsultaPaciente({
             style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
           >
             <RoomAudioRenderer />
+            <DictadoBanner medicoNombre={medicoNombre} />
 
             {/* Video area */}
             <div className="flex-1 min-h-0">
