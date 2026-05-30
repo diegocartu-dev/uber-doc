@@ -1,0 +1,163 @@
+# Política de Reembolsos — Docto
+## Modelo de pago, flujo de reembolso, recuperación de costos y cancelaciones
+### Documento oficial — No rediscutir
+
+> **Fecha de decisión:** 2026-05-30
+> **Estado:** Política aprobada por Diego. Plan de implementación en olas aprobado (ver sección 8). Implementación pendiente de arranque.
+> **Origen:** Auditoría de diseño (Marcos / Sofía / Carolina) + decisiones de Diego sobre el modelo de fondos.
+> **Actualización 2026-05-30:** Resueltas dos decisiones que bloqueaban el plan — (1) el cobro real se cablea para **CI + turnos juntos**; (2) la contradicción crédito-vs-refund se resuelve a favor de **refund inmediato** (se retira el crédito de 45 días). Ver secciones 4, 7 y 8.
+
+---
+
+## 0. RESUMEN EJECUTIVO
+
+Docto reembolsa al paciente ejecutando un **refund real contra la API de Mercado Pago**. El pago va directo a la cuenta MP del médico (collector = médico), por lo que el refund se debita del médico. En el caso raro de que el médico no tenga saldo, **Docto cubre al paciente** (transferencia manual por CVU desde el admin) y **recupera el costo** subiendo el `marketplace_fee` en las próximas consultas del médico.
+
+El objetivo de diseño: **el paciente siempre cobra su reembolso sin fricción** (experiencia transparente), y **el costo siempre se recupera del médico responsable** (sin que Docto absorba pérdidas).
+
+---
+
+## 1. MODELO DE PAGO (FIRME)
+
+- **Collector = médico.** El pago del paciente va **directo a la cuenta de Mercado Pago del médico**. Docto retiene su comisión vía `marketplace_fee`.
+- **Razón (inamovible):** Es una decisión **fiscal**. Si Docto fuera collector, tendría que facturar el total de cada consulta a cada paciente, en lugar de facturar solo comisiones a los médicos. Cualquier escenario donde Docto facture algo distinto a comisiones a médicos es negativo y queda descartado.
+- **No se migra de Checkout Pro.** El flujo de pago actual (redirect a MP, todos los medios de pago habilitados) se mantiene. No se migra a Checkout API / Bricks porque perdería medios de pago (saldo MP, transferencia, Rapipago, débito) y degradaría la UX del paciente.
+- **Consecuencia asumida:** Docto **no controla los fondos** una vez pagados. No puede demorar el release ni retener vía `money_release_days` (eso requeriría migrar de Checkout Pro). El reembolso se resuelve con el flujo de la sección 2, no reteniendo fondos.
+
+---
+
+## 2. FLUJO DE REEMBOLSO
+
+### 2.1 Caso normal (≈99%) — Médico con saldo
+
+1. Se dispara un reembolso (según política de cancelación, sección 4).
+2. Docto ejecuta `POST /v1/payments/{id}/refunds` contra la API de Mercado Pago.
+3. MP debita el monto de la cuenta del médico (collector).
+4. El paciente recibe el reembolso. El `marketplace_fee` de Docto se revierte proporcionalmente.
+5. Fin. Sin intervención manual.
+
+> **Estado actual del código:** Este refund real **NO existe hoy**. `src/lib/cancelaciones.ts` solo hace `UPDATE` del campo `reintegro_estado` (marca intención, no ejecuta movimiento de dinero). El `pago_id` necesario para el refund **sí** se guarda en las tablas `consultas` y `turnos` vía el webhook. Hay que implementar la llamada real a la API.
+
+### 2.2 Caso edge (≈1%) — Médico sin saldo
+
+1. Docto intenta el refund → MP lo rechaza por saldo insuficiente en la cuenta del médico.
+2. **Notificación inmediata al médico:** se le avisa al instante que tiene un reembolso pendiente y que necesita saldo en su cuenta MP para que se procese.
+3. **Reintento automático cada 24hs:** Docto reintenta el refund. Si el médico cobró otra consulta en el ínterin, el saldo se recompone y el refund procede solo.
+4. **A las 48hs sin resolverse → Docto cubre al paciente:** transferencia manual por **CVU** al paciente, ejecutada desde el **dash de admin** (ver sección 3). El paciente cobra sí o sí.
+5. Docto registra la **deuda del médico** por el monto cubierto y la recupera según la sección 2.3.
+
+> **Por qué CVU manual y no automático:** Mercado Pago Argentina **no tiene API de disbursement** para marketplaces — Docto no puede transferirle plata al paciente vía MP de forma programática. La única vía es transferencia bancaria (CVU/CBU). Como es un caso raro (≈1%), la transferencia manual desde el admin es el camino de menor esfuerzo y queda perfectamente acotada.
+
+---
+
+## 3. RECUPERACIÓN DEL COSTO (médico sin saldo)
+
+Cuando Docto cubre un reembolso de su bolsillo, recupera el costo del médico responsable:
+
+- Docto registra la **deuda del médico** (monto cubierto).
+- En las **próximas consultas del médico**, Docto **sube el `marketplace_fee`** para descontar la deuda, además de la comisión normal.
+- **Ejemplo:** comisión normal 10%, deuda $8.000. En una consulta de $10.000, Docto retiene $9.000 ($1.000 de comisión + $8.000 de deuda). El médico cobra $1.000. La deuda se salda sin que el médico haga nada.
+- MP permite `marketplace_fee` de **hasta el 100%** del monto (el médico cobraría $0 en esa consulta). No hay tope porcentual; el único límite es que el fee no puede superar el monto del pago.
+
+> **Estado actual del código:** El `marketplace_fee` **ya se calcula dinámicamente por pago** (`getComisionForMedico()` en `src/lib/comisiones.ts`, consumido en `src/app/api/pago/crear-v2/route.ts`). La extensión natural es que esa función consulte la deuda del médico y sume el recargo. **Falta:** (a) una tabla de deuda del médico (hoy no existe ningún campo `deuda`/`saldo_pendiente`), y (b) la lógica de recargo en `getComisionForMedico()`.
+
+---
+
+## 4. POLÍTICA DE CANCELACIÓN (acuerdo previo con el paciente)
+
+| Quién cancela | Plazo | Resultado |
+|---|---|---|
+| **Paciente** | Más de 48hs antes | **Reembolso 100%** |
+| **Paciente** | Menos de 48hs antes | **Sin reembolso.** Reprograma o pierde el turno. |
+| **Médico** | Cualquier momento | Paciente **reprograma o recibe reembolso** |
+
+> **Resolución 2026-05-30 — Crédito de 45 días retirado, reprogramación intacta.** La política previa de producción otorgaba un **crédito de 45 días** (`DIAS_CREDITO` en `cancelaciones.ts`, administrado por el cron `cerrar-huerfanas`) como **saldo a favor** en lugar de devolver dinero. Esta política **retira ese crédito** y lo reemplaza por **refund inmediato real** cuando corresponde devolver plata (matriz de arriba). La limpieza de esa lógica es parte del ticket 2C (sección 8).
+>
+> **Distinción importante — reprogramación NO es crédito ni refund.** La **reprogramación sigue viva** como opción: cuando el paciente reagenda (mismo médico, nueva fecha), **el dinero no se mueve** — el pago original se mantiene asociado al nuevo turno. No hay refund ni saldo a favor; es la misma transacción re-fechada. Solo se ejecuta refund real cuando efectivamente hay que **devolver plata** al paciente (cancelación con derecho a reembolso, médico que no reprograma, caso edge). Reprogramar y reembolsar son caminos distintos y excluyentes.
+
+### Transparencia obligatoria al debitar al médico
+
+- Cuando se debita un reembolso al médico (refund o recargo de deuda), el médico **debe ver el motivo claro**: qué consulta, qué paciente, qué monto.
+- El débito **nunca es una sorpresa.** El motivo de la cancelación que origina el débito tiene que estar explícito en el dashboard del médico.
+
+---
+
+## 5. DASH DE ADMIN — Requisitos
+
+El panel de administración debe mostrar:
+
+1. **Reembolsos pendientes** — paciente, monto, motivo, desde cuándo.
+2. **Reintentos automáticos** — cuántos se hicieron, cuándo es el próximo.
+3. **Acción requerida** — cuando el refund falló y corresponde transferencia manual: mostrar el **CVU del paciente copiable** + monto.
+4. **Deuda del médico** — cuánto debe, cuánto se recuperó vía fee, cuánto falta.
+
+---
+
+## 6. ESTADO DE IMPLEMENTACIÓN
+
+Lo que esta política requiere construir (no implementado al 2026-05-30):
+
+| Componente | Estado hoy | Falta |
+|---|---|---|
+| Refund real vía API MP (`POST /refunds`) | No existe. `cancelaciones.ts` solo marca estado. | Implementar la llamada real usando el `pago_id` guardado. |
+| Notificación inmediata al médico (refund fallido) | No existe | Implementar trigger + canal de notificación. |
+| Reintento automático cada 24hs | No existe | Implementar job/cron de reintento. |
+| Transferencia CVU manual desde admin | No existe | UI en dash de admin + captura/almacenamiento de CVU del paciente. |
+| Tabla de deuda del médico | No existe | Crear tabla/columnas de deuda. |
+| Recargo de `marketplace_fee` por deuda | Fee ya es dinámico; recargo no existe | Extender `getComisionForMedico()`. |
+| Dash de admin (4 vistas, sección 5) | No existe | Construir panel. |
+
+> **Pendiente de captura:** El sistema **no guarda hoy el CVU/CBU del paciente** ni dato suficiente para transferirle por fuera de MP. La transferencia manual del caso edge requiere obtener ese dato.
+
+---
+
+## 7. ALCANCE Y COHERENCIA CON DOCS EXISTENTES
+
+La auditoría legal (Carolina) detectó que hoy conviven **tres fuentes contradictorias** de política de cancelaciones/reembolsos: TyC publicados, consentimiento del triage, y el código en `cancelaciones.ts` con crédito de 45 días.
+
+**Resuelto (2026-05-30):** la fuente de verdad del **flujo de dinero** es este documento — **refund inmediato real**, sin crédito de 45 días (ver sección 4). Los tres textos deben unificarse contra esta política durante la implementación.
+
+**Pendiente (no bloquea el plan de olas, pero sí el go-live con pacientes reales):**
+- Sincronizar TyC publicados y consentimiento del triage con la matriz de la sección 4 → **Carolina**.
+- Redacción legal de la cláusula de débito al médico (recargo de `marketplace_fee` para recuperar reembolsos cubiertos por Docto, sección 3) en los TyC del médico, con preaviso de 15 días → **Carolina**.
+- Validez bajo Ley 24.240 de "cancelación <48hs sin reembolso" → **Carolina** (planteado en la auditoría, decisión de producto ya tomada: se mantiene).
+
+---
+
+## 8. PLAN DE IMPLEMENTACIÓN — OLAS
+
+> Aprobado por Diego el 2026-05-30. Cada ticket = 1 commit. Cada ola pasa por Quality Gate. **Todo el cobro/refund real se valida en Preview con `OVERRIDE_FLAG_PAGO_MARKETPLACE=true` — nunca prendiendo el kill switch `pago_marketplace` en producción.**
+
+Dependencia dura: el refund (Ola 2) necesita un `pago_id` real que solo genera un cobro real (Ola 1). No se puede invertir.
+
+### OLA 1 — Cobro real end-to-end en sandbox
+| Ticket | Qué | Gate |
+|---|---|---|
+| 1A | Validar cobro real de **CI** en preview. E2E: paga → webhook → `pagada` con `pago_id` real | Roberto + Diego |
+| 1B | Cablear **turnos** a `crear-v2` (reemplaza el `UPDATE estado='confirmado'` directo de `confirmarPagoTurno`). Mismo E2E para turnos | Roberto + Diego |
+
+> **Extensión de alcance (registrada):** el ticket 1B (turnos cableados a MP) no estaba en el instinto original "cobro CI". Se incluye como consecuencia técnica obligatoria: sin `pago_id` real en turnos, el refund de turnos de la Ola 2 queda colgado, y toda la lógica de `cancelaciones.ts` vive en turnos. Decisión de Diego: CI + turnos juntos.
+
+### OLA 2 — Refund real
+| Ticket | Qué | Gate |
+|---|---|---|
+| 2A | Función refund `POST /v1/payments/{pago_id}/refunds` con **token del médico** (collector). Aislada, testeable sola | Roberto |
+| 2B | `cancelaciones.ts` dispara refund real en lugar de solo marcar `reintegro_estado`. Preservar firma `ResultadoCancelacion`; **no-op cuando no hay `pago_id`** (turnos viejos simulados no deben romper) | Roberto + Diego |
+| 2C | Columna `reintegro_estado` en `consultas` (hoy solo en `turnos`) + **retirar crédito de 45 días** (`DIAS_CREDITO`) + ajustar cron `cerrar-huerfanas` | Roberto + Diego |
+
+### OLA 3 — Caso edge (deuda + recargo de fee + CVU en admin)
+| Ticket | Qué | Gate |
+|---|---|---|
+| 3A | Captura de CVU del paciente (no existe la columna). Mayor lead time — UI + consentimiento. Puede arrancar en paralelo, no rompe nada | Sofía + Carolina |
+| 3B | Tabla de deuda del médico + detección de refund fallido + notificación inmediata + reintento automático cada 24hs | Roberto |
+| 3C | Recargo de `marketplace_fee` por deuda en `getComisionForMedico()` | Roberto + Diego |
+| 3D | Dash de admin — las 4 vistas de la sección 5 | Sofía + Diego |
+
+### Riesgos de regresión a proteger (verificados contra producción)
+- La simulación (`/simular` + `confirmarPagoTurno`) es el flujo productivo HOY (`pago_marketplace=false`). No prender el kill switch en producción durante la implementación.
+- `cancelaciones.ts` corre en producción desde 4 llamadores (`dashboard/actions.ts`, `nova/confirmar/route.ts`). Preservar firma y comportamiento no-op sin `pago_id`.
+- El cron `cerrar-huerfanas` también escribe `reintegro_estado` — revisar en la misma ola que toque `cancelaciones.ts` (2C).
+
+---
+
+*Documento de decisión. Plan de olas aprobado. No rediscutir el modelo sin OK de Diego.*
