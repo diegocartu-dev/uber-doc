@@ -29,7 +29,7 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Push a main = redeploy automático en Vercel.
 - Simplificación bold > debugging incremental.
 - NO usar `window.confirm()` ni `window.alert()` — Chrome los suprime en páginas con iframes cross-origin. Usar dialogs React inline con zIndex alto.
-- Migraciones SQL: Marcos no puede ejecutar desde CLI (falta SUPABASE_ACCESS_TOKEN en el entorno). Usar la Management API con el token `sbp_2a46...` para ejecutar DDL directo. Nunca pedir a Diego que toque la terminal.
+- Migraciones SQL: usar la Supabase Management API con SUPABASE_ACCESS_TOKEN (guardado en .env.local) para ejecutar DDL directo. Endpoint: `POST https://api.supabase.com/v1/projects/irpupskopjahbqqvckue/database/query`. Nunca pedir a Diego que toque la terminal.
 - Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
 
 ## Auditoría de seguridad — Regla de evidencia empírica
