@@ -21,12 +21,13 @@ function esMasDe48hAntes(fecha: string, horaInicio: string): boolean {
 
 type ReintegroEstado = "reembolsado" | "fee_pendiente" | "pendiente" | null;
 
-async function ejecutarRefund(
+export async function ejecutarRefund(
   recursoId: string,
   medicoId: string,
   pagoId: string,
   netoMedico: number,
-  applicationFee: number
+  applicationFee: number,
+  tipo: "turno" | "consulta" = "turno"
 ): Promise<ReintegroEstado> {
   const supabase = createAdminClient();
 
@@ -62,7 +63,7 @@ async function ejecutarRefund(
     tokenDocto,
     applicationFee,
     netoMedico,
-    idempotencyPrefix: `refund:turno:${recursoId}`,
+    idempotencyPrefix: `refund:${tipo}:${recursoId}`,
   });
 
   logInfo("[REFUND]", "Resultado refund", {

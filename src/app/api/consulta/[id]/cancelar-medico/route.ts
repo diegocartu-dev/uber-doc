@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { ejecutarRefund } from "@/lib/cancelaciones";
 
 export async function POST(
   req: NextRequest,
@@ -16,7 +18,6 @@ export async function POST(
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  // Verificar que el user es el medico de esta consulta
   const { data: medico } = await supabase
     .from("medicos")
     .select("id")
@@ -27,10 +28,11 @@ export async function POST(
     return NextResponse.json({ error: "No es medico" }, { status: 403 });
   }
 
-  // Verificar que la consulta pertenece al medico y esta en estado cancelable
-  const { data: consulta } = await supabase
+  const admin = createAdminClient();
+
+  const { data: consulta } = await admin
     .from("consultas")
-    .select("id, estado")
+    .select("id, estado, medico_id, pago_id, mp_net_amount_medico, mp_application_fee")
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
     .in("estado", ["aceptada", "pagada", "en_curso"])
@@ -43,9 +45,24 @@ export async function POST(
     );
   }
 
-  const { error } = await supabase
+  let reintegroEstado: string | null = null;
+  if (consulta.pago_id && consulta.mp_net_amount_medico && consulta.mp_application_fee) {
+    reintegroEstado = await ejecutarRefund(
+      consultaId,
+      medico.id,
+      consulta.pago_id,
+      consulta.mp_net_amount_medico,
+      consulta.mp_application_fee,
+      "consulta"
+    );
+  }
+
+  const { error } = await admin
     .from("consultas")
-    .update({ estado: "cancelada" })
+    .update({
+      estado: "cancelada",
+      reintegro_estado: reintegroEstado,
+    })
     .eq("id", consultaId)
     .eq("medico_id", medico.id);
 
@@ -55,5 +72,5 @@ export async function POST(
 
   cerrarEntradaSala({ consultaId, motivo: "cancelado_medico" }).catch(() => {});
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, reintegro_estado: reintegroEstado });
 }
