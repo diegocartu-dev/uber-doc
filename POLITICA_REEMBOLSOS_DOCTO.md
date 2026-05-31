@@ -30,13 +30,24 @@ El objetivo de diseño: **el paciente siempre cobra su reembolso sin fricción**
 
 ### 2.1 Caso normal (≈99%) — Médico con saldo
 
-1. Se dispara un reembolso (según política de cancelación, sección 4).
-2. Docto ejecuta `POST /v1/payments/{id}/refunds` contra la API de Mercado Pago.
-3. MP debita el monto de la cuenta del médico (collector).
-4. El paciente recibe el reembolso. El `marketplace_fee` de Docto se revierte proporcionalmente.
-5. Fin. Sin intervención manual.
+**Regla del reembolso (decisión de Diego, 2026-05-31): el reembolso es NEUTRO — nadie gana ni pierde.**
+El paciente recupera el **100%** del precio. Ese 100% se compone de **lo que cobró el médico** (que devuelve el médico) **+ la comisión que recibió Docto** (que devuelve Docto). El monto y la comisión son **variables por médico** (`precio_consulta` y `getComisionForMedico()`); los valores usados en ejemplos (30.000, 10%) son ilustrativos.
 
-> **Estado actual del código:** Este refund real **NO existe hoy**. `src/lib/cancelaciones.ts` solo hace `UPDATE` del campo `reintegro_estado` (marca intención, no ejecuta movimiento de dinero). El `pago_id` necesario para el refund **sí** se guarda en las tablas `consultas` y `turnos` vía el webhook. Hay que implementar la llamada real a la API.
+**Mecánica — dos refunds, porque MP no revierte el fee solo (verificado empíricamente, Ola 2):**
+
+1. Se dispara un reembolso (según política de cancelación, sección 4).
+2. **Pata médico:** Docto ejecuta `POST /v1/payments/{pago_id}/refunds` por el **neto del médico** (`mp_net_amount_medico`, persistido por el webhook) con el **token del médico** (collector). Debita de la cuenta del médico.
+3. **Pata Docto:** Docto ejecuta un **segundo refund parcial** por el **`mp_application_fee`** con el **token de Docto** (`MP_ACCESS_TOKEN`). Devuelve la comisión desde la cuenta de Docto.
+4. Las dos patas suman el 100% → el paciente recupera todo; el pago queda en `refunded`.
+5. **Orden deliberado: médico primero.** Si la pata del médico falla (saldo insuficiente → sección 2.2), NO se toca a Docto; deriva al flujo edge con el médico debiendo el **total**.
+
+> **Por qué dos refunds:** MP **no revierte el `application_fee` automáticamente** ni acepta un flag para hacerlo (probado contra la API y el SDK en la Ola 2). La única vía para que Docto devuelva su comisión es un segundo refund parcial con su propio token. No es atómico — la atomicidad se **emula con idempotencia + reintento** (clave estable por refund lógico, ej. `refund:consulta:{id}` con sufijos `:medico`/`:docto`).
+
+> **Estado parcial `feePendiente`:** si la pata del médico sale OK pero la de Docto falla (el sandbox de MP mostró errores transitorios 500), el paciente **ya cobró su neto** y solo falta el fee. Es reintentable sin doble débito. **2B debe persistir este estado** (campo en DB) y reintentarlo.
+
+> **Estado actual del código:** La función de refund (`src/lib/mp-refund.ts`: `refundPayment()` + `refundConReversionDeFee()`) ya está implementada y probada en sandbox (ticket 2A, rama `feat/mp-ola2-refund-real`). Falta **integrarla en `cancelaciones.ts`** (hoy solo hace `UPDATE reintegro_estado`, no mueve dinero) — eso es el ticket 2B. El `pago_id`, `mp_net_amount_medico` y `mp_application_fee` ya los guarda el webhook en `consultas`/`turnos`.
+
+> **Pendiente de validar en Preview:** la **separación física del débito** (pata médico de la cuenta del médico, pata Docto de la cuenta de Docto) no se pudo probar headless porque el sandbox usa la misma cuenta para ambos. Confirmar con un pago split real en Preview antes del go-live.
 
 ### 2.2 Caso edge (≈1%) — Médico sin saldo
 
