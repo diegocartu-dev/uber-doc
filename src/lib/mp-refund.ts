@@ -184,6 +184,66 @@ export async function refundPayment(
   };
 }
 
+export interface PaymentState {
+  ok: boolean;
+  /** Estado MP del pago: `approved`, `refunded`, `partially_refunded`, etc. */
+  status?: string;
+  /** Monto total del pago (`transaction_amount`). */
+  transactionAmount?: number;
+  /** Monto ya refundeado acumulado (`transaction_amount_refunded`). */
+  amountRefunded?: number;
+  error?: string;
+}
+
+/**
+ * Consulta el estado real de un pago en MP (`GET /v1/payments/{id}`).
+ *
+ * Es la FUENTE DE VERDAD para decidir si un refund ya se aplicó, sin depender de
+ * la cache de idempotencia de MP (cuyo TTL no está garantizado ≥24h). El cron de
+ * reintentos la usa ANTES de reintentar o escalar: si el pago ya está refundeado,
+ * resuelve en vez de re-ejecutar (evita over-refund → deuda fantasma, hallazgo
+ * C1 de la auditoría 3B).
+ *
+ * Se consulta con el token del collector (médico), bajo cuya cuenta vive el pago.
+ */
+export async function getPaymentState(
+  paymentId: string,
+  accessToken: string
+): Promise<PaymentState> {
+  if (!paymentId || !accessToken) {
+    return { ok: false, error: "paymentId y accessToken requeridos." };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${MP_API}/v1/payments/${paymentId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Error de red consultando el pago: ${message}` };
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok) {
+    return { ok: false, error: extractError(body) };
+  }
+
+  const b = (body ?? {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    status: typeof b.status === "string" ? b.status : undefined,
+    transactionAmount: typeof b.transaction_amount === "number" ? b.transaction_amount : undefined,
+    amountRefunded: typeof b.transaction_amount_refunded === "number" ? b.transaction_amount_refunded : 0,
+  };
+}
+
 // ===========================================================================
 // Reversión del application_fee — regla "nadie gana, nadie pierde" (Diego)
 // ===========================================================================
