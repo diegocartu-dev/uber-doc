@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-
+// Historia Clínica — consultas completadas con evolución (F3)
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
