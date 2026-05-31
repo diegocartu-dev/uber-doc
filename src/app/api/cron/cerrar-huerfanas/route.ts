@@ -50,26 +50,6 @@ export async function GET(req: NextRequest) {
     detalle.push({ tabla, cerradas: ids.length, ids });
   }
 
-  const hace45dias = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: creditosVencidos } = await supabase
-    .from("turnos")
-    .select("id")
-    .eq("estado", "cancelado_medico")
-    .eq("reintegro_estado", "pendiente")
-    .lt("updated_at", hace45dias);
-
-  let reembolsados = 0;
-  if (creditosVencidos && creditosVencidos.length > 0) {
-    const ids = creditosVencidos.map((t) => t.id);
-    const { error: errReembolso } = await supabase
-      .from("turnos")
-      .update({ reintegro_estado: "reembolsado" })
-      .in("id", ids);
-
-    if (!errReembolso) reembolsados = ids.length;
-  }
-
   // Limpiar mp_oauth_state expirados (tokens de un solo uso, TTL 1 hora)
   const hace1hora = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { data: oauthBorrados, error: errOauth } = await supabase
@@ -124,10 +104,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (totalCerradas > 0 || reembolsados > 0 || oauthLimpiados > 0 || webhookLimpiados > 0 || pagadasRecuperadas > 0) {
+  if (totalCerradas > 0 || oauthLimpiados > 0 || webhookLimpiados > 0 || pagadasRecuperadas > 0) {
     logInfo("[CRON/HUERFANAS]", "Ejecución con cambios", {
       totalCerradas,
-      creditosReembolsados: reembolsados,
       oauthStateLimpiados: oauthLimpiados,
       webhookFailedLimpiados: webhookLimpiados,
       pagadasRecuperadas,
@@ -138,7 +117,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     total_cerradas: totalCerradas,
-    creditos_reembolsados: reembolsados,
     oauth_state_limpiados: oauthLimpiados,
     webhook_failed_limpiados: webhookLimpiados,
     pagadas_recuperadas: pagadasRecuperadas,

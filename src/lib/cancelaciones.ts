@@ -2,6 +2,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoCancelado } from "@/lib/email";
 import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { refundConReversionDeFee } from "@/lib/mp-refund";
+import { decrypt } from "@/lib/mp-crypto";
+import { logInfo, logError } from "@/lib/logger";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -9,21 +12,77 @@ type ResultadoCancelacion = {
   error?: string;
 };
 
-export type CreditoPendiente = {
-  turno_id: string;
-  fecha_cancelacion: string;
-  fecha_vencimiento: string;
-  monto: number | null;
-  reprogramaciones: number;
-};
-
-const DIAS_CREDITO = 45;
-
 function esMasDe48hAntes(fecha: string, horaInicio: string): boolean {
   const turnoDate = new Date(`${fecha}T${horaInicio}:00-03:00`);
   const ahora = new Date();
   const diffMs = turnoDate.getTime() - ahora.getTime();
   return diffMs > 48 * 60 * 60 * 1000;
+}
+
+type ReintegroEstado = "reembolsado" | "fee_pendiente" | "pendiente" | null;
+
+async function ejecutarRefund(
+  recursoId: string,
+  medicoId: string,
+  pagoId: string,
+  netoMedico: number,
+  applicationFee: number
+): Promise<ReintegroEstado> {
+  const supabase = createAdminClient();
+
+  const { data: mpAccount } = await supabase
+    .from("medicos_mp_accounts")
+    .select("access_token_encrypted")
+    .eq("medico_id", medicoId)
+    .eq("estado", "activa")
+    .maybeSingle();
+
+  if (!mpAccount?.access_token_encrypted) {
+    logError("[REFUND]", "Sin token MP del médico", { recursoId, medicoId });
+    return "pendiente";
+  }
+
+  const tokenDocto = process.env.MP_ACCESS_TOKEN;
+  if (!tokenDocto) {
+    logError("[REFUND]", "MP_ACCESS_TOKEN ausente", { recursoId });
+    return "pendiente";
+  }
+
+  let tokenMedico: string;
+  try {
+    tokenMedico = decrypt(mpAccount.access_token_encrypted);
+  } catch (err) {
+    logError("[REFUND]", "Error desencriptando token médico", { recursoId, medicoId, error: String(err) });
+    return "pendiente";
+  }
+
+  const result = await refundConReversionDeFee({
+    paymentId: pagoId,
+    tokenMedico,
+    tokenDocto,
+    applicationFee,
+    netoMedico,
+    idempotencyPrefix: `refund:turno:${recursoId}`,
+  });
+
+  logInfo("[REFUND]", "Resultado refund", {
+    recursoId,
+    ok: result.ok,
+    feePendiente: result.feePendiente,
+    netoDevuelto: result.netoDevueltoAlPaciente,
+    medicoOk: result.refundMedico.ok,
+    medicoStatus: result.refundMedico.status,
+    doctoOk: result.refundDocto?.ok ?? null,
+  });
+
+  if (result.ok) return "reembolsado";
+  if (result.feePendiente) return "fee_pendiente";
+
+  if (!result.refundMedico.ok && result.refundMedico.insufficientFunds) {
+    logError("[REFUND]", "Médico sin saldo — deriva a flujo edge (Ola 3)", { recursoId, medicoId });
+  }
+
+  return "pendiente";
 }
 
 export async function cancelarTurnoPorPaciente(
@@ -35,7 +94,7 @@ export async function cancelarTurnoPorPaciente(
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, fecha, hora_inicio, hora_fin, medico_id, monto")
+    .select("id, estado, paciente_id, fecha, hora_inicio, hora_fin, medico_id, monto, pago_id, mp_net_amount_medico, mp_application_fee")
     .eq("id", turnoId)
     .single();
 
@@ -47,12 +106,23 @@ export async function cancelarTurnoPorPaciente(
 
   const reembolso = esMasDe48hAntes(turno.fecha, turno.hora_inicio);
 
+  let reintegroEstado: ReintegroEstado = null;
+  if (reembolso && turno.pago_id && turno.mp_net_amount_medico && turno.mp_application_fee) {
+    reintegroEstado = await ejecutarRefund(
+      turnoId,
+      turno.medico_id,
+      turno.pago_id,
+      turno.mp_net_amount_medico,
+      turno.mp_application_fee
+    );
+  }
+
   const { error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_paciente",
       motivo_cancelacion: motivo || null,
-      reintegro_estado: reembolso ? "reembolsado" : null,
+      reintegro_estado: reintegroEstado,
     })
     .eq("id", turnoId);
 
@@ -71,11 +141,17 @@ export async function cancelarTurnoPorPaciente(
 
   enviarEmailTurnoCancelado(turnoId, "paciente").catch(console.error);
 
+  const reembolsoMsg = reembolso
+    ? (reintegroEstado === "reembolsado"
+        ? "Tu reembolso fue procesado."
+        : "Tu reembolso está en proceso.")
+    : "No aplica reembolso (menos de 48hs de anticipación).";
+
   await insertarMensajeSistema(
     turnoId,
     pacienteId,
     turno.medico_id,
-    `Cancelaste el turno del ${formatearFechaCorta(turno.fecha)}. ${reembolso ? "Tu reembolso fue procesado." : "No aplica reembolso (menos de 48hs de anticipación)."}`
+    `Cancelaste el turno del ${formatearFechaCorta(turno.fecha)}. ${reembolsoMsg}`
   );
 
   const { data: pacNombre } = await supabase
@@ -100,7 +176,7 @@ export async function cancelarTurnoPorMedico(
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, medico_id, fecha, hora_inicio, monto")
+    .select("id, estado, paciente_id, medico_id, fecha, hora_inicio, monto, pago_id, mp_net_amount_medico, mp_application_fee")
     .eq("id", turnoId)
     .single();
 
@@ -110,12 +186,23 @@ export async function cancelarTurnoPorMedico(
     return { ok: false, reembolso: false, error: "Este turno no se puede cancelar." };
   }
 
+  let reintegroEstado: ReintegroEstado = null;
+  if (turno.pago_id && turno.mp_net_amount_medico && turno.mp_application_fee) {
+    reintegroEstado = await ejecutarRefund(
+      turnoId,
+      turno.medico_id,
+      turno.pago_id,
+      turno.mp_net_amount_medico,
+      turno.mp_application_fee
+    );
+  }
+
   const { error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_medico",
       motivo_cancelacion: motivo || null,
-      reintegro_estado: "pendiente",
+      reintegro_estado: reintegroEstado,
     })
     .eq("id", turnoId);
 
@@ -133,11 +220,17 @@ export async function cancelarTurnoPorMedico(
       .single();
 
     const slug = medico?.slug ?? "";
+    const reembolsoMsg = reintegroEstado === "reembolsado"
+      ? " Tu reembolso fue procesado."
+      : reintegroEstado === "fee_pendiente" || reintegroEstado === "pendiente"
+        ? " Tu reembolso está en proceso."
+        : "";
+
     await insertarMensajeSistema(
       turnoId,
       turno.paciente_id,
       medicoId,
-      `El Dr/a. ${medico?.nombre_completo ?? "médico"} canceló el turno del ${formatearFechaCorta(turno.fecha)}. Podés reprogramar desde docto.com.ar/dr/${slug}`
+      `El Dr/a. ${medico?.nombre_completo ?? "médico"} canceló el turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg} Podés reprogramar desde docto.com.ar/dr/${slug}`
     );
 
     pushAlPaciente(turno.paciente_id, {
@@ -158,7 +251,6 @@ export async function reprogramarTurno(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = createAdminClient();
 
-  // RPC atómica: reserva turno + marca crédito en una sola transacción SQL
   const { data, error } = await supabase.rpc("reprogramar_turno_atomico", {
     p_turno_origen_id: turnoOrigenId,
     p_nuevo_turno_id: nuevoTurnoId,
@@ -170,7 +262,6 @@ export async function reprogramarTurno(
   const resultado = data as string;
   if (resultado !== "ok") return { ok: false, error: resultado };
 
-  // Mensaje sistema (no crítico, fuera de la transacción)
   const { data: nuevoTurno } = await supabase
     .from("turnos")
     .select("fecha, hora_inicio, medico_id")
@@ -187,41 +278,6 @@ export async function reprogramarTurno(
   }
 
   return { ok: true };
-}
-
-// Detectar créditos pendientes por DB (no query param)
-export async function obtenerCreditosPendientes(
-  pacienteId: string,
-  medicoId: string
-): Promise<CreditoPendiente[]> {
-  const supabase = createAdminClient();
-
-  const fechaLimite = new Date(Date.now() - DIAS_CREDITO * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data } = await supabase
-    .from("turnos")
-    .select("id, updated_at, monto, reprogramaciones")
-    .eq("paciente_id", pacienteId)
-    .eq("medico_id", medicoId)
-    .eq("estado", "cancelado_medico")
-    .eq("reintegro_estado", "pendiente")
-    .lt("reprogramaciones", 2)
-    .gte("updated_at", fechaLimite)
-    .order("updated_at", { ascending: false });
-
-  if (!data) return [];
-
-  return data.map((t) => {
-    const fechaCancelacion = new Date(t.updated_at);
-    const fechaVencimiento = new Date(fechaCancelacion.getTime() + DIAS_CREDITO * 24 * 60 * 60 * 1000);
-    return {
-      turno_id: t.id,
-      fecha_cancelacion: t.updated_at,
-      fecha_vencimiento: fechaVencimiento.toISOString(),
-      monto: t.monto,
-      reprogramaciones: t.reprogramaciones ?? 0,
-    };
-  });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

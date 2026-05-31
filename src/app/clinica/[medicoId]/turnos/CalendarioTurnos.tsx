@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { reservarTurno, limpiarReservasExpiradas, reprogramarConCredito } from "./actions";
+import { reservarTurno, limpiarReservasExpiradas } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { formatNombreMedico } from "@/lib/utils/texto";
-import type { CreditoPendiente } from "@/lib/cancelaciones";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
@@ -18,30 +17,14 @@ function formatFechaLarga(fecha: string) {
   return `${DIAS_SEMANA[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
-function formatFechaVencimiento(isoDate: string): string {
-  const d = new Date(isoDate);
-  return d.toLocaleDateString("es-AR", {
-    day: "numeric",
-    month: "long",
-    timeZone: "America/Argentina/Buenos_Aires",
-  });
-}
-
-function diasRestantes(fechaVencimiento: string): number {
-  const diff = new Date(fechaVencimiento).getTime() - Date.now();
-  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
-}
-
 export default function CalendarioTurnos({
   turnos,
   medico,
   canalOrigen = "clinica_virtual",
-  credito = null,
 }: {
   turnos: Turno[];
   medico: Medico;
   canalOrigen?: "clinica_virtual" | "consultorio_privado";
-  credito?: CreditoPendiente | null;
 }) {
   const hoy = new Date();
   const [mes, setMes] = useState(hoy.getMonth());
@@ -58,7 +41,6 @@ export default function CalendarioTurnos({
   useEffect(() => { limpiarReservasExpiradas(); }, []);
 
   const ahora = new Date();
-  // Usar fecha local (no UTC) para evitar desfase después de las 21:00 ART
   const hoyStr = `${ahora.getFullYear()}-${(ahora.getMonth() + 1).toString().padStart(2, "0")}-${ahora.getDate().toString().padStart(2, "0")}`;
   const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes();
 
@@ -98,28 +80,16 @@ export default function CalendarioTurnos({
     if (!turnoSeleccionado) return;
     setError(null);
 
-    if (credito) {
-      startTransition(async () => {
-        const result = await reprogramarConCredito(credito.turno_id, turnoSeleccionado.id);
-        if (result?.error) { setError(result.error); return; }
-        setExito(true);
-        setMostrarConfirmacion(false);
-      });
-    } else {
-      startTransition(async () => {
-        const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
-        if (result?.error) { setError(result.error); return; }
-        window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
-      });
-    }
+    startTransition(async () => {
+      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
+      if (result?.error) { setError(result.error); return; }
+      window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
+    });
   }
 
   const turnosDelDia = diaSeleccionado ? (turnosPorFecha.get(diaSeleccionado) ?? []) : [];
   const turnosManana = turnosDelDia.filter((t) => t.hora_inicio < "13:00");
   const turnosTarde = turnosDelDia.filter((t) => t.hora_inicio >= "13:00");
-
-  const diasCreditoRestantes = credito ? diasRestantes(credito.fecha_vencimiento) : 0;
-  const creditoUrgente = credito && diasCreditoRestantes <= 6;
 
   if (exito) {
     return (
@@ -128,15 +98,12 @@ export default function CalendarioTurnos({
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         </div>
         <h2 className="mt-4 text-lg font-medium text-gray-900">
-          {credito ? "¡Turno reprogramado!" : "¡Turno confirmado!"}
+          ¡Turno confirmado!
         </h2>
         <p className="mt-2 text-sm text-gray-500">
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
         <p className="mt-1 text-sm text-gray-500">{formatNombreMedico(medico.nombre)} · {medico.especialidad}</p>
-        {credito && (
-          <p className="mt-2 text-sm font-medium text-[#1D9E75]">Se aplicó tu crédito — sin costo adicional</p>
-        )}
         <a href="/dashboard" className="mt-6 inline-flex items-center justify-center rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white min-h-[48px]">
           Volver al inicio
         </a>
@@ -146,36 +113,6 @@ export default function CalendarioTurnos({
 
   return (
     <div className="mt-6">
-      {/* Banner de crédito (oculto si no hay slots) */}
-      {credito && turnosFiltrados.length > 0 && (
-        <div
-          className="mb-4 rounded-xl p-4"
-          style={{
-            background: creditoUrgente ? "#FFF3E0" : "#EBF3FC",
-            borderLeft: `3px solid ${creditoUrgente ? "#D85A30" : "#378ADD"}`,
-          }}
-        >
-          <p className="text-sm font-medium" style={{ color: creditoUrgente ? "#7A3A1A" : "#1a4a7a" }}>
-            Tenés un crédito{credito.monto ? ` por $${credito.monto.toLocaleString("es-AR")}` : ""} — elegí una nueva fecha sin costo
-          </p>
-          <p className="mt-1 text-xs" style={{ color: creditoUrgente ? "#9A5A3A" : "#5A7A9A" }}>
-            Válido hasta el {formatFechaVencimiento(credito.fecha_vencimiento)}
-            {credito.reprogramaciones > 0 && ` · ${2 - credito.reprogramaciones} reprogramación${2 - credito.reprogramaciones === 1 ? "" : "es"} restante${2 - credito.reprogramaciones === 1 ? "" : "s"}`}
-          </p>
-        </div>
-      )}
-
-      {/* Sin slots disponibles + crédito → reembolso */}
-      {credito && turnosFiltrados.length === 0 && (
-        <div className="rounded-xl bg-white p-5 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
-          <p className="text-sm text-gray-600">No hay turnos disponibles con este médico en este momento.</p>
-          <p className="mt-2 text-sm text-gray-500">Tu crédito sigue vigente hasta el {formatFechaVencimiento(credito.fecha_vencimiento)}. Si no se libera disponibilidad, el reembolso se procesa automáticamente.</p>
-          <a href="/dashboard" className="mt-4 inline-block rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white">
-            Volver al inicio
-          </a>
-        </div>
-      )}
-
       {/* Calendario */}
       {turnosFiltrados.length > 0 && (
         <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
@@ -274,7 +211,7 @@ export default function CalendarioTurnos({
       {turnoSeleccionado && (
         <div className="mt-4 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
           <p className="text-xs font-medium tracking-wide text-gray-400">
-            {credito ? "CONFIRMAR REPROGRAMACIÓN" : "CONFIRMAR TURNO"}
+            CONFIRMAR TURNO
           </p>
 
           <div className="mt-3 space-y-2 text-sm">
@@ -300,81 +237,69 @@ export default function CalendarioTurnos({
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Valor</span>
-              {credito ? (
-                <span className="font-medium">
-                  <span className="text-gray-400 line-through mr-2">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
-                  <span className="text-[#1D9E75]">$0 (crédito aplicado)</span>
-                </span>
-              ) : (
-                <span className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
-              )}
+              <span className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
             </div>
           </div>
 
-          {/* Recordatorios — solo para flujo normal (no reprogramación) */}
-          {!credito && (
-            <>
-              <div className="mt-4" style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: "12px" }}>
-                <p className="text-xs text-gray-400">Recordatorios</p>
-                <div className="mt-2 flex gap-2">
-                  {(() => {
-                    const todosActivos = cuando.length === 2 && ["24h", "10m"].every((v) => cuando.includes(v));
-                    const toggleRecordatorio = (value: string) => {
-                      if (value === "todos") {
-                        setCuando(todosActivos ? [] : ["24h", "10m"]);
-                      } else {
-                        setCuando((prev) =>
-                          prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-                        );
-                      }
-                    };
-                    return [
-                      { value: "todos", label: "Todos", activo: todosActivos },
-                      { value: "24h", label: "24hs", activo: cuando.includes("24h") },
-                      { value: "10m", label: "10 min", activo: cuando.includes("10m") },
-                    ].map((r) => (
-                    <button
-                      key={r.value}
-                      onClick={() => toggleRecordatorio(r.value)}
-                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
-                        r.activo
-                          ? "bg-[#378ADD] text-white"
-                          : "bg-gray-50 text-gray-500"
-                      }`}
-                      style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
-                    >
-                      {r.label}
-                    </button>
-                  ));
-                  })()}
-                </div>
-              </div>
+          <div className="mt-4" style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: "12px" }}>
+            <p className="text-xs text-gray-400">Recordatorios</p>
+            <div className="mt-2 flex gap-2">
+              {(() => {
+                const todosActivos = cuando.length === 2 && ["24h", "10m"].every((v) => cuando.includes(v));
+                const toggleRecordatorio = (value: string) => {
+                  if (value === "todos") {
+                    setCuando(todosActivos ? [] : ["24h", "10m"]);
+                  } else {
+                    setCuando((prev) =>
+                      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+                    );
+                  }
+                };
+                return [
+                  { value: "todos", label: "Todos", activo: todosActivos },
+                  { value: "24h", label: "24hs", activo: cuando.includes("24h") },
+                  { value: "10m", label: "10 min", activo: cuando.includes("10m") },
+                ].map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => toggleRecordatorio(r.value)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
+                    r.activo
+                      ? "bg-[#378ADD] text-white"
+                      : "bg-gray-50 text-gray-500"
+                  }`}
+                  style={{ border: r.activo ? "none" : "0.5px solid #e5e7eb" }}
+                >
+                  {r.label}
+                </button>
+              ));
+              })()}
+            </div>
+          </div>
 
-              <div className="mt-3">
-                <p className="text-xs text-gray-400">Canal</p>
-                <div className="mt-2 flex gap-2">
-                  {[
-                    { value: "ambos", label: "Ambos" },
-                    { value: "email", label: "Email" },
-                    { value: "notificaciones", label: "Notificaciones Docto" },
-                  ].map((c) => (
-                    <button
-                      key={c.value}
-                      onClick={() => setCanal(c.value)}
-                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
-                        canal === c.value
-                          ? "bg-[#378ADD] text-white"
-                          : "bg-gray-50 text-gray-500"
-                      }`}
-                      style={{ border: canal === c.value ? "none" : "0.5px solid #e5e7eb" }}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          <div className="mt-3">
+            <p className="text-xs text-gray-400">Canal</p>
+            <div className="mt-2 flex gap-2">
+              {[
+                { value: "ambos", label: "Ambos" },
+                { value: "email", label: "Email" },
+                { value: "notificaciones", label: "Notificaciones Docto" },
+              ].map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => setCanal(c.value)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-100 ${
+                    canal === c.value
+                      ? "bg-[#378ADD] text-white"
+                      : "bg-gray-50 text-gray-500"
+                  }`}
+                  style={{ border: canal === c.value ? "none" : "0.5px solid #e5e7eb" }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {error && (
             <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">{error}</div>
@@ -402,39 +327,21 @@ export default function CalendarioTurnos({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <p className="text-sm font-medium text-gray-900">
-              {credito ? "Confirmá tu reprogramación" : "Confirmá tu turno"}
+              Confirmá tu turno
             </p>
 
             <div className="mt-4 space-y-1.5 text-sm">
               <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
               <p className="text-gray-700">{formatNombreMedico(medico.nombre)}</p>
-              {credito ? (
-                <p className="font-medium">
-                  <span className="text-gray-400 line-through mr-2">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</span>
-                  <span className="text-[#1D9E75]">$0 (crédito aplicado)</span>
-                </p>
-              ) : (
-                <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
-              )}
+              <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
             </div>
 
             <div className="mt-4 rounded-lg bg-gray-50 p-3" style={{ border: "0.5px solid #e5e7eb" }}>
-              {credito ? (
-                <>
-                  <p className="text-xs font-medium text-gray-500">Crédito aplicado</p>
-                  <p className="mt-1.5 text-[11px] text-gray-500">
-                    Este turno usa tu crédito disponible por la cancelación del médico. No se realiza ningún cobro adicional.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs font-medium text-gray-500">Condiciones:</p>
-                  <ul className="mt-1.5 space-y-1 text-[11px] text-gray-500">
-                    <li>· Cancelación sin costo hasta 48 hs antes</li>
-                    <li>· Si el profesional cancela, se reintegra el 100% del monto</li>
-                  </ul>
-                </>
-              )}
+              <p className="text-xs font-medium text-gray-500">Condiciones:</p>
+              <ul className="mt-1.5 space-y-1 text-[11px] text-gray-500">
+                <li>· Cancelación sin costo hasta 48 hs antes</li>
+                <li>· Si el profesional cancela, se reintegra el 100% del monto</li>
+              </ul>
             </div>
 
             {error && (
@@ -453,7 +360,7 @@ export default function CalendarioTurnos({
                 isLoading={isPending}
                 className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100 min-h-[48px]"
               >
-                {credito ? "Confirmar turno" : "Confirmar y pagar"}
+                Confirmar y pagar
               </LoadingButton>
             </div>
           </div>
