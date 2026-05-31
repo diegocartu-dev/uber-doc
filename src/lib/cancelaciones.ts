@@ -35,7 +35,7 @@ export async function ejecutarRefund(
     .from("medicos_mp_accounts")
     .select("access_token_encrypted")
     .eq("medico_id", medicoId)
-    .eq("estado", "activa")
+    .eq("estado", "activo")
     .maybeSingle();
 
   if (!mpAccount?.access_token_encrypted) {
