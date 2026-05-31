@@ -4,6 +4,7 @@ import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { refundConReversionDeFee } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
+import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { logInfo, logError } from "@/lib/logger";
 
 type ResultadoCancelacion = {
@@ -35,7 +36,7 @@ export async function ejecutarRefund(
     .from("medicos_mp_accounts")
     .select("access_token_encrypted")
     .eq("medico_id", medicoId)
-    .eq("estado", "activa")
+    .eq("estado", "activo")
     .maybeSingle();
 
   if (!mpAccount?.access_token_encrypted) {
@@ -77,10 +78,46 @@ export async function ejecutarRefund(
   });
 
   if (result.ok) return "reembolsado";
-  if (result.feePendiente) return "fee_pendiente";
+
+  // Pata médico OK, falta la de Docto → encolar reintento de la pata del fee.
+  // Persistimos el id del refund del médico para que el cron sepa que esa pata
+  // ya salió (decide por estado propio, no por el monto refundeado global de MP).
+  if (result.feePendiente) {
+    await registrarRefundPendiente({
+      tipo,
+      recursoId,
+      medicoId,
+      pagoId,
+      netoMedico,
+      applicationFee,
+      estado: "fee_pendiente",
+      medicoRefundId: result.refundMedico.ok ? result.refundMedico.refundId : undefined,
+      error: result.refundDocto && !result.refundDocto.ok ? result.refundDocto.error : undefined,
+    });
+    return "fee_pendiente";
+  }
+
+  // Pata médico falló → encolar reintento del refund completo.
+  await registrarRefundPendiente({
+    tipo,
+    recursoId,
+    medicoId,
+    pagoId,
+    netoMedico,
+    applicationFee,
+    estado: "pendiente",
+    error: !result.refundMedico.ok ? result.refundMedico.error : undefined,
+  });
 
   if (!result.refundMedico.ok && result.refundMedico.insufficientFunds) {
     logError("[REFUND]", "Médico sin saldo — deriva a flujo edge (Ola 3)", { recursoId, medicoId });
+    // Notificación inmediata: el médico necesita saldo para que el refund proceda.
+    pushAlMedico(medicoId, {
+      title: "Reembolso pendiente",
+      body: "Un paciente canceló y su reembolso necesita saldo en tu cuenta de Mercado Pago. Lo reintentamos cada 24hs.",
+      url: "/dashboard",
+      tag: `refund-pendiente-${recursoId}`,
+    }).catch(() => {});
   }
 
   return "pendiente";

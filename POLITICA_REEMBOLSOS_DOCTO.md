@@ -132,6 +132,7 @@ La auditoría legal (Carolina) detectó que hoy conviven **tres fuentes contradi
 - Sincronizar TyC publicados y consentimiento del triage con la matriz de la sección 4 → **Carolina**.
 - Redacción legal de la cláusula de débito al médico (recargo de `marketplace_fee` para recuperar reembolsos cubiertos por Docto, sección 3) en los TyC del médico, con preaviso de 15 días → **Carolina**.
 - Validez bajo Ley 24.240 de "cancelación <48hs sin reembolso" → **Carolina** (planteado en la auditoría, decisión de producto ya tomada: se mantiene).
+- **Plazo de reembolso en el caso edge (médico sin saldo) → Carolina.** Decisión de Diego (2026-05-31, hallazgo I2 auditoría Roberto 3B): el cron de reintentos corre diario, por lo que en el ~1% de casos donde el médico no tiene saldo, la cobertura manual por CVU se dispara entre 48h y ~72h. El TyC debe informar que el reembolso "se procesa normalmente de inmediato y, en casos excepcionales, puede demorar hasta X días hábiles". Ajustar la redacción a esta realidad operativa. **Pendiente de redacción legal.**
 
 ---
 
