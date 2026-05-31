@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/sala-espera-diaria",
       "schedule": "59 2 * * *"
+    },
+    {
+      "path": "/api/cron/reintentar-refunds",
+      "schedule": "0 4 * * *"
     }
   ]
 }
