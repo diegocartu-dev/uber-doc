@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         exito: true,
-        mensaje: "Turno cancelado correctamente. El paciente fue notificado y tiene crédito para reprogramar.",
+        mensaje: "Turno cancelado correctamente. El paciente fue notificado y se procesó su reembolso.",
       });
     }
 
@@ -300,7 +300,7 @@ export async function POST(req: NextRequest) {
         exito: cancelados > 0,
         mensaje: errores.length > 0
           ? `${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}. ${errores.length} error${errores.length !== 1 ? "es" : ""}.`
-          : `${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}. Cada paciente fue notificado y tiene crédito para reprogramar.`,
+          : `${cancelados} turno${cancelados !== 1 ? "s" : ""} cancelado${cancelados !== 1 ? "s" : ""}. Cada paciente fue notificado y se procesó su reembolso.`,
       });
     }
 

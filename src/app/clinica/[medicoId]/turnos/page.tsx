@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CalendarioTurnos from "./CalendarioTurnos";
 import { capitalizarNombre, formatNombreMedico } from "@/lib/utils/texto";
-import { obtenerCreditosPendientes } from "@/lib/cancelaciones";
 
 export default async function TurnosPage({
   params,
@@ -43,9 +42,6 @@ export default async function TurnosPage({
 
   if (!medico) redirect("/clinica");
 
-  const creditos = await obtenerCreditosPendientes(paciente!.id, medicoId);
-  const credito = creditos.length > 0 ? creditos[0] : null;
-
   // Traer turnos disponibles futuros (fecha en ART, no UTC)
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
@@ -71,7 +67,7 @@ export default async function TurnosPage({
       <main className="mx-auto max-w-lg px-6 py-8">
         <div>
           <p className="text-xs font-medium tracking-wide text-gray-400">
-            {credito ? "REPROGRAMAR TURNO" : "AGENDAR TURNO"}
+            AGENDAR TURNO
           </p>
           <p className="mt-2 text-lg font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo)}</p>
           <p className="mt-0.5 text-sm text-gray-500">
@@ -89,7 +85,6 @@ export default async function TurnosPage({
             precio: medico.precio_consulta,
           }}
           canalOrigen={canalOrigen}
-          credito={credito}
         />
       </main>
     </div>
