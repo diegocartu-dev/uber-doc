@@ -25,6 +25,8 @@ export async function registrarRefundPendiente(params: {
   netoMedico: number;
   applicationFee: number;
   estado: EstadoPendiente;
+  /** Id del refund de la pata del médico, si ya salió OK (caso `fee_pendiente`). */
+  medicoRefundId?: string;
   error?: string;
 }): Promise<void> {
   const supabase = createAdminClient();
@@ -40,6 +42,7 @@ export async function registrarRefundPendiente(params: {
       neto_medico: params.netoMedico,
       application_fee: params.applicationFee,
       estado: params.estado,
+      medico_refund_id: params.medicoRefundId ?? null,
       ultimo_error: params.error ?? null,
       ultimo_intento_at: ahora.toISOString(),
       proximo_intento_at: proximo,

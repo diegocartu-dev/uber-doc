@@ -80,6 +80,8 @@ export async function ejecutarRefund(
   if (result.ok) return "reembolsado";
 
   // Pata médico OK, falta la de Docto → encolar reintento de la pata del fee.
+  // Persistimos el id del refund del médico para que el cron sepa que esa pata
+  // ya salió (decide por estado propio, no por el monto refundeado global de MP).
   if (result.feePendiente) {
     await registrarRefundPendiente({
       tipo,
@@ -89,6 +91,7 @@ export async function ejecutarRefund(
       netoMedico,
       applicationFee,
       estado: "fee_pendiente",
+      medicoRefundId: result.refundMedico.ok ? result.refundMedico.refundId : undefined,
       error: result.refundDocto && !result.refundDocto.ok ? result.refundDocto.error : undefined,
     });
     return "fee_pendiente";
