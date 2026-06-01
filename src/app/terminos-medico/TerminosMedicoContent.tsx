@@ -13,7 +13,7 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
       )}
 
       <h2>1. Objeto y naturaleza de la relación</h2>
-      <p>Docto es una plataforma tecnológica de telemedicina operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina.</p>
+      <p><strong>Docto</strong> es una plataforma tecnológica de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina.</p>
       <p>Al registrarte como profesional de la salud en Docto, adherís a estos Términos y Condiciones. Esta adhesión no genera relación de dependencia, asociación, sociedad ni vínculo laboral de ningún tipo entre vos y Docto. Actuás como profesional independiente y ejercés la medicina bajo tu propia matrícula, responsabilidad y criterio clínico.</p>
       <p>Docto actúa exclusivamente como intermediario tecnológico: facilita la conexión entre vos y los pacientes, provee la infraestructura para la videoconsulta, y gestiona el procesamiento de pagos. Docto no ejerce la medicina ni interviene en las decisiones clínicas.</p>
 
@@ -53,6 +53,13 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
         <p className="mb-0">La comisión se descuenta automáticamente del pago del paciente mediante el sistema de pagos divididos (application_fee) de Mercado Pago. Vos recibís el importe neto directamente en tu cuenta de Mercado Pago. Docto no retiene ni transfiere fondos en ningún momento: el procesamiento lo realiza íntegramente Mercado Pago.</p>
       </div>
       <p>El porcentaje de comisión podrá ser modificado por Docto con un preaviso mínimo de 30 días corridos, notificado por correo electrónico. Si no estás de acuerdo con el nuevo porcentaje, podés dar de baja tu perfil sin penalidad.</p>
+
+      <h2>5 bis. Recupero de reembolsos cubiertos por Docto</h2>
+      <p>En Docto cobrás directo: el importe de cada consulta se acredita en tu cuenta de Mercado Pago, descontada la comisión de la plataforma. Eso te da liquidez inmediata, sin esperar liquidaciones ni cierres mensuales. Es una de las cosas que más cuidamos del modelo.</p>
+      <p>Ese mismo modelo tiene una contracara que resolvemos juntos. Cuando corresponde reembolsar a un paciente por una cancelación o reprogramación atribuible a tu lado (por ejemplo, una consulta que cancelaste, una inasistencia tuya, o un reembolso que Docto adelanta para cuidar la experiencia del paciente), el dinero de esa consulta ya está en tu cuenta, no en la nuestra. Para que el paciente reciba su reembolso sin fricción y en el momento, Docto lo cubre primero y después lo recupera de tu saldo.</p>
+      <p>Por eso, <strong>autorizás de forma expresa e irrevocable a Docto a recuperar de tu cuenta y/o a compensar contra tus liquidaciones futuras</strong> todo importe que Docto haya reembolsado a un paciente por causas atribuibles a vos o a tu prestación, así como las comisiones y cargos asociados a ese reembolso. Esta autorización incluye el ajuste sobre la comisión de tus próximas consultas y la retención sobre acreditaciones pendientes o futuras, hasta cubrir el monto adeudado.</p>
+      <p>Esta cláusula es una condición esencial para operar con cobro directo en Docto y la aceptás al adherir a estos Términos. Su aplicación es la ejecución de una autorización que ya prestaste: no constituye una modificación de términos y, por lo tanto, no requiere un preaviso adicional para cada recupero. Mantener saldo suficiente en tu cuenta asegura que estos reembolsos se procesen sin demoras y que, entre los dos, le demos al paciente la experiencia que esperamos de Docto.</p>
+      <p>Cada vez que se ejecute un recupero te vamos a notificar el detalle (consulta, paciente, motivo e importe) para que tengas total trazabilidad.</p>
 
       <h2>6. Cuenta de Mercado Pago</h2>
       <p>Para recibir los pagos de tus consultas, debés vincular una cuenta de Mercado Pago activa a tu perfil en Docto. El proceso de vinculación se realiza mediante el flujo de autorización (OAuth) de Mercado Pago.</p>
