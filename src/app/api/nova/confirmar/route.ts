@@ -85,18 +85,37 @@ export async function POST(req: NextRequest) {
 
       const franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
 
-      // Idempotencia ligera: evitar duplicar el mismo modelo Nova (doble toque del botón)
-      const { data: modeloExistente } = await supabase
+      // Idempotencia PRECISA: solo bloquea si ya existe una agenda Nova idéntica
+      // (mismo rango + canal + franjas exactas). Así "miércoles de junio" y
+      // "viernes de junio" (mismo rango/canal, días distintos) NO se bloquean
+      // entre sí, pero el doble-toque del mismo pedido sí se evita.
+      const firma = (dia: number, hi: string, hf: string) => `${dia}|${hi.slice(0, 5)}|${hf.slice(0, 5)}`;
+      const nuevaFirma = new Set(franjas.map((f) => firma(f.dia_semana, f.hora_inicio, f.hora_fin)));
+      const { data: modelosMismoRango } = await supabase
         .from("agenda_modelos")
         .select("id")
         .eq("medico_id", medicoDbId)
         .eq("fecha_inicio", fecha_desde)
         .eq("fecha_fin", fecha_hasta)
         .eq("canal_origen", canal_origen)
-        .eq("creado_por_nova", true)
-        .maybeSingle();
-      if (modeloExistente) {
-        return NextResponse.json({ exito: true, mensaje: "Esa agenda ya estaba creada." });
+        .eq("creado_por_nova", true);
+      if (modelosMismoRango && modelosMismoRango.length > 0) {
+        const { data: franjasExist } = await supabase
+          .from("agenda_franjas")
+          .select("modelo_id, dia_semana, hora_inicio, hora_fin")
+          .in("modelo_id", modelosMismoRango.map((m) => m.id));
+        const porModelo = new Map<string, Set<string>>();
+        for (const f of franjasExist ?? []) {
+          const set = porModelo.get(f.modelo_id) ?? new Set<string>();
+          set.add(firma(f.dia_semana, f.hora_inicio, f.hora_fin));
+          porModelo.set(f.modelo_id, set);
+        }
+        const yaExiste = [...porModelo.values()].some(
+          (set) => set.size === nuevaFirma.size && [...set].every((s) => nuevaFirma.has(s))
+        );
+        if (yaExiste) {
+          return NextResponse.json({ exito: true, mensaje: "Esa agenda ya estaba creada." });
+        }
       }
 
       const canalLabel = canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio";
