@@ -9,8 +9,8 @@ export default function PrivacidadContent() {
       </p>
 
       <h2>1. Responsable del tratamiento</h2>
-      <p><strong>Docto</strong> es una plataforma de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina. Contacto: soporte@docto.com.ar.</p>
-      <p>El responsable se encuentra inscripto ante la Agencia de Acceso a la Información Pública (AAIP) como responsable de una base de datos de carácter personal bajo el legajo RL-2026-36086505-APN-DNPDP#AAIP (base de datos registrada: RL-2026-41929595-APN-DNPDP#AAIP).</p>
+      <p><strong>Docto</strong> es una plataforma de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270. Contacto: soporte@docto.com.ar.</p>
+      <p>Docto se encuentra inscripto ante la Agencia de Acceso a la Información Pública (AAIP) como responsable de una base de datos de carácter personal bajo el legajo RL-2026-36086505-APN-DNPDP#AAIP (base de datos registrada: RL-2026-41929595-APN-DNPDP#AAIP).</p>
 
       <h2>2. Qué datos recolectamos</h2>
 
@@ -90,7 +90,6 @@ export default function PrivacidadContent() {
       <p>Para consultas sobre privacidad y protección de datos:</p>
       <ul>
         <li>Correo: soporte@docto.com.ar</li>
-        <li>Domicilio: Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, CABA, Argentina.</li>
       </ul>
 
       <div className="mt-8 border-t border-gray-200 pt-4 text-center text-xs text-gray-400">

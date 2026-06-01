@@ -13,7 +13,7 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
       )}
 
       <h2>1. Objeto y naturaleza de la relación</h2>
-      <p><strong>Docto</strong> es una plataforma tecnológica de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina.</p>
+      <p><strong>Docto</strong> es una plataforma tecnológica de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270 y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
       <p>Al registrarte como profesional de la salud en Docto, adherís a estos Términos y Condiciones. Esta adhesión no genera relación de dependencia, asociación, sociedad ni vínculo laboral de ningún tipo entre vos y Docto. Actuás como profesional independiente y ejercés la medicina bajo tu propia matrícula, responsabilidad y criterio clínico.</p>
       <p>Docto actúa exclusivamente como intermediario tecnológico: facilita la conexión entre vos y los pacientes, provee la infraestructura para la videoconsulta, y gestiona el procesamiento de pagos. Docto no ejerce la medicina ni interviene en las decisiones clínicas.</p>
 
@@ -88,7 +88,7 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
       </ul>
 
       <h2>10. Propiedad intelectual</h2>
-      <p>La plataforma Docto — incluyendo su diseño, marca, código fuente e interfaz — es propiedad de Diego Oscar González. Tu adhesión no te otorga ningún derecho sobre la marca ni la plataforma más allá del uso de la misma como herramienta para la prestación de servicios profesionales.</p>
+      <p>La plataforma Docto — incluyendo su diseño, marca, código fuente e interfaz — es propiedad de Docto. Tu adhesión no te otorga ningún derecho sobre la marca ni la plataforma más allá del uso de la misma como herramienta para la prestación de servicios profesionales.</p>
 
       <h2>11. Modificaciones</h2>
       <p>Docto se reserva el derecho de modificar estos Términos. Las modificaciones se notificarán por correo electrónico con al menos 15 días de anticipación. El uso continuado de la plataforma luego de publicados los cambios implica la aceptación de los nuevos términos. Si no estás de acuerdo, podés dar de baja tu perfil sin penalidad.</p>
@@ -100,11 +100,10 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
       <ul>
         <li>Correo electrónico: soporte@docto.com.ar</li>
         <li>Sitio web: docto.com.ar</li>
-        <li>Domicilio: Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, CABA, Argentina.</li>
       </ul>
 
       <div className="mt-8 border-t border-gray-200 pt-4 text-center text-xs text-gray-400">
-        Docto — docto.com.ar — Diego Oscar González, CUIT 20-25086458-3
+        Docto — docto.com.ar
         <br />
         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
         <br />
