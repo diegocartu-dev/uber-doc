@@ -7,7 +7,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
             Términos y Condiciones de Uso
           </h1>
           <p className="text-center text-sm text-gray-500">
-            Versión vigente desde el 26 de abril de 2026
+            Versión vigente desde el 1 de junio de 2026
           </p>
         </>
       )}
@@ -17,7 +17,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </div>
 
       <h2>1. Introducción y aceptación</h2>
-      <p>Docto es una plataforma digital de telemedicina operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina. La plataforma es accesible a través del sitio web docto.com.ar.</p>
+      <p><strong>Docto</strong> es una plataforma digital de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina. La plataforma es accesible a través del sitio web docto.com.ar.</p>
       <p>Al registrarte, acceder o utilizar Docto — ya sea como paciente o como profesional de la salud — aceptás en forma plena e irrestricta estos Términos y Condiciones de Uso. Si no estás de acuerdo con alguna de las condiciones aquí establecidas, no deberás utilizar la plataforma.</p>
       <p>Docto se reserva el derecho de modificar estos Términos en cualquier momento. Las modificaciones entrarán en vigencia desde su publicación en la plataforma. El uso continuado de Docto luego de publicados los cambios implica la aceptación de los nuevos términos.</p>
 
@@ -40,7 +40,18 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <p>Las consultas realizadas a través de Docto son de carácter electivo y complementario a la atención médica presencial. El profesional de la salud determinará, según su criterio clínico, si la consulta puede resolverse de forma remota o si el paciente requiere atención presencial.</p>
       <p>Docto no garantiza diagnósticos, resultados de tratamientos ni la disponibilidad permanente de profesionales en ninguna especialidad.</p>
 
-      <h2>3. Registro, cuenta y responsabilidades del usuario</h2>
+      <h2>3. Salud y atención médica</h2>
+      <h3>3.1 Naturaleza de la teleconsulta y sus límites</h3>
+      <p>La teleconsulta en Docto es un acto médico real: un profesional habilitado te atiende a distancia por videollamada, evalúa tu caso y puede diagnosticar, indicar tratamiento o emitir una receta cuando corresponda.</p>
+      <p>Tiene límites propios de la atención a distancia. Hay situaciones que no pueden resolverse por telemedicina y requieren atención presencial: cuadros que necesitan examen físico, estudios complementarios, procedimientos, o cualquier situación donde el profesional, según su criterio clínico, considere que no puede atenderte con seguridad de forma remota. En esos casos el profesional te lo va a indicar y te va a derivar a una consulta presencial. La decisión sobre si tu caso puede resolverse de forma remota o necesita atención presencial es siempre del profesional que te atiende.</p>
+      <h3>3.2 Consentimiento informado y autonomía</h3>
+      <p>Tenés derecho a recibir, antes y durante la consulta, información clara, suficiente y adecuada a tu capacidad de comprensión sobre tu estado de salud, el procedimiento propuesto, sus beneficios, riesgos y las alternativas disponibles (Ley 26.529).</p>
+      <p>Sobre esa información, tenés derecho a aceptar o rechazar los tratamientos o procedimientos indicados, así como a revocar tu decisión posteriormente. La atención por videollamada implica además tu consentimiento para que el acto médico se realice de forma remota; podés interrumpir la teleconsulta en cualquier momento.</p>
+      <p>Tenés derecho a tu historia clínica: es tuya, podés acceder a ella y solicitar una copia. Los documentos que se generen en tu consulta (receta, indicaciones, constancias) quedan disponibles para vos en la plataforma.</p>
+      <h3>3.3 Confidencialidad y secreto profesional</h3>
+      <p>Todo lo que compartas en una consulta está protegido por el secreto profesional y por la confidencialidad de tus datos de salud. El profesional que te atiende y Docto están obligados a no revelar la información vinculada a tu atención, salvo en los casos en que la ley lo exija expresamente o cuando vos lo autorices. Tus datos de salud son datos sensibles y reciben el máximo nivel de protección (ver §8, Privacidad y protección de datos personales).</p>
+
+      <h2>4. Registro, cuenta y responsabilidades del usuario</h2>
       <p>Para utilizar Docto debés registrarte con información verídica, completa y actualizada. Sos responsable de mantener la confidencialidad de tus credenciales de acceso y de todas las actividades realizadas desde tu cuenta.</p>
       <p>Al registrarte declarás que:</p>
       <ul>
@@ -50,7 +61,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </ul>
       <p>Docto podrá suspender o eliminar tu cuenta si detecta información falsa, uso indebido de la plataforma o incumplimiento de estos Términos.</p>
 
-      <h2>4. Profesionales de la salud en la plataforma</h2>
+      <h2>5. Profesionales de la salud en la plataforma</h2>
       <p>Los profesionales de la salud que operan en Docto son profesionales independientes habilitados por los organismos competentes (Ministerio de Salud, colegios profesionales u organismos equivalentes). Docto verifica la matrícula vigente de cada profesional a través del sistema SISA/REFEPS antes de habilitar su perfil.</p>
       <p>Los profesionales son exclusivamente responsables de:</p>
       <ul>
@@ -61,34 +72,32 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </ul>
       <p>Docto no es responsable por las decisiones clínicas de los profesionales ni por los resultados de los tratamientos indicados.</p>
 
-      <h2>5. Pagos, aranceles y política de reembolsos</h2>
-      <h3>5.1 Estructura de pagos</h3>
+      <h2>6. Pagos, aranceles y política de reembolsos</h2>
+      <h3>6.1 Estructura de pagos</h3>
       <p>Los pagos se procesan a través de Mercado Pago mediante el sistema de pagos divididos. Docto retiene una comisión sobre el valor de cada consulta como contraprestación por el uso de la plataforma. El porcentaje de comisión depende de la categoría del profesional y se informa de forma transparente antes de la primera publicación de turnos. El resto es acreditado directamente al profesional de la salud.</p>
       <p>Los precios de cada consulta son establecidos por el profesional y se muestran claramente antes de confirmar la reserva. Al confirmar y pagar, aceptás el arancel informado.</p>
-      <h3>5.2 Reembolsos — Consulta Inmediata</h3>
+      <h3>6.2 Cancelaciones y reembolsos</h3>
+      <p>Tu reembolso depende de quién cancela, con cuánta anticipación y de qué tipo de consulta se trata:</p>
       <ul>
-        <li>Si ningún profesional toma la consulta dentro de los 30 minutos: reembolso del 100%.</li>
-        <li>Si la consulta fue atendida, no procede reembolso salvo lo dispuesto en el punto 5.4.</li>
+        <li><strong>Turno — cancelás con más de 48 hs de anticipación:</strong> reembolso del 100%.</li>
+        <li><strong>Turno — cancelás con menos de 48 hs de anticipación:</strong> sin reembolso, pero podés reprogramar tu consulta sin costo con el mismo profesional.</li>
+        <li><strong>Turno — no te presentás y no cancelaste:</strong> sin reembolso.</li>
+        <li><strong>El profesional cancela (en cualquier momento):</strong> elegís vos — reprogramás sin costo o te reembolsamos el 100%.</li>
+        <li><strong>Consulta Inmediata — ningún profesional la toma en 30 minutos:</strong> reembolso del 100%.</li>
+        <li><strong>Falla técnica imputable a Docto:</strong> reembolso del 100% o reprogramación sin cargo, a tu elección.</li>
       </ul>
-      <h3>5.3 Reembolsos — Turnos programados</h3>
-      <ul>
-        <li>Cancelación por el paciente con más de 48 horas de anticipación: reembolso del 100%.</li>
-        <li>Cancelación por el paciente con menos de 48 horas de anticipación: sin reembolso.</li>
-        <li>Cancelación por el profesional en cualquier momento: reembolso del 100% al paciente.</li>
-        <li>Inasistencia del paciente sin cancelación previa: sin reembolso.</li>
-        <li>El crédito por cancelación del profesional puede aplicarse a una nueva reserva dentro de los 7 días corridos.</li>
-      </ul>
-      <h3>5.4 Reembolsos por problemas técnicos</h3>
-      <p>Si la consulta no pudo realizarse por fallas técnicas imputables a la plataforma Docto, se reembolsará el 100% del importe abonado o se ofrecerá la reprogramación sin cargo. Los problemas de conectividad del paciente o del profesional no son imputables a Docto y no generan derecho a reembolso automático.</p>
-      <h3>5.5 Procesamiento de reembolsos</h3>
-      <p>Los reembolsos se acreditan al medio de pago original dentro de los plazos que establezca Mercado Pago (generalmente 3 a 10 días hábiles). Docto no tiene control sobre los tiempos internos de acreditación del procesador de pagos.</p>
+      <p>Reprogramar no es un reembolso: el pago se mantiene asociado al nuevo turno, no se devuelve dinero ni se genera saldo a favor. Los problemas de conectividad del paciente o del profesional no son imputables a Docto y no generan reembolso automático.</p>
+      <h3>6.3 Procesamiento de reembolsos</h3>
+      <p>Los reembolsos se acreditan al mismo medio de pago con el que abonaste. El tiempo de acreditación depende del procesador de pagos (Mercado Pago) y puede demorar algunos días hábiles; Docto no tiene control sobre esos plazos internos. Si transcurrido un plazo razonable no ves acreditado tu reembolso, escribinos a soporte@docto.com.ar.</p>
+      <h3>6.4 Derecho de revocación (compras a distancia)</h3>
+      <p>Como contratás a distancia, la ley te reconoce el derecho de revocar la operación dentro de los 10 días corridos (art. 34, Ley 24.240). Ese derecho no aplica a las consultas de Docto, porque se trata de un servicio que se agenda y presta en una fecha y hora determinadas elegidas por vos, supuesto expresamente excluido de la revocación. La cancelación y los reembolsos de tu consulta se rigen por la política de cancelaciones de §6.2.</p>
 
-      <h2>6. Recetas digitales</h2>
+      <h2>7. Recetas digitales</h2>
       <p>Las recetas emitidas a través de Docto son recetas digitales con validez legal en todo el territorio nacional, en el marco de la Ley 27.553 y el Decreto 63/2024. Las recetas incluyen la firma electrónica del profesional y el código de identificación correspondiente.</p>
       <p>La emisión de una receta es una decisión exclusiva del profesional interviniente. Docto no puede garantizar que toda consulta resulte en la emisión de una receta. El paciente no tiene derecho a exigir la prescripción de medicamentos específicos.</p>
-      <p>Docto se encuentra inscripto ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el expediente en trámite, y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
+      <p>Docto se encuentra inscripto ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
 
-      <h2>7. Privacidad y protección de datos personales</h2>
+      <h2>8. Privacidad y protección de datos personales</h2>
       <p>El tratamiento de datos personales en Docto se realiza conforme a la Ley 25.326 de Protección de Datos Personales y las disposiciones de la Agencia de Acceso a la Información Pública (AAIP).</p>
       <p>Los datos de salud son considerados datos sensibles y son tratados con el máximo nivel de protección. Docto implementa:</p>
       <ul>
@@ -99,7 +108,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </ul>
       <p>Los datos no son vendidos ni cedidos a terceros con fines comerciales. El titular de los datos puede ejercer sus derechos de acceso, rectificación, actualización y supresión enviando un correo a soporte@docto.com.ar. Los datos clínicos (diagnósticos, recetas, indicaciones, historia clínica) se conservan por un plazo mínimo de 10 años desde la última actuación, conforme al art. 18 de la Ley 26.529. Los datos de perfil e identificación se conservan por 5 años desde la última actividad o hasta que el titular solicite su supresión. Para más información, consultá nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
 
-      <h2>8. Conducta del usuario y usos prohibidos</h2>
+      <h2>9. Conducta del usuario y usos prohibidos</h2>
       <p>Al utilizar Docto, el usuario se compromete a no:</p>
       <ul>
         <li>Proporcionar información falsa sobre su identidad o estado de salud.</li>
@@ -111,7 +120,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Solicitar prescripciones de medicamentos controlados de forma reiterada y sin justificación clínica.</li>
       </ul>
 
-      <h2>9. Limitación de responsabilidad</h2>
+      <h2>10. Limitación de responsabilidad</h2>
       <p>Docto no será responsable por:</p>
       <ul>
         <li>Las decisiones clínicas, diagnósticos o tratamientos indicados por los profesionales de la salud.</li>
@@ -122,16 +131,20 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Demoras en la atención derivadas de la disponibilidad de profesionales.</li>
       </ul>
 
-      <h2>10. Propiedad intelectual</h2>
+      <h2>11. Propiedad intelectual</h2>
       <p>Todo el contenido de la plataforma Docto — incluyendo su diseño, código fuente, marca, logotipo, textos e interfaz — es propiedad exclusiva de Diego Oscar González y está protegido por las leyes de propiedad intelectual vigentes en Argentina. Queda prohibida la reproducción, distribución o modificación de cualquier elemento de la plataforma sin autorización expresa y por escrito.</p>
 
-      <h2>11. Modificaciones del servicio</h2>
+      <h2>12. Modificaciones del servicio</h2>
       <p>Docto se reserva el derecho de modificar, suspender o discontinuar, en forma temporal o permanente, cualquier aspecto de la plataforma. En caso de cambios significativos que afecten los derechos del usuario, se notificará por correo electrónico con al menos 15 días de anticipación.</p>
 
-      <h2>12. Ley aplicable y jurisdicción</h2>
+      <h2>13. Ley aplicable y jurisdicción</h2>
       <p>Estos Términos se rigen por las leyes de la República Argentina. Para cualquier disputa derivada del uso de la plataforma, las partes se someten a la jurisdicción de los tribunales ordinarios de la Ciudad Autónoma de Buenos Aires, renunciando expresamente a cualquier otro fuero que pudiera corresponder.</p>
 
-      <h2>13. Contacto y soporte</h2>
+      <h2>14. Defensa del Consumidor</h2>
+      <p>Si tenés un reclamo como consumidor, podés iniciarlo ante la <strong>Ventanilla Única Federal de Defensa del Consumidor</strong>, disponible para todo el país en <a href="https://www.argentina.gob.ar/servicio/iniciar-un-reclamo-ante-defensa-del-consumidor" className="underline" target="_blank" rel="noopener noreferrer">consumidor.gob.ar</a>. En la Ciudad Autónoma de Buenos Aires, también podés comunicarte con la Dirección General de Defensa y Protección al Consumidor llamando al <strong>147</strong>.</p>
+      <p>Si te arrepentiste de una contratación a distancia, podés ejercer tu derecho de revocación conforme a lo indicado en §6.4.</p>
+
+      <h2>15. Contacto y soporte</h2>
       <ul>
         <li>Correo electrónico: soporte@docto.com.ar</li>
         <li>Sitio web: docto.com.ar</li>
@@ -144,7 +157,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <br />
         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
         <br />
-        Última actualización: mayo de 2026
+        Última actualización: junio de 2026
       </div>
     </article>
   );

@@ -503,7 +503,7 @@ export default function RegistroMedicoPage() {
           </div>
         </form>
 
-        <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} />
+        <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} perfil="medico" />
 
         {/* Modal declaracion de matricula */}
         {modalMatricula && (
