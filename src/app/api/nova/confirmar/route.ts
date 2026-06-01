@@ -2,29 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
-
-
-function generarSlots(
-  horaInicio: string,
-  horaFin: string,
-  duracion: number
-): { hora_inicio: string; hora_fin: string }[] {
-  const slots: { hora_inicio: string; hora_fin: string }[] = [];
-  const [hI, mI] = horaInicio.split(":").map(Number);
-  const [hF, mF] = horaFin.split(":").map(Number);
-  let minActual = hI * 60 + mI;
-  const minFin = hF * 60 + mF;
-
-  while (minActual + duracion <= minFin) {
-    const inicio = `${Math.floor(minActual / 60).toString().padStart(2, "0")}:${(minActual % 60).toString().padStart(2, "0")}`;
-    const finSlot = minActual + duracion;
-    const fin = `${Math.floor(finSlot / 60).toString().padStart(2, "0")}:${(finSlot % 60).toString().padStart(2, "0")}`;
-    slots.push({ hora_inicio: inicio, hora_fin: fin });
-    minActual = finSlot;
-  }
-
-  return slots;
-}
+import { crearAgendaModelo } from "@/lib/agenda/crear-agenda";
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,114 +49,102 @@ export async function POST(req: NextRequest) {
 
     const medicoDbId = medico.id;
 
-    if (accion === "crear_slots") {
-      // 1. Extraer del payload
-      const { fecha, hora_inicio, hora_fin, canal_origen } = datos as {
-        fecha: string;
+    if (accion === "crear_disponibilidad") {
+      const { fecha_desde, fecha_hasta, dias_semana, hora_inicio, hora_fin, duracion, canal_origen } = datos as {
+        fecha_desde: string;
+        fecha_hasta: string;
+        dias_semana?: string[];
         hora_inicio: string;
         hora_fin: string;
+        duracion?: number;
         canal_origen: string;
       };
 
-      // 2. Validaciones server-side
       const CANALES_VALIDOS = ["clinica_virtual", "consultorio_privado"] as const;
       if (!CANALES_VALIDOS.includes(canal_origen as typeof CANALES_VALIDOS[number])) {
         return NextResponse.json({ exito: false, mensaje: "Canal inválido" }, { status: 400 });
       }
-      const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
-      const horaRegex = /^\d{2}:\d{2}$/;
-      if (!fechaRegex.test(fecha) || !horaRegex.test(hora_inicio) || !horaRegex.test(hora_fin)) {
-        return NextResponse.json({ exito: false, mensaje: "Formato de fecha u hora inválido" }, { status: 400 });
+
+      // Duración: la del payload o, si no vino, la del perfil del médico
+      const duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
+
+      // Días de semana: nombres → números (1=lunes … 7=domingo). Vacío/omitido → todos los días del rango.
+      const DIA_MAP: Record<string, number> = {
+        lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6, domingo: 7,
+      };
+      const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      let diasNum: number[];
+      if (!Array.isArray(dias_semana) || dias_semana.length === 0) {
+        diasNum = [1, 2, 3, 4, 5, 6, 7];
+      } else {
+        diasNum = [...new Set(dias_semana.map((d) => DIA_MAP[normalizar(d)]).filter((n): n is number => !!n))];
       }
-      if (hora_inicio >= hora_fin) {
-        return NextResponse.json({ exito: false, mensaje: "hora_inicio debe ser anterior a hora_fin" }, { status: 400 });
+      if (diasNum.length === 0) {
+        return NextResponse.json({ exito: false, mensaje: "No reconocí los días de la semana." }, { status: 400 });
       }
 
-      // 3. Usar duracion_consulta del perfil del médico (no del payload)
-      const duracionMinutos = medico.duracion_consulta;
+      const franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
 
-      // 4. Idempotencia: verificar si ya existe modelo Nova para este médico/fecha
-      const { data: modeloExistente } = await supabase
+      // Idempotencia PRECISA: solo bloquea si ya existe una agenda Nova idéntica
+      // (mismo rango + canal + franjas exactas). Así "miércoles de junio" y
+      // "viernes de junio" (mismo rango/canal, días distintos) NO se bloquean
+      // entre sí, pero el doble-toque del mismo pedido sí se evita.
+      const firma = (dia: number, hi: string, hf: string) => `${dia}|${hi.slice(0, 5)}|${hf.slice(0, 5)}`;
+      const nuevaFirma = new Set(franjas.map((f) => firma(f.dia_semana, f.hora_inicio, f.hora_fin)));
+      const { data: modelosMismoRango } = await supabase
         .from("agenda_modelos")
         .select("id")
         .eq("medico_id", medicoDbId)
-        .eq("fecha_inicio", fecha)
-        .eq("creado_por_nova", true)
-        .maybeSingle();
-
-      if (modeloExistente) {
-        return NextResponse.json({ exito: true, mensaje: "Turnos ya creados anteriormente" });
+        .eq("fecha_inicio", fecha_desde)
+        .eq("fecha_fin", fecha_hasta)
+        .eq("canal_origen", canal_origen)
+        .eq("creado_por_nova", true);
+      if (modelosMismoRango && modelosMismoRango.length > 0) {
+        const { data: franjasExist } = await supabase
+          .from("agenda_franjas")
+          .select("modelo_id, dia_semana, hora_inicio, hora_fin")
+          .in("modelo_id", modelosMismoRango.map((m) => m.id));
+        const porModelo = new Map<string, Set<string>>();
+        for (const f of franjasExist ?? []) {
+          const set = porModelo.get(f.modelo_id) ?? new Set<string>();
+          set.add(firma(f.dia_semana, f.hora_inicio, f.hora_fin));
+          porModelo.set(f.modelo_id, set);
+        }
+        const yaExiste = [...porModelo.values()].some(
+          (set) => set.size === nuevaFirma.size && [...set].every((s) => nuevaFirma.has(s))
+        );
+        if (yaExiste) {
+          return NextResponse.json({ exito: true, mensaje: "Esa agenda ya estaba creada." });
+        }
       }
 
-      // 5. Generar nombre del modelo
-      const [anio, mes, dia] = fecha.split("-");
       const canalLabel = canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio";
-      const nombreModelo = `Nova - ${canalLabel} ${dia}/${mes}`;
+      const nombreModelo =
+        fecha_desde === fecha_hasta
+          ? `Nova - ${canalLabel} ${fecha_desde.split("-").reverse().slice(0, 2).join("/")}`
+          : `Nova - ${canalLabel} ${fecha_desde} a ${fecha_hasta}`;
 
-      // 6. INSERT en agenda_modelos
-      const { data: nuevoModelo, error: errorModelo } = await supabase
-        .from("agenda_modelos")
-        .insert({
-          medico_id: medicoDbId,
-          nombre: nombreModelo,
-          fecha_inicio: fecha,
-          fecha_fin: fecha,
-          duracion_turno: duracionMinutos,
-          precio: medico.precio_consulta,
-          canal_origen: canal_origen,
-          activo: true,
-          creado_por_nova: true,
-        })
-        .select("id")
-        .single();
+      const resultado = await crearAgendaModelo(supabase, {
+        medicoId: medicoDbId,
+        nombre: nombreModelo,
+        fecha_inicio: fecha_desde,
+        fecha_fin: fecha_hasta,
+        duracion_turno: duracionMinutos,
+        precio: medico.precio_consulta,
+        franjas,
+        canal_origen: canal_origen as "clinica_virtual" | "consultorio_privado",
+        creado_por_nova: true,
+      });
 
-      if (errorModelo || !nuevoModelo) {
-        return NextResponse.json({ exito: false, mensaje: "Error al crear el modelo de agenda" }, { status: 500 });
+      if (!resultado.ok) {
+        return NextResponse.json({ exito: false, mensaje: resultado.mensaje });
       }
 
-      // 7. INSERT en agenda_franjas
-      const diasSemana: Record<number, number> = { 0: 7, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
-      const diaSemana = diasSemana[new Date(fecha + "T12:00:00").getDay()];
-
-      // INSERT en agenda_franjas — no es bloqueante si falla; el modelo ya existe y los turnos se crean igual
-      await supabase
-        .from("agenda_franjas")
-        .insert({
-          modelo_id: nuevoModelo.id,
-          dia_semana: diaSemana,
-          hora_inicio: hora_inicio,
-          hora_fin: hora_fin,
-        });
-
-      // 8. Generar y upsert turnos con modelo_id y canal_origen
-      const slots = generarSlots(hora_inicio, hora_fin, duracionMinutos);
-      if (slots.length === 0) {
-        return NextResponse.json({
-          exito: false,
-          mensaje: "El rango horario no permite crear turnos con esa duración",
-        });
+      let mensaje = `Listo, creé ${resultado.turnosCreados} turno${resultado.turnosCreados !== 1 ? "s" : ""} en ${resultado.dias} día${resultado.dias !== 1 ? "s" : ""}.`;
+      if (resultado.agendasViejasBloqueadas > 0) {
+        mensaje += ` Tenías una agenda anterior en esos días: bloqueé ${resultado.agendasViejasBloqueadas} turno${resultado.agendasViejasBloqueadas !== 1 ? "s" : ""} vacío${resultado.agendasViejasBloqueadas !== 1 ? "s" : ""} para no encimar. Revisala si querés.`;
       }
-
-      const turnosParaInsertar = slots.map((slot) => ({
-        medico_id: medicoDbId,
-        fecha,
-        hora_inicio: slot.hora_inicio,
-        hora_fin: slot.hora_fin,
-        estado: "disponible",
-        monto: medico.precio_consulta,
-        modelo_id: nuevoModelo.id,
-        canal_origen: canal_origen,
-      }));
-
-      const { error: errorTurnos } = await supabase
-        .from("turnos")
-        .upsert(turnosParaInsertar, { onConflict: "medico_id,fecha,hora_inicio", ignoreDuplicates: true });
-
-      if (errorTurnos) {
-        return NextResponse.json({ exito: false, mensaje: "Error al crear los turnos" }, { status: 500 });
-      }
-
-      return NextResponse.json({ exito: true, mensaje: `${turnosParaInsertar.length} turnos creados correctamente` });
+      return NextResponse.json({ exito: true, mensaje });
     }
 
     if (accion === "bloquear_agenda") {
