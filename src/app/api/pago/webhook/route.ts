@@ -272,11 +272,25 @@ async function handleApproved(
       .select("id, medico_id");
 
     if (!updated?.length) {
-      logWarn("[WEBHOOK]", "Consulta no actualizada (estado ya cambió?)", logCtx);
-      await sendDoctoAlert(
-        `[ALERTA] Pago aprobado pero consulta no actualizada`,
-        `Un pago fue aprobado por MP pero el UPDATE no afectó filas.\nEstado fuera de sincronía.\n\nConsulta ID: ${id}\nPayment ID: ${paymentId}\nMonto: $${transactionAmount}\nFecha: ${new Date().toISOString()}\n\nAcción: verificar manualmente en Supabase si la consulta ya cambió de estado.`
-      );
+      // El UPDATE no afectó filas. Puede ser: (a) reentrega benigna de MP — MP
+      // manda 2 webhooks por pago (created + updated); el primero ya transicionó
+      // la consulta y este segundo no matchea — o (b) estado realmente fuera de
+      // sincronía. Distinguimos para no alertar en cada pago aprobado.
+      const { data: ya } = await admin
+        .from("consultas")
+        .select("estado, pago_id")
+        .eq("id", id)
+        .maybeSingle();
+      const reentregaBenigna = ya?.pago_id === paymentId && ya?.estado !== "aceptada";
+      if (reentregaBenigna) {
+        logInfo("[WEBHOOK]", "Consulta: reentrega benigna de MP (ya procesada)", { ...logCtx, estadoActual: ya?.estado });
+      } else {
+        logWarn("[WEBHOOK]", "Consulta no actualizada (estado fuera de sincronía)", { ...logCtx, estadoActual: ya?.estado });
+        await sendDoctoAlert(
+          `[ALERTA] Pago aprobado pero consulta no actualizada`,
+          `Un pago fue aprobado por MP pero el UPDATE no afectó filas.\nEstado fuera de sincronía.\n\nConsulta ID: ${id}\nEstado actual: ${ya?.estado ?? "desconocido"}\nPayment ID: ${paymentId}\nMonto: $${transactionAmount}\nFecha: ${new Date().toISOString()}\n\nAcción: verificar manualmente en Supabase si la consulta ya cambió de estado.`
+        );
+      }
     } else {
       logInfo("[WEBHOOK]", "Consulta en_curso (transición automática)", { ...logCtx, transactionAmount, applicationFee, netAmount });
       trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });
@@ -307,11 +321,27 @@ async function handleApproved(
       .select("id, medico_id, paciente_id, fecha");
 
     if (!updated?.length) {
-      logWarn("[WEBHOOK]", "Turno no actualizado (estado ya cambió?)", logCtx);
-      await sendDoctoAlert(
-        `[ALERTA] Pago aprobado pero turno no actualizado`,
-        `Un pago fue aprobado por MP pero el UPDATE no afectó filas.\nEstado fuera de sincronía.\n\nTurno ID: ${id}\nPayment ID: ${paymentId}\nMonto: $${transactionAmount}\nFecha: ${new Date().toISOString()}\n\nAcción: verificar manualmente en Supabase si el turno ya cambió de estado.`
-      );
+      // El UPDATE no afectó filas. Distinguimos dos casos muy distintos:
+      //  (a) Reentrega benigna de MP: el turno ya está confirmado con ESTE pago_id
+      //      (MP manda 2 webhooks por pago). No es problema → log, sin alerta.
+      //  (b) Race de expiración / estado inesperado: la reserva venció y el turno
+      //      volvió a disponible (o lo tomó otro) ANTES de que el pago se aprobara.
+      //      El paciente pagó y no tiene turno → alerta real para refund manual.
+      const { data: ya } = await admin
+        .from("turnos")
+        .select("estado, pago_id")
+        .eq("id", id)
+        .maybeSingle();
+      const reentregaBenigna = ya?.pago_id === paymentId && ya?.estado === "confirmado";
+      if (reentregaBenigna) {
+        logInfo("[WEBHOOK]", "Turno: reentrega benigna de MP (ya confirmado)", { ...logCtx, estadoActual: ya?.estado });
+      } else {
+        logWarn("[WEBHOOK]", "Turno no confirmado tras pago aprobado (race de expiración?)", { ...logCtx, estadoActual: ya?.estado });
+        await sendDoctoAlert(
+          `[ALERTA] Pago aprobado pero turno no confirmado`,
+          `Un pago fue aprobado por MP pero el turno NO quedó confirmado (la reserva pudo expirar durante el checkout).\n\nTurno ID: ${id}\nEstado actual: ${ya?.estado ?? "desconocido"}\nPayment ID: ${paymentId}\nMonto: $${transactionAmount}\nFecha: ${new Date().toISOString()}\n\nAcción: el paciente pagó y puede haberse quedado sin turno. Verificar y, si corresponde, reasignar el turno o procesar refund.`
+        );
+      }
     } else {
       logInfo("[WEBHOOK]", "Turno confirmado", { ...logCtx, transactionAmount, applicationFee, netAmount });
       trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });

@@ -34,8 +34,12 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.estado !== "disponible") return { error: "Este turno ya no está disponible." };
 
-  // Reservar con expiración de 5 minutos
-  const reservadoHasta = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  // Reservar con hold de 15 minutos. El turno queda bloqueado para este paciente
+  // (estado reservado_pendiente + reservado_hasta) y nadie más puede tomarlo
+  // mientras el hold esté vigente. 15 min cubre el tiempo de un pago real en
+  // Checkout Pro (transferencia, OTP del banco, Rapipago), no solo el click
+  // instantáneo de la simulación. Si el hold vence, el turno vuelve a disponible.
+  const reservadoHasta = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   const { error } = await supabase
     .from("turnos")
