@@ -8,12 +8,13 @@ const linkMap: Record<string, string> = {
   "Sumate a Docto": "/auth/registro-medico",
   "Términos": "/terminos",
   "Privacidad": "/privacidad",
+  "Botón de arrepentimiento": "/arrepentimiento",
 };
 
 const footerCols = [
   { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas"] },
   { title: "Médicos", links: ["Sumate a Docto"] },
-  { title: "Legal", links: ["Términos", "Privacidad"] },
+  { title: "Legal", links: ["Términos", "Privacidad", "Botón de arrepentimiento"] },
 ];
 
 export default function Footer() {
