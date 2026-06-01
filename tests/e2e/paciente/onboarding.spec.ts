@@ -52,6 +52,7 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("DNI").fill(PACIENTE_NORMAL.dni);
     await page.getByLabel("Fecha de nacimiento").fill("1990-05-15");
     await page.getByLabel("Femenino").check();
+    await page.getByLabel("Teléfono").fill("1123456789");
 
     // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
     for (const cb of await page.getByRole("checkbox").all()) await cb.check();
@@ -77,6 +78,7 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("DNI").fill(PACIENTE_DNI_INVALIDO.dni);
     await page.getByLabel("Fecha de nacimiento").fill("1991-12-05");
     await page.getByLabel("Masculino").check();
+    await page.getByLabel("Teléfono").fill("1123456789");
 
     // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
     for (const cb of await page.getByRole("checkbox").all()) await cb.check();
