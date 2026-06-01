@@ -3,13 +3,18 @@
 import { useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import TerminosContent from "@/app/terminos/TerminosContent";
+import TerminosMedicoContent from "@/app/terminos-medico/TerminosMedicoContent";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Qué TyC mostrar. "paciente" (default) o "medico". El registro médico
+   *  debe pasar "medico" para que el profesional acepte SUS términos, no los
+   *  del paciente. */
+  perfil?: "paciente" | "medico";
 };
 
-export default function ModalTerminos({ open, onClose }: Props) {
+export default function ModalTerminos({ open, onClose, perfil = "paciente" }: Props) {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "Escape") onClose();
   }, [onClose]);
@@ -27,7 +32,7 @@ export default function ModalTerminos({ open, onClose }: Props) {
       <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl" style={{ maxHeight: "90vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
-            Términos y Condiciones de Uso
+            {perfil === "medico" ? "Términos y Condiciones para Profesionales" : "Términos y Condiciones de Uso"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={20} strokeWidth={1.75} />
@@ -35,7 +40,7 @@ export default function ModalTerminos({ open, onClose }: Props) {
         </div>
 
         <div className="mt-4 flex-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-5 text-sm leading-relaxed text-gray-700">
-          <TerminosContent hideTitle />
+          {perfil === "medico" ? <TerminosMedicoContent hideTitle /> : <TerminosContent hideTitle />}
         </div>
 
         <button
