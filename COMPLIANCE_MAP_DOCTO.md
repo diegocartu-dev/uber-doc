@@ -39,7 +39,7 @@ vigente, y lectura legal de Dra. Carolina.
 | R2 | Exigir declaración seguro mala praxis a médicos | No se solicita |
 | R3 | RL definitivo ReNaPDiS (cargar env vars) | En trámite, env vars vacías |
 | R4 | Renovación anual AAIP | Agendar recordatorio |
-| R5 | Constitución SRL | No iniciada |
+| R5 | Constitución SRL (opcional, a futuro) | No iniciada — Docto opera como Diego RI persona física; SRL es opción futura con volumen, NO bloqueante (ver §R5 abajo) |
 | R6 | Convenio Multilateral IIBB | No inscripto |
 
 ---
