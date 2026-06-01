@@ -75,17 +75,11 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
             <span className="font-medium text-gray-900">{formatFecha(paciente.fecha_nacimiento)}</span>
           </div>
 
-          {/* ── Separador visual ── */}
-          <div className="border-t border-gray-200 my-2" />
-
-          <div className="flex justify-between">
-            <span className="text-gray-500">Cobertura</span>
-            <span className="font-medium text-gray-900">
-              {paciente.tiene_cobertura ? "Sí" : "Particular"}
-            </span>
-          </div>
+          {/* Obra social: solo se muestra si el paciente la cargó. Es dato para la
+              receta / reintegro — la consulta se abona particular, no es "cobertura". */}
           {paciente.tiene_cobertura && (
             <>
+              <div className="border-t border-gray-200 my-2" />
               <div className="flex justify-between">
                 <span className="text-gray-500">Obra social</span>
                 <span className="font-medium text-gray-900">{obraSocialDisplay || "No especificado"}</span>

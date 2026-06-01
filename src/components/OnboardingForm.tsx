@@ -360,8 +360,11 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
         {/* ═══════════════════════════════════════════════════════════════ */}
         <div className="pt-2">
           <label htmlFor="obra_social_select" className="block text-[13px] font-medium text-gray-500">
-            Cobertura médica
+            Obra social o prepaga
           </label>
+          <p className="mt-1 mb-1.5 text-[12px] leading-snug text-gray-400">
+            Estos datos figuran en tu receta y te sirven para gestionar un reintegro si tu obra social lo permite. La consulta se abona de forma particular.
+          </p>
           <select
             id="obra_social_select"
             value={selectValue}
@@ -376,7 +379,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
               paddingRight: 36,
             }}
           >
-            <option value={VALOR_PARTICULAR}>Particular (sin cobertura)</option>
+            <option value={VALOR_PARTICULAR}>No tengo / No incluir</option>
             {obrasSociales ? (
               <>
                 <optgroup label="Prepagas">
