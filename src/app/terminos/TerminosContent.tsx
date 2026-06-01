@@ -17,7 +17,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </div>
 
       <h2>1. Introducción y aceptación</h2>
-      <p><strong>Docto</strong> es una plataforma digital de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, operada por Diego Oscar González (CUIT 20-25086458-3), con domicilio en Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, Ciudad Autónoma de Buenos Aires, Argentina. La plataforma es accesible a través del sitio web docto.com.ar.</p>
+      <p><strong>Docto</strong> es una plataforma digital de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270 y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505. La plataforma es accesible a través del sitio web docto.com.ar. Para cualquier consulta, contactá a soporte@docto.com.ar.</p>
       <p>Al registrarte, acceder o utilizar Docto — ya sea como paciente o como profesional de la salud — aceptás en forma plena e irrestricta estos Términos y Condiciones de Uso. Si no estás de acuerdo con alguna de las condiciones aquí establecidas, no deberás utilizar la plataforma.</p>
       <p>Docto se reserva el derecho de modificar estos Términos en cualquier momento. Las modificaciones entrarán en vigencia desde su publicación en la plataforma. El uso continuado de Docto luego de publicados los cambios implica la aceptación de los nuevos términos.</p>
 
@@ -132,7 +132,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       </ul>
 
       <h2>11. Propiedad intelectual</h2>
-      <p>Todo el contenido de la plataforma Docto — incluyendo su diseño, código fuente, marca, logotipo, textos e interfaz — es propiedad exclusiva de Diego Oscar González y está protegido por las leyes de propiedad intelectual vigentes en Argentina. Queda prohibida la reproducción, distribución o modificación de cualquier elemento de la plataforma sin autorización expresa y por escrito.</p>
+      <p>Todo el contenido de la plataforma Docto — incluyendo su diseño, código fuente, marca, logotipo, textos e interfaz — es propiedad exclusiva de Docto y está protegido por las leyes de propiedad intelectual vigentes en Argentina. Queda prohibida la reproducción, distribución o modificación de cualquier elemento de la plataforma sin autorización expresa y por escrito.</p>
 
       <h2>12. Modificaciones del servicio</h2>
       <p>Docto se reserva el derecho de modificar, suspender o discontinuar, en forma temporal o permanente, cualquier aspecto de la plataforma. En caso de cambios significativos que afecten los derechos del usuario, se notificará por correo electrónico con al menos 15 días de anticipación.</p>
@@ -148,12 +148,11 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <ul>
         <li>Correo electrónico: soporte@docto.com.ar</li>
         <li>Sitio web: docto.com.ar</li>
-        <li>Domicilio: Olga Cossettini 1540, Piso 6, Of. 601, Puerto Madero, CABA, Argentina.</li>
         <li>Horario de atención: lunes a viernes de 9 a 18hs (horario Argentina).</li>
       </ul>
 
       <div className="mt-8 border-t border-gray-200 pt-4 text-center text-xs text-gray-400">
-        Docto — docto.com.ar — Diego Oscar González, CUIT 20-25086458-3
+        Docto — docto.com.ar
         <br />
         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
         <br />
