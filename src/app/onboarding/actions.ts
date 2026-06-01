@@ -41,6 +41,7 @@ export async function completarPerfil(formData: FormData) {
   const dni = (formData.get("dni") as string)?.trim();
   const fecha_nacimiento = (formData.get("fecha_nacimiento") as string)?.trim();
   const sexo_dni = (formData.get("sexo_dni") as string)?.trim() || null;
+  const telefono = (formData.get("telefono") as string)?.trim() || null;
   const redirectTo = (formData.get("redirectTo") as string) ?? "/";
 
   const safeRedirect =
@@ -59,7 +60,7 @@ export async function completarPerfil(formData: FormData) {
     ? null // Will be resolved from FK in PDF route
     : obra_social_otra ?? null;
 
-  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !terminosAceptados || !datosSensiblesAceptados) {
+  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !telefono || !terminosAceptados || !datosSensiblesAceptados) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
@@ -67,7 +68,16 @@ export async function completarPerfil(formData: FormData) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
+  if (telefono.replace(/\D/g, "").length < 8) {
+    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
+  }
+
   if (sexo_dni !== "masculino" && sexo_dni !== "femenino") {
+    redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
+  }
+
+  // Si declaró cobertura, el nro de afiliado es obligatorio (server-side, no bypasseable).
+  if (tieneCobertura && !nro_afiliado) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
@@ -83,6 +93,7 @@ export async function completarPerfil(formData: FormData) {
         dni,
         fecha_nacimiento,
         sexo_dni,
+        telefono,
         tiene_cobertura: tieneCobertura,
         obra_social: tieneCobertura ? obra_social : null,
         obra_social_id: tieneCobertura ? obra_social_id : null,

@@ -23,15 +23,20 @@ export default async function InfoMedicaConsultaPage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
     .eq("user_id", user.id)
     .single();
 
+  // Perfil completo = identidad + teléfono + (si declaró cobertura) nro de afiliado.
+  // El paciente NO puede avanzar a la consulta sin esto. El particular (sin
+  // cobertura) no necesita afiliado: declarar "particular" es un estado completo.
   const perfilCompleto =
     paciente?.nombre_completo?.trim() &&
     paciente?.dni?.trim() &&
     paciente?.fecha_nacimiento &&
-    paciente?.sexo_dni;
+    paciente?.sexo_dni &&
+    paciente?.telefono?.trim() &&
+    (!paciente?.tiene_cobertura || paciente?.nro_afiliado?.trim());
 
   if (!perfilCompleto) {
     redirect(`/onboarding?redirectTo=${encodeURIComponent(currentPath)}`);
