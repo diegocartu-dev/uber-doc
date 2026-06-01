@@ -440,7 +440,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           <div
             className="overflow-hidden transition-all duration-200"
             style={{
-              maxHeight: tieneCobertura ? 80 : 0,
+              maxHeight: tieneCobertura ? (errors.nro_afiliado ? 120 : 80) : 0,
               opacity: tieneCobertura ? 1 : 0,
             }}
           >
