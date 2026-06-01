@@ -376,5 +376,44 @@ Friends & Family.
 
 ---
 
+---
+
+### Junio
+
+#### 01/06 — Nova v2 · Fase 1 (núcleo de agenda)
+**PR #119 mergeado.** Arranca el rediseño de capacidades de Nova
+(doc: `docs/nova/NOVA_V2_DISENO_CAPACIDADES.md`).
+
+**Contexto:** circuito real de Diego (01/06) reveló que Nova no podía
+crear períodos &gt; 1 día, se confundía ("me adelanté"), y no detectaba
+superposición. Verificado contra prod: Nova tenía **0 agendas creadas**
+— las multi-día existentes eran del formulario manual. No era regresión:
+era una capacidad que Nova nunca tuvo. Diagnóstico: tools finas, no prompt.
+
+**Qué se construyó:**
+- `src/lib/agenda/crear-agenda.ts` — `crearAgendaModelo()`, único origen
+  para crear agenda (modelo+franjas+turnos) con rango + recurrencia por
+  día de semana. Freno duro ante turno reservado por paciente (clasifica
+  por ESTADO, no por `paciente_id`). Choque con vacíos → gana el más
+  nuevo, sin doble reserva.
+- `crear_disponibilidad` (Nova) reemplaza `crear_slots` (un solo día).
+  Crea todo un rango en una confirmación. Idempotencia precisa (compara
+  franjas → permite "miércoles" y "viernes" del mismo mes).
+- Prompt: actualizado SOLO en secciones de creación y conflictos.
+
+**Auditoría Roberto:** APROBADO. Invariante cero-doble-reserva verificado
+empíricamente contra prod, incluida concurrencia real. 4 hallazgos de
+robustez (no bloqueantes), 3 endurecidos en el merge. Backlog: race de
+double-submit (mitigada con guard `turnosCreados > 0`).
+
+**Fix de voz (PR #118, aparte):** Nova lee solo si el médico habla (no
+según largo) + desbloqueo de audio en botones iOS. Pendiente de merge.
+
+**Pendiente Fase 1:** migrar formulario manual al mismo origen; tools
+`reprogramar_turno` + `bloquear_periodo`. En evaluación: canal "ambos"
+(agenda común a CV + consultorio) y CI con apagado automático a 3h.
+
+---
+
 *Documento creado el 19/05/2026. Actualizar al cierre de cada 
 sprint con scope, PRs y decisiones técnicas asociadas.*
