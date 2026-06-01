@@ -22,10 +22,7 @@ Cambios aplicados durante beta cerrada que deben revisarse/revertirse antes de a
 © 2026 Docto — Hecho en Argentina
 ```
 
-**Decision pre-launch:** Definir version definitiva del footer. Opciones:
-- Persona fisica: restaurar nombre + CUIT (obligatorio si opera como PF)
-- SRL constituida: reemplazar con razon social + CUIT de la SRL
-- La identificacion legal completa (nombre, CUIT, domicilio) sigue presente en TyC y Politica de Privacidad
+**Decision pre-launch (RESUELTA):** Docto opera como **Diego Gonzalez, Responsable Inscripto persona física** (trámites hechos así). NO hay SRL — "Make Sense SRL" fue idea inicial descartada. Footer: restaurar nombre + CUIT de Diego PF. La identificacion legal completa (nombre, CUIT, domicilio) sigue presente en TyC y Politica de Privacidad. (Evaluar SRL/SAS a futuro con volumen es opcional, no cambia el lanzamiento.)
 
 ---
 
@@ -104,5 +101,5 @@ Estos emails se mantuvieron porque estan detras de autenticacion y son necesario
 | Contrato Docto-Medico (TyC especificos) | Pendiente | ALTA |
 | Farmalink habilitado | Pendiente | BAJA (post-MVP) |
 | Consentimiento informado por consulta | Pendiente | ALTA (Ley 26.529) |
-| Constitucion SRL | Pendiente | ALTA (antes de facturar) |
+| Estructura fiscal (Diego RI persona física) | ✅ Resuelto — trámites hechos como RI. NO hay SRL (Make Sense descartado). Evaluar SRL/SAS a futuro con volumen es opcional, no bloqueante | — |
 | F&F (Friends & Family) testing completado | Pendiente | ALTA |
