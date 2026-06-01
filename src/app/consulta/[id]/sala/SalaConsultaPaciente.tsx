@@ -182,16 +182,27 @@ function useMicCam() {
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
 
+  // Feedback optimista: el botón cambia AL INSTANTE (antes del await). En mobile
+  // la primera activación de cámara/mic espera permiso + dispositivo (lento) → sin
+  // esto el usuario cree que no pasó nada y vuelve a tocar. Revierte si falla.
   const toggleMic = useCallback(async () => {
     const next = !micOn;
-    await localParticipant.setMicrophoneEnabled(next);
     setMicOn(next);
+    try {
+      await localParticipant.setMicrophoneEnabled(next);
+    } catch {
+      setMicOn(!next);
+    }
   }, [micOn, localParticipant]);
 
   const toggleCam = useCallback(async () => {
     const next = !camOn;
-    await localParticipant.setCameraEnabled(next);
     setCamOn(next);
+    try {
+      await localParticipant.setCameraEnabled(next);
+    } catch {
+      setCamOn(!next);
+    }
   }, [camOn, localParticipant]);
 
   return { micOn, camOn, toggleMic, toggleCam };
