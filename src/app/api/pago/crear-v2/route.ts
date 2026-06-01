@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/mp-crypto";
 import { getFlag } from "@/lib/feature-flags";
+import { transaccionHabilitadaParaCobroReal } from "@/lib/pago-whitelist";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError, logWarn } from "@/lib/logger";
@@ -18,12 +19,11 @@ interface PagoBody {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await getFlag("pago_marketplace"))) {
-    return NextResponse.json(
-      { error: "Pagos marketplace deshabilitados temporalmente.", code: "FEATURE_DISABLED" },
-      { status: 503 }
-    );
-  }
+  // El gate de cobro real se evalúa más abajo, una vez conocidos paciente y
+  // médico: cobra de verdad si el flag global `pago_marketplace` está ON, o si
+  // ambas partes están en la whitelist de prueba controlada (MP_PAGO_REAL_WHITELIST).
+  // Para el resto, devuelve 503 → el front cae a /simular.
+  const flagGlobalMarketplace = await getFlag("pago_marketplace");
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -55,6 +55,29 @@ export async function POST(req: NextRequest) {
   }
 
   const { medicoId, monto, titulo, descripcion, redirectSuccess, redirectFailure, redirectPending } = recurso;
+
+  // Gate de cobro real: flag global ON, o paciente + médico ambos en whitelist.
+  let cobroRealHabilitado = flagGlobalMarketplace;
+  if (!cobroRealHabilitado) {
+    const { data: medRow } = await admin
+      .from("medicos")
+      .select("user_id")
+      .eq("id", medicoId)
+      .single();
+    cobroRealHabilitado = await transaccionHabilitadaParaCobroReal({
+      pacienteUserId: user.id,
+      medicoUserId: medRow?.user_id,
+    });
+    if (cobroRealHabilitado) {
+      logInfo("[MP-V2]", "Cobro real por whitelist (flag global off)", { medicoId, tipo, recursoId: id });
+    }
+  }
+  if (!cobroRealHabilitado) {
+    return NextResponse.json(
+      { error: "Pagos marketplace deshabilitados temporalmente.", code: "FEATURE_DISABLED" },
+      { status: 503 }
+    );
+  }
 
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
