@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock } from "lucide-react";
+import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet } from "lucide-react";
 
 interface Props {
   metrics: {
@@ -90,6 +90,12 @@ export default function DashboardAdminClient({ metrics, diasSemana }: Props) {
           href="/admin/alertas"
           color="#E24B4A"
         />
+        <QuickLink
+          icon={Wallet}
+          label="Reembolsos"
+          href="/admin/reembolsos"
+          color="#378ADD"
+        />
       </div>
     </div>
   );
@@ -111,7 +117,7 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
 }
 
 function QuickLink({ icon: Icon, label, value, href, color }: {
-  icon: typeof Activity; label: string; value: number; href: string; color: string;
+  icon: typeof Activity; label: string; value?: number; href: string; color: string;
 }) {
   return (
     <Link
@@ -123,7 +129,9 @@ function QuickLink({ icon: Icon, label, value, href, color }: {
         <Icon size={18} style={{ color }} strokeWidth={1.75} />
       </div>
       <div>
-        <p className="text-lg font-semibold text-gray-900">{value}</p>
+        {value !== undefined
+          ? <p className="text-lg font-semibold text-gray-900">{value}</p>
+          : <p className="text-lg font-semibold text-gray-900">Ver</p>}
         <p className="text-xs text-gray-500">{label}</p>
       </div>
     </Link>
