@@ -9,46 +9,31 @@ type Props = {
   href?: string;
 };
 
-export function TouchButton({ onClick, className, children, disabled, type = "button", href }: Props) {
-  const baseStyle = {
-    transition: "transform 0.15s ease, opacity 0.15s ease",
-    WebkitTapHighlightColor: "transparent",
-    cursor: "pointer",
-    userSelect: "none" as const,
-  };
+// Feedback de presión por CSS `:active` (opacidad), NO por transform en JS.
+// El `scale(0.93)` en onPointerDown achicaba el botón bajo el dedo y, en Safari
+// iOS, eso movía el target y cancelaba el `click` en taps rápidos → obligaba a
+// tocar dos veces (ingresar a la consulta, habilitar cámara/mic, etc.).
+// La opacidad no mueve el elemento, así que el click siempre dispara al 1er toque.
+const baseStyle = {
+  transition: "opacity 0.12s ease",
+  WebkitTapHighlightColor: "transparent",
+  cursor: "pointer",
+  userSelect: "none" as const,
+};
 
-  const handlePress = (e: React.PointerEvent) => {
-    const el = e.currentTarget as HTMLElement;
-    el.style.transform = "scale(0.93)";
-    el.style.opacity = "0.75";
-    setTimeout(() => {
-      el.style.transform = "scale(1)";
-      el.style.opacity = "1";
-    }, 150);
-  };
+export function TouchButton({ onClick, className, children, disabled, type = "button", href }: Props) {
+  const cls = `${className ?? ""} active:opacity-70`.trim();
 
   if (href) {
     return (
-      <a
-        href={href}
-        className={className}
-        style={baseStyle}
-        onPointerDown={handlePress}
-      >
+      <a href={href} className={cls} style={baseStyle}>
         {children}
       </a>
     );
   }
 
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      className={className}
-      disabled={disabled}
-      style={baseStyle}
-      onPointerDown={handlePress}
-    >
+    <button type={type} onClick={onClick} className={cls} disabled={disabled} style={baseStyle}>
       {children}
     </button>
   );
