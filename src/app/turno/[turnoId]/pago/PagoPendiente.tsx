@@ -51,6 +51,29 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
   function handlePagar() {
     setError(null);
     startTransition(async () => {
+      // Intentar cobro real con Mercado Pago (crear-v2). Si el cobro real no
+      // está habilitado para esta transacción (503 → flag global off y/o fuera
+      // de whitelist), se cae a la simulación, igual que el flujo de CI.
+      try {
+        const mpRes = await fetch("/api/pago/crear-v2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ tipo: "turno", id: turnoId }),
+        });
+        if (mpRes.ok) {
+          const mpData = await mpRes.json();
+          if (mpData.init_point) {
+            window.location.href = mpData.init_point;
+            return;
+          }
+        }
+      } catch {
+        // Si el fetch falla, seguimos al fallback de simulación.
+      }
+
+      // Fallback: simulación (flujo productivo actual mientras el cobro real
+      // no esté habilitado para esta transacción).
       const result = await confirmarPagoTurno(turnoId);
       if (result?.error) { setError(result.error); return; }
       setPagado(true);
@@ -144,7 +167,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
         isLoading={isPending}
         className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
       >
-        Simular pago aprobado
+        Pagar turno
       </LoadingButton>
 
       <p className="mt-3 text-center text-[11px] text-gray-400">
