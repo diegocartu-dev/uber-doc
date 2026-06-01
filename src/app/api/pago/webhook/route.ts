@@ -5,6 +5,7 @@ import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { trackEvent } from "@/lib/funnel";
 import { pushAlMedico } from "@/lib/push";
+import { enviarEmailTurnoConfirmado } from "@/lib/email";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -303,7 +304,7 @@ async function handleApproved(
       })
       .eq("id", id)
       .eq("estado", "reservado_pendiente")
-      .select("id");
+      .select("id, medico_id, paciente_id, fecha");
 
     if (!updated?.length) {
       logWarn("[WEBHOOK]", "Turno no actualizado (estado ya cambió?)", logCtx);
@@ -314,6 +315,29 @@ async function handleApproved(
     } else {
       logInfo("[WEBHOOK]", "Turno confirmado", { ...logCtx, transactionAmount, applicationFee, netAmount });
       trackEvent({ evento: "pago_aprobado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, monto: transactionAmount, fee: applicationFee } });
+
+      // Notificaciones de confirmación (paridad con confirmarPagoTurno del flujo
+      // simulado): email al paciente + push al médico. Fire-and-forget.
+      const turnoConfirmado = updated[0];
+      enviarEmailTurnoConfirmado(id).catch(() => {});
+      if (turnoConfirmado.medico_id) {
+        let pacienteNombre = "Un paciente";
+        if (turnoConfirmado.paciente_id) {
+          const { data: pac } = await admin
+            .from("pacientes")
+            .select("nombre_completo")
+            .eq("id", turnoConfirmado.paciente_id)
+            .single();
+          pacienteNombre = pac?.nombre_completo ?? pacienteNombre;
+        }
+        pushAlMedico(turnoConfirmado.medico_id, {
+          title: "🟢 Docto",
+          body: `${pacienteNombre} reservó un turno para el ${turnoConfirmado.fecha}`,
+          url: "/medico/agenda",
+          tag: `reserva-${id}`,
+          silent: true,
+        }).catch(() => {});
+      }
     }
   }
 }
