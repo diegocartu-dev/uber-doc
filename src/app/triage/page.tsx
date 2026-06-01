@@ -297,14 +297,16 @@ function TriageContent() {
               </h3>
               <p className="mb-3">
                 El paciente puede cancelar una consulta sin cargo antes de que el
-                médico la acepte. Una vez aceptada la consulta y realizado el
-                pago, se aplicarán las siguientes políticas: cancelación antes
-                del inicio de la videollamada genera un reembolso del 100%;
-                cancelación durante los primeros 5 minutos de la videollamada
-                genera un reembolso del 50%; no se otorgarán reembolsos una vez
-                transcurridos los primeros 5 minutos de consulta. Los reembolsos
-                se procesarán por el mismo medio de pago utilizado en un plazo de
-                5 a 10 días hábiles.
+                médico la acepte. Una vez aceptada y pagada la consulta: si ningún
+                profesional la toma dentro de los 30 minutos, se reembolsa el 100%.
+                En turnos programados, la cancelación con más de 48 hs de
+                anticipación genera reembolso del 100%; con menos de 48 hs, sin
+                reembolso (podés reprogramar sin costo con el mismo profesional).
+                Si el profesional cancela, podés reprogramar sin costo o recibir
+                el reembolso del 100%. Los reembolsos se acreditan al mismo medio
+                de pago dentro de los plazos que establezca el procesador de pagos;
+                en casos excepcionales pueden demorar algunos días hábiles
+                adicionales. Más detalle en los Términos y Condiciones.
               </p>
 
               <h3 className="mb-2 mt-4 font-semibold text-gray-900">
