@@ -68,7 +68,7 @@ Al momento de desactivar:
 |----------|-------------|
 | `MP_CLIENT_ID` | App ID de Docto en MP (8893156415936925) |
 | `MP_CLIENT_SECRET` | Secret de la app MP |
-| `MP_ACCESS_TOKEN` | Token de la app (owner 28443305, cuenta GREBA/diegocartu@me.com) |
+| `MP_ACCESS_TOKEN` | Token de la app Docto (owner 28443305, cuenta MP personal de Diego, nickname GREBA — RI persona física, sin SRL; cuenta compartida con el emprendimiento GREBA por decisión consciente) |
 | `MP_ACCESS_TOKEN_TEST` | Token test de la app (sandbox) |
 | `MP_WEBHOOK_SECRET` | Secret para validar HMAC de webhooks |
 | `MP_TOKEN_ENCRYPTION_KEY` | Clave AES-256 para encriptar tokens OAuth |
