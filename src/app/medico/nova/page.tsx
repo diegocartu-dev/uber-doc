@@ -148,6 +148,9 @@ export default function NovaChat() {
   const [hablando, setHablando] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioDesbloqueado = useRef(false);
+  // Rastrea si el texto actual del input vino de dictado por voz. Si el médico
+  // habló, Nova lee la respuesta; si escribió, responde solo en texto.
+  const vozPendienteRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { dictando, iniciando, interimText, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
@@ -172,7 +175,7 @@ export default function NovaChat() {
   // ── SSE fetch ──
 
   const enviarMensaje = useCallback(
-    async (texto: string) => {
+    async (texto: string, viaVoz = false) => {
       if (!texto.trim() || !medicoId || enviando) return;
 
       const userMsg: MensajeChat = {
@@ -302,9 +305,10 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // TTS solo en respuestas cortas/conversacionales (≤200 chars)
-                // Respuestas largas (agendas, listas) no se leen automáticamente
-                if (novaTexto && novaTexto.length <= 200) {
+                // Nova lee la respuesta SOLO si el médico habló (no si escribió).
+                // Y solo respuestas cortas/conversacionales (≤200 chars): las
+                // listas largas de agenda no se leen automáticamente.
+                if (viaVoz && novaTexto && novaTexto.length <= 200) {
                   reproducirTTS(novaTexto);
                 }
               }
@@ -429,6 +433,7 @@ export default function NovaChat() {
 
   const confirmarAccion = useCallback(
     async (msgId: string, decision: "si" | "no") => {
+      desbloquearAudio(); // gesto del usuario → habilita audio en iOS
       const msg = mensajes.find((m) => m.id === msgId);
       if (!msg?.confirmacion || !medicoId) return;
 
@@ -486,19 +491,20 @@ export default function NovaChat() {
         setPensando(false);
       }
     },
-    [mensajes, medicoId]
+    [mensajes, medicoId, desbloquearAudio]
   );
 
   const elegirOpcion = useCallback(
     (msgId: string, opcion: string) => {
+      desbloquearAudio(); // gesto del usuario → habilita audio en iOS
       setMensajes((prev) =>
         prev.map((m) =>
           m.id === msgId ? { ...m, opcionElegida: opcion } : m
         )
       );
-      enviarMensaje(opcion);
+      enviarMensaje(opcion, false); // elegir por botón no es voz
     },
-    [enviarMensaje]
+    [enviarMensaje, desbloquearAudio]
   );
 
   // ── Mic toggle ──
@@ -510,7 +516,12 @@ export default function NovaChat() {
       detenerDictado();
     } else {
       beepUI(880, 80);
-      iniciarDictado(setInput);
+      // Envolver el setter: cada vez que el dictado agrega texto, marcamos que
+      // la entrada vino de voz → Nova leerá la respuesta en voz alta.
+      iniciarDictado((fn) => {
+        vozPendienteRef.current = true;
+        setInput(fn);
+      });
     }
   }, [dictando, iniciarDictado, detenerDictado, desbloquearAudio]);
 
@@ -521,7 +532,9 @@ export default function NovaChat() {
       e.preventDefault();
       desbloquearAudio();
       if (dictando) detenerDictado();
-      enviarMensaje(input);
+      const fueVoz = vozPendienteRef.current;
+      vozPendienteRef.current = false;
+      enviarMensaje(input, fueVoz);
     }
   };
 
@@ -735,7 +748,10 @@ export default function NovaChat() {
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              vozPendienteRef.current = false; // tipear a mano = no es voz
+              setInput(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={dictando ? "Dictando..." : "Escribí o dictá tu mensaje..."}
             disabled={enviando}
@@ -748,7 +764,9 @@ export default function NovaChat() {
             onClick={() => {
               desbloquearAudio();
               if (dictando) detenerDictado();
-              enviarMensaje(input);
+              const fueVoz = vozPendienteRef.current;
+              vozPendienteRef.current = false;
+              enviarMensaje(input, fueVoz);
             }}
             disabled={!hayTexto || enviando}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
