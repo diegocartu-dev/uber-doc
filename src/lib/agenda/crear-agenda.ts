@@ -198,11 +198,16 @@ export async function crearAgendaModelo(
     .single();
 
   if (errModelo || !modelo) {
+    // Logueamos la causa real (RLS, constraint, conexión) en vez de enmascararla
+    // como error de validación — facilita el diagnóstico. No hay PII acá.
+    console.error("[crearAgendaModelo] insert agenda_modelos falló:", errModelo?.message);
     return { ok: false, motivo: "validacion", mensaje: "No se pudo crear el modelo de agenda." };
   }
 
-  // 5. INSERT de franjas (no bloqueante: el modelo ya existe y los turnos se crean igual)
-  await supabase.from("agenda_franjas").insert(
+  // 5. INSERT de franjas. Si falla, los turnos se crean igual, PERO la idempotencia
+  // del caller compara franjas → si no se guardaron, no detectaría un duplicado.
+  // Logueamos para no perder la causa.
+  const { error: errFranjas } = await supabase.from("agenda_franjas").insert(
     franjas.map((f) => ({
       modelo_id: modelo.id,
       dia_semana: f.dia_semana,
@@ -210,6 +215,9 @@ export async function crearAgendaModelo(
       hora_fin: f.hora_fin,
     }))
   );
+  if (errFranjas) {
+    console.error("[crearAgendaModelo] insert agenda_franjas falló:", errFranjas.message);
+  }
 
   // 6. INSERT de turnos (lotes de 500, idempotente por índice único medico_id,fecha,hora_inicio)
   const turnosParaInsertar = slotsNuevos.map((s) => ({
@@ -235,16 +243,22 @@ export async function crearAgendaModelo(
 
   // 7. Resolución de choques con agendas VACÍAS: el modelo más nuevo gana →
   //    bloquear los turnos disponibles de OTROS modelos que se pisen con los nuevos.
-  const { data: viejos } = await supabase
-    .from("turnos")
-    .select("id, fecha, hora_inicio, hora_fin")
-    .eq("medico_id", medicoId)
-    .eq("estado", "disponible")
-    .neq("modelo_id", modelo.id)
-    .gte("fecha", fecha_inicio)
-    .lte("fecha", fecha_fin);
-
+  //    GUARD (Roberto #1): solo bloqueamos si ESTE modelo creó turnos reservables.
+  //    Si creó 0 (p.ej. una segunda creación idéntica concurrente cuyos slots
+  //    colisionaron todos con el índice único), no tiene nada que imponer y NO
+  //    debe bloquear los slots que la otra creación acaba de generar.
   let agendasViejasBloqueadas = 0;
+  const { data: viejos } = turnosCreados > 0
+    ? await supabase
+        .from("turnos")
+        .select("id, fecha, hora_inicio, hora_fin")
+        .eq("medico_id", medicoId)
+        .eq("estado", "disponible")
+        .neq("modelo_id", modelo.id)
+        .gte("fecha", fecha_inicio)
+        .lte("fecha", fecha_fin)
+    : { data: null };
+
   if (viejos && viejos.length > 0) {
     const idsABloquear = viejos
       .filter((v) => {
