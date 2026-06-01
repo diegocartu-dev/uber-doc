@@ -27,6 +27,28 @@ export async function crearConsulta(
     return { error: "No autenticado." };
   }
 
+  // Gate de perfil completo (consistente con el flujo de turnos): el paciente no
+  // puede iniciar una Consulta Inmediata sin sus datos mínimos. Esto frena ANTES
+  // del pago, no después (evita pay-then-block). Mismo criterio que info-medica.
+  const { data: perfil } = await supabase
+    .from("pacientes")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, nro_afiliado")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const perfilCompleto =
+    perfil?.nombre_completo?.trim() &&
+    perfil?.dni?.trim() &&
+    perfil?.fecha_nacimiento &&
+    perfil?.sexo_dni &&
+    perfil?.telefono?.trim() &&
+    (!perfil?.tiene_cobertura || perfil?.nro_afiliado?.trim());
+
+  if (!perfilCompleto) {
+    const destino = `/triage?medicoId=${medicoId}&especialidad=${encodeURIComponent(especialidad)}&canal=${canalOrigen}`;
+    redirect(`/onboarding?redirectTo=${encodeURIComponent(destino)}`);
+  }
+
   if (!motivoConsulta.trim()) {
     return { error: "El motivo de consulta es obligatorio." };
   }
