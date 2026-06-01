@@ -40,6 +40,8 @@ type FieldErrors = {
   dni?: string;
   fecha_nacimiento?: string;
   sexo_dni?: string;
+  telefono?: string;
+  nro_afiliado?: string;
 };
 
 // Special values for the select
@@ -132,6 +134,18 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     if (!fechaNac) errs.fecha_nacimiento = "Ingresá tu fecha de nacimiento (DD/MM/AAAA).";
     if (!sexo) errs.sexo_dni = "Seleccioná tu sexo según DNI.";
 
+    const telefono = (form.elements.namedItem("telefono") as HTMLInputElement)?.value?.trim();
+    if (!telefono) {
+      errs.telefono = "Ingresá tu teléfono de contacto.";
+    } else if (telefono.replace(/\D/g, "").length < 8) {
+      errs.telefono = "Ingresá un teléfono válido (al menos 8 dígitos).";
+    }
+
+    // Si declaró cobertura (no es particular), el nro de afiliado es obligatorio.
+    if (tieneCobertura && !nroAfiliado.trim()) {
+      errs.nro_afiliado = "Ingresá tu número de afiliado.";
+    }
+
     return errs;
   }
 
@@ -165,7 +179,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
       {serverError && (
         <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-[#E24B4A]">
           {serverError === "campos_requeridos"
-            ? "Nombre, DNI, fecha de nacimiento y sexo son obligatorios."
+            ? "Completá todos los campos: nombre, DNI, fecha de nacimiento, sexo, teléfono y —si tenés cobertura— el número de afiliado."
             : serverError === "dni_duplicado"
               ? "No pudimos guardar tu información. Si el problema persiste, escribinos a soporte@docto.com.ar."
               : "Ocurrió un error. Intentá de nuevo."}
@@ -319,13 +333,38 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
           )}
         </div>
 
+        {/* ── Teléfono ── */}
+        <div>
+          <label htmlFor="telefono" className="block text-[13px] font-medium text-gray-500">
+            Teléfono
+          </label>
+          <input
+            id="telefono"
+            name="telefono"
+            type="tel"
+            inputMode="tel"
+            required
+            defaultValue={paciente?.telefono ?? ""}
+            className={inputClass}
+            style={errors.telefono ? inputErrorStyle : inputStyle}
+            placeholder="11 2345-6789"
+            onChange={() => errors.telefono && setErrors((e) => ({ ...e, telefono: undefined }))}
+          />
+          {errors.telefono && (
+            <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.telefono}</p>
+          )}
+        </div>
+
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* ── COBERTURA MÉDICA (PR2) ── */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         <div className="pt-2">
           <label htmlFor="obra_social_select" className="block text-[13px] font-medium text-gray-500">
-            Cobertura médica
+            Obra social o prepaga
           </label>
+          <p className="mt-1 mb-1.5 text-[12px] leading-snug text-gray-400">
+            Estos datos figuran en tu receta y te sirven para gestionar un reintegro si tu obra social lo permite. La consulta se abona de forma particular.
+          </p>
           <select
             id="obra_social_select"
             value={selectValue}
@@ -340,7 +379,7 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
               paddingRight: 36,
             }}
           >
-            <option value={VALOR_PARTICULAR}>Particular (sin cobertura)</option>
+            <option value={VALOR_PARTICULAR}>No tengo / No incluir</option>
             {obrasSociales ? (
               <>
                 <optgroup label="Prepagas">
@@ -411,11 +450,14 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
                 type="text"
                 name="nro_afiliado"
                 value={nroAfiliado}
-                onChange={(e) => setNroAfiliado(e.target.value)}
+                onChange={(e) => { setNroAfiliado(e.target.value); if (errors.nro_afiliado) setErrors((er) => ({ ...er, nro_afiliado: undefined })); }}
                 placeholder="Número de afiliado"
                 className={inputClass}
-                style={inputStyle}
+                style={errors.nro_afiliado ? inputErrorStyle : inputStyle}
               />
+              {errors.nro_afiliado && (
+                <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.nro_afiliado}</p>
+              )}
             </div>
           </div>
 

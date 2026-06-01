@@ -23,15 +23,18 @@ export default async function InfoMedicaTurnoPage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
     .eq("user_id", user.id)
     .single();
 
+  // Perfil completo = identidad + teléfono + (si declaró cobertura) nro de afiliado.
   const perfilCompleto =
     paciente?.nombre_completo?.trim() &&
     paciente?.dni?.trim() &&
     paciente?.fecha_nacimiento &&
-    paciente?.sexo_dni;
+    paciente?.sexo_dni &&
+    paciente?.telefono?.trim() &&
+    (!paciente?.tiene_cobertura || paciente?.nro_afiliado?.trim());
 
   if (!perfilCompleto) {
     redirect(`/onboarding?redirectTo=${encodeURIComponent(currentPath)}`);
