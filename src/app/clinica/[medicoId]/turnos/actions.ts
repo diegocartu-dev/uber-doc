@@ -30,9 +30,20 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   if (!paciente) return { error: `Perfil de paciente no encontrado. ${pacErr?.message ?? ""}` };
 
   const { data: turno } = await supabase
-    .from("turnos").select("id, estado").eq("id", turnoId).single();
+    .from("turnos").select("id, estado, medico_id").eq("id", turnoId).single();
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.estado !== "disponible") return { error: "Este turno ya no está disponible." };
+
+  // C2 (backstop por link directo): con el flag activo, no se puede reservar un
+  // turno de un médico sin identidad validada. La vía principal es el filtro de
+  // visibilidad (el médico no aparece); esto cubre el caso del link directo.
+  if (await getFlag("identidad_gate_activa")) {
+    const { data: medicoTurno } = await supabase
+      .from("medicos").select("identidad_validada").eq("id", turno.medico_id).maybeSingle();
+    if (!medicoTurno?.identidad_validada) {
+      return { error: "Este profesional no está disponible en este momento." };
+    }
+  }
 
   // Reservar con hold de 15 minutos. El turno queda bloqueado para este paciente
   // (estado reservado_pendiente + reservado_hasta) y nadie más puede tomarlo

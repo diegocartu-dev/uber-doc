@@ -24,6 +24,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sin cambios" }, { status: 400 });
     }
 
+    // A1 (Roberto): la matrícula NO se puede cambiar una vez validada la
+    // identidad. Si no, se rompe el cruce DNI↔matrícula (TOCTOU): el médico
+    // podría validar con su matrícula real y luego cambiarla por la de otro.
+    // El DNI no es editable acá, así que el titular verificado se mantiene.
+    if (
+      updates.tipo_matricula !== undefined ||
+      updates.numero_matricula !== undefined
+    ) {
+      const { data: actual } = await supabase
+        .from("medicos")
+        .select("identidad_validada")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (actual?.identidad_validada) {
+        return NextResponse.json(
+          {
+            error:
+              "Tu matrícula está verificada y no se puede modificar. Escribinos a soporte@docto.com.ar para cambiarla.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const { error } = await supabase
       .from("medicos")
       .update(updates)

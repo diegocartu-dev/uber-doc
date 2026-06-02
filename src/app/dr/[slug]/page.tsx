@@ -14,11 +14,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, verificado, estado_registro")
+    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") return { title: "Médico no encontrado — Docto" };
+  const { getFlag } = await import("@/lib/feature-flags");
+  const flagIdentidadGate = await getFlag("identidad_gate_activa");
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) return { title: "Médico no encontrado — Docto" };
 
   return {
     title: `${formatNombreMedico(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
@@ -41,11 +43,12 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") notFound();
+  const flagIdentidadGate = await getFlag("identidad_gate_activa");
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) notFound();
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();

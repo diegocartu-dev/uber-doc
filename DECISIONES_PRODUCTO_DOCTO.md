@@ -292,4 +292,47 @@ bloqueado           → slot bloqueado por el médico
 
 ---
 
+## 10. VERIFICACIÓN DE IDENTIDAD DEL MÉDICO (Didit + RENAPER)
+
+### Contexto y decisión (02/06/2026)
+DNI, CUIT y matrícula están en cualquier receta → alguien podría registrarse
+suplantando a un médico real. Para cerrarlo, Docto valida la identidad del médico
+**una sola vez, en el registro**, con Didit (escaneo de DNI + selfie + prueba de
+vida + cruce contra RENAPER), y cruza el DNI verificado contra la matrícula en
+REFEPS. El médico completa el registro **100% al inicio**; reducimos su carga
+auto-completando datos de fuentes oficiales, no salteando la validación.
+
+### Crear agenda sí, publicar no — hasta estar validado
+El médico **puede armar su agenda mientras se registra y validamos sus datos**,
+pero **eso NO la publica**. Un médico no validado **no aparece para ningún
+paciente por ninguna puerta** (consulta inmediata, turno programado, clínica
+virtual, consultorio particular son solo canales de entrada — el servicio es el
+mismo). Los controles de "habilitar/ponerse disponible" quedan cerrados hasta
+tener todos los datos validados.
+
+- **Chokepoint:** el mismo filtro de visibilidad que ya exige `verificado +
+  estado_registro = aprobado` (en `/clinica`, `/dr/[slug]`, `/consultorio`) suma
+  `identidad_validada`. Si no está validado, desaparece de todas las puertas a la
+  vez. El toggle de "Disponible" queda bloqueado hasta perfil completo + validado.
+- **Backstop:** chequeo server-side en las acciones de reserva (para links directos).
+- **Rollout controlado:** todo detrás del feature flag `identidad_gate_activa`
+  (apagado por default) para no bloquear a los médicos existentes antes de tiempo.
+
+### Datos congelados una vez validado (candado)
+Validada la identidad, **matrícula, DNI, tipo y provincia de matrícula quedan
+congelados**: no se editan más, ni desde la app ni con un UPDATE directo a la DB.
+El candado vive en la base de datos (trigger `reverificar_medico`), no en el
+endpoint, así no hay puerta de servicio para saltearlo. Cierra el TOCTOU (validar
+con la matrícula propia y luego cambiarla por la de otro). Migración:
+`20260602_candado_matricula_identidad.sql`.
+
+### Pendiente para antes del registro PÚBLICO
+Los gates app-level (con flag) frenan la operación accidental, pero un médico
+malicioso podría saltearlos con llamadas directas a PostgREST. El blindaje a
+nivel RLS/DB (que no se puede poner detrás de un flag) se implementa **antes de
+abrir el registro a médicos desconocidos** — no es necesario para la prueba
+controlada con médicos reales de confianza.
+
+---
+
 *Documento generado el 15/04/2026. No requiere rediscusión — decisiones cerradas.*

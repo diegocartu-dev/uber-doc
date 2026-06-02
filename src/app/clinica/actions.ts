@@ -59,7 +59,7 @@ export async function crearConsulta(
 
   const { data: medico, error: medicoError } = await supabase
     .from("medicos")
-    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test")
+    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test, identidad_validada")
     .eq("id", medicoId)
     .single();
 
@@ -69,6 +69,16 @@ export async function crearConsulta(
 
   if (medico.es_cuenta_test || !medico.verificado || medico.estado_registro !== "aprobado") {
     return { error: "El médico seleccionado no está disponible." };
+  }
+
+  // C2 (Roberto): gate server-side de identidad biométrica. Con el flag activo,
+  // un médico sin identidad validada no puede recibir consultas (sin consulta no
+  // hay emisión de recetas). Cierra el bypass por deep-link / endpoint directo.
+  {
+    const { getFlag } = await import("@/lib/feature-flags");
+    if ((await getFlag("identidad_gate_activa")) && !medico.identidad_validada) {
+      return { error: "El médico seleccionado no está disponible." };
+    }
   }
 
   if (!medico.disponible) {

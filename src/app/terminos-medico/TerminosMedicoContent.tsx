@@ -27,6 +27,7 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
         <li>Contás con seguro de responsabilidad profesional vigente o asumís personalmente la responsabilidad derivada de tu ejercicio profesional.</li>
       </ul>
       <p>Docto verifica la matrícula informada a través del sistema SISA/REFEPS del Ministerio de Salud de la Nación. Si la verificación resulta negativa o la matrícula se encontrara vencida o inhabilitada, Docto suspenderá tu perfil hasta que regularices la situación.</p>
+      <p>Como medida de prevención de la suplantación de identidad, Docto verifica tu identidad al momento del alta mediante un proveedor especializado, contrastando tu documento de identidad con tu imagen facial y con el RENAPER. El detalle de este tratamiento está en nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
       <p>Es tu responsabilidad informar a Docto cualquier cambio en el estado de tu matrícula dentro de las 48 horas de producido.</p>
 
       <h2>3. Responsabilidad profesional</h2>
