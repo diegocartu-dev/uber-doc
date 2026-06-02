@@ -31,13 +31,18 @@ export default async function ClinicaPage() {
 
   const fullName = user.user_metadata?.full_name || user.email;
 
-  const { data: medicos } = await supabase
+  // Gate de identidad (Didit): con el flag activo, un médico sin identidad
+  // validada no aparece en la clínica. Mismo chokepoint que verificado+aprobado.
+  const flagIdentidadGate = await getFlag("identidad_gate_activa");
+  let medicosQuery = supabase
     .from("medicos")
     .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta")
     .eq("oculto_clinica", false)
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")
     .eq("es_cuenta_test", false);
+  if (flagIdentidadGate) medicosQuery = medicosQuery.eq("identidad_validada", true);
+  const { data: medicos } = await medicosQuery;
 
   // Contar turnos disponibles en clínica virtual por médico (para decidir visibilidad del botón "Agendar turno")
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));

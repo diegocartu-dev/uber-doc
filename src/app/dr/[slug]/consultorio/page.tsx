@@ -53,11 +53,13 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") notFound();
+  const { getFlag } = await import("@/lib/feature-flags");
+  const flagIdentidadGate = await getFlag("identidad_gate_activa");
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) notFound();
 
   // Calcular disponibilidad
   const ahora = new Date();
