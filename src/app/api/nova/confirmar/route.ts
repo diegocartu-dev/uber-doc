@@ -291,44 +291,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (accion === "reprogramar_turno") {
-      const { turno_origen_id, nuevo_turno_id, paciente_id } = datos as {
-        turno_origen_id: string;
-        nuevo_turno_id: string;
-        paciente_id: string;
-      };
-
-      if (!turno_origen_id || !nuevo_turno_id || !paciente_id) {
-        return NextResponse.json({ exito: false, mensaje: "Faltan datos para reprogramar." }, { status: 400 });
-      }
-      if (turno_origen_id === nuevo_turno_id) {
-        return NextResponse.json({ exito: false, mensaje: "El turno nuevo no puede ser el mismo que el actual." }, { status: 400 });
-      }
-
-      // Seguridad: ambos turnos deben pertenecer a ESTE médico
-      const { data: turnosCheck } = await supabase
-        .from("turnos")
-        .select("id, medico_id")
-        .in("id", [turno_origen_id, nuevo_turno_id]);
-      const ownershipOk =
-        turnosCheck && turnosCheck.length === 2 && turnosCheck.every((t) => t.medico_id === medicoDbId);
-      if (!ownershipOk) {
-        return NextResponse.json({ exito: false, mensaje: "Esos turnos no te pertenecen o no existen." }, { status: 403 });
-      }
-
-      const { reprogramarTurno } = await import("@/lib/cancelaciones");
-      const resultado = await reprogramarTurno(turno_origen_id, nuevo_turno_id, paciente_id);
-
-      if (!resultado.ok) {
-        return NextResponse.json({ exito: false, mensaje: resultado.error ?? "No se pudo reprogramar el turno." });
-      }
-
-      return NextResponse.json({
-        exito: true,
-        mensaje: "Turno reprogramado. El paciente fue notificado del nuevo horario.",
-      });
-    }
-
     return NextResponse.json(
       { exito: false, mensaje: "Acción no reconocida" },
       { status: 400 }
