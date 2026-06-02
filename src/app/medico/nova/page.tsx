@@ -372,47 +372,62 @@ export default function NovaChat() {
   }, []);
 
   const reproducirTTS = useCallback(async (texto: string) => {
+    // ⚠️ DIAGNÓSTICO TEMPORAL — SACAR cuando sepamos dónde falla la voz.
+    const diag = (m: string) =>
+      setMensajes((prev) => [...prev, { id: crypto.randomUUID(), role: "nova" as const, content: "🔎 " + m }]);
     try {
+      diag("paso 1: pidiendo audio a /api/nova/tts…");
       const res = await fetch("/api/nova/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ texto }),
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        diag(`❌ TTS HTTP ${res.status} → falla el SERVIDOR/OpenAI (no es iOS)`);
+        return;
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = audioRef.current;
-      if (!audio) return;
+      if (!audio) {
+        diag("❌ no existe el elemento <audio>");
+        return;
+      }
 
-      // Limpiar URL anterior si existe
+      diag(`paso 2: audio recibido ${Math.round(blob.size / 1024)}KB · muted=${audio.muted} · desbloqueado=${audioDesbloqueado.current}`);
+
       const urlAnterior = audio.src;
-
-      audio.onplay = () => setHablando(true);
+      audio.onplay = () => {
+        setHablando(true);
+        diag("paso 3: onplay disparó → el audio ARRANCÓ (si no suena: muted o volumen/silencio iOS)");
+      };
       audio.onended = () => {
         setHablando(false);
         URL.revokeObjectURL(url);
       };
       audio.onerror = () => {
         setHablando(false);
+        diag("❌ audio.onerror (el blob no se pudo decodificar)");
         URL.revokeObjectURL(url);
       };
 
       audio.src = url;
       audio.volume = 1;
-      await audio.play().catch(() => {
-        // Autoplay bloqueado — fallback silencioso
+      try {
+        await audio.play();
+      } catch (e) {
+        diag(`❌ play() RECHAZADO: ${(e as Error).name} → iOS bloqueó la reproducción`);
         setHablando(false);
         URL.revokeObjectURL(url);
-      });
+      }
 
-      // Limpiar URL anterior
       if (urlAnterior && urlAnterior.startsWith("blob:")) {
         URL.revokeObjectURL(urlAnterior);
       }
-    } catch {
-      // TTS falló silenciosamente
+    } catch (e) {
+      diag(`❌ excepción: ${(e as Error).message}`);
     }
   }, []);
 
