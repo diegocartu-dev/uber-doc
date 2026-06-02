@@ -440,6 +440,37 @@ por sesión en CI (pendiente), CI con apagado 3h + aviso de extensión
 y se pasó a rediseño de capacidades (tools, no prompt). El prompt estaba
 bien; el límite eran las tools finas.
 
+#### 02/06 — Nova v2 · Fase 1 COMPLETA (3/3 tools) + sprint de DB
+**Mergeados:** PR #118 (voz), sprint de DB (SQL Editor), PR #121 (reprogramar).
+
+**Sprint de DB** (`supabase/migrations/20260602_reprogramar_medico_y_hardening.sql`,
+aplicado vía SQL Editor por bloqueo temporal del WAF de Cloudflare en la
+Management API):
+- `reprogramar_turno_medico` (RPC nuevo, solo service_role) — mueve un turno
+  confirmado a otro slot preservando el pago, deja el viejo 'reprogramado',
+  optimistic lock → cero doble reserva.
+- Fix CRÍTICO-1 del RPC del paciente (`reprogramar_turno_atomico`): el origen
+  ahora pasa a 'reprogramado' (antes quedaba 'confirmado' → doble turno).
+- REVOKE EXECUTE de ambos RPC a anon/authenticated.
+- CHECK `turnos.monto >= 0`.
+
+**`reprogramar_turno` (PR #121):** Nova mueve el turno de un paciente a otro
+horario. Wrapper `reprogramarTurnoMedico` en cancelaciones.ts + tool + acción
+con ownership. **Cierra las 3 tools de Fase 1: crear, bloquear, reprogramar.**
+
+**Auditoría Roberto:** APROBADO. Verificó empíricamente contra prod que la
+migración quedó bien, que el pago se mueve a UN solo turno (no se pierde ni
+duplica), y que se sostiene cero-doble-reserva. Item de seguimiento no
+bloqueante: agregar `AND estado='confirmado'` al UPDATE final del origen
+(defensa ante futuros refactors).
+
+**PR #118 (voz):** mergeado. OpenAI confirmado con saldo ($0.01/$100) — la voz
+no era saldo sino la lógica (ahora: habla si le hablás, calla si escribís).
+
+**Aprendizaje operativo:** ráfaga de requests a la Management API → rate-ban
+1010 de Cloudflare. Espaciar requests; fallback SQL Editor cuando la API se
+bloquea.
+
 ---
 
 *Documento creado el 19/05/2026. Actualizar al cierre de cada 
