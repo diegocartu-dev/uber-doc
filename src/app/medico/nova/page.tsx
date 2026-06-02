@@ -146,6 +146,9 @@ export default function NovaChat() {
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
   const [hablando, setHablando] = useState(false);
+  // Voz ON por default. El médico puede silenciarla si prefiere solo leer.
+  const [vozSilenciada, setVozSilenciada] = useState(false);
+  const vozSilenciadaRef = useRef(false); // espejo para leerlo sin stale closure en el SSE
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioDesbloqueado = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -163,6 +166,16 @@ export default function NovaChat() {
       setMedicoId(user.id);
     });
   }, [router]);
+
+  // Preferencia de silencio (persistida) + ref espejo para el SSE
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("nova_voz_silenciada") === "1") setVozSilenciada(true);
+    } catch { /* sin localStorage */ }
+  }, []);
+  useEffect(() => {
+    vozSilenciadaRef.current = vozSilenciada;
+  }, [vozSilenciada]);
 
   // Auto-scroll
   useEffect(() => {
@@ -302,9 +315,9 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // TTS solo en respuestas cortas/conversacionales (≤200 chars)
-                // Respuestas largas (agendas, listas) no se leen automáticamente
-                if (novaTexto && novaTexto.length <= 200) {
+                // TTS solo en respuestas cortas/conversacionales (≤200 chars) y si
+                // el médico NO silenció la voz. Respuestas largas no se leen solas.
+                if (novaTexto && novaTexto.length <= 200 && !vozSilenciadaRef.current) {
                   reproducirTTS(novaTexto);
                 }
               }
@@ -432,6 +445,19 @@ export default function NovaChat() {
     setHablando(false);
   }, []);
 
+  // Silenciar / reactivar la voz de Nova. Por default habla; el médico la apaga
+  // si prefiere solo leer. Al silenciar, corta lo que esté sonando.
+  const toggleSilencio = useCallback(() => {
+    setVozSilenciada((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("nova_voz_silenciada", next ? "1" : "0");
+      } catch { /* sin localStorage */ }
+      if (next) detenerAudio();
+      return next;
+    });
+  }, [detenerAudio]);
+
   // ── Confirmar accion ──
 
   const confirmarAccion = useCallback(
@@ -545,6 +571,29 @@ export default function NovaChat() {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
           <span className="text-lg font-medium text-[#1a1a1a]">Nova</span>
         </div>
+        {/* Botón para silenciar / reactivar la voz (habla por default) */}
+        <button
+          onClick={toggleSilencio}
+          aria-label={vozSilenciada ? "Activar la voz de Nova" : "Silenciar la voz de Nova"}
+          className="flex h-9 w-9 items-center justify-center rounded-full transition-colors active:opacity-60"
+          style={{ border: "0.5px solid #e5e7eb", color: vozSilenciada ? "#888780" : "#378ADD" }}
+        >
+          {vozSilenciada ? (
+            // Altavoz silenciado
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          ) : (
+            // Altavoz con ondas (voz activa)
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+          )}
+        </button>
       </header>
       <Breadcrumb />
 
