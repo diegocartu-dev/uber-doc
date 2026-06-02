@@ -11,6 +11,38 @@ function fechaLegible(fechaISO: string): string {
   return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
+// Descripción legible para la confirmación de crear_disponibilidad (rango + recurrencia).
+function describirCrearDisponibilidad(t: Record<string, unknown>): string {
+  const canal = t.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular";
+  const precioTxt = typeof t.precio === "number" && t.precio > 0 ? ` a $${(t.precio as number).toLocaleString("es-AR")}` : "";
+  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min${precioTxt}`;
+  const desde = t.fecha_desde as string;
+  const hasta = t.fecha_hasta as string;
+  const dias = Array.isArray(t.dias_semana) ? (t.dias_semana as string[]) : [];
+
+  if (desde === hasta) {
+    return `Crear turnos el ${fechaLegible(desde)}, ${horario} (${canal})`;
+  }
+  const rango = `del ${fechaLegible(desde)} al ${fechaLegible(hasta)}`;
+  if (dias.length === 0 || dias.length === 7) {
+    return `Crear turnos todos los días, ${rango}, ${horario} (${canal})`;
+  }
+  const diasTxt =
+    dias.length === 1
+      ? `los ${dias[0]}`
+      : `los ${dias.slice(0, -1).join(", ")} y ${dias[dias.length - 1]}`;
+  return `Crear turnos ${diasTxt}, ${rango}, ${horario} (${canal})`;
+}
+
+// Descripción legible para la confirmación de bloquear_periodo.
+function describirBloquearPeriodo(t: Record<string, unknown>): string {
+  const desde = t.fecha_desde as string;
+  const hasta = t.fecha_hasta as string;
+  const horas = t.hora_inicio && t.hora_fin ? ` de ${t.hora_inicio} a ${t.hora_fin}` : " (día completo)";
+  const cuando = desde === hasta ? `el ${fechaLegible(desde)}` : `del ${fechaLegible(desde)} al ${fechaLegible(hasta)}`;
+  return `Bloquear turnos disponibles ${cuando}${horas}`;
+}
+
 function getAhoraAR(): { fecha: string; horaISO: string; contexto: string } {
   // Construir fecha/hora en zona Argentina (GMT-3, sin DST)
   const ahora = new Date();
@@ -47,27 +79,43 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "crear_slots",
+    name: "crear_disponibilidad",
     description:
-      "Crea slots de disponibilidad para que pacientes puedan reservar turnos. Requiere confirmación del médico antes de ejecutar.",
+      "Crea disponibilidad para que los pacientes reserven turnos, en un rango de fechas y con recurrencia por día de semana. Sirve tanto para un solo día como para semanas o meses completos. Requiere confirmación del médico antes de ejecutar. Ejemplos: 'todos los miércoles de junio 19-21' → fecha_desde=primer día del mes, fecha_hasta=último día, dias_semana=['miercoles']. 'El 5 de junio de 8 a 12' → fecha_desde=fecha_hasta=2026-06-05, dias_semana omitido. 'Lunes a viernes todo julio' → rango del mes, dias_semana=['lunes','martes','miercoles','jueves','viernes'].",
     input_schema: {
       type: "object" as const,
       properties: {
-        fecha: {
+        fecha_desde: {
           type: "string",
-          description: "Fecha en formato YYYY-MM-DD",
+          description: "Primera fecha del rango en formato YYYY-MM-DD. Para un solo día, igual a fecha_hasta.",
+        },
+        fecha_hasta: {
+          type: "string",
+          description: "Última fecha del rango en formato YYYY-MM-DD. Para un solo día, igual a fecha_desde.",
+        },
+        dias_semana: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"],
+          },
+          description: "Días de la semana en los que crear turnos dentro del rango. Omitir o dejar vacío para crear TODOS los días del rango (útil para un solo día o para 'todos los días'). Ej: ['miercoles'] para 'todos los miércoles'.",
         },
         hora_inicio: {
           type: "string",
-          description: "Hora de inicio en formato HH:MM",
+          description: "Hora de inicio de la franja en formato HH:MM",
         },
         hora_fin: {
           type: "string",
-          description: "Hora de fin en formato HH:MM",
+          description: "Hora de fin de la franja en formato HH:MM",
         },
         duracion: {
           type: "number",
-          description: "Duración de cada slot en minutos (20, 30 o 45)",
+          description: "Duración de cada turno en minutos (20, 30 o 45). Si no la sabés, preguntá antes.",
+        },
+        precio: {
+          type: "number",
+          description: "Precio de la consulta para ESTA agenda, en pesos. Omitir si el médico no menciona un precio: se usa su precio configurado. El médico puede poner un precio distinto para una agenda puntual (ej: cobrar más un domingo o feriado).",
         },
         canal_origen: {
           type: "string",
@@ -75,30 +123,34 @@ const novaTools: Anthropic.Tool[] = [
           enum: ["clinica_virtual", "consultorio_privado"],
         },
       },
-      required: ["fecha", "hora_inicio", "hora_fin", "duracion", "canal_origen"],
+      required: ["fecha_desde", "fecha_hasta", "hora_inicio", "hora_fin", "duracion", "canal_origen"],
     },
   },
   {
-    name: "bloquear_agenda",
+    name: "bloquear_periodo",
     description:
-      "Bloquea un rango horario para que no se puedan reservar turnos. Requiere confirmación del médico antes de ejecutar.",
+      "Bloquea los turnos disponibles de un rango de fechas para que no se puedan reservar (vacaciones, francos, un día puntual). Para un solo día, fecha_desde = fecha_hasta. Opcionalmente se puede limitar a un rango horario; si se omiten las horas, bloquea el día completo. Requiere confirmación del médico. NO cancela turnos con pacientes: esos se informan aparte. Ejemplos: 'no atiendo del 10 al 20' → fecha_desde=2026-06-10, fecha_hasta=2026-06-20, sin horas. 'bloqueá las tardes de mañana' → un día, hora_inicio=13:00.",
     input_schema: {
       type: "object" as const,
       properties: {
-        fecha: {
+        fecha_desde: {
           type: "string",
-          description: "Fecha en formato YYYY-MM-DD",
+          description: "Primera fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_hasta.",
+        },
+        fecha_hasta: {
+          type: "string",
+          description: "Última fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_desde.",
         },
         hora_inicio: {
           type: "string",
-          description: "Hora de inicio del bloqueo en formato HH:MM",
+          description: "Hora de inicio del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
         hora_fin: {
           type: "string",
-          description: "Hora de fin del bloqueo en formato HH:MM",
+          description: "Hora de fin del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
       },
-      required: ["fecha", "hora_inicio", "hora_fin"],
+      required: ["fecha_desde", "fecha_hasta"],
     },
   },
   {
@@ -406,7 +458,7 @@ Ejemplos:
 - "Necesito saber cuánto dura cada consulta para poder calcular cuántos turnos entran en ese rango."
 
 ACCIONES QUE PODÉS EJECUTAR
-1. Crear turnos programados — ejecutás directo, después confirmás lo que hiciste y por qué lo hiciste así.
+1. Crear disponibilidad de turnos (crear_disponibilidad) — para un solo día, una semana o un mes entero, con recurrencia por día de semana. Describís lo que vas a crear y llamás la herramienta; la interfaz muestra el botón Confirmar. Una sola llamada crea todo el rango: NUNCA crees día por día ni digas "voy creando".
 2. Ver agenda del día o la semana — ejecutás directo.
 3. Activar disponibilidad inmediata ("estoy disponible ahora") — ejecutás directo.
 4. Cancelar turnos — Dos herramientas disponibles:
@@ -418,13 +470,17 @@ LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
 El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide cambiarlo le explicás que eso se hace desde la configuración de su perfil, no a través tuyo.
 
 REGLA DE CONFIRMACIÓN — UNA SOLA VEZ
-Creación y consultas: ejecutás directo, después avisás qué hiciste.
-Cancelaciones, modificaciones y desactivar disponibilidad: describís lo que vas a hacer e INMEDIATAMENTE llamás la herramienta. La interfaz muestra botones Confirmar/Cancelar automáticamente. NUNCA pidas confirmación verbal ("¿avanzamos?", "¿confirma?", "¿está seguro?", "¿cancelamos?") — eso lo manejan los botones de la UI. Si describiste la acción, llamá la herramienta en el mismo turno. El médico confirma con UN SOLO toque en el botón.
+Consultas (ver agenda, ver pago): ejecutás directo, después avisás qué viste.
+Crear disponibilidad, cancelaciones, modificaciones y desactivar disponibilidad: describís lo que vas a hacer e INMEDIATAMENTE llamás la herramienta. La interfaz muestra botones Confirmar/Cancelar automáticamente. NUNCA pidas confirmación verbal ("¿avanzamos?", "¿confirma?", "¿está seguro?", "¿cancelamos?") — eso lo manejan los botones de la UI. Si describiste la acción, llamá la herramienta en el mismo turno. El médico confirma con UN SOLO toque en el botón. Nunca digas que ya creaste algo antes de que el médico toque Confirmar.
 Ejemplo correcto: "Hay un turno de José Vélez el 29/04 a las 19:20. Voy a cancelarlo y él va a recibir una notificación para reprogramar." → [llamás cancelar_turnos_dia] → UI muestra [Confirmar] [Cancelar]
 Ejemplo INCORRECTO: "¿Avanzamos con la cancelación?" (sin llamar la herramienta) → médico escribe "sí" → recién ahí llamás la herramienta. Esto NUNCA debe pasar.
 
-CREAR TURNOS — DATO OBLIGATORIO
-Cuando el médico pide crear turnos y no menciona la duración de cada consulta, siempre preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué lo necesitás. Si ya tenés ese dato en el perfil, lo usás sin preguntar.
+CREAR TURNOS — DATOS Y RANGO
+Antes de crear, necesitás: el rango de fechas (un día, o desde/hasta), los días de la semana si es recurrente, el horario, y la duración de cada turno.
+- Si el médico no menciona la duración, preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué. Si ya está en el perfil, lo usás sin preguntar.
+- Interpretás el rango con naturalidad: "todo junio" → del 1 al 30 de junio. "todos los miércoles de junio" → rango del mes con dias_semana=['miercoles']. "el 5 de 8 a 12" → un solo día. "lunes a viernes" → esos cinco días. Si te falta una fecha clave o es ambigua, preguntás con mostrar_opciones.
+- Una sola llamada a crear_disponibilidad crea TODO el rango de una. No existe crear día por día.
+- PRECIO: si el médico menciona un valor para esa agenda (ej: "los domingos cobro más caro", "esta agenda a 30 mil"), pasalo en el campo precio. Si no menciona nada, omitilo y se usa su precio configurado. Podés contarle el precio en la confirmación.
 
 BOTONES SIEMPRE — HERRAMIENTA mostrar_opciones
 Cuando necesités que el médico elija entre opciones concretas (fecha ambigua, sí/no, qué acción tomar), SIEMPRE usá la herramienta mostrar_opciones. NUNCA hagas una pregunta de opciones solo con texto — el médico debe poder tocar un botón para responder.
@@ -439,8 +495,9 @@ Si el médico pide algo que puede interpretarse como disponibilidad inmediata o 
 Ejemplos de pedidos ambiguos: "quiero atender hoy a las 6", "poneme para ahora", "abrí un turno para dentro de una hora".
 
 CONFLICTOS DE AGENDA
-Si los horarios nuevos se pisan con una agenda que ya tiene pacientes asignados: no creás nada. Avisás que hay otra agenda con pacientes en ese horario y que tiene que revisarla manualmente. Explicás siempre el motivo.
-Si los horarios nuevos no se pisan con nada ocupado: creás la agenda sin problema, aunque sea el mismo día.
+El sistema valida los conflictos al crear, así que nunca generás una doble reserva. Vos solo tenés que contarle bien al médico lo que pasó:
+- Si la creación se rechaza porque hay turnos YA RESERVADOS por pacientes que se pisan: no se creó nada. Le explicás que hay turnos reservados en ese horario y que revise esa agenda manualmente si quiere modificarla. No es un error tuyo.
+- Si la creación sale bien pero había una agenda vieja VACÍA que se pisaba: el sistema la bloquea sola (gana la nueva, sin doble reserva). Se lo contás con naturalidad: "Listo, le armé la agenda nueva. Tenía una agenda anterior en esos días que quedó bloqueada para no encimarse — revísela si quiere." Siempre le decís cuántos turnos creó y en qué días.
 
 "CANCELÁ TODO" O PEDIDOS DE CIERRE TOTAL
 Si el médico pide cerrar todo, parar, desconectarse o cancelar todo: interpretás que quiere tanto bloquear los turnos programados disponibles como desactivar la disponibilidad inmediata. Describís lo que vas a hacer ("Voy a bloquear sus turnos disponibles y desactivar la disponibilidad inmediata"). La interfaz pide confirmación. Una vez confirmado, ejecutás ambas acciones y le recordás que cuando quiera volver a atender tiene que reactivar su disponibilidad manualmente.
@@ -561,8 +618,8 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                   // Herramienta destructiva: el texto ya se emitió vía streaming.
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
-                    crear_slots: `Crear turnos el ${fechaLegible(toolInput.fecha as string)} de ${toolInput.hora_inicio} a ${toolInput.hora_fin} cada ${toolInput.duracion} minutos (${toolInput.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular"})`,
-                    bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
+                    crear_disponibilidad: describirCrearDisponibilidad(toolInput),
+                    bloquear_periodo: describirBloquearPeriodo(toolInput),
                     cancelar_turno: toolInput.paciente_nombre
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,

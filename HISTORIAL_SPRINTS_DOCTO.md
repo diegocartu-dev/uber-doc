@@ -376,5 +376,71 @@ Friends & Family.
 
 ---
 
+---
+
+### Junio
+
+#### 01/06 — Nova v2 · Fase 1 (núcleo de agenda)
+**PR #119 mergeado.** Arranca el rediseño de capacidades de Nova
+(doc: `docs/nova/NOVA_V2_DISENO_CAPACIDADES.md`).
+
+**Contexto:** circuito real de Diego (01/06) reveló que Nova no podía
+crear períodos &gt; 1 día, se confundía ("me adelanté"), y no detectaba
+superposición. Verificado contra prod: Nova tenía **0 agendas creadas**
+— las multi-día existentes eran del formulario manual. No era regresión:
+era una capacidad que Nova nunca tuvo. Diagnóstico: tools finas, no prompt.
+
+**Qué se construyó:**
+- `src/lib/agenda/crear-agenda.ts` — `crearAgendaModelo()`, único origen
+  para crear agenda (modelo+franjas+turnos) con rango + recurrencia por
+  día de semana. Freno duro ante turno reservado por paciente (clasifica
+  por ESTADO, no por `paciente_id`). Choque con vacíos → gana el más
+  nuevo, sin doble reserva.
+- `crear_disponibilidad` (Nova) reemplaza `crear_slots` (un solo día).
+  Crea todo un rango en una confirmación. Idempotencia precisa (compara
+  franjas → permite "miércoles" y "viernes" del mismo mes).
+- Prompt: actualizado SOLO en secciones de creación y conflictos.
+
+**Auditoría Roberto:** APROBADO. Invariante cero-doble-reserva verificado
+empíricamente contra prod, incluida concurrencia real. 4 hallazgos de
+robustez (no bloqueantes), 3 endurecidos en el merge. Backlog: race de
+double-submit (mitigada con guard `turnosCreados > 0`).
+
+**Fix de voz (PR #118, aparte):** Nova lee solo si el médico habla (no
+según largo) + desbloqueo de audio en botones iOS. Pendiente de merge.
+
+**Pendiente Fase 1:** migrar formulario manual al mismo origen; tools
+`reprogramar_turno` + `bloquear_periodo`. En evaluación: canal "ambos"
+(agenda común a CV + consultorio) y CI con apagado automático a 3h.
+
+#### 01/06 — Nova v2 · Fase 1 (cierre) — PR #120
+**Mergeado:** `bloquear_periodo` + precio por agenda. Cierra Fase 1 en
+2.5/3 tools.
+- **`bloquear_periodo`** — bloquear un rango de fechas (vacaciones/francos).
+  Solo toca `disponible`; informa turnos con paciente, no los toca. Roberto OK.
+- **Precio por agenda** — `crear_disponibilidad` acepta precio para esa
+  agenda (domingo/feriado más caro). Validado $500–$500.000 (Roberto CRÍTICO-2:
+  el precio del LLM se cobra real). Aprovecha `agenda_modelos.precio` existente.
+- **`reprogramar_turno` → sacado.** Auditoría reveló que el RPC
+  `reprogramar_turno_atomico` es el flujo del PACIENTE con crédito de
+  cancelación (req. `reintegro_estado='pendiente'`, límite 2 reprog., venc.
+  45d), no sirve para mover un turno activo del médico (`reintegro_estado=NULL`).
+  Reusarlo dejaba al paciente con dos turnos confirmados (CRÍTICO-1). Necesita
+  RPC dedicado → backlog DB.
+
+**Backlog DB (requiere OK de Diego, son migraciones):** RPC dedicado de
+reprogramación del médico; fix RPC paciente (origen queda 'confirmado');
+REVOKE EXECUTE del RPC a anon/authenticated; CHECK `turnos.monto >= 0`.
+
+**Modelo de precios (decisión Diego 01/06):** precio por agenda (ya), precio
+por sesión en CI (pendiente), CI con apagado 3h + aviso de extensión
+(pendiente, mini-sprint). Ver `docs/nova/NOVA_V2_DISENO_CAPACIDADES.md`.
+
+**Decisión de pace:** Diego frenó el whack-a-mole de bugs sueltos de Nova
+y se pasó a rediseño de capacidades (tools, no prompt). El prompt estaba
+bien; el límite eran las tools finas.
+
+---
+
 *Documento creado el 19/05/2026. Actualizar al cierre de cada 
 sprint con scope, PRs y decisiones técnicas asociadas.*
