@@ -5,7 +5,7 @@ export default function PrivacidadContent() {
         Política de Privacidad
       </h1>
       <p className="text-center text-sm text-gray-500">
-        Última actualización: mayo de 2026
+        Última actualización: junio de 2026
       </p>
 
       <h2>1. Responsable del tratamiento</h2>
@@ -25,6 +25,9 @@ export default function PrivacidadContent() {
 
       <h3>d) Datos técnicos</h3>
       <p>Dirección IP, tipo de dispositivo y navegador, datos de sesión y logs de acceso con fines de seguridad.</p>
+
+      <h3>e) Datos de verificación de identidad de profesionales</h3>
+      <p>Resultado de la verificación de identidad (aprobada/rechazada), identificador de la sesión de verificación, nombre, apellido, número de documento, fecha de nacimiento, sexo y nacionalidad obtenidos del documento. Estos datos se tratan con la finalidad de prevenir la suplantación de identidad de profesionales en la plataforma.</p>
 
       <h2>3. Finalidad del tratamiento</h2>
       <ul>
@@ -49,11 +52,13 @@ export default function PrivacidadContent() {
         <li><strong>LiveKit:</strong> provisión de la videollamada. LiveKit procesa datos de audio y video en tiempo real; no almacena grabaciones de las consultas.</li>
         <li><strong>Vercel:</strong> alojamiento de la aplicación web.</li>
         <li><strong>Resend:</strong> envío de correos electrónicos transaccionales.</li>
+        <li><strong>Didit (Didit Inc.):</strong> verificación de identidad de los profesionales de la salud al momento del alta. Procesa el documento de identidad, la imagen facial y la prueba de vida del profesional, y los valida contra el RENAPER. Docto recibe de Didit únicamente el resultado de la verificación y los datos del documento; no recibe ni almacena datos biométricos.</li>
       </ul>
       <p>Los datos NO son vendidos, cedidos ni compartidos con terceros con fines comerciales, publicitarios o de perfilamiento.</p>
 
       <h2>6. Transferencia internacional de datos</h2>
       <p>Los proveedores de infraestructura (Supabase/AWS, Vercel, LiveKit) pueden alojar datos en servidores ubicados fuera de la República Argentina. Esta transferencia se realiza con el consentimiento del titular, conforme la excepción prevista en el art. 12 inc. a) de la Ley 25.326, y se limita estrictamente a lo necesario para la prestación del servicio.</p>
+      <p>La verificación de identidad de los profesionales de la salud se realiza a través de Didit, proveedor con sede fuera de la República Argentina. Esta transferencia internacional comprende los datos del documento del profesional y su imagen facial, se realiza con el consentimiento expreso del titular conforme al art. 12 inc. a) de la Ley 25.326, y se limita estrictamente a la finalidad de verificar su identidad.</p>
 
       <h2>7. Plazo de conservación</h2>
       <ul>
@@ -93,7 +98,7 @@ export default function PrivacidadContent() {
       </ul>
 
       <div className="mt-8 border-t border-gray-200 pt-4 text-center text-xs text-gray-400">
-        Docto — docto.com.ar — Última actualización: mayo de 2026
+        Docto — docto.com.ar — Última actualización: junio de 2026
         <br />
         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270
       </div>
