@@ -208,6 +208,41 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reprogramar_turno",
+    description:
+      "Mueve el turno de un paciente a otro horario disponible. ANTES de llamar: 1) usá ver_agenda en la fecha actual del turno para obtener turno_origen_id y paciente_id del paciente; 2) usá ver_agenda en la fecha destino para encontrar un turno DISPONIBLE (nuevo_turno_id) en el horario nuevo. Si no hay un turno disponible en el horario destino, NO inventes un id: avisale al médico que no hay lugar ahí y ofrecé crear el turno o elegir otro horario. Requiere confirmación. IMPORTANTE: incluí paciente_nombre, fecha_origen y fecha_nueva legibles para que la confirmación sea clara.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        turno_origen_id: {
+          type: "string",
+          description: "UUID del turno actual del paciente (de ver_agenda en la fecha origen).",
+        },
+        nuevo_turno_id: {
+          type: "string",
+          description: "UUID de un turno DISPONIBLE al que se mueve el paciente (de ver_agenda en la fecha destino).",
+        },
+        paciente_id: {
+          type: "string",
+          description: "UUID del paciente (lo devuelve ver_agenda en el campo paciente_id).",
+        },
+        paciente_nombre: {
+          type: "string",
+          description: "Nombre del paciente, para mostrar en la confirmación.",
+        },
+        fecha_origen: {
+          type: "string",
+          description: "Fecha y hora actuales del turno, legibles (ej: 'lunes 9 a las 10:00').",
+        },
+        fecha_nueva: {
+          type: "string",
+          description: "Fecha y hora nuevas, legibles (ej: 'jueves 12 a las 15:00').",
+        },
+      },
+      required: ["turno_origen_id", "nuevo_turno_id", "paciente_id"],
+    },
+  },
+  {
     name: "ver_estado_pago",
     description:
       "Consulta el estado de pago de un turno específico.",
@@ -286,6 +321,7 @@ async function ejecutarTool(
         estado: t.estado,
         monto: t.monto,
         paciente: t.paciente_id ? pacMap.get(t.paciente_id) ?? "Paciente" : null,
+        paciente_id: t.paciente_id, // necesario para reprogramar_turno
         canal_origen: t.canal_origen,
       })),
     };
@@ -465,6 +501,7 @@ ACCIONES QUE PODÉS EJECUTAR
    - cancelar_turno: para cancelar UN turno específico.
    - cancelar_turnos_dia: para cancelar TODOS los turnos con paciente de un día entero. Usá esta cuando el médico pide cancelar "la agenda del día X" o "todos los turnos del martes". Primero usá ver_agenda para saber cuántos turnos con paciente hay, después informá el resumen ("Hay 3 turnos confirmados: Juan 10:00, María 10:30, Pedro 11:00. Voy a cancelarlos y cada paciente va a recibir la notificación para reprogramar.") y llamá cancelar_turnos_dia. La interfaz muestra confirmación al médico. No preguntés verbalmente.
 5. Desactivar disponibilidad inmediata — Describís lo que vas a hacer ("Voy a desactivar su disponibilidad — los pacientes no van a poder encontrarle hasta que la reactive"). La interfaz maneja la confirmación.
+6. Reprogramar el turno de un paciente (reprogramar_turno) — moverlo a otro horario disponible. Primero ubicás el turno con ver_agenda en la fecha actual (de ahí salen turno_origen_id y paciente_id), después buscás un turno DISPONIBLE en la fecha destino con ver_agenda (nuevo_turno_id). Si no hay lugar en el horario destino, avisás y ofrecés crear el turno o elegir otro. El paciente recibe la notificación del cambio automáticamente.
 
 LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
 El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide cambiarlo le explicás que eso se hace desde la configuración de su perfil, no a través tuyo.
@@ -509,6 +546,7 @@ El médico puede pedir lo mismo de muchas formas. Todas estas expresiones llevan
 "me desconecto / cerrá / no atiendo más / pará todo / apagá" → desactivar disponibilidad (con confirmación)
 "qué tengo / mostrá mi agenda / cómo estoy / qué turnos hay / qué me queda" → ver agenda
 "cancelá / borrá / sacá ese turno / eliminá" → cancelar (con confirmación)
+"mové / cambiá / pasá / reprogramá el turno de X al [día/hora]" → reprogramar_turno (con confirmación)
 Si el pedido no encaja en ninguna categoría, preguntás con una sola pregunta amable qué necesita exactamente.
 
 CUANDO NO ENTENDÉS O NO PODÉS AYUDAR
@@ -624,6 +662,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,
                     cancelar_turnos_dia: `Cancelar turnos del ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"}: ${toolInput.resumen ?? ""}`,
+                    reprogramar_turno: `Reprogramar a ${toolInput.paciente_nombre ?? "el paciente"}${toolInput.fecha_origen ? ` (${toolInput.fecha_origen})` : ""} → ${toolInput.fecha_nueva ?? "nuevo horario"}`,
                   };
                   controller.enqueue(
                     encoder.encode(
