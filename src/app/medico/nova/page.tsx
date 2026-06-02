@@ -146,15 +146,8 @@ export default function NovaChat() {
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
   const [hablando, setHablando] = useState(false);
-  // Modo voz manos-libres: cuando está activo, Nova lee TODAS sus respuestas.
-  // Se prende con un toque (que además desbloquea el audio de iOS) y persiste.
-  const [vozActiva, setVozActiva] = useState(false);
-  const vozActivaRef = useRef(false); // espejo para leerlo sin stale closure en el SSE
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioDesbloqueado = useRef(false);
-  // Rastrea si el texto actual del input vino de dictado por voz. Si el médico
-  // habló, Nova lee la respuesta; si escribió, responde solo en texto.
-  const vozPendienteRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { dictando, iniciando, interimText, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
@@ -171,16 +164,6 @@ export default function NovaChat() {
     });
   }, [router]);
 
-  // Cargar preferencia de voz + mantener el ref espejo sincronizado
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("nova_voz") === "1") setVozActiva(true);
-    } catch { /* sin localStorage */ }
-  }, []);
-  useEffect(() => {
-    vozActivaRef.current = vozActiva;
-  }, [vozActiva]);
-
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -189,7 +172,7 @@ export default function NovaChat() {
   // ── SSE fetch ──
 
   const enviarMensaje = useCallback(
-    async (texto: string, viaVoz = false) => {
+    async (texto: string) => {
       if (!texto.trim() || !medicoId || enviando) return;
 
       const userMsg: MensajeChat = {
@@ -225,7 +208,7 @@ export default function NovaChat() {
         const decoder = new TextDecoder();
         let buffer = "";
         let novaTexto = "";
-        const novaId = crypto.randomUUID();
+        let novaId = crypto.randomUUID();
         let confirmacionData: MensajeChat["confirmacion"] | undefined;
         let primerChunk = true;
 
@@ -319,10 +302,9 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // Nova lee la respuesta si: (a) el modo voz manos-libres está
-                // activo (lee todo, el médico optó por escuchar), o (b) el médico
-                // dictó por voz y la respuesta es corta (≤200 chars).
-                if (novaTexto && (vozActivaRef.current || (viaVoz && novaTexto.length <= 200))) {
+                // TTS solo en respuestas cortas/conversacionales (≤200 chars)
+                // Respuestas largas (agendas, listas) no se leen automáticamente
+                if (novaTexto && novaTexto.length <= 200) {
                   reproducirTTS(novaTexto);
                 }
               }
@@ -380,79 +362,73 @@ export default function NovaChat() {
         audio.muted = true;
         audio.play().then(() => {
           audio.pause();
-          audio.currentTime = 0;
-        }).catch(() => {}).finally(() => {
-          // Pase lo que pase con el play de desbloqueo, NUNCA dejar el elemento
-          // silenciado: si quedaba muted, las reproducciones reales no sonaban.
           audio.muted = false;
-        });
+          audio.currentTime = 0;
+        }).catch(() => {});
       }
     } catch {
       // Fallback: intentar de nuevo en el próximo gesto
     }
   }, []);
 
-  const reproducirTTS = useCallback((texto: string) => {
-    // Voz NATIVA del navegador (speechSynthesis): instantánea, lee completo,
-    // gratis y cross-platform (iPhone/Android/PC). Reemplaza el TTS de OpenAI que
-    // tenía 3-4s de delay y a veces cortaba la última oración.
+  const reproducirTTS = useCallback(async (texto: string) => {
     try {
-      const synth = window.speechSynthesis;
-      if (!synth || !texto) return;
-      synth.cancel(); // corta lo que esté leyendo + destraba un bug de iOS con speak
-      const utter = new SpeechSynthesisUtterance(texto);
-      utter.lang = "es-AR";
-      // Preferir una voz en español si el dispositivo ya la tiene cargada
-      const voces = synth.getVoices();
-      const vozEs =
-        voces.find((v) => v.lang === "es-AR") ||
-        voces.find((v) => v.lang.startsWith("es-419")) ||
-        voces.find((v) => v.lang.startsWith("es-MX")) ||
-        voces.find((v) => v.lang.startsWith("es-US")) ||
-        voces.find((v) => v.lang.startsWith("es"));
-      if (vozEs) utter.voice = vozEs;
-      utter.rate = 1;
-      utter.onstart = () => setHablando(true);
-      utter.onend = () => setHablando(false);
-      utter.onerror = () => setHablando(false);
-      synth.speak(utter);
+      const res = await fetch("/api/nova/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto }),
+      });
+
+      if (!res.ok) return;
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      // Limpiar URL anterior si existe
+      const urlAnterior = audio.src;
+
+      audio.onplay = () => setHablando(true);
+      audio.onended = () => {
+        setHablando(false);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setHablando(false);
+        URL.revokeObjectURL(url);
+      };
+
+      audio.src = url;
+      audio.volume = 1;
+      await audio.play().catch(() => {
+        // Autoplay bloqueado — fallback silencioso
+        setHablando(false);
+        URL.revokeObjectURL(url);
+      });
+
+      // Limpiar URL anterior
+      if (urlAnterior && urlAnterior.startsWith("blob:")) {
+        URL.revokeObjectURL(urlAnterior);
+      }
     } catch {
-      setHablando(false);
+      // TTS falló silenciosamente
     }
   }, []);
 
   const detenerAudio = useCallback(() => {
-    try {
-      window.speechSynthesis?.cancel();
-    } catch { /* sin speechSynthesis */ }
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
     setHablando(false);
   }, []);
-
-  // Toggle del modo voz manos-libres. El toque desbloquea el audio de iOS y, al
-  // prender, lee la última respuesta de Nova (confirma que funciona + prima el
-  // audio para las siguientes lecturas automáticas).
-  const toggleVoz = useCallback(() => {
-    desbloquearAudio();
-    setVozActiva((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("nova_voz", next ? "1" : "0");
-      } catch { /* sin localStorage */ }
-      if (next) {
-        const ultimaNova = [...mensajes].reverse().find((m) => m.role === "nova");
-        if (ultimaNova?.content) reproducirTTS(ultimaNova.content);
-      } else {
-        detenerAudio();
-      }
-      return next;
-    });
-  }, [desbloquearAudio, reproducirTTS, detenerAudio, mensajes]);
 
   // ── Confirmar accion ──
 
   const confirmarAccion = useCallback(
     async (msgId: string, decision: "si" | "no") => {
-      desbloquearAudio(); // gesto del usuario → habilita audio en iOS
       const msg = mensajes.find((m) => m.id === msgId);
       if (!msg?.confirmacion || !medicoId) return;
 
@@ -510,20 +486,19 @@ export default function NovaChat() {
         setPensando(false);
       }
     },
-    [mensajes, medicoId, desbloquearAudio]
+    [mensajes, medicoId]
   );
 
   const elegirOpcion = useCallback(
     (msgId: string, opcion: string) => {
-      desbloquearAudio(); // gesto del usuario → habilita audio en iOS
       setMensajes((prev) =>
         prev.map((m) =>
           m.id === msgId ? { ...m, opcionElegida: opcion } : m
         )
       );
-      enviarMensaje(opcion, false); // elegir por botón no es voz
+      enviarMensaje(opcion);
     },
-    [enviarMensaje, desbloquearAudio]
+    [enviarMensaje]
   );
 
   // ── Mic toggle ──
@@ -535,12 +510,7 @@ export default function NovaChat() {
       detenerDictado();
     } else {
       beepUI(880, 80);
-      // Envolver el setter: cada vez que el dictado agrega texto, marcamos que
-      // la entrada vino de voz → Nova leerá la respuesta en voz alta.
-      iniciarDictado((fn) => {
-        vozPendienteRef.current = true;
-        setInput(fn);
-      });
+      iniciarDictado(setInput);
     }
   }, [dictando, iniciarDictado, detenerDictado, desbloquearAudio]);
 
@@ -551,9 +521,7 @@ export default function NovaChat() {
       e.preventDefault();
       desbloquearAudio();
       if (dictando) detenerDictado();
-      const fueVoz = vozPendienteRef.current;
-      vozPendienteRef.current = false;
-      enviarMensaje(input, fueVoz);
+      enviarMensaje(input);
     }
   };
 
@@ -570,32 +538,6 @@ export default function NovaChat() {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
           <span className="text-lg font-medium text-[#1a1a1a]">Nova</span>
         </div>
-        {/* Toggle de voz manos-libres */}
-        <button
-          onClick={toggleVoz}
-          aria-label={vozActiva ? "Desactivar voz" : "Activar voz"}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-all active:scale-90"
-          style={
-            vozActiva
-              ? { background: "#378ADD", color: "white" }
-              : { background: "#f3f4f6", color: "#6b7280", border: "0.5px solid #e5e7eb" }
-          }
-        >
-          {vozActiva ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <line x1="23" y1="9" x2="17" y2="15" />
-              <line x1="17" y1="9" x2="23" y2="15" />
-            </svg>
-          )}
-          Voz
-        </button>
       </header>
       <Breadcrumb />
 
@@ -652,22 +594,6 @@ export default function NovaChat() {
                 <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
                   {msg.content}
                 </p>
-
-                {/* Botón escuchar (respaldo por mensaje — el toque garantiza audio en iOS) */}
-                {msg.role === "nova" && !!msg.content && (
-                  <button
-                    onClick={() => reproducirTTS(msg.content)}
-                    aria-label="Escuchar este mensaje"
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium text-[#378ADD] transition-all active:scale-90"
-                    style={{ background: "#378ADD14", border: "0.5px solid #378ADD55" }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                    </svg>
-                    Escuchar
-                  </button>
-                )}
 
                 {/* Chip canal + duración */}
                 {!!msg.confirmacion?.datos?.canal_origen && (
@@ -809,10 +735,7 @@ export default function NovaChat() {
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => {
-              vozPendienteRef.current = false; // tipear a mano = no es voz
-              setInput(e.target.value);
-            }}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={dictando ? "Dictando..." : "Escribí o dictá tu mensaje..."}
             disabled={enviando}
@@ -825,9 +748,7 @@ export default function NovaChat() {
             onClick={() => {
               desbloquearAudio();
               if (dictando) detenerDictado();
-              const fueVoz = vozPendienteRef.current;
-              vozPendienteRef.current = false;
-              enviarMensaje(input, fueVoz);
+              enviarMensaje(input);
             }}
             disabled={!hayTexto || enviando}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
