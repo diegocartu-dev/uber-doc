@@ -146,6 +146,10 @@ export default function NovaChat() {
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
   const [hablando, setHablando] = useState(false);
+  // Modo voz manos-libres: cuando está activo, Nova lee TODAS sus respuestas.
+  // Se prende con un toque (que además desbloquea el audio de iOS) y persiste.
+  const [vozActiva, setVozActiva] = useState(false);
+  const vozActivaRef = useRef(false); // espejo para leerlo sin stale closure en el SSE
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioDesbloqueado = useRef(false);
   // Rastrea si el texto actual del input vino de dictado por voz. Si el médico
@@ -166,6 +170,16 @@ export default function NovaChat() {
       setMedicoId(user.id);
     });
   }, [router]);
+
+  // Cargar preferencia de voz + mantener el ref espejo sincronizado
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("nova_voz") === "1") setVozActiva(true);
+    } catch { /* sin localStorage */ }
+  }, []);
+  useEffect(() => {
+    vozActivaRef.current = vozActiva;
+  }, [vozActiva]);
 
   // Auto-scroll
   useEffect(() => {
@@ -211,7 +225,7 @@ export default function NovaChat() {
         const decoder = new TextDecoder();
         let buffer = "";
         let novaTexto = "";
-        let novaId = crypto.randomUUID();
+        const novaId = crypto.randomUUID();
         let confirmacionData: MensajeChat["confirmacion"] | undefined;
         let primerChunk = true;
 
@@ -305,10 +319,10 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // Nova lee la respuesta SOLO si el médico habló (no si escribió).
-                // Y solo respuestas cortas/conversacionales (≤200 chars): las
-                // listas largas de agenda no se leen automáticamente.
-                if (viaVoz && novaTexto && novaTexto.length <= 200) {
+                // Nova lee la respuesta si: (a) el modo voz manos-libres está
+                // activo (lee todo, el médico optó por escuchar), o (b) el médico
+                // dictó por voz y la respuesta es corta (≤200 chars).
+                if (novaTexto && (vozActivaRef.current || (viaVoz && novaTexto.length <= 200))) {
                   reproducirTTS(novaTexto);
                 }
               }
@@ -428,6 +442,26 @@ export default function NovaChat() {
     }
     setHablando(false);
   }, []);
+
+  // Toggle del modo voz manos-libres. El toque desbloquea el audio de iOS y, al
+  // prender, lee la última respuesta de Nova (confirma que funciona + prima el
+  // audio para las siguientes lecturas automáticas).
+  const toggleVoz = useCallback(() => {
+    desbloquearAudio();
+    setVozActiva((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("nova_voz", next ? "1" : "0");
+      } catch { /* sin localStorage */ }
+      if (next) {
+        const ultimaNova = [...mensajes].reverse().find((m) => m.role === "nova");
+        if (ultimaNova?.content) reproducirTTS(ultimaNova.content);
+      } else {
+        detenerAudio();
+      }
+      return next;
+    });
+  }, [desbloquearAudio, reproducirTTS, detenerAudio, mensajes]);
 
   // ── Confirmar accion ──
 
@@ -551,6 +585,32 @@ export default function NovaChat() {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
           <span className="text-lg font-medium text-[#1a1a1a]">Nova</span>
         </div>
+        {/* Toggle de voz manos-libres */}
+        <button
+          onClick={toggleVoz}
+          aria-label={vozActiva ? "Desactivar voz" : "Activar voz"}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors"
+          style={
+            vozActiva
+              ? { background: "#378ADD", color: "white" }
+              : { background: "#f3f4f6", color: "#6b7280", border: "0.5px solid #e5e7eb" }
+          }
+        >
+          {vozActiva ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          )}
+          Voz
+        </button>
       </header>
       <Breadcrumb />
 
@@ -607,6 +667,21 @@ export default function NovaChat() {
                 <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
                   {msg.content}
                 </p>
+
+                {/* Botón escuchar (respaldo por mensaje — el toque garantiza audio en iOS) */}
+                {msg.role === "nova" && !!msg.content && (
+                  <button
+                    onClick={() => reproducirTTS(msg.content)}
+                    aria-label="Escuchar este mensaje"
+                    className="mt-1.5 flex items-center gap-1 text-[12px] text-[#888780] active:opacity-60"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    </svg>
+                    Escuchar
+                  </button>
+                )}
 
                 {/* Chip canal + duración */}
                 {!!msg.confirmacion?.datos?.canal_origen && (
