@@ -79,5 +79,12 @@ El problema que veníamos parchando es que **el prompt promete más de lo que la
 - **Reprogramar:** ¿el paciente acepta el nuevo horario o es unilateral del médico con aviso?
 - **`invitar_a_control`:** alcance de la plantilla y consentimiento — definición de Carolina.
 
+## Backlog descubierto en testing (01/06)
+
+- **Gestionar agendas existentes (modelos) por nombre/estado.** El médico piensa en "agendas" (la agenda *prueba*), pero Nova solo maneja turnos por fecha/horario. Capacidades naturales: "¿cuántas agendas activas tengo?", "eliminá la agenda de prueba", "desactivá la de los miércoles". Infra ya existe (`eliminarModelo`, `toggleModelo` en `src/app/medico/agenda/actions.ts`); falta darle a Nova las tools (`ver_agendas`, `eliminar_agenda`, `activar/desactivar_agenda`).
+  - **Seguridad obligatoria:** la FK `turnos.modelo_id` es `ON DELETE NO ACTION` → eliminar un modelo con turnos falla. Y un modelo puede tener pacientes (`reservado_pendiente`/`confirmado`). Eliminar/desactivar una agenda DEBE aplicar el mismo freno por paciente que `crearAgendaModelo`: no romper turnos con pacientes; avisar y mandar a revisión manual.
+  - Decisión Diego (01/06): **no entra en esta versión.** Candidata a Fase 2.
+- **Canal "ambos"** (agenda común CV + consultorio) y **CI con apagado automático a 3h** — pendientes de confirmar el modelo con Diego (ver charla 01/06).
+
 ---
 _Este documento es la fuente de verdad del rediseño de Nova. Actualizar al cierre de cada fase._
