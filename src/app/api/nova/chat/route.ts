@@ -14,7 +14,8 @@ function fechaLegible(fechaISO: string): string {
 // Descripción legible para la confirmación de crear_disponibilidad (rango + recurrencia).
 function describirCrearDisponibilidad(t: Record<string, unknown>): string {
   const canal = t.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular";
-  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min`;
+  const precioTxt = typeof t.precio === "number" && t.precio > 0 ? ` a $${(t.precio as number).toLocaleString("es-AR")}` : "";
+  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min${precioTxt}`;
   const desde = t.fecha_desde as string;
   const hasta = t.fecha_hasta as string;
   const dias = Array.isArray(t.dias_semana) ? (t.dias_semana as string[]) : [];
@@ -31,6 +32,15 @@ function describirCrearDisponibilidad(t: Record<string, unknown>): string {
       ? `los ${dias[0]}`
       : `los ${dias.slice(0, -1).join(", ")} y ${dias[dias.length - 1]}`;
   return `Crear turnos ${diasTxt}, ${rango}, ${horario} (${canal})`;
+}
+
+// Descripción legible para la confirmación de bloquear_periodo.
+function describirBloquearPeriodo(t: Record<string, unknown>): string {
+  const desde = t.fecha_desde as string;
+  const hasta = t.fecha_hasta as string;
+  const horas = t.hora_inicio && t.hora_fin ? ` de ${t.hora_inicio} a ${t.hora_fin}` : " (día completo)";
+  const cuando = desde === hasta ? `el ${fechaLegible(desde)}` : `del ${fechaLegible(desde)} al ${fechaLegible(hasta)}`;
+  return `Bloquear turnos disponibles ${cuando}${horas}`;
 }
 
 function getAhoraAR(): { fecha: string; horaISO: string; contexto: string } {
@@ -103,6 +113,10 @@ const novaTools: Anthropic.Tool[] = [
           type: "number",
           description: "Duración de cada turno en minutos (20, 30 o 45). Si no la sabés, preguntá antes.",
         },
+        precio: {
+          type: "number",
+          description: "Precio de la consulta para ESTA agenda, en pesos. Omitir si el médico no menciona un precio: se usa su precio configurado. El médico puede poner un precio distinto para una agenda puntual (ej: cobrar más un domingo o feriado).",
+        },
         canal_origen: {
           type: "string",
           description: "Canal del turno: 'clinica_virtual' para la clínica virtual de Docto, 'consultorio_privado' para el consultorio presencial del médico. Inferir del mensaje del médico.",
@@ -113,26 +127,30 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "bloquear_agenda",
+    name: "bloquear_periodo",
     description:
-      "Bloquea un rango horario para que no se puedan reservar turnos. Requiere confirmación del médico antes de ejecutar.",
+      "Bloquea los turnos disponibles de un rango de fechas para que no se puedan reservar (vacaciones, francos, un día puntual). Para un solo día, fecha_desde = fecha_hasta. Opcionalmente se puede limitar a un rango horario; si se omiten las horas, bloquea el día completo. Requiere confirmación del médico. NO cancela turnos con pacientes: esos se informan aparte. Ejemplos: 'no atiendo del 10 al 20' → fecha_desde=2026-06-10, fecha_hasta=2026-06-20, sin horas. 'bloqueá las tardes de mañana' → un día, hora_inicio=13:00.",
     input_schema: {
       type: "object" as const,
       properties: {
-        fecha: {
+        fecha_desde: {
           type: "string",
-          description: "Fecha en formato YYYY-MM-DD",
+          description: "Primera fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_hasta.",
+        },
+        fecha_hasta: {
+          type: "string",
+          description: "Última fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_desde.",
         },
         hora_inicio: {
           type: "string",
-          description: "Hora de inicio del bloqueo en formato HH:MM",
+          description: "Hora de inicio del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
         hora_fin: {
           type: "string",
-          description: "Hora de fin del bloqueo en formato HH:MM",
+          description: "Hora de fin del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
       },
-      required: ["fecha", "hora_inicio", "hora_fin"],
+      required: ["fecha_desde", "fecha_hasta"],
     },
   },
   {
@@ -462,6 +480,7 @@ Antes de crear, necesitás: el rango de fechas (un día, o desde/hasta), los dí
 - Si el médico no menciona la duración, preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué. Si ya está en el perfil, lo usás sin preguntar.
 - Interpretás el rango con naturalidad: "todo junio" → del 1 al 30 de junio. "todos los miércoles de junio" → rango del mes con dias_semana=['miercoles']. "el 5 de 8 a 12" → un solo día. "lunes a viernes" → esos cinco días. Si te falta una fecha clave o es ambigua, preguntás con mostrar_opciones.
 - Una sola llamada a crear_disponibilidad crea TODO el rango de una. No existe crear día por día.
+- PRECIO: si el médico menciona un valor para esa agenda (ej: "los domingos cobro más caro", "esta agenda a 30 mil"), pasalo en el campo precio. Si no menciona nada, omitilo y se usa su precio configurado. Podés contarle el precio en la confirmación.
 
 BOTONES SIEMPRE — HERRAMIENTA mostrar_opciones
 Cuando necesités que el médico elija entre opciones concretas (fecha ambigua, sí/no, qué acción tomar), SIEMPRE usá la herramienta mostrar_opciones. NUNCA hagas una pregunta de opciones solo con texto — el médico debe poder tocar un botón para responder.
@@ -600,7 +619,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
                     crear_disponibilidad: describirCrearDisponibilidad(toolInput),
-                    bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
+                    bloquear_periodo: describirBloquearPeriodo(toolInput),
                     cancelar_turno: toolInput.paciente_nombre
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,
