@@ -96,6 +96,13 @@ El problema que veníamos parchando es que **el prompt promete más de lo que la
 - Previene el riesgo de quedar disponible por olvido (no-show pagado).
 - La futura tool de Nova para activar CI debe respetar el mismo tope de 3h.
 
+## Backlog técnico (auditoría Roberto, 01/06)
+
+- **`reprogramar_turno` necesita un RPC dedicado.** El RPC existente `reprogramar_turno_atomico` es el flujo del PACIENTE usando un crédito de cancelación (requiere `reintegro_estado='pendiente'`, límite de 2 reprogramaciones, vencimiento 45 días). NO sirve para que el médico mueva un turno ACTIVO (`reintegro_estado=NULL`): reusarlo dejaba al paciente con dos turnos confirmados. La reprogramación iniciada por el médico necesita su propia función: mover al paciente al slot nuevo, liberar el viejo (`estado='reprogramado'`), notificar. Sin las reglas de crédito.
+- **Bug latente en el RPC del paciente (CRÍTICO-1):** `reprogramar_turno_atomico` marca el origen como `usado_reprogramacion` pero no le cambia el `estado` → si el origen estaba `confirmado`, queda confirmado (doble turno). Nunca se disparó en prod (sin caller). Fix: `UPDATE origen SET estado='reprogramado'` dentro del RPC. Requiere migración + OK de Diego.
+- **REVOKE EXECUTE (IMPORTANTE-1):** el RPC es `SECURITY DEFINER` con EXECUTE para anon/authenticated/PUBLIC. Se autovalida (riesgo bajo) pero es superficie innecesaria. `REVOKE … FROM anon, authenticated, PUBLIC`. Mismo patrón que el backlog de `expirar_turno`.
+- **CHECK defensivo `turnos.monto >= 0`:** hoy no existe. La validación de rango está en el route, conviene una red en DB.
+
 ## Backlog descubierto en testing (01/06)
 
 - **Gestionar agendas existentes (modelos) por nombre/estado.** El médico piensa en "agendas" (la agenda *prueba*), pero Nova solo maneja turnos por fecha/horario. Capacidades naturales: "¿cuántas agendas activas tengo?", "eliminá la agenda de prueba", "desactivá la de los miércoles". Infra ya existe (`eliminarModelo`, `toggleModelo` en `src/app/medico/agenda/actions.ts`); falta darle a Nova las tools (`ver_agendas`, `eliminar_agenda`, `activar/desactivar_agenda`).
