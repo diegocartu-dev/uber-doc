@@ -34,6 +34,15 @@ function describirCrearDisponibilidad(t: Record<string, unknown>): string {
   return `Crear turnos ${diasTxt}, ${rango}, ${horario} (${canal})`;
 }
 
+// Descripción legible para la confirmación de bloquear_periodo.
+function describirBloquearPeriodo(t: Record<string, unknown>): string {
+  const desde = t.fecha_desde as string;
+  const hasta = t.fecha_hasta as string;
+  const horas = t.hora_inicio && t.hora_fin ? ` de ${t.hora_inicio} a ${t.hora_fin}` : " (día completo)";
+  const cuando = desde === hasta ? `el ${fechaLegible(desde)}` : `del ${fechaLegible(desde)} al ${fechaLegible(hasta)}`;
+  return `Bloquear turnos disponibles ${cuando}${horas}`;
+}
+
 function getAhoraAR(): { fecha: string; horaISO: string; contexto: string } {
   // Construir fecha/hora en zona Argentina (GMT-3, sin DST)
   const ahora = new Date();
@@ -118,26 +127,30 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "bloquear_agenda",
+    name: "bloquear_periodo",
     description:
-      "Bloquea un rango horario para que no se puedan reservar turnos. Requiere confirmación del médico antes de ejecutar.",
+      "Bloquea los turnos disponibles de un rango de fechas para que no se puedan reservar (vacaciones, francos, un día puntual). Para un solo día, fecha_desde = fecha_hasta. Opcionalmente se puede limitar a un rango horario; si se omiten las horas, bloquea el día completo. Requiere confirmación del médico. NO cancela turnos con pacientes: esos se informan aparte. Ejemplos: 'no atiendo del 10 al 20' → fecha_desde=2026-06-10, fecha_hasta=2026-06-20, sin horas. 'bloqueá las tardes de mañana' → un día, hora_inicio=13:00.",
     input_schema: {
       type: "object" as const,
       properties: {
-        fecha: {
+        fecha_desde: {
           type: "string",
-          description: "Fecha en formato YYYY-MM-DD",
+          description: "Primera fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_hasta.",
+        },
+        fecha_hasta: {
+          type: "string",
+          description: "Última fecha del bloqueo en formato YYYY-MM-DD. Para un solo día, igual a fecha_desde.",
         },
         hora_inicio: {
           type: "string",
-          description: "Hora de inicio del bloqueo en formato HH:MM",
+          description: "Hora de inicio del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
         hora_fin: {
           type: "string",
-          description: "Hora de fin del bloqueo en formato HH:MM",
+          description: "Hora de fin del bloqueo en formato HH:MM. Omitir para bloquear el día completo.",
         },
       },
-      required: ["fecha", "hora_inicio", "hora_fin"],
+      required: ["fecha_desde", "fecha_hasta"],
     },
   },
   {
@@ -606,7 +619,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
                     crear_disponibilidad: describirCrearDisponibilidad(toolInput),
-                    bloquear_agenda: `Bloquear agenda el ${toolInput.fecha} de ${toolInput.hora_inicio} a ${toolInput.hora_fin}`,
+                    bloquear_periodo: describirBloquearPeriodo(toolInput),
                     cancelar_turno: toolInput.paciente_nombre
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,

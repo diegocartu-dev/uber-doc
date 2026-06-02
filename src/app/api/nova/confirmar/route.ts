@@ -150,64 +150,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ exito: true, mensaje });
     }
 
-    if (accion === "bloquear_agenda") {
-      const { fecha, hora_inicio, hora_fin } = datos as {
-        fecha: string;
-        hora_inicio: string;
-        hora_fin: string;
+    if (accion === "bloquear_periodo") {
+      const { fecha_desde, fecha_hasta, hora_inicio, hora_fin } = datos as {
+        fecha_desde: string;
+        fecha_hasta: string;
+        hora_inicio?: string;
+        hora_fin?: string;
       };
 
-      // Bloquear slots existentes disponibles en ese rango
-      const { data: slotsExistentes } = await supabase
-        .from("turnos")
-        .select("id")
-        .eq("medico_id", medicoDbId)
-        .eq("fecha", fecha)
-        .eq("estado", "disponible")
-        .gte("hora_inicio", hora_inicio)
-        .lte("hora_fin", hora_fin);
+      const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!fechaRegex.test(fecha_desde) || !fechaRegex.test(fecha_hasta) || fecha_desde > fecha_hasta) {
+        return NextResponse.json({ exito: false, mensaje: "Rango de fechas inválido." }, { status: 400 });
+      }
 
-      if (slotsExistentes && slotsExistentes.length > 0) {
-        const ids = slotsExistentes.map((s) => s.id);
+      const conHoras = !!hora_inicio && !!hora_fin;
+      const aMin = (h: string) => {
+        const [hh, mm] = h.split(":").map(Number);
+        return hh * 60 + mm;
+      };
+      // Solape de intervalos para filtrar por hora (cuando se especifica una franja)
+      const seSolapa = <T extends { hora_inicio: string; hora_fin: string }>(arr: T[]) => {
+        if (!conHoras) return arr;
+        const hi = aMin(hora_inicio!);
+        const hf = aMin(hora_fin!);
+        return arr.filter((t) => aMin(t.hora_inicio) < hf && hi < aMin(t.hora_fin));
+      };
+
+      // Turnos DISPONIBLES del rango → se bloquean
+      const { data: disponibles } = await supabase
+        .from("turnos")
+        .select("id, hora_inicio, hora_fin")
+        .eq("medico_id", medicoDbId)
+        .eq("estado", "disponible")
+        .gte("fecha", fecha_desde)
+        .lte("fecha", fecha_hasta);
+
+      const idsABloquear = seSolapa(disponibles ?? []).map((t) => t.id);
+
+      // Turnos CON PACIENTE del rango → NO se tocan, solo se informan
+      const { data: ocupados } = await supabase
+        .from("turnos")
+        .select("id, hora_inicio, hora_fin")
+        .eq("medico_id", medicoDbId)
+        .in("estado", ["reservado_pendiente", "confirmado", "en_espera", "en_curso"])
+        .gte("fecha", fecha_desde)
+        .lte("fecha", fecha_hasta);
+
+      const pacientesEnRango = seSolapa(ocupados ?? []).length;
+
+      for (let i = 0; i < idsABloquear.length; i += 500) {
         const { error } = await supabase
           .from("turnos")
           .update({ estado: "bloqueado" })
-          .in("id", ids)
-          .eq("medico_id", medicoDbId);
-
+          .in("id", idsABloquear.slice(i, i + 500));
         if (error) {
-          return NextResponse.json({
-            exito: false,
-            mensaje: `Error al bloquear: ${error.message}`,
-          });
+          return NextResponse.json({ exito: false, mensaje: `Error al bloquear: ${error.message}` });
         }
-
-        return NextResponse.json({
-          exito: true,
-          mensaje: `Se bloquearon ${ids.length} turnos el ${fecha} de ${hora_inicio} a ${hora_fin}`,
-        });
       }
 
-      // Si no hay slots existentes, crear uno bloqueado
-      const { error } = await supabase.from("turnos").insert({
-        medico_id: medicoDbId,
-        fecha,
-        hora_inicio,
-        hora_fin,
-        estado: "bloqueado",
-      });
-
-      if (error) {
-        return NextResponse.json({
-          exito: false,
-          mensaje: `Error al bloquear: ${error.message}`,
-        });
+      let mensaje =
+        idsABloquear.length > 0
+          ? `Bloqueé ${idsABloquear.length} turno${idsABloquear.length !== 1 ? "s" : ""} disponible${idsABloquear.length !== 1 ? "s" : ""} en ese período.`
+          : "No había turnos disponibles para bloquear en ese período.";
+      if (pacientesEnRango > 0) {
+        mensaje += ` Ojo: hay ${pacientesEnRango} turno${pacientesEnRango !== 1 ? "s" : ""} con paciente en ese período que NO toqué. Si los querés cancelar, decímelo.`;
       }
-
-      return NextResponse.json({
-        exito: true,
-        mensaje: `Agenda bloqueada el ${fecha} de ${hora_inicio} a ${hora_fin}`,
-      });
+      return NextResponse.json({ exito: true, mensaje });
     }
 
     if (accion === "cancelar_turno") {
