@@ -589,7 +589,7 @@ export default function NovaChat() {
         <button
           onClick={toggleVoz}
           aria-label={vozActiva ? "Desactivar voz" : "Activar voz"}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-all active:scale-90"
           style={
             vozActiva
               ? { background: "#378ADD", color: "white" }
@@ -673,7 +673,8 @@ export default function NovaChat() {
                   <button
                     onClick={() => reproducirTTS(msg.content)}
                     aria-label="Escuchar este mensaje"
-                    className="mt-1.5 flex items-center gap-1 text-[12px] text-[#888780] active:opacity-60"
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium text-[#378ADD] transition-all active:scale-90"
+                    style={{ background: "#378ADD14", border: "0.5px solid #378ADD55" }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
