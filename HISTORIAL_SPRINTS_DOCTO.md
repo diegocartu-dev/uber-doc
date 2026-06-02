@@ -440,6 +440,48 @@ por sesión en CI (pendiente), CI con apagado 3h + aviso de extensión
 y se pasó a rediseño de capacidades (tools, no prompt). El prompt estaba
 bien; el límite eran las tools finas.
 
+#### 02/06 — Nova: recuperación de UX (voz + latencia + "responde raro")
+Diego reportó que Nova se había degradado: voz, lentitud y respuestas raras.
+Diagnóstico contra el sprint UX original (13/04): los fixes core seguían
+intactos (streaming, queries paralelas, fecha/hora, modelo `claude-sonnet-4-6`).
+La degradación vino de cambios acumulados. Resuelto en 3 frentes:
+
+**A — Voz (revertida al original + fix real):**
+- Se revirtió toda la saga de voz de esta sesión (toggle, botón Escuchar, voz
+  nativa) al estado original: OpenAI TTS + lectura automática de respuestas
+  ≤200 chars, sin controles nuevos.
+- **Bug real diagnosticado empíricamente:** la voz salía MUDA en iPhone. Con
+  instrumentación temporal se confirmó: OpenAI devolvía el audio OK (143KB) pero
+  el `<audio>` quedaba en `muted=true`. El desbloqueo de iOS muteaba para
+  "desbloquear" y su `play()` de desbloqueo ahora falla (cambio de comportamiento
+  de iOS sobre el mismo código) → nunca des-muteaba. Fix: forzar `audio.muted=false`
+  antes de cada `play()` + des-mutear en `finally` del desbloqueo. (PRs #130, #133)
+
+**B2 — "Responde raro":** 4 secciones de confirmación del prompt se pisaban entre
+sí (probable causa). Consolidadas en 1 regla coherente "CONFIRMACIÓN Y BOTONES":
+confirmar acción (= botón de la tool) vs elegir dato (= mostrar_opciones).
+Roberto OK, sin perder comportamiento. (PR #131, #127, #125)
+
+**B1 — "Tarda":** prompt caching de Anthropic. System prompt separado en bloque
+ESTÁTICO genérico (reglas + tools, con `cache_control:ephemeral`) + DINÁMICO
+(médico + agenda). El nombre del médico se movió al dinámico → prefijo estático
+idéntico entre médicos → cache-hit global. Verificado EMPÍRICAMENTE: cache_read
+= 7615 tokens en la 2da llamada (~90% del prompt servido desde cache, menor TTFT). (PR #134)
+
+**Aprendizajes:**
+- La voz web en iOS es frágil: el switch de silencio, el autoplay y el muteo del
+  desbloqueo pueden romperla; el `<audio>` puede "reproducir" mudo. Forzar
+  `muted=false` antes de cada play.
+- Cuando algo "andaba y dejó de andar" con código idéntico → es entorno (iOS,
+  caché, endpoint), no el código. Diagnosticar empíricamente (instrumentación
+  temporal) antes de parchar.
+- Cloudflare rate-banea la Management API ante ráfagas de requests (error 1010);
+  espaciar. Fallback: SQL Editor.
+- speechSynthesis (voz nativa) NO sirve para auto-read en iOS (iOS bloquea la voz
+  que no nace de un toque). Descartada.
+- ElevenLabs Flash quedó como opción futura para voz instantánea + premium
+  (Starter $6/mes con clonación) — no se adoptó por costo por ahora.
+
 #### 02/06 — Nova v2 · Fase 1 COMPLETA (3/3 tools) + sprint de DB
 **Mergeados:** PR #118 (voz), sprint de DB (SQL Editor), PR #121 (reprogramar).
 
