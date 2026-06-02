@@ -38,6 +38,10 @@ type Estado =
 
 function mapEstado(diditStatus: string | null, recienVolvio: boolean): Estado {
   const s = diditStatus ?? "Not Started";
+  // Aprobado por Didit pero identidad_validada todavía en vuelo (webhook/cruce) →
+  // "procesando". Esta pantalla solo se monta si !identidad_validada, así que un
+  // "Approved" acá significa que falta el flip final, NO que tenga que empezar.
+  if (s === "Approved") return "procesando";
   const terminal = ["In Review", "Resubmitted", "Declined"];
   // Volvió de Didit pero el webhook todavía no resolvió → mostrar "procesando".
   if (recienVolvio && !terminal.includes(s)) return "procesando";
@@ -86,14 +90,16 @@ function CtaSticky({
   onClick,
   cargando,
   error,
-  disabled = false,
+  atenuado = false,
+  hint,
   loadingLabel,
 }: {
   label: string;
   onClick: () => void;
   cargando: boolean;
   error: string | null;
-  disabled?: boolean;
+  atenuado?: boolean;
+  hint?: string;
   loadingLabel?: string;
 }) {
   return (
@@ -105,11 +111,17 @@ function CtaSticky({
         paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
       }}
     >
+      {hint && (
+        <p className="mb-2 text-center text-xs text-gray-500">{hint}</p>
+      )}
+      {/* El botón NUNCA se deshabilita por falta de checkbox (Safari iOS no
+          dispara click en disabled → callejón sin salida). Se atenúa por estilo
+          y la guarda vive en el onClick del caller. */}
       <button
         onClick={onClick}
-        disabled={disabled || cargando}
+        disabled={cargando}
         className="flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-60"
-        style={{ background: AZUL }}
+        style={{ background: AZUL, opacity: atenuado && !cargando ? 0.6 : undefined }}
       >
         {cargando ? (
           <>
@@ -239,7 +251,7 @@ export default function PantallaIdentidad({
         </p>
         <div
           className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          style={{ border: "1px solid #e5e7eb" }}
         >
           <div className="flex items-center gap-3 text-sm text-gray-700">
             <span
@@ -258,7 +270,7 @@ export default function PantallaIdentidad({
         </div>
         <button
           onClick={() => router.refresh()}
-          className="mt-6 w-full text-center text-sm transition hover:underline"
+          className="mt-6 w-full py-3 text-center text-sm transition hover:underline"
           style={{ color: GRIS }}
         >
           Actualizar estado
@@ -281,7 +293,7 @@ export default function PantallaIdentidad({
         </p>
         <div
           className="mt-5 rounded-xl bg-white p-4 text-left"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          style={{ border: "1px solid #e5e7eb" }}
         >
           <p className="text-sm font-medium text-gray-900">
             Para que salga bien:
@@ -347,7 +359,7 @@ export default function PantallaIdentidad({
         {/* Resumen escaneable */}
         <div
           className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          style={{ border: "1px solid #e5e7eb" }}
         >
           <div className="flex items-center gap-3 text-sm text-gray-700">
             <ScanLine size={20} style={{ color: AZUL }} className="shrink-0" />
@@ -374,14 +386,14 @@ export default function PantallaIdentidad({
         <p className="mt-5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
           Consentimiento
         </p>
-        <div className="mt-2 max-h-48 overflow-y-auto overscroll-contain whitespace-pre-line rounded-lg bg-white p-4 text-left text-xs leading-relaxed text-gray-600" style={{ border: "0.5px solid #e5e7eb" }}>
+        <div className="mt-2 max-h-48 overflow-y-auto overscroll-contain whitespace-pre-line rounded-lg bg-white p-4 text-left text-xs leading-relaxed text-gray-600" style={{ border: "1px solid #e5e7eb" }}>
           {CONSENTIMIENTO_IDENTIDAD_TEXTO}
         </div>
 
         {/* Checkbox grande, fila completa clickeable */}
         <label
           className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg bg-white p-3"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          style={{ border: "1px solid #e5e7eb" }}
         >
           <input
             type="checkbox"
@@ -399,20 +411,24 @@ export default function PantallaIdentidad({
           </span>
         </label>
 
-        <div onClick={() => !aceptado && setIntentoSinAceptar(true)}>
-          <CtaSticky
-            label="Aceptar y verificar"
-            onClick={iniciarVerificacion}
-            cargando={cargando}
-            error={error}
-            disabled={!aceptado}
-          />
-        </div>
-        {intentoSinAceptar && !aceptado && (
-          <p className="-mt-1 text-center text-xs text-gray-500">
-            Marcá la casilla para continuar
-          </p>
-        )}
+        <CtaSticky
+          label="Aceptar y verificar"
+          onClick={() => {
+            if (!aceptado) {
+              setIntentoSinAceptar(true);
+              return;
+            }
+            iniciarVerificacion();
+          }}
+          cargando={cargando}
+          error={error}
+          atenuado={!aceptado}
+          hint={
+            intentoSinAceptar && !aceptado
+              ? "Marcá la casilla para continuar"
+              : undefined
+          }
+        />
       </div>
     );
   } else {
@@ -433,7 +449,7 @@ export default function PantallaIdentidad({
         </p>
         <div
           className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
-          style={{ border: "0.5px solid #e5e7eb" }}
+          style={{ border: "1px solid #e5e7eb" }}
         >
           <div className="flex items-center gap-3 text-sm text-gray-700">
             <Clock size={18} style={{ color: GRIS }} className="shrink-0" />

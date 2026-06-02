@@ -48,9 +48,17 @@ export async function POST(req: NextRequest) {
       );
       return NextResponse.json({ error: "firma" }, { status: 401 });
     }
+  } else if (process.env.NODE_ENV === "production") {
+    // C1 (Roberto): fallar CERRADO en producción. Sin secret no hay primera
+    // línea de defensa; un secret olvidado en Vercel no puede degradar el
+    // webhook en silencio. En dev/preview se tolera para poder iterar.
+    console.error(
+      "[didit/webhook] DIDIT_WEBHOOK_SECRET ausente en producción — rechazando webhook"
+    );
+    return NextResponse.json({ error: "config" }, { status: 500 });
   } else {
     console.warn(
-      "[didit/webhook] DIDIT_WEBHOOK_SECRET no configurado — se omite verificación de firma (re-fetch protege igual)"
+      "[didit/webhook] DIDIT_WEBHOOK_SECRET no configurado (dev) — se omite verificación de firma"
     );
   }
 
