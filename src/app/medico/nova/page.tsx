@@ -380,9 +380,12 @@ export default function NovaChat() {
         audio.muted = true;
         audio.play().then(() => {
           audio.pause();
-          audio.muted = false;
           audio.currentTime = 0;
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => {
+          // Pase lo que pase con el play de desbloqueo, NUNCA dejar el elemento
+          // silenciado: si quedaba muted, las reproducciones reales no sonaban.
+          audio.muted = false;
+        });
       }
     } catch {
       // Fallback: intentar de nuevo en el próximo gesto
@@ -419,6 +422,11 @@ export default function NovaChat() {
 
       audio.src = url;
       audio.volume = 1;
+      // CRÍTICO: el desbloqueo de iOS deja el elemento en muted=true y lo
+      // des-silencia en una promesa que puede no ejecutarse. Forzamos muted=false
+      // acá para que NUNCA se reproduzca en silencio ("parece que habla pero no
+      // sale sonido").
+      audio.muted = false;
       await audio.play().catch(() => {
         // Autoplay bloqueado — fallback silencioso
         setHablando(false);
