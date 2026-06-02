@@ -14,7 +14,8 @@ function fechaLegible(fechaISO: string): string {
 // Descripción legible para la confirmación de crear_disponibilidad (rango + recurrencia).
 function describirCrearDisponibilidad(t: Record<string, unknown>): string {
   const canal = t.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular";
-  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min`;
+  const precioTxt = typeof t.precio === "number" && t.precio > 0 ? ` a $${(t.precio as number).toLocaleString("es-AR")}` : "";
+  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min${precioTxt}`;
   const desde = t.fecha_desde as string;
   const hasta = t.fecha_hasta as string;
   const dias = Array.isArray(t.dias_semana) ? (t.dias_semana as string[]) : [];
@@ -102,6 +103,10 @@ const novaTools: Anthropic.Tool[] = [
         duracion: {
           type: "number",
           description: "Duración de cada turno en minutos (20, 30 o 45). Si no la sabés, preguntá antes.",
+        },
+        precio: {
+          type: "number",
+          description: "Precio de la consulta para ESTA agenda, en pesos. Omitir si el médico no menciona un precio: se usa su precio configurado. El médico puede poner un precio distinto para una agenda puntual (ej: cobrar más un domingo o feriado).",
         },
         canal_origen: {
           type: "string",
@@ -462,6 +467,7 @@ Antes de crear, necesitás: el rango de fechas (un día, o desde/hasta), los dí
 - Si el médico no menciona la duración, preguntás antes de crear: "¿Cuánto dura cada turno?" Explicás brevemente por qué. Si ya está en el perfil, lo usás sin preguntar.
 - Interpretás el rango con naturalidad: "todo junio" → del 1 al 30 de junio. "todos los miércoles de junio" → rango del mes con dias_semana=['miercoles']. "el 5 de 8 a 12" → un solo día. "lunes a viernes" → esos cinco días. Si te falta una fecha clave o es ambigua, preguntás con mostrar_opciones.
 - Una sola llamada a crear_disponibilidad crea TODO el rango de una. No existe crear día por día.
+- PRECIO: si el médico menciona un valor para esa agenda (ej: "los domingos cobro más caro", "esta agenda a 30 mil"), pasalo en el campo precio. Si no menciona nada, omitilo y se usa su precio configurado. Podés contarle el precio en la confirmación.
 
 BOTONES SIEMPRE — HERRAMIENTA mostrar_opciones
 Cuando necesités que el médico elija entre opciones concretas (fecha ambigua, sí/no, qué acción tomar), SIEMPRE usá la herramienta mostrar_opciones. NUNCA hagas una pregunta de opciones solo con texto — el médico debe poder tocar un botón para responder.

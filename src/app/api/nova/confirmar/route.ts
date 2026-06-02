@@ -50,13 +50,14 @@ export async function POST(req: NextRequest) {
     const medicoDbId = medico.id;
 
     if (accion === "crear_disponibilidad") {
-      const { fecha_desde, fecha_hasta, dias_semana, hora_inicio, hora_fin, duracion, canal_origen } = datos as {
+      const { fecha_desde, fecha_hasta, dias_semana, hora_inicio, hora_fin, duracion, precio, canal_origen } = datos as {
         fecha_desde: string;
         fecha_hasta: string;
         dias_semana?: string[];
         hora_inicio: string;
         hora_fin: string;
         duracion?: number;
+        precio?: number;
         canal_origen: string;
       };
 
@@ -67,6 +68,8 @@ export async function POST(req: NextRequest) {
 
       // Duración: la del payload o, si no vino, la del perfil del médico
       const duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
+      // Precio: el de ESTA agenda si el médico lo indicó; si no, su precio default
+      const precioAgenda = typeof precio === "number" && precio > 0 ? precio : medico.precio_consulta;
 
       // Días de semana: nombres → números (1=lunes … 7=domingo). Vacío/omitido → todos los días del rango.
       const DIA_MAP: Record<string, number> = {
@@ -130,7 +133,7 @@ export async function POST(req: NextRequest) {
         fecha_inicio: fecha_desde,
         fecha_fin: fecha_hasta,
         duracion_turno: duracionMinutos,
-        precio: medico.precio_consulta,
+        precio: precioAgenda,
         franjas,
         canal_origen: canal_origen as "clinica_virtual" | "consultorio_privado",
         creado_por_nova: true,
