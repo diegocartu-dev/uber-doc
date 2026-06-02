@@ -362,9 +362,12 @@ export default function NovaChat() {
         audio.muted = true;
         audio.play().then(() => {
           audio.pause();
-          audio.muted = false;
           audio.currentTime = 0;
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => {
+          // Pase lo que pase con el play de desbloqueo, NUNCA dejar el elemento
+          // muteado (era la causa de que la voz saliera muda en iPhone).
+          audio.muted = false;
+        });
       }
     } catch {
       // Fallback: intentar de nuevo en el próximo gesto
@@ -372,62 +375,51 @@ export default function NovaChat() {
   }, []);
 
   const reproducirTTS = useCallback(async (texto: string) => {
-    // ⚠️ DIAGNÓSTICO TEMPORAL — SACAR cuando sepamos dónde falla la voz.
-    const diag = (m: string) =>
-      setMensajes((prev) => [...prev, { id: crypto.randomUUID(), role: "nova" as const, content: "🔎 " + m }]);
     try {
-      diag("paso 1: pidiendo audio a /api/nova/tts…");
       const res = await fetch("/api/nova/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ texto }),
       });
 
-      if (!res.ok) {
-        diag(`❌ TTS HTTP ${res.status} → falla el SERVIDOR/OpenAI (no es iOS)`);
-        return;
-      }
+      if (!res.ok) return;
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = audioRef.current;
-      if (!audio) {
-        diag("❌ no existe el elemento <audio>");
-        return;
-      }
+      if (!audio) return;
 
-      diag(`paso 2: audio recibido ${Math.round(blob.size / 1024)}KB · muted=${audio.muted} · desbloqueado=${audioDesbloqueado.current}`);
-
+      // Limpiar URL anterior si existe
       const urlAnterior = audio.src;
-      audio.onplay = () => {
-        setHablando(true);
-        diag("paso 3: onplay disparó → el audio ARRANCÓ (si no suena: muted o volumen/silencio iOS)");
-      };
+
+      audio.onplay = () => setHablando(true);
       audio.onended = () => {
         setHablando(false);
         URL.revokeObjectURL(url);
       };
       audio.onerror = () => {
         setHablando(false);
-        diag("❌ audio.onerror (el blob no se pudo decodificar)");
         URL.revokeObjectURL(url);
       };
 
       audio.src = url;
       audio.volume = 1;
-      try {
-        await audio.play();
-      } catch (e) {
-        diag(`❌ play() RECHAZADO: ${(e as Error).name} → iOS bloqueó la reproducción`);
+      // FIX (diagnosticado 02/06): el desbloqueo de iOS puede dejar el elemento
+      // en muted=true (su play() de desbloqueo falla y nunca des-silencia) → la
+      // voz se reproducía MUDA. Forzamos muted=false acá, siempre, antes de sonar.
+      audio.muted = false;
+      await audio.play().catch(() => {
+        // Autoplay bloqueado — fallback silencioso
         setHablando(false);
         URL.revokeObjectURL(url);
-      }
+      });
 
+      // Limpiar URL anterior
       if (urlAnterior && urlAnterior.startsWith("blob:")) {
         URL.revokeObjectURL(urlAnterior);
       }
-    } catch (e) {
-      diag(`❌ excepción: ${(e as Error).message}`);
+    } catch {
+      // TTS falló silenciosamente
     }
   }, []);
 
