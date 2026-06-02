@@ -318,6 +318,46 @@ export async function reprogramarTurno(
   return { ok: true };
 }
 
+// Reprogramación INICIADA POR EL MÉDICO: mueve un turno confirmado a otro slot
+// disponible, preservando el pago. Usa el RPC dedicado reprogramar_turno_medico
+// (NO el del paciente, que tiene reglas de crédito). Notifica al paciente.
+export async function reprogramarTurnoMedico(
+  turnoOrigenId: string,
+  nuevoTurnoId: string,
+  medicoId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc("reprogramar_turno_medico", {
+    p_turno_origen_id: turnoOrigenId,
+    p_nuevo_turno_id: nuevoTurnoId,
+    p_medico_id: medicoId,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  const resultado = data as string;
+  if (resultado !== "ok") return { ok: false, error: resultado };
+
+  // Notificar al paciente del nuevo horario (paciente_id se deriva del turno movido)
+  const { data: nuevoTurno } = await supabase
+    .from("turnos")
+    .select("fecha, hora_inicio, medico_id, paciente_id")
+    .eq("id", nuevoTurnoId)
+    .single();
+
+  if (nuevoTurno?.paciente_id) {
+    await insertarMensajeSistema(
+      nuevoTurnoId,
+      nuevoTurno.paciente_id,
+      nuevoTurno.medico_id,
+      `Tu turno fue reprogramado al ${formatearFechaCorta(nuevoTurno.fecha)} a las ${nuevoTurno.hora_inicio.slice(0, 5)}.`
+    );
+  }
+
+  return { ok: true };
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function insertarMensajeSistema(
