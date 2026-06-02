@@ -68,7 +68,17 @@ export async function POST(req: NextRequest) {
 
       // Duración: la del payload o, si no vino, la del perfil del médico
       const duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
-      // Precio: el de ESTA agenda si el médico lo indicó; si no, su precio default
+      // Precio: el de ESTA agenda si el médico lo indicó; si no, su precio default.
+      // Validación de rango: el precio lo provee el LLM desde lenguaje natural y se
+      // cobra real al paciente vía MP → topamos contra valores absurdos (Roberto CRÍTICO-2).
+      const PRECIO_MIN = 500;
+      const PRECIO_MAX = 500000;
+      if (typeof precio === "number" && precio > 0 && (precio < PRECIO_MIN || precio > PRECIO_MAX)) {
+        return NextResponse.json({
+          exito: false,
+          mensaje: `Ese precio ($${precio.toLocaleString("es-AR")}) está fuera de rango. El valor de consulta debe estar entre $${PRECIO_MIN.toLocaleString("es-AR")} y $${PRECIO_MAX.toLocaleString("es-AR")}.`,
+        });
+      }
       const precioAgenda = typeof precio === "number" && precio > 0 ? precio : medico.precio_consulta;
 
       // Días de semana: nombres → números (1=lunes … 7=domingo). Vacío/omitido → todos los días del rango.
