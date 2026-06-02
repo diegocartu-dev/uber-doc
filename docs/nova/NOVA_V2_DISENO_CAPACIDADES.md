@@ -79,6 +79,23 @@ El problema que veníamos parchando es que **el prompt promete más de lo que la
 - **Reprogramar:** ¿el paciente acepta el nuevo horario o es unilateral del médico con aviso?
 - **`invitar_a_control`:** alcance de la plantilla y consentimiento — definición de Carolina.
 
+## Modelo de precios + Consulta Inmediata (refinado con Diego, 01/06)
+
+**Decisión de Diego:** el precio NO es único global. Es por contexto:
+
+- **Turnos programados → precio POR AGENDA.** Permite cobrar distinto un domingo/feriado.
+  - Estado: **YA existe.** `agenda_modelos.precio` es editable en el formulario manual (`FormularioModelo.tsx`, campo "Valor de consulta"). Cada turno guarda su `monto` como foto.
+  - Falta: que **Nova** (`crear_disponibilidad`) acepte un precio por agenda en vez de usar siempre `medico.precio_consulta`.
+- **Consulta Inmediata → precio POR SESIÓN.** El médico fija el precio cada vez que habilita CI, para esa sesión de ≤3h.
+  - Hoy el panel de CI deja poner precio, pero lo **persiste como `medicos.precio_consulta` global** (acople a corregir). Hay que **decouplear**: el precio de la sesión de CI no debe pisar el precio default de los turnos.
+- **`medicos.precio_consulta`** pasa a ser solo el **default** que pre-llena ambos.
+
+**CI — apagado automático + aviso de expiración (decisión de Diego):**
+- Máximo **3 horas** por sesión; se apaga sola por default.
+- Antes de apagarse, avisar al médico: *"Tu sesión de Consulta Inmediata está por expirar. ¿La dejás activa 3 horas más?"* con botón para extender. Si no responde → se apaga. Si extiende → otras 3h.
+- Previene el riesgo de quedar disponible por olvido (no-show pagado).
+- La futura tool de Nova para activar CI debe respetar el mismo tope de 3h.
+
 ## Backlog descubierto en testing (01/06)
 
 - **Gestionar agendas existentes (modelos) por nombre/estado.** El médico piensa en "agendas" (la agenda *prueba*), pero Nova solo maneja turnos por fecha/horario. Capacidades naturales: "¿cuántas agendas activas tengo?", "eliminá la agenda de prueba", "desactivá la de los miércoles". Infra ya existe (`eliminarModelo`, `toggleModelo` en `src/app/medico/agenda/actions.ts`); falta darle a Nova las tools (`ver_agendas`, `eliminar_agenda`, `activar/desactivar_agenda`).
