@@ -471,7 +471,11 @@ export async function POST(req: NextRequest) {
         .join(" | ");
     }
 
-    const systemPrompt = `Sos Nova, la asistente personal del ${tituloDr} ${nombreMedico} dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
+    // Bloque ESTÁTICO (cacheable): personalidad + reglas. GENÉRICO — sin datos del
+    // médico — para que el prefijo (este bloque + tools) sea idéntico entre todos
+    // los médicos y dispare cache-hit global de Anthropic. El nombre y el contexto
+    // van en el bloque dinámico de abajo.
+    const systemStatic = `Sos Nova, la asistente personal del médico dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
 
 IDENTIDAD Y TONO
 Usás usted siempre, sin excepción. Cálida pero profesional. Nunca confianzuda ni efusiva. Sin exclamaciones exageradas. Concisa: nunca una palabra de más. Español rioplatense natural — decís "turnos", nunca "slots". Nunca usés markdown, asteriscos, negritas, bullets, guiones ni formato especial. Texto plano conversacional siempre. Tu respuesta se muestra en un chat de celular, no en un documento.
@@ -552,7 +556,7 @@ Respondés en una o dos oraciones cortas, con tu voz natural, cubriendo las cinc
 Ejemplo: "Puedo ayudarle con todo lo de su agenda — crear turnos programados, ver qué tiene para hoy o la semana, activar o cerrar su disponibilidad para atención inmediata, y contarle cuánto vale su consulta. ¿Por dónde arrancamos?"
 
 PRIMERA SESIÓN
-Si es_primera_sesion es true: "Hola ${tituloDr} ${apellidoMedico}, soy Nova, su asistente personal en Docto. No soy un menú de opciones ni un bot — estoy acá para entenderle y ayudarle de verdad con su agenda. ¿Le cuento cómo?"
+Si es_primera_sesion es true: saludás con su título y apellido (los tenés en el contexto de abajo) y te presentás. Ej: "Hola Dr. González, soy Nova, su asistente personal en Docto. No soy un menú de opciones ni un bot — estoy acá para entenderle y ayudarle de verdad con su agenda. ¿Le cuento cómo?"
 Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo las cinco cosas que podés hacer. Cálida, natural, sin sonar a manual.
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 
@@ -569,6 +573,12 @@ Si el médico menciona una fecha futura (ej: "el 29", "el martes"), usá ver_age
 Si el médico dice solo "el 29" y hay turnos tanto el 29 de este mes como el del próximo, usá mostrar_opciones(["29 de abril", "29 de mayo"]) para que elija.
 
 CONTEXTO ACTUAL
+Los datos concretos del médico y de hoy están en el bloque de contexto que sigue.`;
+
+    // Bloque DINÁMICO (NO cacheable): cambia por médico y por día, va después del
+    // bloque cacheado para no romper el cache-hit del prefijo estático.
+    const systemDynamic = `DATOS DEL MÉDICO Y CONTEXTO DE HOY
+Atendés al ${tituloDr} ${nombreMedico}. Dirigite a él como "${tituloDr} ${apellidoMedico}".
 Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
@@ -599,7 +609,14 @@ Próximos 45 días (resumen): ${proximosResumen}`;
             const msgStream = anthropic.messages.stream({
               model: "claude-sonnet-4-6",
               max_tokens: 1024,
-              system: systemPrompt,
+              // El cache_control en el bloque estático cachea TODO el prefijo
+              // (tools + reglas), que es idéntico entre médicos → cache-hit global,
+              // menos tokens reprocesados, menor latencia (TTFT). El bloque dinámico
+              // (médico + agenda de hoy) queda sin cachear.
+              system: [
+                { type: "text", text: systemStatic, cache_control: { type: "ephemeral" } },
+                { type: "text", text: systemDynamic },
+              ],
               tools: novaTools,
               messages,
             });
