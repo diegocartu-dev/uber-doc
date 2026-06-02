@@ -16,6 +16,7 @@ import { BadgeEsperando, BotonSilenciar, PopupEsperando } from "./NotificacionMe
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
+import PantallaIdentidad from "./PantallaIdentidad";
 import PanelProgresoPerfil from "./PanelProgresoPerfil";
 import BannerMercadoPago from "./BannerMercadoPago";
 import BannerFirmaElectronica from "./BannerFirmaElectronica";
@@ -27,9 +28,9 @@ import { formatNombreMedico } from "@/lib/utils/texto";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ aviso?: string; from?: string }>;
+  searchParams: Promise<{ aviso?: string; from?: string; identidad?: string }>;
 }) {
-  const { aviso, from } = await searchParams;
+  const { aviso, from, identidad } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -63,9 +64,10 @@ export default async function DashboardPage({
   }
 
   // Feature flags para UI
-  const [flagNovaAi, flagCiGlobal] = await Promise.all([
+  const [flagNovaAi, flagCiGlobal, flagIdentidadGate] = await Promise.all([
     getFlag("nova_ai"),
     getFlag("consulta_inmediata_global"),
+    getFlag("identidad_gate_activa"),
   ]);
 
   // AR timezone
@@ -82,6 +84,7 @@ export default async function DashboardPage({
     foto_credencial_url: string | null; slug: string | null;
     nombre_completo: string; telefono: string | null; foto_url: string | null;
     domicilio_consultorio: string | null; perfil_completo: boolean;
+    identidad_validada: boolean; didit_status: string | null;
   } | null = null;
 
   let consultasPendientes: {
@@ -188,7 +191,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo, identidad_validada, didit_status")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -384,6 +387,23 @@ export default async function DashboardPage({
         tipoMatricula={medico.tipo_matricula}
         numeroMatricula={medico.numero_matricula}
         fotoCredencialUrl={medico.foto_credencial_url}
+        userId={user.id}
+      />
+    );
+  }
+
+  // Gate de identidad biométrica (Didit). Detrás de feature flag para no
+  // bloquear médicos antes de tiempo. Va DESPUÉS de la verificación de matrícula.
+  if (
+    role === "medico" &&
+    medico &&
+    flagIdentidadGate &&
+    !medico.identidad_validada
+  ) {
+    return (
+      <PantallaIdentidad
+        diditStatus={medico.didit_status}
+        recienVolvio={identidad === "verificada"}
         userId={user.id}
       />
     );
