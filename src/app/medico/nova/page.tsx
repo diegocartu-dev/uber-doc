@@ -392,62 +392,39 @@ export default function NovaChat() {
     }
   }, []);
 
-  const reproducirTTS = useCallback(async (texto: string) => {
+  const reproducirTTS = useCallback((texto: string) => {
+    // Voz NATIVA del navegador (speechSynthesis): instantánea, lee completo,
+    // gratis y cross-platform (iPhone/Android/PC). Reemplaza el TTS de OpenAI que
+    // tenía 3-4s de delay y a veces cortaba la última oración.
     try {
-      const res = await fetch("/api/nova/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto }),
-      });
-
-      if (!res.ok) return;
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      // Limpiar URL anterior si existe
-      const urlAnterior = audio.src;
-
-      audio.onplay = () => setHablando(true);
-      audio.onended = () => {
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      };
-
-      audio.src = url;
-      audio.volume = 1;
-      // CRÍTICO: el desbloqueo de iOS deja el elemento en muted=true y lo
-      // des-silencia en una promesa que puede no ejecutarse. Forzamos muted=false
-      // acá para que NUNCA se reproduzca en silencio ("parece que habla pero no
-      // sale sonido").
-      audio.muted = false;
-      await audio.play().catch(() => {
-        // Autoplay bloqueado — fallback silencioso
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      });
-
-      // Limpiar URL anterior
-      if (urlAnterior && urlAnterior.startsWith("blob:")) {
-        URL.revokeObjectURL(urlAnterior);
-      }
+      const synth = window.speechSynthesis;
+      if (!synth || !texto) return;
+      synth.cancel(); // corta lo que esté leyendo + destraba un bug de iOS con speak
+      const utter = new SpeechSynthesisUtterance(texto);
+      utter.lang = "es-AR";
+      // Preferir una voz en español si el dispositivo ya la tiene cargada
+      const voces = synth.getVoices();
+      const vozEs =
+        voces.find((v) => v.lang === "es-AR") ||
+        voces.find((v) => v.lang.startsWith("es-419")) ||
+        voces.find((v) => v.lang.startsWith("es-MX")) ||
+        voces.find((v) => v.lang.startsWith("es-US")) ||
+        voces.find((v) => v.lang.startsWith("es"));
+      if (vozEs) utter.voice = vozEs;
+      utter.rate = 1;
+      utter.onstart = () => setHablando(true);
+      utter.onend = () => setHablando(false);
+      utter.onerror = () => setHablando(false);
+      synth.speak(utter);
     } catch {
-      // TTS falló silenciosamente
+      setHablando(false);
     }
   }, []);
 
   const detenerAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
+    try {
+      window.speechSynthesis?.cancel();
+    } catch { /* sin speechSynthesis */ }
     setHablando(false);
   }, []);
 
