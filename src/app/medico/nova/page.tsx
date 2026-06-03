@@ -11,7 +11,7 @@ declare global {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import Breadcrumb from "@/components/Breadcrumb";
+import BotonVolver from "@/components/ui/BotonVolver";
 
 // ── Types ──
 
@@ -595,7 +595,7 @@ export default function NovaChat() {
           )}
         </button>
       </header>
-      <Breadcrumb />
+      <BotonVolver />
 
       {/* ── Barra TTS ── */}
       {hablando && (

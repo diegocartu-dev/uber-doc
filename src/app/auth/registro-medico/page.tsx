@@ -6,6 +6,7 @@ import { Stethoscope, X, Upload, CheckCircle, ChevronLeft } from "lucide-react";
 import { registrarMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
+import InputMoneda from "@/components/ui/InputMoneda";
 
 const ESPECIALIDADES = [
   "Alergia e inmunología",
@@ -99,6 +100,7 @@ export default function RegistroMedicoPage() {
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalMatricula, setModalMatricula] = useState(false);
   const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
+  const [precioConsulta, setPrecioConsulta] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
   function validarPaso1(): boolean {
@@ -404,9 +406,17 @@ export default function RegistroMedicoPage() {
           <div className={paso === 3 ? "space-y-4" : "hidden"}>
             <div>
               <label htmlFor="precio_consulta" className={labelClass}>Valor de consulta</label>
-              <div className="relative mt-1">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
-                <input id="precio_consulta" name="precio_consulta" type="number" required min={1} className={inputClass + " pl-7"} placeholder="15000" />
+              <div className="mt-1">
+                <InputMoneda
+                  id="precio_consulta"
+                  name="precio_consulta"
+                  value={precioConsulta}
+                  onChange={setPrecioConsulta}
+                  required
+                  min={1}
+                  placeholder="15.000"
+                  className={inputClass}
+                />
               </div>
             </div>
 

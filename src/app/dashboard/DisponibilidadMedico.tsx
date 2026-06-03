@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { actualizarDisponibilidad, actualizarOcultoClinica, actualizarVisibleConsultorio } from "./actions";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
+import InputMoneda from "@/components/ui/InputMoneda";
 
 type Props = {
   medicoId: string;
@@ -333,9 +334,8 @@ export default function DisponibilidadMedico({
             </div>
             <div>
               <label className="block text-sm text-gray-400">Valor de consulta</label>
-              <div className="relative mt-1">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-gray-400">$</span>
-                <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${selectClass}`} style={selectStyle} />
+              <div className="mt-1">
+                <InputMoneda value={precio} onChange={setPrecio} className={`w-full ${selectClass}`} style={selectStyle} />
               </div>
             </div>
           </div>
