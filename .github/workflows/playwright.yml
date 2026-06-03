@@ -8,6 +8,10 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+permissions:
+  deployments: read
+  contents: read
+
 env:
   PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL || 'https://uber-doc.vercel.app' }}
 
@@ -15,7 +19,7 @@ jobs:
   test:
     name: Etapa 1 — Tests críticos
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +32,61 @@ jobs:
 
       - run: npx playwright install chromium
 
+      - name: Wait for Vercel preview deployment
+        if: github.event_name == 'pull_request'
+        id: preview
+        run: |
+          echo "Waiting for Vercel preview for commit $PR_SHA..."
+
+          for i in $(seq 1 30); do
+            DEPLOY_ID=$(gh api "repos/$GH_REPO/deployments?sha=$PR_SHA&environment=Preview" \
+              --jq '.[0].id // empty' 2>/dev/null)
+
+            if [ -n "$DEPLOY_ID" ]; then
+              STATUS=$(gh api "repos/$GH_REPO/deployments/$DEPLOY_ID/statuses" \
+                --jq '.[0].state // empty' 2>/dev/null)
+              URL=$(gh api "repos/$GH_REPO/deployments/$DEPLOY_ID/statuses" \
+                --jq '.[0].environment_url // empty' 2>/dev/null)
+
+              if [ "$STATUS" = "success" ] && [ -n "$URL" ]; then
+                echo "url=$URL" >> "$GITHUB_OUTPUT"
+                echo "Preview ready: $URL"
+                exit 0
+              fi
+              echo "Deploy found (id=$DEPLOY_ID), status=$STATUS — waiting... ($i/30)"
+            else
+              echo "No deployment found yet — waiting... ($i/30)"
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Timeout waiting for Vercel preview deployment (5 min)"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPO: ${{ github.repository }}
+
+      - name: Set test URL
+        id: test-url
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
+            if [[ ! "$PREVIEW_URL" =~ ^https://.*\.vercel\.app/?$ ]]; then
+              echo "::error::Preview URL does not match expected Vercel domain: $PREVIEW_URL"
+              exit 1
+            fi
+            echo "base_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+            echo "Testing against preview: $PREVIEW_URL"
+          else
+            echo "base_url=$FALLBACK_URL" >> "$GITHUB_OUTPUT"
+            echo "Testing against production: $FALLBACK_URL"
+          fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          FALLBACK_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+
       - name: Reset cuentas de prueba
         run: node scripts/sereno-reset.mjs
         env:
@@ -37,7 +96,11 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test --project=chromium
         env:
-          PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_BASE_URL: ${{ steps.test-url.outputs.base_url }}
+          # Bypass de Vercel Deployment Protection: deja al CI entrar al preview
+          # protegido (era lo que le faltaba a #65 → daba 401 → se revirtió).
+          # La cabecera se manda solo si hay secret (ver playwright.config.ts).
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - uses: actions/upload-artifact@v4
         if: always()
