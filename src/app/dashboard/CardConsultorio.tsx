@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Copy, Check, ExternalLink } from "lucide-react";
+import { Building2, Copy, Check } from "lucide-react";
 
 export default function CardConsultorio({ slug }: { slug: string }) {
   const [copiado, setCopiado] = useState(false);
@@ -17,18 +17,18 @@ export default function CardConsultorio({ slug }: { slug: string }) {
   return (
     <div
       className="rounded-xl bg-white p-5"
-      style={{ border: "1px solid #D85A30", boxShadow: "0 1px 3px rgba(216,90,48,0.08)" }}
+      style={{ border: "0.5px solid #e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}
     >
       <div className="flex items-center gap-3 mb-3">
         <div
           className="flex h-9 w-9 items-center justify-center rounded-lg"
-          style={{ background: "rgba(216, 90, 48, 0.1)" }}
+          style={{ background: "#f3f4f6" }}
         >
-          <Building2 size={18} style={{ color: "#D85A30" }} />
+          <Building2 size={18} style={{ color: "#888780" }} />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Tu Consultorio Particular</h3>
-          <p className="text-xs text-gray-500">Compartí este link con tus pacientes</p>
+          <h3 className="text-sm font-semibold text-gray-900">Tu consultorio particular</h3>
+          <p className="text-xs text-gray-500">Copiá el link y compartilo con tus pacientes</p>
         </div>
       </div>
 
@@ -47,15 +47,6 @@ export default function CardConsultorio({ slug }: { slug: string }) {
           {copiado ? <Check size={15} /> : <Copy size={15} />}
           <span className="hidden sm:inline">{copiado ? "Copiado" : "Copiar"}</span>
         </button>
-        <a
-          href={`/dr/${slug}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 flex items-center justify-center rounded-lg px-2.5 py-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-          title="Ver mi consultorio"
-        >
-          <ExternalLink size={16} />
-        </a>
       </div>
     </div>
   );
