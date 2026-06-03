@@ -204,6 +204,7 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 6i. Notificaciones push (Web Push) | ✅ Implementado (Sprint B, commit 4d8341f) |
 | 6j. Email transaccional pre/post consulta | ✅ Implementado |
 | 6k. Soporte paciente (canal) | ❌ Pendiente |
+| 6l. Grilla Clínica Virtual — cards honestas + orden de médicos (CI/turnos) + dato de espera | ⏳ En curso (sprint 03/06, ver DECISIONES_PRODUCTO §11) |
 
 > **6h — Evidencia:** src/app/page.tsx (614 lineas). Landing pacientes unificada como
 > pagina raiz. src/app/pacientes/page.tsx redirige. Commit 4de10c7 + b60439d.
