@@ -19,6 +19,7 @@ type Medico = {
   disponible: boolean;
   disponible_desde: string | null;
   disponible_hasta: string | null;
+  disponible_desde_at: string | null;
   precio_consulta: number;
   duracion_consulta: number;
   foto_url: string | null;
@@ -370,11 +371,19 @@ export default function GrillaEspecialidades({
     const ea = esperasPorMedico.get(a.id) ?? 0;
     const eb = esperasPorMedico.get(b.id) ?? 0;
     if (ea !== eb) return ea - eb;
-    // TODO(migración disponible_desde_at): cuando exista la columna, desempatar por
-    // `a.disponible_desde_at` vs `b.disponible_desde_at` (asc = el que prendió antes
-    // va primero). Hoy NO está disponible para el client del paciente (created_at fue
-    // revocado en 20260603_endurecer_medicos_grupo2.sql), así que usamos `id` como
-    // fallback estable y determinístico (NO aleatorio) para mantener un orden FIFO fijo.
+    // Desempate FIFO real (§11.4): el médico que se habilitó ANTES va primero, por
+    // `disponible_desde_at` ascendente. Un médico sin timestamp (null) va al final
+    // del desempate; si ambos son null caemos a `id` como orden estable y
+    // determinístico (NO aleatorio).
+    const da = a.disponible_desde_at;
+    const db = b.disponible_desde_at;
+    if (da && db) {
+      if (da !== db) return da < db ? -1 : 1;
+    } else if (da) {
+      return -1;
+    } else if (db) {
+      return 1;
+    }
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
