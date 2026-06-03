@@ -21,6 +21,7 @@ type Medico = {
   disponible_hasta: string | null;
   precio_consulta: number;
   duracion_consulta: number;
+  foto_url: string | null;
 };
 
 type ConsultaEspera = { medico_id: string };
@@ -592,9 +593,23 @@ export default function GrillaEspecialidades({
                       }`}
                       style={{ border: `1px solid var(--color-border-default)` }}
                     >
-                      <div>
+                      <div className="flex min-w-0 items-center gap-3">
+                        {m.foto_url ? (
+                          <div
+                            className="h-11 w-11 shrink-0 rounded-full bg-cover bg-center"
+                            style={{ backgroundImage: `url(${m.foto_url})`, backgroundColor: "var(--color-bg-tertiary)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}
+                          />
+                        ) : (
+                          <div
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                            style={{ backgroundColor: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}
+                          >
+                            {m.nombre_completo.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium" style={{ color: "var(--color-text-primary)" }}>
+                          <p className="truncate font-medium" style={{ color: "var(--color-text-primary)" }}>
                             {capitalizarNombre(m.nombre_completo)}
                           </p>
                           <span
@@ -619,6 +634,7 @@ export default function GrillaEspecialidades({
                             </>
                           )}
                         </p>
+                        </div>
                       </div>
                       {modalModo === "turno" ? (
                         <a
