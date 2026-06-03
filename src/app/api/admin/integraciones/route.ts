@@ -189,12 +189,26 @@ async function checkOpenAI(): Promise<CheckResult> {
 
 function checkSISA(): CheckResult {
   const now = new Date().toISOString();
-  const hasKey = !!process.env.SISA_API_KEY;
+  // BUG previo: chequeaba process.env.SISA_API_KEY, que no existe → siempre
+  // mostraba "simulacion" aunque REFEPS estuviera real. La integración real usa
+  // SISA_MODE + las credenciales del Bus REFEPS. Espejo de la lógica de
+  // /api/sisa: real si el modo no es "simulacion" Y están las credenciales.
+  // (SISA_MODE en prod puede traer comillas/\n por el bug de trailing chars,
+  // por eso se limpia con trim + replace antes de comparar.)
+  const mode = (process.env.SISA_MODE ?? "simulacion").trim().replace(/["']/g, "");
+  const hasCreds = !!(
+    process.env.REFEPS_SYSTEM_ID?.trim() &&
+    process.env.REFEPS_CREDENTIAL_ID?.trim() &&
+    process.env.REFEPS_TOKEN_SECRET?.trim()
+  );
+  const real = mode !== "simulacion" && hasCreds;
   return {
     nombre: "SISA / REFEPS",
     icono: "Shield",
-    estado: hasKey ? "ok" : "simulacion",
-    detalle: hasKey ? "Validacion de matriculas activa" : "Simulacion — sin API real conectada",
+    estado: real ? "ok" : "simulacion",
+    detalle: real
+      ? "Validación de matrículas activa (Bus REFEPS)"
+      : "Simulación — sin credenciales REFEPS en este entorno",
     latencia_ms: null,
     checked_at: now,
   };
