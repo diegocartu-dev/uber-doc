@@ -367,7 +367,7 @@ export default function PantallaIdentidad({
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-700">
             <Camera size={20} style={{ color: AZUL }} className="shrink-0" />
-            Te sacás una selfie con prueba de vida
+            Te sacás una selfie para confirmar que sos vos
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-700">
             <BadgeCheck size={20} style={{ color: AZUL }} className="shrink-0" />

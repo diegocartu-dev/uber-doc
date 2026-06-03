@@ -672,7 +672,7 @@ export default async function DashboardPage({
             </p>
             <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad} - {formatNombreMedico(consultaActiva.medico_nombre)}</p>
             <Link
-              href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/video` : `/sala-espera/${consultaActiva.id}`}
+              href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/sala` : `/sala-espera/${consultaActiva.id}`}
               className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
               style={{ background: consultaActiva.estado === "en_curso" ? "var(--color-info)" : "var(--color-success)" }}
             >

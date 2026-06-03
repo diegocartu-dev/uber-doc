@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       const pushPayload = {
         title: "🟢 Docto",
         body: `El ${formatNombreMedico(medico.nombre_completo)} está listo. Ingresá ahora a tu consulta.`,
-        url: tipo === "turno" ? `/turno/${consultaId}/espera` : `/consulta/${consultaId}/video`,
+        url: tipo === "turno" ? `/turno/${consultaId}/espera` : `/consulta/${consultaId}/sala`,
         tag: `inicio-${consultaId}`,
       };
       if (tipo === "consulta") {
