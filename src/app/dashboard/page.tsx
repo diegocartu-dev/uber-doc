@@ -549,13 +549,6 @@ export default async function DashboardPage({
           </nav>
 
           <div className="mx-auto max-w-7xl px-6 py-6">
-            {/* Consultorio Particular — solo si tiene slug */}
-            {medico.slug && (
-              <div className="mb-4">
-                <CardConsultorio slug={medico.slug} />
-              </div>
-            )}
-
             {/* Nova widget — solo si flag activo */}
             {flagNovaAi && (
               <NovaWidget
@@ -610,6 +603,13 @@ export default async function DashboardPage({
                 <>{colTurnos}{colConsulta}</>
               )}
             </div>
+
+            {/* Consultorio Particular — al fondo del scroll, acceso discreto */}
+            {medico.slug && (
+              <div className="mt-8">
+                <CardConsultorio slug={medico.slug} />
+              </div>
+            )}
           </div>
         </div>
       </DashboardMedicoProvider>
