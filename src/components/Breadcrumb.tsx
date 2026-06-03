@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
+import LinkNav from "./ui/LinkNav";
 
-type Crumb = { label: string; href?: string };
+export type Crumb = { label: string; href?: string };
 
 const BRAND = "var(--color-brand)";
 
-function buildCrumbs(pathname: string): Crumb[] | null {
+export function buildCrumbs(pathname: string): Crumb[] | null {
   // Normalizar segmentos dinámicos
   const p = pathname
     .replace(/\/medico\/paciente\/[^/]+$/, "/medico/paciente/:id")
@@ -40,6 +40,17 @@ function buildCrumbs(pathname: string): Crumb[] | null {
   return null; // ruta desconocida — sin breadcrumb
 }
 
+/**
+ * Destino jerárquico de "Volver": el href del penúltimo crumb del árbol.
+ * Para /medico/agenda ([Docto→/dashboard, Mi agenda]) → "/dashboard".
+ * En home (/dashboard) o rutas desconocidas → null (no se muestra Volver).
+ */
+export function getParentHref(pathname: string): string | null {
+  const crumbs = buildCrumbs(pathname);
+  if (!crumbs || crumbs.length < 2) return null;
+  return crumbs[crumbs.length - 2].href ?? null;
+}
+
 export default function Breadcrumb() {
   const pathname = usePathname();
   const crumbs = buildCrumbs(pathname);
@@ -61,13 +72,13 @@ export default function Breadcrumb() {
                 />
               )}
               {crumb.href && !isLast ? (
-                <Link
+                <LinkNav
                   href={crumb.href}
                   className="text-[12px] font-medium hover:underline underline-offset-2 transition-opacity hover:opacity-80"
                   style={{ color: BRAND }}
                 >
                   {crumb.label}
-                </Link>
+                </LinkNav>
               ) : (
                 <span
                   className="text-[12px]"

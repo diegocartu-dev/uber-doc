@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Stethoscope, Menu } from "lucide-react";
 import MenuDrawer from "./MenuDrawer";
-import Breadcrumb from "./Breadcrumb";
+import BotonVolver from "./ui/BotonVolver";
+import LinkNav from "./ui/LinkNav";
 import { getLogoHref } from "@/lib/origin-slug";
 
 type Props = {
@@ -36,7 +37,7 @@ export default function AppNavbar({ userName, userRole, showMenu = true, logoHre
           style={{ borderBottom: "1px solid var(--color-border-default)", height: 56 }}
         >
           <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 lg:px-6">
-            <Link href={resolvedHref} className="flex items-center gap-2">
+            <LinkNav href={resolvedHref} className="flex items-center gap-2" spinner={false}>
               <Stethoscope size={24} strokeWidth={2} color="var(--color-brand)" />
               <span
                 className="text-lg lowercase"
@@ -44,7 +45,7 @@ export default function AppNavbar({ userName, userRole, showMenu = true, logoHre
               >
                 docto
               </span>
-            </Link>
+            </LinkNav>
 
             {showMenu && userName && (
               <button
@@ -79,8 +80,8 @@ export default function AppNavbar({ userName, userRole, showMenu = true, logoHre
           </div>
         </nav>
 
-        {/* Breadcrumb: solo para usuarios autenticados */}
-        {userName && <Breadcrumb />}
+        {/* Navegación jerárquica (Opción B): botón Volver reemplaza al breadcrumb */}
+        {userName && <BotonVolver />}
       </div>
 
       {showMenu && userName && (

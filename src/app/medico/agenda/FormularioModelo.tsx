@@ -8,6 +8,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { guardarModelo } from "./actions";
+import InputMoneda from "@/components/ui/InputMoneda";
 
 type Modelo = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; activo: boolean; prioridad: number };
 type Franja = { dia_semana: number; hora_inicio: string; hora_fin: string };
@@ -136,8 +137,8 @@ export default function FormularioModelo({
     });
   }
 
-  const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75] min-h-[44px]";
-  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1D9E75] min-h-[44px]";
+  const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
+  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
   const borderStyle = { border: "0.5px solid #e5e7eb" };
 
   function FranjaRow({
@@ -240,9 +241,8 @@ export default function FormularioModelo({
         </div>
         <div className="flex-1">
           <label className="text-xs text-gray-400">Valor de consulta</label>
-          <div className="relative mt-1">
-            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-400">$</span>
-            <input type="number" min={0} value={precio} onChange={(e) => setPrecio(parseInt(e.target.value) || 0)} className={`w-full pl-7 ${inputClass}`} style={borderStyle} />
+          <div className="mt-1">
+            <InputMoneda value={precio} onChange={setPrecio} className={`w-full ${inputClass}`} style={borderStyle} />
           </div>
         </div>
       </div>
@@ -290,7 +290,7 @@ export default function FormularioModelo({
         <div className="mt-5">
           <div className="flex items-center justify-between">
             <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
-            <button onClick={addFranjaBase} className="text-xs text-[#1D9E75] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
+            <button onClick={addFranjaBase} className="text-xs text-[#378ADD] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
           </div>
           <div className="mt-2 space-y-3 md:space-y-2">
             {franjasBase.map((f, i) => (
@@ -341,7 +341,7 @@ export default function FormularioModelo({
           type="checkbox"
           checked={soloConsultorioPrivado}
           onChange={(e) => setSoloConsultorioPrivado(e.target.checked)}
-          className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#1D9E75] focus:ring-[#1D9E75]"
+          className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
         />
         <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
       </label>
