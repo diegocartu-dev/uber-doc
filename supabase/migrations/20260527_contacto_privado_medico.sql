@@ -10,6 +10,18 @@
 -- inscripcion AAIP vigente (RL-2026-41929595). No requiere consulta legal
 -- adicional ni consentimiento separado. El TyC vigente los cubre.
 -- ============================================================================
+-- ⚠️  MANTENIMIENTO CRÍTICO (incidente 2026-06-03):
+-- A partir de esta migración, `medicos` NO tiene SELECT a nivel de tabla:
+-- usa grants COLUMNA-POR-COLUMNA (ver Step 2 abajo). Por lo tanto, TODA columna
+-- PÚBLICA nueva que agregues a `medicos` en cualquier migración futura DEBE
+-- sumarse a estos GRANT, o quedará ilegible para anon/authenticated y romperá
+-- en silencio cualquier SELECT de cliente que la incluya (error 42501 →
+-- médicos caen en modo paciente, turnos/reservas caídos).
+-- Esto ya pasó con 20260602_didit_identidad_medico.sql.
+-- Tras cualquier migración que toque `medicos`, correr:
+--   npx tsx scripts/verify-grants-medicos.ts
+-- Detalle: docs/security/2026-06-03-incidente-grant-medicos-didit.md
+-- ============================================================================
 
 -- Campos de contacto privado
 ALTER TABLE medicos ADD COLUMN IF NOT EXISTS celular_personal TEXT;
