@@ -44,7 +44,7 @@ export default async function MedicosLanding() {
       color: "#378ADD",
       promesaColor: "#1D9E75",
       title: "Consulta Inmediata",
-      promesa: "Prendés un switch y empezás a generar ingresos",
+      promesa: "Te ponés disponible y atendés al instante",
       descripcion: "Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran.",
     },
     {
@@ -128,7 +128,7 @@ export default async function MedicosLanding() {
             margin: "0 0 24px",
             color: "var(--color-text-primary)",
           }}>
-            Monetizá tu tiempo libre.{"\n"}
+            Tu consultorio virtual.{"\n"}
             Ejercé en tus términos.
           </h1>
           <p style={{
