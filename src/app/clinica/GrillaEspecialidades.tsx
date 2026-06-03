@@ -19,6 +19,7 @@ type Medico = {
   disponible: boolean;
   disponible_desde: string | null;
   disponible_hasta: string | null;
+  disponible_desde_at: string | null;
   precio_consulta: number;
   duracion_consulta: number;
   foto_url: string | null;
@@ -199,9 +200,13 @@ function calcularDisponibilidad(
     return algunoSinEspera ? "disponible" : "espera";
   }
 
-  if (tieneInmediata) return "espera";
+  // Nadie online AHORA: "espera" sería engañoso (mostraría "Con espera" con ambos
+  // botones grisados). Honestidad de estado: si hay turnos, el paciente agenda
+  // ("programada"); si no, no hay nada que ofrecer ("sin_medicos"). "espera" queda
+  // reservado SOLO para el caso real "hay alguien online pero con cola".
+  if (tieneTurnos) return "programada";
 
-  return "programada";
+  return "sin_medicos";
 }
 
 // Color semáforo para el conteo de cola (decisión §11.3 + design system):
@@ -370,11 +375,19 @@ export default function GrillaEspecialidades({
     const ea = esperasPorMedico.get(a.id) ?? 0;
     const eb = esperasPorMedico.get(b.id) ?? 0;
     if (ea !== eb) return ea - eb;
-    // TODO(migración disponible_desde_at): cuando exista la columna, desempatar por
-    // `a.disponible_desde_at` vs `b.disponible_desde_at` (asc = el que prendió antes
-    // va primero). Hoy NO está disponible para el client del paciente (created_at fue
-    // revocado en 20260603_endurecer_medicos_grupo2.sql), así que usamos `id` como
-    // fallback estable y determinístico (NO aleatorio) para mantener un orden FIFO fijo.
+    // Desempate FIFO real (§11.4): el médico que se habilitó ANTES va primero, por
+    // `disponible_desde_at` ascendente. Un médico sin timestamp (null) va al final
+    // del desempate; si ambos son null caemos a `id` como orden estable y
+    // determinístico (NO aleatorio).
+    const da = a.disponible_desde_at;
+    const db = b.disponible_desde_at;
+    if (da && db) {
+      if (da !== db) return da < db ? -1 : 1;
+    } else if (da) {
+      return -1;
+    } else if (db) {
+      return 1;
+    }
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
@@ -634,9 +647,9 @@ export default function GrillaEspecialidades({
                         : "Sin médicos disponibles ahora"}
                     </p>
                   )}
-                  {flagCiActiva && botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
+                  {botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
                     <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                      Sin turnos disponibles, consultá ahora
+                      {flagCiActiva ? "Sin turnos disponibles, consultá ahora" : "Sin turnos disponibles"}
                     </p>
                   )}
                 </div>
