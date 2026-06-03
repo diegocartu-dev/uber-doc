@@ -86,7 +86,9 @@ test.describe("Clínica Virtual — visibilidad y botones", () => {
       "Sin médicos disponibles ahora, agendá un turno",
       "Sin médicos disponibles ahora",
     ];
-    const copyAgendarDeshabilitado = ["Sin turnos disponibles, consultá ahora"];
+    // "Sin turnos disponibles" es el prefijo común (con CI activa el copy suma
+    // ", consultá ahora"; con CI global apagada queda solo "Sin turnos disponibles").
+    const copyAgendarDeshabilitado = ["Sin turnos disponibles"];
 
     async function verificarBotonesDeshabilitados(
       nombreBoton: string,

@@ -647,9 +647,9 @@ export default function GrillaEspecialidades({
                         : "Sin médicos disponibles ahora"}
                     </p>
                   )}
-                  {flagCiActiva && botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
+                  {botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
                     <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                      Sin turnos disponibles, consultá ahora
+                      {flagCiActiva ? "Sin turnos disponibles, consultá ahora" : "Sin turnos disponibles"}
                     </p>
                   )}
                 </div>
