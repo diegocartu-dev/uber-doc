@@ -335,4 +335,34 @@ controlada con médicos reales de confianza.
 
 ---
 
+## 11. CLÍNICA VIRTUAL — Grilla de especialidades y orden de médicos
+
+> Decidido por Diego (03/06/2026), debatido con Cortana + Sofía. Decisión cerrada.
+
+### 11.1 Card de especialidad = router honesto, NO ficha de producto
+La card de especialidad comunica **disponibilidad**, no precio.
+
+- **NUNCA muestra precio ni duración** (ni "desde $X"). Esos datos son **por-médico** y viven solo dentro de la ficha del médico (el modal). Mostrar el precio de un médico puntual en la card de especialidad confunde (sensación de bait-and-switch: el paciente ancla en un precio que después cambia).
+- **Consulta Inmediata:** muestra **"N médicos disponibles"** (informativo). Si N = 0 → botón "Consulta ahora" **grisado/deshabilitado**.
+- **Turnos programados:** muestra disponibilidad **SÍ/NO** (sin cantidad). Si no hay → botón "Agendar turno" **grisado** ("Sin turnos disponibles, consultá ahora").
+- El estado de la card refleja el **mejor** caso disponible (si hay al menos un médico sin espera, la especialidad está "Disponible ahora").
+
+### 11.2 Orden de los médicos (dentro del modal/lista) — es el algoritmo de distribución
+**Consulta Inmediata:**
+1. **Primario: menor demora** (menos pacientes en sala de espera primero). Sirve la promesa de CI: atención YA.
+2. **Desempate (todos iguales, ej. todos en 0): el que se habilitó antes** (FIFO de disponibilidad — el que hace más rato está online esperando un paciente va primero). Justicia entre médicos + incentivo a estar disponible. **NO** se usa orden aleatorio.
+
+**Turnos programados:**
+1. **Primero los médicos con el turno libre más cercano** (fecha/hora disponible más próxima). Es lo que el paciente busca en turnos: el más pronto.
+
+### 11.3 Qué se muestra por médico
+- **Consulta Inmediata:** cantidad de pacientes **en sala de espera** (incluyendo al que está siendo atendido), con **color semáforo** (verde sin espera / amarillo pocos / naranja muchos). Es un **conteo factual** (un hecho), **NO** un tiempo estimado en minutos (la estimación es optimista y erosiona confianza si la consulta se estira).
+- **Turnos programados:** el **próximo turno disponible** (fecha).
+- En ambos: nombre + foto + precio + duración viven en la **ficha del médico**, nunca en la card de especialidad.
+
+### 11.4 Nota técnica (pendiente de migración)
+El desempate de CI ("el que se habilitó antes") requiere registrar **cuándo** cada médico activó su disponibilidad. Hoy `medicos.disponible` es booleano sin timestamp → se necesita un campo tipo `disponible_desde_at` (momento en que prendió la disponibilidad). Cambio de DB chico.
+
+---
+
 *Documento generado el 15/04/2026. No requiere rediscusión — decisiones cerradas.*

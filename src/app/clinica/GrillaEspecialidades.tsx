@@ -25,7 +25,11 @@ type Medico = {
 };
 
 type ConsultaEspera = { medico_id: string };
-type TurnoClinicaVirtual = { medico_id: string };
+type TurnoClinicaVirtual = {
+  medico_id: string;
+  fecha: string; // YYYY-MM-DD
+  hora_inicio: string; // HH:MM:SS
+};
 
 type Especialidad = { nombre: string; icon: LucideIcon };
 
@@ -165,7 +169,8 @@ function estaEnHorario(medico: Medico): boolean {
 function calcularDisponibilidad(
   especialidad: string,
   medicos: Medico[],
-  medicosConTurnos: Set<string>
+  medicosConTurnos: Set<string>,
+  esperasPorMedico: Map<string, number>
 ): Disponibilidad {
   const medicosDeLaEsp = medicos.filter(
     (m) => m.especialidad === especialidad
@@ -184,11 +189,62 @@ function calcularDisponibilidad(
   if (!tieneInmediata && !tieneTurnos) return "sin_medicos";
 
   const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
-  if (disponiblesAhora.length > 0) return "disponible";
+  if (disponiblesAhora.length > 0) {
+    // El estado refleja el MEJOR caso (decisión §11.1): si hay al menos un médico
+    // online sin nadie en su cola → "Disponible ahora". Si todos los online tienen
+    // gente esperando → "Con espera".
+    const algunoSinEspera = disponiblesAhora.some(
+      (m) => (esperasPorMedico.get(m.id) ?? 0) === 0
+    );
+    return algunoSinEspera ? "disponible" : "espera";
+  }
 
   if (tieneInmediata) return "espera";
 
   return "programada";
+}
+
+// Color semáforo para el conteo de cola (decisión §11.3 + design system):
+//   0       → verde  "Sin espera"     (#1D9E75, indicador de estado)
+//   1-3     → amarillo (pendiente)    (#BA7517)
+//   4+      → naranja (alerta)        (#D85A30)
+function semaforoEspera(enEspera: number): { color: string; texto: string } {
+  if (enEspera === 0) {
+    return { color: "#1D9E75", texto: "Sin espera" };
+  }
+  const sufijo = `${enEspera} en sala de espera`;
+  if (enEspera <= 3) {
+    return { color: "#BA7517", texto: sufijo };
+  }
+  return { color: "#D85A30", texto: sufijo };
+}
+
+// Próximo turno disponible (la fecha/hora más cercana) por médico, a partir de la
+// lista de turnos ya ordenada ascendente en el server. Médicos sin turnos no
+// aparecen en el Map.
+function proximoTurnoPorMedico(
+  turnos: TurnoClinicaVirtual[]
+): Map<string, TurnoClinicaVirtual> {
+  const map = new Map<string, TurnoClinicaVirtual>();
+  for (const t of turnos) {
+    const actual = map.get(t.medico_id);
+    if (
+      !actual ||
+      t.fecha < actual.fecha ||
+      (t.fecha === actual.fecha && t.hora_inicio < actual.hora_inicio)
+    ) {
+      map.set(t.medico_id, t);
+    }
+  }
+  return map;
+}
+
+function formatFechaTurno(fecha: string, horaInicio: string): string {
+  // fecha YYYY-MM-DD, horaInicio HH:MM(:SS). Render sin TZ shift (fecha local).
+  const [y, mo, d] = fecha.split("-").map(Number);
+  const dt = new Date(y, (mo ?? 1) - 1, d ?? 1);
+  const dia = dt.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  return `${dia} - ${normalizeTime(horaInicio)} h`;
 }
 
 function normalize(text: string) {
@@ -276,6 +332,7 @@ export default function GrillaEspecialidades({
   const mostrarLeadCapture = termino && especialidadBuscadaSinMedicos && espVisibles.length === 0;
 
   const medicosConTurnos = new Set(turnosClinicaVirtual.map((t) => t.medico_id));
+  const turnoMasCercano = proximoTurnoPorMedico(turnosClinicaVirtual);
 
   const esperasPorMedico = new Map<string, number>();
   for (const c of consultasEspera) {
@@ -285,7 +342,7 @@ export default function GrillaEspecialidades({
     );
   }
 
-  const medicosDelModal = modalEspecialidad
+  const medicosDelModalSinOrden = modalEspecialidad
     ? medicos.filter((m) =>
         m.especialidad === modalEspecialidad &&
         (modalModo === "turno"
@@ -293,6 +350,33 @@ export default function GrillaEspecialidades({
           : m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
       )
     : [];
+
+  // Orden de médicos en el modal (decisión §11.2):
+  const medicosDelModal = [...medicosDelModalSinOrden].sort((a, b) => {
+    if (modalModo === "turno") {
+      // Turnos: por turno libre más cercano (asc). Sin turnos van al final.
+      const ta = turnoMasCercano.get(a.id);
+      const tb = turnoMasCercano.get(b.id);
+      if (!ta && !tb) return 0;
+      if (!ta) return 1;
+      if (!tb) return -1;
+      if (ta.fecha !== tb.fecha) return ta.fecha < tb.fecha ? -1 : 1;
+      if (ta.hora_inicio !== tb.hora_inicio)
+        return ta.hora_inicio < tb.hora_inicio ? -1 : 1;
+      return 0;
+    }
+    // CI: (a) menor cantidad en sala de espera asc;
+    //     (b) desempate FIFO de disponibilidad (el que se habilitó antes va primero).
+    const ea = esperasPorMedico.get(a.id) ?? 0;
+    const eb = esperasPorMedico.get(b.id) ?? 0;
+    if (ea !== eb) return ea - eb;
+    // TODO(migración disponible_desde_at): cuando exista la columna, desempatar por
+    // `a.disponible_desde_at` vs `b.disponible_desde_at` (asc = el que prendió antes
+    // va primero). Hoy NO está disponible para el client del paciente (created_at fue
+    // revocado en 20260603_endurecer_medicos_grupo2.sql), así que usamos `id` como
+    // fallback estable y determinístico (NO aleatorio) para mantener un orden FIFO fijo.
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
 
   function handleElegirMedico(medicoId: string, especialidad: string) {
     router.push(`/triage?medicoId=${encodeURIComponent(medicoId)}&especialidad=${encodeURIComponent(especialidad)}`);
@@ -400,16 +484,17 @@ export default function GrillaEspecialidades({
       {/* Grilla */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {espVisibles.map((esp) => {
-          const estado = calcularDisponibilidad(esp.nombre, medicos, medicosConTurnos);
+          const estado = calcularDisponibilidad(esp.nombre, medicos, medicosConTurnos, esperasPorMedico);
           const { color, texto } = semaforo(estado);
           const esSinMedicos = estado === "sin_medicos";
 
-          const tieneInmediata = medicos.some(
-            (m) =>
-              m.especialidad === esp.nombre &&
-              (m.disponible || m.modalidad_atencion === "inmediata" || m.modalidad_atencion === "ambas")
-          );
-          const botonConsultaDeshabilitado = !tieneInmediata;
+          // CI: cantidad de médicos efectivamente disponibles AHORA (disponible=true
+          // y dentro de su franja horaria). Es el N que se muestra en la card y el
+          // que decide si el botón "Consulta ahora" se habilita (decisión §11.1).
+          const medicosDisponiblesAhora = medicos.filter(
+            (m) => m.especialidad === esp.nombre && estaEnHorario(m)
+          ).length;
+          const botonConsultaDeshabilitado = medicosDisponiblesAhora === 0;
 
           const tieneTurnosCV = medicos.some(
             (m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id)
@@ -459,22 +544,23 @@ export default function GrillaEspecialidades({
                 {esp.nombre}
               </h3>
 
-              {(() => {
-                const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre);
-                if (medicosEsp.length === 0) return null;
-                const minPrecio = Math.min(...medicosEsp.map((m) => m.precio_consulta));
-                const minDuracion = medicosEsp.find((m) => m.precio_consulta === minPrecio)?.duracion_consulta;
-                return (
-                  <p className="mt-1 text-xs font-medium" style={{ color: "var(--color-text-primary)" }}>
-                    {formatPrecio(minPrecio)}
-                    {minDuracion && (
-                      <span className="ml-1 font-normal" style={{ color: "var(--color-text-tertiary)" }}>
-                        - {minDuracion} min
-                      </span>
-                    )}
+              {/* Disponibilidad honesta (decisión §11.1): la card es un router de
+                  disponibilidad, NO una ficha de producto. Sin precio ni duración —
+                  esos datos viven por-médico dentro de la ficha (modal). */}
+              {!esSinMedicos && (
+                <div className="mt-1 space-y-0.5">
+                  {flagCiActiva && (
+                    <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      {medicosDisponiblesAhora > 0
+                        ? `${medicosDisponiblesAhora} ${medicosDisponiblesAhora === 1 ? "médico disponible" : "médicos disponibles"}`
+                        : "Sin médicos disponibles ahora"}
+                    </p>
+                  )}
+                  <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                    {tieneTurnosCV ? "Turnos: sí" : "Turnos: no"}
                   </p>
-                );
-              })()}
+                </div>
+              )}
 
               {medicosMatch.length > 0 && (
                 <p className="mt-1 text-xs" style={{ color: "var(--color-text-link)" }}>
@@ -543,10 +629,12 @@ export default function GrillaEspecialidades({
                   </div>
                   {botonConsultaDeshabilitado && (
                     <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
-                      Solo turnos programados para esta especialidad
+                      {tieneTurnosCV
+                        ? "Sin médicos disponibles ahora, agendá un turno"
+                        : "Sin médicos disponibles ahora"}
                     </p>
                   )}
-                  {botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
+                  {flagCiActiva && botonAgendarDeshabilitado && !botonConsultaDeshabilitado && (
                     <p className="mt-1.5 text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
                       Sin turnos disponibles, consultá ahora
                     </p>
@@ -582,8 +670,9 @@ export default function GrillaEspecialidades({
               <div className="mt-4 space-y-3">
                 {medicosDelModal.map((m) => {
                   const enEspera = esperasPorMedico.get(m.id) ?? 0;
-                  const tiempoEstimado = enEspera * m.duracion_consulta;
                   const disponibleAhora = estaEnHorario(m);
+                  const esperaInfo = semaforoEspera(enEspera);
+                  const proxTurno = turnoMasCercano.get(m.id);
 
                   return (
                     <div
@@ -617,22 +706,23 @@ export default function GrillaEspecialidades({
                             style={{ backgroundColor: disponibleAhora ? "var(--color-success)" : "var(--color-border-default)" }}
                           />
                         </div>
-                        <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                          {formatPrecio(m.precio_consulta)} - {m.duracion_consulta} min
-                        </p>
+                        {/* Primera línea = dato de decisión (decisión §11.3).
+                            CI: conteo factual de cola con color semáforo.
+                            Turnos: próximo turno disponible (fecha). */}
+                        {modalModo === "turno" ? (
+                          <p className="mt-0.5 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                            {proxTurno
+                              ? `Próximo turno: ${formatFechaTurno(proxTurno.fecha, proxTurno.hora_inicio)}`
+                              : "Sin turnos disponibles"}
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-sm font-medium" style={{ color: esperaInfo.color }}>
+                            {disponibleAhora ? esperaInfo.texto : "No disponible ahora"}
+                          </p>
+                        )}
+                        {/* Línea secundaria = ficha del médico: precio + duración. */}
                         <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-                          {!disponibleAhora ? (
-                            <span>No disponible ahora</span>
-                          ) : enEspera === 0 ? (
-                            <span className="font-medium" style={{ color: "var(--color-success)" }}>
-                              Sin espera
-                            </span>
-                          ) : (
-                            <>
-                              {enEspera} paciente{enEspera !== 1 ? "s" : ""} en
-                              espera - ~{tiempoEstimado} min
-                            </>
-                          )}
+                          {formatPrecio(m.precio_consulta)} - {m.duracion_consulta} min
                         </p>
                         </div>
                       </div>

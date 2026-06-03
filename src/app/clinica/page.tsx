@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import GrillaEspecialidades from "./GrillaEspecialidades";
 import { getFlag } from "@/lib/feature-flags";
@@ -44,22 +45,34 @@ export default async function ClinicaPage() {
   if (flagIdentidadGate) medicosQuery = medicosQuery.eq("identidad_validada", true);
   const { data: medicos } = await medicosQuery;
 
-  // Contar turnos disponibles en clínica virtual por médico (para decidir visibilidad del botón "Agendar turno")
+  // Turnos disponibles en clínica virtual: traemos fecha + hora_inicio para poder
+  // ordenar los médicos por "turno libre más cercano" (decisión §11.2). Mismo
+  // filtro que ya andaba en producción (estado disponible, canal clinica_virtual,
+  // fecha >= hoy); solo se amplían las columnas seleccionadas de la misma tabla.
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
   const { data: turnosDisponibles } = await supabase
     .from("turnos")
-    .select("medico_id")
+    .select("medico_id, fecha, hora_inicio")
     .eq("estado", "disponible")
     .eq("canal_origen", "clinica_virtual")
     .gte("fecha", hoy)
+    .order("fecha", { ascending: true })
+    .order("hora_inicio", { ascending: true })
     .limit(500);
 
-  // Contar consultas en espera por médico para estimar tiempos
-  const { data: consultasEspera } = await supabase
+  // Cola en espera por médico (decisión §11.3): "pacientes en sala de espera
+  // INCLUYENDO al que está siendo atendido" = consultas en estado esperando +
+  // en_curso. La RLS de `consultas` solo deja al paciente ver SUS propias
+  // consultas (auth.uid() = paciente_id), por lo que con el client del paciente
+  // este conteo daría siempre ~0. Usamos admin client para leer el AGREGADO real
+  // de la cola: solo se selecciona medico_id (un número por médico), NUNCA datos
+  // ni identidad de otros pacientes. Server-side, el service role no sale al cliente.
+  const supabaseAdmin = createAdminClient();
+  const { data: consultasEspera } = await supabaseAdmin
     .from("consultas")
     .select("medico_id")
-    .eq("estado", "esperando");
+    .in("estado", ["esperando", "en_curso"]);
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
