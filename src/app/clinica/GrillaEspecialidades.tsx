@@ -200,9 +200,13 @@ function calcularDisponibilidad(
     return algunoSinEspera ? "disponible" : "espera";
   }
 
-  if (tieneInmediata) return "espera";
+  // Nadie online AHORA: "espera" sería engañoso (mostraría "Con espera" con ambos
+  // botones grisados). Honestidad de estado: si hay turnos, el paciente agenda
+  // ("programada"); si no, no hay nada que ofrecer ("sin_medicos"). "espera" queda
+  // reservado SOLO para el caso real "hay alguien online pero con cola".
+  if (tieneTurnos) return "programada";
 
-  return "programada";
+  return "sin_medicos";
 }
 
 // Color semáforo para el conteo de cola (decisión §11.3 + design system):
