@@ -43,7 +43,7 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, foto_url")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -60,7 +60,8 @@ export default async function ConsultorioPublicoPage({
   }
 
   const initials = medico.nombre_completo
-    .split(" ")
+    .split(/\s+/)
+    .filter(Boolean)
     .map((w: string) => w[0])
     .slice(0, 2)
     .join("")
@@ -77,15 +78,23 @@ export default async function ConsultorioPublicoPage({
         </Link>
 
         {/* Avatar */}
-        <div
-          className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-2xl font-semibold"
-          style={{
-            backgroundColor: "var(--color-bg-tertiary)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          {initials}
-        </div>
+        {medico.foto_url ? (
+          <div
+            className="mx-auto h-20 w-20 rounded-full bg-cover bg-center"
+            style={{ backgroundImage: `url(${medico.foto_url})`, backgroundColor: "var(--color-bg-tertiary)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}
+          />
+        ) : (
+          <div
+            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-2xl font-semibold"
+            style={{
+              backgroundColor: "var(--color-bg-tertiary)",
+              color: "var(--color-text-secondary)",
+              boxShadow: "inset 0 0 0 1px var(--color-border-default)",
+            }}
+          >
+            {initials}
+          </div>
+        )}
 
         {/* Info del médico */}
         <h1
