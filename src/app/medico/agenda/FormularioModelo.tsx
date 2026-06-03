@@ -29,6 +29,24 @@ const MINUTOS = ["00", "15", "30", "45"];
 // 0 = no seleccionado, 1 = horario base (verde), 2 = personalizado (azul)
 type DiaEstado = 0 | 1 | 2;
 
+// Formato yyyy-mm-dd (el que esperan los <input type="date"> y guardarModelo)
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function defaultFechaInicio(): string {
+  return toISODate(new Date());
+}
+
+function defaultFechaFin(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return toISODate(d);
+}
+
 export default function FormularioModelo({
   modelosExistentes,
   duracionConsulta,
@@ -41,21 +59,36 @@ export default function FormularioModelo({
   const [nombre, setNombre] = useState("");
   const [duracionTurno, setDuracionTurno] = useState(duracionConsulta);
   const [precio, setPrecio] = useState(precioConsulta);
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(defaultFechaInicio);
+  const [fechaFin, setFechaFin] = useState(defaultFechaFin);
   const [dias, setDias] = useState<Record<number, DiaEstado>>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 });
   const [franjasBase, setFranjasBase] = useState<{ inicio: string; fin: string }[]>([
     { inicio: "09:00", fin: "13:00" },
   ]);
   const [franjasCustom, setFranjasCustom] = useState<Record<number, { inicio: string; fin: string }[]>>({});
   const [soloConsultorioPrivado, setSoloConsultorioPrivado] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Errores por campo (clave: nombre | fechas | dias | franjas). Cada campo muestra
+  // SU mensaje pegado debajo + borde rojo. Reemplaza el banner global "mudo".
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  // Error del SERVER (falló el guardado) — banner general cerca del botón, no de campo.
+  const [errorServer, setErrorServer] = useState<string | null>(null);
+  // Recién después del primer intento de guardar revalidamos onChange (no antes — sería agresivo).
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLDivElement>(null);
 
+  // Refs por campo validable — para hacer scrollIntoView + focus al primero con error.
+  const nombreRef = useRef<HTMLInputElement>(null);
+  const fechaInicioRef = useRef<HTMLInputElement>(null);
+  const diasRef = useRef<HTMLDivElement>(null);
+  const franjasRef = useRef<HTMLDivElement>(null);
+
+  // Una vez que el médico tocó Guardar, revalidamos en vivo para que el rojo
+  // desaparezca solo al corregir. Antes del primer intento NO validamos (sería agresivo).
   useEffect(() => {
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+    if (!intentoGuardar) return;
+    setErrores(validar());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intentoGuardar, nombre, fechaInicio, fechaFin, dias, franjasBase, franjasCustom]);
 
   function toggleDia(num: number) {
     setDias((prev) => {
@@ -102,16 +135,9 @@ export default function FormularioModelo({
     }));
   }
 
-  function handleGuardar() {
-    setError(null);
-    if (!nombre.trim()) { setError("Ingresa un nombre para el modelo."); return; }
-    if (!fechaInicio || !fechaFin) { setError("Selecciona fechas de inicio y fin."); return; }
-    if (fechaFin < fechaInicio) { setError("La fecha de fin debe ser igual o posterior a la fecha de inicio."); return; }
-
+  // Construye la lista de franjas a enviar según días seleccionados.
+  function construirFranjas(): Franja[] {
     const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0).map(([k]) => parseInt(k));
-    if (diasSeleccionados.length === 0) { setError("Selecciona al menos un dia."); return; }
-
-    // Construir franjas
     const todasFranjas: Franja[] = [];
     for (const diaNum of diasSeleccionados) {
       const estado = dias[diaNum];
@@ -120,8 +146,50 @@ export default function FormularioModelo({
         todasFranjas.push({ dia_semana: diaNum, hora_inicio: f.inicio, hora_fin: f.fin });
       }
     }
+    return todasFranjas;
+  }
 
-    if (todasFranjas.length === 0) { setError("Agrega al menos una franja horaria."); return; }
+  // Validación pura: devuelve un mapa de errores por campo (vacío = todo OK).
+  // Se reusa al Guardar y en la revalidación onChange post-primer-intento.
+  function validar(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!nombre.trim()) errs.nombre = "Ingresá un nombre para el modelo.";
+    if (!fechaInicio || !fechaFin) errs.fechas = "Seleccioná fechas de inicio y fin.";
+    else if (fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
+
+    const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0);
+    if (diasSeleccionados.length === 0) errs.dias = "Seleccioná al menos un día.";
+    else if (construirFranjas().length === 0) errs.franjas = "Agregá al menos una franja horaria.";
+
+    return errs;
+  }
+
+  // Lleva al primer campo con error (en orden visual), foco adentro.
+  function enfocarPrimerError(errs: Record<string, string>) {
+    const orden: [string, React.RefObject<HTMLElement | null>][] = [
+      ["nombre", nombreRef],
+      ["fechas", fechaInicioRef],
+      ["dias", diasRef],
+      ["franjas", franjasRef],
+    ];
+    for (const [campo, ref] of orden) {
+      if (errs[campo] && ref.current) {
+        ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        ref.current.focus({ preventScroll: true });
+        return;
+      }
+    }
+  }
+
+  function handleGuardar() {
+    setErrorServer(null);
+    setIntentoGuardar(true);
+    const errs = validar();
+    setErrores(errs);
+    if (Object.keys(errs).length > 0) {
+      enfocarPrimerError(errs);
+      return;
+    }
 
     startTransition(async () => {
       const result = await guardarModelo({
@@ -130,16 +198,19 @@ export default function FormularioModelo({
         fecha_fin: fechaFin,
         duracion_turno: duracionTurno,
         precio,
-        franjas: todasFranjas,
+        franjas: construirFranjas(),
         canal_origen: soloConsultorioPrivado ? "consultorio_privado" : "clinica_virtual",
       });
-      if (result?.error) setError(result.error);
+      if (result?.error) setErrorServer(result.error);
     });
   }
 
   const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
   const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
   const borderStyle = { border: "0.5px solid #e5e7eb" };
+  const borderError = { border: "1px solid #E24B4A" };
+  // Borde rojo si el campo tiene error, gris si no.
+  const bordeDe = (campo: string) => (errores[campo] ? borderError : borderStyle);
 
   function FranjaRow({
     franja,
@@ -209,23 +280,21 @@ export default function FormularioModelo({
   }
 
   return (
-    <div ref={formRef} className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
+    <div className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
       <h2 className="text-sm font-medium text-gray-900">Nueva agenda</h2>
-
-      {error && (
-        <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
-      )}
 
       {/* Nombre */}
       <div className="mt-4">
         <label className="text-xs text-gray-400">Nombre</label>
         <input
+          ref={nombreRef}
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           placeholder="Ej: Semana laboral, Guardias, Vacaciones"
           className={`mt-1 w-full ${inputClass}`}
-          style={borderStyle}
+          style={bordeDe("nombre")}
         />
+        {errores.nombre && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.nombre}</p>}
       </div>
 
       {/* Duracion y precio */}
@@ -248,22 +317,30 @@ export default function FormularioModelo({
       </div>
 
       {/* Fechas */}
-      <div className="mt-4 flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
-          <label className="text-xs text-gray-400">Desde</label>
-          <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={borderStyle} />
+      <div className="mt-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <label className="text-xs text-gray-400">Desde</label>
+            <input ref={fechaInicioRef} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs text-gray-400">Hasta</label>
+            <input type="date" value={fechaFin} min={fechaInicio || undefined} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
+          </div>
         </div>
-        <div className="flex-1">
-          <label className="text-xs text-gray-400">Hasta</label>
-          <input type="date" value={fechaFin} min={fechaInicio || undefined} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={borderStyle} />
-        </div>
+        {errores.fechas && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
       </div>
 
       {/* Selector de dias */}
       <div className="mt-5">
         <label className="text-xs text-gray-400">Dias</label>
         <p className="mt-0.5 text-[10px] text-gray-400">1 toque = horario base · 2 toques = personalizado · 3 toques = quitar</p>
-        <div className="mt-2 flex flex-wrap gap-[6px]">
+        <div
+          ref={diasRef}
+          tabIndex={-1}
+          className="mt-2 flex flex-wrap gap-[6px] rounded-lg focus:outline-none"
+          style={errores.dias ? { ...borderError, padding: "6px" } : undefined}
+        >
           {DIAS.map((d) => {
             const estado = dias[d.num];
             return (
@@ -283,57 +360,63 @@ export default function FormularioModelo({
             );
           })}
         </div>
+        {errores.dias && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.dias}</p>}
       </div>
 
-      {/* Franjas base */}
-      {Object.values(dias).some((v) => v === 1) && (
-        <div className="mt-5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
-            <button onClick={addFranjaBase} className="text-xs text-[#378ADD] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
-          </div>
-          <div className="mt-2 space-y-3 md:space-y-2">
-            {franjasBase.map((f, i) => (
-              <FranjaRow
-                key={i}
-                franja={f}
-                onUpdate={(field, val) => updateFranjaBase(i, field, val)}
-                onRemove={() => removeFranjaBase(i)}
-                canRemove={franjasBase.length > 1}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Franjas personalizadas por dia */}
-      {Object.entries(dias)
-        .filter(([, v]) => v === 2)
-        .map(([k]) => {
-          const diaNum = parseInt(k);
-          const franjasDelDia = franjasCustom[diaNum] ?? [];
-          return (
-            <div key={diaNum} className="mt-4 rounded-lg bg-[var(--color-primary-soft)] p-4">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-[var(--color-brand-dark)]">
-                  {["", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"][diaNum]} — personalizado
-                </label>
-                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-[var(--color-text-link)] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
-              </div>
-              <div className="mt-2 space-y-3 md:space-y-2">
-                {franjasDelDia.map((f, i) => (
-                  <FranjaRow
-                    key={i}
-                    franja={f}
-                    onUpdate={(field, val) => updateFranjaCustom(diaNum, i, field, val)}
-                    onRemove={() => removeFranjaCustom(diaNum, i)}
-                    canRemove={franjasDelDia.length > 1}
-                  />
-                ))}
-              </div>
+      {/* Zona de franjas (base + personalizadas) — ancla de scroll/foco para error de franjas */}
+      <div ref={franjasRef} tabIndex={-1} className="focus:outline-none">
+        {/* Franjas base */}
+        {Object.values(dias).some((v) => v === 1) && (
+          <div className="mt-5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
+              <button onClick={addFranjaBase} className="text-xs text-[#378ADD] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
             </div>
-          );
-        })}
+            <div className="mt-2 space-y-3 md:space-y-2">
+              {franjasBase.map((f, i) => (
+                <FranjaRow
+                  key={i}
+                  franja={f}
+                  onUpdate={(field, val) => updateFranjaBase(i, field, val)}
+                  onRemove={() => removeFranjaBase(i)}
+                  canRemove={franjasBase.length > 1}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Franjas personalizadas por dia */}
+        {Object.entries(dias)
+          .filter(([, v]) => v === 2)
+          .map(([k]) => {
+            const diaNum = parseInt(k);
+            const franjasDelDia = franjasCustom[diaNum] ?? [];
+            return (
+              <div key={diaNum} className="mt-4 rounded-lg bg-[var(--color-primary-soft)] p-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-[var(--color-brand-dark)]">
+                    {["", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"][diaNum]} — personalizado
+                  </label>
+                  <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-[var(--color-text-link)] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
+                </div>
+                <div className="mt-2 space-y-3 md:space-y-2">
+                  {franjasDelDia.map((f, i) => (
+                    <FranjaRow
+                      key={i}
+                      franja={f}
+                      onUpdate={(field, val) => updateFranjaCustom(diaNum, i, field, val)}
+                      onRemove={() => removeFranjaCustom(diaNum, i)}
+                      canRemove={franjasDelDia.length > 1}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+        {errores.franjas && <p className="mt-2 text-[13px]" style={{ color: "#E24B4A" }}>{errores.franjas}</p>}
+      </div>
 
       {/* Canal */}
       <label className="mt-5 flex items-center gap-3 cursor-pointer">
@@ -345,6 +428,13 @@ export default function FormularioModelo({
         />
         <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
       </label>
+
+      {/* Error del server (falló el guardado) — banner general, cerca del botón Guardar */}
+      {errorServer && (
+        <div className="mt-6 rounded-lg p-3 text-sm" style={{ backgroundColor: "#FDECEC", color: "#E24B4A" }}>
+          {errorServer}
+        </div>
+      )}
 
       {/* Acciones */}
       <div className="mt-6 flex flex-col md:flex-row gap-3">
