@@ -2,6 +2,17 @@ import { defineConfig, devices } from "@playwright/test";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "https://uber-doc.vercel.app";
 
+// Bypass de Vercel Deployment Protection: cuando el CI testea un preview
+// protegido, mandamos esta cabecera en todas las requests para poder entrar.
+// Sin secret (local / producción no protegida) no se manda nada.
+const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const extraHTTPHeaders = BYPASS
+  ? {
+      "x-vercel-protection-bypass": BYPASS,
+      "x-vercel-set-bypass-cookie": "true",
+    }
+  : undefined;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -13,6 +24,7 @@ export default defineConfig({
     : "list",
   use: {
     baseURL: BASE_URL,
+    extraHTTPHeaders,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },

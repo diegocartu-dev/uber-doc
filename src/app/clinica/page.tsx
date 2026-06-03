@@ -37,7 +37,7 @@ export default async function ClinicaPage() {
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
   let medicosQuery = supabase
     .from("medicos")
-    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, foto_url")
+    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url")
     .eq("oculto_clinica", false)
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")

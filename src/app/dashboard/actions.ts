@@ -27,6 +27,24 @@ export async function actualizarDisponibilidad(data: {
   if (data.duracion_consulta) updateData.duracion_consulta = data.duracion_consulta;
   if (data.precio_consulta) updateData.precio_consulta = data.precio_consulta;
 
+  // Desempate FIFO de la grilla de Clínica Virtual (§11.2/§11.4): `disponible_desde_at`
+  // marca el instante en que el médico se habilita de forma CONTINUA. Solo se toca en la
+  // transición real (false→true setea now(), true→false limpia a null). Si el médico ya
+  // estaba disponible y solo guarda horario/precio/duración (handleGuardar manda
+  // disponible: true sin cambio de estado), NO se pisa el timestamp: mantiene su lugar
+  // en la cola. Para distinguir transición de re-guardado leemos el estado previo.
+  const { data: previo } = await supabase
+    .from("medicos")
+    .select("disponible")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (data.disponible && !previo?.disponible) {
+    updateData.disponible_desde_at = new Date().toISOString();
+  } else if (!data.disponible) {
+    updateData.disponible_desde_at = null;
+  }
+
   const { error } = await supabase
     .from("medicos")
     .update(updateData)
