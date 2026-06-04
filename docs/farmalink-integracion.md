@@ -31,15 +31,21 @@ cadenas que usan ese sistema. Es una mejora **post-MVP**.
 |---|---|
 | (a) Solicitud de homologación enviada | ✅ |
 | (b) **Acceso al Catálogo de APIs** (documentación) | ✅ Recibido — portal Axway/Joomla `https://catalogo-srv.farmalink.com.ar/` |
-| (c) **Accesos a TEST** (sandbox) | ⏳ **Próximo paso** — los envía el equipo de seguridad de Farmalink |
-| (d) Construir + probar contra TEST | ⬜ Pendiente |
+| (c) **Accesos a TEST** (OAuth, sandbox) | ✅ **Recibidos (04/06/2026)** — Jira SOL-3426. Cliente OAuth + usuario, en 2 mails ("Creación de usuario Client OAUTH Test 1/2 y 2/2"). |
+| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (ver §6.bis) |
 | (e) Homologación (validación de Farmalink) | ⬜ Pendiente |
 | (f) Producción | ⬜ Pendiente |
 
 > **Credenciales del catálogo:** en el mail de Farmalink ("[FARMALINK] [DOCTO]
 > Acceso a Catalogo de APIs") / gestor de secretos. **NO se commitean al repo.**
-> El catálogo requiere login en el portal (`/sign-in`) — la doc real está detrás
-> del login + se renderiza por JS (leer con navegador, no curl).
+> El catálogo requiere login en el portal — la doc real está detrás del login + se
+> renderiza por JS (leer con navegador, no curl).
+
+> **Credenciales TEST (OAuth) — NUNCA al repo.** Van al gestor de secretos y a
+> env vars de Vercel del entorno de prueba. Son DOS pares: un **cliente OAuth**
+> (→ header `Authorization: Basic`) y un **usuario** (→ headers `username`/`password`).
+> Nombres de env var sugeridos: `FARMALINK_TEST_CLIENT_ID`,
+> `FARMALINK_TEST_CLIENT_SECRET`, `FARMALINK_TEST_USER`, `FARMALINK_TEST_PASSWORD`.
 
 ## 3. Lo que YA tenemos listo de nuestro lado
 
@@ -69,6 +75,67 @@ Flujo previsto (fire-and-forget, NO acoplar la emisión a Farmalink):
 
 **Regla de oro:** si Farmalink falla o está caído, **la receta sigue siendo
 válida** y se entrega igual. La integración nunca bloquea la emisión.
+
+## 4.bis Spec REAL de la API (leída del catálogo, TEST — 04/06/2026)
+
+Host TEST de servicios: **`https://test-servicios.farmalink.com.ar`**
+
+### Autenticación — API "Token" (REST, OAS 3.0, BasicToken)
+`POST https://test-servicios.farmalink.com.ar/api/oauth/token` → devuelve un
+access token que se usa en las demás APIs. **Todos los parámetros van en HEADERS:**
+
+| Header | Qué es |
+|---|---|
+| `Authorization` | `Basic base64(<CLIENT_ID>:<CLIENT_SECRET>)` — el **cliente OAuth** (`FARMALINK_TEST_CLIENT_ID/SECRET`) |
+| `grant_type` * | tipo de permiso del proceso OAUTH |
+| `username` * | usuario del cliente (`FARMALINK_TEST_USER`) |
+| `password` * | password del usuario (`FARMALINK_TEST_PASSWORD`) |
+| `scope` * | contexto/API a autorizar (ej. la API de receta) |
+
+Respuesta 200: `{ access_token, token_type, expires_in, scope, id }`.
+También hay `GET /validate` (ValidateAccessToken) con header `X-OAUTH-IDENTITY-DOMAIN-NAME`.
+> Falta confirmar el valor exacto de `grant_type` y `scope` (probar en el "Try it out" del catálogo).
+
+### Receta — API "RecetaElectRest" (REST v3.0.0)
+Server TEST: **`https://test-servicios.farmalink.com.ar/api/recetaElect/v3`**
+
+| Método | Operación |
+|---|---|
+| `POST /altaReceta` | crear una receta electrónica (genera nro de receta) |
+| `POST /bajaReceta` | anular una receta |
+| `POST /consultaReceta` | consultar una receta |
+
+### Payload de `altaReceta` (estructura real)
+```jsonc
+{ "altaRecetaElectRq": {
+  "infoCabeceraRq": { "idOrganizacion", "tipoOrganizacion", "ipOrigen", "infoBrowser" },
+  "puntoEmisor": { "id" },
+  "recElectronica": {
+    "tipoReceta", "fechaVigenciaDesde", "fechaVigenciaHasta", "tipoTratamiento",
+    "afiliado": { "nombre","apellido","sexo","fechaNacimiento","cuil","mail",
+                  "tipoDocumento","numeroDocumento","datosOfuscado",
+                  "credencial": { "codEntidad","pan","plan","token" } },
+    "medico": { "nombre","apellido","sexo","fechaNacimiento","cuil","mail",
+                "tipoDocumento","numeroDocumento",
+                "firma" /* PNG base64 */, "domicilioAtencion",
+                "codigoReFeps", "matricula": { "tipo","provincia","numero",
+                  "especialidad": { "textoLibre" }, "asociada": {...} } },
+    "diagnostico": { "clasificador" /* 10=CIE-10 */, "codigo" /* ej "I20.9" */ },
+    "detalleRecElectronica": { "item": [ { "cantidad","codProducto","codDroga", ... } ] }
+  } } }
+```
+
+### Mapeo Docto → Farmalink (qué ya tenemos)
+- **medico.firma** ← firma electrónica (PNG, `src/lib/firma/`). ✅
+- **medico.codigoReFeps / matricula** ← REFEPS validado (Bus FHIR) + matrícula. ✅
+- **afiliado** ← perfil del paciente (fecha_nacimiento, sexo_dni) + **credencial** ← obra_social / nro_afiliado / plan. ✅ (campos ya agregados)
+- **diagnostico** ← CIE-10 de la consulta.
+- **detalle.item** (codProducto/codDroga) ← **vademécum CNPM** (16.878 medicamentos). ✅
+- `infoCabeceraRq` / `puntoEmisor` ← datos de Docto como emisor (a confirmar idOrganizacion/puntoEmisor con Farmalink).
+
+> **Lo que falta confirmar:** `grant_type` + `scope` exactos del token; `idOrganizacion`/
+> `tipoOrganizacion`/`puntoEmisor.id` de Docto; el mapeo fino de códigos de producto
+> (CNPM vs catálogo Farmalink); y los schemas de `bajaReceta`/`consultaReceta`.
 
 ## 5. Lo que probablemente nos pidan (tener a mano para ir rápido)
 
