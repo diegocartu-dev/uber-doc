@@ -129,7 +129,7 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 3k. Firma electronica interna Ola 1 (backend) | ✅ En prod |
 | 3l. Logs no repudiables 5 anios | ⚠️ firma_logs + admin_audit_log existen, sin politica de retencion 5 anios |
 | 3m. Plan continuidad operativa documentado | ❌ Pendiente |
-| 3n. Farmalink homologacion | ⏳ Esperando respuesta |
+| 3n. Farmalink homologacion | ⏳ Catálogo de APIs recibido — esperando accesos a TEST (ver docs/farmalink-integracion.md) |
 | 3o. Informe periodico de profesionales a DNSISa | ❌ Pendiente |
 
 > **3g — Evidencia (28/05/2026):** src/lib/refeps/client.ts apunta a bus.msal.gob.ar/fhir.

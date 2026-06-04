@@ -248,7 +248,9 @@ presencialmente."
 dispensación de medicamentos en >12.000 farmacias. Conecta 
 sistemas emisores de receta con farmacias, valida en línea.
 
-**Estado Docto:** Esperando respuesta (contacto iniciado).
+**Estado Docto (2026-06-03):** Catálogo de APIs (documentación) recibido —
+homologación iniciada. Esperando accesos a TEST del equipo de seguridad de
+Farmalink para construir/probar. Plan y preparación en `docs/farmalink-integracion.md`.
 
 **Bloqueante:** NO. Farmalink opera del lado farmacia/financiador, 
 no del emisor de receta. Las recetas de Docto son válidas sin 

@@ -155,7 +155,7 @@ para español LATAM).
 | Trámite | Estado | Próximo paso |
 |---------|--------|--------------|
 | ABM Dominios | En evaluación | Esperar respuesta |
-| Farmalink | Esperando respuesta | Esperar respuesta |
+| Farmalink | Catálogo de APIs recibido — esperando accesos a TEST | Construir/probar al recibir TEST (ver docs/farmalink-integracion.md) |
 | RENAPER | Diferido | Retomar en sprint legal post B y C |
 
 ### 4.3 Marco legal aplicable
@@ -363,7 +363,7 @@ sucesión / acceso de emergencia.
 |-------------|--------|-----------|
 | SISA / REFEPS (validación matrículas) | En simulación | Onboarding médico real |
 | Firma digital recetas (CUIR) | Pendiente | Recetas con validez plena |
-| Farmalink | Esperando respuesta | Recetas dispensables en cadenas |
+| Farmalink | Catálogo de APIs recibido — esperando accesos a TEST | Recetas dispensables en cadenas (ver docs/farmalink-integracion.md) |
 | RENAPER | Diferido | Validación identidad paciente |
 
 ---
