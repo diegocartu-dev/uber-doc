@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import BotonVolver from "@/components/ui/BotonVolver";
+import { getFuncion, type FuncionAyuda } from "@/lib/nova/manual/funciones-ayuda";
 
 // ── Types ──
 
@@ -27,7 +28,49 @@ type MensajeChat = {
   confirmado?: "si" | "no" | null;
   opciones?: string[];
   opcionElegida?: string | null;
+  // ── Manual ilustrado (cuentitos curados, 100% client-side) ──
+  imagen?: string;
+  imagenAlt?: string;
+  manual?: {
+    funcionId: string;
+    /** -1 = apertura · 0..n-1 = paso · n = cierre */
+    pasoActual: number;
+    totalPasos: number;
+  };
 };
+
+// ── Manual ilustrado: construcción de burbujas (puro, sin estado de React) ──
+// El avance del manual es 100% local: arma la próxima burbuja y la empuja al
+// hilo. NUNCA llama a /api/nova/chat. Diseño: docs/nova-manual-ilustrado.md
+
+function construirBurbujaManual(fn: FuncionAyuda, paso: number): MensajeChat {
+  const total = fn.pasos.length;
+  const base = { id: crypto.randomUUID(), role: "nova" as const, opcionElegida: null };
+
+  // Apertura
+  if (paso < 0) {
+    return { ...base, content: fn.apertura, opciones: ["Empezar →"], manual: { funcionId: fn.id, pasoActual: -1, totalPasos: total } };
+  }
+  // Cierre — el botón de encadenar solo aparece si ese cuentito existe
+  if (paso >= total) {
+    const sig = fn.cierre.siguiente;
+    const opciones = sig && getFuncion(sig.funcionId) ? [sig.label] : undefined;
+    return { ...base, content: fn.cierre.texto, opciones, manual: { funcionId: fn.id, pasoActual: total, totalPasos: total } };
+  }
+  // Paso
+  const p = fn.pasos[paso];
+  const esUltimo = paso === total - 1;
+  const opciones = [esUltimo ? "Listo ✓" : "Siguiente →"];
+  if (paso >= 1) opciones.push("← Atrás");
+  return {
+    ...base,
+    content: p.texto,
+    imagen: p.imagen,
+    imagenAlt: p.alt,
+    opciones,
+    manual: { funcionId: fn.id, pasoActual: paso, totalPasos: total },
+  };
+}
 
 // ── Beep de UI con AudioContext (sin assets externos) ──
 
@@ -458,6 +501,56 @@ export default function NovaChat() {
     });
   }, [detenerAudio]);
 
+  // ── Manual ilustrado (cuentitos) — 100% client-side, NUNCA toca el LLM ──
+
+  const iniciarManual = useCallback(
+    (funcionId: string) => {
+      const fn = getFuncion(funcionId);
+      if (!fn) return;
+      const burbuja = construirBurbujaManual(fn, -1);
+      setMensajes((prev) => [...prev, burbuja]);
+      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.content);
+    },
+    [reproducirTTS]
+  );
+
+  const avanzarManual = useCallback(
+    (manual: NonNullable<MensajeChat["manual"]>, opcion: string) => {
+      const fn = getFuncion(manual.funcionId);
+      if (!fn) return;
+      const total = fn.pasos.length;
+
+      // En el cierre, el único avance posible es encadenar al siguiente cuentito
+      if (manual.pasoActual >= total) {
+        const sig = fn.cierre.siguiente;
+        if (sig && opcion === sig.label) iniciarManual(sig.funcionId);
+        return;
+      }
+
+      let target: number;
+      if (opcion === "← Atrás") target = manual.pasoActual - 1;
+      else if (manual.pasoActual < 0) target = 0; // apertura → paso 1
+      else if (manual.pasoActual < total - 1) target = manual.pasoActual + 1;
+      else target = total; // último paso → cierre
+
+      const burbuja = construirBurbujaManual(fn, target);
+      setMensajes((prev) => [...prev, burbuja]);
+      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.content);
+    },
+    [iniciarManual, reproducirTTS]
+  );
+
+  // Deep link: /medico/nova?walkthrough=<id> abre Nova directo en ese cuentito
+  const walkthroughIniciado = useRef(false);
+  useEffect(() => {
+    if (walkthroughIniciado.current || typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("walkthrough");
+    if (id && getFuncion(id)) {
+      walkthroughIniciado.current = true;
+      iniciarManual(id);
+    }
+  }, [iniciarManual]);
+
   // ── Confirmar accion ──
 
   const confirmarAccion = useCallback(
@@ -523,15 +616,15 @@ export default function NovaChat() {
   );
 
   const elegirOpcion = useCallback(
-    (msgId: string, opcion: string) => {
+    (msg: MensajeChat, opcion: string) => {
       setMensajes((prev) =>
-        prev.map((m) =>
-          m.id === msgId ? { ...m, opcionElegida: opcion } : m
-        )
+        prev.map((m) => (m.id === msg.id ? { ...m, opcionElegida: opcion } : m))
       );
-      enviarMensaje(opcion);
+      // Paso del manual → avance local (cero LLM). Si no, va al chat de Nova.
+      if (msg.manual) avanzarManual(msg.manual, opcion);
+      else enviarMensaje(opcion);
     },
-    [enviarMensaje]
+    [enviarMensaje, avanzarManual]
   );
 
   // ── Mic toggle ──
@@ -647,9 +740,28 @@ export default function NovaChat() {
                     : "nova-bubble-nova"
                 }
               >
+                {/* Contador de paso del manual ilustrado */}
+                {msg.manual && msg.manual.pasoActual >= 0 && msg.manual.pasoActual < msg.manual.totalPasos && (
+                  <p className="mb-1 text-[11px] font-medium" style={{ color: "#888780" }}>
+                    Paso {msg.manual.pasoActual + 1} de {msg.manual.totalPasos}
+                  </p>
+                )}
+
                 <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
                   {msg.content}
                 </p>
+
+                {/* Imagen del manual (señalador quemado en la foto, azul #378ADD) */}
+                {msg.imagen && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={msg.imagen}
+                    alt={msg.imagenAlt || ""}
+                    loading="lazy"
+                    className="mt-2 w-full rounded-lg"
+                    style={{ border: "0.5px solid #e5e7eb" }}
+                  />
+                )}
 
                 {/* Chip canal + duración */}
                 {!!msg.confirmacion?.datos?.canal_origen && (
@@ -704,7 +816,7 @@ export default function NovaChat() {
                     {msg.opciones.map((op) => (
                       <button
                         key={op}
-                        onClick={() => elegirOpcion(msg.id, op)}
+                        onClick={() => elegirOpcion(msg, op)}
                         className="rounded-lg px-4 py-2 text-[13px] font-medium text-[#378ADD] active:scale-95 transition-transform"
                         style={{ border: "1px solid #378ADD" }}
                       >
@@ -713,7 +825,7 @@ export default function NovaChat() {
                     ))}
                   </div>
                 )}
-                {msg.opcionElegida && (
+                {msg.opcionElegida && !msg.manual && (
                   <p className="mt-2 text-xs text-[#1D9E75]">{msg.opcionElegida}</p>
                 )}
               </div>
