@@ -88,7 +88,16 @@ export async function POST(req: NextRequest) {
       const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       let diasNum: number[];
       if (!Array.isArray(dias_semana) || dias_semana.length === 0) {
-        diasNum = [1, 2, 3, 4, 5, 6, 7];
+        // Sin d\u00edas expl\u00edcitos: si es UNA fecha puntual ("este viernes"), usamos el
+        // d\u00eda de ESA fecha (no los 7). Si es un rango ("todos los d\u00edas de junio"),
+        // s\u00ed todos. Antes defaulteaba siempre a los 7 \u2192 guardaba franjas Lun-Dom y
+        // la grilla mostraba toda la semana aunque el turno fuera un solo d\u00eda.
+        if (fecha_desde === fecha_hasta) {
+          const js = new Date(fecha_desde + "T12:00:00").getDay(); // 0=domingo \u2026 6=s\u00e1bado
+          diasNum = [js === 0 ? 7 : js]; // \u2192 1=lunes \u2026 7=domingo
+        } else {
+          diasNum = [1, 2, 3, 4, 5, 6, 7];
+        }
       } else {
         diasNum = [...new Set(dias_semana.map((d) => DIA_MAP[normalizar(d)]).filter((n): n is number => !!n))];
       }
