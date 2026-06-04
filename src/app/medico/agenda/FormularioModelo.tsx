@@ -26,7 +26,7 @@ const DIAS = [
 const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
 const MINUTOS = ["00", "15", "30", "45"];
 
-// 0 = no seleccionado, 1 = horario base (verde), 2 = personalizado (azul)
+// 0 = no atiende · 1 = horario común (azul lleno) · 2 = horario propio (azul borde)
 type DiaEstado = 0 | 1 | 2;
 
 // Formato yyyy-mm-dd (el que esperan los <input type="date"> y guardarModelo)
@@ -90,16 +90,22 @@ export default function FormularioModelo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intentoGuardar, nombre, fechaInicio, fechaFin, dias, franjasBase, franjasCustom]);
 
+  // Tocar un día lo prende/apaga (no atiende ↔ horario común). NO cicla a propio
+  // ni lo borra sin querer: personalizar es una acción aparte y explícita (abajo).
   function toggleDia(num: number) {
-    setDias((prev) => {
-      const current = prev[num];
-      const next: DiaEstado = current === 0 ? 1 : current === 1 ? 2 : 0;
-      const updated = { ...prev, [num]: next };
-      if (next === 2 && !franjasCustom[num]) {
-        setFranjasCustom((fc) => ({ ...fc, [num]: [{ inicio: "09:00", fin: "13:00" }] }));
-      }
-      return updated;
-    });
+    setDias((prev) => ({ ...prev, [num]: prev[num] === 0 ? 1 : 0 }));
+  }
+
+  // Pasar un día a "horario propio" (común → propio). Acción explícita.
+  function personalizarDia(num: number) {
+    setDias((prev) => ({ ...prev, [num]: 2 }));
+    setFranjasCustom((fc) => (fc[num] ? fc : { ...fc, [num]: [{ inicio: "09:00", fin: "13:00" }] }));
+  }
+
+  // Volver un día a usar el horario común (propio → común). No pierde sus franjas
+  // propias: quedan guardadas por si lo vuelve a personalizar.
+  function usarHorarioComun(num: number) {
+    setDias((prev) => ({ ...prev, [num]: 1 }));
   }
 
   function addFranjaBase() {
@@ -279,6 +285,10 @@ export default function FormularioModelo({
     );
   }
 
+  const NOMBRE_DIA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  const diasComun = DIAS.filter((d) => dias[d.num] === 1); // azul lleno: comparten horario común
+  const diasPropio = DIAS.filter((d) => dias[d.num] === 2); // azul borde: horario propio
+
   return (
     <div className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
       <h2 className="text-sm font-medium text-gray-900">Nueva agenda</h2>
@@ -331,10 +341,9 @@ export default function FormularioModelo({
         {errores.fechas && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
       </div>
 
-      {/* Selector de dias */}
+      {/* Selector de dias — tocar prende/apaga el día (horario común) */}
       <div className="mt-5">
-        <label className="text-xs text-gray-400">Dias</label>
-        <p className="mt-0.5 text-[10px] text-gray-400">1 toque = horario base · 2 toques = personalizado · 3 toques = quitar</p>
+        <label className="text-xs text-gray-400">Días de atención</label>
         <div
           ref={diasRef}
           tabIndex={-1}
@@ -347,31 +356,56 @@ export default function FormularioModelo({
               <button
                 key={d.num}
                 onClick={() => toggleDia(d.num)}
-                className={`flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95 ${
-                  estado === 2
-                    ? "bg-[var(--color-primary)] text-white"
-                    : estado === 1
-                      ? "bg-[#1D9E75] text-white"
-                      : "bg-gray-100 text-gray-500"
-                }`}
+                aria-label={`${NOMBRE_DIA[d.num]}${estado === 1 ? " — atiende" : estado === 2 ? " — horario propio" : ""}`}
+                className="relative flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95"
+                style={
+                  estado === 1
+                    ? { background: "var(--color-primary)", color: "#fff" }
+                    : estado === 2
+                      ? { background: "var(--color-primary-soft)", color: "var(--color-brand-dark)", border: "2px solid var(--color-primary)" }
+                      : { background: "var(--color-bg-tertiary)", color: "var(--color-muted)" }
+                }
               >
                 {d.label}
+                {estado === 2 && (
+                  <span
+                    className="absolute -top-1 -right-1 h-[10px] w-[10px] rounded-full"
+                    style={{ background: "var(--color-primary)", border: "2px solid #fff" }}
+                  />
+                )}
               </button>
             );
           })}
+        </div>
+        {/* Leyenda: qué SIGNIFICA cada color (no cómo se llega) */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]" style={{ color: "var(--color-muted)" }}>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 shrink-0 rounded" style={{ background: "var(--color-primary)" }} />
+            comparten el horario común
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 shrink-0 rounded" style={{ background: "var(--color-primary-soft)", border: "2px solid var(--color-primary)" }} />
+            tiene su horario propio
+          </span>
         </div>
         {errores.dias && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.dias}</p>}
       </div>
 
       {/* Zona de franjas (base + personalizadas) — ancla de scroll/foco para error de franjas */}
       <div ref={franjasRef} tabIndex={-1} className="focus:outline-none">
-        {/* Franjas base */}
-        {Object.values(dias).some((v) => v === 1) && (
-          <div className="mt-5">
+        {/* Horario común — conecta con sus días (barra azul + las letras de los días) */}
+        {diasComun.length > 0 && (
+          <div className="mt-5 rounded-lg bg-white p-4" style={{ border: "0.5px solid #e5e7eb", borderLeft: "4px solid var(--color-primary)" }}>
             <div className="flex items-center justify-between">
-              <label className="text-xs text-gray-400">Franjas base ({duracionTurno} min c/turno)</label>
-              <button onClick={addFranjaBase} className="text-xs text-[#378ADD] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
+              <div className="flex flex-wrap items-baseline gap-x-1.5">
+                <span className="text-[13px] font-medium" style={{ color: "var(--color-brand-dark)" }}>Horario común</span>
+                <span className="text-[13px] font-semibold tracking-[0.12em]" style={{ color: "var(--color-primary)" }}>
+                  {diasComun.map((d) => d.label).join(" ")}
+                </span>
+              </div>
+              <button onClick={addFranjaBase} className="shrink-0 text-xs hover:underline min-h-[44px] md:min-h-0 px-2" style={{ color: "var(--color-text-link)" }}>+ Agregar franja</button>
             </div>
+            <p className="mt-0.5 text-[12px]" style={{ color: "var(--color-muted)" }}>Estos días comparten este horario · {duracionTurno} min por turno</p>
             <div className="mt-2 space-y-3 md:space-y-2">
               {franjasBase.map((f, i) => (
                 <FranjaRow
@@ -386,34 +420,53 @@ export default function FormularioModelo({
           </div>
         )}
 
-        {/* Franjas personalizadas por dia */}
-        {Object.entries(dias)
-          .filter(([, v]) => v === 2)
-          .map(([k]) => {
-            const diaNum = parseInt(k);
-            const franjasDelDia = franjasCustom[diaNum] ?? [];
-            return (
-              <div key={diaNum} className="mt-4 rounded-lg bg-[var(--color-primary-soft)] p-4">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-[var(--color-brand-dark)]">
-                    {["", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"][diaNum]} — personalizado
-                  </label>
-                  <button onClick={() => addFranjaCustom(diaNum)} className="text-xs text-[var(--color-text-link)] hover:underline min-h-[44px] md:min-h-0 px-2">+ Agregar franja</button>
-                </div>
-                <div className="mt-2 space-y-3 md:space-y-2">
-                  {franjasDelDia.map((f, i) => (
-                    <FranjaRow
-                      key={i}
-                      franja={f}
-                      onUpdate={(field, val) => updateFranjaCustom(diaNum, i, field, val)}
-                      onRemove={() => removeFranjaCustom(diaNum, i)}
-                      canRemove={franjasDelDia.length > 1}
-                    />
-                  ))}
-                </div>
+        {/* Entrada explícita a "personalizar" un día — separada del prender/apagar */}
+        {diasComun.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[12px]" style={{ color: "var(--color-muted)" }}>¿Atendés distinto algún día? Tocalo para darle su propio horario:</p>
+            <div className="mt-1.5 flex flex-wrap gap-[6px]">
+              {diasComun.map((d) => (
+                <button
+                  key={d.num}
+                  onClick={() => personalizarDia(d.num)}
+                  aria-label={`Dar horario propio a ${NOMBRE_DIA[d.num]}`}
+                  className="flex min-w-[40px] min-h-[40px] items-center justify-center rounded-lg text-xs font-medium active:scale-95"
+                  style={{ background: "var(--color-primary-soft)", color: "var(--color-brand-dark)", border: "1px dashed var(--color-primary)" }}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Horario propio por día */}
+        {diasPropio.map((d) => {
+          const diaNum = d.num;
+          const franjasDelDia = franjasCustom[diaNum] ?? [];
+          return (
+            <div key={diaNum} className="mt-4 rounded-lg p-4" style={{ background: "var(--color-primary-soft)", border: "1px solid var(--color-primary-border)" }}>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium" style={{ color: "var(--color-brand-dark)" }}>
+                  {NOMBRE_DIA[diaNum]} · horario propio
+                </label>
+                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs hover:underline min-h-[44px] md:min-h-0 px-2" style={{ color: "var(--color-text-link)" }}>+ Agregar franja</button>
               </div>
-            );
-          })}
+              <div className="mt-2 space-y-3 md:space-y-2">
+                {franjasDelDia.map((f, i) => (
+                  <FranjaRow
+                    key={i}
+                    franja={f}
+                    onUpdate={(field, val) => updateFranjaCustom(diaNum, i, field, val)}
+                    onRemove={() => removeFranjaCustom(diaNum, i)}
+                    canRemove={franjasDelDia.length > 1}
+                  />
+                ))}
+              </div>
+              <button onClick={() => usarHorarioComun(diaNum)} className="mt-2 flex items-center min-h-[40px] text-[12px] hover:underline" style={{ color: "var(--color-muted)" }}>← Usar el horario común</button>
+            </div>
+          );
+        })}
 
         {errores.franjas && <p className="mt-2 text-[13px]" style={{ color: "#E24B4A" }}>{errores.franjas}</p>}
       </div>
