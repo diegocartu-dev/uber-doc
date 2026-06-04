@@ -32,7 +32,7 @@ cadenas que usan ese sistema. Es una mejora **post-MVP**.
 | (a) Solicitud de homologación enviada | ✅ |
 | (b) **Acceso al Catálogo de APIs** (documentación) | ✅ Recibido — portal Axway/Joomla `https://catalogo-srv.farmalink.com.ar/` |
 | (c) **Accesos a TEST** (OAuth, sandbox) | ✅ **Recibidos (04/06/2026)** — Jira SOL-3426. Cliente OAuth + usuario, en 2 mails ("Creación de usuario Client OAUTH Test 1/2 y 2/2"). |
-| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (ver §6.bis) |
+| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (§4.bis); handshake del token **bloqueado** esperando ejemplo de Farmalink (§4.ter) |
 | (e) Homologación (validación de Farmalink) | ⬜ Pendiente |
 | (f) Producción | ⬜ Pendiente |
 
@@ -136,6 +136,34 @@ Server TEST: **`https://test-servicios.farmalink.com.ar/api/recetaElect/v3`**
 > **Lo que falta confirmar:** `grant_type` + `scope` exactos del token; `idOrganizacion`/
 > `tipoOrganizacion`/`puntoEmisor.id` de Docto; el mapeo fino de códigos de producto
 > (CNPM vs catálogo Farmalink); y los schemas de `bajaReceta`/`consultaReceta`.
+
+## 4.ter Handshake del token — pruebas contra el sandbox (04/06/2026)
+
+Se probó empíricamente el endpoint del token (`POST …/api/oauth/token`) con las
+credenciales TEST. Estado: **bloqueado en el handshake, esperando ejemplo de Farmalink.**
+
+**Hallazgos (con evidencia):**
+- El host responde — **NO es bloqueo de IP**: `GET /` al host pasa el WAF y da 500
+  (llega al backend). Nuestra IP saliente de prueba fue `186.19.63.66` (por si en
+  algún momento piden whitelistear, aunque hoy el bloqueo no fue por IP).
+- El borde es un **WAF de F5 / Volterra** (`server: volt-adc`, headers `x-envoy-*`,
+  `x-volterra-location`). Sin `Content-Type: application/json` devuelve **403 con body
+  vacío**. **Con** `Content-Type: application/json` el request **pasa el WAF**.
+- Pasado el WAF, el token devuelve **HTTP 500 con un envelope SOAP vacío** (sin
+  detalle de error), de forma idéntica en TODAS las combinaciones probadas:
+  `grant_type` = password / client_credentials; `scope` = vacío / RecetaElectRest /
+  recetaElect / default / openid; params en **headers** vs **body form-urlencoded**
+  vs **body JSON**; con y sin `X-OAUTH-IDENTITY-DOMAIN-NAME`; con User-Agent de navegador.
+- El catálogo **no expone** los valores por defecto de `grant_type`/`scope` (inputs vacíos).
+
+**Conclusión:** el `grant_type`/`scope` exactos y el formato preciso del request del
+token no están documentados en el catálogo, y el 500 es opaco. **Se pidió a Farmalink
+(homologación) un ejemplo de request válido del token.** (El envío automático del mail
+fue bloqueado por la política de seguridad del agente — lo envía Diego desde
+`soporte@docto.com.ar`, respondiendo al hilo de homologación.)
+
+**Para destrabar, falta de Farmalink:** un request de ejemplo del token (grant_type,
+scope, y si los params van en headers o body). Con eso se completa el cliente OAuth.
 
 ## 5. Lo que probablemente nos pidan (tener a mano para ir rápido)
 
