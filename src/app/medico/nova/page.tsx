@@ -12,7 +12,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import BotonVolver from "@/components/ui/BotonVolver";
-import { getFuncion, type FuncionAyuda } from "@/lib/nova/manual/funciones-ayuda";
+import { getFuncion, vozDe, type FuncionAyuda } from "@/lib/nova/manual/funciones-ayuda";
 import { matchControl, type ControlManual } from "@/lib/nova/manual/match";
 
 // ── Types ──
@@ -32,6 +32,8 @@ type MensajeChat = {
   // ── Manual ilustrado (cuentitos curados, 100% client-side) ──
   imagen?: string;
   imagenAlt?: string;
+  /** Lo que Nova DICE en voz (separado de `content`, que se VE). */
+  narracion?: string;
   manual?: {
     funcionId: string;
     /** -1 = apertura · 0..n-1 = paso · n = cierre */
@@ -50,13 +52,13 @@ function construirBurbujaManual(fn: FuncionAyuda, paso: number): MensajeChat {
 
   // Apertura
   if (paso < 0) {
-    return { ...base, content: fn.apertura, opciones: ["Empezar →"], manual: { funcionId: fn.id, pasoActual: -1, totalPasos: total } };
+    return { ...base, content: fn.apertura, narracion: vozDe(fn.apertura, fn.aperturaNarracion), opciones: ["Empezar →"], manual: { funcionId: fn.id, pasoActual: -1, totalPasos: total } };
   }
   // Cierre — el botón de encadenar solo aparece si ese cuentito existe
   if (paso >= total) {
     const sig = fn.cierre.siguiente;
     const opciones = sig && getFuncion(sig.funcionId) ? [sig.label] : undefined;
-    return { ...base, content: fn.cierre.texto, opciones, manual: { funcionId: fn.id, pasoActual: total, totalPasos: total } };
+    return { ...base, content: fn.cierre.texto, narracion: vozDe(fn.cierre.texto, fn.cierre.narracion), opciones, manual: { funcionId: fn.id, pasoActual: total, totalPasos: total } };
   }
   // Paso
   const p = fn.pasos[paso];
@@ -66,6 +68,7 @@ function construirBurbujaManual(fn: FuncionAyuda, paso: number): MensajeChat {
   return {
     ...base,
     content: p.texto,
+    narracion: vozDe(p.texto, p.narracion),
     imagen: p.imagen,
     imagenAlt: p.alt,
     opciones,
@@ -552,7 +555,7 @@ export default function NovaChat() {
       manualSalidoRef.current = false; // arranca un cuentito → el manual vuelve a estar activo
       const burbuja = construirBurbujaManual(fn, -1);
       setMensajes((prev) => [...prev, burbuja]);
-      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.content);
+      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.narracion ?? burbuja.content);
     },
     [reproducirTTS]
   );
@@ -578,28 +581,30 @@ export default function NovaChat() {
 
       const burbuja = construirBurbujaManual(fn, target);
       setMensajes((prev) => [...prev, burbuja]);
-      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.content);
+      if (!vozSilenciadaRef.current) reproducirTTS(burbuja.narracion ?? burbuja.content);
     },
     [iniciarManual, reproducirTTS]
   );
 
   // ── Ola 2: capa conversacional (controles que NO consumen el paso) ──
 
-  // Texto del paso (o apertura/cierre) sin tocar el array de mensajes.
-  const textoDelPaso = useCallback((manual: NonNullable<MensajeChat["manual"]>): string => {
+  // Lo que Nova DICE en el paso actual (narración, no el texto de pantalla).
+  // Usado por "↺ Repetir" y por el cambio de velocidad (re-narrar).
+  const vozDelPaso = useCallback((manual: NonNullable<MensajeChat["manual"]>): string => {
     const fn = getFuncion(manual.funcionId);
     if (!fn) return "";
-    if (manual.pasoActual < 0) return fn.apertura;
-    if (manual.pasoActual >= manual.totalPasos) return fn.cierre.texto;
-    return fn.pasos[manual.pasoActual].texto;
+    if (manual.pasoActual < 0) return vozDe(fn.apertura, fn.aperturaNarracion);
+    if (manual.pasoActual >= manual.totalPasos) return vozDe(fn.cierre.texto, fn.cierre.narracion);
+    const p = fn.pasos[manual.pasoActual];
+    return vozDe(p.texto, p.narracion);
   }, []);
 
   // "↺ Repetir": re-narra el paso actual. No avanza, no muta el hilo.
   const repetirPaso = useCallback(
     (manual: NonNullable<MensajeChat["manual"]>) => {
-      reproducirTTS(textoDelPaso(manual)); // explícito: repetir suena aunque la voz esté en silencio global
+      reproducirTTS(vozDelPaso(manual)); // explícito: repetir suena aunque la voz esté en silencio global
     },
-    [reproducirTTS, textoDelPaso]
+    [reproducirTTS, vozDelPaso]
   );
 
   // "No me quedó claro": abre/cierra la ampliación curada inline (misma burbuja).
@@ -618,7 +623,7 @@ export default function NovaChat() {
       });
       // Acción explícita del médico → narra aunque la voz esté en silencio global
       // (el silencio es para la narración automática, no para lo que pide a mano).
-      if (abriendo && amp) reproducirTTS(amp.texto);
+      if (abriendo && amp) reproducirTTS(vozDe(amp.texto, amp.narracion));
     },
     [reproducirTTS]
   );
@@ -633,9 +638,9 @@ export default function NovaChat() {
       try {
         localStorage.setItem("nova_velocidad_voz", String(next));
       } catch { /* sin localStorage */ }
-      reproducirTTS(textoDelPaso(manual));
+      reproducirTTS(vozDelPaso(manual));
     },
-    [reproducirTTS, textoDelPaso]
+    [reproducirTTS, vozDelPaso]
   );
 
   // Dispatcher de los controles reconocidos por voz/texto durante un cuentito.
@@ -656,7 +661,7 @@ export default function NovaChat() {
               : undefined;
           if (paso?.ampliacion) {
             setAmpliacionesAbiertas((prev) => new Set(prev).add(msg.id));
-            reproducirTTS(paso.ampliacion.texto); // acción explícita → suena aunque esté en silencio
+            reproducirTTS(vozDe(paso.ampliacion.texto, paso.ampliacion.narracion)); // acción explícita → suena aunque esté en silencio
           } else {
             repetirPaso(manual); // sin ampliación → al menos repetir
           }
