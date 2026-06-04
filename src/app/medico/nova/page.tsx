@@ -199,9 +199,11 @@ export default function NovaChat() {
   const velocidadVozRef = useRef(1); // espejo para reproducirTTS sin stale closure
   // Pasos con la ampliación ("No me quedó claro") abierta inline, por id de burbuja.
   const [ampliacionesAbiertas, setAmpliacionesAbiertas] = useState<Set<string>>(new Set());
-  // Índice O(1) de la burbuja de manual activa (última con meta `manual`) para el
-  // interceptor del input. La fuente de verdad sigue siendo el array `mensajes`.
-  const manualActivoRef = useRef<MensajeChat | null>(null);
+  // Espejo síncrono del hilo (se asigna en render, antes del flush de effects).
+  // El interceptor del input deriva el paso de manual activo en el momento, sin
+  // stale closure ni esperar a un effect post-commit.
+  const mensajesRef = useRef<MensajeChat[]>(mensajes);
+  mensajesRef.current = mensajes;
   const manualSalidoRef = useRef(false); // el médico cerró el cuentito ("ya entendí")
   // Puente para que enviarMensaje (definido antes) llame al dispatcher de
   // controles (definido después). Se sincroniza por effect, evita el TDZ.
@@ -238,22 +240,6 @@ export default function NovaChat() {
     vozSilenciadaRef.current = vozSilenciada;
   }, [vozSilenciada]);
 
-  // Deriva el paso de manual activo (último con meta `manual`) desde el hilo.
-  // Se lee imperativamente en el interceptor del input (sin re-render ni stale closure).
-  useEffect(() => {
-    if (manualSalidoRef.current) {
-      manualActivoRef.current = null;
-      return;
-    }
-    for (let i = mensajes.length - 1; i >= 0; i--) {
-      if (mensajes[i].manual) {
-        manualActivoRef.current = mensajes[i];
-        return;
-      }
-    }
-    manualActivoRef.current = null;
-  }, [mensajes]);
-
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -270,7 +256,10 @@ export default function NovaChat() {
       // Si hay un cuentito activo y el médico pidió un CONTROL (repetir, más
       // lento, volvé, siguiente, no entiendo, salir), se resuelve 100% local —
       // NUNCA llega al LLM. Igual se muestra lo que dijo como burbuja del médico.
-      const activoManual = manualActivoRef.current;
+      // El paso activo se deriva en el momento (espejo síncrono del hilo).
+      const activoManual = manualSalidoRef.current
+        ? null
+        : [...mensajesRef.current].reverse().find((m) => m.manual) ?? null;
       if (activoManual?.manual) {
         const control = matchControl(limpio);
         if (control) {
@@ -627,7 +616,9 @@ export default function NovaChat() {
         else { next.add(msg.id); abriendo = true; }
         return next;
       });
-      if (abriendo && amp && !vozSilenciadaRef.current) reproducirTTS(amp.texto);
+      // Acción explícita del médico → narra aunque la voz esté en silencio global
+      // (el silencio es para la narración automática, no para lo que pide a mano).
+      if (abriendo && amp) reproducirTTS(amp.texto);
     },
     [reproducirTTS]
   );
@@ -665,7 +656,7 @@ export default function NovaChat() {
               : undefined;
           if (paso?.ampliacion) {
             setAmpliacionesAbiertas((prev) => new Set(prev).add(msg.id));
-            if (!vozSilenciadaRef.current) reproducirTTS(paso.ampliacion.texto);
+            reproducirTTS(paso.ampliacion.texto); // acción explícita → suena aunque esté en silencio
           } else {
             repetirPaso(manual); // sin ampliación → al menos repetir
           }
@@ -685,7 +676,6 @@ export default function NovaChat() {
           break;
         case "salir":
           manualSalidoRef.current = true;
-          manualActivoRef.current = null;
           setMensajes((prev) => [
             ...prev,
             { id: crypto.randomUUID(), role: "nova", content: "¡Listo! Cualquier cosa, preguntame nomás. 😊" },
@@ -1017,7 +1007,7 @@ export default function NovaChat() {
                         <button
                           key={op}
                           onClick={() => elegirOpcion(msg, op)}
-                          className={`flex min-h-[44px] items-center rounded-lg px-4 text-[13px] font-medium active:scale-95 transition-transform ${
+                          className={`flex min-h-[48px] items-center rounded-lg px-4 text-[13px] font-medium active:scale-95 transition-transform ${
                             primaria ? "text-white" : "text-[#378ADD]"
                           }`}
                           style={primaria ? { background: "#378ADD" } : { border: "1px solid #378ADD" }}
@@ -1034,7 +1024,7 @@ export default function NovaChat() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       onClick={() => repetirPaso(msg.manual!)}
-                      className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                      className="flex min-h-[48px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
                       style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
                     >
                       ↺ Repetir
@@ -1042,7 +1032,7 @@ export default function NovaChat() {
                     {ampliacion && (
                       <button
                         onClick={() => toggleAmpliacion(msg)}
-                        className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                        className="flex min-h-[48px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
                         style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
                       >
                         {ampAbierta ? "← Volver al paso" : "No me quedó claro"}
@@ -1050,7 +1040,7 @@ export default function NovaChat() {
                     )}
                     <button
                       onClick={() => toggleVelocidad(msg.manual!)}
-                      className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                      className="flex min-h-[48px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
                       style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
                     >
                       {velocidadVoz === 1 ? "Más despacio" : "Velocidad normal"}

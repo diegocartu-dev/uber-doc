@@ -156,6 +156,10 @@ path, mismo número = mismo paso). Verificar con `npx tsx scripts/verify-manual-
     "← Atrás" → borde azul.
   - Input abierto: `matchControl` intercepta los controles por voz/texto con cuentito
     activo; el resto cae a la Nova IA real.
+  - **Target táctil de los botones del manual = 48px** (spec §3/§6, médico de 70).
+    Los botones de confirmación de acción de Nova quedan en 44px (otro flujo).
+  - Audio: lo que el médico pide a mano (Repetir, abrir ampliación) suena **aunque
+    la voz esté en silencio global** (el silencio es solo para la narración automática).
   - **Decisiones de síntesis:** ampliación inline (no burbuja nueva); `matchFuncion`
     **no** se cablea en el interceptor (entrada por lenguaje natural = Ola 3, para no
     secuestrar acciones reales como "armá un turno" en chat libre); "Más despacio" en
