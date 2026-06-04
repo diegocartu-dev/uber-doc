@@ -365,10 +365,22 @@ El desempate de CI ("el que se habilitó antes") requiere registrar **cuándo** 
 
 ---
 
-## 12. AYUDA IN-APP — Nova como manual ilustrado (no videos, no IA generativa)
+## 12. AYUDA IN-APP — Manual ilustrado de Nova (EXPLORADO Y DESCARTADO)
 
-> Decidido por Diego (04/06/2026), diseñado con Sofía (UX/contenido) + Marcos
-> (técnico). Decisión cerrada. **Diseño completo: `docs/nova-manual-ilustrado.md`.**
+> **Estado: DESCARTADO por Diego (04/06/2026), el mismo día que se exploró.**
+> Se construyó un piloto completo ("Armar un turno": motor de cuentitos, capa
+> conversacional, fotos reales señaladas, voz natural, y la oferta "te lo armo yo").
+> Diego lo probó y decidió bajarlo: la experiencia no terminó de cerrar como algo
+> simple y fluido, y materializarla bien (sobre todo el auto-avance sin atropellar
+> al médico de 70) no justificaba seguir. **La app quedó sin tutoriales.**
+>
+> **Lo que SÍ quedó** (no era del tutorial — fueron bugs/UX reales que el piloto
+> destapó): el **rediseño del selector de días**, el fix del **doble-toque** en
+> "Mi agenda"/"Nueva agenda" (LinkNav, mejora toda la app), el **form de agenda en
+> mobile**, y el **CI contra el preview**.
+>
+> Todo el código del manual y el diseño detallado se eliminaron del repo. El detalle
+> de abajo queda solo como registro de lo que se exploró.
 
 ### 12.1 La decisión
 La ayuda dentro de la app **no son videos ni respuestas de IA generativa**. Es

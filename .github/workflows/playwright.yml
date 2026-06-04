@@ -30,14 +30,6 @@ jobs:
 
       - run: npm ci
 
-      # Gate estático del manual ilustrado de Nova: ids únicos, paths bajo
-      # /nova/manual/, y que cada imagen referenciada exista en public/. Corre
-      # ANTES de Playwright y del deploy → un path roto o un id duplicado frena el
-      # merge en segundos, sin gastar el preview ni los tests. Importante antes de
-      # cargar los cuentitos #2–5 del Tier 1. (Hallazgo C, review Ola 2 de Marcos.)
-      - name: Verificar integridad del manual de Nova
-        run: npx tsx scripts/verify-manual-imagenes.ts
-
       - run: npx playwright install chromium
 
       - name: Wait for Vercel preview deployment
