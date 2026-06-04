@@ -365,4 +365,41 @@ El desempate de CI ("el que se habilitó antes") requiere registrar **cuándo** 
 
 ---
 
+## 12. AYUDA IN-APP — Nova como manual ilustrado (no videos, no IA generativa)
+
+> Decidido por Diego (04/06/2026), diseñado con Sofía (UX/contenido) + Marcos
+> (técnico). Decisión cerrada. **Diseño completo: `docs/nova-manual-ilustrado.md`.**
+
+### 12.1 La decisión
+La ayuda dentro de la app **no son videos ni respuestas de IA generativa**. Es
+**Nova** sirviendo **cuentitos ilustrados curados**: secuencias de pasos con **foto
+señalada + texto corto** que el médico recorre a su ritmo. Contenido **estático/
+curado** (archivo TS versionado, no DB, no LLM) → **cero alucinación** (crítico en
+salud), **cero costo de tokens**, fácil de mantener.
+
+- **Los videos** quedan solo para **adquisición** (landing /medicos, redes), NO
+  para enseñar a usar el producto in-app.
+- **Nova es el canal**, pero **ejecuta el manual estático — no lo crea.** Para el
+  médico es "Nova con toda su IA"; la línea estático/generativo la ve solo el equipo.
+
+### 12.2 Decisiones de diseño cerradas
+- **Señalador quemado en la foto** (no runtime), siempre **azul #378ADD**, nunca verde.
+- **Fotos en `public/nova/manual/{id}/{n}.webp`** (repo, versionadas, CDN, sin Storage).
+- **100% client-side:** el avance es `setState`, reusa el mecanismo `opciones` del
+  chat. NUNCA toca `/api/nova/chat` para servir el cuentito.
+- **Capa conversacional — el médico nunca queda atrapado:** botones "↺ Repetir" y
+  "No me quedó claro" (versión ampliada curada), control de velocidad de voz (TTS),
+  y la cajita de texto sigue abierta → pedidos comunes los toma un **matcher local**;
+  cualquier otra cosa cae a la **Nova IA real**.
+- **Puntos de entrada:** (A) link "¿Cómo funciona?" contextual por sección (deep link),
+  (B) Nova ofrece el cuentito ante la pregunta, (C) grilla en el menú. **No** botones "?" flotantes.
+
+### 12.3 Alcance
+- **Tier 1 (lanzamiento):** Armar turno · Ponerse disponible CI · Atender consulta ·
+  Hacer receta · Recorrer tablero.
+- **Piloto:** "Armar un turno" completo (código + 6 fotos señaladas) → validar con un
+  médico real → escalar. Lo único no-código: las fotos las generan Diego/Sofía.
+
+---
+
 *Documento generado el 15/04/2026. No requiere rediscusión — decisiones cerradas.*
