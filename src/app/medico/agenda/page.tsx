@@ -1,4 +1,4 @@
-import Link from "next/link";
+import LinkNav from "@/components/ui/LinkNav";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListaModelos from "./ListaModelos";
@@ -93,12 +93,12 @@ export default async function AgendaPage({
             </div>
           ) : (
             <div className="mt-6">
-              <Link
+              <LinkNav
                 href="/medico/agenda?nuevo=1"
-                className="mb-4 flex items-center justify-center rounded-xl bg-[#378ADD] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100"
+                className="mb-4 w-full justify-center rounded-xl bg-[#378ADD] px-5 min-h-[48px] md:min-h-0 md:py-3 text-center text-[14px] font-medium text-white hover:bg-[#2e6fb5]"
               >
                 + Nueva agenda
-              </Link>
+              </LinkNav>
 
               <div className="space-y-4">
                 <ListaModelos modelos={modelosCompletos} />

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import LinkNav from "@/components/ui/LinkNav";
 import AppNavbar from "@/components/AppNavbar";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
 import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
@@ -440,9 +441,9 @@ export default async function DashboardPage({
         </p>
 
         {/* Mi agenda */}
-        <Link href="/medico/agenda" className="flex items-center justify-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium text-[#378ADD] transition-colors hover:bg-[#378ADD]/5" style={{ border: "1px solid #378ADD" }}>
+        <LinkNav href="/medico/agenda" className="w-full justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-[#378ADD] transition-colors hover:bg-[#378ADD]/5" style={{ border: "1px solid #378ADD" }}>
           Mi agenda →
-        </Link>
+        </LinkNav>
 
         {/* Zona urgencia */}
         <TurnosEnEspera
