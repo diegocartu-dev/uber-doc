@@ -136,6 +136,14 @@ Cierre: *"¡Ya está! Tus turnos quedaron publicados."* · **[Ver cómo ponerme 
 > **Lo único no-código:** las fotos señaladas. El motor se construye con contenido de
 > ejemplo y Diego/Sofía cargan las capturas reales.
 
+### Checklist para las 6 capturas reales de "Armar un turno"
+Reemplazan a los placeholders `public/nova/manual/armar-turno/{1..6}.webp` (mismo
+path, mismo número = mismo paso). Verificar con `npx tsx scripts/verify-manual-imagenes.ts`.
+- **Contrato:** `N.webp` = `pasos[N-1]` del registro. El rótulo interno y el texto del paso deben coincidir.
+- **Paso 4 (días):** la captura debe mostrar la pantalla **real**, con el miércoles rotulado **"X"** (no "M" — la maqueta dice "M M", el componente real usa L M **X** J V S D). Es el paso más confuso; la foto tiene que superponerse con lo que el médico ve.
+- **Paso 5 (franja):** capturar con **un día ya activo** — el botón "+ Agregar franja" solo aparece después de seleccionar un día con horario base.
+- **Señalador:** quemado, azul #378ADD, nunca verde. Uno por paso.
+
 ## 9. Por qué es un diferencial
 Ayuda **ilustrada + curada + segura + conversacional**, servida por la propia IA del
 producto. Construye confianza en Nova (porque nunca se equivoca), y esa confianza se
