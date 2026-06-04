@@ -90,20 +90,19 @@ export default function FormularioModelo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intentoGuardar, nombre, fechaInicio, fechaFin, dias, franjasBase, franjasCustom]);
 
-  // Tocar un día lo prende/apaga (no atiende ↔ horario común). NO cicla a propio
-  // ni lo borra sin querer: personalizar es una acción aparte y explícita (abajo).
+  // Tocar un día cicla su estado: apagado → horario común → horario propio → apagado.
+  // Todo se maneja desde la grilla de arriba (el color dice en qué estado está).
+  // Las franjas propias NO se borran al ciclar: quedan guardadas por si vuelve a propio.
   function toggleDia(num: number) {
-    setDias((prev) => ({ ...prev, [num]: prev[num] === 0 ? 1 : 0 }));
+    const next: DiaEstado = dias[num] === 0 ? 1 : dias[num] === 1 ? 2 : 0;
+    setDias((prev) => ({ ...prev, [num]: next }));
+    if (next === 2 && !franjasCustom[num]) {
+      setFranjasCustom((fc) => (fc[num] ? fc : { ...fc, [num]: [{ inicio: "09:00", fin: "13:00" }] }));
+    }
   }
 
-  // Pasar un día a "horario propio" (común → propio). Acción explícita.
-  function personalizarDia(num: number) {
-    setDias((prev) => ({ ...prev, [num]: 2 }));
-    setFranjasCustom((fc) => (fc[num] ? fc : { ...fc, [num]: [{ inicio: "09:00", fin: "13:00" }] }));
-  }
-
-  // Volver un día a usar el horario común (propio → común). No pierde sus franjas
-  // propias: quedan guardadas por si lo vuelve a personalizar.
+  // Volver un día a usar el horario común (propio → común), sin ciclar por "apagado".
+  // No pierde sus franjas propias.
   function usarHorarioComun(num: number) {
     setDias((prev) => ({ ...prev, [num]: 1 }));
   }
@@ -415,26 +414,6 @@ export default function FormularioModelo({
                   onRemove={() => removeFranjaBase(i)}
                   canRemove={franjasBase.length > 1}
                 />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Entrada explícita a "personalizar" un día — separada del prender/apagar */}
-        {diasComun.length > 0 && (
-          <div className="mt-3">
-            <p className="text-[12px]" style={{ color: "var(--color-muted)" }}>¿Atendés distinto algún día? Tocalo para darle su propio horario:</p>
-            <div className="mt-1.5 flex flex-wrap gap-[6px]">
-              {diasComun.map((d) => (
-                <button
-                  key={d.num}
-                  onClick={() => personalizarDia(d.num)}
-                  aria-label={`Dar horario propio a ${NOMBRE_DIA[d.num]}`}
-                  className="flex min-w-[40px] min-h-[40px] items-center justify-center rounded-lg text-xs font-medium active:scale-95"
-                  style={{ background: "var(--color-primary-soft)", color: "var(--color-brand-dark)", border: "1px dashed var(--color-primary)" }}
-                >
-                  {d.label}
-                </button>
               ))}
             </div>
           </div>
