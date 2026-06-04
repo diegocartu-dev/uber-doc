@@ -667,11 +667,11 @@ export default function NovaChat() {
 
                 {/* Botones confirmacion */}
                 {msg.confirmacion && !msg.confirmado && (
-                  <div className="mt-2.5 flex gap-2">
+                  <div className="mt-2.5 flex gap-3">
                     <button
                       onClick={() => confirmarAccion(msg.id, "si")}
                       disabled={pensando}
-                      className="flex min-h-[44px] items-center gap-2 rounded-lg bg-[#378ADD] px-4 text-[13px] font-medium text-white active:scale-95 transition-all disabled:opacity-70"
+                      className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 text-[13px] font-medium text-white active:scale-95 transition-all disabled:opacity-70"
                     >
                       {pensando && (
                         <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -684,7 +684,7 @@ export default function NovaChat() {
                     <button
                       onClick={() => confirmarAccion(msg.id, "no")}
                       disabled={pensando}
-                      className="flex min-h-[44px] items-center justify-center rounded-lg bg-transparent px-4 text-[13px] font-medium text-[#6b7280] active:scale-95 transition-all disabled:opacity-50"
+                      className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-transparent px-4 text-[13px] font-medium text-[#6b7280] active:scale-95 transition-all disabled:opacity-50"
                       style={{ border: "0.5px solid #e5e7eb" }}
                     >
                       Cancelar
