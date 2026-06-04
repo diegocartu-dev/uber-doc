@@ -43,11 +43,38 @@ export default function LinkNav({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const navegandoRef = useRef(false);
+  // Posición/tiempo del toque inicial, para distinguir tap de scroll.
+  const downRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
-  function handleClick() {
+  function navegar() {
     if (navegandoRef.current) return;
     navegandoRef.current = true;
     startTransition(() => router.push(href));
+  }
+
+  // ── Navegación robusta en touch ──
+  // En mobile, si la página todavía se está acomodando (contenido async que
+  // carga arriba), el botón puede MOVERSE entre que apoyás el dedo y lo levantás
+  // → el `click` sintetizado no encuentra el botón y NO navega (de ahí el "tocás
+  // y no pasa nada, hay que tocar dos veces"). Los eventos de puntero, en cambio,
+  // quedan CAPTURADOS por el botón: el pointerup llega aunque el botón se haya
+  // corrido. Navegamos en el pointerup de un tap real (poco movimiento) → el
+  // primer toque siempre entra. `onClick` queda de fallback (mouse/teclado).
+  function onPointerDown(e: React.PointerEvent) {
+    if (e.pointerType === "mouse") return; // el mouse usa onClick
+    downRef.current = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    if (e.pointerType === "mouse") return;
+    const d = downRef.current;
+    downRef.current = null;
+    if (!d) return;
+    const movido = Math.hypot(e.clientX - d.x, e.clientY - d.y);
+    const transcurrido = e.timeStamp - d.t;
+    if (movido < 12 && transcurrido < 700) navegar(); // tap, no scroll
+  }
+  function onPointerCancel() {
+    downRef.current = null; // el gesto se volvió scroll → no navega
   }
 
   const esFuncion = typeof children === "function";
@@ -55,7 +82,10 @@ export default function LinkNav({
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={navegar}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       disabled={isPending}
       aria-label={ariaLabel}
       aria-busy={isPending}
