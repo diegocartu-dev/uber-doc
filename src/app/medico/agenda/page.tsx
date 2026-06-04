@@ -60,8 +60,14 @@ export default async function AgendaPage({
         Desktop: grid 2 columnas — modelos izquierda, agenda derecha (order classes)
       */}
 
-      {/* Panel calendario/grilla — mobile primero, desktop segundo (order-2) */}
-      <div className="order-1 md:order-2 overflow-y-auto bg-[#f8f9fa] md:border-l md:border-gray-200">
+      {/*
+        Panel calendario/grilla — mobile primero, desktop segundo (order-2).
+        Al crear agenda (?nuevo=1) se oculta en MOBILE para que el formulario
+        ocupe la pantalla desde arriba: el botón "+ Nueva agenda" deja al médico
+        parado en la pantalla de crear, sin scroll ni saltos (decisión Sofía).
+        En desktop se conserva el split (ahí no molesta y el form va al costado).
+      */}
+      <div className={`${mostrarFormulario ? "hidden md:block " : ""}order-1 md:order-2 overflow-y-auto bg-[#f8f9fa] md:border-l md:border-gray-200`}>
         <div className="p-4 md:p-6">
           <PanelDerecho medicoId={medico.id} precio={medico.precio_consulta} flagNovaAi={await getFlag("nova_ai")} />
         </div>
