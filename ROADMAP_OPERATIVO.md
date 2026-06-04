@@ -250,6 +250,7 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 9a. Email de soporte institucional | ⚠️ UI referencia @docto.com.ar, RESEND_API_KEY placeholder local |
 | 9b. Sistema de tickets / soporte | ❌ Pendiente |
 | 9c. FAQ publica | ❌ Pendiente |
+| 9h. Ayuda in-app — Nova manual ilustrado | 🔵 Diseño cerrado, en construcción (piloto "Armar un turno") — `docs/nova-manual-ilustrado.md`, DECISIONES §12 |
 | 9d. Documentacion interna de procesos | ⚠️ 15+ docs en docs/, CLAUDE.md extenso, sin wiki/runbook |
 | 9e. Panel admin para gestionar incidentes | ✅ Implementado (admin con 7+ secciones: dashboard, medicos, pacientes, consultas, alertas, sereno, config) |
 | 9f. Metricas de operacion (KPIs) | ⚠️ eventos_funnel + insights dashboard (hoy, funnel, medicos, especialidades), sin dashboard publico |
