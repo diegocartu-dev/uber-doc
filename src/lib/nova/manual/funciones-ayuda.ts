@@ -98,12 +98,14 @@ export const FUNCIONES_AYUDA: FuncionAyuda[] = [
         alt: "Selectores de fecha desde y hasta",
       },
       {
-        texto: "Tocá los días que atendés. Un solo toque ya te arma tu horario de siempre.",
+        // El selector real tiene 3 estados por toque (FormularioModelo.tsx:96,337):
+        // 1 toque = horario base · 2 toques = personalizado · 3 toques = quitar.
+        texto: "Tocá los días que atendés. Un toque deja tu horario de siempre.",
         imagen: "/nova/manual/armar-turno/4.svg",
         alt: "Selector de días de la semana, lunes a viernes marcados",
         ampliacion: {
           texto:
-            "Cada día es un botón. Un toque lo activa con tu horario habitual; tocalo de nuevo para apagarlo. Si un día atendés distinto, ahí mismo le cambiás la hora. No hace falta cargar día por día desde cero.",
+            "Cada día es un botón. Un toque lo deja con tu horario de siempre. Tocalo otra vez y le ponés un horario distinto solo a ese día. Un toque más y lo quitás. No hace falta cargar día por día desde cero.",
           imagen: "/nova/manual/armar-turno/4.svg",
           alt: "Detalle del selector de días con un día activo",
         },
@@ -117,6 +119,12 @@ export const FUNCIONES_AYUDA: FuncionAyuda[] = [
         texto: 'Cuando esté todo, tocá "Guardar modelo" y ¡listo! Tus turnos quedan publicados.',
         imagen: "/nova/manual/armar-turno/6.svg",
         alt: 'Botón "Guardar modelo" al pie del formulario',
+        ampliacion: {
+          texto:
+            'Antes de guardar: si estos turnos son solo para tu consultorio particular, tildá esa opción. Si no la tocás, quedan publicados en la Clínica Virtual, que es lo más común. Después tocá "Guardar modelo".',
+          imagen: "/nova/manual/armar-turno/6.svg",
+          alt: 'Checkbox "Estos turnos son solo para mi Consultorio Particular" sobre el botón Guardar modelo',
+        },
       },
     ],
     cierre: {
@@ -132,8 +140,4 @@ const POR_ID = new Map(FUNCIONES_AYUDA.map((f) => [f.id, f]));
 
 export function getFuncion(id: string): FuncionAyuda | undefined {
   return POR_ID.get(id);
-}
-
-export function existeFuncion(id: string): boolean {
-  return POR_ID.has(id);
 }

@@ -817,7 +817,7 @@ export default function NovaChat() {
                       <button
                         key={op}
                         onClick={() => elegirOpcion(msg, op)}
-                        className="rounded-lg px-4 py-2 text-[13px] font-medium text-[#378ADD] active:scale-95 transition-transform"
+                        className="flex min-h-[44px] items-center rounded-lg px-4 text-[13px] font-medium text-[#378ADD] active:scale-95 transition-transform"
                         style={{ border: "1px solid #378ADD" }}
                       >
                         {op}

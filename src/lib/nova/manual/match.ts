@@ -4,6 +4,11 @@
 // manual. 100% local, sin IA, sin red. Si no hay match claro, devuelve null y
 // el chat sigue su curso normal (cae a la Nova IA real).
 //
+// ⚠️ Ola 1: este matcher TODAVÍA NO está cableado en el chat. En esta ola al
+// manual se entra solo por deep link (?walkthrough=) o por el botón de
+// encadenado. El cableado en enviarMensaje/handleKeyDown (reconocer la pregunta
+// en lenguaje natural y los controles por voz) es Ola 2.
+//
 // Diseño: docs/nova-manual-ilustrado.md §4–5
 
 import { FUNCIONES_AYUDA, type FuncionAyuda } from "./funciones-ayuda";
