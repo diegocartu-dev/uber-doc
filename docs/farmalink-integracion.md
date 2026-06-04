@@ -32,7 +32,7 @@ cadenas que usan ese sistema. Es una mejora **post-MVP**.
 | (a) Solicitud de homologación enviada | ✅ |
 | (b) **Acceso al Catálogo de APIs** (documentación) | ✅ Recibido — portal Axway/Joomla `https://catalogo-srv.farmalink.com.ar/` |
 | (c) **Accesos a TEST** (OAuth, sandbox) | ✅ **Recibidos (04/06/2026)** — Jira SOL-3426. Cliente OAuth + usuario, en 2 mails ("Creación de usuario Client OAUTH Test 1/2 y 2/2"). |
-| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (§4.bis); handshake del token **bloqueado** esperando ejemplo de Farmalink (§4.ter) |
+| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (§4.bis); handshake del token **bloqueado** esperando ejemplo de Farmalink (§4.ter). Consulta **enviada a homologación el 04/06/2026** desde `soporte@docto.com.ar`. |
 | (e) Homologación (validación de Farmalink) | ⬜ Pendiente |
 | (f) Producción | ⬜ Pendiente |
 
@@ -158,9 +158,12 @@ credenciales TEST. Estado: **bloqueado en el handshake, esperando ejemplo de Far
 
 **Conclusión:** el `grant_type`/`scope` exactos y el formato preciso del request del
 token no están documentados en el catálogo, y el 500 es opaco. **Se pidió a Farmalink
-(homologación) un ejemplo de request válido del token.** (El envío automático del mail
-fue bloqueado por la política de seguridad del agente — lo envía Diego desde
-`soporte@docto.com.ar`, respondiendo al hilo de homologación.)
+(homologación) un ejemplo de request válido del token** — mail **enviado el 04/06/2026**
+desde `soporte@docto.com.ar` a `homologacionre@farmalink.com.ar` (cc
+`seguridad@farmalink.com.ar`), en respuesta al hilo de homologación (ref. Jira SOL-3426).
+Asunto: *"RE: [FARMALINK] [DOCTO] - Recepcion OAUTH Test + consulta de autenticacion"*.
+Confirmación Resend `200`, id `78a82cee-78a9-4801-b853-8869c3170bae`. **Quedamos a la
+espera de la respuesta de Farmalink** con el ejemplo de request del token.
 
 **Para destrabar, falta de Farmalink:** un request de ejemplo del token (grant_type,
 scope, y si los params van en headers o body). Con eso se completa el cliente OAuth.
