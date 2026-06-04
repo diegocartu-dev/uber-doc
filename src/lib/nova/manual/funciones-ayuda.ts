@@ -9,8 +9,8 @@
 //  - Texto: 1 verbo por paso, ≤140 chars, tono de colega ("vos"), nombres de
 //    botones entre comillas tal cual aparecen en la pantalla.
 //  - Imágenes: recortes WebP en /public/nova/manual/{id}/{n}.webp, señalador
-//    QUEMADO en la foto (azul #378ADD, nunca verde). Mientras no estén las fotos
-//    reales, se usan placeholders .svg con el mismo path base.
+//    QUEMADO en la foto (azul #378ADD, nunca verde). "armar-turno" ya usa fotos
+//    reales (recortes de capturas reales de Docto con el señalador azul).
 //  - 3 a 6 pasos por cuentito.
 
 export type CategoriaAyuda =
@@ -32,7 +32,7 @@ export type AmpliacionPaso = {
 export type PasoManual = {
   /** Texto corto del paso (≤140 chars). */
   texto: string;
-  /** Path bajo /public (ej: "/nova/manual/armar-turno/1.svg"). */
+  /** Path bajo /public (ej: "/nova/manual/armar-turno/1.webp"). */
   imagen: string;
   /** Texto alternativo accesible de la imagen. */
   alt: string;
@@ -84,45 +84,45 @@ export const FUNCIONES_AYUDA: FuncionAyuda[] = [
     pasos: [
       {
         texto: 'Entrá a "Mi agenda" y tocá el botón "+ Nueva agenda".',
-        imagen: "/nova/manual/armar-turno/1.svg",
+        imagen: "/nova/manual/armar-turno/1.webp",
         alt: 'Pantalla Mi agenda con el botón "+ Nueva agenda" resaltado',
       },
       {
         texto: 'Ponele un nombre que reconozcas, como "Semana laboral". Después elegí la duración y el valor de cada turno.',
-        imagen: "/nova/manual/armar-turno/2.svg",
+        imagen: "/nova/manual/armar-turno/2.webp",
         alt: "Campos de nombre, duración y valor de la agenda",
       },
       {
         texto: "Marcá desde y hasta qué día querés que valga esta agenda.",
-        imagen: "/nova/manual/armar-turno/3.svg",
+        imagen: "/nova/manual/armar-turno/3.webp",
         alt: "Selectores de fecha desde y hasta",
       },
       {
         // El selector real tiene 3 estados por toque (FormularioModelo.tsx:96,337):
         // 1 toque = horario base · 2 toques = personalizado · 3 toques = quitar.
         texto: "Tocá los días que atendés. Un toque deja tu horario de siempre.",
-        imagen: "/nova/manual/armar-turno/4.svg",
+        imagen: "/nova/manual/armar-turno/4.webp",
         alt: "Selector de días de la semana, lunes a viernes marcados",
         ampliacion: {
           texto:
             "Cada día es un botón. Un toque lo deja con tu horario de siempre. Tocalo otra vez y le ponés un horario distinto solo a ese día. Un toque más y lo quitás. No hace falta cargar día por día desde cero.",
-          imagen: "/nova/manual/armar-turno/4.svg",
+          imagen: "/nova/manual/armar-turno/4.webp",
           alt: "Detalle del selector de días con un día activo",
         },
       },
       {
         texto: '¿Atendés mañana y tarde? Tocá "+ Agregar franja" y cargá el segundo turno del día.',
-        imagen: "/nova/manual/armar-turno/5.svg",
+        imagen: "/nova/manual/armar-turno/5.webp",
         alt: 'Botón "+ Agregar franja" para sumar una segunda franja horaria',
       },
       {
         texto: 'Cuando esté todo, tocá "Guardar modelo" y ¡listo! Tus turnos quedan publicados.',
-        imagen: "/nova/manual/armar-turno/6.svg",
+        imagen: "/nova/manual/armar-turno/6.webp",
         alt: 'Botón "Guardar modelo" al pie del formulario',
         ampliacion: {
           texto:
             'Antes de guardar: si estos turnos son solo para tu consultorio particular, tildá esa opción. Si no la tocás, quedan publicados en la Clínica Virtual, que es lo más común. Después tocá "Guardar modelo".',
-          imagen: "/nova/manual/armar-turno/6.svg",
+          imagen: "/nova/manual/armar-turno/6.webp",
           alt: 'Checkbox "Estos turnos son solo para mi Consultorio Particular" sobre el botón Guardar modelo',
         },
       },
