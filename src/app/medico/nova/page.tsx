@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import BotonVolver from "@/components/ui/BotonVolver";
 import { getFuncion, type FuncionAyuda } from "@/lib/nova/manual/funciones-ayuda";
+import { matchControl, type ControlManual } from "@/lib/nova/manual/match";
 
 // ── Types ──
 
@@ -192,6 +193,19 @@ export default function NovaChat() {
   // Voz ON por default. El médico puede silenciarla si prefiere solo leer.
   const [vozSilenciada, setVozSilenciada] = useState(false);
   const vozSilenciadaRef = useRef(false); // espejo para leerlo sin stale closure en el SSE
+  // ── Ola 2: capa conversacional del manual ──
+  // Velocidad de la voz (TTS). 1 = normal, 0.75 = lento. Persistida.
+  const [velocidadVoz, setVelocidadVoz] = useState(1);
+  const velocidadVozRef = useRef(1); // espejo para reproducirTTS sin stale closure
+  // Pasos con la ampliación ("No me quedó claro") abierta inline, por id de burbuja.
+  const [ampliacionesAbiertas, setAmpliacionesAbiertas] = useState<Set<string>>(new Set());
+  // Índice O(1) de la burbuja de manual activa (última con meta `manual`) para el
+  // interceptor del input. La fuente de verdad sigue siendo el array `mensajes`.
+  const manualActivoRef = useRef<MensajeChat | null>(null);
+  const manualSalidoRef = useRef(false); // el médico cerró el cuentito ("ya entendí")
+  // Puente para que enviarMensaje (definido antes) llame al dispatcher de
+  // controles (definido después). Se sincroniza por effect, evita el TDZ.
+  const ejecutarControlRef = useRef<((control: ControlManual, msg: MensajeChat) => void) | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioDesbloqueado = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -210,15 +224,35 @@ export default function NovaChat() {
     });
   }, [router]);
 
-  // Preferencia de silencio (persistida) + ref espejo para el SSE
+  // Preferencias persistidas (silencio + velocidad) + refs espejo para el SSE
   useEffect(() => {
     try {
       if (localStorage.getItem("nova_voz_silenciada") === "1") setVozSilenciada(true);
+      if (localStorage.getItem("nova_velocidad_voz") === "0.75") {
+        setVelocidadVoz(0.75);
+        velocidadVozRef.current = 0.75;
+      }
     } catch { /* sin localStorage */ }
   }, []);
   useEffect(() => {
     vozSilenciadaRef.current = vozSilenciada;
   }, [vozSilenciada]);
+
+  // Deriva el paso de manual activo (último con meta `manual`) desde el hilo.
+  // Se lee imperativamente en el interceptor del input (sin re-render ni stale closure).
+  useEffect(() => {
+    if (manualSalidoRef.current) {
+      manualActivoRef.current = null;
+      return;
+    }
+    for (let i = mensajes.length - 1; i >= 0; i--) {
+      if (mensajes[i].manual) {
+        manualActivoRef.current = mensajes[i];
+        return;
+      }
+    }
+    manualActivoRef.current = null;
+  }, [mensajes]);
 
   // Auto-scroll
   useEffect(() => {
@@ -229,12 +263,31 @@ export default function NovaChat() {
 
   const enviarMensaje = useCallback(
     async (texto: string) => {
-      if (!texto.trim() || !medicoId || enviando) return;
+      const limpio = texto.trim();
+      if (!limpio || !medicoId || enviando) return;
+
+      // ── Ola 2: interceptor del manual conversacional ──
+      // Si hay un cuentito activo y el médico pidió un CONTROL (repetir, más
+      // lento, volvé, siguiente, no entiendo, salir), se resuelve 100% local —
+      // NUNCA llega al LLM. Igual se muestra lo que dijo como burbuja del médico.
+      const activoManual = manualActivoRef.current;
+      if (activoManual?.manual) {
+        const control = matchControl(limpio);
+        if (control) {
+          setInput("");
+          setMensajes((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "user", content: limpio },
+          ]);
+          ejecutarControlRef.current?.(control, activoManual);
+          return;
+        }
+      }
 
       const userMsg: MensajeChat = {
         id: crypto.randomUUID(),
         role: "user",
-        content: texto.trim(),
+        content: limpio,
       };
 
       const mensajesActualizados = [...mensajes, userMsg];
@@ -435,7 +488,7 @@ export default function NovaChat() {
       const res = await fetch("/api/nova/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto }),
+        body: JSON.stringify({ texto, speed: velocidadVozRef.current }),
       });
 
       if (!res.ok) return;
@@ -507,6 +560,7 @@ export default function NovaChat() {
     (funcionId: string) => {
       const fn = getFuncion(funcionId);
       if (!fn) return;
+      manualSalidoRef.current = false; // arranca un cuentito → el manual vuelve a estar activo
       const burbuja = construirBurbujaManual(fn, -1);
       setMensajes((prev) => [...prev, burbuja]);
       if (!vozSilenciadaRef.current) reproducirTTS(burbuja.content);
@@ -539,6 +593,113 @@ export default function NovaChat() {
     },
     [iniciarManual, reproducirTTS]
   );
+
+  // ── Ola 2: capa conversacional (controles que NO consumen el paso) ──
+
+  // Texto del paso (o apertura/cierre) sin tocar el array de mensajes.
+  const textoDelPaso = useCallback((manual: NonNullable<MensajeChat["manual"]>): string => {
+    const fn = getFuncion(manual.funcionId);
+    if (!fn) return "";
+    if (manual.pasoActual < 0) return fn.apertura;
+    if (manual.pasoActual >= manual.totalPasos) return fn.cierre.texto;
+    return fn.pasos[manual.pasoActual].texto;
+  }, []);
+
+  // "↺ Repetir": re-narra el paso actual. No avanza, no muta el hilo.
+  const repetirPaso = useCallback(
+    (manual: NonNullable<MensajeChat["manual"]>) => {
+      reproducirTTS(textoDelPaso(manual)); // explícito: repetir suena aunque la voz esté en silencio global
+    },
+    [reproducirTTS, textoDelPaso]
+  );
+
+  // "No me quedó claro": abre/cierra la ampliación curada inline (misma burbuja).
+  const toggleAmpliacion = useCallback(
+    (msg: MensajeChat) => {
+      if (!msg.manual) return;
+      const fn = getFuncion(msg.manual.funcionId);
+      const paso = fn && msg.manual.pasoActual >= 0 ? fn.pasos[msg.manual.pasoActual] : undefined;
+      const amp = paso?.ampliacion;
+      let abriendo = false;
+      setAmpliacionesAbiertas((prev) => {
+        const next = new Set(prev);
+        if (next.has(msg.id)) next.delete(msg.id);
+        else { next.add(msg.id); abriendo = true; }
+        return next;
+      });
+      if (abriendo && amp && !vozSilenciadaRef.current) reproducirTTS(amp.texto);
+    },
+    [reproducirTTS]
+  );
+
+  // "Más despacio" / "Velocidad normal": alterna la velocidad de la voz y re-narra
+  // para que el médico ESCUCHE el cambio. Persiste la preferencia.
+  const toggleVelocidad = useCallback(
+    (manual: NonNullable<MensajeChat["manual"]>) => {
+      const next = velocidadVozRef.current === 1 ? 0.75 : 1;
+      velocidadVozRef.current = next;
+      setVelocidadVoz(next);
+      try {
+        localStorage.setItem("nova_velocidad_voz", String(next));
+      } catch { /* sin localStorage */ }
+      reproducirTTS(textoDelPaso(manual));
+    },
+    [reproducirTTS, textoDelPaso]
+  );
+
+  // Dispatcher de los controles reconocidos por voz/texto durante un cuentito.
+  // Recibe la burbuja activa (necesita su id para la ampliación inline).
+  const ejecutarControl = useCallback(
+    (control: ControlManual, msg: MensajeChat) => {
+      const manual = msg.manual;
+      if (!manual) return;
+      switch (control) {
+        case "repetir":
+          repetirPaso(manual);
+          break;
+        case "no-entiendo": {
+          const fn = getFuncion(manual.funcionId);
+          const paso =
+            fn && manual.pasoActual >= 0 && manual.pasoActual < manual.totalPasos
+              ? fn.pasos[manual.pasoActual]
+              : undefined;
+          if (paso?.ampliacion) {
+            setAmpliacionesAbiertas((prev) => new Set(prev).add(msg.id));
+            if (!vozSilenciadaRef.current) reproducirTTS(paso.ampliacion.texto);
+          } else {
+            repetirPaso(manual); // sin ampliación → al menos repetir
+          }
+          break;
+        }
+        case "mas-lento":
+          if (velocidadVozRef.current !== 0.75) toggleVelocidad(manual);
+          else repetirPaso(manual);
+          break;
+        case "siguiente": {
+          const esUltimoPaso = manual.pasoActual >= 0 && manual.pasoActual >= manual.totalPasos - 1;
+          avanzarManual(manual, esUltimoPaso ? "Listo ✓" : "Siguiente →");
+          break;
+        }
+        case "atras":
+          if (manual.pasoActual >= 1) avanzarManual(manual, "← Atrás");
+          break;
+        case "salir":
+          manualSalidoRef.current = true;
+          manualActivoRef.current = null;
+          setMensajes((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "nova", content: "¡Listo! Cualquier cosa, preguntame nomás. 😊" },
+          ]);
+          break;
+      }
+    },
+    [repetirPaso, toggleVelocidad, avanzarManual, reproducirTTS]
+  );
+
+  // Puente enviarMensaje → ejecutarControl (ver ejecutarControlRef arriba).
+  useEffect(() => {
+    ejecutarControlRef.current = ejecutarControl;
+  }, [ejecutarControl]);
 
   // Deep link: /medico/nova?walkthrough=<id> abre Nova directo en ese cuentito
   const walkthroughIniciado = useRef(false);
@@ -652,6 +813,13 @@ export default function NovaChat() {
   };
 
   const hayTexto = input.trim().length > 0;
+  // Id de la última burbuja de manual (el paso "activo"): solo ahí se muestran
+  // los controles (Repetir / No me quedó claro / Más despacio).
+  const ultimoManualId = [...mensajes].reverse().find((m) => m.manual)?.id;
+
+  // En un cuentito, toda opción que NO es "← Atrás" avanza (acción primaria →
+  // azul relleno). "← Atrás" es secundaria (borde azul).
+  const esNavPrimaria = (op: string) => op !== "← Atrás";
 
   return (
     <div className="flex h-dvh flex-col bg-[#f8f9fa]">
@@ -728,7 +896,15 @@ export default function NovaChat() {
             </div>
           )}
 
-          {mensajes.map((msg) => (
+          {mensajes.map((msg) => {
+            const esManualPaso =
+              !!msg.manual && msg.manual.pasoActual >= 0 && msg.manual.pasoActual < msg.manual.totalPasos;
+            const fnManual = msg.manual ? getFuncion(msg.manual.funcionId) : undefined;
+            const ampliacion =
+              esManualPaso && fnManual ? fnManual.pasos[msg.manual!.pasoActual].ampliacion : undefined;
+            const esPasoActivo = esManualPaso && msg.id === ultimoManualId;
+            const ampAbierta = ampliacionesAbiertas.has(msg.id);
+            return (
             <div
               key={msg.id}
               className={`mb-2 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
@@ -761,6 +937,26 @@ export default function NovaChat() {
                     className="mt-2 w-full rounded-lg"
                     style={{ border: "0.5px solid #e5e7eb" }}
                   />
+                )}
+
+                {/* Ampliación inline ("No me quedó claro") — curada, sin LLM */}
+                {ampAbierta && ampliacion && (
+                  <div className="mt-2 rounded-lg p-3" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
+                    <p className="mb-1 text-[11px] font-medium" style={{ color: "#888780" }}>
+                      Con más detalle
+                    </p>
+                    <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{ampliacion.texto}</p>
+                    {ampliacion.imagen && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ampliacion.imagen}
+                        alt={ampliacion.alt || ""}
+                        loading="lazy"
+                        className="mt-2 w-full rounded-lg"
+                        style={{ border: "0.5px solid #e5e7eb" }}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {/* Chip canal + duración */}
@@ -810,27 +1006,65 @@ export default function NovaChat() {
                   <p className="mt-2 text-xs text-[#6b7280]">Cancelado</p>
                 )}
 
-                {/* Botones de opciones (disambiguación) */}
+                {/* Botones de opciones / navegación del manual */}
                 {msg.opciones && !msg.opcionElegida && (
                   <div className="mt-2.5 flex flex-wrap gap-2">
-                    {msg.opciones.map((op) => (
-                      <button
-                        key={op}
-                        onClick={() => elegirOpcion(msg, op)}
-                        className="flex min-h-[44px] items-center rounded-lg px-4 text-[13px] font-medium text-[#378ADD] active:scale-95 transition-transform"
-                        style={{ border: "1px solid #378ADD" }}
-                      >
-                        {op}
-                      </button>
-                    ))}
+                    {msg.opciones.map((op) => {
+                      // En el manual, la acción que avanza va en azul relleno (primaria);
+                      // "← Atrás" en borde azul. Fuera del manual, todo borde azul (como antes).
+                      const primaria = msg.manual && esNavPrimaria(op);
+                      return (
+                        <button
+                          key={op}
+                          onClick={() => elegirOpcion(msg, op)}
+                          className={`flex min-h-[44px] items-center rounded-lg px-4 text-[13px] font-medium active:scale-95 transition-transform ${
+                            primaria ? "text-white" : "text-[#378ADD]"
+                          }`}
+                          style={primaria ? { background: "#378ADD" } : { border: "1px solid #378ADD" }}
+                        >
+                          {op}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
+
+                {/* Controles del paso activo: NO consumen el paso (no setean opcionElegida) */}
+                {esPasoActivo && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => repetirPaso(msg.manual!)}
+                      className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                      style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
+                    >
+                      ↺ Repetir
+                    </button>
+                    {ampliacion && (
+                      <button
+                        onClick={() => toggleAmpliacion(msg)}
+                        className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                        style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
+                      >
+                        {ampAbierta ? "← Volver al paso" : "No me quedó claro"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => toggleVelocidad(msg.manual!)}
+                      className="flex min-h-[44px] items-center rounded-lg px-3 text-[13px] font-medium active:scale-95 transition-transform"
+                      style={{ color: "#888780", border: "0.5px solid #e5e7eb" }}
+                    >
+                      {velocidadVoz === 1 ? "Más despacio" : "Velocidad normal"}
+                    </button>
+                  </div>
+                )}
+
                 {msg.opcionElegida && !msg.manual && (
                   <p className="mt-2 text-xs text-[#1D9E75]">{msg.opcionElegida}</p>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {/* Pensando */}
           {pensando && (

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { texto } = await req.json();
+    const { texto, speed } = await req.json();
 
     if (!texto) {
       return new Response(
@@ -26,6 +26,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Velocidad de la voz (manual de Nova "más despacio"). Clamp conservador a
+    // [0.5, 1.5] y default 1.0 si falta o es inválida → retrocompat con los
+    // call-sites que no mandan speed.
+    const velocidad =
+      typeof speed === "number" && speed >= 0.5 && speed <= 1.5 ? speed : 1.0;
+
     const openai = new OpenAI();
 
     const response = await openai.audio.speech.create({
@@ -33,6 +39,7 @@ export async function POST(req: NextRequest) {
       voice: "nova",
       input: texto,
       response_format: "mp3",
+      speed: velocidad,
     });
 
     const audioBuffer = Buffer.from(await response.arrayBuffer());

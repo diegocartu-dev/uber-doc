@@ -4,10 +4,12 @@
 // manual. 100% local, sin IA, sin red. Si no hay match claro, devuelve null y
 // el chat sigue su curso normal (cae a la Nova IA real).
 //
-// ⚠️ Ola 1: este matcher TODAVÍA NO está cableado en el chat. En esta ola al
-// manual se entra solo por deep link (?walkthrough=) o por el botón de
-// encadenado. El cableado en enviarMensaje/handleKeyDown (reconocer la pregunta
-// en lenguaje natural y los controles por voz) es Ola 2.
+// Estado de cableado:
+//  - matchControl: CABLEADO en Ola 2 (enviarMensaje intercepta los controles por
+//    voz/texto cuando hay un cuentito activo: repetir, más lento, volvé, etc.).
+//  - matchFuncion: AÚN no cableado. Reconocer la pregunta en lenguaje natural
+//    para OFRECER un cuentito desde el chat libre es Ola 3 (entrada B del diseño).
+//    En chat libre, "armá un turno" debe ir al LLM (acción real), no al tutorial.
 //
 // Diseño: docs/nova-manual-ilustrado.md §4–5
 
