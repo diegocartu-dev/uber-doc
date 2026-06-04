@@ -165,8 +165,10 @@ export const FUNCIONES_AYUDA: FuncionAyuda[] = [
       },
     ],
     cierre: {
-      texto: "¡Ya está! Tus turnos quedaron publicados y los pacientes ya pueden reservar. 🎉",
-      narracion: "¡Ya está! Tus turnos quedaron publicados, y los pacientes ya pueden reservar.",
+      texto:
+        "¡Y listo, así se arman tus turnos a mano! 🎉\n\nPero te tiro un secreto: si querés hacerlo más fácil, no hace falta nada de esto. Decime acá los días que atendés, los horarios y cuánto dura cada turno… y yo te la habilito por vos en un segundo. 😉",
+      narracion:
+        "¡Y listo, así se arman tus turnos a mano! Pero te tiro un secreto: si querés hacerlo más fácil, no hace falta nada de esto. Decime acá los días que atendés, los horarios y cuánto dura cada turno, y yo te la habilito por vos en un segundo.",
       siguiente: { funcionId: "ponerse-disponible", label: "Ver cómo ponerme disponible" },
     },
   },

@@ -263,7 +263,10 @@ export default function NovaChat() {
       const activoManual = manualSalidoRef.current
         ? null
         : [...mensajesRef.current].reverse().find((m) => m.manual) ?? null;
-      if (activoManual?.manual) {
+      // Interceptamos controles SOLO durante los pasos (apertura + 0..n-1). En el
+      // CIERRE no: ahí Nova invita a dictar los días/horarios para armar la agenda,
+      // y ese dictado debe ir derecho a la IA real (no que "dale" lo coma un control).
+      if (activoManual?.manual && activoManual.manual.pasoActual < activoManual.manual.totalPasos) {
         const control = matchControl(limpio);
         if (control) {
           setInput("");
