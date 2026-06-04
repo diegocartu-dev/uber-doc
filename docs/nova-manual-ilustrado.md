@@ -144,6 +144,25 @@ path, mismo número = mismo paso). Verificar con `npx tsx scripts/verify-manual-
 - **Paso 5 (franja):** capturar con **un día ya activo** — el botón "+ Agregar franja" solo aparece después de seleccionar un día con horario base.
 - **Señalador:** quemado, azul #378ADD, nunca verde. Uno por paso.
 
+## 8.bis Estado de implementación
+
+- **Ola 1 — Motor:** ✅ en `main` (PR #152). Registro estático + burbuja con foto +
+  contador + Siguiente/Atrás/Listo + deep link `?walkthrough=` + narración TTS por paso.
+- **Ola 2 — Capa conversacional:** 🔵 en review (`feat/nova-manual-ola2`).
+  - "↺ Repetir", "No me quedó claro" (ampliación **inline**), "Más despacio"
+    (velocidad TTS 1 ↔ 0.75, persistida) en una fila de controles **separada de la
+    navegación** (no consumen el paso, solo en el paso activo).
+  - Navegación primaria (Siguiente/Listo/Empezar/encadenar) → **azul relleno**;
+    "← Atrás" → borde azul.
+  - Input abierto: `matchControl` intercepta los controles por voz/texto con cuentito
+    activo; el resto cae a la Nova IA real.
+  - **Decisiones de síntesis:** ampliación inline (no burbuja nueva); `matchFuncion`
+    **no** se cablea en el interceptor (entrada por lenguaje natural = Ola 3, para no
+    secuestrar acciones reales como "armá un turno" en chat libre); "Más despacio" en
+    la fila de controles (no header).
+- **Ola 3 — Puntos de entrada:** ⬜ pendiente. Link "¿Cómo funciona?" contextual +
+  grilla en el menú + `matchFuncion` para que Nova **ofrezca** el cuentito.
+
 ## 9. Por qué es un diferencial
 Ayuda **ilustrada + curada + segura + conversacional**, servida por la propia IA del
 producto. Construye confianza en Nova (porque nunca se equivoca), y esa confianza se
