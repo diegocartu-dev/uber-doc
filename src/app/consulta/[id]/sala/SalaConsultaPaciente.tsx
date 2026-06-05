@@ -10,7 +10,7 @@ import {
   useLocalParticipant,
   useDataChannel,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, DisconnectReason } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { formatNombreMedico } from "@/lib/utils/texto";
@@ -269,8 +269,14 @@ export default function SalaConsultaPaciente({
   const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const [showEstudios, setShowEstudios] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
+  // cerrando: el médico finalizó (ROOM_DELETED) pero la consulta aún no figura
+  // como completada en DB. Mostramos pantalla de transición cálida hasta que
+  // Realtime/polling traigan el estado completado (o el fallback anti-trabado).
+  const [cerrando, setCerrando] = useState(false);
   const inicioRef = useRef(horaInicio ? new Date(horaInicio).getTime() : Date.now());
-  const yaRedirigioRef = useRef(false);
+  // yaCerroRef: guard de "ya cerramos" (transición a pantalla de cierre).
+  // Frena el polling para no re-disparar fetch/setState una vez cerrado.
+  const yaCerroRef = useRef(false);
 
   // --- Obtener token LiveKit ---
   useEffect(() => {
@@ -299,11 +305,18 @@ export default function SalaConsultaPaciente({
     obtenerToken();
   }, [consultaId, roomName]);
 
-  // --- LiveKit: desconexion detectada (medico elimino la sala) ---
-  function handleDisconnected() {
+  // --- LiveKit: desconexion detectada ---
+  // ROOM_DELETED = el médico finalizó la consulta → convergemos a la pantalla
+  // de cierre (NO redirigir). Cualquier otro motivo (caída de red, etc.) mantiene
+  // el comportamiento previo: redirect a /mis-consultas.
+  function handleDisconnected(reason?: DisconnectReason) {
     setVideoVisible(false);
-    if (!yaRedirigioRef.current) {
-      yaRedirigioRef.current = true;
+    if (reason === DisconnectReason.ROOM_DELETED) {
+      setCerrando(true);
+      return;
+    }
+    if (!yaCerroRef.current) {
+      yaCerroRef.current = true;
       router.push("/mis-consultas");
     }
   }
@@ -360,6 +373,7 @@ export default function SalaConsultaPaciente({
           if (!row.estado) return;
           setEstado(row.estado);
           if (row.estado === estadoCompletado) {
+            yaCerroRef.current = true;
             setVideoVisible(false);
             fetchDocumentos();
           }
@@ -377,7 +391,7 @@ export default function SalaConsultaPaciente({
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      if (yaRedirigioRef.current) return;
+      if (yaCerroRef.current) return;
       try {
         const res = await fetch(pollingUrl, {
           credentials: "include",
@@ -385,10 +399,13 @@ export default function SalaConsultaPaciente({
         if (!res.ok) return;
         const data = await res.json();
         if (data.estado === estadoCompletado) {
-          yaRedirigioRef.current = true;
+          // Convergemos a la pantalla de cierre (igual que el Realtime),
+          // NO redirigimos a /mis-consultas — el paciente ve sus documentos.
+          yaCerroRef.current = true;
           clearInterval(interval);
+          setEstado(estadoCompletado);
           setVideoVisible(false);
-          router.push("/mis-consultas");
+          fetchDocumentos();
         }
       } catch {
         // Polling: falla silenciosamente, el siguiente tick reintenta
@@ -396,7 +413,18 @@ export default function SalaConsultaPaciente({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [pollingUrl, estadoCompletado, router]);
+  }, [pollingUrl, estadoCompletado, fetchDocumentos]);
+
+  // --- Fallback anti-trabado: si tras ~20s en "cerrando" el estado sigue sin ser
+  // completado (el update del médico falló silenciosamente), forzamos una pantalla
+  // de cierre graciosa que deriva a /mis-consultas. NO dejamos al paciente trabado. ---
+  const [fallbackCierre, setFallbackCierre] = useState(false);
+  useEffect(() => {
+    if (!cerrando) return;
+    if (estado === estadoCompletado) return;
+    const t = setTimeout(() => setFallbackCierre(true), 20000);
+    return () => clearTimeout(t);
+  }, [cerrando, estado, estadoCompletado]);
 
   // --- Pantalla de cierre (completada/completado) ---
   if (estado === estadoCompletado) {
@@ -506,6 +534,74 @@ export default function SalaConsultaPaciente({
             >
               Volver a mis consultas
             </a>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // --- Fallback anti-trabado: el médico finalizó pero el estado no llegó a
+  // completado en ~20s. Cierre gracioso que deriva a Mis Consultas. ---
+  if (cerrando && fallbackCierre) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-gray-50">
+        <nav className="border-b border-gray-200 bg-white">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🩺</span>
+              <span className="text-xl font-bold text-gray-900">Docto</span>
+            </div>
+          </div>
+        </nav>
+        <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
+          <div className="mx-auto w-full max-w-lg text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#1D9E75]/10">
+              <svg className="h-10 w-10 text-[#1D9E75]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
+            <p className="mt-2 text-gray-600">
+              Vas a encontrar tus documentos en Mis Consultas.
+            </p>
+            <a
+              href="/mis-consultas"
+              className="mt-8 inline-block w-full max-w-xs rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
+              style={{ minHeight: "44px" }}
+            >
+              Ir a mis consultas
+            </a>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // --- Pantalla de transición: el médico finalizó (ROOM_DELETED) y esperamos
+  // que el estado pase a completado para mostrar la pantalla de cierre con docs. ---
+  if (cerrando) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-gray-50">
+        <nav className="border-b border-gray-200 bg-white">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🩺</span>
+              <span className="text-xl font-bold text-gray-900">Docto</span>
+            </div>
+          </div>
+        </nav>
+        <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
+          <div className="mx-auto w-full max-w-lg text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#1D9E75]/10">
+              <svg className="h-8 w-8 animate-spin text-[#1D9E75]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            </div>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
+            <p className="mt-2 text-gray-600">
+              Cargando tus documentos…
+            </p>
           </div>
         </main>
       </div>
