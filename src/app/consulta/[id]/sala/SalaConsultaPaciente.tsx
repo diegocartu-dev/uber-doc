@@ -562,7 +562,7 @@ export default function SalaConsultaPaciente({
             </div>
             <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
             <p className="mt-2 text-gray-600">
-              Vas a encontrar tus documentos en Mis Consultas.
+              En unos minutos vas a encontrar tus documentos en Mis Consultas.
             </p>
             <a
               href="/mis-consultas"

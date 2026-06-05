@@ -1590,7 +1590,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              ¿Finalizar y generar los documentos para el paciente?
+              Se van a enviar los documentos al paciente. ¿Confirmás?
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
               <button
@@ -1661,7 +1661,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              Falta completar la consulta
+              Antes de finalizar
             </h3>
             <p
               style={{
@@ -1723,7 +1723,6 @@ export default function WorkspaceConsulta({
       )}
 
       {/* Dialog de salir — médico: ofrece finalizar o solo salir */}
-      {/* TODO(sofia): revisar si "Finalizar" debe salir de acá también */}
       {showSalirDialog && (
         <div
           style={{
@@ -1763,28 +1762,9 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              ¿Qué querés hacer?
+              Vas a dejar la videollamada. Si todavía no finalizaste, podés volver más tarde a completar los documentos.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <button
-                onClick={() => {
-                  setShowSalirDialog(false);
-                  if (!validarCamposObligatorios()) return;
-                  setShowConfirmDialog(true);
-                }}
-                style={{
-                  padding: "12px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "#378ADD",
-                  color: "white",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Finalizar y generar documentos
-              </button>
               <button
                 onClick={() => {
                   setShowSalirDialog(false);
