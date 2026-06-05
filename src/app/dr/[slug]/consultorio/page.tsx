@@ -23,7 +23,7 @@ export default async function ConsultorioPrivadoPage({
 
   const { data: pacienteCheck } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -53,13 +53,17 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, es_cuenta_test")
     .eq("slug", slug)
     .maybeSingle();
 
   const { getFlag } = await import("@/lib/feature-flags");
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) notFound();
+  // Carril de prueba: cerrar el universo también acá (coherencia con la clínica y los
+  // guards de CI/turnos). Un paciente real no llega a la página de un médico test ni
+  // viceversa, ni por link directo. Defensa en profundidad.
+  const esPacienteTest = pacienteCheck?.es_cuenta_test === true;
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada) || medico.es_cuenta_test !== esPacienteTest) notFound();
 
   // Calcular disponibilidad
   const ahora = new Date();

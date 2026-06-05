@@ -39,9 +39,11 @@ prueba ni viceversa.
    - El paciente de prueba ve la **clínica idéntica a la real, pero poblada por el médico
      de prueba** (universo test). Elige especialidad → médico → CI o turno.
    - URL directa al médico: `https://www.docto.com.ar/dr/docto-test/consultorio`
-3. Paga en **MP sandbox** (`live_mode=false` no aplica acá — `medico.test` tiene MP real;
-   para probar **sin** mover plata real, usá un médico test con MP sandbox, o la whitelist
-   de cobro real `MP_PAGO_REAL_WHITELIST` para una prueba con plata de verdad acotada).
+3. **Pago:** con `pago_marketplace=OFF` (estado actual) el camino activo es `/simular` —
+   **NO mueve plata**. ⚠️ OJO: `medico.test` tiene **MP REAL** (`live_mode=true`); si lo
+   metés en `MP_PAGO_REAL_WHITELIST` para probar `crear-v2`, **mueve plata de verdad**
+   contra su cuenta. Para probar el flujo de pago sin riesgo, dejá `pago_marketplace` OFF
+   y NO agregues `medico.test` a esa whitelist.
 4. **Navegador A** → el médico ve al paciente entrando → acepta → ambos al video. Ahí se
    reproduce el problema con evidencia real, en prod, sin afectar a nadie.
 
