@@ -529,6 +529,31 @@ function DictadoSignaler({ dictando }: { dictando: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
+// Chips de estado de campos obligatorios — fondo oscuro (footer de video)
+// Verde #1D9E75 SOLO como indicador de estado (permitido por design system)
+// ---------------------------------------------------------------------------
+
+function ChipsEstadoObligatorios({ faltaDiagnostico, faltaEvolucion }: { faltaDiagnostico: boolean; faltaEvolucion: boolean }) {
+  const chip = (label: string, falta: boolean) => (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      style={{
+        backgroundColor: falta ? "rgba(255,255,255,0.08)" : "rgba(29,158,117,0.18)",
+        color: falta ? "rgba(255,255,255,0.55)" : "#5FD3AC",
+      }}
+    >
+      {label} {falta ? "⋯" : "✓"}
+    </span>
+  );
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {chip("Diagnóstico", faltaDiagnostico)}
+      {chip("Evolución", faltaEvolucion)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
@@ -563,6 +588,7 @@ export default function WorkspaceConsulta({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
+  const [showFaltaDialog, setShowFaltaDialog] = useState(false);
   const [showModalCobertura, setShowModalCobertura] = useState<"completar" | "editar" | null>(null);
   const [coberturaLocal, setCoberturaLocal] = useState<DatosCobertura>(consulta.paciente_cobertura);
 
@@ -639,6 +665,11 @@ export default function WorkspaceConsulta({
     return () => clearInterval(i);
   }, [horaInicio]);
 
+  // --- Gate amable: estado de campos obligatorios ---
+  const faltaDiagnostico = !diagnostico.trim();
+  const faltaEvolucion = !evolucion.trim();
+  const faltanObligatorios = faltaDiagnostico || faltaEvolucion;
+
   // Helper: validar campos obligatorios antes de finalizar
   function validarCamposObligatorios(): boolean {
     if (!diagnostico.trim()) {
@@ -656,6 +687,29 @@ export default function WorkspaceConsulta({
       return false;
     }
     return true;
+  }
+
+  // --- Punto de entrada único de finalización desde el video ---
+  // Si faltan obligatorios → dialog amable. Si no → dialog de confirmación actual.
+  function intentarFinalizar() {
+    if (faltanObligatorios) {
+      setShowFaltaDialog(true);
+      return;
+    }
+    setShowConfirmDialog(true);
+  }
+
+  // --- Desde el dialog "Falta completar": ir a documentar y enfocar el campo faltante ---
+  function completarAhora() {
+    setShowFaltaDialog(false);
+    setModo("escritura");
+    if (faltaDiagnostico) {
+      setDiagError(true);
+      setTimeout(() => diagRef.current?.focus(), 350);
+    } else if (faltaEvolucion) {
+      setEvolucionError(true);
+      setTimeout(() => evolucionRef.current?.focus(), 350);
+    }
   }
 
   // --- Iniciar finalización — verifica cobertura si hay receta ---
@@ -1010,44 +1064,54 @@ export default function WorkspaceConsulta({
                             )}
                           </button>
                         </div>
-                        {/* Fila 3: Finalizar full width */}
+                        {/* Fila 3: chips de estado + Finalizar full width */}
+                        <ChipsEstadoObligatorios faltaDiagnostico={faltaDiagnostico} faltaEvolucion={faltaEvolucion} />
                         <LoadingButton
                           type="button"
                           isLoading={finalizando}
-                          onClick={() => {
-                            if (!validarCamposObligatorios()) return;
-                            setShowConfirmDialog(true);
-                          }}
+                          onClick={intentarFinalizar}
                           className="w-full rounded-xl py-3 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
                           style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
                         >
-                          Finalizar consulta
+                          Finalizar y enviar al paciente
                         </LoadingButton>
                       </div>
                     )}
 
-                    {/* DESKTOP footer: mic/cam + timer */}
+                    {/* DESKTOP footer: mic/cam + timer + chips + finalizar */}
                     <div
-                      className="hidden md:flex items-center justify-center gap-3 px-4 py-2"
+                      className="hidden md:flex flex-col gap-2 px-4 py-2"
                       style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
                     >
-                      <button
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={toggleMic}
+                          className={`rounded-full p-2 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                        >
+                          <MicIcon on={micOn} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={toggleCam}
+                          className={`rounded-full p-2 transition ${camOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                        >
+                          <CamIcon on={camOn} />
+                        </button>
+                        <span className="text-xs tabular-nums text-white/40 ml-2">
+                          {formatTimer(timerSeg)}
+                        </span>
+                      </div>
+                      <ChipsEstadoObligatorios faltaDiagnostico={faltaDiagnostico} faltaEvolucion={faltaEvolucion} />
+                      <LoadingButton
                         type="button"
-                        onClick={toggleMic}
-                        className={`rounded-full p-2 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                        isLoading={finalizando}
+                        onClick={intentarFinalizar}
+                        className="w-full rounded-xl py-2.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 disabled:opacity-50"
+                        style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
                       >
-                        <MicIcon on={micOn} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={toggleCam}
-                        className={`rounded-full p-2 transition ${camOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
-                      >
-                        <CamIcon on={camOn} />
-                      </button>
-                      <span className="text-xs tabular-nums text-white/40 ml-2">
-                        {formatTimer(timerSeg)}
-                      </span>
+                        Finalizar y enviar al paciente
+                      </LoadingButton>
                     </div>
                   </>
                 )}
@@ -1372,48 +1436,26 @@ export default function WorkspaceConsulta({
             />
           </AccordionSection>
 
-          {/* Acciones sticky — modo escritura: guardar + volver; desktop: finalizar + cancelar */}
+          {/* Acciones sticky — la documentación solo guarda (auto-save) y vuelve a la llamada. */}
+          {/* "Finalizar" vive SOLO en el footer de video (presencia). */}
           <div
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
-            {/* Mobile modo escritura: Volver + Finalizar (auto-save cubre guardado) */}
+            {/* Mobile modo escritura: Volver a la llamada (auto-save cubre guardado) */}
             <div className="md:hidden flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => setModo("video")}
-                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
-                style={{ backgroundColor: "transparent", color: "#378ADD", border: "1px solid #378ADD", minHeight: "44px" }}
+                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80"
+                style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
               >
                 Volver a la llamada
               </button>
-              <LoadingButton
-                type="button"
-                isLoading={finalizando}
-                onClick={() => {
-                  if (!validarCamposObligatorios()) return;
-                  setShowConfirmDialog(true);
-                }}
-                className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
-              >
-                Finalizar y generar documentos
-              </LoadingButton>
             </div>
 
-            {/* Desktop: finalizar + cancelar */}
+            {/* Desktop: cancelar consulta (finalizar vive en el footer de video) */}
             <div className="hidden md:flex md:flex-col md:gap-2">
-              <LoadingButton
-                isLoading={finalizando}
-                onClick={() => {
-                  if (!validarCamposObligatorios()) return;
-                  setShowConfirmDialog(true);
-                }}
-                className="w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 disabled:opacity-50"
-                style={{ minHeight: "44px" }}
-              >
-                Finalizar y generar documentos
-              </LoadingButton>
               <button
                 onClick={() => setShowCancelDialog(true)}
                 className="w-full rounded-xl px-6 py-3 text-sm font-medium transition-all duration-100 active:scale-95 active:opacity-80"
@@ -1548,7 +1590,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              ¿Finalizar y generar los documentos para el paciente?
+              Se van a enviar los documentos al paciente. ¿Confirmás?
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
               <button
@@ -1582,6 +1624,98 @@ export default function WorkspaceConsulta({
                 }}
               >
                 Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog "Falta completar" — gate amable antes de finalizar (NO botón deshabilitado) */}
+      {showFaltaDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                color: "#111",
+                marginBottom: "8px",
+              }}
+            >
+              Antes de finalizar
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#666",
+                marginBottom: "12px",
+              }}
+            >
+              Para enviar los documentos al paciente, completá:
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px 0" }}>
+              {faltaDiagnostico && (
+                <li style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#111", marginBottom: "6px" }}>
+                  <span style={{ display: "inline-block", height: "6px", width: "6px", borderRadius: "9999px", background: "#D85A30" }} />
+                  Diagnóstico
+                </li>
+              )}
+              {faltaEvolucion && (
+                <li style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#111" }}>
+                  <span style={{ display: "inline-block", height: "6px", width: "6px", borderRadius: "9999px", background: "#D85A30" }} />
+                  Evolución
+                </li>
+              )}
+            </ul>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowFaltaDialog(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={completarAhora}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#378ADD",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Completar ahora
               </button>
             </div>
           </div>
@@ -1628,28 +1762,9 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              ¿Qué querés hacer?
+              Vas a dejar la videollamada. Si todavía no finalizaste, podés volver más tarde a completar los documentos.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <button
-                onClick={() => {
-                  setShowSalirDialog(false);
-                  if (!validarCamposObligatorios()) return;
-                  setShowConfirmDialog(true);
-                }}
-                style={{
-                  padding: "12px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "#378ADD",
-                  color: "white",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Finalizar y generar documentos
-              </button>
               <button
                 onClick={() => {
                   setShowSalirDialog(false);
