@@ -17,7 +17,7 @@ export default async function ClinicaPage() {
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -34,6 +34,10 @@ export default async function ClinicaPage() {
 
   // Gate de identidad (Didit): con el flag activo, un médico sin identidad
   // validada no aparece en la clínica. Mismo chokepoint que verificado+aprobado.
+  // Carril de prueba (universos paralelos): un paciente test ve SOLO médicos test, y
+  // un paciente real SOLO médicos reales. Nunca se cruzan. Los reportes ya excluyen test.
+  const esPacienteTest = paciente?.es_cuenta_test === true;
+
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
   let medicosQuery = supabase
     .from("medicos")
@@ -41,7 +45,7 @@ export default async function ClinicaPage() {
     .eq("oculto_clinica", false)
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")
-    .eq("es_cuenta_test", false);
+    .eq("es_cuenta_test", esPacienteTest);
   if (flagIdentidadGate) medicosQuery = medicosQuery.eq("identidad_validada", true);
   const { data: medicos } = await medicosQuery;
 

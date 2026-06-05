@@ -32,7 +32,7 @@ export async function crearConsulta(
   // del pago, no después (evita pay-then-block). Mismo criterio que info-medica.
   const { data: perfil } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, nro_afiliado")
+    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, nro_afiliado, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -67,7 +67,11 @@ export async function crearConsulta(
     return { error: "El médico seleccionado no está disponible." };
   }
 
-  if (medico.es_cuenta_test || !medico.verificado || medico.estado_registro !== "aprobado") {
+  // Carril de prueba (universos paralelos): test↔test y real↔real permitidos; los
+  // cruces (paciente test ↔ médico real, o viceversa) se bloquean. Un paciente no
+  // puede auto-marcarse como test (lo setea un admin en DB), así que no abre agujero.
+  const pacienteEsTest = perfil?.es_cuenta_test === true;
+  if (medico.es_cuenta_test !== pacienteEsTest || !medico.verificado || medico.estado_registro !== "aprobado") {
     return { error: "El médico seleccionado no está disponible." };
   }
 
