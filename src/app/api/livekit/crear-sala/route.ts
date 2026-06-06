@@ -51,6 +51,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
+  // --- Bloqueo durante ventana de rejoin (Fase 1, §6.4 del diseño) ---
+  // Si el médico tiene OTRA consulta/turno en_curso con corte pendiente
+  // (desconectado_at != null), está dentro de la ventana de 2 min: no puede abrir
+  // una sala distinta hasta retomar o que expire. Excluye el propio recurso
+  // (reabrir la misma sala para retomar SÍ está permitido).
+  const corteConsulta = await supabase
+    .from("consultas")
+    .select("id")
+    .eq("medico_id", medico.id)
+    .eq("estado", "en_curso")
+    .not("desconectado_at", "is", null)
+    .neq("id", consultaId)
+    .limit(1)
+    .maybeSingle();
+  const corteTurno = await supabase
+    .from("turnos")
+    .select("id")
+    .eq("medico_id", medico.id)
+    .eq("estado", "en_curso")
+    .not("desconectado_at", "is", null)
+    .neq("id", consultaId)
+    .limit(1)
+    .maybeSingle();
+
+  if (corteConsulta.data || corteTurno.data) {
+    return NextResponse.json(
+      { error: "Tenés una consulta esperando reconexión. Retomala o esperá a que se cierre antes de abrir otra." },
+      { status: 409 }
+    );
+  }
+
   try {
     // Crear sala en LiveKit (si ya existe, createRoom es idempotente)
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);

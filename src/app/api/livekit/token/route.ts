@@ -34,6 +34,23 @@ export async function POST(req: NextRequest) {
 
   if (!consulta) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
+  // --- Gate de estado (Fase 1, defensa en profundidad) — WHITELIST ---
+  // Emitimos token SOLO si el estado es "conectable". Whitelist (no blacklist):
+  // cualquier estado no listado (incl. terminales actuales y futuros de Fase 2)
+  // recibe 409 sin que tengamos que enumerarlos uno por uno. Más robusto.
+  //
+  // Estados conectables según el ENUM real de cada tabla:
+  //   - consultas: en_curso (incluye la ventana de rejoin), pagada
+  //   - turnos:    en_curso, confirmado, en_espera, pagada
+  // Coherente con #169: si el médico ya cerró (completada/completado), un 409 al
+  // reintentar token es correcto — el paciente ya está en su pantalla de cierre.
+  const ESTADOS_CONECTABLES = tipo === "turno"
+    ? ["en_curso", "confirmado", "en_espera", "pagada"]
+    : ["en_curso", "pagada"];
+  if (!ESTADOS_CONECTABLES.includes(consulta.estado)) {
+    return NextResponse.json({ error: "Esta consulta ya finalizó." }, { status: 409 });
+  }
+
   // Determinar si es paciente o medico
   let esPaciente = false;
   let esMedico = false;
