@@ -273,6 +273,16 @@ export default function SalaConsultaPaciente({
   // como completada en DB. Mostramos pantalla de transición cálida hasta que
   // Realtime/polling traigan el estado completado (o el fallback anti-trabado).
   const [cerrando, setCerrando] = useState(false);
+  // rejoin (Fase 1): la llamada se cortó por algo que NO es la finalización del
+  // médico (no ROOM_DELETED) y la consulta sigue en_curso. Mostramos pantalla
+  // "Se cortó la llamada / Retomar". El reloj real (2 min) vive en el servidor
+  // (desconectado_at + cron). Acá solo mostramos UI y un contador derivado.
+  const [mostrandoRejoin, setMostrandoRejoin] = useState(false);
+  const [reconectando, setReconectando] = useState(false);
+  const [desconectadoAt, setDesconectadoAt] = useState<string | null>(null);
+  // roomKey: al cambiar fuerza el remount del <LiveKitRoom> para reconectar con
+  // un token fresco al retomar.
+  const [roomKey, setRoomKey] = useState(0);
   const inicioRef = useRef(horaInicio ? new Date(horaInicio).getTime() : Date.now());
   // yaCerroRef: guard de "ya cerramos" (transición a pantalla de cierre).
   // Frena el polling para no re-disparar fetch/setState una vez cerrado.
@@ -307,17 +317,62 @@ export default function SalaConsultaPaciente({
 
   // --- LiveKit: desconexion detectada ---
   // ROOM_DELETED = el médico finalizó la consulta → convergemos a la pantalla
-  // de cierre (NO redirigir). Cualquier otro motivo (caída de red, etc.) mantiene
-  // el comportamiento previo: redirect a /mis-consultas.
+  // de cierre (NO redirigir). [#169 — NO TOCAR esta rama.]
+  //
+  // Cualquier otro motivo (caída de red, etc.) Y la consulta sigue en_curso →
+  // FASE 1: mostramos la pantalla "Se cortó la llamada / Retomar" en vez de
+  // redirigir. Si tras el corte el estado pasa a un terminal (lo trae
+  // Realtime/polling, intactos), la vista converge a cierre/cancelación como hoy.
   function handleDisconnected(reason?: DisconnectReason) {
     setVideoVisible(false);
     if (reason === DisconnectReason.ROOM_DELETED) {
       setCerrando(true);
       return;
     }
-    if (!yaCerroRef.current) {
-      yaCerroRef.current = true;
-      router.push("/mis-consultas");
+    // Si estamos reconectando a propósito (remount por "Retomar"), ignorar este
+    // disconnect del room viejo.
+    if (reconectando) return;
+    // Si la consulta ya cerró/se canceló, no mostramos rejoin: dejamos que la
+    // vista converja a la pantalla terminal correspondiente.
+    if (yaCerroRef.current || estado !== "en_curso") {
+      if (!yaCerroRef.current) {
+        yaCerroRef.current = true;
+        router.push("/mis-consultas");
+      }
+      return;
+    }
+    // Corte accidental con consulta en_curso → pantalla de rejoin.
+    setMostrandoRejoin(true);
+  }
+
+  // --- Retomar llamada (paciente) ---
+  // Pide un token fresco y remonta el <LiveKitRoom> para reconectar al room (que
+  // sigue vivo por emptyTimeout: 7200). El webhook participant_joined limpiará
+  // desconectado_at server-side.
+  async function retomarLlamada() {
+    setReconectando(true);
+    try {
+      const res = await fetch("/api/livekit/token", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consultaId, tipo }),
+      });
+      if (!res.ok) {
+        // 409 = la consulta ya finalizó → converger a cierre, no mostrar error.
+        setReconectando(false);
+        return;
+      }
+      const data = await res.json();
+      setLivekitToken(data.token);
+      setMostrandoRejoin(false);
+      setDesconectadoAt(null);
+      setVideoVisible(true);
+      setRoomKey((k) => k + 1); // fuerza remount → reconecta
+    } catch {
+      // Falla de red: dejamos la pantalla de rejoin para reintentar.
+    } finally {
+      setReconectando(false);
     }
   }
 
@@ -398,12 +453,18 @@ export default function SalaConsultaPaciente({
         });
         if (!res.ok) return;
         const data = await res.json();
+        // Mientras estamos en rejoin: reflejar el reloj de servidor.
+        // - desconectado_at === null + estado en_curso → el servidor detectó la
+        //   reconexión (o nunca arrancó el reloj): el contador desaparece.
+        // - estado terminal → el cron resolvió: convergemos a cierre.
+        if ("desconectado_at" in data) setDesconectadoAt(data.desconectado_at ?? null);
         if (data.estado === estadoCompletado) {
           // Convergemos a la pantalla de cierre (igual que el Realtime),
           // NO redirigimos a /mis-consultas — el paciente ve sus documentos.
           yaCerroRef.current = true;
           clearInterval(interval);
           setEstado(estadoCompletado);
+          setMostrandoRejoin(false);
           setVideoVisible(false);
           fetchDocumentos();
         }
@@ -661,6 +722,60 @@ export default function SalaConsultaPaciente({
     );
   }
 
+  // --- Pantalla de rejoin: la llamada se cortó (no por finalización del médico) ---
+  // El reloj real (2 min) lo decide el servidor. Acá mostramos un contador
+  // derivado de desconectado_at solo informativo.
+  if (mostrandoRejoin) {
+    const restanteSeg = desconectadoAt
+      ? Math.max(0, 120 - Math.floor((Date.now() - new Date(desconectadoAt).getTime()) / 1000))
+      : null;
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-gray-50">
+        <nav className="border-b border-gray-200 bg-white">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🩺</span>
+              <span className="text-xl font-bold text-gray-900">Docto</span>
+            </div>
+          </div>
+        </nav>
+        <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
+          <div className="mx-auto w-full max-w-md text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: "rgba(216,90,48,0.1)" }}>
+              <svg className="h-10 w-10" style={{ color: "#D85A30" }} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728m-12.728 0a9 9 0 010-12.728m9.9 2.829a5 5 0 010 7.07m-7.072 0a5 5 0 010-7.07" />
+              </svg>
+            </div>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">Se cortó la llamada</h1>
+            <p className="mt-2 text-gray-600">
+              Estamos intentando reconectarte con {formatNombreMedico(medicoNombre)}.
+            </p>
+            {restanteSeg !== null && (
+              <p className="mt-3 text-sm text-gray-500 tabular-nums">
+                Tenés {formatTimer(restanteSeg)} para retomar.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={retomarLlamada}
+              disabled={reconectando}
+              className="mt-8 inline-block w-full rounded-xl px-8 py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100 disabled:opacity-50"
+              style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
+            >
+              {reconectando ? "Reconectando…" : "Retomar llamada"}
+            </button>
+            <a
+              href="/mis-consultas"
+              className="mt-3 inline-block text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              Salir
+            </a>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   // --- Sala de video activa ---
   return (
     <div className="flex h-[100dvh] flex-col bg-gray-900">
@@ -691,6 +806,7 @@ export default function SalaConsultaPaciente({
       {livekitToken && roomName && livekitUrl ? (
         <div className="flex flex-1 flex-col min-h-0" style={{ display: videoVisible ? "flex" : "none" }}>
           <LiveKitRoom
+            key={roomKey}
             serverUrl={livekitUrl}
             token={livekitToken}
             connect={true}

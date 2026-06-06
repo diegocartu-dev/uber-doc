@@ -582,6 +582,19 @@ export default function WorkspaceConsulta({
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
   const [iframeVisible, setIframeVisible] = useState(true);
+  // finalizandoRef: flag síncrono para distinguir, en onDisconnected, una
+  // finalización iniciada por el médico (NO mostrar rejoin) de un corte accidental.
+  // Se setea ANTES de borrar la sala en finalizarConsulta(). [protección anti-#169]
+  const finalizandoRef = useRef(false);
+  // rejoin (Fase 1): overlay "Se cortó la llamada / Retomar / Finalizar" cuando
+  // el corte NO fue una finalización del médico. El reloj real (2 min) vive en el
+  // servidor (desconectado_at + cron); acá solo mostramos UI.
+  const [mostrandoRejoin, setMostrandoRejoin] = useState(false);
+  const [reconectandoRejoin, setReconectandoRejoin] = useState(false);
+  const reconectandoRef = useRef(false);
+  // tokenActivo / roomKey: para remontar el <LiveKitRoom> con token fresco al retomar.
+  const [tokenActivo, setTokenActivo] = useState<string | null>(livekitToken);
+  const [roomKey, setRoomKey] = useState(0);
   const [error, setError] = useState<string | null>(videoErrorProp);
   const [timerSeg, setTimerSeg] = useState(0);
   const [guardadoManual, setGuardadoManual] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -764,6 +777,10 @@ export default function WorkspaceConsulta({
     const sinCuil = receta.trim() && !consulta.paciente_cuil;
 
     setFinalizando(true);
+    // Marcar finalización iniciada por el médico ANTES de borrar la sala, para
+    // que onDisconnected (que se dispara al destruirse el room) NO muestre el
+    // overlay de rejoin. [protección anti-#169]
+    finalizandoRef.current = true;
 
     // 1. Ocultar video inmediatamente
     setIframeVisible(false);
@@ -854,6 +871,48 @@ export default function WorkspaceConsulta({
         // Background: no hay UI para mostrar error, falla silenciosamente
       }
     })();
+  }
+
+  // --- LiveKit: desconexión detectada (médico) ---
+  // Si la desconexión es una finalización iniciada por el médico (finalizandoRef)
+  // o una reconexión intencional (reconectandoRef), NO mostramos rejoin: solo
+  // ocultamos el video como antes. Si es un corte accidental → overlay de rejoin.
+  function handleDisconnected() {
+    setIframeVisible(false);
+    if (finalizandoRef.current || reconectandoRef.current) return;
+    setMostrandoRejoin(true);
+  }
+
+  // --- Retomar llamada (médico) ---
+  // Pide un token fresco al mismo room (vivo por emptyTimeout) y remonta el
+  // <LiveKitRoom>. El webhook participant_joined limpiará desconectado_at.
+  async function retomarLlamada() {
+    setReconectandoRejoin(true);
+    reconectandoRef.current = true;
+    try {
+      const res = await fetch("/api/livekit/token", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consultaId, tipo: "consulta" }),
+      });
+      if (!res.ok) {
+        // 409 = consulta ya finalizó → no reconectar, cerrar overlay.
+        setMostrandoRejoin(false);
+        return;
+      }
+      const data = await res.json();
+      setTokenActivo(data.token);
+      setMostrandoRejoin(false);
+      setIframeVisible(true);
+      setRoomKey((k) => k + 1); // remount → reconecta
+    } catch {
+      // Falla de red: dejamos el overlay para reintentar.
+    } finally {
+      setReconectandoRejoin(false);
+      // Liberar el flag de reconexión tras el remount.
+      setTimeout(() => { reconectandoRef.current = false; }, 1500);
+    }
   }
 
   // --- Cancelar consulta ---
@@ -986,15 +1045,16 @@ export default function WorkspaceConsulta({
         </div>
 
         {/* Video + footer — todo dentro de LiveKitRoom para que los hooks funcionen */}
-        {livekitToken && roomName && livekitUrl ? (
+        {tokenActivo && roomName && livekitUrl ? (
           <div className="flex flex-1 flex-col min-h-0" style={{ display: iframeVisible ? "flex" : "none" }}>
             <LiveKitRoom
+              key={roomKey}
               serverUrl={livekitUrl}
-              token={livekitToken}
+              token={tokenActivo}
               connect={true}
               audio={false}
               video={false}
-              onDisconnected={() => setIframeVisible(false)}
+              onDisconnected={handleDisconnected}
               style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
             >
               <RoomAudioRenderer />
@@ -1624,6 +1684,67 @@ export default function WorkspaceConsulta({
                 }}
               >
                 Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay de rejoin (Fase 1) — la llamada se cortó (no por finalización) */}
+      {mostrandoRejoin && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div style={{ background: "white", borderRadius: "16px", padding: "24px", maxWidth: "360px", width: "100%" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#111", marginBottom: "8px" }}>
+              Se cortó la llamada
+            </h3>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "24px" }}>
+              Se perdió la conexión con el paciente. Podés retomar la llamada o finalizar la consulta.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <button
+                onClick={retomarLlamada}
+                disabled={reconectandoRejoin}
+                style={{
+                  padding: "12px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: "#378ADD",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: reconectandoRejoin ? "default" : "pointer",
+                  opacity: reconectandoRejoin ? 0.5 : 1,
+                  minHeight: "44px",
+                }}
+              >
+                {reconectandoRejoin ? "Reconectando…" : "Retomar llamada"}
+              </button>
+              <button
+                onClick={() => { setMostrandoRejoin(false); intentarFinalizar(); }}
+                style={{
+                  padding: "12px",
+                  borderRadius: "12px",
+                  border: "1px solid #d1d5db",
+                  background: "white",
+                  color: "#374151",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  minHeight: "44px",
+                }}
+              >
+                Finalizar consulta
               </button>
             </div>
           </div>
