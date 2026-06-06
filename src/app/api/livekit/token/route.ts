@@ -34,6 +34,28 @@ export async function POST(req: NextRequest) {
 
   if (!consulta) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
+  // --- Gate de estado (Fase 1, defensa en profundidad) ---
+  // No emitimos token si la consulta ya está en un estado terminal: evita que un
+  // cliente trabado o un reintento manual reconecte a una sala ya cerrada/resuelta.
+  // en_curso (incluye la ventana de rejoin, donde sigue en_curso) y pagada → OK.
+  // Coherente con #169: si el médico ya cerró (completada), un 409 al reintentar
+  // token es correcto — el paciente ya está en su pantalla de cierre por ROOM_DELETED.
+  const ESTADOS_TERMINALES = [
+    "completada",
+    "completado",
+    "cancelada",
+    "cancelado_paciente",
+    "cancelado_medico",
+    "rechazada",
+    // Fase 2 (aún no existen como valores, listados para el gate futuro):
+    "no_show_paciente",
+    "medico_ausente",
+    "interrumpida",
+  ];
+  if (ESTADOS_TERMINALES.includes(consulta.estado)) {
+    return NextResponse.json({ error: "Esta consulta ya finalizó." }, { status: 409 });
+  }
+
   // Determinar si es paciente o medico
   let esPaciente = false;
   let esMedico = false;

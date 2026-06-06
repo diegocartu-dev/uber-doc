@@ -15,9 +15,11 @@ export async function GET(req: NextRequest) {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // NOTA: `desconectado_at` lo agrega la migración 20260606_resolucion_consultas_fase1.sql.
+  // No desplegar este SELECT antes de aplicar la migración. Ver regla en CLAUDE.md.
   let query = supabase
     .from("turnos")
-    .select("estado, sala_video_url")
+    .select("estado, sala_video_url, desconectado_at")
     .eq("id", turnoId);
 
   if (medico) {

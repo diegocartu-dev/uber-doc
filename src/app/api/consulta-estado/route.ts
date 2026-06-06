@@ -17,9 +17,12 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   // Filtrar por ownership: paciente_id = auth.uid() o medico_id = medico.id
+  // NOTA: `desconectado_at` lo agrega la migración 20260606_resolucion_consultas_fase1.sql.
+  // El código que lo selecciona NO debe desplegarse antes de aplicar esa migración
+  // (PostgREST falla el SELECT si la columna no existe). Ver regla en CLAUDE.md.
   let query = supabase
     .from("consultas")
-    .select("estado, sala_video_url")
+    .select("estado, sala_video_url, desconectado_at")
     .eq("id", consultaId);
 
   if (medico) {
