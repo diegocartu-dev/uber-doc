@@ -279,6 +279,12 @@ export default function SalaConsultaPaciente({
   // (desconectado_at + cron). Acá solo mostramos UI y un contador derivado.
   const [mostrandoRejoin, setMostrandoRejoin] = useState(false);
   const [reconectando, setReconectando] = useState(false);
+  // reconectandoRef: guard SÍNCRONO para handleDisconnected (mismo patrón que el
+  // médico). El useState `reconectando` se actualiza async → entre el "Retomar" y
+  // el render hay una ventana en la que el disconnect del room viejo se cuela y
+  // dispara la pantalla de rejoin (parpadeo). El ref se setea inline, sin esa carrera.
+  const reconectandoRef = useRef(false);
+  const [errorRejoin, setErrorRejoin] = useState(false);
   const [desconectadoAt, setDesconectadoAt] = useState<string | null>(null);
   // roomKey: al cambiar fuerza el remount del <LiveKitRoom> para reconectar con
   // un token fresco al retomar.
@@ -330,8 +336,8 @@ export default function SalaConsultaPaciente({
       return;
     }
     // Si estamos reconectando a propósito (remount por "Retomar"), ignorar este
-    // disconnect del room viejo.
-    if (reconectando) return;
+    // disconnect del room viejo. Ref síncrono → sin ventana de carrera (parpadeo).
+    if (reconectandoRef.current) return;
     // Si la consulta ya cerró/se canceló, no mostramos rejoin: dejamos que la
     // vista converja a la pantalla terminal correspondiente.
     if (yaCerroRef.current || estado !== "en_curso") {
@@ -351,6 +357,8 @@ export default function SalaConsultaPaciente({
   // desconectado_at server-side.
   async function retomarLlamada() {
     setReconectando(true);
+    setErrorRejoin(false);
+    reconectandoRef.current = true;
     try {
       const res = await fetch("/api/livekit/token", {
         method: "POST",
@@ -359,8 +367,9 @@ export default function SalaConsultaPaciente({
         body: JSON.stringify({ consultaId, tipo }),
       });
       if (!res.ok) {
-        // 409 = la consulta ya finalizó → converger a cierre, no mostrar error.
-        setReconectando(false);
+        // 409 = la consulta ya finalizó → converger a cierre por polling, sin
+        // error inline. Cualquier otro no-ok (5xx, etc.) → feedback de error.
+        if (res.status !== 409) setErrorRejoin(true);
         return;
       }
       const data = await res.json();
@@ -370,9 +379,13 @@ export default function SalaConsultaPaciente({
       setVideoVisible(true);
       setRoomKey((k) => k + 1); // fuerza remount → reconecta
     } catch {
-      // Falla de red: dejamos la pantalla de rejoin para reintentar.
+      // Falla de red (el caso MÁS probable en esta pantalla): feedback inline para
+      // que el paciente reintente. Dejamos la pantalla de rejoin visible.
+      setErrorRejoin(true);
     } finally {
       setReconectando(false);
+      // Liberar el flag de reconexión tras el remount (mismo patrón que el médico).
+      setTimeout(() => { reconectandoRef.current = false; }, 1500);
     }
   }
 
@@ -726,9 +739,21 @@ export default function SalaConsultaPaciente({
   // El reloj real (2 min) lo decide el servidor. Acá mostramos un contador
   // derivado de desconectado_at solo informativo.
   if (mostrandoRejoin) {
+    // Contador CUALITATIVO (no segundos exactos): el polling actualiza cada 5s y
+    // un contador numérico saltaría de a 5s generando ansiedad. Mostramos SIEMPRE
+    // una línea en la misma posición (sin vacío de 5s):
+    //   - desconectado_at null → el servidor aún no arrancó el reloj (o reconectó).
+    //   - restante <= 30s → aviso de que queda poco.
+    //   - resto → mensaje tranquilizador genérico.
     const restanteSeg = desconectadoAt
       ? Math.max(0, 120 - Math.floor((Date.now() - new Date(desconectadoAt).getTime()) / 1000))
       : null;
+    const textoContador =
+      restanteSeg === null
+        ? "Reconectando…"
+        : restanteSeg <= 30
+          ? "Quedan menos de 30 segundos para retomar"
+          : "Estamos reconectando…";
     return (
       <div className="flex min-h-[100dvh] flex-col bg-gray-50">
         <nav className="border-b border-gray-200 bg-white">
@@ -746,13 +771,17 @@ export default function SalaConsultaPaciente({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728m-12.728 0a9 9 0 010-12.728m9.9 2.829a5 5 0 010 7.07m-7.072 0a5 5 0 010-7.07" />
               </svg>
             </div>
-            <h1 className="mt-6 text-2xl font-bold text-gray-900">Se cortó la llamada</h1>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">Reconectando…</h1>
             <p className="mt-2 text-gray-600">
-              Estamos intentando reconectarte con {formatNombreMedico(medicoNombre)}.
+              Se cortó la conexión con {formatNombreMedico(medicoNombre)}. Estamos volviendo a la videollamada.
             </p>
-            {restanteSeg !== null && (
-              <p className="mt-3 text-sm text-gray-500 tabular-nums">
-                Tenés {formatTimer(restanteSeg)} para retomar.
+            {/* Línea de estado SIEMPRE presente (misma posición, solo cambia el texto). */}
+            <p className="mt-3 text-sm text-gray-500">
+              {textoContador}
+            </p>
+            {errorRejoin && (
+              <p className="mt-3 text-sm" style={{ color: "#E24B4A" }}>
+                No pudimos reconectar. Revisá tu conexión y volvé a intentar.
               </p>
             )}
             <button
@@ -766,7 +795,8 @@ export default function SalaConsultaPaciente({
             </button>
             <a
               href="/mis-consultas"
-              className="mt-3 inline-block text-sm font-medium text-gray-500 hover:text-gray-700"
+              className="mt-3 inline-flex w-full items-center justify-center text-sm font-medium text-gray-500 hover:text-gray-700"
+              style={{ minHeight: "44px", paddingTop: "10px", paddingBottom: "10px" }}
             >
               Salir
             </a>

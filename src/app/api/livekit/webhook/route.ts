@@ -28,10 +28,17 @@ const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
 // Protección anti-#169 (cierre cálido del paciente): cuando el médico finaliza,
 // crear-sala DELETE borra el room → LiveKit emite participant_left de ambos Y
 // room_finished, en orden no garantizado. NUNCA debemos arrancar el reloj de
-// rejoin en una finalización legítima. Antes de setear desconectado_at en
-// participant_left verificamos contra el server LiveKit que el room siga vivo y
-// con participantes (listParticipants); si el room ya no existe o quedó vacío,
-// es una finalización/cierre, no un corte → no arrancamos el reloj.
+// rejoin en una finalización legítima.
+//
+// IMPORTANTE: listParticipants NO es fuente de verdad confiable para distinguir
+// finalización de corte. LiveKit devuelve 200 + [] (no tira error) si el room ya
+// fue borrado, y durante el DELETE puede devolver length===1 (un participante
+// todavía adentro) → contar cabezas sola arranca el reloj sobre una consulta YA
+// finalizada → desconectado_at huérfano. Por eso el gate real es doble:
+//   (a) releer `estado` en DB y exigir que siga `en_curso` (no terminal), y
+//   (b) mirar QUIÉN se fue por rol: si el que se va es el médico y no queda otro
+//       médico presente, es patrón de finalización → NO arrancamos el reloj.
+// listParticipants se usa solo como señal complementaria de "queda alguien".
 // ---------------------------------------------------------------------------
 
 function getHttpUrl(): string {
@@ -191,16 +198,21 @@ async function handleParticipantJoined(event: {
 }
 
 // ---------------------------------------------------------------------------
-// participant_left — registra presencia. Si el room quedó incompleto, la
-// consulta sigue en_curso, y NO es una finalización del médico → arranca el
-// reloj de rejoin (desconectado_at = now()).
+// participant_left — registra presencia. Arranca el reloj de rejoin
+// (desconectado_at = now()) SOLO si es un corte real, no una finalización.
 //
-// Determinación de "incompleto sin finalización": consultamos al server LiveKit
-// (listParticipants). Esto es la fuente de verdad server-authoritative.
-//   - Si listParticipants tira error porque el room ya no existe → el médico lo
-//     borró al finalizar (o room_finished ya corrió) → NO arrancar reloj (#169).
-//   - Si el room existe pero quedó vacío → idem, está por cerrarse → no arrancar.
-//   - Si quedó 1 de 2 participantes → corte real → arrancar reloj.
+// Gate (orden importa — del más barato/autoritativo al complementario):
+//   1. La consulta debe seguir `en_curso` en DB (re-leída acá). Si ya es terminal
+//      (completada/cancelada/etc.) → finalización/cierre ya ocurrió → NO arrancar.
+//   2. Idempotencia: si ya hay desconectado_at → no reiniciar el reloj.
+//   3. Rol del que se fue: si se fue el MÉDICO y no queda médico presente, es el
+//      patrón de finalización (#169) → NO arrancar. listParticipants puede mentir
+//      durante el DELETE (devuelve [] o length===1 sin tirar error), así que el
+//      rol es lo que decide, no el conteo de cabezas.
+//   4. listParticipants como señal complementaria: si quedó 0 participantes el
+//      room está vacío/cerrándose → NO arrancar.
+//   → Solo si se fue alguien y queda contraparte viva con la consulta en_curso,
+//     es un corte real → arrancar reloj.
 // ---------------------------------------------------------------------------
 async function handleParticipantLeft(event: {
   room?: { name?: string };
@@ -231,37 +243,55 @@ async function handleParticipantLeft(event: {
     .eq("id", recursoId)
     .single();
 
+  // (1) Gate de estado: re-leído de DB. Si ya es terminal, la finalización/cierre
+  // ya ocurrió → NO arrancar reloj (protege #169 frente a participant_left tardío
+  // del médico que llega cuando la consulta ya está completada).
   if (!registro || registro.estado !== "en_curso") {
     return NextResponse.json({ ok: true, action: "presencia_left", reason: "no en_curso" });
   }
+  // (2) Idempotencia: ya hay un reloj corriendo, no lo reiniciamos.
   if (registro.desconectado_at) {
-    // Ya hay un reloj corriendo, no lo reiniciamos (idempotente).
     return NextResponse.json({ ok: true, action: "presencia_left", reason: "reloj ya activo" });
   }
 
-  // --- Protección anti-#169: ¿el room sigue vivo e incompleto, o es finalización? ---
-  let arrancarReloj = false;
+  // (3) Rol del que se fue + quién queda. Consultamos al server LiveKit, pero NO
+  // confiamos en el conteo de cabezas para distinguir finalización: usamos el ROL.
+  const rolQueSeFue = parseRol(identity);
+  let participantes: { identity: string }[] = [];
   try {
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
-    const participantes = await svc.listParticipants(roomName);
-    // Room vivo: si quedó al menos 1 participante pero no los 2 esperados → corte real.
-    // Si quedó vacío (0) → está por cerrarse (room_finished vendrá) → no arrancar.
-    if (participantes.length >= 1 && participantes.length < 2) {
-      arrancarReloj = true;
-    }
+    participantes = await svc.listParticipants(roomName);
   } catch {
-    // listParticipants tira error si el room ya no existe → finalización del
-    // médico (DELETE) o room ya cerrado → NO arrancar reloj. Protege #169.
+    // listParticipants tira error solo si el room ya no existe → finalización /
+    // room cerrado → NO arrancar reloj. Protege #169.
     logInfo("[LK/WEBHOOK]", "participant_left: room inexistente (finalización), no arranca reloj", {
       tabla,
       recursoId,
     });
-    arrancarReloj = false;
+    return NextResponse.json({ ok: true, action: "presencia_left", reason: "room inexistente" });
   }
 
-  if (!arrancarReloj) {
-    return NextResponse.json({ ok: true, action: "presencia_left", reason: "room cerrado o completo" });
+  // (4) Room vacío (0 participantes) → está cerrándose (room_finished vendrá) → no arrancar.
+  if (participantes.length === 0) {
+    return NextResponse.json({ ok: true, action: "presencia_left", reason: "room vacio" });
   }
+
+  const quedaMedico = participantes.some((p) => parseRol(p.identity) === "medico");
+
+  // Patrón de finalización (#169): se fue el médico y NO queda ningún médico
+  // presente. Aunque listParticipants devuelva length===1 (el paciente todavía
+  // adentro durante el DELETE), esto NO es un corte → NO arrancar el reloj.
+  if (rolQueSeFue === "medico" && !quedaMedico) {
+    logInfo("[LK/WEBHOOK]", "participant_left: se fue el médico sin médico presente (finalización), no arranca reloj", {
+      tabla,
+      recursoId,
+      identity,
+    });
+    return NextResponse.json({ ok: true, action: "presencia_left", reason: "finalizacion medico" });
+  }
+
+  // Corte real: la consulta sigue en_curso, queda al menos una contraparte viva, y
+  // no es el patrón de finalización del médico → arrancar reloj de rejoin.
 
   const { error } = await supabase
     .from(tabla)

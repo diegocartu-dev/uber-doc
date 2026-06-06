@@ -34,25 +34,20 @@ export async function POST(req: NextRequest) {
 
   if (!consulta) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
-  // --- Gate de estado (Fase 1, defensa en profundidad) ---
-  // No emitimos token si la consulta ya está en un estado terminal: evita que un
-  // cliente trabado o un reintento manual reconecte a una sala ya cerrada/resuelta.
-  // en_curso (incluye la ventana de rejoin, donde sigue en_curso) y pagada → OK.
-  // Coherente con #169: si el médico ya cerró (completada), un 409 al reintentar
-  // token es correcto — el paciente ya está en su pantalla de cierre por ROOM_DELETED.
-  const ESTADOS_TERMINALES = [
-    "completada",
-    "completado",
-    "cancelada",
-    "cancelado_paciente",
-    "cancelado_medico",
-    "rechazada",
-    // Fase 2 (aún no existen como valores, listados para el gate futuro):
-    "no_show_paciente",
-    "medico_ausente",
-    "interrumpida",
-  ];
-  if (ESTADOS_TERMINALES.includes(consulta.estado)) {
+  // --- Gate de estado (Fase 1, defensa en profundidad) — WHITELIST ---
+  // Emitimos token SOLO si el estado es "conectable". Whitelist (no blacklist):
+  // cualquier estado no listado (incl. terminales actuales y futuros de Fase 2)
+  // recibe 409 sin que tengamos que enumerarlos uno por uno. Más robusto.
+  //
+  // Estados conectables según el ENUM real de cada tabla:
+  //   - consultas: en_curso (incluye la ventana de rejoin), pagada
+  //   - turnos:    en_curso, confirmado, en_espera, pagada
+  // Coherente con #169: si el médico ya cerró (completada/completado), un 409 al
+  // reintentar token es correcto — el paciente ya está en su pantalla de cierre.
+  const ESTADOS_CONECTABLES = tipo === "turno"
+    ? ["en_curso", "confirmado", "en_espera", "pagada"]
+    : ["en_curso", "pagada"];
+  if (!ESTADOS_CONECTABLES.includes(consulta.estado)) {
     return NextResponse.json({ error: "Esta consulta ya finalizó." }, { status: 409 });
   }
 

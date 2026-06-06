@@ -1744,9 +1744,12 @@ export default function WorkspaceConsulta({
                   minHeight: "44px",
                 }}
               >
-                Finalizar consulta
+                {faltanObligatorios ? "Finalizar y documentar" : "Finalizar consulta"}
               </button>
             </div>
+            <p style={{ fontSize: "12px", color: "#888780", marginTop: "16px", textAlign: "center" }}>
+              Si nadie vuelve en 2 minutos, la consulta se cierra automáticamente.
+            </p>
           </div>
         </div>
       )}
