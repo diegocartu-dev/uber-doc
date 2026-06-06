@@ -414,4 +414,75 @@ salud), **cero costo de tokens**, fácil de mantener.
 
 ---
 
+## 13. RESOLUCIÓN DE CONSULTAS POR PRESENCIA + REJOIN DE LLAMADA (Diego, 06/06/2026)
+
+### 13.1 El problema
+Una videollamada se puede cortar (red, batería, alguien cierra sin querer). Sin un
+mecanismo claro: (a) no hay forma de retomar, (b) la consulta queda en un limbo, (c)
+no se sabe quién faltó ni qué pasa con la plata. Riesgo de "ir tontas y locas".
+
+### 13.2 La decisión — la plataforma resuelve sola, con datos objetivos
+**NO se le pregunta al médico "¿consulta realizada SÍ/NO?".** La resolución (y la plata)
+la decide la plataforma con señales objetivas, no el FB del médico (le saca el conflicto
+de interés / la palanca financiera).
+
+| Señal objetiva | Resolución | Plata |
+|---|---|---|
+| Paciente **no entró a la sala de espera en 10 min** | Ausente (no-show) | **Retiene el pago** (no se reintegra) |
+| Médico **nunca se conectó** | Médico ausente | Reintegro/crédito al paciente · **SIN penalización (por ahora, se trackea)** |
+| Los dos entraron, se cortó, **no volvieron en 2 min** | Llamada cortada | **Reprograma**, sin penalización |
+| Consulta completa | Normal | Cobro normal (split) |
+
+### 13.3 Los dos relojes (ambos autoritativos del SERVIDOR, nunca del cliente)
+- ⏱️ **10 min — tolerancia de inicio.** El paciente debe estar en la sala de espera
+  dentro de los 10 min. Si no → no-show. **Aplica claro a TURNOS** (horario fijo). En
+  **Consulta Inmediata** el paciente es el que inicia → ya está presente; ahí "ausente"
+  = "el médico aceptó y el paciente ya no estaba". Misma lógica, distinto disparador.
+- ⏱️ **2 min — ventana de rejoin.** Si una llamada **ya conectada** se corta, hay 2 min
+  para volver. Mientras tanto el médico queda bloqueado (la consulta sigue `en_curso`,
+  no puede tomar otra). A los 2 min sin reconexión → se resuelve (reprograma / cierre).
+  - A los 2 min, al médico se le muestra: **"Finalizar consulta"** (→ recordatorio de
+    completar la ficha = el gate "Antes de finalizar" que ya exige Diagnóstico+Evolución)
+    o **"Retomar llamada"** (→ vuelve a la sala, se repite el circuito).
+  - Al cortarse, **ambos** ven "Retomar llamada"; "Finalizar" real es del médico.
+
+### 13.4 Qué sacamos y qué sumamos
+- **Sacamos:** el checkout "Consulta realizada SÍ/NO" del médico. No hace falta — la
+  plata la deciden los datos. (El SÍ/NO solo tendría sentido como confirmación clínica
+  de casos que la plataforma no ve; se descartó por fricción innecesaria.)
+- **Sumamos:** ítem **"Ayuda"** en el menú hamburguesa del perfil, con
+  `soporte@docto.com.ar` como **única** vía de disputa. (Es independiente del motor de
+  resolución → shippeable por separado cuando se quiera.)
+
+### 13.5 Reglas mecánicas (para que no falle)
+1. **Comunicación obligatoria.** "Tenés que estar en la sala de espera a horario o el
+   turno se toma como ausente y se cobra" → en **T&C + al reservar + en el recordatorio
+   + en la sala de espera**. Sin esto, las quejas son válidas; con esto, no. (Diego.)
+2. **Médico ausente: sin penalización por ahora, pero SE TRACKEA** (queda el histórico
+   para activar penalización en el futuro si se decide).
+3. **Confiar y medir:** trackear patrones (un médico con muchos "ausentes/cortes" es señal).
+
+### 13.6 Realidad de datos (verificada en prod 06/06/2026)
+- ✅ **"Paciente entró a la sala de espera"** → lo tenemos: tabla `sala_espera_entradas`
+  (`entrada_en` / `salida_en`). Paciente pagó + sin entrada = no-show.
+- ⚠️ **"Quién se conectó al video"** → hoy NO se registra: el webhook de LiveKit solo
+  escucha `room_finished`. **Falta sumar `participant_joined` / `participant_left`** al
+  webhook para presencia a nivel video (y para detectar al médico ausente).
+- ⚠️ **`/api/livekit/token`** no chequea estado → hay que **gatear el rejoin a `en_curso`**
+  (y endurecer el endpoint para rechazar token si la consulta está `completada`/`cancelada`).
+- Falta un **estado terminal nuevo** para "reprogramar/interrumpida" (hoy solo hay
+  `completada`/`cancelada` en datos).
+
+### 13.7 Legal (pendiente — Carolina)
+Única pieza legal: **política de no-show** (cobro al paciente ausente) en los T&C +
+mostrada al reservar. Estándar y acotada. El "médico ausente" no penaliza → sin carga legal.
+
+### 13.8 Estado
+**Decisión cerrada (Diego). Pendiente: diseño técnico (Marcos) + T&C (Carolina) → build
+por fases.** Fase 1 = rejoin (técnica, sin plata). Fase 2 = resolución objetiva + 10 min
++ no-show + T&C.
+
+---
+
 *Documento generado el 15/04/2026. No requiere rediscusión — decisiones cerradas.*
+*(§12 agregada 04/06/2026 · §13 agregada 06/06/2026.)*
