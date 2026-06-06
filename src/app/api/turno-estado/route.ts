@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: NextRequest) {
   const turnoId = req.nextUrl.searchParams.get("turnoId");
@@ -34,5 +35,30 @@ export async function GET(req: NextRequest) {
   const { data } = await query.single();
 
   if (!data) return NextResponse.json({ error: "No encontrado" }, { status: 403 });
-  return NextResponse.json(data);
+
+  // Cierre on-demand del rejoin (mismo criterio que consulta-estado): 2 min sin
+  // reconexión → cerramos acá. Sin dependencia del cron de 1 min (Vercel Pro).
+  // Backstop diario: /api/cron/rejoin-expirar. Idempotente por estado='en_curso'.
+  let estado = data.estado;
+  let desconectado_at = data.desconectado_at;
+  if (
+    estado === "en_curso" &&
+    desconectado_at &&
+    new Date(desconectado_at).getTime() < Date.now() - 2 * 60 * 1000
+  ) {
+    const admin = createAdminClient();
+    const { data: cerrado } = await admin
+      .from("turnos")
+      .update({ estado: "completado", desconectado_at: null })
+      .eq("id", turnoId)
+      .eq("estado", "en_curso")
+      .select("id")
+      .maybeSingle();
+    if (cerrado) {
+      estado = "completado";
+      desconectado_at = null;
+    }
+  }
+
+  return NextResponse.json({ estado, sala_video_url: data.sala_video_url, desconectado_at });
 }

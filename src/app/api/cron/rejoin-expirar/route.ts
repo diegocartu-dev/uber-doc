@@ -3,11 +3,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
-// GET /api/cron/rejoin-expirar  (cada 1 min — ver vercel.json)
+// GET /api/cron/rejoin-expirar  (BACKSTOP diario — ver vercel.json)
 // Ref: docs/diseno-resolucion-consultas.md §6.4 · DECISIONES_PRODUCTO_DOCTO.md §13.3
 //
 // Reloj de rejoin server-authoritative. Cierra las consultas/turnos cuyo corte
 // (desconectado_at) lleva >= 2 min sin reconexión.
+//
+// NOTA (plan Vercel): el cierre OPORTUNO a los 2 min lo hace el chequeo on-demand
+// en /api/consulta-estado y /api/turno-estado (el que espera hace polling cada 5s).
+// Este cron quedó como BACKSTOP DIARIO para el caso borde "los dos se cayeron y
+// ninguno volvió a pollear" — un cron de cada minuto requería Vercel Pro.
 //
 // FASE 1: deliberadamente NO resuelve plata ni introduce estados terminales
 // nuevos. Reusa la semántica de cerrar-huerfanas (→ completada/completado), solo

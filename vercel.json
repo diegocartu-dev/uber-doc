@@ -26,7 +26,7 @@
     },
     {
       "path": "/api/cron/rejoin-expirar",
-      "schedule": "* * * * *"
+      "schedule": "30 3 * * *"
     }
   ]
 }
