@@ -5,6 +5,7 @@ import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { pushAlPaciente } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { cargarEvolucionesPrevias } from "@/lib/evolucion/historia-clinica";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -59,6 +60,22 @@ export default async function VideoTurnoPage({
     .from("pacientes").select("tiene_cobertura, obra_social, nro_afiliado, plan_obra_social")
     .eq("id", turno.paciente_id).maybeSingle();
 
+  // user_id del paciente (SELECT separado per CLAUDE.md) — necesario para traer
+  // las consultas inmediatas del paciente en el Panel HC (asimetría paciente_id).
+  const { data: pacienteRow } = await supabase
+    .from("pacientes").select("user_id")
+    .eq("id", turno.paciente_id).maybeSingle();
+
+  // Evoluciones PREVIAS del paciente para el Panel HC (excluye este turno).
+  // turnos.paciente_id ya es pacientes.id; consultas usan auth.users.id.
+  const evolucionesPrevias = await cargarEvolucionesPrevias(supabase, {
+    medicoId: medicoData!.id,
+    especialidad: medicoData?.especialidad ?? "",
+    pacienteUserId: pacienteRow?.user_id ?? null,
+    pacienteId: turno.paciente_id ?? null,
+    excluirId: turnoId,
+  });
+
   // --- Crear/obtener sala LiveKit ---
   let livekitToken: string | null = null;
   let roomName: string | null = null;
@@ -100,6 +117,7 @@ export default async function VideoTurnoPage({
       roomName={roomName}
       videoError={videoError}
       horaInicio={turno.hora_inicio || new Date().toISOString()}
+      evolucionesPrevias={evolucionesPrevias}
       consulta={{
         especialidad: medicoData?.especialidad ?? "",
         motivo_consulta: null,

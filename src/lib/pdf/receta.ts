@@ -11,7 +11,7 @@ const bwipjs = require("bwip-js");
 
 export type DocumentoPDF = {
   id: string;
-  tipo: "receta" | "indicaciones" | "certificado";
+  tipo: "receta" | "indicaciones" | "certificado" | "orden";
   diagnostico: string;
   contenido: string;
   created_at: string;
@@ -60,6 +60,7 @@ const tipoLabel: Record<string, string> = {
   receta: "RECETA MÉDICA",
   indicaciones: "INDICACIONES MÉDICAS",
   certificado: "CERTIFICADO MÉDICO",
+  orden: "ORDEN MÉDICA",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

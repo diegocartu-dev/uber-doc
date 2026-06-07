@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import AppNavbar from "@/components/AppNavbar";
 import DescargarPDF from "./DescargarPDF";
 import BannerConsultaActiva from "./BannerConsultaActiva";
-import { Pill, FileText, Award } from "lucide-react";
+import { Pill, FileText, Award, ClipboardList } from "lucide-react";
 import OrigenBadge from "@/components/OrigenBadge";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import type { LucideIcon } from "lucide-react";
@@ -12,12 +12,14 @@ const tipoLabel: Record<string, string> = {
   receta: "Receta",
   indicaciones: "Indicaciones",
   certificado: "Certificado",
+  orden: "Orden médica",
 };
 
 const tipoIconMap: Record<string, LucideIcon> = {
   receta: Pill,
   indicaciones: FileText,
   certificado: Award,
+  orden: ClipboardList,
 };
 
 function formatFechaConsulta(fecha: string) {

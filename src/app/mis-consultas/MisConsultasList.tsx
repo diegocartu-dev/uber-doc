@@ -46,6 +46,7 @@ const tipoDocLabel: Record<string, string> = {
   receta: "Receta",
   indicaciones: "Indicaciones",
   certificado: "Certificado",
+  orden: "Orden médica",
 };
 
 function getMonthKey(dateStr: string) {

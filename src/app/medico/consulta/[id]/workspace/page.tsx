@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import WorkspaceConsulta from "./WorkspaceConsulta";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { cargarEvolucionesPrevias } from "@/lib/evolucion/historia-clinica";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -56,6 +57,24 @@ export default async function WorkspacePage({
     .select("tiene_cobertura, obra_social, nro_afiliado, plan_obra_social")
     .eq("user_id", consulta.paciente_id)
     .single();
+
+  // pacientes.id (SELECT separado per CLAUDE.md) — necesario para traer turnos y
+  // documentos del paciente en el Panel HC (asimetría paciente_id).
+  const { data: pacienteRow } = await supabase
+    .from("pacientes")
+    .select("id")
+    .eq("user_id", consulta.paciente_id)
+    .single();
+
+  // Evoluciones PREVIAS del paciente para el Panel HC (excluye esta consulta).
+  // consultas.paciente_id es auth.users.id; turnos usan pacientes.id.
+  const evolucionesPrevias = await cargarEvolucionesPrevias(supabase, {
+    medicoId: medico.id,
+    especialidad: consulta.especialidad,
+    pacienteUserId: consulta.paciente_id,
+    pacienteId: pacienteRow?.id ?? null,
+    excluirId: consultaId,
+  });
 
   // --- Crear/obtener sala LiveKit ---
   let livekitToken: string | null = null;
@@ -111,6 +130,7 @@ export default async function WorkspacePage({
       roomName={roomName}
       videoError={videoError}
       horaInicio={horaInicio}
+      evolucionesPrevias={evolucionesPrevias}
       consulta={{
         especialidad: consulta.especialidad,
         motivo_consulta: consulta.motivo_consulta,
