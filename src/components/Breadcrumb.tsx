@@ -29,9 +29,9 @@ export function buildCrumbs(pathname: string): Crumb[] | null {
     "/clinica/:id":          [home, { label: "Buscar médico", href: "/clinica" }, { label: "Turnos" }],
     "/sala-espera/:id":      [home, { label: "Sala de espera" }],
     "/medico/agenda":        [home, { label: "Mi agenda" }],
-    "/medico/historial":     [home, { label: "Historial" }],
+    "/medico/historial":     [home, { label: "Mis pacientes" }],
     "/medico/nova":          [home, { label: "Nova" }],
-    "/medico/paciente/:id":  [home, { label: "Historial", href: "/medico/historial" }, { label: "Paciente" }],
+    "/medico/paciente/:id":  [home, { label: "Mis pacientes", href: "/medico/historial" }, { label: "Paciente" }],
     "/consulta/:id":         [home, { label: "Consulta" }],
     "/turno/:id":            [home, { label: "Turno" }],
   };

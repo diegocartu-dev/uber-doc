@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, User, FileText, LogOut, Loader2, Shield } from "lucide-react";
+import { X, User, FileText, LogOut, Loader2, Shield, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -173,6 +173,17 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
               loading={loadingHref === "/mis-consultas"}
               disabled={!!loadingHref}
               onClick={() => handleNavigate("/mis-consultas")}
+            />
+          )}
+
+          {userRole === "medico" && (
+            <DrawerLink
+              href="/medico/historial"
+              icon={<Users size={20} strokeWidth={1.75} />}
+              label="Mis pacientes"
+              loading={loadingHref === "/medico/historial"}
+              disabled={!!loadingHref}
+              onClick={() => handleNavigate("/medico/historial")}
             />
           )}
         </div>
