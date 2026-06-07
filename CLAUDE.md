@@ -132,12 +132,21 @@ ALTER TABLE pacientes
 ### Regla de implementación
 Los SELECTs que incluyan columnas nuevas (`fecha_nacimiento`, `sexo_dni`, etc.) SOLO deben estar en archivos nuevos o en archivos que se modifican explícitamente para este sprint. NUNCA agregar columnas nuevas a SELECTs existentes que funcionan en producción — Supabase PostgREST falla si la columna no existe y el redirect al dashboard rompe toda la página.
 
+## Beta Gate — bloqueo de registro (NO volver a confundir)
+Mecanismo en `src/middleware.ts` → `passesBetaGuard`. Controlado por **una env var: `BETA_PASSWORD`** (Vercel, scope production). Cookie de desbloqueo: `docto_beta_access`.
+- **`BETA_PASSWORD` vacía = SITIO ENTERO CAÍDO** (loop de redirección a /beta-access), NO "abierto". Nunca dejarla vacía en prod.
+- **`BETA_PASSWORD` seteada = beta cerrada**: solo `/auth/register` y `/auth/registro-medico` piden la contraseña; el resto del sitio navega libre. Estado actual: `DoctoTest2026!`.
+- **Abrir registro al mundo = cambio de código** (sacar rutas de `BETA_PROTECTED`), NO se logra con env vars.
+- **Cambiar una env var requiere DEPLOY FRESCO** (`vercel --prod` o `git push`). `vercel redeploy` reusa el snapshot viejo y NO toma el cambio.
+- **Verificar SIEMPRE contra el sitio vivo** con curl (no contra `vercel env ls` ni `.env.local`).
+- Detalle completo, procedimiento y comandos: **`docs/REGISTRO_BETA_GATE.md`**.
+
 ## Estado actual (28 Mayo 2026)
 - MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
 - Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
 - REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion), validacion manual durante F&F.
 - Vademecum CNPM: 16.878 medicamentos oficiales con lazy-load y deteccion dual de controlados.
 - Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
-- Beta cerrada: registro con whitelist de emails (PR #87).
+- Beta cerrada: registro gateado por `BETA_PASSWORD=DoctoTest2026!` (no whitelist de emails). Verificado contra prod 2026-06-07. Ver `docs/REGISTRO_BETA_GATE.md`.
 - Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
 - Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
