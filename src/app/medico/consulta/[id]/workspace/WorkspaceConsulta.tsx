@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   LiveKitRoom,
@@ -25,6 +25,7 @@ import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
 import ModalDatosPaciente from "@/components/ModalDatosPaciente";
 import { datosCoberturaCompletos, type DatosCobertura } from "@/lib/cobertura";
+import { componerEvolucion, type DatosEvolucion } from "@/lib/evolucion/componer";
 import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
 
 type ModoWorkspace = "video" | "escritura" | "estudios";
@@ -76,14 +77,20 @@ function AccordionSection({ title, hasContent, children }: { title: string; hasC
 // Utilidades
 // ---------------------------------------------------------------------------
 
-function calcularEdad(fechaNac: string | null): string {
-  if (!fechaNac) return "";
+function calcularEdadNumero(fechaNac: string | null): number | null {
+  if (!fechaNac) return null;
   const hoy = new Date();
   const nac = new Date(fechaNac);
+  if (Number.isNaN(nac.getTime())) return null;
   let edad = hoy.getFullYear() - nac.getFullYear();
   const m = hoy.getMonth() - nac.getMonth();
   if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-  return `${edad} a\u00f1os`;
+  return edad >= 0 ? edad : null;
+}
+
+function calcularEdad(fechaNac: string | null): string {
+  const edad = calcularEdadNumero(fechaNac);
+  return edad === null ? "" : `${edad} a\u00f1os`;
 }
 
 function formatTimer(seg: number): string {
@@ -311,6 +318,7 @@ type DocBorrador = {
   indicaciones?: string;
   certificado?: string;
   evolucion?: string;
+  evolucion_editada?: boolean;
   updated_at?: string;
   medicamentos_structured?: MedicamentoReceta[];
   receta_texto_libre?: string;
@@ -331,6 +339,7 @@ type Props = {
     paciente_nombre: string;
     paciente_nacimiento: string | null;
     paciente_cuil: string | null;
+    paciente_sexo_dni: string | null;
     paciente_id: string;
     paciente_cobertura: DatosCobertura;
     doc_borrador?: DocBorrador;
@@ -529,6 +538,273 @@ function DictadoSignaler({ dictando }: { dictando: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
+// TarjetaEvolucion — documento generado, editable, con validación humana.
+// Reemplaza el CampoDictado de EVOLUCION. Estados visuales por borde+chip:
+//   sin generar (gris) → generada/no validada (ámbar) → validada (verde).
+// El gate de Finalizar exige que esté validada.
+// ---------------------------------------------------------------------------
+
+type TarjetaEvolucionProps = {
+  validarBtnRef: React.RefObject<HTMLButtonElement | null>;
+  tieneDiagnostico: boolean;
+  evolucion: string;
+  onEvolucionChange: (v: string) => void;
+  evolucionGenerada: string;
+  evolucionValidada: boolean;
+  comentarioAbierto: boolean;
+  onAbrirComentario: () => void;
+  comentario: string;
+  onComentarioChange: (v: string) => void;
+  onValidar: () => void;
+  onDesvalidar: () => void;
+  onRegenerar: () => void;
+  showRegenerarConfirm: boolean;
+  onCancelarRegenerar: () => void;
+  onConfirmarRegenerar: () => void;
+  pulseValidar: boolean;
+  dictando: string | null;
+  onIniciarDictadoComentario: () => void;
+  onDetenerDictado: () => void;
+  dictadoSoportado: boolean;
+};
+
+const TarjetaEvolucion = forwardRef<HTMLDivElement, TarjetaEvolucionProps>(
+  function TarjetaEvolucion(
+    {
+      validarBtnRef,
+      tieneDiagnostico,
+      evolucion,
+      onEvolucionChange,
+      evolucionGenerada,
+      evolucionValidada,
+      comentarioAbierto,
+      onAbrirComentario,
+      comentario,
+      onComentarioChange,
+      onValidar,
+      onDesvalidar,
+      onRegenerar,
+      showRegenerarConfirm,
+      onCancelarRegenerar,
+      onConfirmarRegenerar,
+      pulseValidar,
+      dictando,
+      onIniciarDictadoComentario,
+      onDetenerDictado,
+      dictadoSoportado,
+    },
+    ref
+  ) {
+    // Color del borde izquierdo según estado.
+    const bordeColor = !tieneDiagnostico
+      ? "#888780"
+      : evolucionValidada
+        ? "#1D9E75"
+        : "#BA7517";
+
+    const dictandoComentario = dictando === "comentario";
+
+    return (
+      <div
+        ref={ref}
+        className="mt-4 rounded-lg bg-white"
+        style={{ border: "0.5px solid #e5e7eb", borderLeft: `3px solid ${bordeColor}` }}
+      >
+        <div className="p-3">
+          {/* Cabecera: label + chip de estado + Regenerar */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium tracking-wide text-gray-400">EVOLUCION *</p>
+              {tieneDiagnostico && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={
+                    evolucionValidada
+                      ? { backgroundColor: "rgba(29,158,117,0.12)", color: "#1D9E75" }
+                      : { backgroundColor: "rgba(186,117,23,0.12)", color: "#BA7517" }
+                  }
+                >
+                  {evolucionValidada ? "Validada ✓" : "Generada"}
+                </span>
+              )}
+            </div>
+
+            {/* Regenerar — visible siempre que haya algo generado */}
+            {evolucionGenerada !== "" && (
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={onRegenerar}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition hover:bg-blue-50"
+                  style={{ color: "#378ADD", minHeight: "44px" }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 2v6h6" />
+                    <path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
+                  </svg>
+                  Regenerar
+                </button>
+
+                {/* Mini-confirm inline (popover anclado, NO modal) */}
+                {showRegenerarConfirm && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 50,
+                      width: "260px",
+                      background: "white",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "12px",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                      padding: "14px",
+                    }}
+                  >
+                    <p style={{ fontSize: "13px", color: "#374151", marginBottom: "12px", lineHeight: 1.4 }}>
+                      Editaste la evolución a mano. Regenerar va a descartar tus cambios.
+                    </p>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={onCancelarRegenerar}
+                        style={{
+                          flex: 1,
+                          padding: "8px",
+                          borderRadius: "8px",
+                          border: "1px solid #e5e7eb",
+                          background: "white",
+                          fontSize: "13px",
+                          color: "#888780",
+                          cursor: "pointer",
+                          minHeight: "44px",
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onConfirmarRegenerar}
+                        style={{
+                          flex: 1,
+                          padding: "8px",
+                          borderRadius: "8px",
+                          border: "1px solid #E24B4A",
+                          background: "white",
+                          fontSize: "13px",
+                          color: "#E24B4A",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          minHeight: "44px",
+                        }}
+                      >
+                        Regenerar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Cuerpo */}
+          {!tieneDiagnostico ? (
+            <p className="mt-2 text-sm" style={{ color: "#888780" }}>
+              La evolución se genera automáticamente cuando cargues el diagnóstico.
+            </p>
+          ) : (
+            <>
+              <textarea
+                value={evolucion}
+                onChange={(e) => onEvolucionChange(e.target.value)}
+                rows={5}
+                placeholder="La evolución del paciente en esta consulta..."
+                className="mt-2 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                style={{ border: "0.5px solid #e5e7eb" }}
+              />
+
+              {/* Comentario adicional — diferido tras link azul */}
+              {comentarioAbierto ? (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium tracking-wide text-gray-400">
+                      COMENTARIO ADICIONAL
+                    </p>
+                    {dictadoSoportado && (
+                      <button
+                        type="button"
+                        onClick={dictandoComentario ? onDetenerDictado : onIniciarDictadoComentario}
+                        className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition ${
+                          dictandoComentario
+                            ? "bg-red-600 text-white animate-pulse"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        }`}
+                        style={{ minHeight: "44px", minWidth: "44px" }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                          <line x1="12" x2="12" y1="19" y2="22" />
+                        </svg>
+                        {dictandoComentario ? "Detener" : "Dictar"}
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={comentario}
+                    onChange={(e) => onComentarioChange(e.target.value)}
+                    rows={2}
+                    placeholder="Algo que quieras agregar sobre la consulta..."
+                    className="mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+                    style={{ border: "0.5px solid #e5e7eb" }}
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onAbrirComentario}
+                  className="mt-2 flex items-center gap-1 text-sm font-medium transition hover:opacity-80"
+                  style={{ color: "#378ADD", minHeight: "44px" }}
+                >
+                  + Agregar comentario
+                </button>
+              )}
+
+              {/* Validar / Validada */}
+              {evolucionValidada ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <span className="text-sm font-medium" style={{ color: "#1D9E75" }}>
+                    ✓ Validada
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onDesvalidar}
+                    className="text-sm transition hover:opacity-80"
+                    style={{ color: "#888780", minHeight: "44px" }}
+                  >
+                    Editar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  ref={validarBtnRef}
+                  type="button"
+                  onClick={onValidar}
+                  className={`mt-3 w-full rounded-lg py-2.5 text-sm font-medium text-white transition active:scale-95 ${pulseValidar ? "animate-pulse" : ""}`}
+                  style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
+                >
+                  Revisé y confirmo
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Chips de estado de campos obligatorios — fondo oscuro (footer de video)
 // Verde #1D9E75 SOLO como indicador de estado (permitido por design system)
 // ---------------------------------------------------------------------------
@@ -577,7 +853,17 @@ export default function WorkspaceConsulta({
   const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+  // --- Evolución: documento generado, editable, con validación humana ---
   const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
+  // evolucionGenerada = el texto del último componer(). Se inicializa con lo que
+  // venía del borrador para que "editada" arranque en false si el médico no tocó nada.
+  const [evolucionGenerada, setEvolucionGenerada] = useState<string>(borrador?.evolucion ?? "");
+  const [evolucionEditada, setEvolucionEditada] = useState(borrador?.evolucion_editada ?? false);
+  const [evolucionValidada, setEvolucionValidada] = useState(false);
+  const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
+  const [comentarioAbierto, setComentarioAbierto] = useState(false);
+  const [comentario, setComentario] = useState("");
+  const [showRegenerarConfirm, setShowRegenerarConfirm] = useState(false);
 
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
@@ -623,18 +909,27 @@ export default function WorkspaceConsulta({
     });
   }
   const [diagError, setDiagError] = useState(false);
-  const [evolucionError, setEvolucionError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
-  const evolucionRef = useRef<HTMLTextAreaElement>(null);
+  // Refs/flags de la tarjeta de evolución
+  const tarjetaEvolucionRef = useRef<HTMLDivElement>(null);
+  const validarBtnRef = useRef<HTMLButtonElement>(null);
+  const [pulseValidar, setPulseValidar] = useState(false);
+  const prellenadoRef = useRef(false);
+  const evolucionEdicionRef = useRef(false); // true tras el primer cambio real → habilita invalidación
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   // --- Auto-save ---
+  // evolucion_editada se persiste DERIVADO en el borrador (no la validación: se
+  // rehace si recargás). Se computa inline, no desde el state, para no depender
+  // del orden de actualización.
   const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
     diagnostico,
     receta,
     indicaciones,
     certificado,
     evolucion,
+    evolucion_editada:
+      evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0,
     medicamentos_structured: medicamentos,
     receta_texto_libre: recetaTextoLibre,
   });
@@ -666,6 +961,94 @@ export default function WorkspaceConsulta({
   // --- Datos derivados ---
   const edad = calcularEdad(consulta.paciente_nacimiento);
 
+  // --- Evolución: armado de datos para el motor de composición ---
+  // Mapea el estado del workspace → DatosEvolucion. Pura, sin efectos.
+  const construirDatosEvolucion = useCallback((): DatosEvolucion => {
+    const sexoRaw = consulta.paciente_sexo_dni;
+    const sexo: DatosEvolucion["sexo"] =
+      sexoRaw === "masculino" || sexoRaw === "femenino" ? sexoRaw : null;
+    return {
+      edad: calcularEdadNumero(consulta.paciente_nacimiento),
+      sexo,
+      motivo: consulta.motivo_consulta,
+      sintomas: consulta.sintomas,
+      plazo: consulta.tiempo_sintomas,
+      diagnostico,
+      indicaciones,
+      receta, // ya serializada; el motor strip-ea "Rp/"
+      certificado,
+      comentario,
+    };
+  }, [
+    consulta.paciente_sexo_dni,
+    consulta.paciente_nacimiento,
+    consulta.motivo_consulta,
+    consulta.sintomas,
+    consulta.tiempo_sintomas,
+    diagnostico,
+    indicaciones,
+    receta,
+    certificado,
+    comentario,
+  ]);
+
+  // --- Pre-llenado diferido de la evolución ---
+  // La PRIMERA vez que diagnostico pasa de vacío a no-vacío con evolucion aún vacía,
+  // componemos en silencio. Si ya venía evolucion del borrador, no hacemos nada
+  // (evolucionGenerada ya se inicializó con ese texto en el useState).
+  useEffect(() => {
+    if (prellenadoRef.current) return;
+    if (!diagnostico.trim()) return;
+    if (evolucion !== "") {
+      // Ya había evolución (borrador): respetar y marcar como ya pre-llenada.
+      prellenadoRef.current = true;
+      return;
+    }
+    prellenadoRef.current = true;
+    const texto = componerEvolucion(construirDatosEvolucion());
+    if (texto) {
+      setEvolucion(texto);
+      setEvolucionGenerada(texto);
+    } else {
+      // Sin contenido componible: dejar el flag puesto igual para no reintentar.
+      prellenadoRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagnostico]);
+
+  // --- Derivación de evolucion_editada + invalidación al editar ---
+  // editada = el cuerpo difiere del último generado, o hay comentario.
+  // La primera corrida (mount / pre-llenado) NO invalida; sólo a partir de un
+  // cambio real del médico. Editar tras validar vuelve la tarjeta a ámbar.
+  useEffect(() => {
+    const editada =
+      evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0;
+    setEvolucionEditada(editada);
+    if (!evolucionEdicionRef.current) {
+      evolucionEdicionRef.current = true;
+      return;
+    }
+    if (editada) setEvolucionValidada(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evolucion, evolucionGenerada, comentario]);
+
+  // --- Regenerar evolución (descarta edición manual del cuerpo) ---
+  function regenerarEvolucion() {
+    const texto = componerEvolucion(construirDatosEvolucion());
+    setEvolucion(texto);
+    setEvolucionGenerada(texto);
+    setEvolucionValidada(false);
+    setEvolucionValidadaAt(null);
+    setShowRegenerarConfirm(false);
+  }
+
+  // --- Validar evolución (revisión humana) ---
+  function validarEvolucion() {
+    setEvolucionValidada(true);
+    setEvolucionValidadaAt(new Date().toISOString());
+    setPulseValidar(false);
+  }
+
   // --- Timer ---
   useEffect(() => {
     const inicio = new Date(horaInicio).getTime();
@@ -680,8 +1063,22 @@ export default function WorkspaceConsulta({
 
   // --- Gate amable: estado de campos obligatorios ---
   const faltaDiagnostico = !diagnostico.trim();
-  const faltaEvolucion = !evolucion.trim();
+  // El chip "Evolución" se prende sólo cuando el médico validó (revisión humana),
+  // no apenas hay texto generado.
+  const faltaEvolucion = !evolucionValidada;
   const faltanObligatorios = faltaDiagnostico || faltaEvolucion;
+
+  // Helper: llevar la vista a la tarjeta de evolución y hacer pulse en "Revisé y
+  // confirmo" durante 600ms. Reemplaza el focus al textarea: la acción que falta
+  // ahora es validar, no escribir.
+  function resaltarValidarEvolucion() {
+    setModo("escritura");
+    setTimeout(() => {
+      tarjetaEvolucionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setPulseValidar(true);
+      setTimeout(() => setPulseValidar(false), 600);
+    }, 350);
+  }
 
   // Helper: validar campos obligatorios antes de finalizar
   function validarCamposObligatorios(): boolean {
@@ -692,11 +1089,9 @@ export default function WorkspaceConsulta({
       setTimeout(() => diagRef.current?.focus(), 350);
       return false;
     }
-    if (!evolucion.trim()) {
-      setError("Completá la Evolución antes de finalizar.");
-      setEvolucionError(true);
-      setModo("escritura");
-      setTimeout(() => evolucionRef.current?.focus(), 350);
+    if (!evolucionValidada) {
+      setError("Validá la evolución antes de finalizar.");
+      resaltarValidarEvolucion();
       return false;
     }
     return true;
@@ -715,13 +1110,12 @@ export default function WorkspaceConsulta({
   // --- Desde el dialog "Falta completar": ir a documentar y enfocar el campo faltante ---
   function completarAhora() {
     setShowFaltaDialog(false);
-    setModo("escritura");
     if (faltaDiagnostico) {
+      setModo("escritura");
       setDiagError(true);
       setTimeout(() => diagRef.current?.focus(), 350);
     } else if (faltaEvolucion) {
-      setEvolucionError(true);
-      setTimeout(() => evolucionRef.current?.focus(), 350);
+      resaltarValidarEvolucion();
     }
   }
 
@@ -850,7 +1244,14 @@ export default function WorkspaceConsulta({
 
         await supabase
           .from("consultas")
-          .update({ estado: "completada", doc_borrador: null, evolucion: evolucion.trim() })
+          .update({
+            estado: "completada",
+            doc_borrador: null,
+            evolucion: evolucion.trim(),
+            evolucion_validada_at: evolucionValidadaAt,
+            evolucion_editada:
+              evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0,
+          })
           .eq("id", consultaId);
 
         // Borrar estudios temporales del paciente
@@ -1386,6 +1787,7 @@ export default function WorkspaceConsulta({
                 DICTADO EN CURSO — {
                   dictando === "diagnostico" ? "Diagnóstico" :
                   dictando === "evolucion" ? "Evolución" :
+                  dictando === "comentario" ? "Comentario adicional" :
                   dictando === "indicaciones" ? "Indicaciones" :
                   dictando === "certificado" ? "Certificado" :
                   dictando === "receta" ? "Receta" : dictando
@@ -1437,20 +1839,32 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
           />
-          <CampoDictado
-            label="EVOLUCION"
-            campo="evolucion"
-            value={evolucion}
-            setter={(v) => { setEvolucion(v); if (v.trim()) { setEvolucionError(false); setError(null); } }}
-            placeholder="Registrá la evolución del paciente en esta consulta..."
-            rows={4}
-            required
-            hasError={evolucionError}
-            textareaRef={evolucionRef}
+          <TarjetaEvolucion
+            ref={tarjetaEvolucionRef}
+            validarBtnRef={validarBtnRef}
+            tieneDiagnostico={!!diagnostico.trim()}
+            evolucion={evolucion}
+            onEvolucionChange={(v) => { setEvolucion(v); setError(null); }}
+            evolucionGenerada={evolucionGenerada}
+            evolucionValidada={evolucionValidada}
+            comentarioAbierto={comentarioAbierto}
+            onAbrirComentario={() => setComentarioAbierto(true)}
+            comentario={comentario}
+            onComentarioChange={setComentario}
+            onValidar={validarEvolucion}
+            onDesvalidar={() => { setEvolucionValidada(false); setEvolucionValidadaAt(null); }}
+            onRegenerar={() => {
+              if (evolucionEditada) setShowRegenerarConfirm(true);
+              else regenerarEvolucion();
+            }}
+            showRegenerarConfirm={showRegenerarConfirm}
+            onCancelarRegenerar={() => setShowRegenerarConfirm(false)}
+            onConfirmarRegenerar={regenerarEvolucion}
+            pulseValidar={pulseValidar}
             dictando={dictando}
-            onIniciar={() => iniciarDictado("evolucion", (fn) => setEvolucion((prev) => { const val = fn(prev); if (val.trim()) { setEvolucionError(false); setError(null); } return val; }))}
-            onDetener={detenerDictado}
-            soportado={dictadoSoportado}
+            onIniciarDictadoComentario={() => iniciarDictado("comentario", setComentario)}
+            onDetenerDictado={detenerDictado}
+            dictadoSoportado={dictadoSoportado}
           />
 
           {/* Acordeón: RECETA */}
@@ -1806,7 +2220,7 @@ export default function WorkspaceConsulta({
               {faltaEvolucion && (
                 <li style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#111" }}>
                   <span style={{ display: "inline-block", height: "6px", width: "6px", borderRadius: "9999px", background: "#D85A30" }} />
-                  Evolución
+                  Validar evolución
                 </li>
               )}
             </ul>

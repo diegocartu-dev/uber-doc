@@ -45,7 +45,7 @@ export default async function WorkspacePage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, fecha_nacimiento, cuil")
+    .select("nombre_completo, fecha_nacimiento, cuil, sexo_dni")
     .eq("user_id", consulta.paciente_id)
     .single();
 
@@ -118,6 +118,7 @@ export default async function WorkspacePage({
         paciente_nombre: paciente?.nombre_completo ?? "Paciente",
         paciente_nacimiento: paciente?.fecha_nacimiento ?? null,
         paciente_cuil: paciente?.cuil ?? null,
+        paciente_sexo_dni: paciente?.sexo_dni ?? null,
         paciente_id: consulta.paciente_id,
         paciente_cobertura: {
           tiene_cobertura: pacienteCobertura?.tiene_cobertura ?? null,
