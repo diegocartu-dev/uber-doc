@@ -19,14 +19,6 @@ import { formatNombreMedico } from "@/lib/utils/texto";
 // Tipos
 // ---------------------------------------------------------------------------
 
-type Documento = {
-  id: string;
-  tipo: string;
-  diagnostico: string | null;
-  contenido: string;
-  created_at: string;
-};
-
 type Props = {
   consultaId: string;
   roomName: string | null;
@@ -230,21 +222,6 @@ function formatTimer(seg: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function tipoLabel(tipo: string): string {
-  switch (tipo) {
-    case "receta":
-      return "Receta";
-    case "indicaciones":
-      return "Indicaciones";
-    case "certificado":
-      return "Certificado";
-    case "orden":
-      return "Orden médica";
-    default:
-      return tipo.charAt(0).toUpperCase() + tipo.slice(1);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
@@ -267,8 +244,6 @@ export default function SalaConsultaPaciente({
   const [videoVisible, setVideoVisible] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [timerSeg, setTimerSeg] = useState(0);
-  const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [docExpandido, setDocExpandido] = useState<string | null>(null);
   const [showEstudios, setShowEstudios] = useState(false);
   const [showSalirDialog, setShowSalirDialog] = useState(false);
   // cerrando: el médico finalizó (ROOM_DELETED) pero la consulta aún no figura
@@ -399,22 +374,6 @@ export default function SalaConsultaPaciente({
     return () => clearInterval(i);
   }, []);
 
-  // --- Fetch documentos cuando la consulta se completa ---
-  const fetchDocumentos = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const colId = tipo === "turno" ? "turno_id" : "consulta_id";
-      const { data } = await supabase
-        .from("documentos")
-        .select("id, tipo, diagnostico, contenido, created_at")
-        .eq(colId, consultaId)
-        .order("created_at", { ascending: true });
-      if (data) setDocumentos(data);
-    } catch {
-      // silently fail
-    }
-  }, [consultaId, tipo]);
-
   // --- Realtime estado: filtro por PK (id) → válido en Supabase Realtime ---
   const tabla = tipo === "turno" ? "turnos" : "consultas";
 
@@ -430,7 +389,6 @@ export default function SalaConsultaPaciente({
       .then(({ data }) => {
         if (!data?.estado) return;
         setEstado(data.estado);
-        if (data.estado === estadoCompletado) fetchDocumentos();
       });
 
     const channel = supabase
@@ -445,14 +403,13 @@ export default function SalaConsultaPaciente({
           if (row.estado === estadoCompletado) {
             yaCerroRef.current = true;
             setVideoVisible(false);
-            fetchDocumentos();
           }
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [consultaId, fetchDocumentos, tabla, estadoCompletado]);
+  }, [consultaId, tabla, estadoCompletado]);
 
   // --- Polling de respaldo cada 5s (complementa Realtime) ---
   const pollingUrl = tipo === "turno"
@@ -475,13 +432,13 @@ export default function SalaConsultaPaciente({
         if ("desconectado_at" in data) setDesconectadoAt(data.desconectado_at ?? null);
         if (data.estado === estadoCompletado) {
           // Convergemos a la pantalla de cierre (igual que el Realtime),
-          // NO redirigimos a /mis-consultas — el paciente ve sus documentos.
+          // NO redirigimos a /mis-consultas — el paciente ve sus documentos
+          // en Mis documentos desde la pantalla de cierre.
           yaCerroRef.current = true;
           clearInterval(interval);
           setEstado(estadoCompletado);
           setMostrandoRejoin(false);
           setVideoVisible(false);
-          fetchDocumentos();
         }
       } catch {
         // Polling: falla silenciosamente, el siguiente tick reintenta
@@ -489,7 +446,7 @@ export default function SalaConsultaPaciente({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [pollingUrl, estadoCompletado, fetchDocumentos]);
+  }, [pollingUrl, estadoCompletado]);
 
   // --- Fallback anti-trabado: si tras ~20s en "cerrando" el estado sigue sin ser
   // completado (el update del médico falló silenciosamente), forzamos una pantalla
@@ -541,74 +498,18 @@ export default function SalaConsultaPaciente({
               <p className="mt-2 text-gray-600">
                 Tu consulta con {formatNombreMedico(medicoNombre)} ha finalizado
               </p>
+              <p className="mt-3 text-sm text-gray-500">
+                Tus recetas y documentos quedaron guardados en Mis documentos.
+              </p>
             </div>
 
-            {/* Documentos */}
-            {documentos.length > 0 && (
-              <div className="mt-8">
-                <p className="text-xs font-medium tracking-wide text-gray-400">
-                  DOCUMENTOS DE TU CONSULTA
-                </p>
-                <div className="mt-3 space-y-3">
-                  {documentos.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="rounded-xl border border-gray-200 bg-white shadow-sm"
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDocExpandido(
-                            docExpandido === doc.id ? null : doc.id
-                          )
-                        }
-                        className="flex w-full items-center justify-between px-5 py-4 text-left"
-                        style={{ minHeight: "44px" }}
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {tipoLabel(doc.tipo)}
-                          </p>
-                          {doc.diagnostico && (
-                            <p className="mt-0.5 text-xs text-gray-500">
-                              {doc.diagnostico}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-gray-400 text-sm">
-                          {docExpandido === doc.id ? "▲" : "▼"}
-                        </span>
-                      </button>
-                      {docExpandido === doc.id && (
-                        <div
-                          className="border-t border-gray-100 px-5 py-4"
-                        >
-                          <p className="whitespace-pre-wrap text-sm text-gray-700">
-                            {doc.contenido}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {documentos.length === 0 && (
-              <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
-                <p className="text-sm text-gray-500">
-                  No se generaron documentos en esta consulta
-                </p>
-              </div>
-            )}
-
-            {/* Botón volver */}
+            {/* Botón ver documentos */}
             <a
-              href="/mis-consultas"
+              href="/documentos"
               className="mt-8 block w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
-              Volver a mis consultas
+              Ver mis documentos
             </a>
           </div>
         </main>
@@ -617,7 +518,7 @@ export default function SalaConsultaPaciente({
   }
 
   // --- Fallback anti-trabado: el médico finalizó pero el estado no llegó a
-  // completado en ~20s. Cierre gracioso que deriva a Mis Consultas. ---
+  // completado en ~20s. Cierre gracioso que deriva a Mis documentos. ---
   if (cerrando && fallbackCierre) {
     return (
       <div className="flex min-h-[100dvh] flex-col bg-gray-50">
@@ -638,14 +539,14 @@ export default function SalaConsultaPaciente({
             </div>
             <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
             <p className="mt-2 text-gray-600">
-              En unos minutos vas a encontrar tus documentos en Mis Consultas.
+              En unos minutos vas a encontrar tus recetas y documentos en Mis documentos.
             </p>
             <a
-              href="/mis-consultas"
+              href="/documentos"
               className="mt-8 inline-block w-full max-w-xs rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
-              Ir a mis consultas
+              Ver mis documentos
             </a>
           </div>
         </main>

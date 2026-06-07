@@ -32,6 +32,7 @@ export function useAutoSaveBorrador(
         camposActuales.receta.trim() ||
         camposActuales.indicaciones.trim() ||
         camposActuales.certificado.trim() ||
+        (camposActuales.orden && String(camposActuales.orden).trim()) ||
         (camposActuales.evolucion && String(camposActuales.evolucion).trim());
 
       if (!hayContenido) return;
