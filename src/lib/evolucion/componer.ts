@@ -16,7 +16,7 @@
 //
 // Plantilla (las secciones sin contenido se omiten por completo):
 //   paciente: {sexo}, de {edad} años. refiere al ingreso: {motivo}, {síntomas} hace {plazo}.
-//   se diagnostica: {diagnóstico}. se indica: {receta}, {indicaciones}.
+//   se diagnostica: {diagnóstico}. se indica: {receta}, {indicaciones}, {certificado}.
 //   comentarios adicionales: {comentario}.
 //
 // Ejemplo real (debe matchear EXACTO):
@@ -40,6 +40,12 @@ export interface DatosEvolucion {
   indicaciones: string | null;
   /** Receta YA serializada a texto (ver serializarMedicamentos del workspace). */
   receta: string | null;
+  /**
+   * Certificado tal cual lo cargó el médico (CampoDictado plano del workspace).
+   * Es texto libre/funcional, NO una plantilla legal: típicamente trae el reposo
+   * ("reposo 48 hs"). Se embebe verbatim como tercer ítem de "se indica".
+   */
+  certificado?: string | null;
   comentario: string | null;
 }
 
@@ -137,15 +143,22 @@ function seccionDiagnostico(diagnostico: string | null): string {
 }
 
 /**
- * "se indica: {receta}, {indicaciones}" — RECETA PRIMERO, SIEMPRE.
+ * "se indica: {receta}, {indicaciones}, {certificado}" — RECETA PRIMERO, SIEMPRE,
+ * luego indicaciones, luego certificado (de ahí sale el reposo, si lo hubiera).
  * Saca el prefijo "Rp/" (o "Rp/ ") de la receta serializada acá (en el documento
- * de receta queda igual). Si no hay ninguna de las dos, omite la sección.
+ * de receta queda igual). El certificado se embebe verbatim (es texto libre del
+ * médico, no plantilla legal). Si las tres están vacías, omite la sección.
  */
-function seccionIndica(receta: string | null, indicaciones: string | null): string {
+function seccionIndica(
+  receta: string | null,
+  indicaciones: string | null,
+  certificado: string | null | undefined
+): string {
   const r = limpiar(receta).replace(/^Rp\/\s*/, "").trim();
   const i = limpiar(indicaciones);
+  const c = limpiar(certificado);
 
-  const cuerpo = [r, i].filter((p) => p.length > 0).join(", ");
+  const cuerpo = [r, i, c].filter((p) => p.length > 0).join(", ");
   return cuerpo ? `se indica: ${cuerpo}` : "";
 }
 
@@ -170,7 +183,7 @@ export function componerEvolucion(datos: DatosEvolucion): string {
     seccionPaciente(datos.edad, datos.sexo),
     seccionRefiere(datos.motivo, datos.sintomas, datos.plazo),
     seccionDiagnostico(datos.diagnostico),
-    seccionIndica(datos.receta, datos.indicaciones),
+    seccionIndica(datos.receta, datos.indicaciones, datos.certificado),
     seccionComentario(datos.comentario),
   ].filter((s) => s.length > 0);
 

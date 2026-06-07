@@ -18,6 +18,7 @@ function datos(parcial: Partial<DatosEvolucion>): DatosEvolucion {
     diagnostico: null,
     indicaciones: null,
     receta: null,
+    certificado: null,
     comentario: null,
     ...parcial,
   };
@@ -271,7 +272,7 @@ test("se indica con solo indicaciones (sin receta)", () => {
   assert.equal(out, "paciente: femenino, de 50 años. se diagnostica: contractura. se indica: reposo y calor local.");
 });
 
-test("sin receta NI indicaciones: omite 'se indica' por completo (no inventa cierre)", () => {
+test("sin receta NI indicaciones NI certificado: omite 'se indica' por completo (no inventa cierre)", () => {
   const out = componerEvolucion(
     datos({ edad: 50, sexo: "femenino", motivo: "control", diagnostico: "paciente sana" })
   );
@@ -280,6 +281,89 @@ test("sin receta NI indicaciones: omite 'se indica' por completo (no inventa cie
     "paciente: femenino, de 50 años. refiere al ingreso: control. se diagnostica: paciente sana."
   );
   assert.doesNotMatch(out, /se indica/);
+});
+
+// ---------------------------------------------------------------------------
+// se indica — CERTIFICADO como tercer ítem (receta + indicaciones + certificado)
+// El certificado trae típicamente el reposo. Orden fijo: receta, indicaciones, certificado.
+// ---------------------------------------------------------------------------
+test("se indica con los 3: receta, indicaciones y certificado en ese orden", () => {
+  const out = componerEvolucion(
+    datos({
+      edad: 45,
+      sexo: "masculino",
+      diagnostico: "gripe",
+      indicaciones: "hidratación abundante",
+      receta: "Rp/ ibuprofeno 400 mg, 1 comprimido cada 8 hs",
+      certificado: "reposo 48 hs",
+    })
+  );
+  assert.equal(
+    out,
+    "paciente: masculino, de 45 años. se diagnostica: gripe. " +
+      "se indica: ibuprofeno 400 mg, 1 comprimido cada 8 hs, hidratación abundante, reposo 48 hs."
+  );
+});
+
+test("se indica con solo certificado (sin receta ni indicaciones)", () => {
+  const out = componerEvolucion(
+    datos({ edad: 33, sexo: "femenino", diagnostico: "lumbalgia", certificado: "reposo 72 hs" })
+  );
+  assert.equal(out, "paciente: femenino, de 33 años. se diagnostica: lumbalgia. se indica: reposo 72 hs.");
+});
+
+test("se indica con receta + certificado (sin indicaciones)", () => {
+  const out = componerEvolucion(
+    datos({
+      edad: 50,
+      sexo: "masculino",
+      diagnostico: "faringitis",
+      receta: "Rp/ amoxicilina 500 mg, 1 comprimido cada 8 hs",
+      certificado: "reposo 24 hs",
+    })
+  );
+  assert.equal(
+    out,
+    "paciente: masculino, de 50 años. se diagnostica: faringitis. " +
+      "se indica: amoxicilina 500 mg, 1 comprimido cada 8 hs, reposo 24 hs."
+  );
+});
+
+test("se indica con indicaciones + certificado (sin receta)", () => {
+  const out = componerEvolucion(
+    datos({
+      edad: 40,
+      sexo: "femenino",
+      diagnostico: "contractura",
+      indicaciones: "calor local",
+      certificado: "reposo 48 hs",
+    })
+  );
+  assert.equal(
+    out,
+    "paciente: femenino, de 40 años. se diagnostica: contractura. se indica: calor local, reposo 48 hs."
+  );
+});
+
+test("certificado en blanco no agrega ítem ni coma colgada en se indica", () => {
+  const out = componerEvolucion(
+    datos({ edad: 50, sexo: "masculino", diagnostico: "faringitis", indicaciones: "reposo e hidratación", certificado: "   " })
+  );
+  assert.equal(
+    out,
+    "paciente: masculino, de 50 años. se diagnostica: faringitis. se indica: reposo e hidratación."
+  );
+  assert.doesNotMatch(out, /,\s*\./);
+});
+
+test("respeta capitalización del médico en el certificado", () => {
+  const out = componerEvolucion(
+    datos({ edad: 30, sexo: "femenino", diagnostico: "gripe", certificado: "Reposo Domiciliario 48 HS" })
+  );
+  assert.equal(
+    out,
+    "paciente: femenino, de 30 años. se diagnostica: gripe. se indica: Reposo Domiciliario 48 HS."
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -378,6 +462,7 @@ test("guard: la plantilla no inventa pautas de alarma / alergias / signos vitale
       diagnostico: "cuadro viral",
       indicaciones: "reposo e hidratación",
       receta: "Rp/ paracetamol 500 mg",
+      certificado: "reposo 48 hs",
       // SIN comentario con esas palabras: cualquier match vendría de la plantilla.
     })
   );
