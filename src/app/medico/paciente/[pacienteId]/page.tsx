@@ -1,12 +1,24 @@
 export const dynamic = "force-dynamic";
-// Historia Clínica — consultas completadas con evolución (F3)
-import Link from "next/link";
+// Ficha del paciente — datos + Evoluciones (timeline) + historial (F3)
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
 import OrigenBadge from "@/components/OrigenBadge";
 import AppNavbar from "@/components/AppNavbar";
 import PatologiaCronica from "./PatologiaCronica";
+import EvolucionesTimeline, { type EntradaEvolucion } from "./EvolucionesTimeline";
+
+// Color del borde por canal — coherente con OrigenBadge
+function canalInfo(canalOrigen: string | null): { label: string; color: string } {
+  switch (canalOrigen) {
+    case "clinica_virtual":
+      return { label: "Clínica Virtual", color: "#378ADD" };
+    case "consultorio_privado":
+      return { label: "Consultorio privado", color: "#D85A30" };
+    default:
+      return { label: "Consulta Inmediata", color: "#1D9E75" };
+  }
+}
 
 function calcularEdad(fechaNac: string | null): string {
   if (!fechaNac) return "";
@@ -233,6 +245,25 @@ export default async function FichaPacientePage({
     docsPorConsulta.get(doc.consulta_id)!.push(doc);
   }
 
+  /* ── Evoluciones (timeline) — consultas completadas ── */
+  const entradasEvolucion: EntradaEvolucion[] = consultasCompletadas.map((c) => {
+    const docs = docsPorConsulta.get(c.id) ?? [];
+    const recetaTexto = docs.filter((d) => d.tipo === "receta").map((d) => d.contenido).join("\n") || null;
+    const indicacionesTexto = docs.filter((d) => d.tipo === "indicaciones").map((d) => d.contenido).join("\n") || null;
+    const canal = canalInfo((c as { canal_origen?: string | null }).canal_origen ?? null);
+    return {
+      id: c.id,
+      fechaLabel: `${formatFecha(c.created_at)} — ${formatHora(c.created_at)}hs`,
+      especialidad: c.especialidad,
+      canalLabel: canal.label,
+      canalColor: canal.color,
+      evolucion: c.evolucion ?? null,
+      diagnostico: docs[0]?.diagnostico || null,
+      medicacion: recetaTexto,
+      indicaciones: indicacionesTexto,
+    };
+  });
+
   /* ── Sección de consultas ── */
   const seccionConsultas = (
     <div key="consultas" className="mt-6">
@@ -432,72 +463,8 @@ export default async function FichaPacientePage({
           initialPatologias={perfilVinculo?.patologia_cronica ?? []}
         />
 
-        {/* Historia Clínica — consultas completadas con evolución */}
-        {consultasCompletadas.length > 0 && (
-          <div className="mt-8">
-            <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">
-              Historia Clínica
-            </p>
-            <div className="mt-4 space-y-6">
-              {consultasCompletadas.map((c) => {
-                const docs = docsPorConsulta.get(c.id) ?? [];
-                const recetaDocs = docs.filter((d) => d.tipo === "receta");
-                const indicacionesDocs = docs.filter((d) => d.tipo === "indicaciones");
-                const recetaTexto = recetaDocs.map((d) => d.contenido).join("\n") || null;
-                const indicacionesTexto = indicacionesDocs.map((d) => d.contenido).join("\n") || null;
-                const diagnosticoTexto = docs[0]?.diagnostico || null;
-
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-xl bg-white px-6 py-5"
-                    style={{ border: "0.5px solid #e5e7eb" }}
-                  >
-                    <p className="text-sm font-medium text-gray-900">
-                      {formatFecha(c.created_at)} — {formatHora(c.created_at)}hs
-                    </p>
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {c.especialidad}
-                      {c.canal_origen === "consultorio_privado"
-                        ? " · Consultorio privado"
-                        : " · Consulta Inmediata"}
-                    </p>
-
-                    <div className="mt-5 space-y-4" style={{ lineHeight: "1.7" }}>
-                      {c.evolucion && (
-                        <div>
-                          <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Evolución</p>
-                          <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">{c.evolucion}</p>
-                        </div>
-                      )}
-
-                      {diagnosticoTexto && (
-                        <div>
-                          <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Diagnóstico</p>
-                          <p className="mt-1 text-sm text-gray-800">{diagnosticoTexto}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Medicación</p>
-                        <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">
-                          {recetaTexto || "Sin receta"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase">Indicaciones</p>
-                        <p className="mt-1 text-sm text-gray-800 whitespace-pre-line">
-                          {indicacionesTexto || "Sin indicaciones"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Evoluciones — consultas completadas (timeline) */}
+        <EvolucionesTimeline entradas={entradasEvolucion} />
 
         {/* Secciones de historial — orden según origen */}
         {desde === "turno" ? (
