@@ -31,3 +31,9 @@ WITH CHECK (
       AND m.es_cuenta_test = public.paciente_es_test(auth.uid())
   )
 );
+
+-- Hardening (Roberto): least-privilege. La policy solo se evalúa para sesiones
+-- logueadas (auth.uid()), así que solo `authenticated` necesita EXECUTE. Saca la
+-- función de la superficie alcanzable por `anon`.
+REVOKE EXECUTE ON FUNCTION public.paciente_es_test(uuid) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.paciente_es_test(uuid) TO authenticated;
