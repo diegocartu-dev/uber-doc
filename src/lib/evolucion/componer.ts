@@ -8,16 +8,22 @@
 // PRINCIPIO INNEGOCIABLE (Diego): cada palabra de la evolución tiene un autor
 // humano. Esta plantilla SOLO re-ordena datos cargados. NUNCA inventa contenido
 // que un humano no escribió: nada de pautas de alarma, "niega alergias", signos
-// vitales ni examen físico. Si un dato falta, la frase entera desaparece.
+// vitales ni examen físico. Si un dato falta, la sección entera desaparece.
 //
-// Reglas de redacción definidas por Martín (médico). Tono alineado con la
-// evolución que genera Nova por voz (tercera persona médica formal):
-// "Paciente refiere...", "Se indica...".
+// FORMATO (Diego, spec 07/06/2026): transcripción corrida por "etiqueta: contenido".
+// NO es prosa narrativa. Etiquetas en minúscula seguidas de dos puntos, todo en
+// un párrafo, secciones separadas por ". ", el string termina en ".".
 //
-// Estructura (una frase por bloque, separadas por punto, las que falten se omiten):
-//   Paciente de {edad} años, {sexo}. Consulta por {motivo}.
-//   Refiere {síntomas} de {plazo} de evolución. Diagnóstico: {diagnóstico}.
-//   Se indica {indicaciones}. Se prescribe {receta}. {comentario}
+// Plantilla (las secciones sin contenido se omiten por completo):
+//   paciente: {sexo}, de {edad} años. refiere al ingreso: {motivo}, {síntomas} hace {plazo}.
+//   se diagnostica: {diagnóstico}. se indica: {receta}, {indicaciones}.
+//   comentarios adicionales: {comentario}.
+//
+// Ejemplo real (debe matchear EXACTO):
+//   paciente: masculino, de 38 años. refiere al ingreso: le duele mucho la panza,
+//   dolor abdominal, fiebre hace 1-3 días. se diagnostica: gastroenteritis aguda.
+//   se indica: buscapina 10 mg, cápsulas blandas, 1 comprimido cada 8 hs, dieta
+//   blanda y reposo 48 hs. comentarios adicionales: paciente alérgico al sertal.
 // ============================================================================
 
 export interface DatosEvolucion {
@@ -28,7 +34,7 @@ export interface DatosEvolucion {
   motivo: string | null;
   /** Lista de síntomas del triage (puede incluir "Otro", que se filtra). */
   sintomas: string[] | null;
-  /** Valor CRUDO del triage (ej. "1-3 días"). Se transforma a lenguaje natural. */
+  /** Valor CRUDO del triage (ej. "1-3 días"). Se pasa a minúscula tras "hace". */
   plazo: string | null;
   diagnostico: string | null;
   indicaciones: string | null;
@@ -37,124 +43,116 @@ export interface DatosEvolucion {
   comentario: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Mapeo del plazo crudo del triage → cola "de {X} de evolución".
-// Fuente de verdad: TIEMPO_OPCIONES en src/app/triage/page.tsx.
-// Si el triage agrega/renombra una opción, agregarla acá (y un test).
-// ---------------------------------------------------------------------------
-const PLAZO_A_NATURAL: Record<string, string> = {
-  "Menos de 24 horas": "menos de 24 horas",
-  "1-3 días": "1 a 3 días",
-  "4-7 días": "4 a 7 días",
-  "1-2 semanas": "1 a 2 semanas",
-  "Más de 2 semanas": "más de 2 semanas",
-  "Más de 1 mes": "más de 1 mes",
-};
-
 function limpiar(v: string | null | undefined): string {
   return (v ?? "").trim();
 }
 
 /**
- * Transforma el valor crudo de tiempo del triage a lenguaje natural, sin la
- * envoltura "de ... de evolución" (eso lo agrega el bloque de síntomas).
- * Si el valor no está mapeado, lo devuelve tal cual (degradación graceful:
- * el médico nunca ve un placeholder roto, a lo sumo el texto literal del triage).
- * Devuelve "" si no hay plazo.
- */
-function plazoNatural(plazo: string | null): string {
-  const raw = limpiar(plazo);
-  if (!raw) return "";
-  return PLAZO_A_NATURAL[raw] ?? raw;
-}
-
-/**
- * Une una lista de strings con comas y " y " antes del último.
- * ["a"] → "a" · ["a","b"] → "a y b" · ["a","b","c"] → "a, b y c"
- */
-function unirConY(items: string[]): string {
-  if (items.length === 0) return "";
-  if (items.length === 1) return items[0];
-  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
-}
-
-/** Asegura que una frase termine en un signo de puntuación de cierre. */
-function terminarConPunto(frase: string): string {
-  const t = frase.trim();
-  if (!t) return "";
-  return /[.!?]$/.test(t) ? t : `${t}.`;
-}
-
-// ---------------------------------------------------------------------------
-// Construcción de cada bloque. Cada función devuelve la frase COMPLETA con su
-// punto final, o "" si el dato no alcanza para armar la frase.
-// ---------------------------------------------------------------------------
-
-function bloqueDemografico(edad: number | null, sexo: DatosEvolucion["sexo"]): string {
-  // Apertura tolerante a faltantes: "Paciente de 47 años, masculino." /
-  // "Paciente masculino." / "Paciente de 47 años." / "Paciente."
-  const tieneEdad = typeof edad === "number" && Number.isFinite(edad) && edad >= 0;
-  const tieneSexo = sexo === "masculino" || sexo === "femenino";
-
-  if (tieneEdad && tieneSexo) return `Paciente de ${edad} años, ${sexo}.`;
-  if (tieneEdad) return `Paciente de ${edad} años.`;
-  if (tieneSexo) return `Paciente ${sexo}.`;
-  return "Paciente.";
-}
-
-function bloqueMotivo(motivo: string | null): string {
-  const m = limpiar(motivo);
-  return m ? `Consulta por ${m}.` : "";
-}
-
-function bloqueSintomas(sintomas: string[] | null, plazo: string | null): string {
-  // Filtrar "Otro" (el motivo libre ya lo cubre) y vacíos.
-  const lista = (sintomas ?? [])
-    .map((s) => limpiar(s))
-    .filter((s) => s.length > 0 && s.toLowerCase() !== "otro");
-
-  if (lista.length === 0) return "";
-
-  // Síntomas en minúscula inicial para que fluyan en la prosa de la frase.
-  const frase = unirConY(lista.map(minusculaInicial));
-  const cola = plazoNatural(plazo);
-
-  return cola
-    ? `Refiere ${frase} de ${cola} de evolución.`
-    : `Refiere ${frase}.`;
-}
-
-function bloqueDiagnostico(diagnostico: string | null): string {
-  const d = limpiar(diagnostico);
-  // Dos puntos. NO tocar la capitalización de lo que escribió el médico.
-  return d ? terminarConPunto(`Diagnóstico: ${d}`) : "";
-}
-
-function bloqueIndicaciones(indicaciones: string | null): string {
-  const i = limpiar(indicaciones);
-  return i ? terminarConPunto(`Se indica ${i}`) : "";
-}
-
-function bloqueReceta(receta: string | null): string {
-  const r = limpiar(receta);
-  // "Se prescribe" (preferido sobre "Se receta"). La receta ya viene serializada.
-  return r ? terminarConPunto(`Se prescribe ${r}`) : "";
-}
-
-function bloqueComentario(comentario: string | null): string {
-  const c = limpiar(comentario);
-  // Sin rótulo "Comentarios adicionales:" — se concatena como una frase más.
-  return c ? terminarConPunto(c) : "";
-}
-
-/**
  * minusculaInicial — baja SOLO la primera letra, dejando el resto intacto.
- * Los síntomas del triage vienen capitalizados ("Dolor de garganta") y queremos
- * que fluyan en prosa ("refiere dolor de garganta"). No tocamos siglas internas.
+ * Los síntomas del triage vienen capitalizados ("Dolor de garganta") y el plazo
+ * arranca en mayúscula ("Menos de 24 horas"); queremos que fluyan en la
+ * transcripción corrida ("dolor de garganta", "hace menos de 24 horas").
+ * NO tocamos siglas internas.
  */
 function minusculaInicial(s: string): string {
   if (!s) return s;
   return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/**
+ * Plazo del triage → cola "hace {plazo en minúscula}". Devuelve solo el valor
+ * en minúscula (sin "hace"); el bloque de síntomas agrega "hace". El valor crudo
+ * del triage va tal cual salvo la primera letra: "1-3 días" → "1-3 días",
+ * "Menos de 24 horas" → "menos de 24 horas", "Más de 2 semanas" → "más de 2 semanas".
+ * Devuelve "" si no hay plazo.
+ */
+function plazoNatural(plazo: string | null): string {
+  const raw = limpiar(plazo);
+  return raw ? minusculaInicial(raw) : "";
+}
+
+// ---------------------------------------------------------------------------
+// Construcción de cada sección. Cada función devuelve "etiqueta: contenido" SIN
+// el punto de cierre (el armado final agrega ". "), o "" si no hay dato.
+// ---------------------------------------------------------------------------
+
+/** "paciente: {sexo}, de {edad} años" — sexo primero. Tolerante a faltantes. */
+function seccionPaciente(edad: number | null, sexo: DatosEvolucion["sexo"]): string {
+  const tieneEdad = typeof edad === "number" && Number.isFinite(edad) && edad >= 0;
+  const tieneSexo = sexo === "masculino" || sexo === "femenino";
+
+  const partes: string[] = [];
+  if (tieneSexo) partes.push(sexo as string);
+  if (tieneEdad) partes.push(`de ${edad} años`);
+
+  // En la práctica siempre hay sexo+edad. Si por dato corrupto faltan ambos,
+  // omitimos la sección entera (mejor que "paciente: .").
+  if (partes.length === 0) return "";
+  return `paciente: ${partes.join(", ")}`;
+}
+
+/**
+ * "refiere al ingreso: {motivo}, {síntomas} hace {plazo}".
+ * Turnos no tienen triage: si no hay motivo NI síntomas, la sección se omite.
+ * Variantes defensivas: solo motivo, solo síntomas, síntomas sin plazo.
+ */
+function seccionRefiere(
+  motivo: string | null,
+  sintomas: string[] | null,
+  plazo: string | null
+): string {
+  const m = limpiar(motivo);
+
+  // Filtrar "Otro" (el motivo libre ya lo cubre) y vacíos. Bajar inicial para
+  // que fluyan en la transcripción.
+  const lista = (sintomas ?? [])
+    .map((s) => limpiar(s))
+    .filter((s) => s.length > 0 && s.toLowerCase() !== "otro")
+    .map(minusculaInicial);
+
+  // En esta transcripción corrida los síntomas se enumeran SOLO con comas
+  // (sin " y " antes del último). Es lo que da la salida canónica de Diego
+  // ("le duele mucho la panza, dolor abdominal, fiebre hace 1-3 días") y lo que
+  // lee bien encadenado al motivo, también separado por coma. Ver reporte: esto
+  // difiere de la letra de la spec ("la última con ' y '"); manda el ejemplo.
+  const cola = plazoNatural(plazo);
+  const sintomasFrase = lista.length > 0 ? lista.join(", ") : "";
+  const sintomasConPlazo = sintomasFrase
+    ? cola
+      ? `${sintomasFrase} hace ${cola}`
+      : sintomasFrase
+    : "";
+
+  // Sin motivo ni síntomas → no hay sección (caso turno).
+  if (!m && !sintomasConPlazo) return "";
+
+  const cuerpo = [m, sintomasConPlazo].filter((p) => p.length > 0).join(", ");
+  return `refiere al ingreso: ${cuerpo}`;
+}
+
+/** "se diagnostica: {diagnóstico}" tal cual lo escribió el médico. */
+function seccionDiagnostico(diagnostico: string | null): string {
+  const d = limpiar(diagnostico);
+  return d ? `se diagnostica: ${d}` : "";
+}
+
+/**
+ * "se indica: {receta}, {indicaciones}" — RECETA PRIMERO, SIEMPRE.
+ * Saca el prefijo "Rp/" (o "Rp/ ") de la receta serializada acá (en el documento
+ * de receta queda igual). Si no hay ninguna de las dos, omite la sección.
+ */
+function seccionIndica(receta: string | null, indicaciones: string | null): string {
+  const r = limpiar(receta).replace(/^Rp\/\s*/, "").trim();
+  const i = limpiar(indicaciones);
+
+  const cuerpo = [r, i].filter((p) => p.length > 0).join(", ");
+  return cuerpo ? `se indica: ${cuerpo}` : "";
+}
+
+/** "comentarios adicionales: {comentario}" — texto del médico, tal cual. */
+function seccionComentario(comentario: string | null): string {
+  const c = limpiar(comentario);
+  return c ? `comentarios adicionales: ${c}` : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -163,19 +161,24 @@ function minusculaInicial(s: string): string {
 
 /**
  * Compone el texto de la evolución a partir de datos ya cargados por humanos.
- * Determinística, pura, sin IO. Los bloques sin dato se omiten por completo.
- * Nunca devuelve frases colgadas ("Se indica .") ni inventa contenido.
+ * Determinística, pura, sin IO. Las secciones sin dato se omiten por completo.
+ * Une las secciones con ". " y cierra con ".". Nunca deja etiquetas colgadas
+ * ("se indica: .") ni inventa contenido.
  */
 export function componerEvolucion(datos: DatosEvolucion): string {
-  const frases = [
-    bloqueDemografico(datos.edad, datos.sexo),
-    bloqueMotivo(datos.motivo),
-    bloqueSintomas(datos.sintomas, datos.plazo),
-    bloqueDiagnostico(datos.diagnostico),
-    bloqueIndicaciones(datos.indicaciones),
-    bloqueReceta(datos.receta),
-    bloqueComentario(datos.comentario),
-  ].filter((f) => f.length > 0);
+  const secciones = [
+    seccionPaciente(datos.edad, datos.sexo),
+    seccionRefiere(datos.motivo, datos.sintomas, datos.plazo),
+    seccionDiagnostico(datos.diagnostico),
+    seccionIndica(datos.receta, datos.indicaciones),
+    seccionComentario(datos.comentario),
+  ].filter((s) => s.length > 0);
 
-  return frases.join(" ");
+  if (secciones.length === 0) return "";
+
+  const cuerpo = secciones.join(". ");
+  // Cierre con un único punto. Si el contenido humano de la última sección ya
+  // termina en signo de cierre (p. ej. el comentario del médico "Control en 48 hs."),
+  // no duplicamos el punto — sin tocar su texto, solo decidimos si agregar el nuestro.
+  return /[.!?]$/.test(cuerpo) ? cuerpo : `${cuerpo}.`;
 }
