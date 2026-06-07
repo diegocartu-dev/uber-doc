@@ -167,7 +167,7 @@ export default async function FichaPacientePage({
   // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
   const { data: turnosData } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, estado, medico_id, canal_origen")
+    .select("id, fecha, hora_inicio, estado, medico_id, canal_origen, evolucion, iniciado_en")
     .eq("medico_id", medico.id)
     .eq("paciente_id", pacienteId)
     .order("fecha", { ascending: false })
@@ -245,14 +245,22 @@ export default async function FichaPacientePage({
     docsPorConsulta.get(doc.consulta_id)!.push(doc);
   }
 
-  /* ── Evoluciones (timeline) — consultas completadas ── */
-  const entradasEvolucion: EntradaEvolucion[] = consultasCompletadas.map((c) => {
+  /* ── Evoluciones (timeline unificado) — CI + turnos, ordenados por fecha ──
+     La HC es una sola línea de tiempo: consultas inmediatas y turnos completados
+     (Clínica Virtual / Consultorio) conviven mergeados por fecha real, sin importar el canal. */
+  const hayEvolucion = (v: string | null | undefined): boolean => !!v && v.trim() !== "";
+
+  // `sortTs` es interno (epoch ms) sólo para ordenar; no forma parte de la shape pública.
+  type EntradaConOrden = EntradaEvolucion & { sortTs: number };
+
+  const entradasCI: EntradaConOrden[] = consultasCompletadas.map((c) => {
     const docs = docsPorConsulta.get(c.id) ?? [];
     const recetaTexto = docs.filter((d) => d.tipo === "receta").map((d) => d.contenido).join("\n") || null;
     const indicacionesTexto = docs.filter((d) => d.tipo === "indicaciones").map((d) => d.contenido).join("\n") || null;
     const canal = canalInfo((c as { canal_origen?: string | null }).canal_origen ?? null);
     return {
       id: c.id,
+      sortTs: new Date(c.created_at).getTime(),
       fechaLabel: `${formatFecha(c.created_at)} — ${formatHora(c.created_at)}hs`,
       especialidad: c.especialidad,
       canalLabel: canal.label,
@@ -263,6 +271,37 @@ export default async function FichaPacientePage({
       indicaciones: indicacionesTexto,
     };
   });
+
+  // Turnos completados CON evolución registrada → entran al mismo timeline.
+  const turnosConEvolucion = turnosFinal.filter(
+    (t) => t.estado === "completado" && hayEvolucion((t as { evolucion?: string | null }).evolucion),
+  );
+
+  const entradasTurnos: EntradaConOrden[] = turnosConEvolucion.map((t) => {
+    const docs = docsPorTurno.get(t.id) ?? [];
+    const recetaTexto = docs.filter((d) => d.tipo === "receta").map((d) => d.contenido).join("\n") || null;
+    const indicacionesTexto = docs.filter((d) => d.tipo === "indicaciones").map((d) => d.contenido).join("\n") || null;
+    const canal = canalInfo((t as { canal_origen?: string | null }).canal_origen ?? null);
+    // `iniciado_en` (timestamptz) es el momento real de atención; si falta, caemos a fecha+hora del turno.
+    const iniciadoEn = (t as { iniciado_en?: string | null }).iniciado_en ?? null;
+    const fechaRef = iniciadoEn ?? `${t.fecha}T${t.hora_inicio}`;
+    return {
+      id: t.id,
+      sortTs: new Date(fechaRef).getTime(),
+      fechaLabel: `${formatFecha(fechaRef)} — ${formatHora(fechaRef)}hs`,
+      especialidad: medico.especialidad,
+      canalLabel: canal.label,
+      canalColor: canal.color,
+      evolucion: (t as { evolucion?: string | null }).evolucion ?? null,
+      diagnostico: docs[0]?.diagnostico || null,
+      medicacion: recetaTexto,
+      indicaciones: indicacionesTexto,
+    };
+  });
+
+  const entradasEvolucion: EntradaEvolucion[] = [...entradasCI, ...entradasTurnos]
+    .sort((a, b) => b.sortTs - a.sortTs)
+    .map(({ sortTs: _sortTs, ...entrada }) => entrada);
 
   /* ── Sección de consultas ── */
   const seccionConsultas = (
@@ -345,21 +384,25 @@ export default async function FichaPacientePage({
     </div>
   );
 
-  /* ── Sección de turnos ── */
-  const seccionTurnos = (
+  /* ── Sección de turnos ──
+     Los turnos completados CON evolución ya se muestran en el timeline unificado de Evoluciones.
+     Acá listamos sólo el resto (futuros, confirmados, en espera, cancelados, o completados sin
+     evolución) para no duplicar el mismo turno en dos lugares. */
+  const turnosFueraDeTimeline = turnosFinal.filter(
+    (t) => !(t.estado === "completado" && hayEvolucion((t as { evolucion?: string | null }).evolucion)),
+  );
+
+  const seccionTurnos = turnosFueraDeTimeline.length === 0 ? null : (
     <div key="turnos" className="mt-8">
       <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(55,138,221,0.06)", borderLeft: "4px solid #378ADD" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
         <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#378ADD" }}>
-          Historial de turnos · {turnosFinal.length}
+          Historial de turnos · {turnosFueraDeTimeline.length}
         </p>
       </div>
 
-      {turnosFinal.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">No hay turnos registrados con este paciente.</p>
-      ) : (
-        <div className="mt-3 space-y-4">
-          {turnosFinal.map((t) => {
+      <div className="mt-3 space-y-4">
+          {turnosFueraDeTimeline.map((t) => {
             const docs = docsPorTurno.get(t.id) ?? [];
             return (
               <div
@@ -403,8 +446,7 @@ export default async function FichaPacientePage({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 
@@ -463,7 +505,7 @@ export default async function FichaPacientePage({
           initialPatologias={perfilVinculo?.patologia_cronica ?? []}
         />
 
-        {/* Evoluciones — consultas completadas (timeline) */}
+        {/* Evoluciones — timeline unificado (CI + turnos completados con evolución) */}
         <EvolucionesTimeline entradas={entradasEvolucion} />
 
         {/* Secciones de historial — orden según origen */}
