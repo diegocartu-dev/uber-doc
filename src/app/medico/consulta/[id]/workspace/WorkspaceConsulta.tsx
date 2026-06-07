@@ -318,6 +318,7 @@ type DocBorrador = {
   indicaciones?: string;
   certificado?: string;
   evolucion?: string;
+  comentario?: string;
   evolucion_editada?: boolean;
   updated_at?: string;
   medicamentos_structured?: MedicamentoReceta[];
@@ -327,6 +328,9 @@ type DocBorrador = {
 type Props = {
   consultaId: string;
   medicoId: string;
+  // Canal: "consulta" (CI) o "turno". Parametriza tabla, FK del paciente y estado
+  // de cierre. El componente es uno solo; el comportamiento se ramifica por aquí.
+  tipo?: "consulta" | "turno";
   livekitToken: string | null;
   roomName: string | null;
   videoError: string | null;
@@ -836,6 +840,7 @@ function ChipsEstadoObligatorios({ faltaDiagnostico, faltaEvolucion }: { faltaDi
 export default function WorkspaceConsulta({
   consultaId,
   medicoId,
+  tipo = "consulta",
   livekitToken,
   roomName,
   videoError: videoErrorProp,
@@ -843,6 +848,32 @@ export default function WorkspaceConsulta({
   consulta,
 }: Props) {
   const router = useRouter();
+
+  // --- Canal: tabla, estado de cierre y helper de lookup del pacientes.id ---
+  // turnos.paciente_id YA ES pacientes.id (FK directo, verificado en prod).
+  // consultas.paciente_id es auth.users.id → requiere lookup por user_id.
+  const esTurno = tipo === "turno";
+  const tablaPrincipal = esTurno ? "turnos" : "consultas";
+  const estadoCompletado = esTurno ? "completado" : "completada";
+
+  // Resuelve el pacientes.id real a partir del paciente_id del registro.
+  // - turno: paciente_id ya es pacientes.id → se devuelve tal cual.
+  // - consulta: paciente_id es auth.users.id → lookup por user_id.
+  const resolverPacienteId = useCallback(
+    async (
+      supabase: ReturnType<typeof createClient>,
+      pacienteIdRegistro: string
+    ): Promise<string | null> => {
+      if (esTurno) return pacienteIdRegistro;
+      const { data } = await supabase
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", pacienteIdRegistro)
+        .single();
+      return data?.id ?? null;
+    },
+    [esTurno]
+  );
 
   // --- Estado campos clinicos ---
   const borrador = consulta.doc_borrador;
@@ -861,8 +892,12 @@ export default function WorkspaceConsulta({
   const [evolucionEditada, setEvolucionEditada] = useState(borrador?.evolucion_editada ?? false);
   const [evolucionValidada, setEvolucionValidada] = useState(false);
   const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
-  const [comentarioAbierto, setComentarioAbierto] = useState(false);
-  const [comentario, setComentario] = useState("");
+  // Comentario: campo separado de la evolución compuesta. Se persiste en el
+  // borrador y se restaura al recargar. Si venía con texto, abrir el bloque.
+  const [comentario, setComentario] = useState(borrador?.comentario ?? "");
+  const [comentarioAbierto, setComentarioAbierto] = useState(
+    (borrador?.comentario ?? "").trim().length > 0
+  );
   const [showRegenerarConfirm, setShowRegenerarConfirm] = useState(false);
 
   // --- UI state ---
@@ -922,12 +957,13 @@ export default function WorkspaceConsulta({
   // evolucion_editada se persiste DERIVADO en el borrador (no la validación: se
   // rehace si recargás). Se computa inline, no desde el state, para no depender
   // del orden de actualización.
-  const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, "consulta", {
+  const { estado: estadoBorrador } = useAutoSaveBorrador(consultaId, tipo, {
     diagnostico,
     receta,
     indicaciones,
     certificado,
     evolucion,
+    comentario,
     evolucion_editada:
       evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0,
     medicamentos_structured: medicamentos,
@@ -1142,13 +1178,9 @@ export default function WorkspaceConsulta({
 
     // Guardar en pacientes (fire-and-forget)
     const supabase = createClient();
-    const { data: pac } = await supabase
-      .from("pacientes")
-      .select("id")
-      .eq("user_id", consulta.paciente_id)
-      .single();
+    const pacienteId = await resolverPacienteId(supabase, consulta.paciente_id);
 
-    if (pac) {
+    if (pacienteId) {
       supabase
         .from("pacientes")
         .update({
@@ -1157,7 +1189,7 @@ export default function WorkspaceConsulta({
           nro_afiliado: datos.nro_afiliado,
           plan_obra_social: datos.plan_obra_social,
         })
-        .eq("id", pac.id)
+        .eq("id", pacienteId)
         .then(() => {});
     }
 
@@ -1192,34 +1224,33 @@ export default function WorkspaceConsulta({
     // 3. Navegar al dashboard sin esperar Supabase
     router.push(sinCuil ? "/dashboard?aviso=sin-cuil&from=videollamada" : "/dashboard?from=videollamada");
 
-    // 4. Guardar documentos y cerrar consulta en background (fire-and-forget)
+    // 4. Guardar documentos y cerrar consulta/turno en background (fire-and-forget)
+    //    Mismo flujo para ambos canales; solo cambian tabla, estado y FK del paciente.
     (async () => {
       try {
         const supabase = createClient();
 
-        const { data: consultaDb } = await supabase
-          .from("consultas")
+        const { data: registroDb } = await supabase
+          .from(tablaPrincipal)
           .select("estado, paciente_id, medico_id")
           .eq("id", consultaId)
           .single();
 
-        if (!consultaDb?.paciente_id) return;
-        if (consultaDb.estado === "completada") return;
+        if (!registroDb?.paciente_id) return;
+        if (registroDb.estado === estadoCompletado) return;
 
-        // Lookup: paciente_id en consultas es auth.users.id, documentos necesita pacientes.id
-        const { data: paciente } = await supabase
-          .from("pacientes")
-          .select("id")
-          .eq("user_id", consultaDb.paciente_id)
-          .single();
+        // pacientes.id para el insert de documentos (asimetría de schema por canal):
+        // - consulta: paciente_id es auth.users.id → lookup por user_id
+        // - turno: paciente_id YA es pacientes.id → directo
+        const pacienteId = await resolverPacienteId(supabase, registroDb.paciente_id);
 
         const { data: medico } = await supabase
           .from("medicos")
           .select("id")
-          .eq("id", consultaDb.medico_id)
+          .eq("id", registroDb.medico_id)
           .single();
 
-        if (!paciente || !medico) return;
+        if (!pacienteId || !medico) return;
 
         const docs: { tipo: string; contenido: string }[] = [];
         if (receta.trim() && !sinCuil) docs.push({ tipo: "receta", contenido: receta.trim() });
@@ -1232,9 +1263,9 @@ export default function WorkspaceConsulta({
 
         await supabase.from("documentos").insert(
           docs.map((d) => ({
-            consulta_id: consultaId,
-            turno_id: null,
-            paciente_id: paciente.id,
+            consulta_id: esTurno ? null : consultaId,
+            turno_id: esTurno ? consultaId : null,
+            paciente_id: pacienteId,
             medico_id: medico.id,
             tipo: d.tipo,
             diagnostico: diagnostico.trim(),
@@ -1243,9 +1274,9 @@ export default function WorkspaceConsulta({
         );
 
         await supabase
-          .from("consultas")
+          .from(tablaPrincipal)
           .update({
-            estado: "completada",
+            estado: estadoCompletado,
             doc_borrador: null,
             evolucion: evolucion.trim(),
             evolucion_validada_at: evolucionValidadaAt,
@@ -1254,19 +1285,19 @@ export default function WorkspaceConsulta({
           })
           .eq("id", consultaId);
 
-        // Borrar estudios temporales del paciente
+        // Borrar estudios temporales del paciente (route channel-aware)
         fetch("/api/consulta/borrar-estudios-temp", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ consultaId }),
+          body: JSON.stringify({ consultaId, tipo }),
         }).catch(() => {});
 
         fetch("/api/push/notificar-documentos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ pacienteId: paciente.id, consultaId }),
+          body: JSON.stringify({ pacienteId, consultaId, tipo }),
         }).catch(() => {});
       } catch {
         // Background: no hay UI para mostrar error, falla silenciosamente
@@ -1295,7 +1326,7 @@ export default function WorkspaceConsulta({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consultaId, tipo: "consulta" }),
+        body: JSON.stringify({ consultaId, tipo }),
       });
       if (!res.ok) {
         // 409 = consulta ya finalizó → no reconectar, cerrar overlay.
@@ -1343,13 +1374,14 @@ export default function WorkspaceConsulta({
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo: "consulta",
+          tipo,
           borrador: {
             diagnostico,
             receta,
             indicaciones,
             certificado,
             evolucion,
+            comentario,
             medicamentos_structured: medicamentos,
             receta_texto_libre: recetaTextoLibre,
             updated_at: new Date().toISOString(),
@@ -2352,25 +2384,21 @@ export default function WorkspaceConsulta({
               setCoberturaLocal(datos);
               setShowModalCobertura(null);
               const supabase = createClient();
-              supabase
-                .from("pacientes")
-                .select("id")
-                .eq("user_id", consulta.paciente_id)
-                .single()
-                .then(({ data: pac }) => {
-                  if (pac) {
-                    supabase
-                      .from("pacientes")
-                      .update({
-                        tiene_cobertura: datos.tiene_cobertura,
-                        obra_social: datos.obra_social,
-                        nro_afiliado: datos.nro_afiliado,
-                        plan_obra_social: datos.plan_obra_social,
-                      })
-                      .eq("id", pac.id)
-                      .then(() => {});
-                  }
-                });
+              (async () => {
+                const pacienteId = await resolverPacienteId(supabase, consulta.paciente_id);
+                if (pacienteId) {
+                  supabase
+                    .from("pacientes")
+                    .update({
+                      tiene_cobertura: datos.tiene_cobertura,
+                      obra_social: datos.obra_social,
+                      nro_afiliado: datos.nro_afiliado,
+                      plan_obra_social: datos.plan_obra_social,
+                    })
+                    .eq("id", pacienteId)
+                    .then(() => {});
+                }
+              })();
             }
           }}
           onCancelar={() => setShowModalCobertura(null)}

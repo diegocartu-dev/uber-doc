@@ -95,6 +95,7 @@ export default async function VideoTurnoPage({
     <WorkspaceConsulta
       consultaId={turnoId}
       medicoId={medicoData!.id}
+      tipo="turno"
       livekitToken={livekitToken}
       roomName={roomName}
       videoError={videoError}

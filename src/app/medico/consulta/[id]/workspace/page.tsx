@@ -106,6 +106,7 @@ export default async function WorkspacePage({
     <WorkspaceConsulta
       consultaId={consultaId}
       medicoId={medico.id}
+      tipo="consulta"
       livekitToken={livekitToken}
       roomName={roomName}
       videoError={videoError}
