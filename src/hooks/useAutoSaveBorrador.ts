@@ -88,7 +88,7 @@ export function useAutoSaveBorrador(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [campos.diagnostico, campos.receta, campos.indicaciones, campos.certificado, campos.evolucion, guardar]);
+  }, [campos.diagnostico, campos.receta, campos.indicaciones, campos.certificado, campos.evolucion, campos.comentario, guardar]);
 
   // Cleanup on unmount
   useEffect(() => {
