@@ -335,10 +335,10 @@ export default async function Home({
         <div
           className="landing-medicos-grid"
           style={{
-            maxWidth: 1080,
+            maxWidth: 680,
             margin: "0 auto",
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "1fr",
             gap: 64,
             alignItems: "center",
           }}
