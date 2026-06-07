@@ -1,16 +1,24 @@
 -- Fix: RLS de consultas INSERT — universo del carril de prueba (es_cuenta_test).
--- YA APLICADA en prod (07/06/2026, autorizada por Diego). Este archivo la trackea.
+-- YA APLICADA en prod (07/06/2026, autorizada por Diego).
 --
--- GAP del carril de prueba (#167): los guards de la app (clinica/actions.ts) se
--- hicieron universe-aware (test↔test permitido), pero la policy RLS
--- "Pacientes pueden crear consultas" seguía con `m.es_cuenta_test = false`
--- hardcodeado → un paciente test NO podía crear una CI con un médico test (la base
--- rechazaba la INSERT → "No se pudo crear la consulta"). Detectado por Diego
--- testeando el par de prueba. La QA de #167 no lo cazó (revisó guards de app, no RLS).
+-- GAP del carril (#167): la RLS "Pacientes pueden crear consultas" hardcodeaba
+-- m.es_cuenta_test = false → un paciente test no podía crear CI con un médico test.
 --
--- Fix: espejar el guard de la app — el médico debe estar en el MISMO universo que el
--- paciente. Real↔real y test↔test permitidos; los cruces siguen bloqueados (aislamiento
--- intacto, no se abre nada).
+-- Fix: la RLS espeja el guard de la app (médico en el MISMO universo que el paciente).
+-- IMPORTANTE: el lookup de es_cuenta_test del paciente va por una función
+-- SECURITY DEFINER. Un subquery directo a `pacientes` dentro de la policy dispara
+-- el RLS de pacientes → recursión infinita (42P17) que rompe la INSERT para TODOS.
+-- La función SECURITY DEFINER lee es_cuenta_test sin disparar RLS → corta el ciclo.
+
+CREATE OR REPLACE FUNCTION public.paciente_es_test(p_uid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $f$
+  SELECT COALESCE((SELECT es_cuenta_test FROM pacientes WHERE user_id = p_uid LIMIT 1), false)
+$f$;
 
 ALTER POLICY "Pacientes pueden crear consultas" ON consultas
 WITH CHECK (
@@ -20,9 +28,6 @@ WITH CHECK (
       AND m.disponible = true
       AND m.verificado = true
       AND m.estado_registro = 'aprobado'
-      AND m.es_cuenta_test = COALESCE(
-        (SELECT p.es_cuenta_test FROM pacientes p WHERE p.user_id = auth.uid()),
-        false
-      )
+      AND m.es_cuenta_test = public.paciente_es_test(auth.uid())
   )
 );
