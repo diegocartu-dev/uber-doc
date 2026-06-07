@@ -50,7 +50,7 @@ test.describe("Onboarding paciente", () => {
 
     await page.getByLabel("Nombre completo").fill("Paciente Test Uno");
     await page.getByLabel("DNI").fill(PACIENTE_NORMAL.dni);
-    await page.getByLabel("Fecha de nacimiento").fill("1990-05-15");
+    await page.getByLabel("Fecha de nacimiento").fill("15/05/1990");
     await page.getByLabel("Femenino").check();
     await page.getByLabel("Teléfono").fill("1123456789");
 
@@ -76,7 +76,7 @@ test.describe("Onboarding paciente", () => {
 
     await page.getByLabel("Nombre completo").fill("Test Regresion RLS");
     await page.getByLabel("DNI").fill(PACIENTE_DNI_INVALIDO.dni);
-    await page.getByLabel("Fecha de nacimiento").fill("1991-12-05");
+    await page.getByLabel("Fecha de nacimiento").fill("05/12/1991");
     await page.getByLabel("Masculino").check();
     await page.getByLabel("Teléfono").fill("1123456789");
 
