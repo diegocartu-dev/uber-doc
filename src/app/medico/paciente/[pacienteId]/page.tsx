@@ -84,12 +84,14 @@ const tipoLabel: Record<string, string> = {
   receta: "Receta",
   indicaciones: "Indicaciones",
   certificado: "Certificado",
+  orden: "Orden médica",
 };
 
 const tipoIcon: Record<string, string> = {
   receta: "Rx",
   indicaciones: "Ind",
   certificado: "Cert",
+  orden: "Ord",
 };
 
 export default async function FichaPacientePage({

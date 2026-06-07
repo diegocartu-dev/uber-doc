@@ -238,6 +238,8 @@ function tipoLabel(tipo: string): string {
       return "Indicaciones";
     case "certificado":
       return "Certificado";
+    case "orden":
+      return "Orden médica";
     default:
       return tipo.charAt(0).toUpperCase() + tipo.slice(1);
   }

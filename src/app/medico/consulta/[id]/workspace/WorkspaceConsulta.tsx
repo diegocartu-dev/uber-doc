@@ -317,6 +317,7 @@ type DocBorrador = {
   receta?: string;
   indicaciones?: string;
   certificado?: string;
+  orden?: string;
   evolucion?: string;
   comentario?: string;
   evolucion_editada?: boolean;
@@ -884,6 +885,9 @@ export default function WorkspaceConsulta({
   const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+  // Orden médica (RX, laboratorio, derivaciones). Es texto plano y se persiste
+  // como documento tipo "orden". NO entra en la evolución ni en la HC.
+  const [orden, setOrden] = useState(borrador?.orden ?? "");
   // --- Evolución: documento generado, editable, con validación humana ---
   const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
   // evolucionGenerada = el texto del último componer(). Se inicializa con lo que
@@ -962,6 +966,7 @@ export default function WorkspaceConsulta({
     receta,
     indicaciones,
     certificado,
+    orden,
     evolucion,
     comentario,
     evolucion_editada:
@@ -1258,6 +1263,8 @@ export default function WorkspaceConsulta({
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
         if (certificado.trim())
           docs.push({ tipo: "certificado", contenido: certificado.trim() });
+        if (orden.trim())
+          docs.push({ tipo: "orden", contenido: orden.trim() });
         if (docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
@@ -1380,6 +1387,7 @@ export default function WorkspaceConsulta({
             receta,
             indicaciones,
             certificado,
+            orden,
             evolucion,
             comentario,
             medicamentos_structured: medicamentos,
@@ -1822,6 +1830,7 @@ export default function WorkspaceConsulta({
                   dictando === "comentario" ? "Comentario adicional" :
                   dictando === "indicaciones" ? "Indicaciones" :
                   dictando === "certificado" ? "Certificado" :
+                  dictando === "orden" ? "Orden médica" :
                   dictando === "receta" ? "Receta" : dictando
                 }
               </span>
@@ -1856,7 +1865,9 @@ export default function WorkspaceConsulta({
             </div>
           )}
 
-          {/* Campos — Diagnóstico siempre visible, resto en acordeón */}
+          {/* Campos — orden: Diagnóstico (plano) → Indicaciones → Receta →
+              Certificado → Orden → Evolución (tarjeta, ÚLTIMA). Diagnóstico
+              siempre visible; los del medio en acordeón (densidad mobile). */}
           <CampoDictado
             label="DIAGNOSTICO"
             campo="diagnostico"
@@ -1871,6 +1882,68 @@ export default function WorkspaceConsulta({
             onDetener={detenerDictado}
             soportado={dictadoSoportado}
           />
+
+          {/* Acordeón: INDICACIONES */}
+          <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
+            <CampoDictado
+              label=""
+              campo="indicaciones"
+              value={indicaciones}
+              setter={setIndicaciones}
+              placeholder="Reposo, estudios, derivaciones..."
+              dictando={dictando}
+              onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
+              onDetener={detenerDictado}
+              soportado={dictadoSoportado}
+            />
+          </AccordionSection>
+
+          {/* Acordeón: RECETA */}
+          <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
+            <MedicamentoAutocomplete
+              medicamentos={medicamentos}
+              onMedicamentosChange={setMedicamentos}
+              textoLibre={recetaTextoLibre}
+              onTextoLibreChange={setRecetaTextoLibre}
+              dictando={dictando}
+              onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
+              onDetenerDictado={detenerDictado}
+            />
+          </AccordionSection>
+
+          {/* Acordeón: CERTIFICADO */}
+          <AccordionSection title="CERTIFICADO" hasContent={certificado.trim().length > 0}>
+            <CampoDictado
+              label=""
+              campo="certificado"
+              value={certificado}
+              setter={setCertificado}
+              placeholder="Certificado medico..."
+              dictando={dictando}
+              onIniciar={() => iniciarDictado("certificado", setCertificado)}
+              onDetener={detenerDictado}
+              soportado={dictadoSoportado}
+            />
+          </AccordionSection>
+
+          {/* Acordeón: ORDEN MÉDICA — texto plano, persiste como documento tipo
+              "orden". NO entra en la evolución ni en la HC. */}
+          <AccordionSection title="ORDEN MÉDICA" hasContent={orden.trim().length > 0}>
+            <CampoDictado
+              label=""
+              campo="orden"
+              value={orden}
+              setter={setOrden}
+              placeholder="RX de codo, laboratorio, derivaciones..."
+              dictando={dictando}
+              onIniciar={() => iniciarDictado("orden", setOrden)}
+              onDetener={detenerDictado}
+              soportado={dictadoSoportado}
+            />
+          </AccordionSection>
+
+          {/* Evolución — TarjetaEvolucion, plana y ÚLTIMA. El ref + scrollIntoView
+              de resaltarValidarEvolucion() siguen funcionando con la tarjeta acá. */}
           <TarjetaEvolucion
             ref={tarjetaEvolucionRef}
             validarBtnRef={validarBtnRef}
@@ -1898,49 +1971,6 @@ export default function WorkspaceConsulta({
             onDetenerDictado={detenerDictado}
             dictadoSoportado={dictadoSoportado}
           />
-
-          {/* Acordeón: RECETA */}
-          <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
-            <MedicamentoAutocomplete
-              medicamentos={medicamentos}
-              onMedicamentosChange={setMedicamentos}
-              textoLibre={recetaTextoLibre}
-              onTextoLibreChange={setRecetaTextoLibre}
-              dictando={dictando}
-              onIniciarDictado={() => iniciarDictado("receta", setRecetaTextoLibre)}
-              onDetenerDictado={detenerDictado}
-            />
-          </AccordionSection>
-
-          {/* Acordeón: INDICACIONES */}
-          <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
-            <CampoDictado
-              label=""
-              campo="indicaciones"
-              value={indicaciones}
-              setter={setIndicaciones}
-              placeholder="Reposo, estudios, derivaciones..."
-              dictando={dictando}
-              onIniciar={() => iniciarDictado("indicaciones", setIndicaciones)}
-              onDetener={detenerDictado}
-              soportado={dictadoSoportado}
-            />
-          </AccordionSection>
-
-          {/* Acordeón: CERTIFICADO */}
-          <AccordionSection title="CERTIFICADO" hasContent={certificado.trim().length > 0}>
-            <CampoDictado
-              label=""
-              campo="certificado"
-              value={certificado}
-              setter={setCertificado}
-              placeholder="Certificado medico..."
-              dictando={dictando}
-              onIniciar={() => iniciarDictado("certificado", setCertificado)}
-              onDetener={detenerDictado}
-              soportado={dictadoSoportado}
-            />
-          </AccordionSection>
 
           {/* Acciones sticky — la documentación solo guarda (auto-save) y vuelve a la llamada. */}
           {/* "Finalizar" vive SOLO en el footer de video (presencia). */}
