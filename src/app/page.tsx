@@ -3,7 +3,6 @@ import {
   ShieldCheck,
   FileText,
   Wallet,
-  Check,
   ArrowRight,
 } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -63,21 +62,6 @@ export default async function Home({
   }
 
   /* ---------- Landing pag. para usuarios NO autenticados ---------- */
-
-  const turnosFeatures = [
-    {
-      title: "Hasta 45 días de anticipación",
-      description: "Planificá tu consulta cuando más te convenga.",
-    },
-    {
-      title: "Recordatorio automático",
-      description: "",
-    },
-    {
-      title: "Cancelación flexible",
-      description: "",
-    },
-  ];
 
   return (
     <div className="landing-root" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fff", overflowX: "hidden" }}>
@@ -315,38 +299,6 @@ export default async function Home({
                 Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda,
                 y pagá de forma segura. Confirmación inmediata.
               </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-                {turnosFeatures.map((f) => (
-                  <div key={f.title} style={{ display: "flex", gap: 10 }}>
-                    <div
-                      style={{
-                        flexShrink: 0,
-                        width: 20,
-                        height: 20,
-                        borderRadius: 999,
-                        background: "var(--color-success-tint)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginTop: 1,
-                      }}
-                    >
-                      <Check size={12} style={{ color: "#1D9E75" }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: f.description ? 1 : 0 }}>
-                        {f.title}
-                      </div>
-                      {f.description && (
-                        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                          {f.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
 
               <Link
                 href="/clinica"
