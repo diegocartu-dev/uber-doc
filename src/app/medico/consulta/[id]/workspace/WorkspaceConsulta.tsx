@@ -27,8 +27,10 @@ import ModalDatosPaciente from "@/components/ModalDatosPaciente";
 import { datosCoberturaCompletos, type DatosCobertura } from "@/lib/cobertura";
 import { componerEvolucion, type DatosEvolucion } from "@/lib/evolucion/componer";
 import PanelEstudios, { useEstudiosCount } from "./PanelEstudios";
+import PanelHistoriaClinica from "./PanelHistoriaClinica";
+import type { EntradaEvolucion } from "@/app/medico/paciente/[pacienteId]/EvolucionesTimeline";
 
-type ModoWorkspace = "video" | "escritura" | "estudios";
+type ModoWorkspace = "video" | "escritura" | "estudios" | "hc";
 
 // ---------------------------------------------------------------------------
 // AccordionSection — secciones colapsables del panel de documentación
@@ -336,6 +338,10 @@ type Props = {
   roomName: string | null;
   videoError: string | null;
   horaInicio: string;
+  // Evoluciones PREVIAS del paciente (CI + turnos completados con evolución del
+  // MISMO paciente, EXCLUYENDO el encuentro actual), ordenadas nueva→vieja.
+  // Alimentan el Panel HC. Default [] para no romper si la página no las pasa.
+  evolucionesPrevias?: EntradaEvolucion[];
   consulta: {
     especialidad: string;
     motivo_consulta: string | null;
@@ -846,6 +852,7 @@ export default function WorkspaceConsulta({
   roomName,
   videoError: videoErrorProp,
   horaInicio,
+  evolucionesPrevias = [],
   consulta,
 }: Props) {
   const router = useRouter();
@@ -1541,12 +1548,12 @@ export default function WorkspaceConsulta({
                             <CamIcon on={camOn} />
                           </button>
                         </div>
-                        {/* Fila 2: Barra de modos */}
+                        {/* Fila 2: Barra de modos — Documentar / Estudios / HC */}
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => setModo("escritura")}
-                            className="flex-1 rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
+                            className="flex-[1.3] rounded-xl bg-[#378ADD] py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
                             style={{ minHeight: "48px" }}
                           >
                             Documentar
@@ -1563,6 +1570,14 @@ export default function WorkspaceConsulta({
                                 {estudiosCount}
                               </span>
                             )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModo("hc")}
+                            className="flex-[0.7] rounded-xl bg-white/10 py-3 text-sm font-medium text-white active:scale-95 transition-all duration-100"
+                            style={{ minHeight: "48px" }}
+                          >
+                            HC
                           </button>
                         </div>
                         {/* Fila 3: chips de estado + Finalizar full width */}
@@ -1641,18 +1656,18 @@ export default function WorkspaceConsulta({
         } ${modoEscritura ? "" : "hidden md:block"}`}
         style={{ borderLeft: "0.5px solid #e5e7eb" }}
       >
-        {/* Desktop: Barra de modos */}
+        {/* Desktop: Barra de modos — Documentación / Estudios / HC */}
         <div
           className="hidden md:flex items-center gap-1 px-4 py-2"
           style={{ borderBottom: "0.5px solid #e5e7eb" }}
         >
           <button
             type="button"
-            onClick={() => setModo(modo === "estudios" ? "escritura" : "video")}
+            onClick={() => setModo(modo === "video" ? "video" : "escritura")}
             className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
-              modo !== "estudios"
-                ? "bg-[#378ADD] text-white"
-                : "text-gray-500 hover:bg-gray-100"
+              modo === "estudios" || modo === "hc"
+                ? "text-gray-500 hover:bg-gray-100"
+                : "bg-[#378ADD] text-white"
             }`}
           >
             Documentación
@@ -1673,15 +1688,28 @@ export default function WorkspaceConsulta({
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => setModo("hc")}
+            className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
+              modo === "hc"
+                ? "bg-[#378ADD] text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            HC
+          </button>
         </div>
 
-        {/* Contenido: Estudios o Documentación */}
+        {/* Contenido: Estudios / Historia Clínica / Documentación */}
         {modo === "estudios" ? (
           <PanelEstudios
             consultaId={consultaId}
             estadoConsulta="en_curso"
             createdAt={horaInicio}
           />
+        ) : modo === "hc" ? (
+          <PanelHistoriaClinica entradas={evolucionesPrevias} />
         ) : (
         <div className="p-5">
           {/* Info paciente (solo desktop) */}
