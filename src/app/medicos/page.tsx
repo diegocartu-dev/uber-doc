@@ -231,7 +231,7 @@ export default async function MedicosLanding() {
               color: "#378ADD",
               marginBottom: 12,
             }}>
-              Tu asistente permanente
+              Tu secretaria perfecta
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <div style={{
@@ -254,23 +254,17 @@ export default async function MedicosLanding() {
                 margin: 0,
                 color: "var(--color-text-primary)",
               }}>
-                Nova trabaja mientras vos atendés
+                Pedile a Nova. Nova lo hace.
               </h3>
             </div>
             <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--color-text-secondary)" }}>
               <p style={{ margin: "0 0 14px" }}>
-                Dictás el diagnóstico en voz alta.
-                Nova genera la receta con validez legal,
-                las indicaciones y el certificado — todo
-                con tu firma electrónica. El paciente los
-                recibe automáticamente.
-              </p>
-              <p style={{ margin: 0 }}>
-                La burocracia que te robaba 2 horas por día,
-                resuelta en 20 segundos.
+                Armá tu agenda, consultá tus turnos del día o dictá una receta
+                en voz alta. Nova la confecciona y, cuando confirmás, queda
+                firmada electrónicamente.
               </p>
               <p style={{ margin: "10px 0 0", fontWeight: 600, color: "var(--color-text-primary)", fontSize: 14 }}>
-                Ninguna plataforma argentina tiene esto.
+                Vos solo atendés.
               </p>
             </div>
           </div>

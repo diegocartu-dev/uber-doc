@@ -5,9 +5,6 @@ import {
   Wallet,
   Check,
   ArrowRight,
-  CalendarCheck,
-  Users,
-  Stethoscope,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -82,28 +79,6 @@ export default async function Home({
     },
   ];
 
-  const inmediataFeatures = [
-    {
-      title: "Espera promedio 12 minutos",
-      description: "Clínica Médica, Pediatría y Dermatología disponibles casi siempre.",
-    },
-    {
-      title: "Pagás solo si te atienden",
-      description: "",
-    },
-    {
-      title: "Receta digital, indicaciones y certificado",
-      description: "En tu mail y en tu perfil de Docto.",
-    },
-  ];
-
-  const medicoFeatures = [
-    { icon: Wallet, title: "Cobrás por consulta", description: "Sin mensualidades. Nos llevamos una comisión solo cuando atendés." },
-    { icon: CalendarCheck, title: "Agenda flexible", description: "Publicás tus horarios y los cambiás cuando quieras. Vos mandás." },
-    { icon: FileText, title: "Receta digital", description: "Firma electrónica con validez legal, sin papel ni trámites." },
-    { icon: Users, title: "Pacientes verificados", description: "DNI + cobertura confirmados antes de reservar turno." },
-  ];
-
   return (
     <div className="landing-root" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#fff", overflowX: "hidden" }}>
       <LandingNav />
@@ -138,8 +113,7 @@ export default async function Home({
                 maxWidth: 560,
               }}
             >
-              Reservá turno con médicos con matrícula verificada y recibí tu receta con validez legal.
-              Desde donde estés, sin obra social de por medio.
+              En Docto, atenderte es simple. Buscás, reservás, te atienden.
             </p>
             <p
               className="hero-sub-mobile"
@@ -152,7 +126,7 @@ export default async function Home({
                 display: "none",
               }}
             >
-              Médicos verificados. Receta digital. Sin obra social.
+              En Docto, atenderte es simple. Buscás, reservás, te atienden.
             </p>
 
             <div style={{ marginBottom: 18 }}>
@@ -263,44 +237,13 @@ export default async function Home({
                   fontSize: 15,
                   lineHeight: 1.55,
                   color: "var(--color-text-secondary)",
-                  margin: "0 0 22px",
+                  margin: "0 0 24px",
+                  maxWidth: 460,
                 }}
               >
-                Médicos disponibles para atención espontánea.
-                Entrás a la sala de espera y te atienden.
+                Entrás, ves qué médicos están disponibles ahora y te conectás.
+                En apenas unos minutos estás en consulta.
               </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-                {inmediataFeatures.map((f) => (
-                  <div key={f.title} style={{ display: "flex", gap: 10 }}>
-                    <div
-                      style={{
-                        flexShrink: 0,
-                        width: 20,
-                        height: 20,
-                        borderRadius: 999,
-                        background: "var(--color-success-tint)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginTop: 1,
-                      }}
-                    >
-                      <Check size={12} style={{ color: "#1D9E75" }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: f.description ? 1 : 0 }}>
-                        {f.title}
-                      </div>
-                      {f.description && (
-                        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                          {f.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
 
               <Link
                 href="/clinica"
@@ -528,33 +471,6 @@ export default async function Home({
             </div>
           </div>
 
-          <div className="landing-medico-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {medicoFeatures.map((f) => (
-              <div key={f.title} style={{
-                padding: "22px 20px",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 14,
-                background: "rgba(255,255,255,0.03)",
-              }}>
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: "rgba(161, 206, 164, 0.15)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 14,
-                  }}
-                >
-                  <f.icon size={18} style={{ color: "#A1CEA4" }} />
-                </div>
-                <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.6)" }}>{f.description}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -590,9 +506,6 @@ export default async function Home({
 
           /* Trust line vertical */
           .landing-trust-line { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
-
-          /* MÉDICOS cards — single column on mobile */
-          .landing-medico-cards { grid-template-columns: 1fr !important; }
 
           /* CTAs "Sumate" + "Conocé más" — misma fila compactos */
           .medicos-cta-row { flex-wrap: nowrap !important; gap: 8px !important; }
