@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
-import type { FirmaDigitalPDF } from "@/lib/pdf/receta";
+import type { FirmaDigitalPDF, DocumentoPDF } from "@/lib/pdf/receta";
 
 export async function GET(
   req: NextRequest,
@@ -103,7 +103,7 @@ export async function GET(
 
   const documento = {
     id: doc.id,
-    tipo: doc.tipo as "receta" | "indicaciones" | "certificado",
+    tipo: doc.tipo as DocumentoPDF["tipo"],
     diagnostico: doc.diagnostico,
     contenido: doc.contenido,
     created_at: doc.created_at,
