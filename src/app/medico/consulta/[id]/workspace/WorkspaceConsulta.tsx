@@ -549,71 +549,45 @@ function DictadoSignaler({ dictando }: { dictando: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// TarjetaEvolucion — documento generado, editable, con validación humana.
-// Reemplaza el CampoDictado de EVOLUCION. Estados visuales por borde+chip:
-//   sin generar (gris) → generada/no validada (ámbar) → validada (verde).
-// El gate de Finalizar exige que esté validada.
+// TarjetaEvolucion — documento de evolución con generación MANUAL y obligatoria.
+//
+// Dos estados, sin auto-pre-llenado (root cause del bug histórico: se generaba en
+// la primera letra del diagnóstico y quedaba vieja):
+//   1. inicial (no generada): botón primario "Generar evolución" + texto guía.
+//      Chip "Pendiente" (ámbar). Sin textarea.
+//   2. generada: textarea editable (el médico edita/agrega libre acá) + botón
+//      secundario "Regenerar". Chip "Generada ✓" (verde). Gate satisfecho.
+//
+// Generar ES la validación humana. No hay un paso "Revisé y confirmo" aparte.
+// Si cambian los campos fuente (diagnóstico/indicaciones/receta/certificado)
+// DESPUÉS de generar, el componente vuelve al estado inicial (lo maneja el padre).
 // ---------------------------------------------------------------------------
 
 type TarjetaEvolucionProps = {
-  validarBtnRef: React.RefObject<HTMLButtonElement | null>;
-  tieneDiagnostico: boolean;
+  generarBtnRef: React.RefObject<HTMLButtonElement | null>;
+  evolucionGenerada: boolean;
   evolucion: string;
   onEvolucionChange: (v: string) => void;
-  evolucionGenerada: string;
-  evolucionValidada: boolean;
-  comentarioAbierto: boolean;
-  onAbrirComentario: () => void;
-  comentario: string;
-  onComentarioChange: (v: string) => void;
-  onValidar: () => void;
-  onDesvalidar: () => void;
+  onGenerar: () => void;
   onRegenerar: () => void;
-  showRegenerarConfirm: boolean;
-  onCancelarRegenerar: () => void;
-  onConfirmarRegenerar: () => void;
-  pulseValidar: boolean;
-  dictando: string | null;
-  onIniciarDictadoComentario: () => void;
-  onDetenerDictado: () => void;
-  dictadoSoportado: boolean;
+  pulseGenerar: boolean;
 };
 
 const TarjetaEvolucion = forwardRef<HTMLDivElement, TarjetaEvolucionProps>(
   function TarjetaEvolucion(
     {
-      validarBtnRef,
-      tieneDiagnostico,
+      generarBtnRef,
+      evolucionGenerada,
       evolucion,
       onEvolucionChange,
-      evolucionGenerada,
-      evolucionValidada,
-      comentarioAbierto,
-      onAbrirComentario,
-      comentario,
-      onComentarioChange,
-      onValidar,
-      onDesvalidar,
+      onGenerar,
       onRegenerar,
-      showRegenerarConfirm,
-      onCancelarRegenerar,
-      onConfirmarRegenerar,
-      pulseValidar,
-      dictando,
-      onIniciarDictadoComentario,
-      onDetenerDictado,
-      dictadoSoportado,
+      pulseGenerar,
     },
     ref
   ) {
-    // Color del borde izquierdo según estado.
-    const bordeColor = !tieneDiagnostico
-      ? "#888780"
-      : evolucionValidada
-        ? "#1D9E75"
-        : "#BA7517";
-
-    const dictandoComentario = dictando === "comentario";
+    // Borde izquierdo: ámbar (pendiente) → verde (generada).
+    const bordeColor = evolucionGenerada ? "#1D9E75" : "#BA7517";
 
     return (
       <div
@@ -622,192 +596,66 @@ const TarjetaEvolucion = forwardRef<HTMLDivElement, TarjetaEvolucionProps>(
         style={{ border: "0.5px solid #e5e7eb", borderLeft: `3px solid ${bordeColor}` }}
       >
         <div className="p-3">
-          {/* Cabecera: label + chip de estado + Regenerar */}
+          {/* Cabecera: label + chip de estado + Regenerar (solo si ya se generó) */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <p className="text-xs font-medium tracking-wide text-gray-400">EVOLUCION *</p>
-              {tieneDiagnostico && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  style={
-                    evolucionValidada
-                      ? { backgroundColor: "rgba(29,158,117,0.12)", color: "#1D9E75" }
-                      : { backgroundColor: "rgba(186,117,23,0.12)", color: "#BA7517" }
-                  }
-                >
-                  {evolucionValidada ? "Validada ✓" : "Generada"}
-                </span>
-              )}
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                style={
+                  evolucionGenerada
+                    ? { backgroundColor: "rgba(29,158,117,0.12)", color: "#1D9E75" }
+                    : { backgroundColor: "rgba(186,117,23,0.12)", color: "#BA7517" }
+                }
+              >
+                {evolucionGenerada ? "Generada ✓" : "Pendiente"}
+              </span>
             </div>
 
-            {/* Regenerar — visible siempre que haya algo generado */}
-            {evolucionGenerada !== "" && (
-              <div style={{ position: "relative" }}>
-                <button
-                  type="button"
-                  onClick={onRegenerar}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition hover:bg-blue-50"
-                  style={{ color: "#378ADD", minHeight: "44px" }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 2v6h6" />
-                    <path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
-                  </svg>
-                  Regenerar
-                </button>
-
-                {/* Mini-confirm inline (popover anclado, NO modal) */}
-                {showRegenerarConfirm && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 6px)",
-                      right: 0,
-                      zIndex: 50,
-                      width: "260px",
-                      background: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "12px",
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                      padding: "14px",
-                    }}
-                  >
-                    <p style={{ fontSize: "13px", color: "#374151", marginBottom: "12px", lineHeight: 1.4 }}>
-                      Editaste la evolución a mano. Regenerar va a descartar tus cambios.
-                    </p>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <button
-                        type="button"
-                        onClick={onCancelarRegenerar}
-                        style={{
-                          flex: 1,
-                          padding: "8px",
-                          borderRadius: "8px",
-                          border: "1px solid #e5e7eb",
-                          background: "white",
-                          fontSize: "13px",
-                          color: "#888780",
-                          cursor: "pointer",
-                          minHeight: "44px",
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onConfirmarRegenerar}
-                        style={{
-                          flex: 1,
-                          padding: "8px",
-                          borderRadius: "8px",
-                          border: "1px solid #E24B4A",
-                          background: "white",
-                          fontSize: "13px",
-                          color: "#E24B4A",
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          minHeight: "44px",
-                        }}
-                      >
-                        Regenerar
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+            {/* Regenerar — secundario, solo cuando ya hay evolución generada */}
+            {evolucionGenerada && (
+              <button
+                type="button"
+                onClick={onRegenerar}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition hover:bg-blue-50"
+                style={{ color: "#378ADD", minHeight: "44px" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 2v6h6" />
+                  <path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
+                </svg>
+                Regenerar
+              </button>
             )}
           </div>
 
           {/* Cuerpo */}
-          {!tieneDiagnostico ? (
-            <p className="mt-2 text-sm" style={{ color: "#888780" }}>
-              La evolución se genera automáticamente cuando cargues el diagnóstico.
-            </p>
-          ) : (
+          {!evolucionGenerada ? (
+            // Estado inicial: guía + botón primario full-width.
             <>
-              <textarea
-                value={evolucion}
-                onChange={(e) => onEvolucionChange(e.target.value)}
-                rows={5}
-                placeholder="La evolución del paciente en esta consulta..."
-                className="mt-2 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-                style={{ border: "0.5px solid #e5e7eb" }}
-              />
-
-              {/* Comentario adicional — diferido tras link azul */}
-              {comentarioAbierto ? (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium tracking-wide text-gray-400">
-                      COMENTARIO ADICIONAL
-                    </p>
-                    {dictadoSoportado && (
-                      <button
-                        type="button"
-                        onClick={dictandoComentario ? onDetenerDictado : onIniciarDictadoComentario}
-                        className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition ${
-                          dictandoComentario
-                            ? "bg-red-600 text-white animate-pulse"
-                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                        }`}
-                        style={{ minHeight: "44px", minWidth: "44px" }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                          <line x1="12" x2="12" y1="19" y2="22" />
-                        </svg>
-                        {dictandoComentario ? "Detener" : "Dictar"}
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    value={comentario}
-                    onChange={(e) => onComentarioChange(e.target.value)}
-                    rows={2}
-                    placeholder="Algo que quieras agregar sobre la consulta..."
-                    className="mt-1.5 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-                    style={{ border: "0.5px solid #e5e7eb" }}
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onAbrirComentario}
-                  className="mt-2 flex items-center gap-1 text-sm font-medium transition hover:opacity-80"
-                  style={{ color: "#378ADD", minHeight: "44px" }}
-                >
-                  + Agregar comentario
-                </button>
-              )}
-
-              {/* Validar / Validada */}
-              {evolucionValidada ? (
-                <div className="mt-3 flex items-center gap-3">
-                  <span className="text-sm font-medium" style={{ color: "#1D9E75" }}>
-                    ✓ Validada
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onDesvalidar}
-                    className="text-sm transition hover:opacity-80"
-                    style={{ color: "#888780", minHeight: "44px" }}
-                  >
-                    Editar
-                  </button>
-                </div>
-              ) : (
-                <button
-                  ref={validarBtnRef}
-                  type="button"
-                  onClick={onValidar}
-                  className={`mt-3 w-full rounded-lg py-2.5 text-sm font-medium text-white transition active:scale-95 ${pulseValidar ? "animate-pulse" : ""}`}
-                  style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
-                >
-                  Revisé y confirmo
-                </button>
-              )}
+              <p className="mt-2 text-sm" style={{ color: "#888780" }}>
+                Cargá los datos arriba y generá la evolución.
+              </p>
+              <button
+                ref={generarBtnRef}
+                type="button"
+                onClick={onGenerar}
+                className={`mt-3 w-full rounded-lg py-2.5 text-sm font-medium text-white transition active:scale-95 ${pulseGenerar ? "animate-pulse" : ""}`}
+                style={{ backgroundColor: "#378ADD", minHeight: "44px" }}
+              >
+                Generar evolución
+              </button>
             </>
+          ) : (
+            // Estado generado: textarea editable. El médico edita o agrega libre acá.
+            <textarea
+              value={evolucion}
+              onChange={(e) => onEvolucionChange(e.target.value)}
+              rows={6}
+              placeholder="La evolución del paciente en esta consulta..."
+              className="mt-2 w-full resize-none rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
+              style={{ border: "0.5px solid #e5e7eb" }}
+            />
           )}
         </div>
       </div>
@@ -895,21 +743,21 @@ export default function WorkspaceConsulta({
   // Orden médica (RX, laboratorio, derivaciones). Es texto plano y se persiste
   // como documento tipo "orden". NO entra en la evolución ni en la HC.
   const [orden, setOrden] = useState(borrador?.orden ?? "");
-  // --- Evolución: documento generado, editable, con validación humana ---
+  // --- Evolución: generación MANUAL y obligatoria (no auto-pre-llenado) ---
+  // El médico aprieta "Generar evolución" → componemos con el estado ACTUAL de
+  // todos los campos. Generar ES la validación humana; no hay paso aparte.
   const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
-  // evolucionGenerada = el texto del último componer(). Se inicializa con lo que
-  // venía del borrador para que "editada" arranque en false si el médico no tocó nada.
-  const [evolucionGenerada, setEvolucionGenerada] = useState<string>(borrador?.evolucion ?? "");
-  const [evolucionEditada, setEvolucionEditada] = useState(borrador?.evolucion_editada ?? false);
-  const [evolucionValidada, setEvolucionValidada] = useState(false);
-  const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
-  // Comentario: campo separado de la evolución compuesta. Se persiste en el
-  // borrador y se restaura al recargar. Si venía con texto, abrir el bloque.
-  const [comentario, setComentario] = useState(borrador?.comentario ?? "");
-  const [comentarioAbierto, setComentarioAbierto] = useState(
-    (borrador?.comentario ?? "").trim().length > 0
+  // evolucionGenerada (boolean): ¿se generó ya? Es el gate. Se restaura como true
+  // si venía evolución del borrador (el médico ya generó en una sesión anterior).
+  const [evolucionGenerada, setEvolucionGenerada] = useState<boolean>(
+    (borrador?.evolucion ?? "").trim().length > 0
   );
-  const [showRegenerarConfirm, setShowRegenerarConfirm] = useState(false);
+  // evolucionBase = texto exacto del último componer(). Sirve para detectar si el
+  // médico editó el texto a mano (evolucion_editada). Al restaurar del borrador no
+  // conocemos el base original; usamos el texto guardado (editada arranca en false).
+  const [evolucionBase, setEvolucionBase] = useState<string>(borrador?.evolucion ?? "");
+  // Momento de la generación (revisión humana). Se persiste como evolucion_validada_at.
+  const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
 
   // --- UI state ---
   const [finalizando, setFinalizando] = useState(false);
@@ -958,10 +806,15 @@ export default function WorkspaceConsulta({
   const diagRef = useRef<HTMLTextAreaElement>(null);
   // Refs/flags de la tarjeta de evolución
   const tarjetaEvolucionRef = useRef<HTMLDivElement>(null);
-  const validarBtnRef = useRef<HTMLButtonElement>(null);
-  const [pulseValidar, setPulseValidar] = useState(false);
-  const prellenadoRef = useRef(false);
-  const evolucionEdicionRef = useRef(false); // true tras el primer cambio real → habilita invalidación
+  const generarBtnRef = useRef<HTMLButtonElement>(null);
+  const [pulseGenerar, setPulseGenerar] = useState(false);
+  // Snapshot de los campos FUENTE (diagnóstico/indicaciones/receta/certificado)
+  // en el momento de generar. Si después cambia alguno, la evolución quedó stale
+  // y volvemos al estado inicial. NO incluye el texto de la evolución (editar el
+  // textarea es edición del médico, se preserva — no resetea). Se inicializa con
+  // las fuentes del mount si la evolución venía generada del borrador, para que un
+  // cambio posterior de fuente la invalide igual.
+  const fuentesSnapshotRef = useRef<string | null>(null);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   // --- Auto-save ---
@@ -975,9 +828,7 @@ export default function WorkspaceConsulta({
     certificado,
     orden,
     evolucion,
-    comentario,
-    evolucion_editada:
-      evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0,
+    evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
     medicamentos_structured: medicamentos,
     receta_texto_libre: recetaTextoLibre,
   });
@@ -1025,7 +876,9 @@ export default function WorkspaceConsulta({
       indicaciones,
       receta, // ya serializada; el motor strip-ea "Rp/"
       certificado,
-      comentario,
+      // Sin campo "comentario" separado: el médico edita/agrega libre directo en
+      // el textarea de la evolución tras generar. El motor lo deja en null.
+      comentario: null,
     };
   }, [
     consulta.paciente_sexo_dni,
@@ -1037,65 +890,54 @@ export default function WorkspaceConsulta({
     indicaciones,
     receta,
     certificado,
-    comentario,
   ]);
 
-  // --- Pre-llenado diferido de la evolución ---
-  // La PRIMERA vez que diagnostico pasa de vacío a no-vacío con evolucion aún vacía,
-  // componemos en silencio. Si ya venía evolucion del borrador, no hacemos nada
-  // (evolucionGenerada ya se inicializó con ese texto en el useState).
-  useEffect(() => {
-    if (prellenadoRef.current) return;
-    if (!diagnostico.trim()) return;
-    if (evolucion !== "") {
-      // Ya había evolución (borrador): respetar y marcar como ya pre-llenada.
-      prellenadoRef.current = true;
-      return;
-    }
-    prellenadoRef.current = true;
-    const texto = componerEvolucion(construirDatosEvolucion());
-    if (texto) {
-      setEvolucion(texto);
-      setEvolucionGenerada(texto);
-    } else {
-      // Sin contenido componible: dejar el flag puesto igual para no reintentar.
-      prellenadoRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diagnostico]);
+  // --- Firma de los campos FUENTE de la evolución ---
+  // Identidad de lo que alimenta el componer(). Si cambia tras generar, la
+  // evolución quedó stale. NO incluye el texto de la evolución: editar el textarea
+  // es edición del médico y se preserva.
+  const fuentesEvolucion = JSON.stringify([
+    diagnostico.trim(),
+    indicaciones.trim(),
+    receta.trim(),
+    certificado.trim(),
+  ]);
 
-  // --- Derivación de evolucion_editada + invalidación al editar ---
-  // editada = el cuerpo difiere del último generado, o hay comentario.
-  // La primera corrida (mount / pre-llenado) NO invalida; sólo a partir de un
-  // cambio real del médico. Editar tras validar vuelve la tarjeta a ámbar.
-  useEffect(() => {
-    const editada =
-      evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0;
-    setEvolucionEditada(editada);
-    if (!evolucionEdicionRef.current) {
-      evolucionEdicionRef.current = true;
-      return;
-    }
-    if (editada) setEvolucionValidada(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evolucion, evolucionGenerada, comentario]);
-
-  // --- Regenerar evolución (descarta edición manual del cuerpo) ---
-  function regenerarEvolucion() {
+  // --- Generar / Regenerar evolución (acción humana explícita) ---
+  // Compone con el estado ACTUAL de todos los campos, puebla el textarea, guarda
+  // el texto base (para detectar ediciones) y el snapshot de fuentes (para detectar
+  // staleness). Marca la evolución como generada → satisface el gate de finalizar.
+  function generarEvolucion() {
     const texto = componerEvolucion(construirDatosEvolucion());
     setEvolucion(texto);
-    setEvolucionGenerada(texto);
-    setEvolucionValidada(false);
-    setEvolucionValidadaAt(null);
-    setShowRegenerarConfirm(false);
+    setEvolucionBase(texto);
+    setEvolucionGenerada(true);
+    setEvolucionValidadaAt(new Date().toISOString());
+    fuentesSnapshotRef.current = fuentesEvolucion;
+    setPulseGenerar(false);
+    setError(null);
   }
 
-  // --- Validar evolución (revisión humana) ---
-  function validarEvolucion() {
-    setEvolucionValidada(true);
-    setEvolucionValidadaAt(new Date().toISOString());
-    setPulseValidar(false);
-  }
+  // --- Reset por staleness: si cambian los campos fuente DESPUÉS de generar,
+  //     volvemos al estado inicial (textarea limpio, botón "Generar" de nuevo).
+  //     Editar el TEXTO de la evolución no dispara esto (no toca las fuentes).
+  useEffect(() => {
+    if (!evolucionGenerada) return;
+    // Primer pase con evolución restaurada del borrador: anclar el snapshot a las
+    // fuentes actuales (que es lo que reflejaba la evolución guardada). NO invalidar.
+    if (fuentesSnapshotRef.current === null) {
+      fuentesSnapshotRef.current = fuentesEvolucion;
+      return;
+    }
+    if (fuentesEvolucion === fuentesSnapshotRef.current) return;
+    // Una fuente cambió → invalidar y volver al estado inicial.
+    setEvolucionGenerada(false);
+    setEvolucion("");
+    setEvolucionBase("");
+    setEvolucionValidadaAt(null);
+    fuentesSnapshotRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fuentesEvolucion]);
 
   // --- Timer ---
   useEffect(() => {
@@ -1111,20 +953,19 @@ export default function WorkspaceConsulta({
 
   // --- Gate amable: estado de campos obligatorios ---
   const faltaDiagnostico = !diagnostico.trim();
-  // El chip "Evolución" se prende sólo cuando el médico validó (revisión humana),
-  // no apenas hay texto generado.
-  const faltaEvolucion = !evolucionValidada;
+  // El chip "Evolución" se prende cuando la evolución fue generada (acción humana
+  // explícita). Generar ES la validación; no hay paso aparte.
+  const faltaEvolucion = !evolucionGenerada;
   const faltanObligatorios = faltaDiagnostico || faltaEvolucion;
 
-  // Helper: llevar la vista a la tarjeta de evolución y hacer pulse en "Revisé y
-  // confirmo" durante 600ms. Reemplaza el focus al textarea: la acción que falta
-  // ahora es validar, no escribir.
-  function resaltarValidarEvolucion() {
+  // Helper: llevar la vista a la tarjeta de evolución y hacer pulse en "Generar
+  // evolución" durante 600ms. La acción que falta es generar.
+  function resaltarGenerarEvolucion() {
     setModo("escritura");
     setTimeout(() => {
       tarjetaEvolucionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      setPulseValidar(true);
-      setTimeout(() => setPulseValidar(false), 600);
+      setPulseGenerar(true);
+      setTimeout(() => setPulseGenerar(false), 600);
     }, 350);
   }
 
@@ -1137,9 +978,9 @@ export default function WorkspaceConsulta({
       setTimeout(() => diagRef.current?.focus(), 350);
       return false;
     }
-    if (!evolucionValidada) {
-      setError("Validá la evolución antes de finalizar.");
-      resaltarValidarEvolucion();
+    if (!evolucionGenerada) {
+      setError("Generá la evolución antes de finalizar.");
+      resaltarGenerarEvolucion();
       return false;
     }
     return true;
@@ -1163,7 +1004,7 @@ export default function WorkspaceConsulta({
       setDiagError(true);
       setTimeout(() => diagRef.current?.focus(), 350);
     } else if (faltaEvolucion) {
-      resaltarValidarEvolucion();
+      resaltarGenerarEvolucion();
     }
   }
 
@@ -1293,9 +1134,10 @@ export default function WorkspaceConsulta({
             estado: estadoCompletado,
             doc_borrador: null,
             evolucion: evolucion.trim(),
-            evolucion_validada_at: evolucionValidadaAt,
-            evolucion_editada:
-              evolucion.trim() !== evolucionGenerada.trim() || comentario.trim().length > 0,
+            // Momento de generar; fallback al de finalizar si por algún borde no se
+            // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
+            evolucion_validada_at: evolucionValidadaAt ?? new Date().toISOString(),
+            evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
           })
           .eq("id", consultaId);
 
@@ -1396,7 +1238,6 @@ export default function WorkspaceConsulta({
             certificado,
             orden,
             evolucion,
-            comentario,
             medicamentos_structured: medicamentos,
             receta_texto_libre: recetaTextoLibre,
             updated_at: new Date().toISOString(),
@@ -1855,7 +1696,6 @@ export default function WorkspaceConsulta({
                 DICTADO EN CURSO — {
                   dictando === "diagnostico" ? "Diagnóstico" :
                   dictando === "evolucion" ? "Evolución" :
-                  dictando === "comentario" ? "Comentario adicional" :
                   dictando === "indicaciones" ? "Indicaciones" :
                   dictando === "certificado" ? "Certificado" :
                   dictando === "orden" ? "Orden médica" :
@@ -1971,33 +1811,16 @@ export default function WorkspaceConsulta({
           </AccordionSection>
 
           {/* Evolución — TarjetaEvolucion, plana y ÚLTIMA. El ref + scrollIntoView
-              de resaltarValidarEvolucion() siguen funcionando con la tarjeta acá. */}
+              de resaltarGenerarEvolucion() siguen funcionando con la tarjeta acá. */}
           <TarjetaEvolucion
             ref={tarjetaEvolucionRef}
-            validarBtnRef={validarBtnRef}
-            tieneDiagnostico={!!diagnostico.trim()}
+            generarBtnRef={generarBtnRef}
+            evolucionGenerada={evolucionGenerada}
             evolucion={evolucion}
             onEvolucionChange={(v) => { setEvolucion(v); setError(null); }}
-            evolucionGenerada={evolucionGenerada}
-            evolucionValidada={evolucionValidada}
-            comentarioAbierto={comentarioAbierto}
-            onAbrirComentario={() => setComentarioAbierto(true)}
-            comentario={comentario}
-            onComentarioChange={setComentario}
-            onValidar={validarEvolucion}
-            onDesvalidar={() => { setEvolucionValidada(false); setEvolucionValidadaAt(null); }}
-            onRegenerar={() => {
-              if (evolucionEditada) setShowRegenerarConfirm(true);
-              else regenerarEvolucion();
-            }}
-            showRegenerarConfirm={showRegenerarConfirm}
-            onCancelarRegenerar={() => setShowRegenerarConfirm(false)}
-            onConfirmarRegenerar={regenerarEvolucion}
-            pulseValidar={pulseValidar}
-            dictando={dictando}
-            onIniciarDictadoComentario={() => iniciarDictado("comentario", setComentario)}
-            onDetenerDictado={detenerDictado}
-            dictadoSoportado={dictadoSoportado}
+            onGenerar={generarEvolucion}
+            onRegenerar={generarEvolucion}
+            pulseGenerar={pulseGenerar}
           />
 
           {/* Acciones sticky — la documentación solo guarda (auto-save) y vuelve a la llamada. */}
@@ -2310,7 +2133,7 @@ export default function WorkspaceConsulta({
               {faltaEvolucion && (
                 <li style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#111" }}>
                   <span style={{ display: "inline-block", height: "6px", width: "6px", borderRadius: "9999px", background: "#D85A30" }} />
-                  Validar evolución
+                  Generá la evolución antes de finalizar.
                 </li>
               )}
             </ul>
