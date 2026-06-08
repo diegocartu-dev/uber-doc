@@ -2,7 +2,7 @@
 
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 import NotificacionEspera from "@/components/NotificacionEspera";
-import NotificacionPagada from "@/components/NotificacionPagada";
+import NotificacionPacienteListo from "@/components/NotificacionPacienteListo";
 
 export function BadgeEsperando() {
   const { totalEsperando, enVideollamada, badgeFlash } = useDashboardMedico();
@@ -86,16 +86,18 @@ export function PopupEsperando() {
 }
 
 export function PopupPagada() {
-  // popupPagada ya viene gateado por enVideollamada desde el provider.
-  const { popupPagada, dismissPopupPagada } = useDashboardMedico();
+  // popupListo ya viene gateado por enVideollamada desde el provider.
+  // Cubre "paciente listo" de cualquier canal: CI pagada o turno en sala de espera.
+  const { popupListo, dismissPopupListo } = useDashboardMedico();
 
-  if (!popupPagada) return null;
+  if (!popupListo) return null;
 
   return (
-    <NotificacionPagada
-      pacienteNombre={popupPagada.pacienteNombre}
-      consultaId={popupPagada.consultaId}
-      onDismiss={dismissPopupPagada}
+    <NotificacionPacienteListo
+      tipo={popupListo.tipo}
+      id={popupListo.id}
+      pacienteNombre={popupListo.pacienteNombre}
+      onDismiss={dismissPopupListo}
     />
   );
 }
