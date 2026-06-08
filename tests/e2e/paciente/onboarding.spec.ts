@@ -53,6 +53,9 @@ test.describe("Onboarding paciente", () => {
     await page.getByLabel("Fecha de nacimiento").fill("15/05/1990");
     await page.getByLabel("Femenino").check();
     await page.getByLabel("Teléfono").fill("1123456789");
+    // Fijar obra social explícitamente (evita que un perfil previo con cobertura
+    // exija "Nro. de afiliado" y bloquee el submit).
+    await page.getByLabel("Obra social o prepaga").selectOption({ label: "No tengo / No incluir" });
 
     // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
     for (const cb of await page.getByRole("checkbox").all()) await cb.check();
