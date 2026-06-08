@@ -2,6 +2,7 @@
 
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 import NotificacionEspera from "@/components/NotificacionEspera";
+import NotificacionPagada from "@/components/NotificacionPagada";
 
 export function BadgeEsperando() {
   const { totalEsperando, enVideollamada, badgeFlash } = useDashboardMedico();
@@ -80,6 +81,21 @@ export function PopupEsperando() {
       consultaId={popupData.consultaId}
       tipo={popupData.tipo}
       onDismiss={dismissPopup}
+    />
+  );
+}
+
+export function PopupPagada() {
+  // popupPagada ya viene gateado por enVideollamada desde el provider.
+  const { popupPagada, dismissPopupPagada } = useDashboardMedico();
+
+  if (!popupPagada) return null;
+
+  return (
+    <NotificacionPagada
+      pacienteNombre={popupPagada.pacienteNombre}
+      consultaId={popupPagada.consultaId}
+      onDismiss={dismissPopupPagada}
     />
   );
 }
