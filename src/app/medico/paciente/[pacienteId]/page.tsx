@@ -163,8 +163,12 @@ export default async function FichaPacientePage({
 
   const consultasFinal = consultasData ?? [];
 
+  // Una CI entra al timeline de Evoluciones si está completada (ver entradasCI).
+  // Predicado único: lo que entra al timeline NO se repite en la sección de consultas.
+  const ciEnTimeline = (c: { estado: string }): boolean => c.estado === "completada";
+
   // Consultas completadas para Historia Clínica
-  const consultasCompletadas = consultasFinal.filter((c) => c.estado === "completada");
+  const consultasCompletadas = consultasFinal.filter(ciEnTimeline);
 
   // Traer turnos del médico con este paciente (paciente_id = pacientes.id directo)
   const { data: turnosData } = await supabase
@@ -305,21 +309,23 @@ export default async function FichaPacientePage({
     .sort((a, b) => b.sortTs - a.sortTs)
     .map(({ sortTs: _sortTs, ...entrada }) => entrada);
 
-  /* ── Sección de consultas ── */
-  const seccionConsultas = (
+  /* ── Sección de consultas ──
+     Las CI completadas ya se muestran en el timeline unificado de Evoluciones.
+     Acá listamos sólo el resto (esperando, aceptada, en_curso, cancelada) para no
+     duplicar la misma consulta en dos lugares. Simétrico con los turnos. */
+  const consultasFueraDeTimeline = consultasFinal.filter((c) => !ciEnTimeline(c));
+
+  const seccionConsultas = consultasFueraDeTimeline.length === 0 ? null : (
     <div key="consultas" className="mt-6">
       <div className="flex items-center gap-2.5 rounded-t-xl px-5 py-3" style={{ background: "rgba(29,158,117,0.06)", borderLeft: "4px solid #1D9E75" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
         <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#1D9E75" }}>
-          Historial de consultas · {consultasFinal.length}
+          Historial de consultas · {consultasFueraDeTimeline.length}
         </p>
       </div>
 
-      {consultasFinal.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">No hay consultas registradas con este paciente.</p>
-      ) : (
-        <div className="mt-3 space-y-4">
-          {consultasFinal.map((c) => {
+      <div className="mt-3 space-y-4">
+          {consultasFueraDeTimeline.map((c) => {
             const docs = docsPorConsulta.get(c.id) ?? [];
             return (
               <div
@@ -381,8 +387,7 @@ export default async function FichaPacientePage({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 

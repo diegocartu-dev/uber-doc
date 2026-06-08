@@ -52,6 +52,9 @@ export default function AdminConsultas({
   const [consultas, setConsultas] = useState(consultasIniciales);
   const [actualizando, setActualizando] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  // Confirmación de borrado — dialog React inline.
+  // window.confirm() lo suprime Chrome en páginas con iframes cross-origin.
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState<string | null>(null);
 
   useEffect(() => {
     setConsultas(consultasIniciales);
@@ -147,7 +150,7 @@ export default function AdminConsultas({
   }
 
   async function handleEliminar(id: string) {
-    if (!confirm("¿Eliminar esta consulta?")) return;
+    setConfirmandoEliminar(null);
     setEliminando(id);
     const supabase = createClient();
     await supabase.from("consultas").delete().eq("id", id);
@@ -206,7 +209,7 @@ export default function AdminConsultas({
                 </select>
                 <LoadingButton
                   isLoading={eliminando === c.id}
-                  onClick={() => handleEliminar(c.id)}
+                  onClick={() => setConfirmandoEliminar(c.id)}
                   className="text-[10px] text-gray-400 hover:text-red-500 disabled:opacity-50"
                 >
                   eliminar
@@ -214,6 +217,72 @@ export default function AdminConsultas({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Dialog de confirmación de borrado — reemplaza window.confirm() que
+          Chrome suprime en páginas con iframes cross-origin. */}
+      {confirmandoEliminar && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#111", marginBottom: "8px" }}>
+              Eliminar consulta
+            </h3>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "24px" }}>
+              ¿Eliminar esta consulta? Esta acción no se puede deshacer.
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setConfirmandoEliminar(null)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => handleEliminar(confirmandoEliminar)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #E24B4A",
+                  background: "transparent",
+                  color: "#E24B4A",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

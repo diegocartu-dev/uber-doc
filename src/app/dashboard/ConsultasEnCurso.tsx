@@ -45,17 +45,16 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
   const router = useRouter();
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Confirmaci\u00f3n de cancelaci\u00f3n \u2014 dialog React inline.
+  // window.confirm() lo suprime Chrome en p\u00e1ginas con iframes cross-origin.
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState<string | null>(null);
 
   function handleIniciar(consultaId: string) {
     router.push(`/medico/consulta/${consultaId}/workspace`);
   }
 
   async function handleCancelar(consultaId: string) {
-    const confirmado = window.confirm(
-      "\u00bfEst\u00e1s seguro? Si el paciente pag\u00f3, se le reembolsar\u00e1."
-    );
-    if (!confirmado) return;
-
+    setConfirmandoCancelar(null);
     setCancelando(consultaId);
     setError(null);
     try {
@@ -186,7 +185,7 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
               {/* Cancelar consulta */}
               <button
                 disabled={cancelando === c.id}
-                onClick={() => handleCancelar(c.id)}
+                onClick={() => setConfirmandoCancelar(c.id)}
                 className="rounded-lg border text-sm font-medium disabled:opacity-50 px-5 py-2.5"
                 style={{ color: "#E24B4A", borderColor: "#E24B4A", background: "transparent", minHeight: "44px", fontSize: "14px" }}
               >
@@ -196,6 +195,72 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
           </div>
         );
       })}
+
+      {/* Dialog de confirmación de cancelación — reemplaza window.confirm() que
+          Chrome suprime en páginas con iframes cross-origin. */}
+      {confirmandoCancelar && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "360px",
+              width: "100%",
+            }}
+          >
+            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#111", marginBottom: "8px" }}>
+              Cancelar consulta
+            </h3>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "24px" }}>
+              ¿Estás seguro? Si el paciente pagó, se le reembolsará.
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setConfirmandoCancelar(null)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #e5e7eb",
+                  background: "white",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => handleCancelar(confirmandoCancelar)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #E24B4A",
+                  background: "transparent",
+                  color: "#E24B4A",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar consulta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
