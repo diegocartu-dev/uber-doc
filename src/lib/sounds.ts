@@ -10,6 +10,27 @@ function getCtx(): AudioContext | null {
   return audioCtx;
 }
 
+/**
+ * Desbloquea el audio dentro de un gesto del usuario.
+ * iOS Safari no alcanza con ctx.resume(): exige reproducir efectivamente un nodo
+ * dentro del handler del gesto. Por eso disparamos un tono inaudible (volumen 0).
+ * Llamar desde un click/pointerdown real (toggle "Disponible", primer tap, etc.).
+ */
+export function unlockAudio() {
+  const ctx = getCtx();
+  if (!ctx) return;
+
+  if (ctx.state === "suspended") ctx.resume();
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.02);
+}
+
 function playTone(frequency: number, duration: number, type: OscillatorType = "sine", volume = 0.3) {
   const ctx = getCtx();
   if (!ctx) return;
