@@ -71,6 +71,7 @@ type DashboardCtx = {
   dismissPopup: () => void;
   popupPagada: PopupPagada;
   dismissPopupPagada: () => void;
+  flashConsultaId: string | null;
   totalEsperando: number;
   badgeFlash: boolean;
 };
@@ -91,6 +92,7 @@ const Ctx = createContext<DashboardCtx>({
   dismissPopup: () => {},
   popupPagada: null,
   dismissPopupPagada: () => {},
+  flashConsultaId: null,
   totalEsperando: 0,
   badgeFlash: false,
 });
@@ -151,6 +153,7 @@ export default function DashboardMedicoProvider({
   const bloquearPollDisponible = useRef(false);
   const [popupData, setPopupData] = useState<PopupData>(null);
   const [popupPagada, setPopupPagada] = useState<PopupPagada>(null);
+  const [flashConsultaId, setFlashConsultaId] = useState<string | null>(null);
   const [silenciado, setSilenciadoState] = useState(false);
   const silenciadoRef = useRef(false);
   const [badgeFlash, setBadgeFlash] = useState(false);
@@ -192,7 +195,14 @@ export default function DashboardMedicoProvider({
   }, []);
 
   const dismissPopupPagada = useCallback(() => {
-    setPopupPagada(null);
+    setPopupPagada((prev) => {
+      // Al descartar "Ahora no", flashea la card del paciente en ConsultasEnCurso.
+      if (prev) {
+        setFlashConsultaId(prev.consultaId);
+        setTimeout(() => setFlashConsultaId(null), 600);
+      }
+      return null;
+    });
   }, []);
 
   // Respaldo de desbloqueo de audio: si el médico recarga con "Disponible" ya
@@ -375,7 +385,7 @@ export default function DashboardMedicoProvider({
       popupData: enVideollamada || popupPagada ? null : popupData,
       dismissPopup,
       popupPagada: enVideollamada ? null : popupPagada,
-      dismissPopupPagada, totalEsperando, badgeFlash,
+      dismissPopupPagada, flashConsultaId, totalEsperando, badgeFlash,
     }}>
       {children}
     </Ctx.Provider>
