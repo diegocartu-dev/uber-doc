@@ -132,12 +132,20 @@ ALTER TABLE pacientes
 ### Regla de implementación
 Los SELECTs que incluyan columnas nuevas (`fecha_nacimiento`, `sexo_dni`, etc.) SOLO deben estar en archivos nuevos o en archivos que se modifican explícitamente para este sprint. NUNCA agregar columnas nuevas a SELECTs existentes que funcionan en producción — Supabase PostgREST falla si la columna no existe y el redirect al dashboard rompe toda la página.
 
-## Estado actual (28 Mayo 2026)
+## Beta Gate — bloqueo de registro (NO volver a confundir)
+Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env var **`BETA_PASSWORD`** (cookie `docto_beta_access`). Fuente de verdad completa: **`docs/REGISTRO_BETA_GATE.md`**.
+- **`BETA_PASSWORD` vacía = TODO el sitio caído** (loop de redirección), NO "abierto". Nunca dejarla vacía en prod.
+- Seteada = beta cerrada: solo `/auth/register` y `/auth/registro-medico` piden la contraseña. Hoy `DoctoTest2026!`.
+- **Cambiar una env var requiere DEPLOY FRESCO** (`vercel --prod`/`git push`), nunca `vercel redeploy`.
+- **Previews:** cada preview necesita `BETA_PASSWORD` o loopea y el CI E2E muere. Fix permanente: setear "All Preview" en el dashboard de Vercel. Por-branch: la branch debe existir en el remoto ANTES del `vercel env add`.
+
+## Estado actual (07 Junio 2026)
 - MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
 - Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
 - REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion), validacion manual durante F&F.
 - Vademecum CNPM: 16.878 medicamentos oficiales con lazy-load y deteccion dual de controlados.
 - Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
-- Beta cerrada: registro con whitelist de emails (PR #87).
+- Beta cerrada: registro gateado por `BETA_PASSWORD=DoctoTest2026!` (no whitelist de emails). Ver `docs/REGISTRO_BETA_GATE.md`.
+- **Sprint 07/06/2026 — Evoluciones + HC + Orden + Alertas:** evolución auto-compuesta determinística (formato `tema: contenido`) + validación humana ("Revisé y confirmo"); "Mis pacientes" + timeline unificado CI+turnos; **unificación de canales** (`WorkspaceConsulta` channel-aware — los turnos guardan igual que CI); panel HC durante la llamada + reorden Documentar + campo Orden (`documentos.tipo='orden'`); pantalla de cierre del paciente sin preview; alertas del médico (sonido + popup "paciente listo" para CI pagada y turno en sala de espera). Detalle: `docs/sprints/2026-06-07-evoluciones-hc-orden-alertas.md`.
 - Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
 - Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
