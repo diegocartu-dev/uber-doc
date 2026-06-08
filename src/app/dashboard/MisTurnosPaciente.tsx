@@ -91,7 +91,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
         <div className="flex items-center gap-2">
           {mostrarSala ? (
             <Link
-              href={`/turno/${t.id}/espera`}
+              href={`/turno/${t.id}/info-medica?redirect=/turno/${t.id}/espera`}
               className="shrink-0 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
             >
               Ir a sala de espera

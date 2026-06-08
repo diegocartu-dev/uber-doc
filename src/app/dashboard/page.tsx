@@ -696,7 +696,7 @@ export default async function DashboardPage({
               <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>Tu medico te atendera en breve</p>
               <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{formatNombreMedico(enEspera.medico_nombre)} - {enEspera.hora_inicio.slice(0, 5)} hs</p>
               <Link
-                href={`/turno/${enEspera.id}/espera`}
+                href={`/turno/${enEspera.id}/info-medica?redirect=/turno/${enEspera.id}/espera`}
                 className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
                 style={{ backgroundColor: "var(--color-success)" }}
               >
@@ -731,7 +731,7 @@ export default async function DashboardPage({
               <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>{proximoHoy.especialidad}</p>
               {mostrarSala && (
                 <Link
-                  href={`/turno/${proximoHoy.id}/espera`}
+                  href={`/turno/${proximoHoy.id}/info-medica?redirect=/turno/${proximoHoy.id}/espera`}
                   className="mt-3 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
                   style={{ backgroundColor: "var(--color-success)" }}
                 >

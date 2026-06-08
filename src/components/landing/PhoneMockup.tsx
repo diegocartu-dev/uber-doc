@@ -1,4 +1,4 @@
-import { Heart, Brain, Baby, Eye, Activity, Pill, Clock, ChevronRight } from "lucide-react";
+import { Heart, Brain, Baby, Eye, Activity, Pill, Clock, ChevronRight, Volume2, Calendar } from "lucide-react";
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -340,6 +340,115 @@ export function PhoneMockupTurnos() {
           fontSize: 11, fontWeight: 600, textAlign: "center",
         }}>
           Confirmar turno
+        </div>
+      </div>
+    </PhoneFrame>
+  );
+}
+
+const metricas = [
+  { label: "INGRESOS", value: "$150.000", color: "#378ADD" },
+  { label: "ATENDIDOS", value: "3", color: "#111827" },
+  { label: "EN ESPERA", value: "0", color: "#111827" },
+  { label: "TURNOS PEND.", value: "1", color: "#378ADD" },
+];
+
+export function PhoneMockupMedico() {
+  return (
+    <PhoneFrame>
+      <div style={{ padding: "52px 14px 16px", height: "100%", background: "#F8F9FA" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#111827", letterSpacing: "-0.02em" }}>Docto</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+              <span className="landing-pulse" style={{ width: 5, height: 5, borderRadius: "50%", background: "#3F7A52", display: "inline-block" }} />
+              <span style={{ fontSize: 8, color: "#9CA3AF" }}>Disponible</span>
+            </span>
+          </div>
+          <div style={{
+            width: 24, height: 24, borderRadius: "50%", background: "#F1F3F5",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 8, fontWeight: 600, color: "#4B5563",
+          }}>
+            MR
+          </div>
+        </div>
+        <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 10 }}>Dra. Martina Ríos</div>
+
+        {/* Welcome card */}
+        <div style={{
+          background: "#fff", borderRadius: 10, padding: "10px 12px",
+          border: "1px solid #E5E7EB", marginBottom: 10,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#111827", marginBottom: 2 }}>
+            Buenas tardes, Dra. Ríos
+          </div>
+          <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 8 }}>
+            Hoy tenés <span style={{ fontWeight: 700, color: "#111827" }}>2</span> turnos programados
+          </div>
+          <div style={{
+            background: "#378ADD", color: "#fff", borderRadius: 7,
+            padding: "7px 0", fontSize: 9.5, fontWeight: 600, textAlign: "center",
+          }}>
+            Hablar con Nova
+          </div>
+        </div>
+
+        {/* Metricas */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: 6,
+        }}>
+          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#9CA3AF" }}>
+            Métricas
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {["Hoy", "Semana", "Mes"].map((t, i) => (
+              <span key={t} style={{
+                fontSize: 7, fontWeight: 600, padding: "3px 7px", borderRadius: 999,
+                background: i === 0 ? "#F1F3F5" : "transparent",
+                color: i === 0 ? "#111827" : "#9CA3AF",
+              }}>{t}</span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 10 }}>
+          {metricas.map((m) => (
+            <div key={m.label} style={{
+              background: "#fff", borderRadius: 8, padding: "8px 10px",
+              border: "1px solid #E5E7EB",
+            }}>
+              <div style={{ fontSize: 7, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" as const, color: "#9CA3AF", marginBottom: 2 }}>
+                {m.label}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: m.color, letterSpacing: "-0.02em" }}>
+                {m.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Turnos programados */}
+        <div style={{
+          background: "#fff", borderRadius: 10, padding: "10px 12px",
+          border: "1px solid #378ADD",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#378ADD", display: "inline-block" }} />
+            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const, color: "#378ADD" }}>
+              Turnos programados
+            </span>
+          </div>
+          <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 6 }}>2 turnos hoy</div>
+          <div style={{
+            border: "1px solid #378ADD", borderRadius: 7,
+            padding: "6px 0", fontSize: 9, fontWeight: 600, textAlign: "center",
+            color: "#378ADD",
+          }}>
+            Mi agenda →
+          </div>
         </div>
       </div>
     </PhoneFrame>

@@ -117,7 +117,7 @@ export default async function ConfirmacionTurnoPage({
             if (faltanMenos15 || enEspera) {
               return (
                 <Link
-                  href={`/turno/${turnoId}/espera`}
+                  href={`/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/espera`}
                   className="block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-medium text-white"
                 >
                   Ir a sala de espera
