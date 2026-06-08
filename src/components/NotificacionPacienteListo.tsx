@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { capitalizarNombre } from "@/lib/utils/texto";
 
 type Props = {
+  tipo: "consulta" | "turno";
+  id: string;
   pacienteNombre: string;
-  consultaId: string;
   onDismiss: () => void;
 };
 
-export default function NotificacionPagada({ pacienteNombre, consultaId, onDismiss }: Props) {
+export default function NotificacionPacienteListo({ tipo, id, pacienteNombre, onDismiss }: Props) {
   const [visible, setVisible] = useState(false);
   const router = useRouter();
 
@@ -19,8 +20,17 @@ export default function NotificacionPagada({ pacienteNombre, consultaId, onDismi
   }, []);
 
   function handleIniciar() {
-    router.push(`/medico/consulta/${consultaId}/workspace`);
+    if (tipo === "turno") {
+      router.push(`/turno/${id}/video`);
+    } else {
+      router.push(`/medico/consulta/${id}/workspace`);
+    }
   }
+
+  // CI: el paciente pagó. Turno: el paciente llegó a la sala de espera.
+  const titulo = tipo === "turno"
+    ? `${capitalizarNombre(pacienteNombre)} llegó`
+    : `${capitalizarNombre(pacienteNombre)} pagó`;
 
   return (
     <div
@@ -70,7 +80,7 @@ export default function NotificacionPagada({ pacienteNombre, consultaId, onDismi
         </div>
 
         <p style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", margin: 0, lineHeight: 1.25 }}>
-          {capitalizarNombre(pacienteNombre)} pagó
+          {titulo}
         </p>
         <p style={{ fontSize: 15, color: "#888780", margin: "6px 0 0" }}>
           Listo para la consulta

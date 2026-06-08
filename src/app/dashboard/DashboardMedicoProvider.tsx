@@ -51,8 +51,11 @@ type PopupData = {
   tipo: "consulta" | "turno";
 } | null;
 
-type PopupPagada = {
-  consultaId: string;
+// "Paciente listo" de cualquier canal: CI que pasó a pagada o turno que entró
+// a la sala de espera. Ambos disparan el mismo modal prominente.
+type PopupListo = {
+  tipo: "consulta" | "turno";
+  id: string;
   pacienteNombre: string;
 } | null;
 
@@ -69,8 +72,8 @@ type DashboardCtx = {
   setSilenciado: (v: boolean) => void;
   popupData: PopupData;
   dismissPopup: () => void;
-  popupPagada: PopupPagada;
-  dismissPopupPagada: () => void;
+  popupListo: PopupListo;
+  dismissPopupListo: () => void;
   flashConsultaId: string | null;
   totalEsperando: number;
   badgeFlash: boolean;
@@ -90,8 +93,8 @@ const Ctx = createContext<DashboardCtx>({
   setSilenciado: () => {},
   popupData: null,
   dismissPopup: () => {},
-  popupPagada: null,
-  dismissPopupPagada: () => {},
+  popupListo: null,
+  dismissPopupListo: () => {},
   flashConsultaId: null,
   totalEsperando: 0,
   badgeFlash: false,
@@ -101,10 +104,9 @@ export function useDashboardMedico() {
   return useContext(Ctx);
 }
 
-function getFirstWaiting(
-  pendientes: ConsultaPendiente[],
-  turnosEspera: TurnoEspera[]
-): PopupData {
+// El toast suave (momento 1) es SOLO para CI nueva por aceptar. Los turnos en
+// sala de espera ya NO van al toast: disparan el modal prominente "paciente listo".
+function getFirstWaiting(pendientes: ConsultaPendiente[]): PopupData {
   if (pendientes.length > 0) {
     const p = pendientes[0];
     return {
@@ -112,15 +114,6 @@ function getFirstWaiting(
       esperandoDesde: p.created_at,
       consultaId: p.id,
       tipo: "consulta",
-    };
-  }
-  if (turnosEspera.length > 0) {
-    const t = turnosEspera[0];
-    return {
-      pacienteNombre: t.paciente_nombre,
-      esperandoDesde: new Date(t.entradoEn).toISOString(),
-      consultaId: t.id,
-      tipo: "turno",
     };
   }
   return null;
@@ -152,7 +145,7 @@ export default function DashboardMedicoProvider({
   const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
   const bloquearPollDisponible = useRef(false);
   const [popupData, setPopupData] = useState<PopupData>(null);
-  const [popupPagada, setPopupPagada] = useState<PopupPagada>(null);
+  const [popupListo, setPopupListo] = useState<PopupListo>(null);
   const [flashConsultaId, setFlashConsultaId] = useState<string | null>(null);
   const [silenciado, setSilenciadoState] = useState(false);
   const silenciadoRef = useRef(false);
@@ -165,6 +158,11 @@ export default function DashboardMedicoProvider({
   // para no disparar un popup falso al recargar con una consulta ya pagada.
   const prevPagadasIds = useRef<Set<string>>(
     new Set(initialEnCurso.filter((c) => c.estado === "pagada").map((c) => c.id))
+  );
+  // IDs de turnos ya en sala de espera. Inicializa con los del SSR para no
+  // disparar un modal falso al recargar con un turno ya esperando.
+  const prevTurnosEsperaIds = useRef<Set<string>>(
+    new Set(initialTurnosEspera.map((t) => t.id))
   );
 
   const enVideollamada = enCurso.some((c) => c.estado === "en_curso");
@@ -194,11 +192,12 @@ export default function DashboardMedicoProvider({
     setTimeout(() => setBadgeFlash(false), 600);
   }, []);
 
-  const dismissPopupPagada = useCallback(() => {
-    setPopupPagada((prev) => {
-      // Al descartar "Ahora no", flashea la card del paciente en ConsultasEnCurso.
-      if (prev) {
-        setFlashConsultaId(prev.consultaId);
+  const dismissPopupListo = useCallback(() => {
+    setPopupListo((prev) => {
+      // Al descartar "Ahora no" en una CI pagada, flashea la card del paciente en
+      // ConsultasEnCurso. Para turnos no hay card equivalente, así que no flashea.
+      if (prev && prev.tipo === "consulta") {
+        setFlashConsultaId(prev.id);
         setTimeout(() => setFlashConsultaId(null), 600);
       }
       return null;
@@ -213,10 +212,22 @@ export default function DashboardMedicoProvider({
     return () => window.removeEventListener("pointerdown", handler, { capture: true });
   }, []);
 
-  // Post-videollamada: trigger inmediato al montar si viene de finalizar consulta
+  // Post-videollamada: trigger inmediato al montar si viene de finalizar consulta.
+  // Prioridad "paciente listo" (modal) sobre "CI esperando" (toast):
+  //   - Turno ya en sala de espera o CI ya pagada → modal prominente.
+  //   - Si no, CI pendiente por aceptar → toast suave.
   useEffect(() => {
-    if (postVideollamada && totalEsperando > 0) {
-      setPopupData(getFirstWaiting(pendientes, turnosEspera));
+    if (!postVideollamada) return;
+    const turnoListo = turnosEspera[0];
+    const ciPagada = enCurso.find((c) => c.estado === "pagada");
+    if (turnoListo) {
+      setPopupListo({ tipo: "turno", id: turnoListo.id, pacienteNombre: turnoListo.paciente_nombre });
+      if (!silenciadoRef.current) soundVideoLista();
+    } else if (ciPagada) {
+      setPopupListo({ tipo: "consulta", id: ciPagada.id, pacienteNombre: ciPagada.paciente_nombre });
+      if (!silenciadoRef.current) soundVideoLista();
+    } else if (pendientes.length > 0) {
+      setPopupData(getFirstWaiting(pendientes));
       soundPacienteEsperando();
     }
     // Solo al montar
@@ -254,6 +265,8 @@ export default function DashboardMedicoProvider({
       );
 
       const enCursoData: ConsultaEnCurso[] = data.consultas_en_curso ?? [];
+      const turnosEsperaData: TurnoEspera[] = data.turnos_espera ?? [];
+      const pendientesData: ConsultaPendiente[] = data.consultas_pendientes ?? [];
       const hayVideoActiva = enCursoData.some((c) => c.estado === "en_curso");
 
       // ── Detección aceptada→pagada (diff por Set de IDs, no por contador:
@@ -264,43 +277,55 @@ export default function DashboardMedicoProvider({
       // pasaron a en_curso/completada).
       prevPagadasIds.current = new Set(pagadasAhora.map((c) => c.id));
 
-      // Transición: videollamada terminó. Prioridad: si quedó una pagada sin
-      // mostrar, abrir el modal de pagada por sobre el toast de esperando.
-      if (prevEnVideollamada.current && !hayVideoActiva) {
-        if (pagadasAhora.length > 0) {
-          const p = pagadasAhora[0];
-          setPopupPagada({ consultaId: p.id, pacienteNombre: p.paciente_nombre });
+      // ── Detección turno→sala de espera (mismo patrón de diff por Set). Un turno
+      // que aparece nuevo en turnos_espera es un "paciente listo" → modal. ──
+      const turnoNuevo = turnosEsperaData.find((t) => !prevTurnosEsperaIds.current.has(t.id));
+      prevTurnosEsperaIds.current = new Set(turnosEsperaData.map((t) => t.id));
+
+      // "Paciente listo" del poll: prioridad CI pagada nueva sobre turno nuevo
+      // (un solo modal a la vez). Ambos Sets ya quedaron actualizados arriba, así
+      // que el que no se muestre ahora no se re-disparará en el próximo poll.
+      const listoNuevo: PopupListo = pagadaNueva
+        ? { tipo: "consulta", id: pagadaNueva.id, pacienteNombre: pagadaNueva.paciente_nombre }
+        : turnoNuevo
+        ? { tipo: "turno", id: turnoNuevo.id, pacienteNombre: turnoNuevo.paciente_nombre }
+        : null;
+
+      // Transición: videollamada terminó. Prioridad: si hay un paciente listo
+      // (CI pagada o turno en espera, aunque ya estuviera esperando), abrir el
+      // modal por sobre el toast.
+      const esTickTransicion = prevEnVideollamada.current && !hayVideoActiva;
+      if (esTickTransicion) {
+        const pagadaPendiente = pagadasAhora[0];
+        const turnoPendiente = turnosEsperaData[0];
+        if (pagadaPendiente) {
+          setPopupListo({ tipo: "consulta", id: pagadaPendiente.id, pacienteNombre: pagadaPendiente.paciente_nombre });
           if (!silenciadoRef.current) soundVideoLista();
-        } else {
-          const pends = data.consultas_pendientes ?? [];
-          const turnos = data.turnos_espera ?? [];
-          if (pends.length > 0 || turnos.length > 0) {
-            setPopupData(getFirstWaiting(pends, turnos));
-            soundPacienteEsperando();
-          }
+        } else if (turnoPendiente) {
+          setPopupListo({ tipo: "turno", id: turnoPendiente.id, pacienteNombre: turnoPendiente.paciente_nombre });
+          if (!silenciadoRef.current) soundVideoLista();
+        } else if (pendientesData.length > 0) {
+          setPopupData(getFirstWaiting(pendientesData));
+          soundPacienteEsperando();
         }
       }
       prevEnVideollamada.current = hayVideoActiva;
 
-      // Pagada nueva detectada fuera de videollamada → modal + sonido.
-      if (!hayVideoActiva && pagadaNueva) {
-        setPopupPagada({ consultaId: pagadaNueva.id, pacienteNombre: pagadaNueva.paciente_nombre });
+      // Paciente listo nuevo detectado fuera de videollamada → modal + sonido.
+      // En el tick de transición ya se priorizó arriba; no duplicar.
+      if (!hayVideoActiva && !esTickTransicion && listoNuevo) {
+        setPopupListo(listoNuevo);
         if (!silenciadoRef.current) soundVideoLista();
       }
 
-      // Sound + popup si hay NUEVOS pacientes esperando y NO está en videollamada
-      if (!hayVideoActiva) {
-        if (
-          data.consultas_pendientes.length > prevPendientesCount.current ||
-          data.turnos_espera.length > prevTurnosCount.current
-        ) {
-          if (!silenciadoRef.current) soundPacienteEsperando();
-          setPopupData(getFirstWaiting(data.consultas_pendientes, data.turnos_espera));
-        }
+      // Toast suave SOLO para CI nueva por aceptar (turnos van al modal de arriba).
+      if (!hayVideoActiva && !esTickTransicion && pendientesData.length > prevPendientesCount.current) {
+        if (!silenciadoRef.current) soundPacienteEsperando();
+        setPopupData(getFirstWaiting(pendientesData));
       }
 
-      prevPendientesCount.current = data.consultas_pendientes.length;
-      prevTurnosCount.current = data.turnos_espera.length;
+      prevPendientesCount.current = pendientesData.length;
+      prevTurnosCount.current = turnosEsperaData.length;
     } catch {
       // silently ignore network errors
     }
@@ -367,25 +392,33 @@ export default function DashboardMedicoProvider({
     }
   }, [totalEsperando]);
 
-  // Cierra el modal de pagada si la consulta dejó de estar en estado "pagada"
-  // (el médico la inició → en_curso, o se canceló). Evita modal colgado.
+  // Cierra el modal "paciente listo" si el paciente dejó de estar listo. Evita
+  // modal colgado:
+  //   - CI: la consulta dejó de estar "pagada" (el médico la inició → en_curso, o
+  //     se canceló).
+  //   - Turno: el turno dejó de estar en la sala de espera (atendido o se fue).
   useEffect(() => {
-    if (popupPagada && !enCurso.some((c) => c.id === popupPagada.consultaId && c.estado === "pagada")) {
-      setPopupPagada(null);
+    if (!popupListo) return;
+    const sigueListo =
+      popupListo.tipo === "consulta"
+        ? enCurso.some((c) => c.id === popupListo.id && c.estado === "pagada")
+        : turnosEspera.some((t) => t.id === popupListo.id);
+    if (!sigueListo) {
+      setPopupListo(null);
     }
-  }, [enCurso, popupPagada]);
+  }, [enCurso, turnosEspera, popupListo]);
 
   return (
     <Ctx.Provider value={{
       pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy,
       setDisponible: handleSetDisponible, bloquearPollDisponible,
       enVideollamada, silenciado, setSilenciado,
-      // Prioridad: el modal de pagada suprime el toast de esperando.
+      // Prioridad: el modal "paciente listo" suprime el toast de esperando.
       // Ambos se anulan durante una videollamada activa.
-      popupData: enVideollamada || popupPagada ? null : popupData,
+      popupData: enVideollamada || popupListo ? null : popupData,
       dismissPopup,
-      popupPagada: enVideollamada ? null : popupPagada,
-      dismissPopupPagada, flashConsultaId, totalEsperando, badgeFlash,
+      popupListo: enVideollamada ? null : popupListo,
+      dismissPopupListo, flashConsultaId, totalEsperando, badgeFlash,
     }}>
       {children}
     </Ctx.Provider>
