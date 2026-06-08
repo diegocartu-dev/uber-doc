@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { actualizarDisponibilidad, actualizarOcultoClinica, actualizarVisibleConsultorio } from "./actions";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
+import { unlockAudio } from "@/lib/sounds";
 import InputMoneda from "@/components/ui/InputMoneda";
 
 type Props = {
@@ -76,6 +77,9 @@ export default function DisponibilidadMedico({
     if (guardandoToggleRef.current) return;
     if (!perfilCompleto && !activo) return; // Can't enable without complete profile
     const nuevoEstado = !activo;
+    // Activar disponibilidad es un gesto del usuario: aprovechamos para desbloquear
+    // el audio en mobile (iOS exige reproducir un nodo dentro del gesto).
+    if (nuevoEstado) unlockAudio();
     setDisponibleCtx(nuevoEstado);
     setGuardando(true);
     guardandoToggleRef.current = true;

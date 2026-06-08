@@ -41,7 +41,7 @@ function tiempoTranscurrido(fecha: string): string {
 }
 
 export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
-  const { enCurso: consultas } = useDashboardMedico();
+  const { enCurso: consultas, flashConsultaId } = useDashboardMedico();
   const router = useRouter();
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,11 +84,19 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
         const puedeVideo = c.estado === "pagada" || c.estado === "en_curso";
         const esperandoPago = c.estado === "aceptada";
 
+        const flash = flashConsultaId === c.id;
+
         return (
           <div
             key={c.id}
             className="rounded-xl border-l-4 border-[#378ADD] bg-white p-6"
-            style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}
+            style={{
+              borderTop: "0.5px solid #e5e7eb",
+              borderRight: "0.5px solid #e5e7eb",
+              borderBottom: "0.5px solid #e5e7eb",
+              boxShadow: flash ? "0 0 0 3px #378ADD" : "none",
+              transition: "box-shadow 0.3s ease",
+            }}
           >
             {/* Header */}
             <div className="flex items-center justify-between">

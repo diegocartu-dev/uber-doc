@@ -13,7 +13,7 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
-import { BadgeEsperando, BotonSilenciar, PopupEsperando } from "./NotificacionMedicoUI";
+import { BadgeEsperando, BotonSilenciar, PopupEsperando, PopupPagada } from "./NotificacionMedicoUI";
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
@@ -508,6 +508,7 @@ export default async function DashboardPage({
       >
         <div className="min-h-full bg-[#f8f9fa]">
           <PopupEsperando />
+          <PopupPagada />
           {aviso === "sin-cuil" && (
             <div className="bg-[#BA7517]/10 px-4 py-3 text-center text-sm text-[#BA7517]" style={{ borderBottom: "1px solid #BA7517" }}>
               El paciente no complet&oacute; su CUIL &mdash; la receta no fue incluida en los documentos.

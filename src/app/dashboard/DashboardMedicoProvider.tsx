@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { soundPacienteEsperando } from "@/lib/sounds";
+import { soundPacienteEsperando, soundVideoLista, unlockAudio } from "@/lib/sounds";
 
 const POLL_INTERVAL = 5000;
 const SILENCIADO_KEY = "docto_notif_silenciado";
@@ -51,6 +51,11 @@ type PopupData = {
   tipo: "consulta" | "turno";
 } | null;
 
+type PopupPagada = {
+  consultaId: string;
+  pacienteNombre: string;
+} | null;
+
 type DashboardCtx = {
   pendientes: ConsultaPendiente[];
   enCurso: ConsultaEnCurso[];
@@ -64,6 +69,9 @@ type DashboardCtx = {
   setSilenciado: (v: boolean) => void;
   popupData: PopupData;
   dismissPopup: () => void;
+  popupPagada: PopupPagada;
+  dismissPopupPagada: () => void;
+  flashConsultaId: string | null;
   totalEsperando: number;
   badgeFlash: boolean;
 };
@@ -82,6 +90,9 @@ const Ctx = createContext<DashboardCtx>({
   setSilenciado: () => {},
   popupData: null,
   dismissPopup: () => {},
+  popupPagada: null,
+  dismissPopupPagada: () => {},
+  flashConsultaId: null,
   totalEsperando: 0,
   badgeFlash: false,
 });
@@ -141,6 +152,8 @@ export default function DashboardMedicoProvider({
   const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
   const bloquearPollDisponible = useRef(false);
   const [popupData, setPopupData] = useState<PopupData>(null);
+  const [popupPagada, setPopupPagada] = useState<PopupPagada>(null);
+  const [flashConsultaId, setFlashConsultaId] = useState<string | null>(null);
   const [silenciado, setSilenciadoState] = useState(false);
   const silenciadoRef = useRef(false);
   const [badgeFlash, setBadgeFlash] = useState(false);
@@ -148,6 +161,11 @@ export default function DashboardMedicoProvider({
   const prevPendientesCount = useRef(initialPendientes.length);
   const prevTurnosCount = useRef(initialTurnosEspera.length);
   const prevEnVideollamada = useRef(initialEnCurso.some((c) => c.estado === "en_curso"));
+  // IDs de consultas ya en estado "pagada". Inicializa con las que vienen del SSR
+  // para no disparar un popup falso al recargar con una consulta ya pagada.
+  const prevPagadasIds = useRef<Set<string>>(
+    new Set(initialEnCurso.filter((c) => c.estado === "pagada").map((c) => c.id))
+  );
 
   const enVideollamada = enCurso.some((c) => c.estado === "en_curso");
   const totalEsperando = pendientes.length + turnosEspera.length;
@@ -174,6 +192,25 @@ export default function DashboardMedicoProvider({
     setPopupData(null);
     setBadgeFlash(true);
     setTimeout(() => setBadgeFlash(false), 600);
+  }, []);
+
+  const dismissPopupPagada = useCallback(() => {
+    setPopupPagada((prev) => {
+      // Al descartar "Ahora no", flashea la card del paciente en ConsultasEnCurso.
+      if (prev) {
+        setFlashConsultaId(prev.consultaId);
+        setTimeout(() => setFlashConsultaId(null), 600);
+      }
+      return null;
+    });
+  }, []);
+
+  // Respaldo de desbloqueo de audio: si el médico recarga con "Disponible" ya
+  // activo, no pasa por el toggle. El primer pointerdown desbloquea el audio.
+  useEffect(() => {
+    const handler = () => unlockAudio();
+    window.addEventListener("pointerdown", handler, { once: true, capture: true });
+    return () => window.removeEventListener("pointerdown", handler, { capture: true });
   }, []);
 
   // Post-videollamada: trigger inmediato al montar si viene de finalizar consulta
@@ -216,20 +253,40 @@ export default function DashboardMedicoProvider({
         })
       );
 
-      const hayVideoActiva = (data.consultas_en_curso ?? []).some(
-        (c: ConsultaEnCurso) => c.estado === "en_curso"
-      );
+      const enCursoData: ConsultaEnCurso[] = data.consultas_en_curso ?? [];
+      const hayVideoActiva = enCursoData.some((c) => c.estado === "en_curso");
 
-      // Transición: videollamada terminó → notificar si hay pacientes esperando
+      // ── Detección aceptada→pagada (diff por Set de IDs, no por contador:
+      // necesitamos saber CUÁL pagó). ──
+      const pagadasAhora = enCursoData.filter((c) => c.estado === "pagada");
+      const pagadaNueva = pagadasAhora.find((c) => !prevPagadasIds.current.has(c.id));
+      // Actualizar el set con el estado actual (entran nuevas, salen las que
+      // pasaron a en_curso/completada).
+      prevPagadasIds.current = new Set(pagadasAhora.map((c) => c.id));
+
+      // Transición: videollamada terminó. Prioridad: si quedó una pagada sin
+      // mostrar, abrir el modal de pagada por sobre el toast de esperando.
       if (prevEnVideollamada.current && !hayVideoActiva) {
-        const pends = data.consultas_pendientes ?? [];
-        const turnos = data.turnos_espera ?? [];
-        if (pends.length > 0 || turnos.length > 0) {
-          setPopupData(getFirstWaiting(pends, turnos));
-          soundPacienteEsperando();
+        if (pagadasAhora.length > 0) {
+          const p = pagadasAhora[0];
+          setPopupPagada({ consultaId: p.id, pacienteNombre: p.paciente_nombre });
+          if (!silenciadoRef.current) soundVideoLista();
+        } else {
+          const pends = data.consultas_pendientes ?? [];
+          const turnos = data.turnos_espera ?? [];
+          if (pends.length > 0 || turnos.length > 0) {
+            setPopupData(getFirstWaiting(pends, turnos));
+            soundPacienteEsperando();
+          }
         }
       }
       prevEnVideollamada.current = hayVideoActiva;
+
+      // Pagada nueva detectada fuera de videollamada → modal + sonido.
+      if (!hayVideoActiva && pagadaNueva) {
+        setPopupPagada({ consultaId: pagadaNueva.id, pacienteNombre: pagadaNueva.paciente_nombre });
+        if (!silenciadoRef.current) soundVideoLista();
+      }
 
       // Sound + popup si hay NUEVOS pacientes esperando y NO está en videollamada
       if (!hayVideoActiva) {
@@ -310,13 +367,25 @@ export default function DashboardMedicoProvider({
     }
   }, [totalEsperando]);
 
+  // Cierra el modal de pagada si la consulta dejó de estar en estado "pagada"
+  // (el médico la inició → en_curso, o se canceló). Evita modal colgado.
+  useEffect(() => {
+    if (popupPagada && !enCurso.some((c) => c.id === popupPagada.consultaId && c.estado === "pagada")) {
+      setPopupPagada(null);
+    }
+  }, [enCurso, popupPagada]);
+
   return (
     <Ctx.Provider value={{
       pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy,
       setDisponible: handleSetDisponible, bloquearPollDisponible,
       enVideollamada, silenciado, setSilenciado,
-      popupData: enVideollamada ? null : popupData,
-      dismissPopup, totalEsperando, badgeFlash,
+      // Prioridad: el modal de pagada suprime el toast de esperando.
+      // Ambos se anulan durante una videollamada activa.
+      popupData: enVideollamada || popupPagada ? null : popupData,
+      dismissPopup,
+      popupPagada: enVideollamada ? null : popupPagada,
+      dismissPopupPagada, flashConsultaId, totalEsperando, badgeFlash,
     }}>
       {children}
     </Ctx.Provider>
