@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, User, FileText, LogOut, Loader2, Shield, Users } from "lucide-react";
+import { X, User, FileText, LogOut, Loader2, Shield, Users, HelpCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -186,6 +186,16 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
               onClick={() => handleNavigate("/medico/historial")}
             />
           )}
+
+          <a
+            href="mailto:soporte@docto.com.ar?subject=Ayuda Docto"
+            onClick={onClose}
+            className="flex w-full items-center gap-3 px-5 transition-colors hover:bg-gray-50"
+            style={{ minHeight: 48, color: "var(--color-text-primary)" }}
+          >
+            <HelpCircle size={20} strokeWidth={1.75} />
+            <span className="text-sm font-medium">Ayuda</span>
+          </a>
         </div>
 
         {/* Admin link */}
