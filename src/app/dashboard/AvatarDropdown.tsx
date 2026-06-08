@@ -81,6 +81,16 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
 
               <div className="border-t border-gray-100" />
 
+              <a
+                href="mailto:soporte@docto.com.ar?subject=Ayuda Docto"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center px-4 py-3.5 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
+              >
+                Ayuda
+              </a>
+
+              <div className="border-t border-gray-100" />
+
               <button
                 onClick={() => { setOpen(false); handleLogout(); }}
                 className="flex w-full items-center px-4 py-3.5 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
