@@ -367,7 +367,7 @@ export default function RegistroMedicoPage() {
             )}
 
             <div>
-              <label htmlFor="foto_credencial" className={labelClass}>Foto de credencial de matrícula</label>
+              <label htmlFor="foto_credencial" className={labelClass}>Foto de credencial de matrícula <span className="font-normal text-gray-400">(opcional)</span></label>
               <div className="mt-1">
                 <label
                   htmlFor="foto_credencial"
@@ -402,7 +402,7 @@ export default function RegistroMedicoPage() {
                     setFotoCredencial(file);
                   }}
                 />
-                <p className="mt-1 text-xs text-gray-400">JPG, PNG o PDF. Máximo 5 MB.</p>
+                <p className="mt-1 text-xs text-gray-400">Podés subirla después desde tu perfil. JPG, PNG o PDF. Máximo 5 MB.</p>
               </div>
             </div>
           </div>
