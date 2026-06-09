@@ -36,6 +36,49 @@ function dniEnCUIT(dni: string, cuitLimpio: string): boolean {
   return cuitLimpio.substring(2, 10) === dni.padStart(8, "0");
 }
 
+/**
+ * Guarda todos los datos del formulario en registros_borrador ANTES de
+ * intentar crear la cuenta. Si algo falla después, los datos quedan
+ * guardados y se pueden completar desde el admin.
+ */
+async function guardarBorrador(
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  datos: Record<string, unknown>,
+  ip: string,
+  userAgent: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("registros_borrador")
+    .insert({
+      email: datos.email as string,
+      nombre_completo: datos.nombre_completo as string,
+      datos,
+      estado: "pendiente",
+      ip_address: ip,
+      user_agent: userAgent,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[registro] Error guardando borrador:", error);
+    return null;
+  }
+  return data.id;
+}
+
+async function actualizarBorrador(
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  borradorId: string,
+  estado: "completado" | "error",
+  extra?: { error_mensaje?: string; foto_credencial_url?: string },
+) {
+  await supabaseAdmin
+    .from("registros_borrador")
+    .update({ estado, ...extra })
+    .eq("id", borradorId);
+}
+
 export async function registrarMedico(formData: FormData) {
   // Feature flag: registro de médicos
   const { getFlag } = await import("@/lib/feature-flags");
@@ -46,11 +89,13 @@ export async function registrarMedico(formData: FormData) {
 
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const userAgent = hdrs.get("user-agent") ?? "unknown";
   if (!checkRateLimit(ip)) {
     return { error: "Demasiados intentos de registro. Intentá de nuevo en una hora." };
   }
 
   const supabase = await createClient();
+  const supabaseAdmin = createAdminClient();
 
   const email = formData.get("email") as string;
 
@@ -119,7 +164,32 @@ export async function registrarMedico(formData: FormData) {
     return { error: "El DNI no coincide con los dígitos centrales del CUIT." };
   }
 
-  const supabaseAdmin = createAdminClient();
+  // ═══ BORRADOR: guardar TODO antes de intentar crear la cuenta ═══
+  // Si algo falla después, los datos quedan en registros_borrador
+  // y se pueden completar desde el panel admin.
+  const datosBorrador = {
+    email,
+    titulo,
+    nombre_completo,
+    especialidad,
+    tipo_matricula,
+    numero_matricula,
+    provincia,
+    precio_consulta,
+    duracion_consulta,
+    modalidad_atencion,
+    cuit: cuitLimpio,
+    domicilio,
+    dni,
+    matricula_provincial,
+    provincia_matricula,
+    terminos_aceptados: terminosAceptados,
+    declaracion_matricula: declaracionMatricula,
+  };
+
+  const borradorId = await guardarBorrador(supabaseAdmin, datosBorrador, ip, userAgent);
+
+  // ═══ Verificar duplicados ═══
   let duplicateQuery = supabaseAdmin
     .from("medicos")
     .select("id")
@@ -135,9 +205,26 @@ export async function registrarMedico(formData: FormData) {
   const { data: existente } = await duplicateQuery.maybeSingle();
 
   if (existente) {
+    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: "Matrícula duplicada" });
     return { error: "Esta matrícula ya está registrada en Docto." };
   }
 
+  // ═══ Subir foto ANTES del signUp (así queda guardada pase lo que pase) ═══
+  let foto_credencial_url: string | null = null;
+  const fotoFile = formData.get("foto_credencial") as File | null;
+  if (fotoFile && fotoFile.size > 0) {
+    const ext = fotoFile.name.split(".").pop() || "jpg";
+    const path = `borrador-${borradorId || "unknown"}/credencial-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("credenciales-medicos")
+      .upload(path, fotoFile, { contentType: fotoFile.type });
+    if (!uploadError) {
+      foto_credencial_url = path;
+      if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "pendiente", { foto_credencial_url: path });
+    }
+  }
+
+  // ═══ Crear cuenta en Supabase Auth ═══
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
@@ -147,30 +234,30 @@ export async function registrarMedico(formData: FormData) {
   });
 
   if (authError) {
+    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: `Auth: ${authError.message}` });
     return { error: authError.message };
   }
 
   if (!authData.user) {
+    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: "Auth: no user returned" });
     return { error: "No se pudo crear el usuario." };
   }
 
-  // Upload foto credencial si existe
-  let foto_credencial_url: string | null = null;
-  const fotoFile = formData.get("foto_credencial") as File | null;
-  if (fotoFile && fotoFile.size > 0) {
-    const ext = fotoFile.name.split(".").pop() || "jpg";
-    const path = `${authData.user.id}/credencial-${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabaseAdmin.storage
+  // Si la foto se subió con path temporal, moverla al path definitivo con user_id
+  if (foto_credencial_url && foto_credencial_url.startsWith("borrador-")) {
+    const ext = foto_credencial_url.split(".").pop() || "jpg";
+    const newPath = `${authData.user.id}/credencial-${Date.now()}.${ext}`;
+    const { error: moveError } = await supabaseAdmin.storage
       .from("credenciales-medicos")
-      .upload(path, fotoFile, { contentType: fotoFile.type });
-    if (!uploadError) {
-      foto_credencial_url = path;
+      .move(foto_credencial_url, newPath);
+    if (!moveError) {
+      foto_credencial_url = newPath;
     }
   }
 
   const slug = nombre_completo
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
     .trim()
@@ -193,7 +280,7 @@ export async function registrarMedico(formData: FormData) {
       precio_consulta,
       duracion_consulta,
       modalidad_atencion,
-      cuit,
+      cuit: cuitLimpio,
       domicilio,
       dni,
       matricula_provincial,
@@ -212,8 +299,12 @@ export async function registrarMedico(formData: FormData) {
   }
 
   if (dbError) {
+    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: `DB: ${dbError.message}` });
     return { error: `Error al crear el perfil: ${dbError.message}` };
   }
+
+  // ═══ Registro exitoso — marcar borrador como completado ═══
+  if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "completado");
 
   redirect("/dashboard");
 }
