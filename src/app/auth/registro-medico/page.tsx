@@ -178,11 +178,16 @@ export default function RegistroMedicoPage() {
     setLoading(true);
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
-    const result = await registrarMedico(formData);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result = await registrarMedico(formData);
 
-    if (result?.error) {
-      setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        setLoading(false);
+      }
+    } catch {
+      setError("Error al enviar el registro. Recargá la página e intentá de nuevo.");
       setLoading(false);
     }
   }
