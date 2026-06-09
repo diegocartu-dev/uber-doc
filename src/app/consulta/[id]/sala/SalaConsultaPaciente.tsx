@@ -173,6 +173,8 @@ function useMicCam() {
   const { localParticipant } = useLocalParticipant();
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const [camError, setCamError] = useState<string | null>(null);
 
   // Feedback optimista: el botón cambia AL INSTANTE (antes del await). En mobile
   // la primera activación de cámara/mic espera permiso + dispositivo (lento) → sin
@@ -180,28 +182,63 @@ function useMicCam() {
   const toggleMic = useCallback(async () => {
     const next = !micOn;
     setMicOn(next);
+    setMicError(null);
     try {
       await localParticipant.setMicrophoneEnabled(next);
-    } catch {
+    } catch (err) {
       setMicOn(!next);
+      if (next) {
+        // Solo mostrar error al intentar ACTIVAR
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
+          setMicError("Permití el acceso al micrófono en tu navegador. Tocá el ícono de candado en la barra de direcciones.");
+        } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
+          setMicError("No se encontró un micrófono en tu dispositivo.");
+        } else {
+          setMicError("No se pudo activar el micrófono. Intentá de nuevo.");
+        }
+        // Auto-limpiar el error después de 8 segundos
+        setTimeout(() => setMicError(null), 8000);
+      }
     }
   }, [micOn, localParticipant]);
 
   const toggleCam = useCallback(async () => {
     const next = !camOn;
     setCamOn(next);
+    setCamError(null);
     try {
       await localParticipant.setCameraEnabled(next);
-    } catch {
+    } catch (err) {
       setCamOn(!next);
+      if (next) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
+          setCamError("Permití el acceso a la cámara en tu navegador. Tocá el ícono de candado en la barra de direcciones.");
+        } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
+          setCamError("No se encontró una cámara en tu dispositivo.");
+        } else {
+          setCamError("No se pudo activar la cámara. Intentá de nuevo.");
+        }
+        setTimeout(() => setCamError(null), 8000);
+      }
     }
   }, [camOn, localParticipant]);
 
-  return { micOn, camOn, toggleMic, toggleCam };
+  return { micOn, camOn, toggleMic, toggleCam, micError, camError };
 }
 
+type MicCamControls = {
+  micOn: boolean;
+  camOn: boolean;
+  toggleMic: () => void;
+  toggleCam: () => void;
+  micError: string | null;
+  camError: string | null;
+};
+
 // Render prop wrapper para mic/cam
-function MicCamProvider({ children }: { children: (controls: { micOn: boolean; camOn: boolean; toggleMic: () => void; toggleCam: () => void }) => React.ReactNode }) {
+function MicCamProvider({ children }: { children: (controls: MicCamControls) => React.ReactNode }) {
   const controls = useMicCam();
   return <>{children(controls)}</>;
 }
@@ -758,7 +795,26 @@ export default function SalaConsultaPaciente({
 
             {/* Footer: mic + cam + info + salir */}
             <MicCamProvider>
-              {({ micOn, camOn, toggleMic, toggleCam }) => (
+              {({ micOn, camOn, toggleMic, toggleCam, micError, camError }) => (
+                <>
+                {/* Banner de error mic/cam — sobre el footer */}
+                {(micError || camError) && (
+                  <div
+                    className="flex items-center gap-2 px-4 py-2.5"
+                    style={{ backgroundColor: "rgba(226,75,74,0.15)", borderTop: "1px solid rgba(226,75,74,0.3)" }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+                    </svg>
+                    <p className="text-xs text-white/90">{micError || camError}</p>
+                  </div>
+                )}
+                {/* Hint: tocá el mic para hablar — solo la primera vez que el mic está apagado */}
+                {!micOn && !micError && (
+                  <div className="flex items-center justify-center px-4 py-1.5" style={{ backgroundColor: "rgba(55,138,221,0.15)" }}>
+                    <p className="text-xs text-[#378ADD]">Tocá el botón del micrófono para que te escuchen</p>
+                  </div>
+                )}
                 <div
                   className="flex items-center justify-between px-4 py-3"
                   style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
@@ -767,7 +823,7 @@ export default function SalaConsultaPaciente({
                     <button
                       type="button"
                       onClick={toggleMic}
-                      className={`rounded-full p-3 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white"}`}
+                      className={`rounded-full p-3 transition ${micOn ? "bg-white/10 text-white hover:bg-white/20" : "bg-red-600 text-white animate-pulse"}`}
                       style={{ minHeight: "44px", minWidth: "44px" }}
                     >
                       <MicIcon on={micOn} />
@@ -807,6 +863,7 @@ export default function SalaConsultaPaciente({
                     </button>
                   </div>
                 </div>
+                </>
               )}
             </MicCamProvider>
           </LiveKitRoom>
