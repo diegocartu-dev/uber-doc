@@ -184,7 +184,7 @@ function useMicCam() {
     setMicOn(realMicOn);
     if (!realMicOn && !mic) {
       // No hay track de mic → el permiso probablemente fue denegado al conectar
-      setMicError("No se pudo acceder al micrófono. Revisá los permisos de la app.");
+      setMicError("No se pudo acceder al micrófono. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el micrófono.");
       setTimeout(() => setMicError(null), 8000);
     }
   }, [localParticipant.getTrackPublication(Track.Source.Microphone)?.isMuted]);
@@ -204,11 +204,11 @@ function useMicCam() {
         // Solo mostrar error al intentar ACTIVAR
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
-          setMicError("Permití el acceso al micrófono en tu navegador. Tocá el ícono de candado en la barra de direcciones.");
+          setMicError("El micrófono está bloqueado. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el micrófono desde ahí.");
         } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
           setMicError("No se encontró un micrófono en tu dispositivo.");
         } else {
-          setMicError("No se pudo activar el micrófono. Intentá de nuevo.");
+          setMicError("No se pudo activar el micrófono. Cerrá y volvé a abrir la app.");
         }
         // Auto-limpiar el error después de 8 segundos
         setTimeout(() => setMicError(null), 8000);
@@ -227,7 +227,7 @@ function useMicCam() {
       if (next) {
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
-          setCamError("Permití el acceso a la cámara en tu navegador. Tocá el ícono de candado en la barra de direcciones.");
+          setCamError("La cámara está bloqueada. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá la cámara desde ahí.");
         } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
           setCamError("No se encontró una cámara en tu dispositivo.");
         } else {
