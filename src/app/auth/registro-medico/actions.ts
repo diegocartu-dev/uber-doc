@@ -70,7 +70,7 @@ async function guardarBorrador(
 async function actualizarBorrador(
   supabaseAdmin: ReturnType<typeof createAdminClient>,
   borradorId: string,
-  estado: "completado" | "error",
+  estado: "pendiente" | "completado" | "error",
   extra?: { error_mensaje?: string; foto_credencial_url?: string },
 ) {
   await supabaseAdmin
