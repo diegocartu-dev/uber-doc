@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 export default function BetaAccessForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -27,8 +26,8 @@ export default function BetaAccessForm() {
         const fromRaw = searchParams.get("from") || "/";
         // Solo aceptar paths internos para evitar open redirect
         const from = fromRaw.startsWith("/") && !fromRaw.startsWith("//") ? fromRaw : "/";
-        router.push(from);
-        router.refresh();
+        // Hard navigation — router.push() fallaba silenciosamente en mobile Safari
+        window.location.href = from;
       } else {
         setError("Contraseña incorrecta");
         setLoading(false);
