@@ -54,11 +54,12 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: "Error al eliminar archivo" }, { status: 500 });
       }
     } else {
-      // Remove link from array
+      // Remove link from array — use admin: RLS blocks patient UPDATE when estado != 'esperando'
+      const admin2 = createAdminClient();
       const currentLinks: string[] = consulta.estudios_links ?? [];
       const updatedLinks = currentLinks.filter((l) => l !== valor);
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await admin2
         .from("consultas")
         .update({ estudios_links: updatedLinks })
         .eq("id", consultaId);

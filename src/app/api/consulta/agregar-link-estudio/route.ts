@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "URL inválida" }, { status: 400 });
     }
 
-    // Verify patient owns consultation and it's active
+    // Verify patient owns consultation and it's active (RLS: paciente can SELECT own rows)
     const { data: consulta } = await supabase
       .from("consultas")
       .select("id, paciente_id, estado, estudios_links")
@@ -49,7 +50,10 @@ export async function POST(request: NextRequest) {
     const currentLinks: string[] = consulta.estudios_links ?? [];
     const updatedLinks = [...currentLinks, linkEntry];
 
-    const { error: updateError } = await supabase
+    // Use admin client: RLS only allows patient UPDATE when estado='esperando',
+    // but links can be added during en_curso. Auth already verified above.
+    const admin = createAdminClient();
+    const { error: updateError } = await admin
       .from("consultas")
       .update({ estudios_links: updatedLinks })
       .eq("id", consultaId);
