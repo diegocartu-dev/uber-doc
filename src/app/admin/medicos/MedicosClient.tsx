@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, XCircle, ExternalLink, FileText, Copy, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert } from "lucide-react";
+import { CheckCircle, XCircle, ExternalLink, FileText, Copy, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
@@ -108,6 +108,29 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
     setTimeout(() => setCopiado(null), 2000);
   }
 
+  async function handleImpersonate(userId: string, nombre: string) {
+    setProcesando(userId);
+    setMensaje(null);
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (data.ok && data.link) {
+        // Abrir en nueva pestaña para no perder sesión admin
+        window.open(data.link, "_blank");
+        setMensaje({ texto: `Sesión abierta como ${nombre}`, tipo: "ok" });
+      } else {
+        setMensaje({ texto: data.error || "No se pudo generar el acceso", tipo: "error" });
+      }
+    } catch {
+      setMensaje({ texto: "Error de conexión", tipo: "error" });
+    }
+    setProcesando(null);
+  }
+
   return (
     <div className="p-6 lg:p-8">
       <h1 className="text-xl font-semibold text-gray-900">Médicos</h1>
@@ -206,6 +229,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
                 onCopiar={() => copiarMatricula(m.tipo_matricula, m.numero_matricula, m.id)}
+                onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
               />
             ))
           : filtered.map((m) => (
@@ -218,6 +242,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
                 onVerPerfil={() => setPanelMedico(m)}
+                onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
               />
             ))
         }
@@ -229,7 +254,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
         onClose={() => setPanelMedico(null)}
         title={panelMedico?.nombre_completo ?? ""}
       >
-        {panelMedico && <MedicoDetalle medico={panelMedico} />}
+        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} />}
       </SidePanel>
     </div>
   );
@@ -245,6 +270,7 @@ function PendienteCard({
   onStartConfirm,
   onCancelConfirm,
   onCopiar,
+  onImpersonate,
 }: {
   medico: Medico;
   procesando: boolean;
@@ -255,6 +281,7 @@ function PendienteCard({
   onStartConfirm: (accion: string) => void;
   onCancelConfirm: () => void;
   onCopiar: () => void;
+  onImpersonate: () => void;
 }) {
   return (
     <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
@@ -297,6 +324,13 @@ function PendienteCard({
             <FileText size={14} /> Ver credencial
           </button>
         )}
+        <button
+          onClick={onImpersonate}
+          disabled={procesando}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
+        >
+          <LogIn size={14} /> Ingresar como médico
+        </button>
       </div>
 
       {confirmando === "aprobar" ? (
@@ -353,6 +387,7 @@ function MedicoRow({
   onStartConfirm,
   onCancelConfirm,
   onVerPerfil,
+  onImpersonate,
 }: {
   medico: Medico;
   procesando: boolean;
@@ -361,6 +396,7 @@ function MedicoRow({
   onStartConfirm: (accion: string) => void;
   onCancelConfirm: () => void;
   onVerPerfil: () => void;
+  onImpersonate: () => void;
 }) {
   return (
     <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
@@ -389,6 +425,13 @@ function MedicoRow({
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
           >
             <Eye size={14} /> Ver perfil
+          </button>
+          <button
+            onClick={onImpersonate}
+            disabled={procesando}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
+          >
+            <LogIn size={14} /> Ingresar como médico
           </button>
           {m.estado_registro === "aprobado" && (
             <button
@@ -450,7 +493,7 @@ function MedicoRow({
   );
 }
 
-function MedicoDetalle({ medico: m }: { medico: Medico }) {
+function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImpersonate: () => void }) {
   const [validando, setValidando] = useState(false);
   const [refepsResult, setRefepsResult] = useState<Record<string, unknown> | null>(m.refeps_data);
   const [refepsValidado, setRefepsValidado] = useState(m.refeps_validado);
@@ -595,6 +638,18 @@ function MedicoDetalle({ medico: m }: { medico: Medico }) {
           <FileText size={16} /> Ver credencial
         </button>
       )}
+
+      <div className="border-t border-gray-100 pt-4">
+        <button
+          onClick={onImpersonate}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
+        >
+          <LogIn size={16} /> Ingresar como este médico
+        </button>
+        <p className="mt-2 text-center text-xs text-gray-400">
+          Se abre en nueva pestaña. Tu sesión admin se mantiene.
+        </p>
+      </div>
     </div>
   );
 }
