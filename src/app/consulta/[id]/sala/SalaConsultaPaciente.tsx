@@ -171,10 +171,23 @@ function DictadoBanner({ medicoNombre }: { medicoNombre: string }) {
 // Hook para controles mic/cam — debe usarse dentro de LiveKitRoom
 function useMicCam() {
   const { localParticipant } = useLocalParticipant();
-  const [micOn, setMicOn] = useState(false);
+  const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [camError, setCamError] = useState<string | null>(null);
+
+  // Sincronizar estado real del mic: si el permiso fue denegado al conectar,
+  // LiveKit no publica el track y nuestro state queda desincronizado.
+  useEffect(() => {
+    const mic = localParticipant.getTrackPublication(Track.Source.Microphone);
+    const realMicOn = !!mic && !mic.isMuted;
+    setMicOn(realMicOn);
+    if (!realMicOn && !mic) {
+      // No hay track de mic → el permiso probablemente fue denegado al conectar
+      setMicError("No se pudo acceder al micrófono. Revisá los permisos de la app.");
+      setTimeout(() => setMicError(null), 8000);
+    }
+  }, [localParticipant.getTrackPublication(Track.Source.Microphone)?.isMuted]);
 
   // Feedback optimista: el botón cambia AL INSTANTE (antes del await). En mobile
   // la primera activación de cámara/mic espera permiso + dispositivo (lento) → sin
@@ -780,7 +793,7 @@ export default function SalaConsultaPaciente({
             serverUrl={livekitUrl}
             token={livekitToken}
             connect={true}
-            audio={false}
+            audio={true}
             video={false}
             onDisconnected={handleDisconnected}
             style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
