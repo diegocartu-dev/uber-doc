@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
+import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { Video, CheckCircle } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { formatNombreMedico } from "@/lib/utils/texto";
@@ -46,6 +46,21 @@ export default function SalaEsperaCliente({
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
+
+  // Desbloquear audio al primer gesto del usuario (iOS/Android requieren
+  // interacción antes de reproducir sonido). Sin esto, soundConsultaAceptada
+  // y soundVideoLista no suenan en mobile.
+  useEffect(() => {
+    const handler = () => unlockAudio();
+    document.addEventListener("pointerdown", handler, { once: true });
+    document.addEventListener("touchstart", handler, { once: true });
+    // Intento inmediato por si ya hubo interacción previa en la página
+    unlockAudio();
+    return () => {
+      document.removeEventListener("pointerdown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, []);
 
   // Polling: 5s interval contra /api/consulta-estado
   const poll = useCallback(async () => {

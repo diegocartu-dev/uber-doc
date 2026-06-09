@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { soundConsultaAceptada, soundVideoLista } from "@/lib/sounds";
+import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { CheckCircle, XCircle, Video } from "lucide-react";
 import { formatNombreMedico } from "@/lib/utils/texto";
 
@@ -25,6 +25,18 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
     setEstado("redirigiendo");
     window.location.href = `/turno/${turnoId}/sala`;
   }
+
+  // Desbloquear audio al primer gesto del usuario (iOS/Android)
+  useEffect(() => {
+    const handler = () => unlockAudio();
+    document.addEventListener("pointerdown", handler, { once: true });
+    document.addEventListener("touchstart", handler, { once: true });
+    unlockAudio();
+    return () => {
+      document.removeEventListener("pointerdown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, []);
 
   // Polling cada 3s via API route
   useEffect(() => {
