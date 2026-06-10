@@ -145,7 +145,7 @@ Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env va
 ## Estado actual (07 Junio 2026)
 - MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
 - Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
-- REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion), validacion manual durante F&F.
+- REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion). **Gate duro (10/06/2026): un médico real NO puede quedar `aprobado` sin `refeps_validado=true`, jamás.** Las acciones `aprobar`/`reactivar` en `/api/admin/medicos` validan contra REFEPS en el momento (`asegurarRefepsParaAprobar`) y bloquean si la matrícula no figura encontrada+activa. Backstop a nivel DB: constraint `medicos_aprobado_requiere_refeps` (cuentas `es_cuenta_test` exentas). El botón "Validar REFEPS" del panel admin sigue para re-validar.
 - Vademecum CNPM: 16.878 medicamentos oficiales con lazy-load y deteccion dual de controlados.
 - Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
 - Beta cerrada: registro gateado por `BETA_PASSWORD=DoctoTest2026!` (no whitelist de emails). Ver `docs/REGISTRO_BETA_GATE.md`.
