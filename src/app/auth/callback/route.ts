@@ -44,7 +44,8 @@ export async function GET(request: Request) {
   }
 
   // Crear registro paciente si no existe (bypass RLS con admin client)
-  // Solo para usuarios que NO son médicos
+  // Solo para usuarios que NO son médicos.
+  // Si es médico → forzar redirect a /dashboard (evita que caiga en / → onboarding).
   if (data.user) {
     const admin = createAdminClient();
     const { data: esMedico } = await admin
@@ -53,21 +54,30 @@ export async function GET(request: Request) {
       .eq("user_id", data.user.id)
       .maybeSingle();
 
-    if (!esMedico) {
-      const { data: existente } = await admin
-        .from("pacientes")
-        .select("id")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
+    if (esMedico) {
+      // Médico: redirect directo a dashboard (ignora next param que puede perderse)
+      const medicoResponse = NextResponse.redirect(`${origin}/dashboard`);
+      // Copiar cookies de sesión al nuevo response
+      response.cookies.getAll().forEach((cookie) => {
+        medicoResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+      return medicoResponse;
+    }
 
-      if (!existente) {
-        const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
-        await admin.from("pacientes").insert({
-          user_id: data.user.id,
-          nombre_completo: fullName,
-          email: data.user.email ?? null,
-        });
-      }
+    // No es médico → crear paciente si no existe
+    const { data: existente } = await admin
+      .from("pacientes")
+      .select("id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    if (!existente) {
+      const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
+      await admin.from("pacientes").insert({
+        user_id: data.user.id,
+        nombre_completo: fullName,
+        email: data.user.email ?? null,
+      });
     }
   }
 
