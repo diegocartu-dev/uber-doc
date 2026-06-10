@@ -4,48 +4,36 @@ import { useState } from "react";
 
 type Documento = {
   id: string;
-  tipo: string;
 };
 
 export default function DescargarPDF({ documento }: { documento: Documento }) {
-  const [loading, setLoading] = useState(false);
+  const [abriendo, setAbriendo] = useState(false);
 
-  async function descargar() {
-    if (loading) return;
-    setLoading(true);
-
-    try {
-      const res = await fetch(`/api/documentos/${documento.id}/pdf`);
-
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}`);
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-
-      // Abrir en nueva pestaña para que el usuario vea el PDF
-      // y pueda imprimir/guardar desde el visor del browser
-      window.open(url, "_blank");
-
-      // Limpiar después de un delay
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch (err) {
-      console.error("Error descargando PDF:", err);
-      // Fallback: abrir directo en nueva pestaña
-      window.open(`/api/documentos/${documento.id}/pdf`, "_blank");
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  // Enlace nativo en vez de fetch + blob + window.open.
+  //
+  // El patrón anterior (fetch → blob → window.open) se rompía en Safari iOS:
+  // `window.open()` llamado DESPUÉS de un `await` ya no está dentro del gesto
+  // del usuario, así que iOS lo bloquea como popup y no abre nada. El paciente
+  // tocaba "Descargar PDF" y no pasaba nada.
+  //
+  // Un <a> con href directo es una navegación sincrónica (sí cuenta como gesto
+  // del usuario), por lo que iOS la permite. El endpoint ya devuelve el PDF con
+  // `Content-Disposition: inline` + `application/pdf`, así que el navegador lo
+  // abre en su visor nativo, desde donde el usuario puede guardar o compartir.
   return (
-    <button
-      onClick={descargar}
-      disabled={loading}
-      className="shrink-0 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-200 disabled:opacity-50"
+    <a
+      href={`/api/documentos/${documento.id}/pdf`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => {
+        // Solo feedback visual — NO preventDefault: dejamos que la navegación
+        // nativa proceda (es lo que funciona en iOS).
+        setAbriendo(true);
+        setTimeout(() => setAbriendo(false), 4000);
+      }}
+      className="shrink-0 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-200"
     >
-      {loading ? "Generando..." : "Descargar PDF"}
-    </button>
+      {abriendo ? "Abriendo…" : "Descargar PDF"}
+    </a>
   );
 }
