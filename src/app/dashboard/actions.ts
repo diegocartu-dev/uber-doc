@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
 
 export async function actualizarDisponibilidad(data: {
   disponible: boolean;
@@ -35,9 +36,19 @@ export async function actualizarDisponibilidad(data: {
   // en la cola. Para distinguir transición de re-guardado leemos el estado previo.
   const { data: previo } = await supabase
     .from("medicos")
-    .select("disponible")
+    .select("disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, domicilio_consultorio, foto_url, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  // Gate duro: no se puede activar la disponibilidad (atender) sin el perfil
+  // completo. Defensa en profundidad — el cliente ya lo bloquea, pero el server
+  // es la fuente de verdad. Solo aplica al ACTIVAR (false→true / re-guardar en true).
+  if (data.disponible && previo && !perfilMedicoCompleto(previo)) {
+    const faltan = camposFaltantesMedico(previo).map((c) => c.label);
+    return {
+      error: `Completá tu perfil para poder atender. Falta: ${faltan.join(", ")}.`,
+    };
+  }
 
   if (data.disponible && !previo?.disponible) {
     updateData.disponible_desde_at = new Date().toISOString();

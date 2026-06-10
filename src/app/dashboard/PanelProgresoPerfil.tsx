@@ -48,8 +48,10 @@ export default function PanelProgresoPerfil({
     { label: "Matrícula", done: !!(numeroMatricula?.trim() && tipoMatricula?.trim()), anchor: "matricula", blocking: true },
     { label: "Teléfono profesional", done: !!telefono?.trim(), anchor: "telefono", blocking: true },
     { label: "Domicilio del consultorio", done: !!domicilioConsultorio?.trim(), anchor: "domicilio", blocking: true },
-    // Recomendados (amarillo) — no bloquean CI
-    { label: "Foto de perfil", done: !!fotoUrl?.trim(), anchor: "foto", blocking: false },
+    // Foto: ahora bloqueante (decisión Diego 10/06/2026 — todos los datos que
+    // dependen del médico son obligatorios para atender). Debe coincidir con
+    // camposFaltantesMedico() en src/lib/perfil-medico.ts.
+    { label: "Foto de perfil", done: !!fotoUrl?.trim(), anchor: "foto", blocking: true },
   ];
 
   const completados = items.filter((i) => i.done).length;

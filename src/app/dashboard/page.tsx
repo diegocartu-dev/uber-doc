@@ -25,6 +25,7 @@ import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import { getFlag } from "@/lib/feature-flags";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { perfilMedicoCompleto } from "@/lib/perfil-medico";
 
 export default async function DashboardPage({
   searchParams,
@@ -192,7 +193,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo, identidad_validada, didit_status")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo, identidad_validada, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -482,6 +483,10 @@ export default async function DashboardPage({
       </div>
     );
 
+    // Completitud REAL del perfil (no el flag DB `perfil_completo`, que quedaba
+    // desactualizado). Gobierna el gate del toggle "disponible" y el banner.
+    const perfilCompletoReal = perfilMedicoCompleto(medico);
+
     const colConsulta = (
       <BloqueConsultaInmediata
         medicoId={medico.id}
@@ -492,7 +497,7 @@ export default async function DashboardPage({
         consultasPendientesCount={consultasPendientes.length}
         ocultoClinica={medico.oculto_clinica}
         visibleConsultorioParticular={medico.visible_consultorio_particular ?? true}
-        perfilCompleto={medico.perfil_completo}
+        perfilCompleto={perfilCompletoReal}
       />
     );
 
@@ -539,7 +544,7 @@ export default async function DashboardPage({
                     initials={initials}
                     fullName={fullName}
                     email={user.email ?? ""}
-                    perfilCompleto={medico.perfil_completo}
+                    perfilCompleto={perfilCompletoReal}
                   />
                 </div>
               </div>
@@ -567,7 +572,7 @@ export default async function DashboardPage({
             {/* Panel progreso perfil */}
             <div className="mt-4">
               <PanelProgresoPerfil
-                perfilCompleto={medico.perfil_completo}
+                perfilCompleto={perfilCompletoReal}
                 telefono={medico.telefono}
                 fotoUrl={medico.foto_url}
                 domicilioConsultorio={medico.domicilio_consultorio}
