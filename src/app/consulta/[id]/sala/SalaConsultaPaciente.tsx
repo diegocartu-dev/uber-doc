@@ -168,6 +168,44 @@ function DictadoBanner({ medicoNombre }: { medicoNombre: string }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Detección de plataforma — los permisos de mic/cam fallan distinto en cada una
+// y las instrucciones para desbloquearlos son diferentes (iOS no tiene candadito,
+// la PWA de iOS no tiene barra de direcciones, etc.)
+// ---------------------------------------------------------------------------
+
+function esIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    // iPadOS se reporta como Mac pero tiene touch
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function esStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
+function instruccionesPermiso(dispositivo: "micrófono" | "cámara"): string {
+  const ios = esIOS();
+  const pwa = esStandalone();
+  if (ios && pwa) {
+    return `El permiso de ${dispositivo} está bloqueado para la app de Docto. Andá a Ajustes de tu iPhone, buscá «Docto» y activá Micrófono y Cámara. Si no aparece, abrí docto.com.ar desde Safari.`;
+  }
+  if (ios) {
+    return `El ${dispositivo} está bloqueado. En Safari, tocá «ᴀA» en la barra de direcciones → «Configuración del sitio web» → permití Micrófono y Cámara, y recargá la página.`;
+  }
+  if (pwa) {
+    return `El ${dispositivo} está bloqueado. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el ${dispositivo} desde ahí.`;
+  }
+  return `El ${dispositivo} está bloqueado. Tocá el candadito al lado de la dirección y permití el acceso al ${dispositivo}.`;
+}
+
 // Hook para controles mic/cam — debe usarse dentro de LiveKitRoom
 function useMicCam() {
   const { localParticipant } = useLocalParticipant();
@@ -176,17 +214,12 @@ function useMicCam() {
   const [micError, setMicError] = useState<string | null>(null);
   const [camError, setCamError] = useState<string | null>(null);
 
-  // Sincronizar estado real del mic: si el permiso fue denegado al conectar,
-  // LiveKit no publica el track y nuestro state queda desincronizado.
+  // Sincronizar estado real del mic: si el track no se publicó (permiso ausente),
+  // nuestro state queda desincronizado. Solo sincroniza — la guía al usuario la da
+  // el banner azul "Tocá el botón del micrófono" y la pantalla previa de permisos.
   useEffect(() => {
     const mic = localParticipant.getTrackPublication(Track.Source.Microphone);
-    const realMicOn = !!mic && !mic.isMuted;
-    setMicOn(realMicOn);
-    if (!realMicOn && !mic) {
-      // No hay track de mic → el permiso probablemente fue denegado al conectar
-      setMicError("No se pudo acceder al micrófono. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el micrófono.");
-      setTimeout(() => setMicError(null), 8000);
-    }
+    setMicOn(!!mic && !mic.isMuted);
   }, [localParticipant.getTrackPublication(Track.Source.Microphone)?.isMuted]);
 
   // Feedback optimista: el botón cambia AL INSTANTE (antes del await). En mobile
@@ -204,7 +237,7 @@ function useMicCam() {
         // Solo mostrar error al intentar ACTIVAR
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
-          setMicError("El micrófono está bloqueado. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el micrófono desde ahí.");
+          setMicError(instruccionesPermiso("micrófono"));
         } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
           setMicError("No se encontró un micrófono en tu dispositivo.");
         } else {
@@ -227,7 +260,7 @@ function useMicCam() {
       if (next) {
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("Permission") || msg.includes("NotAllowed") || msg.includes("permission")) {
-          setCamError("La cámara está bloqueada. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá la cámara desde ahí.");
+          setCamError(instruccionesPermiso("cámara"));
         } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
           setCamError("No se encontró una cámara en tu dispositivo.");
         } else {
@@ -316,6 +349,65 @@ export default function SalaConsultaPaciente({
   // roomKey: al cambiar fuerza el remount del <LiveKitRoom> para reconectar con
   // un token fresco al retomar.
   const [roomKey, setRoomKey] = useState(0);
+
+  // --- Pre-join: permisos de mic/cam ANTES de conectar a LiveKit ---
+  // iOS (Safari y PWA) solo muestra el prompt de permisos si getUserMedia se
+  // llama DENTRO de un gesto del usuario. Conectar con audio={true} dispara el
+  // pedido sin gesto → WebKit lo deniega en silencio y cachea la denegación para
+  // toda la sesión: después ningún toque al botón del mic funciona. Por eso el
+  // paciente pasa por una pantalla previa cuyo botón (el gesto) pide el permiso.
+  // En Android la PWA necesita el pedido temprano (audio={true}) — el pre-join
+  // resuelve ambos: permiso con gesto, y recién después conectamos con audio.
+  const [dispositivosListos, setDispositivosListos] = useState(false);
+  const [audioPermitido, setAudioPermitido] = useState(false);
+  const [prejoinError, setPrejoinError] = useState<string | null>(null);
+  const [activandoDispositivos, setActivandoDispositivos] = useState(false);
+
+  // Si el permiso de mic ya está concedido (usuario recurrente en Chrome/desktop,
+  // donde persiste), saltamos el pre-join sin pedir gesto. En iOS la Permissions
+  // API puede no existir o responder "prompt" → se muestra el pre-join.
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const st = await navigator.permissions?.query?.({ name: "microphone" as PermissionName });
+        if (!cancelado && st?.state === "granted") {
+          setAudioPermitido(true);
+          setDispositivosListos(true);
+        }
+      } catch {
+        // Permissions API no disponible (Safari viejo, Firefox) → pre-join manual
+      }
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  const activarDispositivos = useCallback(async () => {
+    if (activandoDispositivos) return;
+    setActivandoDispositivos(true);
+    setPrejoinError(null);
+    try {
+      // Pedir mic+cam juntos: un solo prompt, dentro del gesto del toque.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // Soltar los tracks: solo necesitábamos el permiso. LiveKit los re-adquiere
+      // al conectar (sin prompt, porque ya está concedido).
+      stream.getTracks().forEach((t) => t.stop());
+      setAudioPermitido(true);
+      setDispositivosListos(true);
+    } catch {
+      // Sin cámara (o cámara bloqueada): reintentar solo audio — alcanza para la consulta.
+      try {
+        const soloAudio = await navigator.mediaDevices.getUserMedia({ audio: true });
+        soloAudio.getTracks().forEach((t) => t.stop());
+        setAudioPermitido(true);
+        setDispositivosListos(true);
+      } catch {
+        setPrejoinError(instruccionesPermiso("micrófono"));
+      }
+    }
+    setActivandoDispositivos(false);
+  }, [activandoDispositivos]);
+
   const inicioRef = useRef(horaInicio ? new Date(horaInicio).getTime() : Date.now());
   // yaCerroRef: guard de "ya cerramos" (transición a pantalla de cierre).
   // Frena el polling para no re-disparar fetch/setState una vez cerrado.
@@ -785,15 +877,69 @@ export default function SalaConsultaPaciente({
         </div>
       </div>
 
+      {/* Pre-join: pedir permisos de mic/cam con un gesto del usuario ANTES de
+          conectar. Ver comentario en los states de pre-join (iOS deniega en
+          silencio los pedidos sin gesto y cachea la denegación). */}
+      {livekitToken && roomName && livekitUrl && !dispositivosListos ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+          <div className="w-full max-w-sm text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/10">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#378ADD" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" x2="12" y1="19" y2="22"/>
+              </svg>
+            </div>
+            <h2 className="mt-6 text-xl font-bold text-white">
+              {formatNombreMedico(medicoNombre)} te está esperando
+            </h2>
+            <p className="mt-2 text-sm text-white/70">
+              Para entrar a la consulta, primero activá tu cámara y micrófono.
+              Cuando el teléfono te pregunte, tocá «Permitir».
+            </p>
+            {prejoinError && (
+              <div
+                className="mt-4 flex items-start gap-2 rounded-lg px-3 py-2.5 text-left"
+                style={{ backgroundColor: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.3)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+                </svg>
+                <p className="text-xs text-white/90">{prejoinError}</p>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={activarDispositivos}
+              disabled={activandoDispositivos}
+              className="mt-6 w-full rounded-xl px-8 py-3.5 text-sm font-semibold text-white active:scale-95 transition-all duration-100 disabled:opacity-60"
+              style={{ backgroundColor: "#378ADD", minHeight: "52px" }}
+            >
+              {activandoDispositivos ? "Activando…" : prejoinError ? "Reintentar" : "Activar cámara y micrófono"}
+            </button>
+            {prejoinError && (
+              <button
+                type="button"
+                onClick={() => { setAudioPermitido(false); setDispositivosListos(true); }}
+                className="mt-3 w-full text-sm font-medium text-white/50 hover:text-white/80"
+                style={{ minHeight: "44px" }}
+              >
+                Entrar sin micrófono igual
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {/* Video + footer — todo dentro de LiveKitRoom para que hooks mic/cam funcionen */}
-      {livekitToken && roomName && livekitUrl ? (
+      {livekitToken && roomName && livekitUrl && dispositivosListos ? (
         <div className="flex flex-1 flex-col min-h-0" style={{ display: videoVisible ? "flex" : "none" }}>
           <LiveKitRoom
             key={roomKey}
             serverUrl={livekitUrl}
             token={livekitToken}
             connect={true}
-            audio={true}
+            audio={audioPermitido}
             video={false}
             onDisconnected={handleDisconnected}
             style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
@@ -881,7 +1027,9 @@ export default function SalaConsultaPaciente({
             </MicCamProvider>
           </LiveKitRoom>
         </div>
-      ) : (
+      ) : livekitToken && roomName && livekitUrl ? null : (
+        // Tokens listos pero pre-join pendiente → lo cubre el bloque de arriba.
+        // Este fallback (spinner) es solo para mientras llega el token.
         <>
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">

@@ -92,6 +92,9 @@ Los componentes de video usan **LiveKit React SDK** (`@livekit/components-react`
 ### Problemas conocidos y aprendizajes
 - **`window.confirm()` + iframe cross-origin = SILENCIOSAMENTE SUPRIMIDO** en Chrome/HTTPS. El confirm devuelve `false` sin mostrar nada. Toda confirmación destructiva debe usar dialog React.
 - **Supabase client no lanza excepciones**: devuelve `{data, error}`. Siempre verificar `error` antes de asumir éxito.
+- **iOS exige gesto del usuario para el prompt de mic/cám** (Safari y PWA). `getUserMedia` fuera de un toque (ej: `audio={true}` al conectar LiveKitRoom) se deniega EN SILENCIO y WebKit cachea la denegación para toda la sesión — después ningún toggle funciona. Fix (10/06/2026): pantalla pre-join en `SalaConsultaPaciente` cuyo botón pide el permiso dentro del gesto; recién después se monta LiveKitRoom. Android PWA necesita lo contrario (pedido temprano) — el pre-join resuelve ambos. NO volver a `audio={true}` con connect directo.
+- **`window.open()` después de un `await` = bloqueado en Safari iOS** (queda fuera del gesto). Para abrir PDFs/archivos usar `<a href target="_blank">` nativo (fix en `DescargarPDF.tsx`, 10/06/2026).
+- **Mensajes de error de permisos deben ser por plataforma**: iOS no tiene candadito ni barra de direcciones en PWA. Usar `instruccionesPermiso()` de `SalaConsultaPaciente.tsx`.
 
 ### Lo que NO se debe hacer
 - NUNCA depender solo de Realtime para transiciones críticas del paciente — siempre polling como respaldo
