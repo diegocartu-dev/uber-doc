@@ -2,6 +2,78 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
+import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+
+/**
+ * Gate de seguridad regulatoria: un médico REAL no puede quedar `aprobado` sin
+ * validación REFEPS activa, JAMÁS. Si ya está validado, pasa. Si no, valida
+ * contra el Bus REFEPS en el momento y solo deja aprobar si la matrícula figura
+ * ENCONTRADA y ACTIVA en el registro oficial. Las cuentas de test
+ * (`es_cuenta_test`) quedan exentas (infra interna de pruebas).
+ *
+ * Se usa en `aprobar` y `reactivar` (ambas dejan al médico en `aprobado`).
+ * Backstop a nivel DB: constraint `medicos_aprobado_requiere_refeps`.
+ */
+async function asegurarRefepsParaAprobar(
+  admin: ReturnType<typeof createAdminClient>,
+  medicoId: string
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const { data: medico } = await admin
+    .from("medicos")
+    .select("dni, refeps_validado, es_cuenta_test")
+    .eq("id", medicoId)
+    .single();
+
+  if (!medico) return { ok: false, error: "Médico no encontrado", status: 404 };
+  if (medico.es_cuenta_test) return { ok: true };
+  if (medico.refeps_validado === true) return { ok: true };
+
+  if (!medico.dni) {
+    return {
+      ok: false,
+      error:
+        "No se puede aprobar: el médico no tiene DNI cargado para validar contra REFEPS.",
+      status: 422,
+    };
+  }
+
+  const resultado = await validarMedicoREFEPS(medico.dni);
+  // Strippear `raw` (FHIR completo con datos personales) antes de persistir.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw: _raw, ...resultadoSinRaw } = resultado;
+  const ahora = new Date().toISOString();
+
+  if (resultado.encontrado && resultado.activo) {
+    await admin
+      .from("medicos")
+      .update({
+        refeps_validado: true,
+        refeps_data: resultadoSinRaw,
+        refeps_validado_at: ahora,
+      })
+      .eq("id", medicoId);
+    return { ok: true };
+  }
+
+  // Validación fallida: persistir el intento y BLOQUEAR la aprobación.
+  await admin
+    .from("medicos")
+    .update({
+      refeps_validado: false,
+      refeps_data: resultadoSinRaw,
+      refeps_validado_at: ahora,
+    })
+    .eq("id", medicoId);
+
+  const detalle = !resultado.encontrado
+    ? "la matrícula/DNI no figura en REFEPS"
+    : "la matrícula figura INACTIVA en REFEPS";
+  return {
+    ok: false,
+    error: `No se puede aprobar: ${detalle}. Verificá los datos del médico (DNI/matrícula) antes de aprobar.`,
+    status: 422,
+  };
+}
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -40,6 +112,10 @@ export async function PATCH(req: NextRequest) {
   const adminUser = await getAdminUser(user.id);
 
   if (accion === "aprobar") {
+    // Gate REFEPS: imposible aprobar un médico real sin matrícula activa.
+    const gate = await asegurarRefepsParaAprobar(admin, medicoId);
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
     const { error } = await admin
       .from("medicos")
       .update({
@@ -112,6 +188,10 @@ export async function PATCH(req: NextRequest) {
     if (!motivo || motivo.trim().length < 10) {
       return NextResponse.json({ error: "Motivo obligatorio (min 10 caracteres)" }, { status: 400 });
     }
+    // Reactivar deja al médico en `aprobado` → mismo gate REFEPS que aprobar.
+    const gate = await asegurarRefepsParaAprobar(admin, medicoId);
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
     const { error } = await admin
       .from("medicos")
       .update({
