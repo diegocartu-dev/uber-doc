@@ -102,17 +102,23 @@ export async function fetchMetricasMedico(
     .from("consultas").select("id", { count: "exact", head: true })
     .eq("medico_id", medicoId).eq("estado", "esperando");
 
-  const { count: turnosComp } = await supabase
-    .from("turnos").select("id", { count: "exact", head: true })
+  const { data: turnosCompData } = await supabase
+    .from("turnos").select("monto")
     .eq("medico_id", medicoId).eq("estado", "completado")
     .gte("fecha", fechaDesde).lte("fecha", hoy);
-  const { count: consultasComp } = await supabase
-    .from("consultas").select("id", { count: "exact", head: true })
+  const { data: consultasCompData } = await supabase
+    .from("consultas").select("monto")
     .eq("medico_id", medicoId).eq("estado", "completada")
     .gte("created_at", `${fechaDesde}T00:00:00`);
 
-  const completadas = (turnosComp ?? 0) + (consultasComp ?? 0);
-  const ingresos = completadas * (med.precio_consulta ?? 0);
+  const turnosComp = turnosCompData?.length ?? 0;
+  const consultasComp = consultasCompData?.length ?? 0;
+  const completadas = turnosComp + consultasComp;
+
+  // Sumar montos reales facturados (no precio actual × cantidad)
+  const ingresosTurnos = (turnosCompData ?? []).reduce((sum, t) => sum + (t.monto ?? 0), 0);
+  const ingresosConsultas = (consultasCompData ?? []).reduce((sum, c) => sum + (c.monto ?? 0), 0);
+  const ingresos = ingresosTurnos + ingresosConsultas;
 
   return {
     turnos: turnosCount ?? 0,
