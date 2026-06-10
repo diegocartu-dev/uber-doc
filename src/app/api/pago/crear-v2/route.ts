@@ -56,6 +56,21 @@ export async function POST(req: NextRequest) {
 
   const { medicoId, monto, titulo, descripcion, redirectSuccess, redirectFailure, redirectPending } = recurso;
 
+  // Cuentas de test SIEMPRE simulan — sin importar el flag global `pago_marketplace`
+  // ni la whitelist. Garantiza que medico.test / paciente.test funcionen siempre y
+  // evita cobrar plata real en pruebas (la cuenta MP del médico test es live_mode).
+  // Si el paciente O el médico es cuenta de test → 503 → el front cae a /simular.
+  const [{ data: medTest }, { data: pacTest }] = await Promise.all([
+    admin.from("medicos").select("es_cuenta_test").eq("id", medicoId).maybeSingle(),
+    admin.from("pacientes").select("es_cuenta_test").eq("user_id", user.id).maybeSingle(),
+  ]);
+  if (medTest?.es_cuenta_test || pacTest?.es_cuenta_test) {
+    return NextResponse.json(
+      { error: "Pagos marketplace deshabilitados temporalmente.", code: "FEATURE_DISABLED" },
+      { status: 503 }
+    );
+  }
+
   // Gate de cobro real: flag global ON, o paciente + médico ambos en whitelist.
   let cobroRealHabilitado = flagGlobalMarketplace;
   if (!cobroRealHabilitado) {
