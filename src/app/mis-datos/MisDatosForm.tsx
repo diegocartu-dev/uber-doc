@@ -11,8 +11,14 @@ type PacienteData = {
   cuil: string | null;
   fecha_nacimiento: string | null;
   telefono: string | null;
+  tiene_cobertura: boolean | null;
   obra_social: string | null;
+  obra_social_id: string | null;
+  obra_social_otra: string | null;
+  // Nombre ya resuelto (FK > otra > legacy) para mostrar/prefilear.
+  obra_social_resuelta: string | null;
   nro_afiliado: string | null;
+  plan_obra_social: string | null;
 } | null;
 
 type MedicoData = {
@@ -72,8 +78,10 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
     role === "paciente" ? (paciente?.nombre_completo ?? "") : (medico?.nombre_completo ?? "")
   );
   const [telefono, setTelefono] = useState(paciente?.telefono ?? "");
-  const [obraSocial, setObraSocial] = useState(paciente?.obra_social ?? "");
+  // Prefilear con el nombre RESUELTO (FK/otra/legacy), no solo el legacy.
+  const [obraSocial, setObraSocial] = useState(paciente?.obra_social_resuelta ?? "");
   const [nroAfiliado, setNroAfiliado] = useState(paciente?.nro_afiliado ?? "");
+  const [planObraSocial, setPlanObraSocial] = useState(paciente?.plan_obra_social ?? "");
   const [fechaNac, setFechaNac] = useState(paciente?.fecha_nacimiento ?? "");
   const [cuil, setCuil] = useState(paciente?.cuil ?? "");
 
@@ -89,15 +97,23 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
     const supabase = createClient();
 
     if (role === "paciente" && paciente) {
+      const tieneOS = !!obraSocial.trim();
+      // Escribir en las columnas que la app realmente lee (obra_social_otra está
+      // en la cadena de resolución FK > otra > legacy). Como acá editamos texto
+      // libre, limpiamos el FK (obra_social_id) y sincronizamos el legacy.
       const { error: err } = await supabase
         .from("pacientes")
         .update({
           nombre_completo: nombre,
           telefono,
           cuil: cuil || null,
-          obra_social: obraSocial || null,
-          nro_afiliado: nroAfiliado || null,
           fecha_nacimiento: fechaNac || null,
+          tiene_cobertura: tieneOS,
+          obra_social: tieneOS ? obraSocial.trim() : null,
+          obra_social_otra: tieneOS ? obraSocial.trim() : null,
+          obra_social_id: null,
+          nro_afiliado: tieneOS ? (nroAfiliado.trim() || null) : null,
+          plan_obra_social: tieneOS ? (planObraSocial.trim() || null) : null,
         })
         .eq("id", paciente.id);
 
@@ -296,6 +312,27 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
                 value={nroAfiliado}
                 onChange={(e) => setNroAfiliado(e.target.value)}
                 style={inputStyle}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = "var(--color-primary)";
+                  e.currentTarget.style.boxShadow = "var(--shadow-focus)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "var(--color-border-strong)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+              />
+            </div>
+          )}
+
+          {obraSocial && (
+            <div>
+              <label style={labelStyle}>Plan (opcional)</label>
+              <input
+                type="text"
+                value={planObraSocial}
+                onChange={(e) => setPlanObraSocial(e.target.value)}
+                style={inputStyle}
+                placeholder="Ej: 210, Plata, Plan 4000"
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = "var(--color-primary)";
                   e.currentTarget.style.boxShadow = "var(--shadow-focus)";

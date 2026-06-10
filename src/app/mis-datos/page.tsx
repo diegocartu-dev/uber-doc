@@ -23,11 +23,34 @@ export default async function MisDatosPage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const { data: paciente } = await supabase
+  const { data: pacienteRaw } = await supabase
     .from("pacientes")
-    .select("id, nombre_completo, dni, cuil, fecha_nacimiento, telefono, obra_social, nro_afiliado")
+    .select("id, nombre_completo, dni, cuil, fecha_nacimiento, telefono, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  // Resolver el nombre de la obra social desde la misma cadena que usa el resto
+  // de la app: FK (obras_sociales) > obra_social_otra > legacy obra_social.
+  // Sin esto, mis-datos solo leía `obra_social` (legacy) y mostraba vacío a
+  // quienes eligieron de la lista (obra_social_id), pareciendo "no se guardó".
+  let obraSocialResuelta: string | null = null;
+  if (pacienteRaw?.obra_social_id) {
+    const { data: os } = await supabase
+      .from("obras_sociales")
+      .select("nombre")
+      .eq("id", pacienteRaw.obra_social_id)
+      .maybeSingle();
+    obraSocialResuelta = os?.nombre ?? null;
+  }
+  obraSocialResuelta =
+    obraSocialResuelta ??
+    pacienteRaw?.obra_social_otra ??
+    pacienteRaw?.obra_social ??
+    null;
+
+  const paciente = pacienteRaw
+    ? { ...pacienteRaw, obra_social_resuelta: obraSocialResuelta }
+    : null;
 
   if (medico) role = "medico";
   else if (paciente) role = "paciente";
