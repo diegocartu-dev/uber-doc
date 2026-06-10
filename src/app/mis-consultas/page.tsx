@@ -31,10 +31,14 @@ export default async function MisConsultasPage() {
     .eq("paciente_id", user.id)
     .order("created_at", { ascending: false });
 
-  // Fetch turnos
+  // Fetch turnos.
+  // OJO: la tabla `turnos` NO tiene columna `especialidad` (sí `medicos`).
+  // Pedirla acá hace fallar TODO el SELECT (PostgREST 42703) → `turnos` queda
+  // null y el paciente ve solo consultas inmediatas. La especialidad del turno
+  // se deriva del médico más abajo. NO volver a agregar `especialidad` acá.
   const { data: turnos } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, estado, medico_id, especialidad, canal_origen")
+    .select("id, fecha, hora_inicio, estado, medico_id, canal_origen")
     .eq("paciente_id", paciente.id)
     .order("fecha", { ascending: false });
 
@@ -97,7 +101,7 @@ export default async function MisConsultasPage() {
       date: t.fecha + "T" + t.hora_inicio,
       estado: t.estado,
       medicoNombre: med?.nombre_completo ?? "Medico",
-      especialidad: t.especialidad ?? med?.especialidad ?? "",
+      especialidad: med?.especialidad ?? "",
       canalOrigen: (t as { canal_origen?: string }).canal_origen ?? null,
       documentos: docs.map((d) => ({ id: d.id, tipo: d.tipo, diagnostico: d.diagnostico, contenido: d.contenido })),
     });
