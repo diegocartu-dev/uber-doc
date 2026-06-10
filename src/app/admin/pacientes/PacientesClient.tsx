@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Eye, PauseCircle, ShieldOff, RotateCcw, Loader2 } from "lucide-react";
+import { Search, Eye, PauseCircle, ShieldOff, RotateCcw, Loader2, LogIn } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
@@ -77,6 +77,28 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
   function irAPagina(p: number) {
     if (p < 1 || p > totalPages) return;
     buscarServer(p);
+  }
+
+  async function handleImpersonate(userId: string, nombre: string) {
+    setProcesando(userId);
+    setMensaje(null);
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (data.ok && data.link) {
+        window.open(data.link, "_blank");
+        setMensaje({ texto: `Sesión abierta como ${nombre}`, tipo: "ok" });
+      } else {
+        setMensaje({ texto: data.error || "No se pudo generar el acceso", tipo: "error" });
+      }
+    } catch {
+      setMensaje({ texto: "Error de conexión", tipo: "error" });
+    }
+    setProcesando(null);
   }
 
   async function handleAccion(pacienteId: string, accion: string, motivo?: string) {
@@ -196,6 +218,14 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
                         className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
                       >
                         <Eye size={14} /> Ver
+                      </button>
+                      <button
+                        onClick={() => handleImpersonate(p.user_id, p.nombre_completo)}
+                        disabled={procesando === p.user_id}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-blue-50 hover:text-[#378ADD]"
+                      >
+                        {procesando === p.user_id ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
+                        Ingresar
                       </button>
                       {estado === "activo" && (
                         <>
@@ -345,7 +375,21 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
         onClose={() => setPanelPaciente(null)}
         title={panelPaciente?.nombre_completo ?? "Paciente"}
       >
-        {panelPaciente && <PacienteDetalle paciente={panelPaciente} />}
+        {panelPaciente && (
+          <>
+            <PacienteDetalle paciente={panelPaciente} />
+            <div className="mt-6 border-t border-gray-100 pt-4">
+              <button
+                onClick={() => handleImpersonate(panelPaciente.user_id, panelPaciente.nombre_completo)}
+                disabled={procesando === panelPaciente.user_id}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#378ADD] px-4 py-2 text-sm font-medium text-[#378ADD] transition hover:bg-[#378ADD]/5"
+              >
+                {procesando === panelPaciente.user_id ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                Ingresar como paciente
+              </button>
+            </div>
+          </>
+        )}
       </SidePanel>
     </div>
   );

@@ -58,8 +58,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/login`);
   }
 
-  // Crear response de redirect al dashboard
-  const response = NextResponse.redirect(`${origin}/dashboard`);
+  // Redirect a / — el root page enruta según tipo de usuario
+  // (médico → /dashboard, paciente → /clinica o /onboarding)
+  const response = NextResponse.redirect(`${origin}/`);
 
   // Crear Supabase client que setea cookies en el response
   const supabase = createServerClient(
