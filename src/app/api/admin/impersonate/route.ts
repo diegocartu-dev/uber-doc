@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import crypto from "crypto";
 
 /**
  * POST /api/admin/impersonate
- * Genera un magic link para ingresar como cualquier usuario.
+ * Genera un link firmado para ingresar como cualquier usuario.
+ * El link va a /api/admin/impersonate-session que verifica el OTP
+ * directamente sin pasar por el redirect chain de Supabase
+ * (que se rompe con www/non-www y PKCE).
  * Solo accesible para admins autenticados.
  */
 export async function POST(request: Request) {
@@ -38,26 +42,38 @@ export async function POST(request: Request) {
     );
   }
 
-  // Generar magic link
+  // Generar magic link para obtener el OTP raw
   const { data: linkData, error: linkError } =
     await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: userData.user.email,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/dashboard`,
-      },
     });
 
-  if (linkError || !linkData?.properties?.action_link) {
+  if (linkError || !linkData?.properties?.email_otp) {
     return NextResponse.json(
-      { error: linkError?.message || "No se pudo generar el link" },
+      { error: linkError?.message || "No se pudo generar el acceso" },
       { status: 500 },
     );
   }
 
+  // Crear código firmado HMAC con email + OTP + expiración (2 minutos)
+  const payload = JSON.stringify({
+    email: userData.user.email,
+    otp: linkData.properties.email_otp,
+    exp: Date.now() + 120_000,
+  });
+  const sig = crypto
+    .createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    .update(payload)
+    .digest("hex");
+  const code =
+    Buffer.from(payload).toString("base64url") + "." + sig;
+
+  // URL relativa — se abre desde el mismo origin del admin,
+  // evitando problemas de www vs non-www
   return NextResponse.json({
     ok: true,
-    link: linkData.properties.action_link,
+    link: `/api/admin/impersonate-session?code=${encodeURIComponent(code)}`,
     email: userData.user.email,
   });
 }
