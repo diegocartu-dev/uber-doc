@@ -145,12 +145,8 @@ export default function NovaChat() {
   const [enviando, setEnviando] = useState(false);
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
-  const [hablando, setHablando] = useState(false);
-  // Voz ON por default. El médico puede silenciarla si prefiere solo leer.
-  const [vozSilenciada, setVozSilenciada] = useState(false);
-  const vozSilenciadaRef = useRef(false); // espejo para leerlo sin stale closure en el SSE
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioDesbloqueado = useRef(false);
+  // TTS desactivado: Nova escucha voz (dictado) pero responde solo por texto.
+  // El delay de TTS era demasiado grande y molestaba al médico.
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { dictando, iniciando, interimText, iniciar: iniciarDictado, detener: detenerDictado } = useDictado();
@@ -166,16 +162,6 @@ export default function NovaChat() {
       setMedicoId(user.id);
     });
   }, [router]);
-
-  // Preferencia de silencio (persistida) + ref espejo para el SSE
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("nova_voz_silenciada") === "1") setVozSilenciada(true);
-    } catch { /* sin localStorage */ }
-  }, []);
-  useEffect(() => {
-    vozSilenciadaRef.current = vozSilenciada;
-  }, [vozSilenciada]);
 
   // Auto-scroll
   useEffect(() => {
@@ -315,11 +301,6 @@ export default function NovaChat() {
 
               if (event.type === "done") {
                 setPensando(false);
-                // TTS solo en respuestas cortas/conversacionales (≤200 chars) y si
-                // el médico NO silenció la voz. Respuestas largas no se leen solas.
-                if (novaTexto && novaTexto.length <= 200 && !vozSilenciadaRef.current) {
-                  reproducirTTS(novaTexto);
-                }
               }
 
               if (event.type === "error") {
@@ -356,107 +337,7 @@ export default function NovaChat() {
     [medicoId, enviando]
   );
 
-  // ── TTS ──
-
-  // Desbloquear audio en el contexto de gesto del usuario (click/touch)
-  const desbloquearAudio = useCallback(() => {
-    if (audioDesbloqueado.current) return;
-    try {
-      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const buffer = ctx.createBuffer(1, 1, 22050);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(0);
-      audioDesbloqueado.current = true;
-
-      const audio = audioRef.current;
-      if (audio) {
-        audio.muted = true;
-        audio.play().then(() => {
-          audio.pause();
-          audio.currentTime = 0;
-        }).catch(() => {}).finally(() => {
-          // Pase lo que pase con el play de desbloqueo, NUNCA dejar el elemento
-          // muteado (era la causa de que la voz saliera muda en iPhone).
-          audio.muted = false;
-        });
-      }
-    } catch {
-      // Fallback: intentar de nuevo en el próximo gesto
-    }
-  }, []);
-
-  const reproducirTTS = useCallback(async (texto: string) => {
-    try {
-      const res = await fetch("/api/nova/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto }),
-      });
-
-      if (!res.ok) return;
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      // Limpiar URL anterior si existe
-      const urlAnterior = audio.src;
-
-      audio.onplay = () => setHablando(true);
-      audio.onended = () => {
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      };
-
-      audio.src = url;
-      audio.volume = 1;
-      // FIX (diagnosticado 02/06): el desbloqueo de iOS puede dejar el elemento
-      // en muted=true (su play() de desbloqueo falla y nunca des-silencia) → la
-      // voz se reproducía MUDA. Forzamos muted=false acá, siempre, antes de sonar.
-      audio.muted = false;
-      await audio.play().catch(() => {
-        // Autoplay bloqueado — fallback silencioso
-        setHablando(false);
-        URL.revokeObjectURL(url);
-      });
-
-      // Limpiar URL anterior
-      if (urlAnterior && urlAnterior.startsWith("blob:")) {
-        URL.revokeObjectURL(urlAnterior);
-      }
-    } catch {
-      // TTS falló silenciosamente
-    }
-  }, []);
-
-  const detenerAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-    setHablando(false);
-  }, []);
-
-  // Silenciar / reactivar la voz de Nova. Por default habla; el médico la apaga
-  // si prefiere solo leer. Al silenciar, corta lo que esté sonando.
-  const toggleSilencio = useCallback(() => {
-    setVozSilenciada((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("nova_voz_silenciada", next ? "1" : "0");
-      } catch { /* sin localStorage */ }
-      if (next) detenerAudio();
-      return next;
-    });
-  }, [detenerAudio]);
+  // TTS removido — Nova solo responde por texto.
 
   // ── Confirmar accion ──
 
@@ -537,7 +418,6 @@ export default function NovaChat() {
   // ── Mic toggle ──
 
   const toggleMic = useCallback(() => {
-    desbloquearAudio();
     if (dictando) {
       beepUI(440, 120);
       detenerDictado();
@@ -545,14 +425,13 @@ export default function NovaChat() {
       beepUI(880, 80);
       iniciarDictado(setInput);
     }
-  }, [dictando, iniciarDictado, detenerDictado, desbloquearAudio]);
+  }, [dictando, iniciarDictado, detenerDictado]);
 
   // ── Enviar con Enter ──
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      desbloquearAudio();
       if (dictando) detenerDictado();
       enviarMensaje(input);
     }
@@ -571,56 +450,11 @@ export default function NovaChat() {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1D9E75]" />
           <span className="text-lg font-medium text-[#1a1a1a]">Nova</span>
         </div>
-        {/* Botón para silenciar / reactivar la voz (habla por default) */}
-        <button
-          onClick={toggleSilencio}
-          aria-label={vozSilenciada ? "Activar la voz de Nova" : "Silenciar la voz de Nova"}
-          className="flex h-9 w-9 items-center justify-center rounded-full transition-colors active:opacity-60"
-          style={{ border: "0.5px solid #e5e7eb", color: vozSilenciada ? "#888780" : "#378ADD" }}
-        >
-          {vozSilenciada ? (
-            // Altavoz silenciado
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <line x1="23" y1="9" x2="17" y2="15" />
-              <line x1="17" y1="9" x2="23" y2="15" />
-            </svg>
-          ) : (
-            // Altavoz con ondas (voz activa)
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-            </svg>
-          )}
-        </button>
+        {/* Voz desactivada — Nova solo responde por texto */}
       </header>
       <BotonVolver />
 
-      {/* ── Barra TTS ── */}
-      {hablando && (
-        <div
-          className="flex h-10 shrink-0 items-center justify-between px-4"
-          style={{ background: "linear-gradient(90deg, #378ADD, #2e6fb5)" }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="flex items-end gap-[3px]">
-              <span className="nova-sound-bar" style={{ height: 8 }} />
-              <span className="nova-sound-bar" style={{ height: 16, animationDelay: "0.15s" }} />
-              <span className="nova-sound-bar" style={{ height: 12, animationDelay: "0.3s" }} />
-            </div>
-            <span className="text-[13px] font-medium text-white">
-              Nova esta hablando
-            </span>
-          </div>
-          <button
-            onClick={detenerAudio}
-            className="text-xs text-white/70 underline"
-          >
-            Detener
-          </button>
-        </div>
-      )}
+      {/* TTS removido — Nova responde solo por texto */}
 
       {/* ── Mensajes ── */}
       <div className="flex-1 overflow-y-auto">
@@ -802,7 +636,6 @@ export default function NovaChat() {
           {/* Send */}
           <button
             onClick={() => {
-              desbloquearAudio();
               if (dictando) detenerDictado();
               enviarMensaje(input);
             }}
@@ -817,9 +650,6 @@ export default function NovaChat() {
           </button>
         </div>
       </div>
-
-      {/* Audio persistente para TTS (desbloqueo mobile) */}
-      <audio ref={audioRef} playsInline />
 
       {/* ── Styles ── */}
       <style jsx>{`
@@ -854,17 +684,7 @@ export default function NovaChat() {
           0%, 60%, 100% { transform: translateY(0); }
           30% { transform: translateY(-6px); }
         }
-        .nova-sound-bar {
-          display: inline-block;
-          width: 3px;
-          border-radius: 2px;
-          background: white;
-          animation: novaSound 0.8s infinite alternate;
-        }
-        @keyframes novaSound {
-          0% { height: 8px; }
-          100% { height: 16px; }
-        }
+        /* TTS sound bars removed */
         .nova-input:focus {
           border-color: #1D9E75 !important;
           box-shadow: 0 0 0 2px rgba(29,158,117,0.15);
