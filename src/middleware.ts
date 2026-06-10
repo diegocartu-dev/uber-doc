@@ -24,10 +24,12 @@ const TIMEOUT_EXEMPT_PREFIXES = [
 ];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.
-const BETA_PROTECTED = [
-  "/auth/register",         // registro paciente
-  "/auth/registro-medico",  // registro médico
-];
+// LANZAMIENTO 10/06/2026 (decisión Diego — abrir al mundo): registro ABIERTO.
+// Array vacío = ninguna ruta pide la contraseña beta → registro público libre.
+// IMPORTANTE: `BETA_PASSWORD` debe seguir SETEADA en prod (passesBetaGuard es
+// fail-closed: vacía = sitio caído). Para re-cerrar la beta, volver a agregar
+// "/auth/register" y "/auth/registro-medico" acá (reversible en 1 deploy).
+const BETA_PROTECTED: string[] = [];
 
 function isBetaProtected(pathname: string): boolean {
   return BETA_PROTECTED.some(
