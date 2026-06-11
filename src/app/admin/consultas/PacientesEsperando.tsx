@@ -244,6 +244,13 @@ export default function PacientesEsperando() {
               rows={3}
               className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-[#378ADD] focus:outline-none"
             />
+            {/* Feedback en vivo: antes el botón quedaba deshabilitado en silencio
+                con motivo < 10 caracteres y parecía roto. */}
+            {motivo.trim().length > 0 && motivo.trim().length < 10 && (
+              <p className="mt-2 text-xs" style={{ color: "#BA7517" }}>
+                El motivo debe tener al menos 10 caracteres — te faltan {10 - motivo.trim().length}.
+              </p>
+            )}
             {error && (
               <p className="mt-2 text-xs text-[#E24B4A]">{error}</p>
             )}
