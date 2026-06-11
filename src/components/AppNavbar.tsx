@@ -6,6 +6,7 @@ import { Stethoscope, Menu } from "lucide-react";
 import MenuDrawer from "./MenuDrawer";
 import BotonVolver from "./ui/BotonVolver";
 import LinkNav from "./ui/LinkNav";
+import PresenciaTracker from "./PresenciaTracker";
 import { getLogoHref } from "@/lib/origin-slug";
 
 type Props = {
@@ -30,6 +31,8 @@ export default function AppNavbar({ userName, userRole, showMenu = true, logoHre
 
   return (
     <>
+      {/* Presencia en vivo para el monitor del admin — solo usuarios logueados */}
+      {userName && <PresenciaTracker rol={userRole === "medico" ? "medico" : "paciente"} />}
       {/* Sticky wrapper — nav + breadcrumb pegan juntos como una unidad */}
       <div className="sticky top-0 z-50">
         <nav

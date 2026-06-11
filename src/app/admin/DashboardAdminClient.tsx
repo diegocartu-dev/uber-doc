@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet } from "lucide-react";
+import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet, CalendarDays } from "lucide-react";
+import OnlineAhora from "./OnlineAhora";
 
 interface Props {
   metrics: {
@@ -14,11 +15,13 @@ interface Props {
     pendingAlertas: number;
   };
   diasSemana: { fecha: string; consultas: number; completadas: number }[];
+  medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null }[];
+  turnosPorEspecialidad: { especialidad: string; slots: number; medicos: number }[];
 }
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-export default function DashboardAdminClient({ metrics, diasSemana }: Props) {
+export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad }: Props) {
   const maxConsultas = Math.max(...diasSemana.map((d) => d.consultas), 1);
 
   return (
@@ -30,10 +33,70 @@ export default function DashboardAdminClient({ metrics, diasSemana }: Props) {
 
       {/* Metric cards */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <OnlineAhora />
         <MetricCard icon={CalendarCheck} label="Consultas hoy" value={metrics.consultasHoy} color="#378ADD" />
-        <MetricCard icon={Stethoscope} label="Médicos activos" value={metrics.medicosActivos} sub={`${metrics.totalMedicos} registrados`} color="#378ADD" />
-        <MetricCard icon={Users} label="Pacientes" value={metrics.totalPacientes} color="#378ADD" />
+        <MetricCard icon={Users} label="Pacientes" value={metrics.totalPacientes} sub={`${metrics.totalMedicos} médicos registrados`} color="#378ADD" />
         <MetricCard icon={Activity} label="En curso ahora" value={metrics.enCursoAhora} color={metrics.enCursoAhora > 0 ? "#378ADD" : "#888780"} />
+      </div>
+
+      {/* Operación en vivo: plantilla de médicos + oferta de turnos */}
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Médicos disponibles ahora */}
+        <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-900">Médicos disponibles ahora</h2>
+            <span className="text-xs font-semibold" style={{ color: medicosDisponibles.length > 0 ? "#1D9E75" : "#888780" }}>
+              {medicosDisponibles.length}
+            </span>
+          </div>
+          {medicosDisponibles.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-400">Ningún médico tiene la consulta inmediata activa en este momento.</p>
+          ) : (
+            <div className="mt-3 divide-y divide-gray-50">
+              {medicosDisponibles.map((m) => (
+                <div key={m.id} className="flex items-center justify-between py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">{m.nombre}</p>
+                    <p className="text-xs text-gray-400">
+                      {m.especialidad}
+                      {m.hasta ? ` · hasta las ${m.hasta.slice(0, 5)}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    {m.clinica && (
+                      <span className="rounded-full bg-[#378ADD]/10 px-2 py-0.5 text-[11px] font-medium text-[#378ADD]">Clínica</span>
+                    )}
+                    {m.consultorio && (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">Consultorio</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Turnos disponibles por especialidad */}
+        <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
+          <div className="flex items-center gap-2">
+            <CalendarDays size={15} strokeWidth={1.75} className="text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-900">Turnos libres — próximos 7 días</h2>
+          </div>
+          {turnosPorEspecialidad.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-400">No hay slots de turno publicados para los próximos 7 días.</p>
+          ) : (
+            <div className="mt-3 divide-y divide-gray-50">
+              {turnosPorEspecialidad.map((e) => (
+                <div key={e.especialidad} className="flex items-center justify-between py-2.5">
+                  <p className="text-sm text-gray-700">{e.especialidad}</p>
+                  <p className="text-xs text-gray-400">
+                    <span className="text-sm font-semibold text-gray-900">{e.slots}</span> slots · {e.medicos} médico{e.medicos !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 7 day chart */}

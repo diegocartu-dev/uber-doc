@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,6 +20,9 @@ const NAV_ITEMS = [
   { href: "/admin/medicos", label: "Medicos", icon: Stethoscope, badgeKey: "medicos" as const },
   { href: "/admin/pacientes", label: "Pacientes", icon: Users, badgeKey: null },
   { href: "/admin/consultas", label: "Consultas", icon: MessageSquare, badgeKey: null },
+  // Insights vive fuera de /admin pero es admin-only (GMV, comisión Docto,
+  // funnel, demanda por especialidad). Sin este link era invisible.
+  { href: "/insights", label: "Insights", icon: TrendingUp, badgeKey: null },
   { href: "/admin/alertas", label: "Alertas", icon: Bell, badgeKey: "alertas" as const },
   { href: "/admin/sereno", label: "Sereno", icon: ShieldCheck, badgeKey: null },
   { href: "/admin/configuracion", label: "Configuracion", icon: Settings, badgeKey: null },
