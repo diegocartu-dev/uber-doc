@@ -6,6 +6,15 @@
 >
 > **Estado (2026-06-03):** Catálogo de APIs (documentación) recibido. Esperando
 > accesos a TEST para construir y probar. **NO bloqueante para lanzar.**
+>
+> **Novedad (2026-06-11):** Farmalink notificó (mail masivo a integradores) que
+> publicó documentación actualizada: **"RecetaElectRest 3.0.0 — Modalidades de
+> Prescripción"** en el catálogo (`https://catalogo-srv.farmalink.com.ar/`).
+> Piden "avanzar con las adecuaciones" para una implementación homogénea.
+> **Impacto:** la spec mapeada en §4.bis se leyó el 04/06 — hay que RE-VALIDARLA
+> contra la 3.0.0 (bajar el doc nuevo con login al catálogo; está detrás del
+> portal, no se lee con curl) ANTES de construir `altaReceta`. Sigue sin
+> respuesta la consulta del token 500 enviada el 04/06 (ya 7 días).
 
 ---
 
