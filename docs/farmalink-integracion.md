@@ -41,7 +41,7 @@ cadenas que usan ese sistema. Es una mejora **post-MVP**.
 | (a) Solicitud de homologación enviada | ✅ |
 | (b) **Acceso al Catálogo de APIs** (documentación) | ✅ Recibido — portal Axway/Joomla `https://catalogo-srv.farmalink.com.ar/` |
 | (c) **Accesos a TEST** (OAuth, sandbox) | ✅ **Recibidos (04/06/2026)** — Jira SOL-3426. Cliente OAuth + usuario, en 2 mails ("Creación de usuario Client OAUTH Test 1/2 y 2/2"). |
-| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (§4.bis); handshake del token **bloqueado** esperando ejemplo de Farmalink (§4.ter). Consulta **enviada a homologación el 04/06/2026** desde `soporte@docto.com.ar`. |
+| (d) Construir + probar contra TEST | 🔵 En curso — spec mapeada (§4.bis); **handshake del token RESUELTO 11/06** (§4.quater): endpoint correcto `/api/oauth/token/generate`, token 200 OK verificado. Sigue: cliente OAuth + altaReceta (RecetaElectRest 3.0.0). |
 | (e) Homologación (validación de Farmalink) | ⬜ Pendiente |
 | (f) Producción | ⬜ Pendiente |
 
@@ -176,6 +176,36 @@ espera de la respuesta de Farmalink** con el ejemplo de request del token.
 
 **Para destrabar, falta de Farmalink:** un request de ejemplo del token (grant_type,
 scope, y si los params van en headers o body). Con eso se completa el cliente OAuth.
+
+## 4.quater ✅ Handshake RESUELTO — token funcionando (11/06/2026)
+
+Farmalink respondió el **05/06** (homologación, mismo hilo SOL-3426) con el curl
+válido. El problema era la **URL**: el endpoint real es
+`POST /api/oauth/token/generate` — nosotros probábamos `/api/oauth/token` (sin
+`/generate`). El 500 opaco era el backend ruteando mal el path, no las credenciales.
+
+**Formato exacto que funciona (verificado 11/06/2026, HTTP 200):**
+
+```bash
+curl --location --request POST 'https://test-servicios.farmalink.com.ar/api/oauth/token/generate' \
+  --header 'Authorization: Basic <base64(CLIENT_ID:CLIENT_SECRET)>' \
+  --header 'username: <FARMALINK_TEST_USER>' \
+  --header 'password: <FARMALINK_TEST_PASSWORD>' \
+  --header 'scope: Switch.RecetaElectRest' \
+  --header 'grant_type: PASSWORD' \
+  --header 'Content-Type: application/json'   # exigido por el WAF
+```
+
+- Todos los parámetros van en **HEADERS** (no body).
+- `grant_type: PASSWORD` en **mayúsculas**.
+- `scope: Switch.RecetaElectRest` (con el prefijo `Switch.`).
+- Respuesta 200: `{ access_token (JWT), token_type: Bearer, expires_in: 43200, scope, id }`
+  → el token dura **12 horas**.
+- Credenciales en `.env.local` (`FARMALINK_TEST_*`, gitignored).
+
+**Próximo paso:** cliente OAuth en `src/lib/farmalink/` (cache del token por ~11h y
+re-generación) + `altaReceta` contra TEST, alineado a **RecetaElectRest 3.0.0**
+(notificación del 11/06 — ver §4.quinquies abajo si se documenta el delta 3.0.0).
 
 ## 5. Lo que probablemente nos pidan (tener a mano para ir rápido)
 
