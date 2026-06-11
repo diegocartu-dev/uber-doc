@@ -8,6 +8,7 @@ import {
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin-auth";
 import LandingNav from "@/components/landing/LandingNav";
 import Buscador from "@/components/landing/Buscador";
 import { PhoneMockupHero, PhoneMockupInmediata, PhoneMockupTurnos } from "@/components/landing/PhoneMockup";
@@ -27,6 +28,10 @@ export default async function Home({
   } = await supabase.auth.getUser();
 
   if (user) {
+    // Admins primero: si no, caen al flujo paciente (se les creaba un registro
+    // de paciente y aterrizaban en /clinica en vez del panel admin).
+    if (await isAdmin(user.id)) redirect("/admin");
+
     const { data: medico } = await supabase
       .from("medicos")
       .select("id")

@@ -44,10 +44,21 @@ export async function GET(request: Request) {
   }
 
   // Crear registro paciente si no existe (bypass RLS con admin client)
-  // Solo para usuarios que NO son médicos.
+  // Solo para usuarios que NO son médicos NI admins.
   // Si es médico → forzar redirect a /dashboard (evita que caiga en / → onboarding).
+  // Si es admin → redirect a /admin y NO crearle registro de paciente.
   if (data.user) {
     const admin = createAdminClient();
+
+    const { isAdmin } = await import("@/lib/admin-auth");
+    if (await isAdmin(data.user.id)) {
+      const adminResponse = NextResponse.redirect(`${origin}/admin`);
+      response.cookies.getAll().forEach((cookie) => {
+        adminResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+      return adminResponse;
+    }
+
     const { data: esMedico } = await admin
       .from("medicos")
       .select("id")
