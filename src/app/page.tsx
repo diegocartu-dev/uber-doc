@@ -126,7 +126,7 @@ export default async function Home({
             <div className="landing-trust-line" style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", fontSize: 13, color: "var(--color-text-secondary)" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <ShieldCheck size={15} style={{ color: "#3F7A52" }} />
-                Profesionales verificados
+                Matrícula verificada en el Ministerio de Salud
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <FileText size={15} style={{ color: "#3F7A52" }} />
@@ -301,8 +301,8 @@ export default async function Home({
                   margin: "0 0 22px",
                 }}
               >
-                Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda,
-                y pagá de forma segura. Confirmación inmediata.
+                Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda.
+                El precio que ves es el que pagás. Confirmación inmediata.
               </p>
 
               <Link
