@@ -217,11 +217,12 @@ un colegio médico profesional sin sonrojarse. Nada de estética gig economy
 médicos (los códigos de ética lo sancionan). Convocamos profesionales, no
 repartidores.
 
-**Momento founder:** los primeros médicos tienen categoría fundador (comisión 5%).
-Hay una historia de escasez real esperando a ser contada — **[DECISIÓN DIEGO
-PENDIENTE: definir qué significa "founder" en el tiempo — ¿5% de por vida? ¿por N
-años? ¿primeros cuántos médicos?— antes de que la agencia lo convierta en
-campaña. Sin esto definido, el claim no se usa.]**
+**Momento founder (definición Diego, 12/06/2026):** la categoría founder la asigna
+el admin, uno por uno. En el arranque, todos los médicos que entran son founders
+(comisión 5%) — el programa contempla **~15 médicos founders** y después se evalúa
+cómo fluye. Regla para campaña: se comunica "comisión founder del 5%" y la
+escasez real ("los primeros 15"), pero **NO se promete plazo** ("de por vida",
+"para siempre" = prohibido hasta que Diego lo defina formalmente).
 
 ---
 
@@ -340,17 +341,21 @@ Ante la duda regulatoria, la revisión legal es gate previo a publicar.
 
 ### Números reales a hoy (internos — NO publicables sin OK explícito)
 
-> Estos números definen la estrategia (densidad de oferta, precio percibido vs.
-> copago de prepaga) pero NO van en piezas hasta que den orgullo, no lástima.
+> La foto honesta (12/06/2026): **no hay números todavía — y ese es exactamente el
+> punto de partida del GTM.** Acabamos de lanzar; la tracción es lo que esta
+> campaña tiene que construir, empezando por la oferta.
 
-- Médicos aprobados y activos: **[COMPLETA DIEGO]** (lanzamiento: primeros founders)
+- **Objetivo del primer tramo del GTM: captar médicos.** Meta inicial: ~15
+  médicos founders activos (la pregunta del huevo-gallina está resuelta:
+  médicos primero).
+- Médicos aprobados y activos: primeros founders en alta (programa recién abierto).
 - Ticket de consulta: lo fija cada médico — referencia real validada: ~$30.000 ARS
-  (neto médico ~$27.000 tras comisiones)
-- Comisión Docto: 5% founder / 10% estándar
-- Consultas completadas desde el lanzamiento: **[COMPLETA DIEGO]**
-- Franjas horarias con oferta: **[COMPLETA DIEGO]**
-- Rango de inversión mensual previsto para los primeros 6 meses:
-  **[COMPLETA DIEGO — sin esto la agencia no puede cotizar en serio]**
+  (neto médico ~$27.000 tras comisiones).
+- Comisión Docto: 5% founder / 10% estándar.
+- Consultas completadas: las de validación de lanzamiento (con pago real, split OK).
+- Presupuesto: la "agencia" es **Code** (proyecto paralelo interno de Diego, no un
+  proveedor externo) — estrategia y presupuesto por canal se definen en conjunto
+  ahí, caso por caso. No hay rango predefinido.
 
 ---
 
@@ -391,15 +396,23 @@ Ante la duda regulatoria, la revisión legal es gate previo a publicar.
 
 ---
 
-## Anexo — Decisiones pendientes de Diego antes de la primera reunión
+## Anexo — Decisiones (resueltas el 12/06/2026, salvo la 4)
 
-1. **Términos founder:** qué significa el 5% en el tiempo (de por vida / N años /
-   primeros N médicos). Sin esto, el claim founder no se usa en campaña.
-2. **Números internos** de la sección 10 (médicos activos, consultas, franjas).
-3. **Rango de presupuesto** mensual para los primeros 6 meses.
-4. **Página índice /verificar:** hoy la verificación funciona por link de cada
-   receta; si queremos publicitar "entrá a docto.com.ar/verificar", hay que
-   construir la página índice primero (decisión producto, no marketing).
+1. ✅ **Términos founder:** asignación manual por admin; en el arranque todos
+   entran como founders; programa de ~15 médicos founders, después se evalúa.
+   En campaña: comunicar el 5% y la escasez ("los primeros 15"), sin prometer
+   plazos.
+2. ✅ **Números internos:** no hay todavía — el primer tramo del GTM es
+   exactamente construirlos, empezando por la captación de médicos (ver 10).
+3. ✅ **Presupuesto:** la agencia es Code (proyecto interno); estrategia y
+   presupuesto se definen ahí, canal por canal.
+4. ⏳ **Página índice /verificar:** hoy cada receta tiene su propio link de
+   verificación (docto.com.ar/verificar/CÓDIGO) — pero la dirección "pelada"
+   (docto.com.ar/verificar, sin código) no existe como página. Si la campaña
+   quisiera decir "entrá a docto.com.ar/verificar y poné el código de la
+   receta", primero habría que construir esa página con su buscador. Mientras
+   tanto, el claim correcto es "cada receta lleva su link/QR de verificación".
+   Decisión de producto pendiente — sin urgencia.
 
 ---
 
