@@ -43,6 +43,7 @@ export default function SalaEsperaCliente({
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [pagando, setPagando] = useState(false);
+  const [errorPago, setErrorPago] = useState<string | null>(null);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
@@ -225,6 +226,7 @@ export default function SalaEsperaCliente({
           disabled={pagando}
           onClick={async () => {
             setPagando(true);
+            setErrorPago(null);
             try {
               // Intentar pago real con Mercado Pago
               const mpRes = await fetch("/api/pago/crear-v2", {
@@ -255,9 +257,12 @@ export default function SalaEsperaCliente({
                 return;
               }
 
-              // Ambos fallaron
+              // Ambos fallaron — avisar SIEMPRE (antes fallaba en silencio y el
+              // paciente no sabía si pagó o no)
+              setErrorPago("No pudimos procesar el pago. Reintentá en unos segundos — si sigue fallando, escribinos a soporte@docto.com.ar.");
               setPagando(false);
             } catch {
+              setErrorPago("No pudimos procesar el pago. Revisá tu conexión y reintentá.");
               setPagando(false);
             }
           }}
@@ -265,6 +270,12 @@ export default function SalaEsperaCliente({
         >
           {pagando ? "Procesando..." : "Pagar consulta"}
         </button>
+      )}
+
+      {errorPago && (
+        <p className="mt-2 text-sm font-medium" style={{ color: "#E24B4A" }}>
+          {errorPago}
+        </p>
       )}
 
       {/* Estudios del paciente — solo después de que el médico acepte */}
