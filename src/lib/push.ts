@@ -34,33 +34,42 @@ export async function enviarPush(userId: string, payload: PushPayload): Promise<
   if (!ensureVapid()) return false;
 
   const supabase = createAdminClient();
-  const { data: sub } = await supabase
+  // TODAS las suscripciones activas del usuario — celular Y compu. Antes se
+  // enviaba solo a la más reciente (limit 1): si el médico activaba push en la
+  // compu después que en el celular, el celular quedaba MUDO para siempre.
+  const { data: subs } = await supabase
     .from("push_subscriptions")
     .select("endpoint, p256dh, auth")
     .eq("user_id", userId)
     .eq("activa", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  if (!sub) return false;
+  if (!subs || subs.length === 0) return false;
 
-  try {
-    await webpush.sendNotification(
-      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-      JSON.stringify(payload)
-    );
-    return true;
-  } catch (err: unknown) {
-    const statusCode = (err as { statusCode?: number })?.statusCode;
-    if (statusCode === 404 || statusCode === 410) {
-      await supabase
-        .from("push_subscriptions")
-        .update({ activa: false })
-        .eq("endpoint", sub.endpoint);
-    }
-    return false;
-  }
+  const resultados = await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify(payload)
+        );
+        return true;
+      } catch (err: unknown) {
+        const statusCode = (err as { statusCode?: number })?.statusCode;
+        if (statusCode === 404 || statusCode === 410) {
+          // Suscripción muerta (dispositivo la revocó/expiró) → desactivar
+          await supabase
+            .from("push_subscriptions")
+            .update({ activa: false })
+            .eq("endpoint", sub.endpoint);
+        }
+        return false;
+      }
+    })
+  );
+
+  // true si llegó al menos a un dispositivo
+  return resultados.some(Boolean);
 }
 
 export async function medicoEstaEnCurso(medicoId: string): Promise<boolean> {
