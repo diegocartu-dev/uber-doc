@@ -6,7 +6,7 @@ const TIMEOUT_MS = 3000;
 const RATE_LIMIT_MS = 10_000;
 const rateLimitMap = new Map<string, number>();
 
-type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion";
+type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion" | "homologacion";
 
 interface CheckResult {
   nombre: string;
@@ -38,7 +38,10 @@ async function timed(fn: () => Promise<{ detalle: string; error_tecnico?: string
     const result = await withTimeout(fn(), TIMEOUT_MS);
     const latencia = Date.now() - start;
     return {
-      estado: latencia > TIMEOUT_MS ? "degradado" : "ok",
+      // BUG previo: si el check devolvía un error "blando" (error_tecnico seteado,
+      // ej "API key invalida"), el estado igual quedaba "ok" → badge verde "Activa"
+      // con texto de error al lado. El error_tecnico manda.
+      estado: result.error_tecnico ? "error" : latencia > TIMEOUT_MS ? "degradado" : "ok",
       latencia_ms: latencia,
       detalle: result.detalle,
       error_tecnico: result.error_tecnico,
@@ -69,13 +72,13 @@ async function checkSupabase(): Promise<CheckResult> {
 
 async function checkVercel(): Promise<CheckResult> {
   const now = new Date().toISOString();
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
-  if (!baseUrl) {
-    return { nombre: "Vercel", icono: "Globe", estado: "ok", detalle: "Hosting activo (sin URL configurada)", latencia_ms: null, checked_at: now };
-  }
+  // SIEMPRE el dominio público. BUG previo: usaba VERCEL_URL (la URL interna del
+  // deploy, protegida por Vercel Authentication) → 401 falso "Respondiendo con
+  // errores" aunque el sitio estuviera perfecto.
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.docto.com.ar";
   const result = await timed(async () => {
     const url = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
-    const res = await fetch(`${url}/api/health`, { cache: "no-store" });
+    const res = await fetch(`${url.replace(/\/$/, "")}/api/health`, { cache: "no-store" });
     if (!res.ok) return { detalle: "Respondiendo con errores", error_tecnico: `HTTP ${res.status}` };
     return { detalle: "Hosting activo" };
   });
@@ -125,12 +128,18 @@ async function checkResend(): Promise<CheckResult> {
     return { nombre: "Resend", icono: "Mail", estado: "no_configurado", detalle: "API key no configurada", latencia_ms: null, checked_at: now };
   }
   const result = await timed(async () => {
-    const res = await fetch("https://api.resend.com/domains", {
-      headers: { Authorization: `Bearer ${key}` },
+    // POST /emails con body vacío: NO envía nada. 422 = la key autenticó y el
+    // payload fue rechazado → key VÁLIDA. BUG previo: se chequeaba GET /domains,
+    // que las keys restringidas "solo envío" no pueden leer → 401 falso
+    // "API key invalida" aunque los emails salieran perfecto.
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: "{}",
       cache: "no-store",
     });
     if (res.status === 401) return { detalle: "API key invalida", error_tecnico: "HTTP 401" };
-    if (!res.ok) return { detalle: "Respondiendo con errores", error_tecnico: `HTTP ${res.status}` };
+    if (res.status !== 422 && !res.ok) return { detalle: "Respondiendo con errores", error_tecnico: `HTTP ${res.status}` };
     return { detalle: "Email transaccional activo" };
   });
   return { nombre: "Resend", icono: "Mail", checked_at: now, ...result };
@@ -216,14 +225,57 @@ function checkSISA(): CheckResult {
 
 function checkReNaPDiS(): CheckResult {
   const now = new Date().toISOString();
+  // ReNaPDiS NO tiene API pública contra la cual integrar: el cumplimiento es
+  // (a) formato de receta compliant (Rp/IFA, Ley 27.553) — HECHO — y
+  // (b) inscripción registral de la plataforma — trámite administrativo, no técnico.
+  // El estado "simulacion" anterior daba a entender que algo estaba apagado.
   return {
     nombre: "ReNaPDiS",
     icono: "FileCheck",
-    estado: "simulacion",
-    detalle: "Recetas digitales — sin API publica disponible",
+    estado: "ok",
+    detalle: "Formato de receta compliant (Ley 27.553) — no existe API pública para integrar",
     latencia_ms: null,
     checked_at: now,
   };
+}
+
+async function checkFarmalink(): Promise<CheckResult> {
+  const now = new Date().toISOString();
+  const clientId = process.env.FARMALINK_TEST_CLIENT_ID;
+  const clientSecret = process.env.FARMALINK_TEST_CLIENT_SECRET;
+  const usuario = process.env.FARMALINK_TEST_USER;
+  const clave = process.env.FARMALINK_TEST_PASSWORD;
+  if (!clientId || !clientSecret || !usuario || !clave) {
+    return {
+      nombre: "Farmalink",
+      icono: "FileCheck",
+      estado: "no_configurado",
+      detalle: "Receta en farmacias — en construcción (credenciales TEST no configuradas en este entorno)",
+      latencia_ms: null,
+      checked_at: now,
+    };
+  }
+  const result = await timed(async () => {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const res = await fetch("https://test-servicios.farmalink.com.ar/api/oauth/token/generate", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basic}`,
+        username: usuario,
+        password: clave,
+        scope: "Switch.RecetaElectRest",
+        grant_type: "PASSWORD",
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return { detalle: "Homologación TEST — autenticación falló", error_tecnico: `HTTP ${res.status}` };
+    return { detalle: "Homologación TEST — autenticación OK (en construcción)" };
+  });
+  const check: CheckResult = { nombre: "Farmalink", icono: "FileCheck", checked_at: now, ...result };
+  // Token OK = homologación en marcha, no "Activa" (todavía no emite recetas reales)
+  if (check.estado === "ok") check.estado = "homologacion";
+  return check;
 }
 
 export async function GET() {
@@ -250,6 +302,7 @@ export async function GET() {
     checkResend(),
     checkAnthropic(),
     checkOpenAI(),
+    checkFarmalink(),
   ]);
 
   const integraciones: CheckResult[] = results.map((r) =>

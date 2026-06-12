@@ -21,7 +21,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 
-type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion";
+type Estado = "ok" | "degradado" | "error" | "no_configurado" | "simulacion" | "homologacion";
 
 interface Integracion {
   nombre: string;
@@ -52,6 +52,8 @@ const STATUS_CONFIG: Record<Estado, { color: string; Icon: typeof CheckCircle; l
   error: { color: "#D85A30", Icon: XCircle, label: "Caida" },
   no_configurado: { color: "#888780", Icon: AlertTriangle, label: "No integrada" },
   simulacion: { color: "#888780", Icon: AlertTriangle, label: "Simulacion" },
+  // En homologación: el handshake técnico funciona pero aún no opera en producción
+  homologacion: { color: "#378ADD", Icon: AlertTriangle, label: "Homologación" },
 };
 
 function tiempoRelativo(iso: string): string {
