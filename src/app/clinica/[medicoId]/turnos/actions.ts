@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { pushAlMedico } from "@/lib/push";
 import { getFlag } from "@/lib/feature-flags";
+import { transaccionEsDeTest } from "@/lib/pago-test";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -100,6 +101,20 @@ export async function confirmarPagoTurno(turnoId: string) {
   // Verificar que no expiró
   if (turno.reservado_hasta && new Date(turno.reservado_hasta) < new Date()) {
     return { error: "Tu reserva expiró. Volvé al calendario para elegir otro turno." };
+  }
+
+  // Esta acción es el fallback SIMULADO (confirma sin cobrar). Con el cobro real
+  // general ON, solo se permite para cuentas de test; un turno real debe pagarse
+  // de verdad por crear-v2 → si llegó acá (ej: médico sin MP), no lo confirmamos
+  // gratis. Sin este guard, un turno real podría confirmarse sin pago.
+  if (await getFlag("pago_marketplace")) {
+    const esTest = await transaccionEsDeTest({
+      pacienteUserId: user.id,
+      medicoId: turno.medico_id,
+    });
+    if (!esTest) {
+      return { error: "No se pudo procesar el pago de este turno. Reintentá o contactá soporte." };
+    }
   }
 
   const { error } = await supabase

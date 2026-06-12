@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { transaccionEsDeTest } from "@/lib/pago-test";
 
 export async function POST(req: NextRequest) {
-  // Bloquear solo si pagos reales marketplace están activos
-  const { getFlag } = await import("@/lib/feature-flags");
-  if (await getFlag("pago_marketplace")) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
   try {
     const { consultaId } = await req.json();
     if (!consultaId) {
@@ -26,13 +21,29 @@ export async function POST(req: NextRequest) {
 
     const { data: consulta } = await supabaseAdmin
       .from("consultas")
-      .select("id, estado, paciente_id")
+      .select("id, estado, paciente_id, medico_id")
       .eq("id", consultaId)
       .eq("paciente_id", user.id)
       .single();
 
     if (!consulta) {
       return NextResponse.json({ error: "Consulta no encontrada" }, { status: 404 });
+    }
+
+    // Con el cobro real general ON, simular SOLO está permitido para cuentas de
+    // test (paciente o médico). Para usuarios reales con el flag ON, se bloquea
+    // (deben pagar de verdad por crear-v2). Antes el guard bloqueaba a TODOS
+    // apenas el flag estaba ON → rompía el pago simulado de CI de las cuentas
+    // test (su fallback es este endpoint).
+    const { getFlag } = await import("@/lib/feature-flags");
+    if (await getFlag("pago_marketplace")) {
+      const esTest = await transaccionEsDeTest({
+        pacienteUserId: user.id,
+        medicoId: consulta.medico_id,
+      });
+      if (!esTest) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
     }
 
     if (consulta.estado !== "aceptada") {
