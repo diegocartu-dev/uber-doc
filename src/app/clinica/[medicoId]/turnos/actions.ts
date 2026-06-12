@@ -114,12 +114,12 @@ export async function confirmarPagoTurno(turnoId: string) {
 
   const { data: pacNombre } = await supabase
     .from("pacientes").select("nombre_completo").eq("id", paciente.id).single();
+  // CON sonido (decisión Diego 11/06): el médico se entera sin estar mirando la app.
   pushAlMedico(turno.medico_id, {
     title: "🟢 Docto",
     body: `${pacNombre?.nombre_completo ?? "Un paciente"} reservó un turno para el ${turno.fecha}`,
     url: "/medico/agenda",
     tag: `reserva-${turnoId}`,
-    silent: true,
   }).catch(() => {});
 
   return { success: true };
@@ -152,12 +152,15 @@ export async function entrarSalaEspera(turnoId: string) {
 
   const { data: pacNombre } = await supabase
     .from("pacientes").select("nombre_completo").eq("id", paciente.id).single();
+  // SIN skip por en_curso (decisión Diego 11/06): el médico debe enterarse de un
+  // paciente esperando AUNQUE esté en otra llamada — antes se salteaba y el
+  // siguiente paciente quedaba invisible hasta que el médico volviera al dashboard.
   pushAlMedico(turno.medico_id, {
     title: "🟢 Docto",
     body: `${pacNombre?.nombre_completo ?? "Un paciente"} está esperando tu consulta`,
     url: "/dashboard",
     tag: `espera-${turnoId}`,
-  }, true).catch(() => {});
+  }).catch(() => {});
 
   return { success: true };
 }

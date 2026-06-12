@@ -24,6 +24,7 @@ import BannerFirmaElectronica from "./BannerFirmaElectronica";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
+import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { perfilMedicoCompleto } from "@/lib/perfil-medico";
@@ -514,6 +515,7 @@ export default async function DashboardPage({
       >
         <div className="min-h-full bg-[#f8f9fa]">
           <PresenciaTracker rol="medico" />
+          <ModalPushMedico />
           <PopupEsperando />
           <PopupPagada />
           {aviso === "sin-cuil" && (

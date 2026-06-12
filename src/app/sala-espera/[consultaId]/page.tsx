@@ -59,12 +59,15 @@ export default async function SalaEsperaPage({
       canalOrigen: consulta.canal_origen,
     }).catch((e) => console.error("[sala-espera] Error registrando entrada:", e));
 
+    // SIN skip por en_curso (decisión Diego 11/06): el médico debe enterarse de un
+    // paciente nuevo AUNQUE esté en otra llamada — antes se salteaba y el siguiente
+    // paciente quedaba invisible hasta volver al dashboard.
     pushAlMedico(consulta.medico_id, {
       title: "🟢 Docto",
       body: `${paciente.nombre_completo ?? "Un paciente"} está esperando una consulta inmediata`,
       url: "/dashboard",
       tag: `espera-ci-${consulta.id}`,
-    }, true).catch(() => {});
+    }).catch(() => {});
   }
 
   // Contar posición en la cola (consultas esperando antes que esta)

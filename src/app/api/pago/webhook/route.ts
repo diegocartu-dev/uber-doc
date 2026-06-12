@@ -360,12 +360,12 @@ async function handleApproved(
             .single();
           pacienteNombre = pac?.nombre_completo ?? pacienteNombre;
         }
+        // CON sonido (decisión Diego 11/06): el médico se entera sin mirar la app.
         pushAlMedico(turnoConfirmado.medico_id, {
           title: "🟢 Docto",
           body: `${pacienteNombre} reservó un turno para el ${turnoConfirmado.fecha}`,
           url: "/medico/agenda",
           tag: `reserva-${id}`,
-          silent: true,
         }).catch(() => {});
       }
     }
