@@ -13,6 +13,15 @@ const admin = createClient(supabaseUrl, serviceKey);
 async function cleanup() {
   console.log("[sereno-cleanup] Limpiando datos generados por cuentas de prueba...");
 
+  // Borradores que deja el smoke de registro (tests/e2e/registro-no-bloqueado.spec.ts):
+  // cada corrida del smoke médico crea un borrador (matrícula duplicada a propósito).
+  // Se borra siempre, exista o no cuenta de prueba.
+  const { count: smokeBorradores } = await admin
+    .from("registros_borrador")
+    .delete({ count: "exact" })
+    .like("email", "sereno-smoke-%");
+  console.log(`[sereno-cleanup] Borradores de smoke de registro eliminados: ${smokeBorradores ?? 0}`);
+
   // Get test medico and paciente IDs
   const { data: testMedicos } = await admin
     .from("medicos")
