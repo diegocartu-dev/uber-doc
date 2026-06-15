@@ -4,6 +4,12 @@ import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 
+// Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
+// Vercel y la función moría sin completar (refeps_validado_at quedaba null).
+// maxDuration evita la muerte por timeout corto; los logs [aprobar/refeps] +
+// [refeps/token] + [refeps/buscar] muestran dónde y cuánto tarda la validación.
+export const maxDuration = 60;
+
 /**
  * Gate de seguridad regulatoria: un médico REAL no puede quedar `aprobado` sin
  * validación REFEPS activa, JAMÁS. Si ya está validado, pasa. Si no, valida
@@ -37,7 +43,10 @@ async function asegurarRefepsParaAprobar(
     };
   }
 
+  console.log(`[aprobar/refeps] validando médico ${medicoId} (DNI ${medico.dni})…`);
+  const _tRefeps = Date.now();
   const resultado = await validarMedicoREFEPS(medico.dni);
+  console.log(`[aprobar/refeps] resultado en ${Date.now() - _tRefeps}ms — encontrado=${resultado.encontrado} activo=${resultado.activo} error=${resultado.error ?? "-"}`);
   // Strippear `raw` (FHIR completo con datos personales) antes de persistir.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw: _raw, ...resultadoSinRaw } = resultado;
