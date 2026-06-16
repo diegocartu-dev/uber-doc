@@ -224,7 +224,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 procesando={procesando === m.id}
                 confirmando={confirmando?.id === m.id ? confirmando.accion : null}
                 copiado={copiado === m.id}
-                onAprobar={() => setConfirmando({ id: m.id, accion: "aprobar" })}
+                onAprobar={() => handleAccion(m.id, "aprobar")}
                 onRechazar={(motivo) => handleAccion(m.id, "rechazar", motivo)}
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
