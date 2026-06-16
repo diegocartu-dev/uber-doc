@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+import { enviarEmailMedicoAprobado } from "@/lib/email";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -143,6 +144,9 @@ export async function PATCH(req: NextRequest) {
         recursoId: medicoId,
       });
     }
+    // Email de bienvenida al médico recién aprobado (founder). No bloquea ni
+    // rompe la aprobación: la función captura sus propios errores.
+    await enviarEmailMedicoAprobado(medicoId);
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 
