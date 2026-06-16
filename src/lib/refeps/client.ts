@@ -106,6 +106,7 @@ export async function obtenerToken(): Promise<string> {
 
   // El Bus de Interoperabilidad usa JSON body (no form-urlencoded)
   // con campos camelCase (grantType, clientAssertionType, clientAssertion)
+  const _tTok = Date.now();
   const resp = await fetch(TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -118,6 +119,7 @@ export async function obtenerToken(): Promise<string> {
     }),
     signal: AbortSignal.timeout(10_000),
   });
+  console.log(`[refeps/token] HTTP ${resp.status} en ${Date.now() - _tTok}ms`);
 
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
@@ -176,6 +178,7 @@ export async function buscarPorDNI(
   url.searchParams.set("identifier", `${IDENTIFIER_SYSTEMS.REFEPS}|${refepsId}`);
   url.searchParams.set("_format", "json");
 
+  const _tBus = Date.now();
   const resp = await fetch(url.toString(), {
     method: "GET",
     headers: {
@@ -184,6 +187,7 @@ export async function buscarPorDNI(
     },
     signal: AbortSignal.timeout(10_000),
   });
+  console.log(`[refeps/buscar] HTTP ${resp.status} en ${Date.now() - _tBus}ms`);
 
   // Si 401, invalidar token e intentar una vez más
   if (resp.status === 401) {
