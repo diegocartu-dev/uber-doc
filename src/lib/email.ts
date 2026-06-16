@@ -388,3 +388,68 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
     console.error("[email] enviarEmailRecordatorio24h falló:", err);
   }
 }
+
+export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "medico_aprobado"); return; }
+  try {
+    const supabase = createAdminClient();
+    const { data: medico } = await supabase
+      .from("medicos")
+      .select("nombre_completo, slug, email, user_id")
+      .eq("id", medicoId)
+      .single();
+    if (!medico) return;
+
+    let email = (medico.email as string | null) ?? null;
+    if (!email && medico.user_id) {
+      const { data: { user } } = await supabase.auth.admin.getUserById(medico.user_id);
+      email = user?.email ?? null;
+    }
+    if (!email) { console.warn("[email] médico sin email, no se envía bienvenida:", medicoId); return; }
+    const destinatario = email;
+
+    const linkConsultorio = medico.slug ? `docto.com.ar/dr/${medico.slug}` : "docto.com.ar/dr/tu-nombre";
+
+    const html = wrapHtml("¡Bienvenido a Docto! — tu cuenta está activa", `
+      <div style="margin-bottom:20px;">${chip("M&eacute;dico fundador", AZUL)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">&iexcl;Hola ${formatNombreMedico(medico.nombre_completo)}! 🎉</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
+        Tu cuenta ya est&aacute; <strong>aprobada y verificada</strong> &mdash; y sos uno de nuestros <strong>m&eacute;dicos fundadores</strong> (comisi&oacute;n del 5%). De ac&aacute; en m&aacute;s, Docto es tu consultorio digital: vos atend&eacute;s, del resto nos encargamos nosotros.
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Para arrancar en 5 minutos:</p>
+      <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
+        <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Conect&aacute; tu Mercado Pago</strong> (Perfil &rarr; Cobros) &mdash; es donde vas a recibir tus honorarios, directo a tu cuenta.</li>
+        <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Arm&aacute; tu agenda con Nova</strong>, tu asistente &mdash; contale cu&aacute;ndo y a cu&aacute;nto quer&eacute;s atender, y ella crea los turnos por vos.</li>
+        <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Ponete disponible</strong> desde tu panel cuando tengas un rato libre &mdash; ah&iacute; los pacientes ya te encuentran.</li>
+      </ul>
+      <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Tus tres formas de atender:</p>
+      <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
+        <li style="margin-bottom:10px;">⚡ <strong style="color:${GRIS};">Consulta Inmediata</strong> &mdash; te pon&eacute;s disponible y el paciente se conecta al instante. Ideal para los huecos libres.</li>
+        <li style="margin-bottom:10px;">📅 <strong style="color:${GRIS};">Turnos Programados</strong> &mdash; abr&iacute;s tu agenda y reservan d&iacute;a y hora. Confirmaci&oacute;n y recordatorios, autom&aacute;ticos.</li>
+        <li style="margin-bottom:10px;">🩺 <strong style="color:${GRIS};">Consultorio Particular</strong> &mdash; tu link propio (${linkConsultorio}) copialo para atender a tus pacientes en tu consultorio virtual privado.</li>
+      </ul>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
+        Vas a ver que Docto es <strong>muy intuitivo</strong> &mdash; en un par de consultas ya va a ser tu plataforma de trabajo preferida. Cualquier cosa, estamos.
+      </p>
+      <p style="margin:0 0 4px;font-size:15px;color:#6b7280;">&iexcl;Bienvenido/a al equipo!</p>
+      <p style="margin:0;font-size:15px;color:#6b7280;">&mdash; El equipo de Docto</p>
+      ${boton("Ir a mi panel", `${BASE_URL}/dashboard`, AZUL)}
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Adjuntamos una gu&iacute;a r&aacute;pida de Docto en PDF para que empieces con todo.</p>
+    `);
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: destinatario,
+        subject: "¡Bienvenido a Docto! Tu cuenta de médico fundador está activa",
+        html,
+        attachments: [{ filename: "Bienvenida a Docto.pdf", path: `${BASE_URL}/guia-docto.pdf` }],
+      }),
+      `medico-aprobado-${medicoId}`
+    );
+
+    console.log("[email] bienvenida médico aprobado enviada:", medicoId);
+  } catch (err) {
+    console.error("[email] enviarEmailMedicoAprobado falló:", err);
+  }
+}

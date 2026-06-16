@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+import { enviarEmailMedicoAprobado } from "@/lib/email";
 
 /**
  * Gate de seguridad regulatoria: un médico REAL no puede quedar `aprobado` sin
@@ -134,6 +135,9 @@ export async function PATCH(req: NextRequest) {
         recursoId: medicoId,
       });
     }
+    // Email de bienvenida al médico recién aprobado (founder). No bloquea ni
+    // rompe la aprobación: la función captura sus propios errores.
+    await enviarEmailMedicoAprobado(medicoId);
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 
