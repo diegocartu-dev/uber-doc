@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/insights", label: "Hoy" },
   { href: "/insights/medicos", label: "Médicos" },
   { href: "/insights/especialidades", label: "Especialidades" },
+  { href: "/insights/oferta", label: "Oferta" },
   { href: "/insights/funnel", label: "Funnel" },
 ];
 

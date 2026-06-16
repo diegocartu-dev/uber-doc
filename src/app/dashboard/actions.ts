@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
+import { logDisponibilidad } from "@/lib/disponibilidad-log";
 
 export async function actualizarDisponibilidad(data: {
   disponible: boolean;
@@ -36,7 +37,7 @@ export async function actualizarDisponibilidad(data: {
   // en la cola. Para distinguir transición de re-guardado leemos el estado previo.
   const { data: previo } = await supabase
     .from("medicos")
-    .select("disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, domicilio_consultorio, foto_url, es_cuenta_test")
+    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, domicilio_consultorio, foto_url, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -63,6 +64,16 @@ export async function actualizarDisponibilidad(data: {
 
   if (error) {
     return { error: error.message };
+  }
+
+  // Log de la transición real de disponibilidad CI (para el panel de oferta).
+  // Solo transiciones reales (no re-guardados) y médicos no-test. Non-blocking.
+  if (previo?.id && !previo.es_cuenta_test) {
+    if (data.disponible && !previo.disponible) {
+      await logDisponibilidad(previo.id, true);
+    } else if (!data.disponible && previo.disponible) {
+      await logDisponibilidad(previo.id, false);
+    }
   }
 
   return { success: true };
