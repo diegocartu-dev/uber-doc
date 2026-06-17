@@ -107,6 +107,7 @@ export default async function DashboardPage({
 
   let completadasHoy = 0;
   let ingresosHoy = 0;
+  let netoHoy = 0;
   let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string; canal_origen?: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
   let proximosTurnos: { id: string; fecha: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
@@ -290,13 +291,20 @@ export default async function DashboardPage({
 
       // Completadas hoy (consultas + turnos)
       const { data: compConsHoy } = await supabase
-        .from("consultas").select("id")
+        .from("consultas").select("id, monto, comision_docto_pct")
         .eq("medico_id", data.id).eq("estado", "completada").gte("created_at", hoy);
       const { data: compTurnosHoy } = await supabase
-        .from("turnos").select("id")
+        .from("turnos").select("id, monto, comision_docto_pct")
         .eq("medico_id", data.id).eq("estado", "completado").eq("fecha", hoy);
       completadasHoy = (compConsHoy?.length ?? 0) + (compTurnosHoy?.length ?? 0);
-      ingresosHoy = completadasHoy * (data.precio_consulta ?? 0);
+      // Ingresos = suma de montos reales facturados; Neto = menos comisión Docto
+      // por consulta (default 5%). MISMA fórmula que fetchMetricasMedico (actions.ts),
+      // así "Hoy" no difiere entre la carga de la página y el botón.
+      const _compHoy = [...(compConsHoy ?? []), ...(compTurnosHoy ?? [])];
+      ingresosHoy = _compHoy.reduce((s, x) => s + (x.monto ?? 0), 0);
+      netoHoy = Math.round(
+        _compHoy.reduce((s, x) => s + (x.monto ?? 0) * (1 - (Number(x.comision_docto_pct) || 5) / 100), 0)
+      );
 
       // Modelos activos (lista para sidebar)
       const { data: modelosData } = await supabase
@@ -597,6 +605,7 @@ export default async function DashboardPage({
                 enEspera: turnosEsperaCompletos.length + consultasPendientes.length,
                 completadas: completadasHoy,
                 ingresos: ingresosHoy,
+                neto: netoHoy,
               }}
             />
 
