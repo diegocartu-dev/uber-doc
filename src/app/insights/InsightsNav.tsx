@@ -6,6 +6,7 @@ import { Stethoscope, Settings } from "lucide-react";
 
 const LINKS = [
   { href: "/insights", label: "Hoy" },
+  { href: "/insights/atenciones", label: "Atenciones" },
   { href: "/insights/medicos", label: "Médicos" },
   { href: "/insights/especialidades", label: "Especialidades" },
   { href: "/insights/oferta", label: "Oferta" },
