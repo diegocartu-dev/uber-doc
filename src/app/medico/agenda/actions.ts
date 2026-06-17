@@ -174,12 +174,13 @@ async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClie
     .order("created_at", { ascending: false });
 
   if (!modelosActivos || modelosActivos.length === 0) {
-    // Sin modelos activos → desbloquear todos los turnos bloqueados del médico
+    // Sin modelos activos → ningún turno debe quedar reservable. Bloquear los
+    // disponibles (los tomados/reservados NO se tocan: distinto estado).
     await supabase
       .from("turnos")
-      .update({ estado: "disponible" })
+      .update({ estado: "bloqueado" })
       .eq("medico_id", medicoId)
-      .eq("estado", "bloqueado");
+      .eq("estado", "disponible");
     return;
   }
 
@@ -213,18 +214,22 @@ async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClie
     const jsDay = d.getDay();
     const diaSemana = jsDay === 0 ? 7 : jsDay;
 
-    // Encontrar el modelo activo más nuevo que cubre esta fecha/día
+    // Encontrar el modelo ACTIVO más nuevo que cubre esta fecha/día
     const modeloGanador = modelosActivos.find((m) => {
       const dias = diasPorModelo.get(m.id);
       return dias?.has(diaSemana) && turno.fecha >= m.fecha_inicio && turno.fecha <= m.fecha_fin;
     });
 
-    if (modeloGanador && modeloGanador.id !== turno.modelo_id) {
-      // Otro modelo más nuevo cubre este slot → debe estar bloqueado
-      if (turno.estado === "disponible") aBloquear.push(turno.id);
-    } else {
-      // Este turno pertenece al modelo ganador (o no hay conflicto) → debe estar disponible
+    // Un turno debe quedar DISPONIBLE solo si su propio modelo es el ganador
+    // (activo, cubre la fecha y es el más nuevo). Si el modelo del turno está
+    // inhabilitado, o gana otro modelo más nuevo, o ningún modelo activo cubre
+    // esa fecha → debe quedar BLOQUEADO (no reservable, oculto en el calendario).
+    const debeEstarDisponible = !!modeloGanador && modeloGanador.id === turno.modelo_id;
+
+    if (debeEstarDisponible) {
       if (turno.estado === "bloqueado") aDesbloquear.push(turno.id);
+    } else {
+      if (turno.estado === "disponible") aBloquear.push(turno.id);
     }
   }
 
