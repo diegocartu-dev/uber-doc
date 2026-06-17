@@ -85,11 +85,11 @@ export async function fetchMetricasMedico(
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { turnos: 0, enEspera: 0, completadas: 0, ingresos: 0 };
+  if (!user) return { turnos: 0, enEspera: 0, completadas: 0, ingresos: 0, neto: 0 };
 
   const { data: med } = await supabase
     .from("medicos").select("id, precio_consulta").eq("id", medicoId).eq("user_id", user.id).maybeSingle();
-  if (!med) return { turnos: 0, enEspera: 0, completadas: 0, ingresos: 0 };
+  if (!med) return { turnos: 0, enEspera: 0, completadas: 0, ingresos: 0, neto: 0 };
 
   const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const pad = (n: number) => n.toString().padStart(2, "0");
@@ -125,11 +125,11 @@ export async function fetchMetricasMedico(
     .eq("medico_id", medicoId).eq("estado", "esperando");
 
   const { data: turnosCompData } = await supabase
-    .from("turnos").select("monto")
+    .from("turnos").select("monto, comision_docto_pct")
     .eq("medico_id", medicoId).eq("estado", "completado")
     .gte("fecha", fechaDesde).lte("fecha", hoy);
   const { data: consultasCompData } = await supabase
-    .from("consultas").select("monto")
+    .from("consultas").select("monto, comision_docto_pct")
     .eq("medico_id", medicoId).eq("estado", "completada")
     .gte("created_at", `${fechaDesde}T00:00:00`);
 
@@ -137,16 +137,26 @@ export async function fetchMetricasMedico(
   const consultasComp = consultasCompData?.length ?? 0;
   const completadas = turnosComp + consultasComp;
 
-  // Sumar montos reales facturados (no precio actual × cantidad)
-  const ingresosTurnos = (turnosCompData ?? []).reduce((sum, t) => sum + (t.monto ?? 0), 0);
-  const ingresosConsultas = (consultasCompData ?? []).reduce((sum, c) => sum + (c.monto ?? 0), 0);
-  const ingresos = ingresosTurnos + ingresosConsultas;
+  // Ingresos = suma de los montos REALES facturados (respeta el valor de cada
+  // consulta/turno, que pueden ser distintos). Neto = ingresos menos la comisión
+  // de Docto por consulta (comision_docto_pct, default 5%). MISMA fórmula que el
+  // cálculo inicial del dashboard (page.tsx) para que "Hoy" no difiera entre la
+  // carga de la página y el botón.
+  const completadasData = [...(turnosCompData ?? []), ...(consultasCompData ?? [])];
+  const ingresos = completadasData.reduce((sum, x) => sum + (x.monto ?? 0), 0);
+  const neto = Math.round(
+    completadasData.reduce(
+      (sum, x) => sum + (x.monto ?? 0) * (1 - (Number(x.comision_docto_pct) || 5) / 100),
+      0
+    )
+  );
 
   return {
     turnos: turnosCount ?? 0,
     enEspera: (turnosEspera ?? 0) + (consultasEspera ?? 0),
     completadas,
     ingresos,
+    neto,
   };
 }
 
