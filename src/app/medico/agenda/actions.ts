@@ -294,13 +294,24 @@ export async function eliminarModelo(modeloId: string) {
   // médico, así que la limpieza va por el cliente admin (propiedad ya validada).
   const admin = createAdminClient();
 
-  const { count: turnosOcupados } = await admin
+  // Solo se puede borrar una agenda cuyos turnos sean TODOS libres
+  // (disponible/bloqueado). Comparamos total vs libres: así cualquier estado
+  // distinto de disponible/bloqueado —incluido NULL o un estado futuro— cuenta
+  // como ocupado y bloquea el borrado (no se pierde la reserva ni el historial).
+  const { count: total, error: totalErr } = await admin
+    .from("turnos")
+    .select("id", { count: "exact", head: true })
+    .eq("modelo_id", modeloId);
+  if (totalErr) return { error: totalErr.message };
+
+  const { count: libres, error: libresErr } = await admin
     .from("turnos")
     .select("id", { count: "exact", head: true })
     .eq("modelo_id", modeloId)
-    .not("estado", "in", "(disponible,bloqueado)");
+    .in("estado", ["disponible", "bloqueado"]);
+  if (libresErr) return { error: libresErr.message };
 
-  if (turnosOcupados && turnosOcupados > 0) {
+  if ((total ?? 0) > (libres ?? 0)) {
     return {
       error:
         "Esta agenda tiene turnos reservados o cancelados en su historial, así que no se puede eliminar. Inhabilitala con el interruptor para que deje de ofrecer turnos.",
