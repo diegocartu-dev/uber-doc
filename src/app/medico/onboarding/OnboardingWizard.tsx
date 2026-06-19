@@ -186,7 +186,7 @@ export default function OnboardingWizard(props: Props) {
     <Marco>
       <Progreso />
       <div className="flex-1">
-        {paso === 1 && <PasoMP {...props} hecho={hechos.mp} onSkip={() => avanzar(1)} onDone={() => { marcar("mp"); avanzar(1); }} />}
+        {paso === 1 && <PasoMP {...props} hecho={hechos.mp} onSkip={() => { if (ORDEN.slice(1).some((k) => !hechos[k])) avanzar(1); else router.push("/dashboard"); }} onDone={() => { marcar("mp"); avanzar(1); }} />}
         {paso === 2 && <PasoFoto fotoUrl={props.fotoUrl} onDone={() => { marcar("foto"); avanzar(2); }} />}
         {paso === 3 && <PasoFirma firmaUrl={props.firmaUrl} onDone={() => { marcar("firma"); avanzar(3); }} />}
         {paso === 4 && <PasoDomicilio inicial={props.domicilioInicial} provinciaInicial={props.provinciaInicial} onDone={() => { marcar("domicilio"); avanzar(4); }} />}
@@ -282,6 +282,10 @@ function PasoFoto({ fotoUrl, onDone }: { fotoUrl: string | null; onDone: () => v
 
 // ════════ PASO 3 — FIRMA ════════
 function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () => void }) {
+  // "Continuar" no se habilita hasta que la imagen de firma esté efectivamente
+  // guardada (vía el botón propio de FirmaManuscrita) — evita avanzar con la
+  // firma manuscrita vacía. Si ya había firma, arranca lista.
+  const [firmaLista, setFirmaLista] = useState(!!firmaUrl);
   const [provisionando, setProvisionando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -303,10 +307,10 @@ function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () =
   };
 
   return (
-    <Centro icono="✍️" titulo="Tu firma para las recetas" sub="Dibujala con el dedo o subí una foto. Después tocá Continuar para activarla.">
-      <FirmaManuscrita firmaUrl={firmaUrl} />
+    <Centro icono="✍️" titulo="Tu firma para las recetas" sub="Dibujá tu firma o subí una foto, y tocá «Guardar firma». Después continuás.">
+      <FirmaManuscrita firmaUrl={firmaUrl} onGuardada={() => setFirmaLista(true)} />
       {error && <p className="text-center text-sm" style={{ color: C.rojo }}>{error}</p>}
-      <CTA onClick={continuar} disabled={provisionando}>{provisionando ? "Activando…" : "Continuar"}</CTA>
+      <CTA onClick={continuar} disabled={!firmaLista || provisionando}>{provisionando ? "Activando…" : "Continuar"}</CTA>
     </Centro>
   );
 }
@@ -386,7 +390,7 @@ function CTA({ onClick, disabled, children }: { onClick: () => void; disabled?: 
       onClick={onClick}
       disabled={disabled}
       className="w-full rounded-xl py-3.5 text-base font-semibold text-white disabled:opacity-50"
-      style={{ backgroundColor: "#378ADD" }}
+      style={{ backgroundColor: C.azul }}
     >
       {children}
     </button>

@@ -6,9 +6,10 @@ import SignaturePad from "signature_pad";
 
 interface Props {
   firmaUrl: string | null; // path en storage, no URL pública
+  onGuardada?: () => void; // opcional: avisa al padre (wizard) cuando la firma se guardó
 }
 
-export default function FirmaManuscrita({ firmaUrl }: Props) {
+export default function FirmaManuscrita({ firmaUrl, onGuardada }: Props) {
   const [modo, setModo] = useState<"dibujar" | "subir">("dibujar");
   const [guardando, setGuardando] = useState(false);
   const [firmaGuardada, setFirmaGuardada] = useState(!!firmaUrl);
@@ -166,6 +167,7 @@ export default function FirmaManuscrita({ firmaUrl }: Props) {
       }
 
       setFirmaGuardada(true);
+      onGuardada?.();
       setPreviewSrc(`/api/medico/firma?v=${Date.now()}`);
       setArchivoSubido(null);
       setTieneTrazos(false);
