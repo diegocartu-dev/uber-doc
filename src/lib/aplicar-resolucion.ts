@@ -106,7 +106,13 @@ export async function resolverYAplicarConsulta(
     pacienteSePresento: true,
     medicoEntroAlVideo,
     pacienteEntroAlVideo,
-    presenciaConfiable: true,
+    // Confiabilidad DERIVADA de señal real (no hardcodeada): si registramos que el
+    // paciente entró al video, el webhook de presencia funciona para esta sala →
+    // "el médico no entró" es confiable → medico_ausente. Si NO hay registro de
+    // presencia del paciente, no podemos afirmar ausencia del médico (el webhook
+    // pudo no haber llegado) → el motor resuelve conservador a favor del paciente
+    // (interrumpida + reembolso) SIN penalizar al médico. (Roberto I-1 / P-1.)
+    presenciaConfiable: pacienteEntroAlVideo,
     huboCorte: corteMs != null,
   });
 
@@ -118,20 +124,29 @@ export async function resolverYAplicarConsulta(
   // ejecutarRefund es idempotente (MP key); si el proceso muere antes del UPDATE,
   // la consulta sigue en_curso y el próximo tick la re-resuelve sin doble cobro.
   let reintegroEstado: string | null = null;
-  if (
-    r.accionPlata === "refund" &&
-    c.pago_id &&
-    c.mp_net_amount_medico &&
-    c.mp_application_fee
-  ) {
-    reintegroEstado = await ejecutarRefund(
-      consultaId,
-      c.medico_id,
-      c.pago_id,
-      c.mp_net_amount_medico,
-      c.mp_application_fee,
-      "consulta"
-    );
+  if (r.accionPlata === "refund") {
+    if (c.pago_id && c.mp_net_amount_medico && c.mp_application_fee) {
+      reintegroEstado = await ejecutarRefund(
+        consultaId,
+        c.medico_id,
+        c.pago_id,
+        c.mp_net_amount_medico,
+        c.mp_application_fee,
+        "consulta"
+      );
+    } else {
+      // Corresponde reembolso pero faltan datos de pago → NO lo dejamos pasar en
+      // silencio. Marca terminal igual (no se atendió) pero alerta para revisión
+      // manual del reintegro. (Roberto I-2.)
+      reintegroEstado = "revision_manual";
+      logError("[RESOLUCION]", "Reembolso pendiente: faltan datos de pago en la consulta", {
+        consultaId,
+        motivo: r.motivo,
+        pagoId: c.pago_id,
+        netoMedico: c.mp_net_amount_medico,
+        applicationFee: c.mp_application_fee,
+      });
+    }
   }
 
   // UPDATE terminal idempotente: solo si sigue en_curso (anti doble-resolución).
