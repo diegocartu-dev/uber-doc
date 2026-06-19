@@ -41,14 +41,30 @@ export async function actualizarDisponibilidad(data: {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  // Gate duro: no se puede activar la disponibilidad (atender) sin el perfil
+  // Gate duro: no se puede activar la disponibilidad (atender) sin el onboarding
   // completo. Defensa en profundidad — el cliente ya lo bloquea, pero el server
-  // es la fuente de verdad. Solo aplica al ACTIVAR (false→true / re-guardar en true).
-  if (data.disponible && previo && !perfilMedicoCompleto(previo)) {
-    const faltan = camposFaltantesMedico(previo).map((c) => c.label);
-    return {
-      error: `Completá tu perfil para poder atender. Falta: ${faltan.join(", ")}.`,
-    };
+  // es la fuente de verdad. Incluye Mercado Pago conectado y firma electrónica
+  // (sin eso no cobra ni firma recetas). MP/firma no viven en `medicos`: se leen
+  // de `medicos_mp_accounts` (activo) y `medico_claves`. Solo al ACTIVAR.
+  if (data.disponible && previo) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const adminDb = createAdminClient();
+    const [mpRes, firmaRes] = await Promise.all([
+      adminDb
+        .from("medicos_mp_accounts")
+        .select("estado")
+        .eq("medico_id", previo.id)
+        .eq("estado", "activo")
+        .maybeSingle(),
+      adminDb.from("medico_claves").select("id").eq("medico_id", previo.id).maybeSingle(),
+    ]);
+    const onb = { mpConectado: !!mpRes.data, firmaConfigurada: !!firmaRes.data };
+    if (!perfilMedicoCompleto(previo, onb)) {
+      const faltan = camposFaltantesMedico(previo, onb).map((c) => c.label);
+      return {
+        error: `Completá tu perfil para poder atender. Falta: ${faltan.join(", ")}.`,
+      };
+    }
   }
 
   if (data.disponible && !previo?.disponible) {
