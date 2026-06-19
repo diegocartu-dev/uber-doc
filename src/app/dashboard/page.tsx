@@ -18,16 +18,14 @@ import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import PantallaIdentidad from "./PantallaIdentidad";
-import PanelProgresoPerfil from "./PanelProgresoPerfil";
-import BannerMercadoPago from "./BannerMercadoPago";
-import BannerFirmaElectronica from "./BannerFirmaElectronica";
+import BannerActivacion from "./BannerActivacion";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
 import { formatNombreMedico } from "@/lib/utils/texto";
-import { perfilMedicoCompleto } from "@/lib/perfil-medico";
+import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
 
 export default async function DashboardPage({
   searchParams,
@@ -581,21 +579,15 @@ export default async function DashboardPage({
               <BotonPush rol="medico" />
             </div>
 
-            {/* Panel progreso perfil */}
-            <div className="mt-4">
-              <PanelProgresoPerfil
-                perfilCompleto={perfilCompletoReal}
-                telefono={medico.telefono}
-                fotoUrl={medico.foto_url}
-                domicilioConsultorio={medico.domicilio_consultorio}
-                nombreCompleto={medico.nombre_completo}
-                especialidad={medico.especialidad}
-                numeroMatricula={medico.numero_matricula}
-                tipoMatricula={medico.tipo_matricula}
-              />
-              <BannerMercadoPago mpConectado={mpConectado} />
-              <BannerFirmaElectronica firmaConfigurada={firmaConfigurada} />
-            </div>
+            {/* Activación pendiente → una sola tarjeta que lleva al wizard guiado
+                (/medico/onboarding). Reemplaza el viejo collage de perfil+MP+firma. */}
+            {!perfilCompletoReal && (
+              <div className="mt-4">
+                <BannerActivacion
+                  faltan={camposFaltantesMedico(medico, { mpConectado, firmaConfigurada }).length}
+                />
+              </div>
+            )}
 
             {/* Métricas full width */}
             <MetricasMedico
