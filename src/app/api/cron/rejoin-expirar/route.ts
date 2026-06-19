@@ -1,29 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolverYAplicarConsulta } from "@/lib/aplicar-resolucion";
 import { logInfo, logError } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
-// GET /api/cron/rejoin-expirar  (BACKSTOP diario — ver vercel.json)
-// Ref: docs/diseno-resolucion-consultas.md §6.4 · DECISIONES_PRODUCTO_DOCTO.md §13.3
+// GET /api/cron/rejoin-expirar  (cada 1 min — Vercel Pro)
+// Ref: docs/diseno-resolucion-consultas.md §6.4 / §7
 //
-// Reloj de rejoin server-authoritative. Cierra las consultas/turnos cuyo corte
-// (desconectado_at) lleva >= 2 min sin reconexión.
+// BACKSTOP del chequeo on-demand de /api/consulta-estado: resuelve consultas/turnos
+// `en_curso` que ya corresponde cerrar cuando NADIE está polleando (el paciente
+// cerró la pestaña). El cierre OPORTUNO lo hace el on-demand mientras el paciente
+// espera; este cron lo cubre cuando no hay polling.
 //
-// NOTA (plan Vercel): el cierre OPORTUNO a los 2 min lo hace el chequeo on-demand
-// en /api/consulta-estado y /api/turno-estado (el que espera hace polling cada 5s).
-// Este cron quedó como BACKSTOP DIARIO para el caso borde "los dos se cayeron y
-// ninguno volvió a pollear" — un cron de cada minuto requería Vercel Pro.
+// Consultas CI (Fase 2): delega en el aplicador (resolverYAplicarConsulta), que
+// hace cumplir la ventana de 15 min y la acción de plata (reembolso si el médico
+// no finalizó). El aplicador es idempotente y NO toca consultas activas, así que
+// es seguro pasarle todas las en_curso.
 //
-// FASE 1: deliberadamente NO resuelve plata ni introduce estados terminales
-// nuevos. Reusa la semántica de cerrar-huerfanas (→ completada/completado), solo
-// que con un reloj de 2 min en vez de 10. El valor de Fase 1 es la UX de retomar
-// y el bloqueo del médico; los estados (medico_ausente/interrumpida) y la plata
-// son Fase 2 (este cron se "upgradeará" en F2-4 para aplicar el motor de
-// resolución en lugar de cerrar a completada).
-//
-// Idempotente: el UPDATE está condicionado por estado = 'en_curso'. Si una
-// reconexión limpió desconectado_at antes de este tick, el filtro no lo agarra.
-// Si dos ticks se solapan, el segundo ya no encuentra en_curso → no re-resuelve.
+// Turnos: por ahora mantiene el comportamiento Fase 1 (cerrar a completado tras la
+// ventana de corte). PENDIENTE F2: aplicar el motor a turnos (turno applicator).
 // ---------------------------------------------------------------------------
 
 export async function GET(req: NextRequest) {
@@ -33,59 +28,55 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
+
+  // ── Consultas CI: resolución vía el motor ──
+  let consultasResueltas = 0;
+  const { data: enCurso, error: errCi } = await supabase
+    .from("consultas")
+    .select("id")
+    .eq("estado", "en_curso");
+  if (errCi) {
+    logError("[CRON/REJOIN]", "Error listando consultas en_curso", { error: errCi.message });
+  } else {
+    for (const c of enCurso ?? []) {
+      try {
+        const motivo = await resolverYAplicarConsulta(c.id, "cron_rejoin");
+        if (motivo) consultasResueltas++;
+      } catch (e) {
+        logError("[CRON/REJOIN]", "Error resolviendo consulta", { id: c.id, error: String(e) });
+      }
+    }
+  }
+
+  // ── Turnos: comportamiento Fase 1 (cerrar a completado tras 2 min de corte) ──
   const hace2min = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-
-  let totalCerradas = 0;
-  const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
-
-  for (const tabla of ["consultas", "turnos"] as const) {
-    // Candidatos: en_curso con corte pendiente que ya superó la ventana de 2 min.
-    const { data: vencidas, error: errSelect } = await supabase
-      .from(tabla)
-      .select("id")
-      .eq("estado", "en_curso")
-      .not("desconectado_at", "is", null)
-      .lt("desconectado_at", hace2min);
-
-    if (errSelect) {
-      logError("[CRON/REJOIN]", `Error seleccionando ${tabla}`, { error: errSelect.message });
-      detalle.push({ tabla, cerradas: 0, ids: [`ERROR: ${errSelect.message}`] });
-      continue;
-    }
-
-    if (!vencidas || vencidas.length === 0) {
-      detalle.push({ tabla, cerradas: 0, ids: [] });
-      continue;
-    }
-
-    const ids = vencidas.map((v) => v.id);
-    const estadoFinal = tabla === "consultas" ? "completada" : "completado";
-
-    // UPDATE condicionado por estado previo (at-most-once + anti-reconexión-tardía).
-    const { data: actualizadas, error: errUpdate } = await supabase
-      .from(tabla)
-      .update({ estado: estadoFinal, desconectado_at: null })
+  let turnosCerrados = 0;
+  const { data: vencidos, error: errT } = await supabase
+    .from("turnos")
+    .select("id")
+    .eq("estado", "en_curso")
+    .not("desconectado_at", "is", null)
+    .lt("desconectado_at", hace2min);
+  if (errT) {
+    logError("[CRON/REJOIN]", "Error seleccionando turnos", { error: errT.message });
+  } else if (vencidos && vencidos.length > 0) {
+    const ids = vencidos.map((v) => v.id);
+    const { data: act, error: errU } = await supabase
+      .from("turnos")
+      .update({ estado: "completado", desconectado_at: null })
       .in("id", ids)
       .eq("estado", "en_curso")
       .select("id");
-
-    if (errUpdate) {
-      logError("[CRON/REJOIN]", `Error actualizando ${tabla}`, { error: errUpdate.message, ids });
-      detalle.push({ tabla, cerradas: 0, ids: [`ERROR update: ${errUpdate.message}`] });
-      continue;
-    }
-
-    const cerradasIds = (actualizadas ?? []).map((r) => r.id);
-    totalCerradas += cerradasIds.length;
-    detalle.push({ tabla, cerradas: cerradasIds.length, ids: cerradasIds });
+    if (errU) logError("[CRON/REJOIN]", "Error cerrando turnos", { error: errU.message, ids });
+    else turnosCerrados = (act ?? []).length;
   }
 
-  if (totalCerradas > 0) {
-    logInfo("[CRON/REJOIN]", "Rejoin expirado: consultas cerradas por timeout de 2 min", {
-      totalCerradas,
-      detalle,
-    });
+  if (consultasResueltas > 0 || turnosCerrados > 0) {
+    logInfo("[CRON/REJOIN]", "Resolución backstop", { consultasResueltas, turnosCerrados });
   }
-
-  return NextResponse.json({ ok: true, total_cerradas: totalCerradas, detalle });
+  return NextResponse.json({
+    ok: true,
+    consultas_resueltas: consultasResueltas,
+    turnos_cerrados: turnosCerrados,
+  });
 }

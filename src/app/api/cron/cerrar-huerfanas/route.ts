@@ -14,7 +14,12 @@ export async function GET(req: NextRequest) {
   let totalCerradas = 0;
   const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
 
-  for (const tabla of ["consultas", "turnos"] as const) {
+  // NOTA (Fase 2): las consultas CI YA NO se cierran acá a 'completada' — eso le
+  // pagaría al médico una consulta que no finalizó. Su resolución (completada solo
+  // por finalización; reembolso si no finalizó) la maneja el aplicador vía
+  // /api/consulta-estado (on-demand) + /api/cron/rejoin-expirar (backstop). Acá
+  // queda solo el cierre de TURNOS huérfanos + las limpiezas de oauth/webhooks.
+  for (const tabla of ["turnos"] as const) {
     const { data: huerfanas, error: errSelect } = await supabase
       .from(tabla)
       .select("id")
@@ -33,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     const ids = huerfanas.map((h) => h.id);
-    const estadoFinal = tabla === "consultas" ? "completada" : "completado";
+    const estadoFinal = "completado"; // solo turnos en este loop (las CI las resuelve el aplicador)
 
     const { error: errUpdate } = await supabase
       .from(tabla)
