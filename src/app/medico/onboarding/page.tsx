@@ -14,9 +14,13 @@ export const dynamic = "force-dynamic";
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ paso?: string; mp?: string; error?: string }>;
+  searchParams: Promise<{ paso?: string; mp?: string; error?: string; qa?: string }>;
 }) {
   const sp = await searchParams;
+  // QA solo en previews (NUNCA en producción): ?qa=1 deja ver el wizard con
+  // cualquier médico, salteando los redirects de aprobado/test/completo. En prod
+  // es siempre false → comportamiento normal intacto.
+  const qa = sp.qa === "1" && process.env.VERCEL_ENV !== "production";
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,7 +37,7 @@ export default async function OnboardingPage({
 
   // No es médico, o todavía no lo aprobaron → no hay wizard. El dashboard se
   // encarga (muestra pantalla de espera si está pendiente_revision).
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado") {
+  if (!medico || (!qa && (!medico.verificado || medico.estado_registro !== "aprobado"))) {
     redirect("/dashboard");
   }
 
@@ -57,7 +61,7 @@ export default async function OnboardingPage({
   };
 
   // Cuentas test o ya 100% completas → no necesitan wizard.
-  if (medico.es_cuenta_test || (pasos.mp && pasos.foto && pasos.firma && pasos.domicilio)) {
+  if (!qa && (medico.es_cuenta_test || (pasos.mp && pasos.foto && pasos.firma && pasos.domicilio))) {
     redirect("/dashboard");
   }
 
