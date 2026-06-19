@@ -29,11 +29,13 @@ export type ResueltaPor =
   | "cron_tolerancia"
   | "cron_huerfanas";
 
-// Ventana de reconexión tras un corte de red (ambos estuvieron, se cortó).
-const REJOIN_GRACIA_MS = 2 * 60 * 1000;
-// Tolerancia para que el médico se presente antes de declararlo ausente y
-// reembolsar (decisión Diego 19/06/2026). Corre desde en_curso_at (pago aprobado).
-const TOLERANCIA_MEDICO_MS = 15 * 60 * 1000;
+// Ventana única de gracia (decisión Diego 19/06/2026): el médico tiene 15 min
+// para hacerse presente y FINALIZAR la consulta (o cancelarla). Pasado ese plazo
+// sin finalización, el sistema la da por no realizada y reembolsa al paciente.
+// Corre desde el corte (`desconectado_at`) si hubo uno, o desde `en_curso_at`
+// (pago aprobado) si el médico nunca apareció. La reconexión "Retomar" del
+// paciente sigue disponible durante toda la ventana.
+const GRACIA_MS = 15 * 60 * 1000;
 
 /** ¿Algún participante con ese rol llegó a conectarse al video del recurso? */
 async function entroAlVideo(
@@ -82,10 +84,11 @@ export async function resolverYAplicarConsulta(
   const inicioMs = c.en_curso_at ? new Date(c.en_curso_at).getTime() : null;
 
   // Pre-chequeo barato de timing: si no podría estar para resolver, ni consultamos
-  // presencia (esto corre en cada poll de 5s del paciente).
-  const venceRejoin = corteMs != null && ahora - corteMs >= REJOIN_GRACIA_MS;
+  // presencia (esto corre en cada poll de 5s del paciente). La ventana de 15 min
+  // corre desde el corte si hubo uno, o desde el inicio si el médico nunca apareció.
+  const venceRejoin = corteMs != null && ahora - corteMs >= GRACIA_MS;
   const podriaSerAusente =
-    corteMs == null && inicioMs != null && ahora - inicioMs >= TOLERANCIA_MEDICO_MS;
+    corteMs == null && inicioMs != null && ahora - inicioMs >= GRACIA_MS;
   if (!venceRejoin && !podriaSerAusente) return null;
 
   const [medicoEntroAlVideo, pacienteEntroAlVideo] = await Promise.all([

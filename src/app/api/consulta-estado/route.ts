@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { resolverYAplicarConsulta } from "@/lib/aplicar-resolucion";
 
 export async function GET(req: NextRequest) {
   const consultaId = req.nextUrl.searchParams.get("consultaId");
@@ -36,28 +36,19 @@ export async function GET(req: NextRequest) {
 
   if (!data) return NextResponse.json({ error: "No encontrada" }, { status: 403 });
 
-  // Cierre on-demand del rejoin: si el corte (desconectado_at) lleva >= 2 min sin
-  // reconexión, cerramos acá mismo en vez de depender de un cron de 1 min (que
-  // requiere Vercel Pro). El que espera en "Reconectando…" hace polling cada 5s →
-  // dispara el cierre a tiempo. Backstop diario: /api/cron/rejoin-expirar.
-  // Idempotente: el UPDATE va condicionado por estado='en_curso'.
+  // Resolución on-demand (Fase 2): mientras el paciente pollea (cada 5s),
+  // resolvemos en tiempo real una consulta en_curso que ya corresponde cerrar —
+  // corte de red sin reconexión, o médico que nunca apareció — pasada la ventana
+  // de gracia de 15 min. El aplicador hace cumplir la ventana + la acción de plata
+  // (reembolso al paciente si el médico no finalizó); acá solo reflejamos el
+  // resultado. Backstop: crons rejoin-expirar / tolerancia-inicio. Nunca resuelve
+  // una consulta activa ni una que el médico finalizó (esa ya está completada).
   let estado = data.estado;
   let desconectado_at = data.desconectado_at;
-  if (
-    estado === "en_curso" &&
-    desconectado_at &&
-    new Date(desconectado_at).getTime() < Date.now() - 2 * 60 * 1000
-  ) {
-    const admin = createAdminClient();
-    const { data: cerrada } = await admin
-      .from("consultas")
-      .update({ estado: "completada", desconectado_at: null })
-      .eq("id", consultaId)
-      .eq("estado", "en_curso")
-      .select("id")
-      .maybeSingle();
-    if (cerrada) {
-      estado = "completada";
+  if (estado === "en_curso") {
+    const motivo = await resolverYAplicarConsulta(consultaId, "polling_consulta");
+    if (motivo) {
+      estado = motivo;
       desconectado_at = null;
     }
   }
