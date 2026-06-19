@@ -26,6 +26,7 @@ type Props = {
   fotoUrl: string | null;
   firmaUrl: string | null;
   domicilioInicial: string;
+  provinciaInicial: string;
   pasoInicialParam: string | null;
   mpResultado: string | null; // "ok" | "error" | null (al volver del OAuth)
   mpError: string | null; // credentials_mismatch | mp_account_already_linked | ...
@@ -185,7 +186,7 @@ export default function OnboardingWizard(props: Props) {
         {paso === 1 && <PasoMP {...props} hecho={hechos.mp} onSkip={() => avanzar(1)} onDone={() => { marcar("mp"); avanzar(1); }} />}
         {paso === 2 && <PasoFoto fotoUrl={props.fotoUrl} onDone={() => { marcar("foto"); avanzar(2); }} />}
         {paso === 3 && <PasoFirma firmaUrl={props.firmaUrl} onDone={() => { marcar("firma"); avanzar(3); }} />}
-        {paso === 4 && <PasoDomicilio inicial={props.domicilioInicial} onDone={() => { marcar("domicilio"); avanzar(4); }} />}
+        {paso === 4 && <PasoDomicilio inicial={props.domicilioInicial} provinciaInicial={props.provinciaInicial} onDone={() => { marcar("domicilio"); avanzar(4); }} />}
       </div>
     </Marco>
   );
@@ -308,20 +309,34 @@ function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () =
 }
 
 // ════════ PASO 4 — DOMICILIO ════════
-function PasoDomicilio({ inicial, onDone }: { inicial: string; onDone: () => void }) {
-  const [valor, setValor] = useState(inicial);
+const PROVINCIAS = [
+  "Buenos Aires", "Ciudad Autónoma de Buenos Aires", "Catamarca", "Chaco", "Chubut",
+  "Córdoba", "Corrientes", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja",
+  "Mendoza", "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis",
+  "Santa Cruz", "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán",
+];
+
+function PasoDomicilio({ inicial, provinciaInicial, onDone }: { inicial: string; provinciaInicial: string; onDone: () => void }) {
+  const [calle, setCalle] = useState(inicial);
+  const [ciudad, setCiudad] = useState("");
+  const [provincia, setProvincia] = useState(provinciaInicial);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const guardar = async () => {
-    if (!valor.trim()) { setError("Cargá el domicilio del consultorio."); return; }
+    if (!calle.trim() || !ciudad.trim() || !provincia.trim()) {
+      setError("Completá calle y número, ciudad y provincia.");
+      return;
+    }
     setError(null);
     setGuardando(true);
     try {
+      // domicilio_consultorio es lo que va en la receta: lo componemos estructurado.
+      const domicilio_consultorio = `${calle.trim()}, ${ciudad.trim()}, ${provincia}`;
       const res = await fetch("/api/medico/perfil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domicilio_consultorio: valor.trim() }),
+        body: JSON.stringify({ domicilio_consultorio, provincia }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || "No se pudo guardar.");
@@ -333,15 +348,15 @@ function PasoDomicilio({ inicial, onDone }: { inicial: string; onDone: () => voi
     }
   };
 
+  const inputCls = "w-full rounded-xl border px-4 py-3 text-base outline-none focus:ring-2";
   return (
     <Centro icono="🏥" titulo="Domicilio del consultorio" sub="Requisito para la receta electrónica. Aunque atiendas solo de forma virtual, la receta necesita un domicilio profesional registrado.">
-      <input
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        placeholder="Calle, número, localidad, provincia"
-        className="w-full rounded-xl border px-4 py-3 text-base outline-none focus:ring-2"
-        style={{ borderColor: error ? C.rojo : "#D1D5DB" }}
-      />
+      <input value={calle} onChange={(e) => setCalle(e.target.value)} placeholder="Calle y número" className={inputCls} style={{ borderColor: "#D1D5DB" }} />
+      <input value={ciudad} onChange={(e) => setCiudad(e.target.value)} placeholder="Ciudad / Localidad" className={inputCls} style={{ borderColor: "#D1D5DB" }} />
+      <select value={provincia} onChange={(e) => setProvincia(e.target.value)} className={inputCls} style={{ borderColor: "#D1D5DB", appearance: "none" }}>
+        <option value="">Provincia</option>
+        {PROVINCIAS.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
       {error && <p className="text-sm" style={{ color: C.rojo }}>{error}</p>}
       <CTA onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : "Finalizar"}</CTA>
     </Centro>

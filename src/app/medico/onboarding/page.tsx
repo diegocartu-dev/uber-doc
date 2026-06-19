@@ -30,7 +30,7 @@ export default async function OnboardingPage({
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, es_cuenta_test"
+      "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test"
     )
     .eq("user_id", user.id)
     .maybeSingle();
@@ -72,6 +72,7 @@ export default async function OnboardingPage({
       fotoUrl={medico.foto_url ?? null}
       firmaUrl={medico.firma_manuscrita_url ?? null}
       domicilioInicial={medico.domicilio_consultorio ?? ""}
+      provinciaInicial={medico.provincia ?? ""}
       pasoInicialParam={sp.paso ?? null}
       mpResultado={sp.mp ?? null}
       mpError={sp.error ?? null}
