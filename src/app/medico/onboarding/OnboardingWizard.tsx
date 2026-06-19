@@ -61,11 +61,14 @@ export default function OnboardingWizard(props: Props) {
 
   const marcar = (k: Key) => setHechos((h) => ({ ...h, [k]: true }));
   const avanzar = (desde: number) => {
-    // Próximo paso incompleto a partir de `desde`; si no queda, cierre.
+    // Próximo paso incompleto a partir de `desde`.
     for (let i = desde; i < 4; i++) {
       if (!hechos[ORDEN[i]]) return setPaso(i + 1);
     }
-    setPaso(5);
+    // No llegar al cierre con un paso anterior salteado (ej. MP con "lo hago al
+    // final"): si quedó alguno pendiente, volver a ese paso. Cierre solo con los 4.
+    const pendiente = ORDEN.findIndex((k) => !hechos[k]);
+    setPaso(pendiente === -1 ? 5 : pendiente + 1);
   };
 
   // ── chrome ──────────────────────────────────────────────
