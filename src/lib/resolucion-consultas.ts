@@ -40,6 +40,14 @@ export type SenalesResolucion = {
    * paciente como `interrumpida` con reintegro, sin penalizar al médico (§11).
    */
   presenciaConfiable: boolean;
+  /**
+   * ¿Hubo un corte detectado (`desconectado_at` seteado por el webhook) que no se
+   * retomó? Distingue "se cortó la llamada y no volvieron" (interrumpida, reembolso)
+   * de "ambos estuvieron, la sesión transcurrió, pero el médico no la finalizó
+   * limpio" (completada, SIN reembolso — la consulta ocurrió). Sin esto, una
+   * consulta atendida que no disparó room_finished se reembolsaría por error.
+   */
+  huboCorte: boolean;
 };
 
 export type Resolucion = {
@@ -83,7 +91,12 @@ export function resolver(s: SenalesResolucion): Resolucion {
     return { motivo: "interrumpida", accionPlata: "refund", registrarAusenciaMedico: false };
   }
 
-  // 5. Ambos estuvieron en el video y la sesión se cortó sin retomarse → interrumpida.
-  //    Reintegro/crédito, sin penalización (no hay culpa objetiva).
-  return { motivo: "interrumpida", accionPlata: "refund", registrarAusenciaMedico: false };
+  // 5. Ambos estuvieron en el video. Dos sub-casos según si hubo un corte:
+  //    a) hubo corte y no retomaron → interrumpida (reintegro/crédito, sin culpa).
+  //    b) sin corte → la consulta TRANSCURRIÓ y solo no se finalizó limpio →
+  //       completada, SIN reembolso (el médico atendió; reembolsar sería un error).
+  if (s.huboCorte) {
+    return { motivo: "interrumpida", accionPlata: "refund", registrarAusenciaMedico: false };
+  }
+  return { motivo: "completada", accionPlata: "ninguna", registrarAusenciaMedico: false };
 }
