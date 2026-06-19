@@ -35,7 +35,11 @@ export type ResueltaPor =
 // Corre desde el corte (`desconectado_at`) si hubo uno, o desde `en_curso_at`
 // (pago aprobado) si el médico nunca apareció. La reconexión "Retomar" del
 // paciente sigue disponible durante toda la ventana.
-const GRACIA_MS = 15 * 60 * 1000;
+//
+// Configurable por env RESOLUCION_GRACIA_MIN (default 15) para poder bajarla en
+// previews y testear sin esperar 15 min reales. En prod se deja sin setear (=15).
+const GRACIA_MIN = Number(process.env.RESOLUCION_GRACIA_MIN) || 15;
+const GRACIA_MS = GRACIA_MIN * 60 * 1000;
 
 /** ¿Algún participante con ese rol llegó a conectarse al video del recurso? */
 async function entroAlVideo(
