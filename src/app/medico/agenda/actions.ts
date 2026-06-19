@@ -8,7 +8,9 @@
 // - enviarRecordatorios(): cron job para email/WhatsApp antes del turno
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 export async function guardarModelo(data: {
   nombre: string;
@@ -264,6 +266,8 @@ export async function toggleModelo(modeloId: string, activo: boolean) {
 
   await recalcularBloqueos(supabase, medico.id);
 
+  revalidatePath("/medico/agenda");
+
   return { success: true };
 }
 
@@ -281,13 +285,56 @@ export async function eliminarModelo(modeloId: string) {
   if (!modelo) return { error: "Modelo no encontrado." };
   if (modelo.medico_id !== medico.id) return { error: "No autorizado." };
 
-  const { error } = await supabase
+  // La FK turnos.modelo_id es ON DELETE NO ACTION: hay que vaciar los turnos
+  // del modelo antes de borrarlo. Solo se pueden borrar agendas cuyos turnos
+  // sean libres (disponible/bloqueado). Si tiene turnos reservados o con
+  // historial (confirmado, en espera/curso, pendiente de pago, cancelados) NO
+  // se elimina —se perdería la reserva o el historial—; el médico puede
+  // inhabilitarla con el toggle. `turnos` no tiene policy de DELETE para el
+  // médico, así que la limpieza va por el cliente admin (propiedad ya validada).
+  const admin = createAdminClient();
+
+  // Solo se puede borrar una agenda cuyos turnos sean TODOS libres
+  // (disponible/bloqueado). Comparamos total vs libres: así cualquier estado
+  // distinto de disponible/bloqueado —incluido NULL o un estado futuro— cuenta
+  // como ocupado y bloquea el borrado (no se pierde la reserva ni el historial).
+  const { count: total, error: totalErr } = await admin
+    .from("turnos")
+    .select("id", { count: "exact", head: true })
+    .eq("modelo_id", modeloId);
+  if (totalErr) return { error: totalErr.message };
+
+  const { count: libres, error: libresErr } = await admin
+    .from("turnos")
+    .select("id", { count: "exact", head: true })
+    .eq("modelo_id", modeloId)
+    .in("estado", ["disponible", "bloqueado"]);
+  if (libresErr) return { error: libresErr.message };
+
+  if ((total ?? 0) > (libres ?? 0)) {
+    return {
+      error:
+        "Esta agenda tiene turnos reservados o cancelados en su historial, así que no se puede eliminar. Inhabilitala con el interruptor para que deje de ofrecer turnos.",
+    };
+  }
+
+  const { error: turnosErr } = await admin
+    .from("turnos")
+    .delete()
+    .eq("modelo_id", modeloId)
+    .in("estado", ["disponible", "bloqueado"]);
+  if (turnosErr) return { error: turnosErr.message };
+
+  // agenda_franjas cae por ON DELETE CASCADE
+  const { error } = await admin
     .from("agenda_modelos")
     .delete()
     .eq("id", modeloId);
   if (error) return { error: error.message };
 
   await recalcularBloqueos(supabase, medico.id);
+
+  revalidatePath("/medico/agenda");
 
   return { success: true };
 }

@@ -65,6 +65,16 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
   const [cargando, setCargando] = useState(true);
   const [turnosMes, setTurnosMes] = useState<{ fecha: string; estado: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState(hoyStr);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  // Recargar los turnos cuando el médico inhabilita/elimina una agenda
+  // (ListaModelos dispara "agenda:changed"). Sin esto el calendario quedaba con
+  // datos viejos hasta recargar la página a mano.
+  useEffect(() => {
+    function onChanged() { setRefreshNonce((n) => n + 1); }
+    window.addEventListener("agenda:changed", onChanged);
+    return () => window.removeEventListener("agenda:changed", onChanged);
+  }, []);
 
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [dialogCancelar, setDialogCancelar] = useState(false);
@@ -174,7 +184,7 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
       setCargando(false);
     }
     load();
-  }, [medicoId, diasSemana[0], diasSemana[6]]);
+  }, [medicoId, diasSemana[0], diasSemana[6], refreshNonce]);
 
   // Fetch turnos mes
   useEffect(() => {
@@ -186,7 +196,7 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
       setTurnosMes(data ?? []);
     }
     load();
-  }, [medicoId, mesVisible, anioVisible]);
+  }, [medicoId, mesVisible, anioVisible, refreshNonce]);
 
   const slotMap = new Map<string, Turno>();
   for (const t of turnos) {

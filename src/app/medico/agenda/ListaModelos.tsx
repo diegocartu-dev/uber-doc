@@ -37,17 +37,47 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
   const [isPending, startTransition] = useTransition();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [eliminarId, setEliminarId] = useState<string | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+  const [errorToggle, setErrorToggle] = useState<string | null>(null);
 
   function handleToggle(id: string, activo: boolean) {
+    setErrorToggle(null);
+    const anterior = modelos;
     setModelos((prev) => prev.map((m) => m.id === id ? { ...m, activo } : m));
-    startTransition(async () => { await toggleModelo(id, activo); });
+    startTransition(async () => {
+      const res = await toggleModelo(id, activo);
+      if (res && "error" in res) {
+        setModelos(anterior); // revertir el cambio optimista
+        setErrorToggle(res.error ?? "No se pudo guardar el cambio. Probá de nuevo.");
+        return;
+      }
+      // Avisar al calendario (PanelDerecho) para que recargue sus turnos
+      window.dispatchEvent(new CustomEvent("agenda:changed"));
+    });
+  }
+
+  function abrirEliminar(id: string) {
+    setErrorEliminar(null);
+    setEliminarId(id);
   }
 
   function confirmarEliminar() {
     if (!eliminarId) return;
-    setModelos((prev) => prev.filter((m) => m.id !== eliminarId));
-    startTransition(async () => { await eliminarModelo(eliminarId); });
-    setEliminarId(null);
+    const id = eliminarId;
+    setEliminando(true);
+    setErrorEliminar(null);
+    startTransition(async () => {
+      const res = await eliminarModelo(id);
+      setEliminando(false);
+      if (res && "error" in res) {
+        setErrorEliminar(res.error ?? "No se pudo eliminar la agenda. Probá de nuevo."); // se muestra en el dialog; la card NO se quita
+        return;
+      }
+      setModelos((prev) => prev.filter((m) => m.id !== id));
+      setEliminarId(null);
+      window.dispatchEvent(new CustomEvent("agenda:changed"));
+    });
   }
 
   function toggleExpand(id: string) {
@@ -71,27 +101,58 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
 
   return (
     <>
+      {/* Banner de error de toggle (inhabilitar/habilitar) */}
+      {errorToggle && (
+        <div
+          className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-[#E24B4A]"
+          style={{ border: "1px solid #E24B4A" }}
+        >
+          {errorToggle}
+        </div>
+      )}
+
       {/* Dialog eliminar */}
       {eliminarId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEliminarId(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!eliminando) { setEliminarId(null); setErrorEliminar(null); } }}
+        >
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-[16px] font-semibold text-gray-900">Eliminar agenda</p>
-            <p className="mt-2 text-[14px] text-gray-500">¿Estás seguro? Los turnos disponibles de esta agenda se van a eliminar.</p>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={confirmarEliminar}
-                className="flex-1 min-h-[44px] rounded-lg text-[14px] font-medium text-[#E24B4A] transition hover:bg-red-50"
-                style={{ border: "1px solid #E24B4A" }}
-              >
-                Eliminar
-              </button>
-              <button
-                onClick={() => setEliminarId(null)}
-                className="flex-1 min-h-[44px] rounded-lg bg-gray-100 text-[14px] font-medium text-gray-600 transition hover:bg-gray-200"
-              >
-                Cancelar
-              </button>
-            </div>
+            {errorEliminar ? (
+              <>
+                <p className="mt-2 text-[14px] text-[#E24B4A]">{errorEliminar}</p>
+                <div className="mt-5">
+                  <button
+                    onClick={() => { setEliminarId(null); setErrorEliminar(null); }}
+                    className="w-full min-h-[44px] rounded-lg bg-gray-100 text-[14px] font-medium text-gray-600 transition hover:bg-gray-200"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-[14px] text-gray-500">¿Estás seguro? Los turnos disponibles de esta agenda se van a eliminar. Esta acción no se puede deshacer.</p>
+                <div className="mt-5 flex gap-3">
+                  <button
+                    onClick={confirmarEliminar}
+                    disabled={eliminando}
+                    className="flex-1 min-h-[44px] rounded-lg text-[14px] font-medium text-[#E24B4A] transition hover:bg-red-50 disabled:opacity-50"
+                    style={{ border: "1px solid #E24B4A" }}
+                  >
+                    {eliminando ? "Eliminando..." : "Eliminar"}
+                  </button>
+                  <button
+                    onClick={() => setEliminarId(null)}
+                    disabled={eliminando}
+                    className="flex-1 min-h-[44px] rounded-lg bg-gray-100 text-[14px] font-medium text-gray-600 transition hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -184,7 +245,7 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
               {/* Eliminar */}
               <div className="mt-4">
                 <button
-                  onClick={() => setEliminarId(m.id)}
+                  onClick={() => abrirEliminar(m.id)}
                   className="min-h-[44px] rounded-lg px-4 text-[13px] text-[#E24B4A] font-medium hover:bg-red-50 transition-colors"
                 >
                   Eliminar agenda
