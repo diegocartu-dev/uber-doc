@@ -5,7 +5,7 @@
 // (patrón ya usado en scripts/) para testear la función pura crítica de plata.
 
 import assert from "node:assert/strict";
-import { resolver, type SenalesResolucion } from "../src/lib/resolucion-consultas.ts";
+import { resolver, type SenalesResolucion } from "../src/lib/resolucion-consultas";
 
 let pasados = 0;
 function caso(nombre: string, senales: SenalesResolucion, esperado: ReturnType<typeof resolver>) {
