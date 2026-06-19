@@ -495,7 +495,7 @@ export default async function DashboardPage({
 
     // Completitud REAL del perfil (no el flag DB `perfil_completo`, que quedaba
     // desactualizado). Gobierna el gate del toggle "disponible" y el banner.
-    const perfilCompletoReal = perfilMedicoCompleto(medico);
+    const perfilCompletoReal = perfilMedicoCompleto(medico, { mpConectado, firmaConfigurada });
 
     const colConsulta = (
       <BloqueConsultaInmediata

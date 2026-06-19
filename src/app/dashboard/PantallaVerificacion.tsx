@@ -9,7 +9,7 @@ import LogoutButton from "./LogoutButton";
 const estadoConfig = {
   pendiente_revision: {
     titulo: "Tu cuenta está siendo revisada",
-    desc: "Estamos verificando tu matrícula profesional. Te avisamos por email cuando esté activa. Este proceso suele tomar menos de 24 horas.",
+    desc: "Estamos validando tu matrícula profesional. En menos de 24 horas te habilitamos para empezar a atender. Te avisamos por email cuando tu cuenta esté activa.",
     icon: Clock,
     color: "#BA7517",
     bgColor: "rgba(186, 117, 23, 0.1)",

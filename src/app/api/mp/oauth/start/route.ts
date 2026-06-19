@@ -3,7 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "crypto";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // `origin=onboarding` (lo manda solo el wizard) hace que el callback vuelva al
+  // wizard. Sin el param (todo el flujo actual desde /medico/perfil) el state
+  // queda plano y el callback vuelve a /medico/perfil como siempre.
+  const origin = new URL(request.url).searchParams.get("origin");
   const supabase = await createClient();
   const {
     data: { user },
@@ -25,7 +29,9 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 
-  const state = randomBytes(32).toString("hex");
+  // El sufijo `.onb` viaja en el state (round-trip del OAuth) y le dice al
+  // callback que vuelva al wizard. No afecta la validación (se busca el state completo).
+  const state = randomBytes(32).toString("hex") + (origin === "onboarding" ? ".onb" : "");
 
   const { error: stateError } = await admin.from("mp_oauth_state").insert({
     state,
