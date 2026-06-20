@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlMedico } from "@/lib/push";
+import { avisarMedicoEsperandoWhatsApp } from "@/lib/whatsapp";
 
 /**
  * Cron cada 10 min (decisión Diego 11/06/2026): re-notificar al médico mientras
@@ -108,6 +109,13 @@ export async function GET(req: Request) {
     }).catch(() => false);
 
     if (ok) recordatorios++;
+
+    // Respaldo por WhatsApp del recordatorio (throttle interno por médico evita
+    // mandar cada 10 min). Inerte sin flag/credenciales. Fire-and-forget.
+    void avisarMedicoEsperandoWhatsApp(
+      medicoId,
+      pendientes.length === 1 ? "un paciente" : `${pendientes.length} pacientes`
+    ).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, recordatorios, medicosConPendientes: porMedico.size });

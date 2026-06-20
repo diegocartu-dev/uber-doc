@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { avisarMedicoEsperandoWhatsApp } from "@/lib/whatsapp";
 
 type TipoEntrada = "ci" | "turno_programado" | "consultorio_particular";
 
@@ -33,6 +34,11 @@ export async function registrarEntradaSala(params: {
     console.error("[sala-espera] Error registrando entrada:", error);
     return null;
   }
+
+  // Aviso al médico por WhatsApp (respaldo del push) — el momento crítico: hay un
+  // paciente en la sala. Único punto que cubre los 3 canales (CI, turno, consultorio
+  // particular). Fire-and-forget + throttle interno; inerte sin flag/credenciales.
+  void avisarMedicoEsperandoWhatsApp(params.medicoId, "un paciente").catch(() => {});
 
   return data as string;
 }

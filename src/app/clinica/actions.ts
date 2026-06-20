@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getFlag } from "@/lib/feature-flags";
+import { avisarMedicoAceptarWhatsApp } from "@/lib/whatsapp";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -119,6 +120,11 @@ export async function crearConsulta(
     console.error("crearConsulta insert failed:", error.code);
     return { error: "No se pudo crear la consulta. Por favor, intentá de nuevo." };
   }
+
+  // TRIGGER A — avisar al médico por WhatsApp que un paciente solicitó una CI y debe
+  // aceptarla (recién ahí el paciente puede pagar e ingresar). Solo CI. Fire-and-forget
+  // ANTES del redirect (redirect lanza una excepción de control). Inerte sin flag/creds.
+  void avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "").catch(() => {});
 
   redirect(`/sala-espera/${data.id}`);
 }
