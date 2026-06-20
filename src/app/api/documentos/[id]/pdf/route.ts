@@ -21,7 +21,7 @@ export async function GET(
   // Buscar documento — RLS garantiza que solo el paciente o médico lo ve
   const { data: doc, error: docError } = await supabase
     .from("documentos")
-    .select("id, tipo, diagnostico, contenido, created_at, medico_id, consulta_id, turno_id, paciente_id")
+    .select("id, tipo, diagnostico, contenido, tratamiento, dias_reposo, created_at, medico_id, consulta_id, turno_id, paciente_id")
     .eq("id", documentoId)
     .single();
 
@@ -106,6 +106,8 @@ export async function GET(
     tipo: doc.tipo as DocumentoPDF["tipo"],
     diagnostico: doc.diagnostico,
     contenido: doc.contenido,
+    tratamiento: doc.tratamiento ?? null,
+    dias_reposo: doc.dias_reposo ?? null,
     created_at: doc.created_at,
     medico_nombre: medico.nombre_completo,
     medico_especialidad: medico.especialidad ?? "",
