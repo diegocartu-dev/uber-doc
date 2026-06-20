@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ShieldCheck,
   FileText,
+  FileCheck,
   Wallet,
   ArrowRight,
 } from "lucide-react";
@@ -131,6 +132,10 @@ export default async function Home({
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <FileText size={15} style={{ color: "#3F7A52" }} />
                 Receta digital
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <FileCheck size={15} style={{ color: "#3F7A52" }} />
+                Certificado médico
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <Wallet size={15} style={{ color: "#3F7A52" }} />
