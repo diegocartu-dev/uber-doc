@@ -754,9 +754,11 @@ function renderFooter(
   if (doc.tipo === "receta") {
     seccionB = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506.";
   } else if (doc.tipo === "certificado") {
-    // NOTA: los números Ley 27.802 / Decreto 407/2026 vienen del informe legal y
-    // están PENDIENTES de verificación contra Boletín Oficial / matriculado antes
-    // del go-live (Carolina, cutoff ene-2026, no los pudo confirmar).
+    // Normas VERIFICADAS contra fuente oficial (20/06/2026): Ley 27.802 (BO
+    // 06/03/2026) y Decreto 407/2026 (BO 01/06/2026, reglamenta el art. 210 LCT).
+    // Cita validada por Carolina contra el texto oficial. Pendiente antes del
+    // go-live público: revisión de un laboralista matriculado (doc de máxima
+    // exposición) + cláusula art. 210 de control del empleador en los T&C.
     seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, modificado por Ley 27.802) y su Decreto reglamentario 407/2026. Firma electrónica con validez legal según Ley 25.506.";
   } else {
     seccionB = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553. Firma electrónica con validez legal según Ley 25.506.";
