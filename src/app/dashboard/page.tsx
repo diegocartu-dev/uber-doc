@@ -194,7 +194,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, perfil_completo, identidad_validada, didit_status, es_cuenta_test")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
       .single();
     medico = data;

@@ -15,6 +15,11 @@ export type MedicoCompletitud = {
   telefono?: string | null;
   domicilio_consultorio?: string | null;
   foto_url?: string | null;
+  // Firma manuscrita (imagen). Es lo que da validez legal a TODO documento que
+  // emite el médico (receta + certificado + indicaciones): firma electrónica =
+  // manuscrita + matrícula REFEPS + leyendas + plataforma ReNaPDiS. Sin ella no
+  // puede firmar → no debe poder ponerse disponible. Vive en `medicos`.
+  firma_manuscrita_url?: string | null;
   es_cuenta_test?: boolean | null;
 };
 
@@ -46,6 +51,7 @@ export function camposFaltantesMedico(m: MedicoCompletitud, onb: OnboardingMedic
   if (!lleno(m.domicilio_consultorio))
     faltantes.push({ label: "Domicilio del consultorio", anchor: "domicilio" });
   if (!lleno(m.foto_url)) faltantes.push({ label: "Foto de perfil", anchor: "foto" });
+  if (!lleno(m.firma_manuscrita_url)) faltantes.push({ label: "Firma manuscrita", anchor: "firma" });
   if (!onb.mpConectado) faltantes.push({ label: "Cobros (Mercado Pago)", anchor: "cobros" });
   if (!onb.firmaConfigurada) faltantes.push({ label: "Firma electrónica", anchor: "firma" });
   return faltantes;

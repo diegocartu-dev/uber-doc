@@ -28,6 +28,8 @@ export type DocumentoPDF = {
   paciente_obra_social: string | null;
   paciente_nro_afiliado: string | null;
   paciente_plan_obra_social: string | null;
+  tratamiento?: string | null;
+  dias_reposo?: number | null;
   firma?: FirmaDigitalPDF | null;
   medico_firma_manuscrita_path?: string | null;
 };
@@ -170,22 +172,67 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
       // ─── CONTENIDO ────────────────────────────────────────────────────
       // Observación #3 Martín: evitar "RECETA MÉDICA" duplicado (ya está en el header)
       pdf.moveDown(0.3);
-      renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo);
 
-      if (esReceta && doc.contenido.includes("Rp/")) {
-        // Receta estructurada con formato IFA — renderizar con tipografía diferenciada
-        renderRecetaEstructurada(pdf, doc.contenido);
-      } else {
-        // Texto plano (indicaciones, certificados, recetas legacy)
+      if (doc.tipo === "certificado") {
+        // Certificado de reposo laboral (art. 210 LCT) — bloques estructurados.
+        // El diagnóstico ya se renderizó arriba. Acá: tratamiento + días de reposo.
+        renderSectionLabel(pdf, "TRATAMIENTO INDICADO");
         pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
-        pdf.text(doc.contenido, MARGIN.left, undefined, {
+        pdf.text(doc.tratamiento?.trim() || doc.contenido?.trim() || "—", MARGIN.left, undefined, {
           width: CONTENT_WIDTH,
           lineGap: 2,
         });
+
+        pdf.moveDown(0.4);
+        renderSectionLabel(pdf, "REPOSO LABORAL");
+        const dias = doc.dias_reposo ?? 0;
+        // El reposo corto (≤ 3 días calendario) se expresa en horas (24/48/72 hs); el
+        // largo en días. La unidad se deriva del conteo sin ambigüedad porque las horas
+        // solo cubren 1-3 días y los días arrancan en 4 (ver WorkspaceConsulta:
+        // HORAS_REPOSO_RAPIDAS / DIAS_REPOSO_RAPIDOS).
+        const reposoTexto =
+          dias >= 1 && dias <= 3
+            ? `${dias * 24} horas de reposo laboral`
+            : `${dias} día${dias === 1 ? "" : "s"} de reposo laboral`;
+        pdf.font("Inter-SemiBold").fontSize(11).fillColor(COLORS.primary);
+        pdf.text(reposoTexto, MARGIN.left, undefined, {
+          width: CONTENT_WIDTH,
+        });
+        // Rango cerrado y explícito (Carolina: evita la impugnación por ambigüedad).
+        // Argentina no tiene DST → sumar (dias-1) días en ms es +N días calendario.
+        pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
+        if (dias <= 1) {
+          pdf.text(`El día ${formatFecha(doc.created_at)}.`, MARGIN.left, undefined, {
+            width: CONTENT_WIDTH,
+          });
+        } else {
+          const desde = new Date(doc.created_at);
+          const hasta = new Date(desde.getTime() + (dias - 1) * 24 * 60 * 60 * 1000);
+          pdf.text(
+            `Desde el ${formatFecha(desde.toISOString())} hasta el ${formatFecha(hasta.toISOString())}, ambos inclusive.`,
+            MARGIN.left,
+            undefined,
+            { width: CONTENT_WIDTH }
+          );
+        }
+      } else {
+        renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo);
+        if (esReceta && doc.contenido.includes("Rp/")) {
+          // Receta estructurada con formato IFA — tipografía diferenciada
+          renderRecetaEstructurada(pdf, doc.contenido);
+        } else {
+          // Texto plano (indicaciones, orden, recetas legacy)
+          pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
+          pdf.text(doc.contenido, MARGIN.left, undefined, {
+            width: CONTENT_WIDTH,
+            lineGap: 2,
+          });
+        }
       }
 
       // ─── Calcular posición del footer ─────────────────────────────────
-      const footerHeight = esReceta ? 125 : 50;
+      // No-recetas ahora llevan leyenda de firma + marco regulatorio por tipo.
+      const footerHeight = esReceta ? 125 : 95;
       const footerTopY = PAGE_HEIGHT - MARGIN.bottom - footerHeight;
 
       // Si el contenido ya pasó de donde debería ir la firma, agregar página
@@ -661,20 +708,19 @@ function renderFooter(
 ) {
   let y = footerTopY;
 
+  // ─── Sección A — Leyenda de firma (TODOS los documentos firmados) ───
+  // Línea separadora superior
+  pdf
+    .moveTo(MARGIN.left, y)
+    .lineTo(PAGE_WIDTH - MARGIN.right, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(0.5)
+    .stroke();
+  y += 6;
+
+  pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
   if (esReceta) {
-    // ─── Sección A — Leyendas obligatorias ReNaPDiS ──────────────────
-
-    // Línea separadora superior
-    pdf
-      .moveTo(MARGIN.left, y)
-      .lineTo(PAGE_WIDTH - MARGIN.right, y)
-      .strokeColor(COLORS.border)
-      .lineWidth(0.5)
-      .stroke();
-    y += 6;
-
-    // Leyenda 1: Firma electrónica
-    pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
+    // Receta: leyenda de firma + leyenda del Registro de Recetarios (ReNaPDiS)
     pdf.text(
       `Este documento ha sido firmado —electrónica o digitalmente según corresponda— por ${formatNombreMedico(doc.medico_nombre)}.`,
       MARGIN.left, y,
@@ -682,53 +728,54 @@ function renderFooter(
     );
     y = pdf.y + 4;
 
-    // Leyenda 2: ReNaPDiS
     const renapdisRL = process.env.RENAPDIS_RL_NUMBER;
-
     const leyendaRenapdis = renapdisRL
       ? `Esta receta fue creada por un emisor inscripto y validado en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación - ${renapdisRL}`
       : `Esta receta fue creada por un emisor inscripto en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación — Inscripción en trámite (EX-2026-41816871-APN-SSVEIYES#MS)`;
-
-    pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
+    pdf.text(leyendaRenapdis, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
+    y = pdf.y + 4;
+  } else {
+    // Certificado / indicaciones / orden: leyenda de firma electrónica simple.
+    // (El Registro de Recetarios / ReNaPDiS es específico de recetas — no va acá.)
     pdf.text(
-      leyendaRenapdis,
+      `Este documento ha sido firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)}.`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
     y = pdf.y + 4;
-
-    // Línea separadora inferior
-    pdf
-      .moveTo(MARGIN.left, y)
-      .lineTo(PAGE_WIDTH - MARGIN.right, y)
-      .strokeColor(COLORS.border)
-      .lineWidth(0.5)
-      .stroke();
-    y += 6;
-  } else {
-    // Para no-recetas: línea separadora simple
-    pdf
-      .moveTo(MARGIN.left, y)
-      .lineTo(PAGE_WIDTH - MARGIN.right, y)
-      .strokeColor(COLORS.border)
-      .lineWidth(0.5)
-      .stroke();
-    y += 6;
   }
 
-  // ─── Sección B — Marco regulatorio (letra chica) ────────────────────
+  // Línea separadora inferior
+  pdf
+    .moveTo(MARGIN.left, y)
+    .lineTo(PAGE_WIDTH - MARGIN.right, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(0.5)
+    .stroke();
+  y += 6;
 
+  // ─── Sección B — Marco regulatorio POR TIPO (letra chica) ───────────
+  // Dictamen Carolina: cada documento cita SOLO la norma que lo habilita.
+  // NUNCA AAIP/Ley 25.326 ni mezclar las leyendas de receta en otros tipos.
   pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
-
-  // Ley habilitante + firma electrónica — con referencia Plataforma 0270 ReNaPDiS
-  const seccionB = esReceta
-    ? "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506."
-    : "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553 y Decreto 63/2024.";
+  let seccionB: string;
+  if (doc.tipo === "receta") {
+    seccionB = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506.";
+  } else if (doc.tipo === "certificado") {
+    // Normas VERIFICADAS contra fuente oficial (20/06/2026): Ley 27.802 (BO
+    // 06/03/2026) y Decreto 407/2026 (BO 01/06/2026, reglamenta el art. 210 LCT).
+    // Cita validada por Carolina contra el texto oficial. Pendiente antes del
+    // go-live público: revisión de un laboralista matriculado (doc de máxima
+    // exposición) + cláusula art. 210 de control del empleador en los T&C.
+    seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, modificado por Ley 27.802) y su Decreto reglamentario 407/2026. Firma electrónica con validez legal según Ley 25.506.";
+  } else {
+    seccionB = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553. Firma electrónica con validez legal según Ley 25.506.";
+  }
 
   pdf.text(seccionB, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
   y = pdf.y + 2;
 
-  // Disclaimer final
+  // Disclaimer final (todos)
   pdf.text(
     "Este documento no reemplaza una consulta presencial cuando sea necesaria.",
     MARGIN.left, y,
