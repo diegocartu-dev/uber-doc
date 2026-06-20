@@ -190,10 +190,23 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
         pdf.text(`${dias} día${dias === 1 ? "" : "s"} de reposo laboral`, MARGIN.left, undefined, {
           width: CONTENT_WIDTH,
         });
+        // Rango cerrado y explícito (Carolina: evita la impugnación por ambigüedad).
+        // Argentina no tiene DST → sumar (dias-1) días en ms es +N días calendario.
         pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
-        pdf.text(`A partir del ${formatFecha(doc.created_at)}.`, MARGIN.left, undefined, {
-          width: CONTENT_WIDTH,
-        });
+        if (dias <= 1) {
+          pdf.text(`El día ${formatFecha(doc.created_at)}.`, MARGIN.left, undefined, {
+            width: CONTENT_WIDTH,
+          });
+        } else {
+          const desde = new Date(doc.created_at);
+          const hasta = new Date(desde.getTime() + (dias - 1) * 24 * 60 * 60 * 1000);
+          pdf.text(
+            `Desde el ${formatFecha(desde.toISOString())} hasta el ${formatFecha(hasta.toISOString())}, ambos inclusive.`,
+            MARGIN.left,
+            undefined,
+            { width: CONTENT_WIDTH }
+          );
+        }
       } else {
         renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo);
         if (esReceta && doc.contenido.includes("Rp/")) {
@@ -741,7 +754,10 @@ function renderFooter(
   if (doc.tipo === "receta") {
     seccionB = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506.";
   } else if (doc.tipo === "certificado") {
-    seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, t.o. Ley 27.802). Firma electrónica con validez legal según Ley 25.506.";
+    // NOTA: los números Ley 27.802 / Decreto 407/2026 vienen del informe legal y
+    // están PENDIENTES de verificación contra Boletín Oficial / matriculado antes
+    // del go-live (Carolina, cutoff ene-2026, no los pudo confirmar).
+    seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, modificado por Ley 27.802) y su Decreto reglamentario 407/2026. Firma electrónica con validez legal según Ley 25.506.";
   } else {
     seccionB = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553. Firma electrónica con validez legal según Ley 25.506.";
   }
