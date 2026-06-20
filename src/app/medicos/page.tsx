@@ -400,13 +400,20 @@ export default async function MedicosLanding() {
           <div style={{ textAlign: "center" }}>
             <div style={{
               display: "inline-flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               gap: 8,
               fontSize: 12,
+              lineHeight: 1.5,
+              maxWidth: 620,
+              textAlign: "left",
               color: "var(--color-text-tertiary)",
             }}>
-              <ShieldCheck size={14} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
-              Plataforma inscripta ante la AAIP (RL-2026-36086505). Opera bajo Ley 27.553 y Decreto 63/2024.
+              <ShieldCheck size={14} style={{ color: "var(--color-text-tertiary)", flexShrink: 0, marginTop: 2 }} />
+              <span>
+                Plataforma inscripta ante la AAIP (RL-2026-36086505). Opera bajo Ley 27.553 y Decreto 63/2024.
+                <br />
+                Emite certificados médicos digitales, incluido el de reposo laboral bajo el nuevo marco de la Ley 27.802 y el Decreto 407/2026.
+              </span>
             </div>
           </div>
         </div>

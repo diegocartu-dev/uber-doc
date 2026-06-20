@@ -83,6 +83,10 @@ export default function Footer() {
             <span>ReNaPDiS Plataforma 0270</span>
           </div>
         </div>
+
+        <div style={{ marginTop: 18, fontSize: 11.5, lineHeight: 1.55, color: "var(--color-text-tertiary)", maxWidth: 760 }}>
+          Emite certificados médicos digitales, incluido el de reposo laboral bajo el nuevo marco de la Ley 27.802 y el Decreto 407/2026.
+        </div>
       </div>
       <style>{`
         @media (max-width: 900px) {
