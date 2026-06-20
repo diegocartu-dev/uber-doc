@@ -92,10 +92,18 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <h3>6.4 Derecho de revocación (compras a distancia)</h3>
       <p>Como contratás a distancia, la ley te reconoce el derecho de revocar la operación dentro de los 10 días corridos (art. 34, Ley 24.240). Ese derecho no aplica a las consultas de Docto, porque se trata de un servicio que se agenda y presta en una fecha y hora determinadas elegidas por vos, supuesto expresamente excluido de la revocación. La cancelación y los reembolsos de tu consulta se rigen por la política de cancelaciones de §6.2.</p>
 
-      <h2>7. Recetas digitales</h2>
+      <h2>7. Recetas y documentos médicos digitales</h2>
+      <h3>7.1 Recetas digitales</h3>
       <p>Las recetas emitidas a través de Docto son recetas digitales con validez legal en todo el territorio nacional, en el marco de la Ley 27.553 y el Decreto 63/2024. Las recetas incluyen la firma electrónica del profesional y el código de identificación correspondiente.</p>
       <p>La emisión de una receta es una decisión exclusiva del profesional interviniente. Docto no puede garantizar que toda consulta resulte en la emisión de una receta. El paciente no tiene derecho a exigir la prescripción de medicamentos específicos.</p>
       <p>Docto se encuentra inscripto ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
+
+      <h3>7.2 Otros documentos médicos</h3>
+      <p>Además de la receta, el profesional puede emitir a través de Docto otros documentos —indicaciones médicas, órdenes de estudios y certificados médicos— firmados electrónicamente. Cada documento se emite bajo la exclusiva responsabilidad profesional del médico interviniente, quien decide su contenido y procedencia. Docto provee la plataforma de emisión, no interviene en el criterio clínico.</p>
+
+      <h3>7.3 Certificados médicos de reposo laboral</h3>
+      <p>A través de Docto el profesional interviniente puede emitir certificados de reposo o licencia laboral, firmados electrónicamente. El certificado consigna el diagnóstico, el tratamiento indicado y los días de reposo, según el criterio del profesional. La Ley 27.802 y su Decreto reglamentario 407/2026 regulan, entre otros aspectos, el artículo 210 de la Ley de Contrato de Trabajo, relativo al control del estado de salud del trabajador.</p>
+      <p><strong>Derecho de control del empleador.</strong> El artículo 210 de la Ley de Contrato de Trabajo reconoce al empleador la facultad de verificar el estado de salud del trabajador mediante un control a cargo del facultativo que aquél designe. La emisión de un certificado a través de Docto no sustituye, limita ni excluye ese derecho de control del empleador, ni la eventual intervención de una junta médica cuando corresponda. El trabajador es responsable de presentar el certificado a su empleador en los plazos y formas que su relación laboral exija.</p>
 
       <h2>8. Privacidad y protección de datos personales</h2>
       <p>El tratamiento de datos personales en Docto se realiza conforme a la Ley 25.326 de Protección de Datos Personales y las disposiciones de la Agencia de Acceso a la Información Pública (AAIP).</p>
