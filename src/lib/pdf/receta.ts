@@ -186,8 +186,16 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
         pdf.moveDown(0.4);
         renderSectionLabel(pdf, "REPOSO LABORAL");
         const dias = doc.dias_reposo ?? 0;
+        // El reposo corto (≤ 3 días calendario) se expresa en horas (24/48/72 hs); el
+        // largo en días. La unidad se deriva del conteo sin ambigüedad porque las horas
+        // solo cubren 1-3 días y los días arrancan en 4 (ver WorkspaceConsulta:
+        // HORAS_REPOSO_RAPIDAS / DIAS_REPOSO_RAPIDOS).
+        const reposoTexto =
+          dias >= 1 && dias <= 3
+            ? `${dias * 24} horas de reposo laboral`
+            : `${dias} día${dias === 1 ? "" : "s"} de reposo laboral`;
         pdf.font("Inter-SemiBold").fontSize(11).fillColor(COLORS.primary);
-        pdf.text(`${dias} día${dias === 1 ? "" : "s"} de reposo laboral`, MARGIN.left, undefined, {
+        pdf.text(reposoTexto, MARGIN.left, undefined, {
           width: CONTENT_WIDTH,
         });
         // Rango cerrado y explícito (Carolina: evita la impugnación por ambigüedad).

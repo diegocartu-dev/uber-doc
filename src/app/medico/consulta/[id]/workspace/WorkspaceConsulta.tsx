@@ -32,11 +32,27 @@ import type { EntradaEvolucion } from "@/app/medico/paciente/[pacienteId]/Evoluc
 
 type ModoWorkspace = "video" | "escritura" | "estudios" | "hc";
 
+// Chips de acceso rápido para el reposo del certificado. Dos grupos: HORAS para
+// el reposo corto (24/48/72 hs) y DÍAS para el largo (4/5/6 + "Otro" para cualquier
+// número). Un médico de 70 años prefiere tocar a tipear. La selección es obligatoria,
+// no hay default (decisión Diego).
+//
+// Modelo de datos: el reposo se persiste SIEMPRE como `dias_reposo` (entero, días
+// calendario, para el rango "desde X hasta Y"). Las horas mapean a días: 24→1, 48→2,
+// 72→3. Como las horas solo cubren 1-3 días y los días arrancan en 4, el PDF deriva
+// la unidad sin ambigüedad: dias_reposo ≤ 3 se muestra en horas, ≥ 4 en días.
+const HORAS_REPOSO_RAPIDAS: number[] = [24, 48, 72];
+const DIAS_REPOSO_RAPIDOS: number[] = [4, 5, 6];
+
 // ---------------------------------------------------------------------------
 // AccordionSection — secciones colapsables del panel de documentación
 // ---------------------------------------------------------------------------
-function AccordionSection({ title, hasContent, children }: { title: string; hasContent: boolean; children: React.ReactNode }) {
+function AccordionSection({ title, hasContent, forceOpen, children }: { title: string; hasContent: boolean; forceOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Apertura programática (ej: el guard del certificado abre la sección al fallar).
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
 
   return (
     <div className="mt-4 border-t border-gray-100 pt-3">
@@ -319,6 +335,8 @@ type DocBorrador = {
   receta?: string;
   indicaciones?: string;
   certificado?: string;
+  // Días de reposo del certificado (dato jurídico estructurado, art. 210 LCT).
+  dias_reposo?: number | null;
   orden?: string;
   evolucion?: string;
   comentario?: string;
@@ -739,7 +757,23 @@ export default function WorkspaceConsulta({
   const [recetaTextoLibre, setRecetaTextoLibre] = useState(parsedMeds.textoLibre);
   const receta = serializarMedicamentos(medicamentos, recetaTextoLibre);
   const [indicaciones, setIndicaciones] = useState(borrador?.indicaciones ?? "");
+  // Certificado de reposo laboral (art. 210 LCT). `certificado` = texto del
+  // tratamiento indicado en el certificado; `diasReposo` = dato jurídico numérico
+  // (días de reposo desde la emisión). El reposo arranca el día de emisión (día 1)
+  // y se extiende por la cantidad de días — el inicio NO es editable (decisión Diego).
   const [certificado, setCertificado] = useState(borrador?.certificado ?? "");
+  const [diasReposo, setDiasReposo] = useState<string>(
+    borrador?.dias_reposo != null ? String(borrador.dias_reposo) : ""
+  );
+  const [diasError, setDiasError] = useState(false);
+  const diasReposoNum = parseInt(diasReposo, 10);
+  const diasReposoValido = Number.isInteger(diasReposoNum) && diasReposoNum >= 1;
+  // ¿El valor actual coincide con un chip rápido? (horas 24/48/72 → 1/2/3 días, o
+  // días 4/5/6). Si no, vive en el input "Otro".
+  const diasReposoEsChip =
+    [...HORAS_REPOSO_RAPIDAS.map((h) => h / 24), ...DIAS_REPOSO_RAPIDOS].includes(diasReposoNum);
+  // ¿El médico está emitiendo un certificado de reposo? (texto o días cargados)
+  const emitiendoCertificado = certificado.trim().length > 0 || diasReposo.trim().length > 0;
   // Orden médica (RX, laboratorio, derivaciones). Es texto plano y se persiste
   // como documento tipo "orden". NO entra en la evolución ni en la HC.
   const [orden, setOrden] = useState(borrador?.orden ?? "");
@@ -804,6 +838,9 @@ export default function WorkspaceConsulta({
   }
   const [diagError, setDiagError] = useState(false);
   const diagRef = useRef<HTMLTextAreaElement>(null);
+  // Ref al bloque de días de reposo, para centrarlo en viewport cuando el guard
+  // del certificado falla (el acordeón se abre solo vía forceOpen + scroll acá).
+  const diasBlockRef = useRef<HTMLDivElement>(null);
   // Refs/flags de la tarjeta de evolución
   const tarjetaEvolucionRef = useRef<HTMLDivElement>(null);
   const generarBtnRef = useRef<HTMLButtonElement>(null);
@@ -826,6 +863,7 @@ export default function WorkspaceConsulta({
     receta,
     indicaciones,
     certificado,
+    dias_reposo: diasReposoValido ? diasReposoNum : null,
     orden,
     evolucion,
     evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
@@ -969,6 +1007,18 @@ export default function WorkspaceConsulta({
     }, 350);
   }
 
+  // Helper: mostrar el error del certificado de reposo (días faltantes). Abre el
+  // acordeón (forceOpen={diasError}), pasa a modo escritura y centra el bloque de
+  // días en viewport tras el render (espeja el patrón de resaltarGenerarEvolucion).
+  function mostrarErrorDiasReposo() {
+    setError("El certificado de reposo requiere elegir las horas o los días de reposo.");
+    setDiasError(true);
+    setModo("escritura");
+    setTimeout(() => {
+      diasBlockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 350);
+  }
+
   // Helper: validar campos obligatorios antes de finalizar
   function validarCamposObligatorios(): boolean {
     if (!diagnostico.trim()) {
@@ -983,6 +1033,13 @@ export default function WorkspaceConsulta({
       resaltarGenerarEvolucion();
       return false;
     }
+    // Guard del certificado de reposo: si el médico lo está emitiendo (escribió
+    // tratamiento o cargó días), los días de reposo son un dato jurídico obligatorio
+    // y deben ser un entero >= 1 (art. 210 LCT). No se puede emitir un reposo de 0 días.
+    if (emitiendoCertificado && !diasReposoValido) {
+      mostrarErrorDiasReposo();
+      return false;
+    }
     return true;
   }
 
@@ -991,6 +1048,12 @@ export default function WorkspaceConsulta({
   function intentarFinalizar() {
     if (faltanObligatorios) {
       setShowFaltaDialog(true);
+      return;
+    }
+    // Certificado de reposo: si se está emitiendo, los días son obligatorios (>=1).
+    // Se atrapa acá, antes del dialog de confirmación, para que el error sea visible.
+    if (emitiendoCertificado && !diasReposoValido) {
+      mostrarErrorDiasReposo();
       return;
     }
     setShowConfirmDialog(true);
@@ -1105,12 +1168,26 @@ export default function WorkspaceConsulta({
 
         if (!pacienteId || !medico) return;
 
-        const docs: { tipo: string; contenido: string }[] = [];
+        const docs: {
+          tipo: string;
+          contenido: string;
+          tratamiento?: string | null;
+          dias_reposo?: number | null;
+        }[] = [];
         if (receta.trim() && !sinCuil) docs.push({ tipo: "receta", contenido: receta.trim() });
         if (indicaciones.trim())
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
-        if (certificado.trim())
-          docs.push({ tipo: "certificado", contenido: certificado.trim() });
+        // Certificado de reposo (art. 210 LCT): se emite si hay tratamiento o días.
+        // El PDF arma TRATAMIENTO INDICADO desde `tratamiento` (prefill: el cuerpo
+        // del certificado, o las indicaciones como fallback) y REPOSO LABORAL desde
+        // `dias_reposo`. El rango se calcula desde `created_at` (día de emisión).
+        if (certificado.trim() || diasReposoValido)
+          docs.push({
+            tipo: "certificado",
+            contenido: certificado.trim(),
+            tratamiento: certificado.trim() || indicaciones.trim() || null,
+            dias_reposo: diasReposoValido ? diasReposoNum : null,
+          });
         if (orden.trim())
           docs.push({ tipo: "orden", contenido: orden.trim() });
         if (docs.length === 0)
@@ -1125,6 +1202,8 @@ export default function WorkspaceConsulta({
             tipo: d.tipo,
             diagnostico: diagnostico.trim(),
             contenido: d.contenido,
+            tratamiento: d.tratamiento ?? null,
+            dias_reposo: d.dias_reposo ?? null,
           }))
         );
 
@@ -1236,6 +1315,7 @@ export default function WorkspaceConsulta({
             receta,
             indicaciones,
             certificado,
+            dias_reposo: diasReposoValido ? diasReposoNum : null,
             orden,
             evolucion,
             medicamentos_structured: medicamentos,
@@ -1779,14 +1859,100 @@ export default function WorkspaceConsulta({
             />
           </AccordionSection>
 
-          {/* Acordeón: CERTIFICADO */}
-          <AccordionSection title="CERTIFICADO" hasContent={certificado.trim().length > 0}>
+          {/* Acordeón: CERTIFICADO DE REPOSO (art. 210 LCT) — días estructurados +
+              tratamiento (prefill opcional desde indicaciones). El reposo arranca el
+              día de emisión; el inicio no es editable. */}
+          <AccordionSection
+            title="CERTIFICADO DE REPOSO"
+            hasContent={emitiendoCertificado}
+            forceOpen={diasError}
+          >
+            {/* Reposo laboral — dato jurídico obligatorio (sin default). Dos grupos:
+                horas para el reposo corto (24/48/72 hs → 1/2/3 días) y días para el
+                largo (4/5/6 + "Otro"). Se persiste siempre como dias_reposo. */}
+            <div className="mb-3" ref={diasBlockRef}>
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                Reposo laboral <span className="text-gray-400">(desde hoy)</span>
+              </label>
+
+              <span className="mt-1 mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Horas</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {HORAS_REPOSO_RAPIDAS.map((h) => {
+                  const d = h / 24;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => { setDiasReposo(String(d)); setDiasError(false); }}
+                      className={`min-h-[44px] rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+                        diasReposoNum === d
+                          ? "border-[#378ADD] bg-[#378ADD] text-white"
+                          : "border-gray-300 bg-white text-gray-700"
+                      }`}
+                    >
+                      {h} hs
+                    </button>
+                  );
+                })}
+              </div>
+
+              <span className="mt-4 mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Días</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {DIAS_REPOSO_RAPIDOS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => { setDiasReposo(String(d)); setDiasError(false); }}
+                    className={`min-h-[44px] rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+                      diasReposoNum === d
+                        ? "border-[#378ADD] bg-[#378ADD] text-white"
+                        : "border-gray-300 bg-white text-gray-700"
+                    }`}
+                  >
+                    {d} días
+                  </button>
+                ))}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={diasReposoEsChip ? "" : diasReposo}
+                  onChange={(e) => {
+                    setDiasReposo(e.target.value.replace(/[^\d]/g, ""));
+                    setDiasError(false);
+                  }}
+                  placeholder="Otro"
+                  aria-label="Otra cantidad de días de reposo"
+                  className={`min-h-[44px] w-24 rounded-lg border px-3 py-2 text-sm ${
+                    diasError ? "border-[#E24B4A]" : "border-gray-300"
+                  }`}
+                />
+              </div>
+              {diasError && (
+                <p className="mt-2 text-xs text-[#E24B4A]">
+                  Elegí las horas o los días de reposo para emitir el certificado.
+                </p>
+              )}
+            </div>
+
+            {/* Tratamiento indicado — prefill opcional desde Indicaciones */}
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-600">Tratamiento indicado</label>
+              {indicaciones.trim().length > 0 && certificado.trim().length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCertificado(indicaciones)}
+                  className="-mr-2 px-2 py-1 text-xs font-medium text-[#378ADD]"
+                >
+                  Usar indicaciones
+                </button>
+              )}
+            </div>
             <CampoDictado
               label=""
               campo="certificado"
               value={certificado}
               setter={setCertificado}
-              placeholder="Certificado medico..."
+              placeholder="Reposo, medicación, recomendaciones..."
               dictando={dictando}
               onIniciar={() => iniciarDictado("certificado", setCertificado)}
               onDetener={detenerDictado}
