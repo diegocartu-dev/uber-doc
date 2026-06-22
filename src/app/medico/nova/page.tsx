@@ -55,6 +55,7 @@ function useDictado() {
   const [iniciando, setIniciando] = useState(false); // estado entre click y permisos
   const [interimText, setInterimText] = useState(""); // texto parcial en tiempo real
   const detenidoManual = useRef(false);
+  const procesadosRef = useRef(0); // índice del próximo resultado final a procesar (anti-duplicado Android)
 
   const iniciar = useCallback(
     async (setter: (fn: (prev: string) => string) => void) => {
@@ -65,7 +66,11 @@ function useDictado() {
       setIniciando(true);
 
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Pedir el permiso de micrófono dentro del gesto (necesario en iOS). CLAVE:
+        // liberar el stream enseguida — si queda abierto, en Android Chrome bloquea
+        // a SpeechRecognition y el dictado "no toma nada". iOS no tiene ese conflicto.
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
       } catch {
         setIniciando(false);
         return;
@@ -76,19 +81,23 @@ function useDictado() {
       rec.continuous = true;
       rec.interimResults = true;
       detenidoManual.current = false;
+      procesadosRef.current = 0;
 
       rec.onresult = (e: any) => {
-        let finalTranscript = "";
+        // Finales NUEVOS por nuestro propio índice (no `e.resultIndex`, que en Android
+        // no avanza y re-emite finales ya capturados → texto duplicado).
+        let finalNuevo = "";
         let interimTranscript = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
+        for (let i = procesadosRef.current; i < e.results.length; i++) {
           if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript;
+            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
+            procesadosRef.current = i + 1;
           } else {
             interimTranscript += e.results[i][0].transcript;
           }
         }
-        if (finalTranscript) {
-          setter((prev) => (prev ? prev + " " : "") + finalTranscript);
+        if (finalNuevo) {
+          setter((prev) => (prev ? prev + " " : "") + finalNuevo.trim());
           setInterimText("");
         } else if (interimTranscript) {
           setInterimText(interimTranscript);

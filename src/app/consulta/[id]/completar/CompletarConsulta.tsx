@@ -26,6 +26,7 @@ function calcularEdad(fechaNac: string | null): string {
 
 function useDictado() {
   const recRef = useRef<any>(null);
+  const procesadosRef = useRef(0); // anti-duplicado Android: nuestro propio índice de finales procesados
   const [dictando, setDictando] = useState<string | null>(null);
 
   const iniciar = useCallback(
@@ -38,14 +39,20 @@ function useDictado() {
       rec.lang = "es-AR";
       rec.continuous = true;
       rec.interimResults = true;
+      procesadosRef.current = 0;
 
       rec.onresult = (e: any) => {
-        let transcript = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
+        // Agregar solo los finales nuevos por nuestro propio índice (no `e.resultIndex`,
+        // que en Android no avanza y duplica el texto).
+        let finalNuevo = "";
+        for (let i = procesadosRef.current; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
+            procesadosRef.current = i + 1;
+          }
         }
-        if (e.results[e.results.length - 1].isFinal) {
-          setter((prev) => (prev ? prev + " " : "") + transcript);
+        if (finalNuevo) {
+          setter((prev) => (prev ? prev + " " : "") + finalNuevo);
         }
       };
 
