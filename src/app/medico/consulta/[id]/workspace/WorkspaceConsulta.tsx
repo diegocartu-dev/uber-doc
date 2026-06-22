@@ -189,6 +189,11 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
 
 function useDictado() {
   const recRef = useRef<any>(null);
+  // Índice del próximo resultado de SpeechRecognition a procesar. Robusto contra el
+  // bug de Android Chrome donde `e.resultIndex` no avanza y re-emite finales ya
+  // capturados (causaba "se indica reposo y se indica reposo y..."). Llevamos NUESTRO
+  // propio índice y agregamos cada segmento final UNA sola vez.
+  const procesadosRef = useRef(0);
   const [dictando, setDictando] = useState<string | null>(null);
 
   const soportado =
@@ -205,14 +210,20 @@ function useDictado() {
       rec.lang = "es-AR";
       rec.continuous = true;
       rec.interimResults = true;
+      procesadosRef.current = 0;
 
       rec.onresult = (e: any) => {
-        let transcript = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
+        // Agregar SOLO los resultados finales aún no procesados, llevando nuestro
+        // propio índice (no `e.resultIndex`, que en Android no avanza y duplica).
+        let finalNuevo = "";
+        for (let i = procesadosRef.current; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
+            procesadosRef.current = i + 1;
+          }
         }
-        if (e.results[e.results.length - 1].isFinal) {
-          setter((prev) => (prev ? prev + " " : "") + transcript);
+        if (finalNuevo) {
+          setter((prev) => (prev ? prev + " " : "") + finalNuevo);
         }
       };
 

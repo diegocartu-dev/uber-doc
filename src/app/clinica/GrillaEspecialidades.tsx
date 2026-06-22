@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, X, Building2, Microscope, Syringe, Heart, Baby, Sparkles,
@@ -286,6 +286,16 @@ export default function GrillaEspecialidades({
   const router = useRouter();
   const [modalEspecialidad, setModalEspecialidad] = useState<string | null>(null);
   const [modalModo, setModalModo] = useState<"inmediata" | "turno">(flagCiActiva ? "inmediata" : "turno");
+
+  // Auto-actualizar la disponibilidad de los médicos sin que el paciente refresque a
+  // mano: cada 15s re-corremos la query del servidor (router.refresh re-renderiza el
+  // RSC con datos frescos pero conserva el estado del cliente — el modal NO se cierra).
+  // Es polling, no Realtime: simple, sin depender de la config de Realtime de la tabla,
+  // y alineado con la regla del proyecto de no depender solo de Realtime.
+  useEffect(() => {
+    const id = setInterval(() => router.refresh(), 15000);
+    return () => clearInterval(id);
+  }, [router]);
 
   // Si ambos flags estan apagados, mostrar mensaje
   const sinServicios = !flagCiActiva && !flagTurnosActivos;
