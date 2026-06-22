@@ -82,6 +82,10 @@ export function perfilMedicoCompleto(m: MedicoCompletitud, onb: OnboardingMedico
 export function identidadHabilitada(m: {
   identidad_validada?: boolean | null;
   biometria_exenta?: boolean | null;
+  es_cuenta_test?: boolean | null;
 }): boolean {
+  // Cuentas test EXENTAS del gate de identidad (igual que de perfilMedicoCompleto y
+  // REFEPS): no pueden hacer un escaneo Didit real. Coherencia con los demás gates.
+  if (m.es_cuenta_test) return true;
   return Boolean(m.identidad_validada) || Boolean(m.biometria_exenta);
 }

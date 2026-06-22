@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada, biometria_exenta")
+    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -44,7 +44,7 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, foto_url")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, foto_url")
     .eq("slug", slug)
     .maybeSingle();
 
