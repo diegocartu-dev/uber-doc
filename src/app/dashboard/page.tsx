@@ -25,7 +25,7 @@ import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
 import { formatNombreMedico } from "@/lib/utils/texto";
-import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
+import { perfilMedicoCompleto, camposFaltantesMedico, identidadHabilitada } from "@/lib/perfil-medico";
 
 export default async function DashboardPage({
   searchParams,
@@ -84,9 +84,9 @@ export default async function DashboardPage({
     oculto_clinica: boolean; visible_consultorio_particular: boolean; verificado: boolean; estado_registro: string;
     especialidad: string; tipo_matricula: string; numero_matricula: string;
     foto_credencial_url: string | null; slug: string | null;
-    nombre_completo: string; telefono: string | null; foto_url: string | null;
+    nombre_completo: string; telefono: string | null; celular_personal: string | null; foto_url: string | null;
     domicilio_consultorio: string | null; perfil_completo: boolean;
-    identidad_validada: boolean; didit_status: string | null;
+    identidad_validada: boolean; biometria_exenta: boolean; didit_status: string | null;
   } | null = null;
 
   let consultasPendientes: {
@@ -194,7 +194,7 @@ export default async function DashboardPage({
   if (role === "medico") {
     const { data } = await supabase
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, didit_status, es_cuenta_test")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, celular_personal, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, biometria_exenta, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -408,7 +408,7 @@ export default async function DashboardPage({
     role === "medico" &&
     medico &&
     flagIdentidadGate &&
-    !medico.identidad_validada
+    !identidadHabilitada(medico)
   ) {
     return (
       <PantallaIdentidad

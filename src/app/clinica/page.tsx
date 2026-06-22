@@ -46,7 +46,8 @@ export default async function ClinicaPage() {
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")
     .eq("es_cuenta_test", esPacienteTest);
-  if (flagIdentidadGate) medicosQuery = medicosQuery.eq("identidad_validada", true);
+  // Gate de identidad: validados por Didit O eximidos (biometria_exenta, fundadores).
+  if (flagIdentidadGate) medicosQuery = medicosQuery.or("identidad_validada.eq.true,biometria_exenta.eq.true");
   const { data: medicos } = await medicosQuery;
 
   // Turnos disponibles en clínica virtual: traemos fecha + hora_inicio para poder

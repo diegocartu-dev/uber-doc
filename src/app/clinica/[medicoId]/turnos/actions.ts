@@ -6,6 +6,7 @@ import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { pushAlMedico } from "@/lib/push";
 import { getFlag } from "@/lib/feature-flags";
 import { transaccionEsDeTest } from "@/lib/pago-test";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export async function limpiarReservasExpiradas() {
   const supabase = await createClient();
@@ -50,8 +51,8 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   // visibilidad (el médico no aparece); esto cubre el caso del link directo.
   if (await getFlag("identidad_gate_activa")) {
     const { data: medicoTurno } = await supabase
-      .from("medicos").select("identidad_validada").eq("id", turno.medico_id).maybeSingle();
-    if (!medicoTurno?.identidad_validada) {
+      .from("medicos").select("identidad_validada, biometria_exenta").eq("id", turno.medico_id).maybeSingle();
+    if (!medicoTurno || !identidadHabilitada(medicoTurno)) {
       return { error: "Este profesional no está disponible en este momento." };
     }
   }

@@ -37,7 +37,7 @@ export async function actualizarDisponibilidad(data: {
   // en la cola. Para distinguir transición de re-guardado leemos el estado previo.
   const { data: previo } = await supabase
     .from("medicos")
-    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test")
+    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 

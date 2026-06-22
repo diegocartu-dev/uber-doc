@@ -8,6 +8,7 @@ import AppNavbar from "@/components/AppNavbar";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioPrivadoClient from "./ConsultorioPrivadoClient";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export default async function ConsultorioPrivadoPage({
   params,
@@ -53,7 +54,7 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, es_cuenta_test")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -63,7 +64,7 @@ export default async function ConsultorioPrivadoPage({
   // guards de CI/turnos). Un paciente real no llega a la página de un médico test ni
   // viceversa, ni por link directo. Defensa en profundidad.
   const esPacienteTest = pacienteCheck?.es_cuenta_test === true;
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada) || medico.es_cuenta_test !== esPacienteTest) notFound();
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico)) || medico.es_cuenta_test !== esPacienteTest) notFound();
 
   // Calcular disponibilidad
   const ahora = new Date();

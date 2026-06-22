@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CalendarioTurnos from "./CalendarioTurnos";
 import { capitalizarNombre, formatNombreMedico } from "@/lib/utils/texto";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export default async function TurnosPage({
   params,
@@ -36,14 +37,14 @@ export default async function TurnosPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada")
+    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta")
     .eq("id", medicoId)
     .single();
 
   // Gate de identidad (Didit): con el flag activo, no mostrar el calendario de un
   // médico sin validar (consistencia con las otras puertas de visibilidad).
   const { getFlag } = await import("@/lib/feature-flags");
-  if (!medico || ((await getFlag("identidad_gate_activa")) && !medico.identidad_validada)) redirect("/clinica");
+  if (!medico || ((await getFlag("identidad_gate_activa")) && !identidadHabilitada(medico))) redirect("/clinica");
 
   // Traer turnos disponibles futuros (fecha en ART, no UTC)
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
