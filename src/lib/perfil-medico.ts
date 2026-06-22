@@ -13,6 +13,11 @@ export type MedicoCompletitud = {
   tipo_matricula?: string | null;
   numero_matricula?: string | null;
   telefono?: string | null;
+  // Celular personal (móvil). ÚNICO fin: es la vía por la que Docto le avisa al
+  // instante que tiene un paciente esperando (WhatsApp/SMS/push). Sin él, el médico
+  // queda ciego salvo que tenga el dashboard abierto → no debe poder atender. Distinto
+  // de `telefono` (profesional, puede ser fijo, va en los documentos).
+  celular_personal?: string | null;
   domicilio_consultorio?: string | null;
   foto_url?: string | null;
   // Firma manuscrita (imagen). Es lo que da validez legal a TODO documento que
@@ -48,6 +53,7 @@ export function camposFaltantesMedico(m: MedicoCompletitud, onb: OnboardingMedic
   if (!lleno(m.tipo_matricula) || !lleno(m.numero_matricula))
     faltantes.push({ label: "Matrícula", anchor: "matricula" });
   if (!lleno(m.telefono)) faltantes.push({ label: "Teléfono profesional", anchor: "telefono" });
+  if (!lleno(m.celular_personal)) faltantes.push({ label: "Celular personal", anchor: "celular" });
   if (!lleno(m.domicilio_consultorio))
     faltantes.push({ label: "Domicilio del consultorio", anchor: "domicilio" });
   if (!lleno(m.foto_url)) faltantes.push({ label: "Foto de perfil", anchor: "foto" });
@@ -64,4 +70,18 @@ export function camposFaltantesMedico(m: MedicoCompletitud, onb: OnboardingMedic
 export function perfilMedicoCompleto(m: MedicoCompletitud, onb: OnboardingMedico): boolean {
   if (m.es_cuenta_test) return true;
   return camposFaltantesMedico(m, onb).length === 0;
+}
+
+/**
+ * ¿El médico pasa el gate de identidad biométrica? Verdadero si validó por Didit
+ * (`identidad_validada`) O si está eximido (`biometria_exenta`, grandfathering de
+ * fundadores). ÚNICA fuente de verdad para el gate `identidad_gate_activa` — usar
+ * en TODOS los puntos de enforcement (página pública, clínica, consultorio, turnos,
+ * CI, dashboard) para no dejar ninguno sin la exención.
+ */
+export function identidadHabilitada(m: {
+  identidad_validada?: boolean | null;
+  biometria_exenta?: boolean | null;
+}): boolean {
+  return Boolean(m.identidad_validada) || Boolean(m.biometria_exenta);
 }

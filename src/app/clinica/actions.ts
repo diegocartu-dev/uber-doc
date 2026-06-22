@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getFlag } from "@/lib/feature-flags";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 import { avisarMedicoAceptarWhatsApp } from "@/lib/whatsapp";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -60,7 +61,7 @@ export async function crearConsulta(
 
   const { data: medico, error: medicoError } = await supabase
     .from("medicos")
-    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test, identidad_validada")
+    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test, identidad_validada, biometria_exenta")
     .eq("id", medicoId)
     .single();
 
@@ -81,7 +82,7 @@ export async function crearConsulta(
   // hay emisión de recetas). Cierra el bypass por deep-link / endpoint directo.
   {
     const { getFlag } = await import("@/lib/feature-flags");
-    if ((await getFlag("identidad_gate_activa")) && !medico.identidad_validada) {
+    if ((await getFlag("identidad_gate_activa")) && !identidadHabilitada(medico)) {
       return { error: "El médico seleccionado no está disponible." };
     }
   }

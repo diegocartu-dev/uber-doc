@@ -8,19 +8,20 @@ import { Stethoscope } from "lucide-react";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioLoginClient from "./ConsultorioLoginClient";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada")
+    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada, biometria_exenta")
     .eq("slug", slug)
     .maybeSingle();
 
   const { getFlag } = await import("@/lib/feature-flags");
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) return { title: "Médico no encontrado — Docto" };
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) return { title: "Médico no encontrado — Docto" };
 
   return {
     title: `${formatNombreMedico(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
@@ -43,12 +44,12 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, foto_url")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, foto_url")
     .eq("slug", slug)
     .maybeSingle();
 
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !medico.identidad_validada)) notFound();
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) notFound();
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();
