@@ -80,10 +80,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Callback consciente del origen: desde el wizard de onboarding, el médico
+    // vuelve al paso 6 del caminito (no al dashboard) para ver el estado y cerrar.
+    // Desde la PantallaIdentidad del dashboard (sin origin), vuelve al dashboard.
+    const callbackUrl =
+      body?.origin === "onboarding"
+        ? "https://docto.com.ar/medico/onboarding?paso=6&identidad=verificada"
+        : "https://docto.com.ar/dashboard?identidad=verificada";
+
     // Crear la sesión de verificación en Didit
     const sesion = await crearSesionDidit({
       vendorData: medico.id,
-      callbackUrl: "https://docto.com.ar/dashboard?identidad=verificada",
+      callbackUrl,
       language: "es",
     });
 
