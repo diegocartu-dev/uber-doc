@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Calendar, Zap } from "lucide-react";
 
 interface Fila {
@@ -28,11 +29,13 @@ function Heatmap({
   serie,
   rgb,
   unidad,
+  hoyIso,
   scrollToToday,
 }: {
   serie: Serie;
   rgb: string;
   unidad: string;
+  hoyIso: string;
   scrollToToday?: boolean;
 }) {
   const max = Math.max(1, ...serie.matriz.flat());
@@ -56,11 +59,13 @@ function Heatmap({
             </div>
           ))}
         </div>
-        {serie.filas.map((fila, d) => (
+        {serie.filas.map((fila, d) => {
+          const esPasado = fila.iso < hoyIso; // ya ocurrió (inmutable) → atenuado
+          return (
           <div
             key={fila.iso}
             ref={fila.esHoy ? hoyRef : undefined}
-            className={`mt-px flex items-center rounded ${fila.esHoy ? "bg-[#378ADD]/10 ring-1 ring-inset ring-[#378ADD]/40" : ""}`}
+            className={`mt-px flex items-center rounded ${fila.esHoy ? "border-b-2 border-[#378ADD]/50 bg-[#378ADD]/10 ring-1 ring-inset ring-[#378ADD]/40" : ""} ${esPasado ? "opacity-50" : ""}`}
           >
             <div
               className={`w-16 shrink-0 pl-1 text-[10px] ${
@@ -81,7 +86,8 @@ function Heatmap({
               </div>
             ))}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -91,14 +97,16 @@ export default function OfertaClient() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(7);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/insights/oferta?dias=${dias}`)
+    fetch(`/api/insights/oferta?dias=${dias}&real=${real ? 1 : 0}`)
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [dias]);
+  }, [dias, real]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8">
@@ -137,10 +145,14 @@ export default function OfertaClient() {
               <Calendar size={16} color="#378ADD" />
               <h2 className="text-sm font-semibold text-white">Turnos programados habilitados</h2>
               <span className="text-xs text-white/40">
-                médicos con agenda abierta · 7 días atrás · hoy · 30 adelante · {data.medicosConAgenda} con agenda
+                {data.medicosConAgenda} con agenda · 7 días atrás · hoy · 30 adelante
               </span>
             </div>
-            <Heatmap serie={data.turnos} rgb="55,138,221" unidad="médico(s)" scrollToToday />
+            <p className="mb-2 text-[11px] text-white/35">
+              Cada celda = una franja de 1 h. El número es cuántos médicos tienen agenda abierta esa hora. Bajo la línea
+              de <span className="text-[#378ADD]">Hoy</span> es proyección; lo de arriba (atenuado) ya pasó.
+            </p>
+            <Heatmap serie={data.turnos} rgb="55,138,221" unidad="médico(s)" hoyIso={data.hoy} scrollToToday />
           </section>
 
           {/* CI ofertada: hoy y días hacia atrás */}
@@ -149,11 +161,15 @@ export default function OfertaClient() {
               <Zap size={16} color="#1D9E75" />
               <h2 className="text-sm font-semibold text-white">Consulta Inmediata ofertada</h2>
               <span className="text-xs text-white/40">
-                médico-horas de CI · hoy y {data.dias} días hacia atrás · total {data.totalMedicoHorasCI} h
+                total {data.totalMedicoHorasCI} médico-horas · hoy y {data.dias} días hacia atrás
               </span>
             </div>
+            <p className="mb-2 text-[11px] text-white/35">
+              Cada celda = médico-horas de disponibilidad de CI en esa franja (3 médicos disponibles de 10 a 11 = 3
+              médico-horas). <span className="text-[#378ADD]">Hoy</span> arriba; abajo (atenuado), los días previos.
+            </p>
             {data.hayDatosCI ? (
-              <Heatmap serie={data.ci} rgb="29,158,117" unidad="médico-horas" />
+              <Heatmap serie={data.ci} rgb="29,158,117" unidad="médico-horas" hoyIso={data.hoy} />
             ) : (
               <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm text-white/40">
                 Todavía no hay datos de disponibilidad de CI. Se registran desde ahora — en unos días vas a ver acá las
@@ -163,9 +179,7 @@ export default function OfertaClient() {
           </section>
 
           <p className="text-center text-[11px] text-white/25">
-            Cada celda es una franja de 1 hora (hora de Argentina). La fila <span className="text-[#378ADD]">Hoy</span>{" "}
-            está resaltada. Turnos: médicos con agenda abierta esa fecha. CI: médico-horas de disponibilidad (3 médicos
-            disponibles de 10 a 11 = 3 médico-horas).
+            Horarios en hora de Argentina (UTC−3).
           </p>
         </>
       )}

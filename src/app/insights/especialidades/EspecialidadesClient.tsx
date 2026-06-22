@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 interface EspStat {
   especialidad: string;
-  consultas: number;
-  completadas: number;
+  consultas: number;   // Total (todas, incl. canceladas)
+  completadas: number; // Atendidas
   gmv: number;
   medicosActivos: number;
   medicosTotal: number;
   esperaPromMs: number | null;
   demanda: "alta" | "media" | "ok";
+  consultasPorMedicoActivo: number | null;
+  sinMedicos: boolean;
 }
 
 function formatARS(n: number) {
@@ -34,14 +37,16 @@ export default function EspecialidadesClient() {
   const [data, setData] = useState<EspStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(30);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/insights/especialidades?dias=${dias}`)
+    fetch(`/api/insights/especialidades?dias=${dias}&real=${real ? 1 : 0}`)
       .then(r => r.json())
       .then(d => setData(d.especialidades ?? []))
       .finally(() => setLoading(false));
-  }, [dias]);
+  }, [dias, real]);
 
   return (
     <div className="space-y-6">
@@ -83,18 +88,28 @@ export default function EspecialidadesClient() {
               >
                 <div className="flex items-start justify-between">
                   <h3 className="text-base font-semibold text-white">{esp.especialidad}</h3>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${d.bg} ${d.text}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${d.bg} ${d.text}`}
+                    title="Demanda vs oferta: cuántas consultas llegan por cada médico activo. Alta = conviene reclutar."
+                  >
                     {d.label}
                   </span>
                 </div>
+                <p className="mt-1 text-[11px] text-white/35">
+                  {esp.sinMedicos
+                    ? "⚠ Hay demanda y 0 médicos activos — reclutar"
+                    : esp.consultasPorMedicoActivo != null
+                      ? `${esp.consultasPorMedicoActivo} consultas por médico activo`
+                      : "Sin actividad en el período"}
+                </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Consultas</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Total</p>
                     <p className="mt-1 text-lg font-semibold text-white">{esp.consultas}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Completadas</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Atendidas</p>
                     <p className="mt-1 text-lg font-semibold text-white">
                       {esp.completadas}
                       <span className="ml-1 text-sm font-normal text-white/40">({convRate}%)</span>

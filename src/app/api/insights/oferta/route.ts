@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
+import { leerSoloReales } from "@/lib/insights/filtro-test";
 
 // Panel "Oferta por horario": oferta de atención por FECHA CONCRETA × hora.
 //   - ci:     médico-horas de Consulta Inmediata ofertadas (histórico, del log de
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "7", 10) || 7, 1), 90);
+  const soloReales = leerSoloReales(req.nextUrl.searchParams);
   const admin = createAdminClient();
 
   const hoyIdx = arDayIndex(Date.now());
@@ -54,7 +56,9 @@ export async function GET(req: NextRequest) {
   const desdeISO = diaInfo(Math.min(hoyIdx - dias, hoyIdx - TURNOS_ATRAS) - 1).iso;
 
   const [{ data: medicos }, { data: modelos }, { data: franjas }, { data: log }] = await Promise.all([
-    admin.from("medicos").select("id").eq("verificado", true).eq("es_cuenta_test", false),
+    soloReales
+      ? admin.from("medicos").select("id").eq("verificado", true).eq("es_cuenta_test", false)
+      : admin.from("medicos").select("id").eq("verificado", true),
     admin.from("agenda_modelos").select("id, medico_id, activo, fecha_inicio, fecha_fin"),
     admin.from("agenda_franjas").select("modelo_id, dia_semana, hora_inicio, hora_fin"),
     admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeISO).order("at", { ascending: true }),

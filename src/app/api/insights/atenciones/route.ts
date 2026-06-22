@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
+import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 
 // Panel "Atenciones": una fila por atención REAL (no por slot de agenda), para
 // saber qué pasó — médico, paciente, tipo, estado, duración, cobro y documentos.
@@ -46,10 +47,11 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "30", 10) || 30, 1), 365);
+  const soloReales = leerSoloReales(req.nextUrl.searchParams);
   const desde = fechaAR(dias);
   const admin = createAdminClient();
 
-  const [{ data: consultas }, { data: turnos }, { data: documentos }, { data: medicos }, { data: pacientes }] =
+  const [{ data: consultasRaw }, { data: turnosRaw }, { data: documentos }, { data: medicos }, { data: pacientes }, sets] =
     await Promise.all([
       admin
         .from("consultas")
@@ -63,7 +65,13 @@ export async function GET(req: NextRequest) {
       admin.from("documentos").select("consulta_id, turno_id, tipo"),
       admin.from("medicos").select("id, nombre_completo"),
       admin.from("pacientes").select("user_id, nombre_completo"),
+      setsDeTest(admin),
     ]);
+
+  // Filtro test unificado (médico O paciente). Con "solo reales" (default) esta
+  // pantalla deja de mostrar solo "Dr. Docto Test" y aparecen las atenciones reales.
+  const consultas = (consultasRaw ?? []).filter((c) => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
+  const turnos = (turnosRaw ?? []).filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
 
   const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
   const pacMap = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo])); // join por user_id
