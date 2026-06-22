@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface HoyData {
@@ -14,11 +15,15 @@ interface HoyData {
   gmv: number;
   comisionDocto: number;
   esperaPromMs: number | null;
-  retencionPct: number;
+  retencionPct: number | null;
   noShowsHoy: number;
   horasDisp: number;
   medicosDispCount: number;
   cancelTardiasCount: number;
+  disponiblesAhora: {
+    id: string; nombre: string; especialidad: string;
+    modos: string[]; desde: string | null; hasta: string | null;
+  }[];
   actividad: {
     id: string; tipo: "CI" | "Turno"; estado: string;
     medico: string; paciente: string; especialidad: string;
@@ -59,15 +64,17 @@ function salud(metrica: string, valor: number): { label: string; color: string }
 export default function InsightsHoyClient() {
   const [data, setData] = useState<HoyData | null>(null);
   const [loading, setLoading] = useState(true);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/insights/hoy");
+      const res = await fetch(`/api/insights/hoy?real=${real ? 1 : 0}`);
       const json = await res.json();
       setData(json);
     } catch { /* ignore */ }
     setLoading(false);
-  }, []);
+  }, [real]);
 
   useEffect(() => {
     fetchData();
@@ -84,7 +91,7 @@ export default function InsightsHoyClient() {
   }
 
   const esperaSalud = data.esperaPromMs ? salud("espera", data.esperaPromMs) : null;
-  const retencionSalud = salud("retencion", data.retencionPct);
+  const retencionSalud = data.retencionPct != null ? salud("retencion", data.retencionPct) : null;
   const noshowSalud = salud("noshow", data.noShowsHoy);
 
   return (
@@ -95,6 +102,47 @@ export default function InsightsHoyClient() {
           {new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}
         </p>
       </div>
+
+      {/* DISPONIBLES AHORA — quién puede atender en este momento y en qué modo */}
+      {data.disponiblesAhora.length > 0 ? (
+        <div className="rounded-xl bg-[#1E293B] p-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wider text-white/40">Disponibles ahora</p>
+            <span className="text-xs text-white/40">{data.disponiblesAhora.length} médico(s)</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.disponiblesAhora.map((m) => (
+              <div key={m.id} className="min-w-[210px] flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 sm:max-w-[280px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-[#1D9E75]" />
+                  <span className="truncate text-sm font-medium text-white/90">{m.nombre}</span>
+                </div>
+                <p className="mt-0.5 truncate text-xs text-white/40">{m.especialidad || "—"}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {m.modos.map((modo) => (
+                    <span
+                      key={modo}
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                        modo === "CI" ? "bg-[#378ADD]/20 text-[#378ADD]" : "bg-white/10 text-white/60"
+                      }`}
+                    >
+                      {modo === "CI" ? "Consulta inmediata" : "Turnos hoy"}
+                    </span>
+                  ))}
+                  {m.desde && m.hasta && (
+                    <span className="text-[10px] text-white/35">{m.desde}–{m.hasta}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[#D85A30]/30 bg-[#D85A30]/10 px-4 py-3 text-center">
+          <p className="text-sm font-semibold text-[#D85A30]">Nadie disponible ahora mismo</p>
+          <p className="mt-0.5 text-xs text-white/40">Ningún médico está atendiendo en este momento.</p>
+        </div>
+      )}
 
       {/* FILA 1 — Las 3 preguntas */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -149,7 +197,7 @@ export default function InsightsHoyClient() {
             <p className="text-sm font-medium text-[#378ADD]">
               Docto {formatARS(data.comisionDocto)}
             </p>
-            <p className="text-xs text-[#378ADD]/60">comisión 5%</p>
+            <p className="text-xs text-[#378ADD]/60">$1.500 por consulta · {data.completadasHoy} hoy</p>
           </div>
         </div>
       </div>
@@ -163,7 +211,7 @@ export default function InsightsHoyClient() {
         />
         <MetricSmall
           label="Retención"
-          value={`${data.retencionPct}% vuelven`}
+          value={data.retencionPct != null ? `${data.retencionPct}% vuelven` : "Sin datos"}
           salud={retencionSalud}
         />
         <MetricSmall
@@ -182,13 +230,13 @@ export default function InsightsHoyClient() {
         />
       </div>
 
-      {/* FILA 3 — Actividad reciente */}
+      {/* FILA 3 — Atenciones de hoy (reales, no slots de agenda) */}
       <div className="rounded-xl bg-[#1E293B]" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
         <div className="border-b border-white/5 px-5 py-4">
-          <h2 className="text-sm font-semibold text-white/80">Actividad del día</h2>
+          <h2 className="text-sm font-semibold text-white/80">Atenciones de hoy</h2>
         </div>
         {data.actividad.length === 0 ? (
-          <div className="p-8 text-center text-sm text-white/30">Sin actividad hoy</div>
+          <div className="p-8 text-center text-sm text-white/30">Todavía no hubo atenciones hoy</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -198,8 +246,7 @@ export default function InsightsHoyClient() {
                   <th className="hidden px-5 py-3 sm:table-cell">Paciente</th>
                   <th className="hidden px-5 py-3 lg:table-cell">Especialidad</th>
                   <th className="px-5 py-3">Canal</th>
-                  <th className="px-5 py-3">Precio</th>
-                  <th className="hidden px-5 py-3 lg:table-cell">Comisión</th>
+                  <th className="hidden px-5 py-3 sm:table-cell">Precio</th>
                   <th className="px-5 py-3">Estado</th>
                 </tr>
               </thead>
@@ -216,8 +263,7 @@ export default function InsightsHoyClient() {
                         {a.tipo}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-white/70">{formatARS(a.precio)}</td>
-                    <td className="hidden px-5 py-3 text-[#378ADD]/80 lg:table-cell">{formatARS(a.precio * 0.05)}</td>
+                    <td className="hidden px-5 py-3 text-white/70 sm:table-cell">{formatARS(a.precio)}</td>
                     <td className="px-5 py-3">
                       <EstadoBadge estado={a.estado} />
                     </td>

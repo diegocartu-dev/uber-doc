@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, ArrowUpDown } from "lucide-react";
 
 interface MedicoStat {
@@ -8,13 +9,15 @@ interface MedicoStat {
   nombre: string;
   especialidad: string;
   disponible: boolean;
-  consultas: number;
+  consultas: number; // = atendidas (compat)
+  atendidas: number;
+  total: number;
   canceladas: number;
   noShows: number;
   gmv: number;
   comision: number;
   esperaPromMs: number | null;
-  retencion: number;
+  retencion: number | null;
   ultimaActividad: string | null;
 }
 
@@ -36,14 +39,16 @@ export default function MedicosInsightsClient() {
   const [dias, setDias] = useState(30);
   const [sortKey, setSortKey] = useState<SortKey>("gmv");
   const [sortAsc, setSortAsc] = useState(false);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/insights/medicos?dias=${dias}`)
+    fetch(`/api/insights/medicos?dias=${dias}&real=${real ? 1 : 0}`)
       .then(r => r.json())
       .then(d => setMedicos(d.medicos ?? []))
       .finally(() => setLoading(false));
-  }, [dias]);
+  }, [dias, real]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -88,7 +93,8 @@ export default function MedicosInsightsClient() {
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
                   <SortHeader label="Médico" sortKey="nombre" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 md:table-cell">Especialidad</th>
-                  <SortHeader label="Consultas" sortKey="consultas" current={sortKey} asc={sortAsc} onClick={toggleSort} />
+                  <SortHeader label="Atendidas" sortKey="consultas" current={sortKey} asc={sortAsc} onClick={toggleSort} />
+                  <th className="hidden px-4 py-3 md:table-cell">Total</th>
                   <SortHeader label="GMV" sortKey="gmv" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Comisión</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Espera CI</th>
@@ -108,7 +114,8 @@ export default function MedicosInsightsClient() {
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 text-white/50 md:table-cell">{m.especialidad}</td>
-                    <td className="px-4 py-3 text-white/70">{m.consultas}</td>
+                    <td className="px-4 py-3 text-white/70">{m.atendidas ?? m.consultas}</td>
+                    <td className="hidden px-4 py-3 text-white/40 md:table-cell">{m.total ?? "—"}</td>
                     <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.gmv)}</td>
                     <td className="hidden px-4 py-3 text-[#378ADD] lg:table-cell">{formatARS(m.comision)}</td>
                     <td className="hidden px-4 py-3 text-white/50 lg:table-cell">
@@ -121,13 +128,17 @@ export default function MedicosInsightsClient() {
                       <span className={m.canceladas > 2 ? "text-[#D85A30]" : "text-white/40"}>{m.canceladas}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        m.retencion >= 30 ? "bg-[#1D9E75]/20 text-[#1D9E75]" :
-                        m.retencion >= 15 ? "bg-[#BA7517]/20 text-[#BA7517]" :
-                        "bg-white/10 text-white/40"
-                      }`}>
-                        {m.retencion}%
-                      </span>
+                      {m.retencion == null ? (
+                        <span className="text-white/25" title="Sin consultas en el período">—</span>
+                      ) : (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          m.retencion >= 30 ? "bg-[#1D9E75]/20 text-[#1D9E75]" :
+                          m.retencion >= 15 ? "bg-[#BA7517]/20 text-[#BA7517]" :
+                          "bg-white/10 text-white/40"
+                        }`}>
+                          {m.retencion}%
+                        </span>
+                      )}
                     </td>
                     <td className="hidden px-4 py-3 text-white/30 lg:table-cell">
                       {m.ultimaActividad ? new Date(m.ultimaActividad).toLocaleDateString("es-AR") : "—"}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 interface Funnel {
@@ -19,7 +20,7 @@ interface MedFila {
 }
 interface Data {
   dias: number;
-  incluirTest: boolean;
+  soloReales: boolean;
   funnel: Funnel;
   demandaPorMedico: MedFila[];
 }
@@ -30,15 +31,16 @@ export default function FunnelClient() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(30);
-  const [incluirTest, setIncluirTest] = useState(false);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/insights/funnel?dias=${dias}&test=${incluirTest ? 1 : 0}`)
+    fetch(`/api/insights/funnel?dias=${dias}&real=${real ? 1 : 0}`)
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [dias, incluirTest]);
+  }, [dias, real]);
 
   const etapas = data
     ? [
@@ -58,14 +60,6 @@ export default function FunnelClient() {
           <p className="text-sm text-white/50">Qué pasó con los pacientes: entraron, pagaron, entraron al video, completaron — y a qué médico eligieron.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIncluirTest((v) => !v)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              incluirTest ? "bg-[#BA7517]/20 text-[#BA7517]" : "bg-white/5 text-white/40 hover:text-white/70"
-            }`}
-          >
-            {incluirTest ? "Incluye cuentas test" : "Solo reales"}
-          </button>
           <div className="flex gap-1">
             {[7, 30, 90].map((d) => (
               <button
@@ -92,7 +86,7 @@ export default function FunnelClient() {
           <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
             <h2 className="mb-4 text-sm font-semibold text-white">Recorrido del paciente</h2>
             {base === 0 ? (
-              <p className="py-8 text-center text-sm text-white/40">Sin consultas en el período{incluirTest ? "" : " (probá incluir cuentas test)"}.</p>
+              <p className="py-8 text-center text-sm text-white/40">Sin consultas reales en el período.</p>
             ) : (
               <div className="space-y-3">
                 {etapas.map((e, i) => {
@@ -132,7 +126,7 @@ export default function FunnelClient() {
                   <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
                     <th className="py-2 pr-3 font-medium">Médico</th>
                     <th className="px-3 py-2 font-medium">Pacientes</th>
-                    <th className="px-3 py-2 font-medium">Consultas</th>
+                    <th className="px-3 py-2 font-medium">Consultas (total)</th>
                     <th className="px-3 py-2 font-medium">Llegaron al video</th>
                   </tr>
                 </thead>

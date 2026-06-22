@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
+import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 
 // Panel "Funnel": recorrido del paciente en Consulta Inmediata
 //   Entró (sala de espera) → Pagó → Entró al video → Completó, + los que cancelaron,
@@ -29,18 +30,20 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "30", 10) || 30, 1), 365);
-  const incluirTest = req.nextUrl.searchParams.get("test") === "1";
+  const soloReales = leerSoloReales(req.nextUrl.searchParams);
   const desde = fechaAR(dias);
   const admin = createAdminClient();
 
-  const [{ data: consultas }, { data: medicos }] = await Promise.all([
+  const [{ data: consultas }, { data: medicos }, sets] = await Promise.all([
     admin.from("consultas").select("id, medico_id, paciente_id, estado, en_curso_at, mp_status, pago_id, created_at").gte("created_at", desde),
     admin.from("medicos").select("id, nombre_completo, es_cuenta_test"),
+    setsDeTest(admin),
   ]);
 
   const medMap = new Map((medicos ?? []).map((m) => [m.id, { nombre: m.nombre_completo as string, test: !!m.es_cuenta_test }]));
   let cs = (consultas ?? []) as C[];
-  if (!incluirTest) cs = cs.filter((c) => !medMap.get(c.medico_id)?.test);
+  // Solo reales (default): excluye si el médico O el paciente son cuenta test.
+  if (soloReales) cs = cs.filter((c) => !esTest(sets, c.medico_id, c.paciente_id));
 
   const funnel = {
     entraron: cs.length,
@@ -63,5 +66,5 @@ export async function GET(req: NextRequest) {
     .map((e) => ({ medico: e.medico, test: e.test, pacientes: e.pacientes.size, consultas: e.consultas, video: e.video }))
     .sort((a, b) => b.pacientes - a.pacientes || b.consultas - a.consultas);
 
-  return NextResponse.json({ dias, incluirTest, funnel, demandaPorMedico });
+  return NextResponse.json({ dias, soloReales, funnel, demandaPorMedico });
 }

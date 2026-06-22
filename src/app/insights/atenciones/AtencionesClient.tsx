@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 interface Cobro {
@@ -42,14 +43,16 @@ export default function AtencionesClient() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(30);
+  const sp = useSearchParams();
+  const real = sp.get("real") !== "0";
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/insights/atenciones?dias=${dias}`)
+    fetch(`/api/insights/atenciones?dias=${dias}&real=${real ? 1 : 0}`)
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [dias]);
+  }, [dias, real]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8">
@@ -105,8 +108,8 @@ export default function AtencionesClient() {
                   <th className="px-3 py-3 font-medium">Paciente</th>
                   <th className="px-3 py-3 font-medium">Estado</th>
                   <th className="px-3 py-3 font-medium">Duró</th>
-                  <th className="px-3 py-3 font-medium">Cobró</th>
                   <th className="px-3 py-3 font-medium">Documentó</th>
+                  <th className="px-3 py-3 font-medium">Cobró</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +122,8 @@ export default function AtencionesClient() {
                 )}
                 {data.atenciones.map((a, i) => {
                   const ec = ESTADO_COLOR[a.estado] ?? "#888780";
-                  const tc = a.tipo === "CI" ? "#1D9E75" : "#378ADD";
+                  // CI = azul (acción), Turno = gris (categoría). Verde es solo para estados.
+                  const tc = a.tipo === "CI" ? "#378ADD" : "#888780";
                   return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
                       <td className="whitespace-nowrap px-4 py-3 text-white/70">{a.cuando}</td>
@@ -138,15 +142,6 @@ export default function AtencionesClient() {
                       <td className="whitespace-nowrap px-3 py-3 text-white/70">
                         {a.duracionMin != null ? `${a.duracionMin} min` : <span className="text-white/25">—</span>}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3">
-                        {a.cobro?.pagado ? (
-                          <span className="font-semibold text-[#1D9E75]">{fmtMonto(a.cobro.monto)}</span>
-                        ) : a.cobro ? (
-                          <span className="text-[#BA7517]">Pendiente</span>
-                        ) : (
-                          <span className="text-white/25">—</span>
-                        )}
-                      </td>
                       <td className="px-3 py-3">
                         {a.docs.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
@@ -156,6 +151,15 @@ export default function AtencionesClient() {
                               </span>
                             ))}
                           </div>
+                        ) : (
+                          <span className="text-white/25">—</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        {a.cobro?.pagado ? (
+                          <span className="font-semibold text-[#1D9E75]">{fmtMonto(a.cobro.monto)}</span>
+                        ) : a.cobro ? (
+                          <span className="text-[#BA7517]">Pendiente</span>
                         ) : (
                           <span className="text-white/25">—</span>
                         )}
