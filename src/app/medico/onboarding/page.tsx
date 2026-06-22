@@ -30,7 +30,7 @@ export default async function OnboardingPage({
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test"
+      "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test, celular_personal, identidad_validada, didit_status, biometria_exenta"
     )
     .eq("user_id", user.id)
     .maybeSingle();
@@ -53,15 +53,26 @@ export default async function OnboardingPage({
     adminDb.from("medico_claves").select("id").eq("medico_id", medico.id).maybeSingle(),
   ]);
 
+  // El biométrico cuenta como hecho si quedó validado o si la cuenta está exenta.
+  const biometricoHecho = !!medico.identidad_validada || !!medico.biometria_exenta;
   const pasos = {
     mp: !!mpRes.data,
+    celular: !!medico.celular_personal?.trim(),
     foto: !!medico.foto_url?.trim(),
-    firma: !!firmaRes.data,
+    // Firma = claves electrónicas (medico_claves) Y la imagen manuscrita, igual que
+    // el gate real de atender. Si no, un médico con claves pero sin imagen cerraría
+    // el wizard "100%" pero el dashboard lo bloquearía de ponerse disponible.
+    firma: !!firmaRes.data && !!medico.firma_manuscrita_url?.trim(),
     domicilio: !!medico.domicilio_consultorio?.trim(),
+    biometrico: biometricoHecho,
   };
 
   // Cuentas test o ya 100% completas → no necesitan wizard.
-  if (!qa && (medico.es_cuenta_test || (pasos.mp && pasos.foto && pasos.firma && pasos.domicilio))) {
+  if (
+    !qa &&
+    (medico.es_cuenta_test ||
+      (pasos.mp && pasos.celular && pasos.foto && pasos.firma && pasos.domicilio && pasos.biometrico))
+  ) {
     redirect("/dashboard");
   }
 
@@ -73,6 +84,9 @@ export default async function OnboardingPage({
       firmaUrl={medico.firma_manuscrita_url ?? null}
       domicilioInicial={medico.domicilio_consultorio ?? ""}
       provinciaInicial={medico.provincia ?? ""}
+      celularInicial={medico.celular_personal ?? ""}
+      diditStatus={medico.didit_status ?? null}
+      userId={user.id}
       pasoInicialParam={sp.paso ?? null}
       mpResultado={sp.mp ?? null}
       mpError={sp.error ?? null}

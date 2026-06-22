@@ -37,7 +37,7 @@ export default async function TurnosPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta")
+    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("id", medicoId)
     .single();
 

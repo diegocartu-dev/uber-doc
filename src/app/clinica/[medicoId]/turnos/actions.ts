@@ -51,7 +51,7 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   // visibilidad (el médico no aparece); esto cubre el caso del link directo.
   if (await getFlag("identidad_gate_activa")) {
     const { data: medicoTurno } = await supabase
-      .from("medicos").select("identidad_validada, biometria_exenta").eq("id", turno.medico_id).maybeSingle();
+      .from("medicos").select("identidad_validada, biometria_exenta, es_cuenta_test").eq("id", turno.medico_id).maybeSingle();
     if (!medicoTurno || !identidadHabilitada(medicoTurno)) {
       return { error: "Este profesional no está disponible en este momento." };
     }
