@@ -18,6 +18,7 @@ import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import PantallaIdentidad from "./PantallaIdentidad";
+import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
@@ -384,16 +385,19 @@ export default async function DashboardPage({
   // ═══════════════════════════════════════
   if (role === "medico" && medico && !medico.verificado) {
     return (
-      <PantallaVerificacion
-        fullName={fullName}
-        email={user.email ?? ""}
-        estadoRegistro={medico.estado_registro}
-        especialidad={medico.especialidad}
-        tipoMatricula={medico.tipo_matricula}
-        numeroMatricula={medico.numero_matricula}
-        fotoCredencialUrl={medico.foto_credencial_url}
-        userId={user.id}
-      />
+      <>
+        <PantallaVerificacion
+          fullName={fullName}
+          email={user.email ?? ""}
+          estadoRegistro={medico.estado_registro}
+          especialidad={medico.especialidad}
+          tipoMatricula={medico.tipo_matricula}
+          numeroMatricula={medico.numero_matricula}
+          fotoCredencialUrl={medico.foto_credencial_url}
+          userId={user.id}
+        />
+        <CampanaMedico flotante />
+      </>
     );
   }
 
@@ -406,11 +410,14 @@ export default async function DashboardPage({
     !identidadHabilitada(medico)
   ) {
     return (
-      <PantallaIdentidad
-        diditStatus={medico.didit_status}
-        recienVolvio={identidad === "verificada"}
-        userId={user.id}
-      />
+      <>
+        <PantallaIdentidad
+          diditStatus={medico.didit_status}
+          recienVolvio={identidad === "verificada"}
+          userId={user.id}
+        />
+        <CampanaMedico flotante />
+      </>
     );
   }
 
@@ -544,6 +551,7 @@ export default async function DashboardPage({
                       Nova
                     </Link>
                   )}
+                  <CampanaMedico />
                   <span className="hidden text-sm text-gray-500 lg:inline">{fullName}</span>
                   <AvatarDropdown
                     initials={initials}
