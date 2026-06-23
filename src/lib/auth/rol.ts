@@ -26,13 +26,6 @@ export async function resolverRol(supabase: Supa, userId: string): Promise<RolUs
   return null;
 }
 
-/** Página "home" de cada rol. */
-export function homeDeRol(rol: RolUsuario): string {
-  if (rol === "admin") return "/admin";
-  if (rol === "medico") return "/dashboard";
-  return "/clinica"; // paciente (y usuario nuevo)
-}
-
 /**
  * Guard para RUTAS DE PACIENTE: si quien entra NO es paciente, lo redirige a su lugar.
  *   - admin  → /admin
