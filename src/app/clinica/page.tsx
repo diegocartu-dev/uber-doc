@@ -5,6 +5,7 @@ import AppNavbar from "@/components/AppNavbar";
 import GrillaEspecialidades from "./GrillaEspecialidades";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
+import { guardRutaPaciente } from "@/lib/auth/rol";
 
 export default async function ClinicaPage() {
   const supabase = await createClient();
@@ -15,6 +16,10 @@ export default async function ClinicaPage() {
   if (!user) {
     redirect("/auth/login");
   }
+
+  // Esta es una ruta de PACIENTE: si entra un médico → /dashboard, un admin → /admin.
+  // El paciente (y el usuario nuevo en onboarding) pasa.
+  await guardRutaPaciente(supabase, user.id);
 
   const { data: paciente } = await supabase
     .from("pacientes")

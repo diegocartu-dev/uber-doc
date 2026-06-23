@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import CalendarioTurnos from "./CalendarioTurnos";
 import { capitalizarNombre, formatNombreMedico } from "@/lib/utils/texto";
 import { identidadHabilitada } from "@/lib/perfil-medico";
+import { guardRutaPaciente } from "@/lib/auth/rol";
 
 export default async function TurnosPage({
   params,
@@ -18,6 +19,9 @@ export default async function TurnosPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  // Ruta de PACIENTE (reserva de turno): médico → /dashboard, admin → /admin.
+  await guardRutaPaciente(supabase, user.id);
 
   const { data: paciente } = await supabase
     .from("pacientes")
