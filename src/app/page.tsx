@@ -135,7 +135,7 @@ export default async function Home({
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <FileCheck size={15} style={{ color: "#3F7A52" }} />
-                Certificado médico
+                Certificado médico — Ley 27.802 / Decreto 407/2026
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <Wallet size={15} style={{ color: "#3F7A52" }} />
