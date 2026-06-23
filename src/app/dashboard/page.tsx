@@ -24,6 +24,7 @@ import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
+import { isAdmin } from "@/lib/admin-auth";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { perfilMedicoCompleto, camposFaltantesMedico, identidadHabilitada } from "@/lib/perfil-medico";
 
@@ -36,6 +37,12 @@ export default async function DashboardPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  // Admin SIEMPRE va al panel admin — aunque también tenga fila de médico o paciente.
+  // (Precedencia admin > médico > paciente; fuente de verdad en src/lib/auth/rol.ts.)
+  // Antes este chequeo estaba al final y quedaba "tapado" cuando el admin tenía rol
+  // médico/paciente, así que el admin caía en la vista equivocada.
+  if (await isAdmin(user.id)) redirect("/admin");
 
   const fullName = user.user_metadata?.full_name || user.email;
   let role = user.user_metadata?.role;
@@ -52,18 +59,6 @@ export default async function DashboardPage({
     }
   }
 
-  // Admin puro (sin rol medico/paciente) → redirigir a panel admin
-  if (!role || (role !== "medico" && role !== "paciente")) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminDb = createAdminClient();
-    const { data: esAdmin } = await adminDb
-      .from("admin_users")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("activo", true)
-      .maybeSingle();
-    if (esAdmin) redirect("/admin");
-  }
 
   // Feature flags para UI
   const [flagNovaAi, flagCiGlobal, flagIdentidadGate] = await Promise.all([

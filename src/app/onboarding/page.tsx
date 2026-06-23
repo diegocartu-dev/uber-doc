@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import OnboardingForm from "@/components/OnboardingForm";
+import { guardRutaPaciente } from "@/lib/auth/rol";
 
 export default async function OnboardingPage({
   searchParams,
@@ -12,6 +13,10 @@ export default async function OnboardingPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/");
+
+  // Ruta de PACIENTE (onboarding del paciente nuevo): médico → /dashboard, admin → /admin.
+  // El usuario nuevo sin fila todavía PASA (es justo el que tiene que completar acá).
+  await guardRutaPaciente(supabase, user.id);
 
   const { data: paciente } = await supabase
     .from("pacientes")
