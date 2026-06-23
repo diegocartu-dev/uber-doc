@@ -220,11 +220,25 @@ async function handlePayment(paymentId: string): Promise<void> {
     return;
   }
 
-  const applicationFee = payment.fee_details?.find(
-    (f: { type: string }) => f.type === "mercadopago_fee"
-  )?.amount ?? payment.marketplace_fee ?? 0;
   const transactionAmount: number = payment.transaction_amount ?? 0;
   const dateCreated: string | null = payment.date_created ?? null;
+
+  // Comisión REAL de Docto = el `marketplace_fee` que enviamos en crear-v2 (lo que
+  // efectivamente cobra Docto). NO usar `mercadopago_fee` de `fee_details`: ese es la
+  // comisión interna de procesamiento de Mercado Pago (un número distinto y más bajo,
+  // ~$1.290 en un pago de $30.000), no la comisión de Docto ($1.500 = 5%).
+  // Fuente primaria: metadata.marketplace_fee (lo que mandamos). Fallbacks: recálculo
+  // por comision_pct (misma fórmula que crear-v2), o el campo marketplace_fee del pago.
+  const metaFee = Number(payment.metadata?.marketplace_fee);
+  const metaPct = Number(payment.metadata?.comision_pct);
+  const applicationFee =
+    Number.isFinite(metaFee) && metaFee > 0
+      ? metaFee
+      : Number.isFinite(metaPct) && metaPct > 0
+        ? Math.round(transactionAmount * (metaPct / 100) * 100) / 100
+        : typeof payment.marketplace_fee === "number" && payment.marketplace_fee > 0
+          ? payment.marketplace_fee
+          : 0;
 
   const logCtx = { paymentId, status, tipo, id };
 
