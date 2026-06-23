@@ -18,9 +18,17 @@ interface MedFila {
   consultas: number;
   video: number;
 }
+interface Etapa {
+  etapa: string;
+  n: number;
+  nuevo: boolean;
+  pct: number;
+  pctPaso: number | null;
+}
 interface Data {
   dias: number;
   soloReales: boolean;
+  recorrido: Etapa[];
   funnel: Funnel;
   demandaPorMedico: MedFila[];
 }
@@ -42,22 +50,15 @@ export default function FunnelClient() {
       .finally(() => setLoading(false));
   }, [dias, real]);
 
-  const etapas = data
-    ? [
-        { label: "Entraron (sala de espera)", n: data.funnel.entraron, color: "#378ADD" },
-        { label: "Pagaron", n: data.funnel.pagaron, color: "#378ADD" },
-        { label: "Entraron al video", n: data.funnel.video, color: "#1D9E75" },
-        { label: "Completaron", n: data.funnel.completaron, color: "#1D9E75" },
-      ]
-    : [];
-  const base = data?.funnel.entraron ?? 0;
+  const recorrido = data?.recorrido ?? [];
+  const registro = recorrido[0]?.n ?? 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-white">Funnel de pacientes</h1>
-          <p className="text-sm text-white/50">Qué pasó con los pacientes: entraron, pagaron, entraron al video, completaron — y a qué médico eligieron.</p>
+          <p className="text-sm text-white/50">El recorrido completo: de cuántos se registran, cuántos llegan a cada paso hasta atenderse.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
@@ -82,35 +83,42 @@ export default function FunnelClient() {
         </div>
       ) : (
         <>
-          {/* Embudo */}
+          {/* Recorrido completo del paciente */}
           <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
-            <h2 className="mb-4 text-sm font-semibold text-white">Recorrido del paciente</h2>
-            {base === 0 ? (
-              <p className="py-8 text-center text-sm text-white/40">Sin consultas reales en el período.</p>
+            <h2 className="mb-1 text-sm font-semibold text-white">Recorrido del paciente</h2>
+            <p className="mb-4 text-xs text-white/40">
+              Pacientes distintos que llegan a cada paso. El % es sobre los que se registraron.
+            </p>
+            {registro === 0 ? (
+              <p className="py-8 text-center text-sm text-white/40">Sin registros reales en el período.</p>
             ) : (
               <div className="space-y-3">
-                {etapas.map((e, i) => {
-                  const p = pct(e.n, base);
-                  const prev = i > 0 ? etapas[i - 1].n : null;
-                  const conv = prev != null && prev > 0 ? pct(e.n, prev) : null;
+                {recorrido.map((e, i) => {
+                  const esFinal = i === recorrido.length - 1;
+                  const color = esFinal ? "#1D9E75" : "#378ADD";
                   return (
-                    <div key={e.label}>
+                    <div key={e.etapa}>
                       <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="text-white/80">{e.label}</span>
+                        <span className="text-white/80">
+                          {e.etapa}
+                          {e.nuevo && (
+                            <span className="ml-2 text-[10px] text-white/30">midiendo desde 22/06</span>
+                          )}
+                        </span>
                         <span className="text-white/50">
-                          <span className="font-semibold text-white">{e.n}</span> · {p}%
-                          {conv != null && <span className="ml-2 text-[11px] text-white/35">({conv}% del paso anterior)</span>}
+                          <span className="font-semibold text-white">{e.n}</span> · {e.pct}%
+                          {e.pctPaso != null && <span className="ml-2 text-[11px] text-white/35">({e.pctPaso}% del paso anterior)</span>}
                         </span>
                       </div>
                       <div className="h-7 w-full overflow-hidden rounded bg-white/5">
-                        <div className="h-full rounded" style={{ width: `${Math.max(p, 2)}%`, background: e.color }} />
+                        <div className="h-full rounded" style={{ width: `${Math.max(e.pct, 2)}%`, background: color }} />
                       </div>
                     </div>
                   );
                 })}
                 <div className="flex items-center justify-between pt-2 text-sm">
-                  <span className="text-[#E24B4A]">Cancelaron / se cayeron</span>
-                  <span className="font-semibold text-[#E24B4A]">{data.funnel.cancelaron} · {pct(data.funnel.cancelaron, base)}%</span>
+                  <span className="text-[#E24B4A]">Cancelaron / se cayeron (de las consultas)</span>
+                  <span className="font-semibold text-[#E24B4A]">{data.funnel.cancelaron}</span>
                 </div>
               </div>
             )}
@@ -153,7 +161,7 @@ export default function FunnelClient() {
           </section>
 
           <p className="text-center text-[11px] text-white/25">
-            "Entró al video" se usa como señal de que el médico aceptó (el momento exacto de aceptación no se registra hoy). El recorrido se mide combinando estado + pago + timestamps.
+            "Entró a la clínica" y "Eligió un médico" se empezaron a medir el 22/06 — para períodos anteriores dan 0 aunque haya habido visitas (antes no se registraban). De acá en adelante se llenan con cada paciente que entra.
           </p>
         </>
       )}
