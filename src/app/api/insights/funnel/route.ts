@@ -34,9 +34,11 @@ export async function GET(req: NextRequest) {
   const desde = fechaAR(dias);
   const admin = createAdminClient();
 
-  const [{ data: consultas }, { data: medicos }, sets] = await Promise.all([
+  const [{ data: consultas }, { data: medicos }, { data: pacientes }, { data: eventos }, sets] = await Promise.all([
     admin.from("consultas").select("id, medico_id, paciente_id, estado, en_curso_at, mp_status, pago_id, created_at").gte("created_at", desde),
     admin.from("medicos").select("id, nombre_completo, es_cuenta_test"),
+    admin.from("pacientes").select("user_id, dni, fecha_nacimiento, sexo_dni, es_cuenta_test, created_at").gte("created_at", desde),
+    admin.from("eventos_funnel").select("evento, paciente_id, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado"]).gte("created_at", desde),
     setsDeTest(admin),
   ]);
 
@@ -45,6 +47,7 @@ export async function GET(req: NextRequest) {
   // Solo reales (default): excluye si el médico O el paciente son cuenta test.
   if (soloReales) cs = cs.filter((c) => !esTest(sets, c.medico_id, c.paciente_id));
 
+  // Funnel TARDÍO (Consulta Inmediata, por consulta) — el que ya existía.
   const funnel = {
     entraron: cs.length,
     pagaron: cs.filter(pago).length,
@@ -52,6 +55,50 @@ export async function GET(req: NextRequest) {
     completaron: cs.filter((c) => c.estado === "completada").length,
     cancelaron: cs.filter((c) => c.estado === "cancelada").length,
   };
+
+  // RECORRIDO COMPLETO del paciente: pacientes DISTINTOS por etapa en el período.
+  //   registró → completó perfil → entró a la clínica → eligió médico → inició pago → pagó → se atendió
+  // Las dos etapas del medio (clínica/médico) se instrumentaron el 22/06 → para
+  // períodos viejos dan 0 aunque haya habido visitas (antes no se medían). Se marcan
+  // `nuevo:true` para que la UI lo aclare y no se lea como bug.
+  let pac = (pacientes ?? []) as { user_id: string | null; dni: string | null; fecha_nacimiento: string | null; sexo_dni: string | null; es_cuenta_test: boolean | null }[];
+  if (soloReales) pac = pac.filter((p) => !p.es_cuenta_test);
+  const registro = pac.length;
+  const perfil = pac.filter((p) => p.dni && p.fecha_nacimiento && p.sexo_dni).length;
+
+  const distinctPac = (evt: string) => {
+    const s = new Set<string>();
+    for (const e of (eventos ?? []) as { evento: string; paciente_id: string | null }[]) {
+      if (e.evento !== evt || !e.paciente_id) continue;
+      if (soloReales && sets.testPac.has(e.paciente_id)) continue;
+      s.add(e.paciente_id);
+    }
+    return s.size;
+  };
+  const pagoSet = new Set<string>();
+  const atendioSet = new Set<string>();
+  for (const c of cs) {
+    if (pago(c)) pagoSet.add(c.paciente_id);
+    if (c.estado === "completada") atendioSet.add(c.paciente_id);
+  }
+
+  const etapas = [
+    { etapa: "Se registró", n: registro, nuevo: false },
+    { etapa: "Completó su perfil", n: perfil, nuevo: false },
+    { etapa: "Entró a la clínica", n: distinctPac("clinica_vista"), nuevo: true },
+    { etapa: "Eligió un médico", n: distinctPac("medico_elegido"), nuevo: true },
+    { etapa: "Inició el pago", n: distinctPac("pago_creado"), nuevo: false },
+    { etapa: "Pagó", n: pagoSet.size, nuevo: false },
+    { etapa: "Se atendió", n: atendioSet.size, nuevo: false },
+  ];
+  const base = registro || 1;
+  const recorrido = etapas.map((e, i) => {
+    const prev = i > 0 ? etapas[i - 1].n : null;
+    // Sin "% del paso anterior" si no hay paso anterior o ese paso está en 0 (caso de
+    // las etapas recién instrumentadas sin historia → un % sería engañoso, no >100%).
+    const pctPaso = prev && prev > 0 ? Math.round((e.n / prev) * 100) : null;
+    return { ...e, pct: Math.round((e.n / base) * 100), pctPaso };
+  });
 
   const porMed = new Map<string, { medico: string; test: boolean; pacientes: Set<string>; consultas: number; video: number }>();
   for (const c of cs) {
@@ -66,5 +113,5 @@ export async function GET(req: NextRequest) {
     .map((e) => ({ medico: e.medico, test: e.test, pacientes: e.pacientes.size, consultas: e.consultas, video: e.video }))
     .sort((a, b) => b.pacientes - a.pacientes || b.consultas - a.consultas);
 
-  return NextResponse.json({ dias, soloReales, funnel, demandaPorMedico });
+  return NextResponse.json({ dias, soloReales, recorrido, funnel, demandaPorMedico });
 }

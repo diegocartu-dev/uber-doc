@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/funnel";
 
-const EVENTOS_PERMITIDOS_CLIENTE = [
-  "mp_oauth_view_tab",
-  "mp_oauth_start_click",
-] as const;
+// Eventos que emite el MÉDICO (se guardan con medico_id).
+const EVENTOS_MEDICO = ["mp_oauth_view_tab", "mp_oauth_start_click"] as const;
+// Eventos del recorrido del PACIENTE (se guardan con paciente_id = user.id, igual
+// que consultas.paciente_id, para que el funnel y el filtro de test cuadren).
+const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido"] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,22 +23,22 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { evento, metadata } = body;
 
-    if (!EVENTOS_PERMITIDOS_CLIENTE.includes(evento)) {
-      return NextResponse.json({ ok: true });
-    }
-
     const admin = createAdminClient();
     const { data: medico } = await admin
       .from("medicos")
       .select("id")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    await trackEvent({
-      evento,
-      medicoId: medico?.id ?? null,
-      metadata: metadata ?? {},
-    });
+    if (EVENTOS_MEDICO.includes(evento)) {
+      await trackEvent({ evento, medicoId: medico?.id ?? null, metadata: metadata ?? {} });
+    } else if (EVENTOS_PACIENTE.includes(evento)) {
+      // No contaminar el funnel del PACIENTE con médicos que curiosean la clínica:
+      // si el usuario es médico, descartamos el evento de paciente.
+      if (medico) return NextResponse.json({ ok: true });
+      await trackEvent({ evento, pacienteId: user.id, metadata: metadata ?? {} });
+    }
+    // Cualquier otro evento: se ignora silenciosamente (no se confía en el cliente).
   } catch {
     // Never break the client
   }

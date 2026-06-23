@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { capitalizarNombre } from "@/lib/utils/texto";
+import { trackFunnel } from "@/lib/funnel-client";
 
 type Medico = {
   id: string;
@@ -297,6 +298,13 @@ export default function GrillaEspecialidades({
     return () => clearInterval(id);
   }, [router]);
 
+  // Funnel del paciente: registrar que entró a la clínica (una vez por visita).
+  // Es la primera etapa que hoy NO se medía — el punto ciego entre "se registró" y
+  // "consultó". Fire-and-forget, no bloquea nada.
+  useEffect(() => {
+    trackFunnel("clinica_vista");
+  }, []);
+
   // Si ambos flags estan apagados, mostrar mensaje
   const sinServicios = !flagCiActiva && !flagTurnosActivos;
 
@@ -402,7 +410,14 @@ export default function GrillaEspecialidades({
   });
 
   function handleElegirMedico(medicoId: string, especialidad: string) {
+    trackFunnel("medico_elegido", { medicoId, modo: "ci", especialidad });
     router.push(`/triage?medicoId=${encodeURIComponent(medicoId)}&especialidad=${encodeURIComponent(especialidad)}`);
+  }
+
+  // Eligió un médico para agendar turno: registramos la etapa y navegamos.
+  function irATurnos(medicoId: string) {
+    trackFunnel("medico_elegido", { medicoId, modo: "turno" });
+    router.push(`/clinica/${medicoId}/turnos`);
   }
 
   return (
@@ -599,7 +614,7 @@ export default function GrillaEspecialidades({
                     onClick={() => {
                       const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id));
                       if (medicosEsp.length === 1) {
-                        router.push(`/clinica/${medicosEsp[0].id}/turnos`);
+                        irATurnos(medicosEsp[0].id);
                       } else {
                         setModalModo("turno");
                         setModalEspecialidad(esp.nombre);
@@ -635,7 +650,7 @@ export default function GrillaEspecialidades({
                         if (botonAgendarDeshabilitado) return;
                         const medicosEsp = medicos.filter((m) => m.especialidad === esp.nombre && medicosConTurnos.has(m.id));
                         if (medicosEsp.length === 1) {
-                          router.push(`/clinica/${medicosEsp[0].id}/turnos`);
+                          irATurnos(medicosEsp[0].id);
                         } else {
                           setModalModo("turno");
                           setModalEspecialidad(esp.nombre);
@@ -752,6 +767,7 @@ export default function GrillaEspecialidades({
                       {modalModo === "turno" ? (
                         <a
                           href={`/clinica/${m.id}/turnos`}
+                          onClick={() => trackFunnel("medico_elegido", { medicoId: m.id, modo: "turno" })}
                           className="shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white"
                           style={{ backgroundColor: "var(--color-primary)" }}
                         >
@@ -774,6 +790,7 @@ export default function GrillaEspecialidades({
                           {medicosConTurnos.has(m.id) && (
                             <a
                               href={`/clinica/${m.id}/turnos`}
+                              onClick={() => trackFunnel("medico_elegido", { medicoId: m.id, modo: "turno" })}
                               className="rounded-[var(--radius-md)] px-3 py-1.5 text-center text-xs font-medium transition-colors hover:bg-[var(--color-bg-tertiary)]"
                               style={{ backgroundColor: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)" }}
                             >

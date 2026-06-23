@@ -10,7 +10,10 @@ type EventoFunnel =
   | "pago_aprobado"
   | "pago_rechazado"
   | "pago_refund"
-  | "pago_chargeback";
+  | "pago_chargeback"
+  // Recorrido del paciente (funnel temprano)
+  | "clinica_vista"
+  | "medico_elegido";
 
 export async function trackEvent(params: {
   evento: EventoFunnel;
