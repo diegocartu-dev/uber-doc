@@ -13,6 +13,7 @@ import {
   LogOut,
   ShieldCheck,
   TrendingUp,
+  Send,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   // funnel, demanda por especialidad). Sin este link era invisible.
   { href: "/insights", label: "Insights", icon: TrendingUp, badgeKey: null },
   { href: "/admin/alertas", label: "Alertas", icon: Bell, badgeKey: "alertas" as const },
+  { href: "/admin/notificaciones", label: "Notificaciones", icon: Send, badgeKey: null },
   { href: "/admin/sereno", label: "Sereno", icon: ShieldCheck, badgeKey: null },
   { href: "/admin/configuracion", label: "Configuracion", icon: Settings, badgeKey: null },
 ];
