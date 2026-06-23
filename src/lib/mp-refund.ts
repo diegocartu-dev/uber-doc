@@ -184,6 +184,31 @@ export async function refundPayment(
   };
 }
 
+/**
+ * Reembolso TOTAL de un pago de split (marketplace) con UNA sola llamada, hecha con
+ * el token del MÉDICO (collector, bajo cuya cuenta vive el pago).
+ *
+ * Según la doc oficial de MP (split de pagos): "cuando ocurre una devolución, el monto
+ * se divide y descuenta automáticamente de la cuenta del vendedor Y de la del
+ * marketplace, proporcionalmente". O sea: este refund total revierte SOLO la parte del
+ * médico Y la comisión de Docto (que vive en la cuenta marketplace/GREBA) — sin
+ * necesitar una segunda llamada con el token de Docto.
+ *
+ * Reemplaza a `refundConReversionDeFee` (dos refunds parciales), cuya pata del fee con
+ * el token de Docto fallaba en producción con "Payment not found" (el token de GREBA no
+ * puede reembolsar un pago de la cuenta del médico). Ver mp-refund.ts §"Reversión...".
+ *
+ * VALIDACIÓN: la reversión real del fee de GREBA SOLO se puede confirmar con un
+ * reembolso real en producción (cuentas separadas) — sandbox no lo reproduce.
+ */
+export async function refundTotal(
+  paymentId: string,
+  tokenMedico: string,
+  idempotencyKey: string
+): Promise<RefundResult> {
+  return refundPayment(paymentId, tokenMedico, { idempotencyKey });
+}
+
 export interface PaymentState {
   ok: boolean;
   /** Estado MP del pago: `approved`, `refunded`, `partially_refunded`, etc. */

@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoCancelado } from "@/lib/email";
 import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
-import { refundConReversionDeFee } from "@/lib/mp-refund";
+import { refundTotal } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { logInfo, logError } from "@/lib/logger";
@@ -44,12 +44,6 @@ export async function ejecutarRefund(
     return "pendiente";
   }
 
-  const tokenDocto = process.env.MP_ACCESS_TOKEN;
-  if (!tokenDocto) {
-    logError("[REFUND]", "MP_ACCESS_TOKEN ausente", { recursoId });
-    return "pendiente";
-  }
-
   let tokenMedico: string;
   try {
     tokenMedico = decrypt(mpAccount.access_token_encrypted);
@@ -58,46 +52,23 @@ export async function ejecutarRefund(
     return "pendiente";
   }
 
-  const result = await refundConReversionDeFee({
-    paymentId: pagoId,
-    tokenMedico,
-    tokenDocto,
-    applicationFee,
-    netoMedico,
-    idempotencyPrefix: `refund:${tipo}:${recursoId}`,
-  });
+  // UN solo refund total con el token del MÉDICO. MP revierte automáticamente la
+  // comisión de Docto (vive en la cuenta marketplace/GREBA) por el split — no hay
+  // pata de fee separada (la vieja `refundConReversionDeFee` fallaba en prod con
+  // "Payment not found" al intentar el fee con el token de GREBA).
+  const result = await refundTotal(pagoId, tokenMedico, `refund:${tipo}:${recursoId}`);
 
-  logInfo("[REFUND]", "Resultado refund", {
+  logInfo("[REFUND]", "Resultado refund total", {
     recursoId,
     ok: result.ok,
-    feePendiente: result.feePendiente,
-    netoDevuelto: result.netoDevueltoAlPaciente,
-    medicoOk: result.refundMedico.ok,
-    medicoStatus: result.refundMedico.status,
-    doctoOk: result.refundDocto?.ok ?? null,
+    status: result.status,
+    insufficientFunds: !result.ok && result.insufficientFunds,
   });
 
   if (result.ok) return "reembolsado";
 
-  // Pata médico OK, falta la de Docto → encolar reintento de la pata del fee.
-  // Persistimos el id del refund del médico para que el cron sepa que esa pata
-  // ya salió (decide por estado propio, no por el monto refundeado global de MP).
-  if (result.feePendiente) {
-    await registrarRefundPendiente({
-      tipo,
-      recursoId,
-      medicoId,
-      pagoId,
-      netoMedico,
-      applicationFee,
-      estado: "fee_pendiente",
-      medicoRefundId: result.refundMedico.ok ? result.refundMedico.refundId : undefined,
-      error: result.refundDocto && !result.refundDocto.ok ? result.refundDocto.error : undefined,
-    });
-    return "fee_pendiente";
-  }
-
-  // Pata médico falló → encolar reintento del refund completo.
+  // Falló → encolar para reintento diario (cron). El refund total ya incluye la
+  // comisión de Docto, así que ya no hay estado `fee_pendiente`.
   await registrarRefundPendiente({
     tipo,
     recursoId,
@@ -106,11 +77,11 @@ export async function ejecutarRefund(
     netoMedico,
     applicationFee,
     estado: "pendiente",
-    error: !result.refundMedico.ok ? result.refundMedico.error : undefined,
+    error: result.error,
   });
 
-  if (!result.refundMedico.ok && result.refundMedico.insufficientFunds) {
-    logError("[REFUND]", "Médico sin saldo — deriva a flujo edge (Ola 3)", { recursoId, medicoId });
+  if (result.insufficientFunds) {
+    logError("[REFUND]", "Médico sin saldo — reintento diario / escala a CVU a las 48h", { recursoId, medicoId });
     // Notificación inmediata: el médico necesita saldo para que el refund proceda.
     pushAlMedico(medicoId, {
       title: "Reembolso pendiente",
@@ -144,14 +115,16 @@ export async function cancelarTurnoPorPaciente(
 
   const reembolso = esMasDe48hAntes(turno.fecha, turno.hora_inicio);
 
+  // Refund total: solo se necesita el pago_id (MP revierte la parte del médico y la
+  // comisión de Docto por el split). Los montos van solo para la cola/escalada.
   let reintegroEstado: ReintegroEstado = null;
-  if (reembolso && turno.pago_id && turno.mp_net_amount_medico && turno.mp_application_fee) {
+  if (reembolso && turno.pago_id) {
     reintegroEstado = await ejecutarRefund(
       turnoId,
       turno.medico_id,
       turno.pago_id,
-      turno.mp_net_amount_medico,
-      turno.mp_application_fee
+      turno.mp_net_amount_medico ?? 0,
+      turno.mp_application_fee ?? 0
     );
   }
 
@@ -225,13 +198,13 @@ export async function cancelarTurnoPorMedico(
   }
 
   let reintegroEstado: ReintegroEstado = null;
-  if (turno.pago_id && turno.mp_net_amount_medico && turno.mp_application_fee) {
+  if (turno.pago_id) {
     reintegroEstado = await ejecutarRefund(
       turnoId,
       turno.medico_id,
       turno.pago_id,
-      turno.mp_net_amount_medico,
-      turno.mp_application_fee
+      turno.mp_net_amount_medico ?? 0,
+      turno.mp_application_fee ?? 0
     );
   }
 

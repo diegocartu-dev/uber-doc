@@ -45,14 +45,15 @@ export async function POST(
     );
   }
 
+  // Refund total: alcanza con pago_id (MP revierte médico + comisión Docto por el split).
   let reintegroEstado: string | null = null;
-  if (consulta.pago_id && consulta.mp_net_amount_medico && consulta.mp_application_fee) {
+  if (consulta.pago_id) {
     reintegroEstado = await ejecutarRefund(
       consultaId,
       medico.id,
       consulta.pago_id,
-      consulta.mp_net_amount_medico,
-      consulta.mp_application_fee,
+      consulta.mp_net_amount_medico ?? 0,
+      consulta.mp_application_fee ?? 0,
       "consulta"
     );
   }
