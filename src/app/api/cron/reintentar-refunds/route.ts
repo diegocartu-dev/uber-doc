@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { refundPayment, refundConReversionDeFee, getPaymentState } from "@/lib/mp-refund";
+import { refundPayment, getPaymentState } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
 import { pushAlMedico } from "@/lib/push";
 import { sendDoctoAlert } from "@/lib/alertas";
@@ -49,7 +49,6 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
   const ahora = new Date();
-  const tokenDocto = process.env.MP_ACCESS_TOKEN;
 
   const { data: pendientes, error } = await admin
     .from("refunds_pendientes")
@@ -101,8 +100,8 @@ export async function GET(req: NextRequest) {
       .eq("estado", "activo")
       .maybeSingle();
 
-    if (!mpAccount?.access_token_encrypted || !tokenDocto) {
-      await setError(admin, r.id, "Sin token MP (médico o Docto)");
+    if (!mpAccount?.access_token_encrypted) {
+      await setError(admin, r.id, "Sin token MP del médico");
       reintentados++;
       continue;
     }
@@ -116,111 +115,57 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    const prefix = `refund:${r.tipo}:${r.recurso_id}`;
-    const neto = Number(r.neto_medico);
-    const fee = Number(r.application_fee);
-    const total = neto + fee;
+    const total = Number(r.neto_medico) + Number(r.application_fee);
 
-    // ── C1: consultar el estado REAL del pago, solo como guard anti-over-refund ──
-    // Evita re-ejecutar un refund que ya se aplicó (over-refund) cuando la
-    // idempotency key de MP expiró entre reintentos. NO se usa para decidir la
-    // rama (eso lo deciden los flags de pata persistidos — hallazgo C1-bis).
+    // ── Guard anti-over-refund: consultar el estado REAL del pago en MP ──
+    // Con el token del médico (collector, bajo cuya cuenta vive el pago). Si ya está
+    // refundeado el total, resolvemos sin re-ejecutar (idempotencia robusta aunque la
+    // idempotency key de MP haya expirado entre reintentos).
     const estadoPago = await getPaymentState(r.pago_id, tokenMedico);
     if (!estadoPago.ok) {
-      // No pudimos confirmar el estado: NO escalamos a ciegas, reintentamos luego.
+      // No pudimos confirmar el estado: NO tocamos plata a ciegas, reintentamos luego.
       await setError(admin, r.id, `No se pudo consultar el pago en MP: ${estadoPago.error ?? "desconocido"}`);
       reintentados++;
       continue;
     }
 
     const refundeado = estadoPago.amountRefunded ?? 0;
-    const remaining = total - refundeado;
-
-    // Ya está todo refundeado (ambas patas, o cobertura externa) → resolver.
     if (refundeado + EPSILON >= total) {
       await marcarResuelto(admin, r, ahora);
       resueltos++;
       continue;
     }
 
-    // ── Rama por estado PROPIO: la pata del médico ya salió OK (la registramos) ──
-    if (r.medico_refund_id) {
-      // Guard anti-over-refund: el fee no puede exceder lo que queda por refundear.
-      if (remaining + EPSILON < fee) {
-        await marcarRevisionManual(admin, r, "El remaining del pago no alcanza para devolver el fee (¿refund externo previo?).");
-        revisionManual++;
-        continue;
-      }
-      const res = await refundPayment(r.pago_id, tokenDocto, {
-        amount: fee,
-        idempotencyKey: `${prefix}:docto`,
-      });
-      if (res.ok) {
-        await admin.from("refunds_pendientes").update({ docto_refund_id: res.refundId }).eq("id", r.id);
-        await marcarResuelto(admin, r, ahora);
-        resueltos++;
-      } else if (intentosActual >= MAX_INTENTOS) {
-        // I4: el fee no cierra tras muchos reintentos → revisión manual, no loop infinito.
-        await marcarRevisionManual(admin, r, `Fee sin resolver tras ${intentosActual} intentos: ${res.error}`);
-        revisionManual++;
-      } else {
-        await setEstadoError(admin, r.id, "fee_pendiente", res.error);
-        reintentados++;
-      }
-      continue;
-    }
-
-    // ── La pata del médico NO está registrada como salida ──
-    // Si MP ya tiene >= neto refundeado sin que NOSOTROS hayamos registrado la
-    // pata, es ambiguo (pata nuestra no persistida, o refund externo): no tocamos
-    // plata, derivamos a revisión manual.
-    if (refundeado + EPSILON >= neto) {
-      await marcarRevisionManual(admin, r, "Refundeado >= neto sin pata médico registrada — revisar manualmente.");
-      revisionManual++;
-      continue;
-    }
-
-    // Seguro: la porción del médico todavía no se refundeó → refund completo.
-    const res = await refundConReversionDeFee({
-      paymentId: r.pago_id,
-      tokenMedico,
-      tokenDocto,
-      applicationFee: fee,
-      netoMedico: neto,
-      idempotencyPrefix: prefix,
+    // ── Refund TOTAL con el token del médico ──
+    // MP revierte en una sola llamada la parte del médico Y la comisión de Docto (que
+    // vive en la cuenta marketplace/GREBA) por el split. Sobre un pago parcialmente
+    // refundeado, MP devuelve solo el remanente. La idempotency key es ESTABLE por
+    // recurso → un reintento no genera un refund nuevo.
+    const res = await refundPayment(r.pago_id, tokenMedico, {
+      idempotencyKey: `refund:${r.tipo}:${r.recurso_id}`,
     });
 
     if (res.ok) {
-      await admin
-        .from("refunds_pendientes")
-        .update({
-          medico_refund_id: res.refundMedico.ok ? res.refundMedico.refundId : null,
-          docto_refund_id: res.refundDocto?.ok ? res.refundDocto.refundId : null,
-        })
-        .eq("id", r.id);
       await marcarResuelto(admin, r, ahora);
       resueltos++;
-    } else if (res.feePendiente) {
-      // La pata del médico salió ahora; persistimos su id y dejamos pendiente el fee.
-      await admin
-        .from("refunds_pendientes")
-        .update({
-          estado: "fee_pendiente",
-          medico_refund_id: res.refundMedico.ok ? res.refundMedico.refundId : null,
-          ultimo_error: res.refundDocto && !res.refundDocto.ok ? res.refundDocto.error : null,
-        })
-        .eq("id", r.id);
-      reintentados++;
-    } else {
-      // Sigue sin saldo. ¿Pasaron 48hs desde el primer intento? → escalar con deuda.
+    } else if (res.insufficientFunds) {
+      // Saldo insuficiente del médico. A las 48hs Docto cubre al paciente por CVU y
+      // registra la deuda del médico (sección 2.2 política); antes, reintenta.
       const edadHoras = (ahora.getTime() - new Date(r.creado_at).getTime()) / (1000 * 60 * 60);
       if (edadHoras >= HORAS_ESCALADA) {
         await escalarPorDeuda(admin, r, ahora);
         escalados++;
       } else {
-        await setError(admin, r.id, res.refundMedico.ok ? null : res.refundMedico.error);
+        await setError(admin, r.id, res.error);
         reintentados++;
       }
+    } else if (intentosActual >= MAX_INTENTOS) {
+      // Error permanente de MP tras muchos reintentos → revisión manual, no loop infinito.
+      await marcarRevisionManual(admin, r, `Refund sin resolver tras ${intentosActual} intentos: ${res.error}`);
+      revisionManual++;
+    } else {
+      await setError(admin, r.id, res.error);
+      reintentados++;
     }
   }
 
@@ -249,15 +194,6 @@ export async function GET(req: NextRequest) {
 /** Solo registra el motivo del último intento (intentos/proximo ya los movió el claim). */
 async function setError(admin: Admin, id: string, error: string | null): Promise<void> {
   await admin.from("refunds_pendientes").update({ ultimo_error: error }).eq("id", id);
-}
-
-async function setEstadoError(
-  admin: Admin,
-  id: string,
-  estado: "pendiente" | "fee_pendiente",
-  error: string | null
-): Promise<void> {
-  await admin.from("refunds_pendientes").update({ estado, ultimo_error: error }).eq("id", id);
 }
 
 async function marcarResuelto(admin: Admin, r: RefundPendiente, ahora: Date): Promise<void> {
