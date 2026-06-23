@@ -234,6 +234,24 @@ export default function RegistroMedicoPage() {
           Paso {paso} de 3
         </p>
 
+        {/* Aviso al inicio del registro: Docto opera nacional → se requiere Matrícula
+            Nacional (MN). Deja la expectativa clara de entrada para que un profesional
+            con matrícula solo provincial no llegue hasta el final y sea rechazado. */}
+        {paso === 1 && (
+          <div
+            className="mt-4 rounded-lg p-3 text-sm"
+            style={{ backgroundColor: "#378ADD12", border: "1px solid #378ADD33", color: "var(--color-text-secondary)" }}
+          >
+            <p className="font-medium" style={{ color: "var(--color-text-primary)" }}>
+              En Docto atendés de forma virtual a pacientes de todo el país.
+            </p>
+            <p className="mt-1">
+              Por eso, para inscribirte pedimos <strong>Matrícula Nacional (MN)</strong> — es el estándar
+              que nos permite habilitarte para atender en cualquier provincia con respaldo.
+            </p>
+          </div>
+        )}
+
         <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
