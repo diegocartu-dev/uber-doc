@@ -5,6 +5,7 @@ import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { refundTotal } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
+import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
 
 type ResultadoCancelacion = {
@@ -79,6 +80,20 @@ export async function ejecutarRefund(
     estado: "pendiente",
     error: result.error,
   });
+
+  // Aviso al admin en el PRIMER fallo (día 1), no recién al escalar tras 10 reintentos.
+  // Distingue la causa para poder priorizar: saldo (se resuelve solo) vs otro error
+  // (no se arregla reintentando → requiere acción manual ya).
+  const causa = result.insufficientFunds
+    ? "Médico sin saldo en MP. Se reintenta cada 24h y a las 48h Docto cubre al paciente por CVU. Suele resolverse solo cuando el médico cobra otra consulta — no requiere acción inmediata."
+    : `Error de Mercado Pago (NO es saldo): "${result.error}". NO se resuelve solo reintentando — requiere revisión manual ahora.`;
+  await sendDoctoAlert(
+    "[REFUND] Reembolso no procesó al primer intento",
+    `Un reembolso falló en el PRIMER intento y quedó en cola.\n\n` +
+      `Tipo: ${tipo}\nRecurso: ${recursoId}\nMédico: ${medicoId}\nPago: ${pagoId}\n` +
+      `Monto: $${netoMedico + applicationFee}\nCausa: ${causa}\n\n` +
+      `Acción: revisar en el admin de reembolsos / en Mercado Pago. (Este aviso ahora llega el día 1; antes recién llegaba tras 10 reintentos ≈ 10 días.)`
+  ).catch((e) => logError("[REFUND]", "Error enviando alerta día-1", { recursoId, error: String(e) }));
 
   if (result.insufficientFunds) {
     logError("[REFUND]", "Médico sin saldo — reintento diario / escala a CVU a las 48h", { recursoId, medicoId });
