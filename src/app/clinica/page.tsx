@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import GrillaEspecialidades from "./GrillaEspecialidades";
 import { getFlag } from "@/lib/feature-flags";
+import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export default async function ClinicaPage() {
   const supabase = await createClient();
@@ -39,17 +40,27 @@ export default async function ClinicaPage() {
   const esPacienteTest = paciente?.es_cuenta_test === true;
 
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
-  let medicosQuery = supabase
+  // Decisión Diego (22/06): NO ocultar a los médicos no validados (gate de identidad).
+  // Se traen TODOS los aprobados/visibles y se marca `habilitadoIdentidad`. La grilla
+  // muestra a los no habilitados GRISADOS / no reservables (en vez de esconderlos), para
+  // que el paciente perciba la oferta y el médico tenga incentivo a validarse. El candado
+  // real ya vive en la RESERVA (crearConsulta + reservarTurno bloquean server-side a un
+  // no-validado, incluso por deep-link), así que mostrarlos en el listado no abre agujero.
+  const { data: medicosRaw } = await supabase
     .from("medicos")
-    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url")
+    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("oculto_clinica", false)
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")
     .eq("es_cuenta_test", esPacienteTest);
-  // Gate de identidad: validados por Didit O eximidos (biometria_exenta, fundadores)
-  // O cuentas test (exentas como en los demás gates).
-  if (flagIdentidadGate) medicosQuery = medicosQuery.or("identidad_validada.eq.true,biometria_exenta.eq.true,es_cuenta_test.eq.true");
-  const { data: medicos } = await medicosQuery;
+  const medicos = (medicosRaw ?? []).map(
+    ({ identidad_validada, biometria_exenta, es_cuenta_test, ...m }) => ({
+      ...m,
+      // Reservable según el gate: si el gate está apagado, todos; si está activo, solo
+      // validados/exentos/test. Misma fuente de verdad que el guard de reserva.
+      habilitadoIdentidad: !flagIdentidadGate || identidadHabilitada({ identidad_validada, biometria_exenta, es_cuenta_test }),
+    })
+  );
 
   // Turnos disponibles en clínica virtual: traemos fecha + hora_inicio para poder
   // ordenar los médicos por "turno libre más cercano" (decisión §11.2). Mismo

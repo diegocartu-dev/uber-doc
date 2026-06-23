@@ -24,6 +24,9 @@ type Medico = {
   precio_consulta: number;
   duracion_consulta: number;
   foto_url: string | null;
+  // ¿Pasa el gate de identidad? (validado/exento/test, o gate apagado). Si es false, el
+  // médico se muestra GRISADO y no reservable — el candado real está en la reserva.
+  habilitadoIdentidad: boolean;
 };
 
 type ConsultaEspera = { medico_id: string };
@@ -168,6 +171,14 @@ function estaEnHorario(medico: Medico): boolean {
   );
 }
 
+// "Reservable AHORA": en su horario Y habilitado por el gate de identidad. Un médico
+// no validado nunca es reservable → cae en el mismo estado grisado que uno fuera de
+// horario (indistinguible para el paciente). Reemplaza a estaEnHorario en todos los
+// puntos donde se decide si se puede atender/reservar ahora.
+function puedeAtenderAhora(medico: Medico): boolean {
+  return medico.habilitadoIdentidad && estaEnHorario(medico);
+}
+
 function calcularDisponibilidad(
   especialidad: string,
   medicos: Medico[],
@@ -190,7 +201,7 @@ function calcularDisponibilidad(
 
   if (!tieneInmediata && !tieneTurnos) return "sin_medicos";
 
-  const disponiblesAhora = medicosDeLaEsp.filter((m) => estaEnHorario(m));
+  const disponiblesAhora = medicosDeLaEsp.filter((m) => puedeAtenderAhora(m));
   if (disponiblesAhora.length > 0) {
     // El estado refleja el MEJOR caso (decisión §11.1): si hay al menos un médico
     // online sin nadie en su cola → "Disponible ahora". Si todos los online tienen
@@ -354,7 +365,13 @@ export default function GrillaEspecialidades({
   // Mostrar captura de lead si busca especialidad sin médicos y no hay resultados con médicos
   const mostrarLeadCapture = termino && especialidadBuscadaSinMedicos && espVisibles.length === 0;
 
-  const medicosConTurnos = new Set(turnosClinicaVirtual.map((t) => t.medico_id));
+  // Solo los médicos habilitados por el gate de identidad son reservables por turno. Un
+  // no-validado no ofrece turnos (la reserva igual lo bloquea server-side, pero acá lo
+  // sacamos para no mostrarle un camino muerto al paciente).
+  const habilitadosIdentidad = new Set(medicos.filter((m) => m.habilitadoIdentidad).map((m) => m.id));
+  const medicosConTurnos = new Set(
+    turnosClinicaVirtual.filter((t) => habilitadosIdentidad.has(t.medico_id)).map((t) => t.medico_id)
+  );
   const turnoMasCercano = proximoTurnoPorMedico(turnosClinicaVirtual);
 
   const esperasPorMedico = new Map<string, number>();
@@ -388,8 +405,13 @@ export default function GrillaEspecialidades({
         return ta.hora_inicio < tb.hora_inicio ? -1 : 1;
       return 0;
     }
-    // CI: (a) menor cantidad en sala de espera asc;
+    // CI: (0) reservables AHORA primero (los grisados/no-disponibles van al fondo, para
+    //         que el paciente vea arriba lo que sí puede tomar);
+    //     (a) menor cantidad en sala de espera asc;
     //     (b) desempate FIFO de disponibilidad (el que se habilitó antes va primero).
+    const pa = puedeAtenderAhora(a);
+    const pb = puedeAtenderAhora(b);
+    if (pa !== pb) return pa ? -1 : 1;
     const ea = esperasPorMedico.get(a.id) ?? 0;
     const eb = esperasPorMedico.get(b.id) ?? 0;
     if (ea !== eb) return ea - eb;
@@ -530,7 +552,7 @@ export default function GrillaEspecialidades({
           // y dentro de su franja horaria). Es el N que se muestra en la card y el
           // que decide si el botón "Consulta ahora" se habilita (decisión §11.1).
           const medicosDisponiblesAhora = medicos.filter(
-            (m) => m.especialidad === esp.nombre && estaEnHorario(m)
+            (m) => m.especialidad === esp.nombre && puedeAtenderAhora(m)
           ).length;
           const botonConsultaDeshabilitado = medicosDisponiblesAhora === 0;
 
@@ -708,7 +730,7 @@ export default function GrillaEspecialidades({
               <div className="mt-4 space-y-3">
                 {medicosDelModal.map((m) => {
                   const enEspera = esperasPorMedico.get(m.id) ?? 0;
-                  const disponibleAhora = estaEnHorario(m);
+                  const disponibleAhora = puedeAtenderAhora(m);
                   const esperaInfo = semaforoEspera(enEspera);
                   const proxTurno = turnoMasCercano.get(m.id);
 
