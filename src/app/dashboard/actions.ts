@@ -35,7 +35,13 @@ export async function actualizarDisponibilidad(data: {
   // estaba disponible y solo guarda horario/precio/duración (handleGuardar manda
   // disponible: true sin cambio de estado), NO se pisa el timestamp: mantiene su lugar
   // en la cola. Para distinguir transición de re-guardado leemos el estado previo.
-  const { data: previo } = await supabase
+  // Fila propia vía service role: el SELECT incluye celular_personal (sin GRANT
+  // para authenticated). Con el cliente RLS, PostgREST falla la query ENTERA →
+  // previo=null → el gate duro de abajo NO corre (se podría activar disponible sin
+  // MP/firma) y se rompe el FIFO/log. Es el dato propio del médico, por user_id.
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const adminDb = createAdminClient();
+  const { data: previo } = await adminDb
     .from("medicos")
     .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test")
     .eq("user_id", user.id)
@@ -47,8 +53,6 @@ export async function actualizarDisponibilidad(data: {
   // (sin eso no cobra ni firma recetas). MP/firma no viven en `medicos`: se leen
   // de `medicos_mp_accounts` (activo) y `medico_claves`. Solo al ACTIVAR.
   if (data.disponible && previo) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminDb = createAdminClient();
     const [mpRes, firmaRes] = await Promise.all([
       adminDb
         .from("medicos_mp_accounts")

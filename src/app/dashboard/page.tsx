@@ -203,6 +203,12 @@ export default async function DashboardPage({
       .single();
     medico = data;
 
+    // Defensa en profundidad: si el rol es médico pero la fila no cargó, NO caer
+    // al render de paciente (mostraría chrome del rol equivocado). Fallar ruidoso.
+    if (!medico) {
+      throw new Error("No se pudo cargar el perfil del médico. Reintentá en unos segundos.");
+    }
+
     if (data) {
       async function fetchPacientes(ids: string[]) {
         if (ids.length === 0) return new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
