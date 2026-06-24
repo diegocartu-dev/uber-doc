@@ -31,6 +31,9 @@ interface Medico {
   refeps_validado: boolean | null;
   refeps_data: Record<string, unknown> | null;
   refeps_validado_at: string | null;
+  // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
+  faltantes?: string[];
+  listoParaAtender?: boolean;
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -418,6 +421,18 @@ function MedicoRow({
           <p className="mt-0.5 text-xs text-gray-500">
             {m.especialidad} · {m.tipo_matricula} {m.numero_matricula} · {m.email}
           </p>
+          {m.estado_registro === "aprobado" && m.faltantes !== undefined && (
+            m.listoParaAtender ? (
+              <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[11px] font-medium text-[#0F6E56]">
+                <CheckCircle size={12} /> Listo para atender{m.disponible ? " · disponible ahora" : ""}
+              </span>
+            ) : (
+              <span className="mt-1.5 inline-flex items-start gap-1.5 rounded-lg bg-[#BA7517]/10 px-2 py-1 text-[11px] font-medium text-[#854F0B]">
+                <ShieldAlert size={12} className="mt-px shrink-0" />
+                <span>No puede atender — falta: {m.faltantes?.join(", ")}</span>
+              </span>
+            )
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

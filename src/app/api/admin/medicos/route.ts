@@ -4,6 +4,7 @@ import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { enviarEmailMedicoAprobado } from "@/lib/email";
+import { camposFaltantesMedico } from "@/lib/perfil-medico";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from("medicos")
-    .select("id, nombre_completo, email, dni, tipo_matricula, numero_matricula, provincia_matricula, especialidad, foto_credencial_url, estado_registro, created_at, cuit, user_id, domicilio, verificado, verificado_at, verificado_por, disponible, notas_admin, slug, categoria, refeps_validado, refeps_data, refeps_validado_at, identidad_validada, identidad_validada_at, didit_status")
+    .select("id, nombre_completo, email, dni, tipo_matricula, numero_matricula, provincia_matricula, especialidad, foto_credencial_url, estado_registro, created_at, cuit, user_id, domicilio, verificado, verificado_at, verificado_por, disponible, notas_admin, slug, categoria, refeps_validado, refeps_data, refeps_validado_at, identidad_validada, identidad_validada_at, didit_status, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url")
     .eq("es_cuenta_test", false)
     .order("created_at", { ascending: true });
 
@@ -104,7 +105,28 @@ export async function GET(req: NextRequest) {
 
   const { data: medicos, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ medicos: medicos ?? [] });
+
+  // Estado de onboarding por médico: qué requisitos le faltan para poder ATENDER.
+  // Mismo cálculo que el gate de "disponible" (campos de la fila + MP activo + firma
+  // electrónica). Permite al admin ver de un vistazo quién está listo y a quién empujar.
+  const ids = (medicos ?? []).map((m) => m.id);
+  const [mpRes, firmaRes] = await Promise.all([
+    ids.length
+      ? admin.from("medicos_mp_accounts").select("medico_id").eq("estado", "activo").in("medico_id", ids)
+      : Promise.resolve({ data: [] as { medico_id: string }[] }),
+    ids.length
+      ? admin.from("medico_claves").select("medico_id").in("medico_id", ids)
+      : Promise.resolve({ data: [] as { medico_id: string }[] }),
+  ]);
+  const mpSet = new Set((mpRes.data ?? []).map((r) => r.medico_id));
+  const firmaSet = new Set((firmaRes.data ?? []).map((r) => r.medico_id));
+
+  const enriquecidos = (medicos ?? []).map((m) => {
+    const onb = { mpConectado: mpSet.has(m.id), firmaConfigurada: firmaSet.has(m.id) };
+    const faltantes = camposFaltantesMedico(m, onb).map((c) => c.label);
+    return { ...m, faltantes, listoParaAtender: faltantes.length === 0 };
+  });
+  return NextResponse.json({ medicos: enriquecidos });
 }
 
 export async function PATCH(req: NextRequest) {
