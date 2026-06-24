@@ -31,6 +31,13 @@ interface Medico {
   refeps_validado: boolean | null;
   refeps_data: Record<string, unknown> | null;
   refeps_validado_at: string | null;
+  // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
+  faltantes?: string[];
+  faltantesCount?: number;
+  totalRequisitos?: number;
+  criticosFaltantes?: string[];
+  sinEmpezar?: boolean;
+  listoParaAtender?: boolean;
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -402,7 +409,7 @@ function MedicoRow({
     <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-900">{m.nombre_completo}</h3>
             <StatusBadge status={m.estado_registro} />
             {m.categoria && (
@@ -413,6 +420,25 @@ function MedicoRow({
               }`}>
                 {m.categoria === "founder" ? "Founder" : "Tradicional"}
               </span>
+            )}
+            {/* Estado de onboarding: ¿puede atender? (verde = indicador de estado;
+                #0F6E56 / #854F0B = variantes de contraste del verde/ámbar de estado) */}
+            {m.estado_registro === "aprobado" && m.faltantesCount !== undefined && (
+              m.listoParaAtender ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#0F6E56]">
+                  <CheckCircle size={11} /> Listo para atender{m.disponible ? " · disponible ahora" : ""}
+                </span>
+              ) : (
+                <span
+                  title={m.faltantes?.join(", ")}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]"
+                >
+                  <ShieldAlert size={11} />
+                  {m.sinEmpezar
+                    ? "No puede atender · perfil sin empezar"
+                    : `No puede atender · faltan ${m.faltantesCount} de ${m.totalRequisitos}${m.criticosFaltantes && m.criticosFaltantes.length ? ` · ${m.criticosFaltantes.join(", ")}` : ""}`}
+                </span>
+              )
             )}
           </div>
           <p className="mt-0.5 text-xs text-gray-500">
