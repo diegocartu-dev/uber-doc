@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import LinkNav from "@/components/ui/LinkNav";
 import AppNavbar from "@/components/AppNavbar";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
@@ -188,7 +189,14 @@ export default async function DashboardPage({
   }
 
   if (role === "medico") {
-    const { data } = await supabase
+    // Fila PROPIA del médico vía service role (NO el cliente con RLS): el SELECT
+    // incluye columnas sin GRANT para `authenticated` (ej. celular_personal, PII)
+    // y PostgREST falla la query entera → data=null → el médico caía al render de
+    // paciente. No se puede grantear celular_personal a authenticated (lo expondría
+    // a cualquier paciente vía la policy pública de medicos). Es el dato propio del
+    // usuario, leído server-side por su user_id: seguro.
+    const adminDb = createAdminClient();
+    const { data } = await adminDb
       .from("medicos")
       .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, celular_personal, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, biometria_exenta, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
