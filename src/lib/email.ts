@@ -411,10 +411,10 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     const linkConsultorio = medico.slug ? `docto.com.ar/dr/${medico.slug}` : "docto.com.ar/dr/tu-nombre";
 
     const html = wrapHtml("¡Bienvenido a Docto! — tu cuenta está activa", `
-      <div style="margin-bottom:20px;">${chip("M&eacute;dico fundador", AZUL)}</div>
+      <div style="margin-bottom:20px;">${chip("Cuenta verificada", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">&iexcl;Hola ${formatNombreMedico(medico.nombre_completo)}! 🎉</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
-        Tu cuenta ya est&aacute; <strong>aprobada y verificada</strong> &mdash; y sos uno de nuestros <strong>m&eacute;dicos fundadores</strong> (comisi&oacute;n del 5%). De ac&aacute; en m&aacute;s, Docto es tu consultorio digital: vos atend&eacute;s, del resto nos encargamos nosotros.
+        Tu cuenta ya est&aacute; <strong>aprobada y verificada</strong>. De ac&aacute; en m&aacute;s, Docto es tu consultorio digital: vos atend&eacute;s, del resto nos encargamos nosotros.
       </p>
       <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Para arrancar en 5 minutos:</p>
       <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
@@ -441,7 +441,7 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       () => resend().emails.send({
         from: FROM,
         to: destinatario,
-        subject: "¡Bienvenido a Docto! Tu cuenta de médico fundador está activa",
+        subject: "¡Bienvenido a Docto! Tu cuenta ya está activa",
         html,
         attachments: [{ filename: "Bienvenida a Docto.pdf", path: `${BASE_URL}/guia-docto.pdf` }],
       }),
