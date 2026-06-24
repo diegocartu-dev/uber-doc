@@ -60,6 +60,10 @@ export async function GET(req: Request) {
     .not("es_cuenta_test", "is", true)
     .is("disponible_desde_at", null);
 
+  if (sinAncla && sinAncla > 0) {
+    console.warn(`[cron/apagar-disponibilidad] ${sinAncla} médico(s) disponible(s) sin disponible_desde_at — estado inconsistente, no se apagan.`);
+  }
+
   if (!stale || stale.length === 0) {
     return NextResponse.json({ ok: true, apagados: 0, sinAncla: sinAncla ?? 0 });
   }
@@ -77,10 +81,14 @@ export async function GET(req: Request) {
 
   let apagados = 0;
   for (const m of aApagar) {
+    // UPDATE condicionado al estado que leímos: si el médico se re-activó (o ya se
+    // apagó) entre el SELECT y este UPDATE, no lo pisamos. Idempotente.
     const { error: errUpd } = await admin
       .from("medicos")
       .update({ disponible: false, disponible_desde_at: null })
-      .eq("id", m.id);
+      .eq("id", m.id)
+      .eq("disponible", true)
+      .not("disponible_desde_at", "is", null);
     if (errUpd) {
       console.error(`[cron/apagar-disponibilidad] Error apagando ${m.id}:`, errUpd.message);
       continue;
