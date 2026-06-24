@@ -26,7 +26,11 @@ function calcularEdad(fechaNac: string | null): string {
 
 function useDictado() {
   const recRef = useRef<any>(null);
-  const procesadosRef = useRef(0); // anti-duplicado Android: nuestro propio índice de finales procesados
+  // Texto del campo al ARRANCAR el dictado. En cada onresult reconstruimos el campo
+  // como base + (todos los finales del evento) → SET idempotente, NO append. Robusto
+  // contra Android Chrome, que re-emite finales (mismo índice o nuevos) y con append
+  // duplicaba ("reposo por 24 horas. reposo por 24 horas").
+  const baseRef = useRef("");
   const [dictando, setDictando] = useState<string | null>(null);
 
   const iniciar = useCallback(
@@ -39,21 +43,19 @@ function useDictado() {
       rec.lang = "es-AR";
       rec.continuous = true;
       rec.interimResults = true;
-      procesadosRef.current = 0;
+      // Capturamos el texto ya escrito como base para reconstruir en cada evento.
+      setter((prev) => { baseRef.current = prev; return prev; });
 
       rec.onresult = (e: any) => {
-        // Agregar solo los finales nuevos por nuestro propio índice (no `e.resultIndex`,
-        // que en Android no avanza y duplica el texto).
-        let finalNuevo = "";
-        for (let i = procesadosRef.current; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
-            procesadosRef.current = i + 1;
-          }
+        // SET idempotente: campo = base + TODOS los finales del evento. No appendea,
+        // así que si Android re-emite un final el resultado es siempre el mismo (no duplica).
+        let finales = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) finales += (finales ? " " : "") + e.results[i][0].transcript.trim();
         }
-        if (finalNuevo) {
-          setter((prev) => (prev ? prev + " " : "") + finalNuevo);
-        }
+        if (typeof window !== "undefined" && window.location.search.includes("dictdbg"))
+          console.log("[dictado] len=%d resultIndex=%s finales=%s", e.results.length, e.resultIndex, finales);
+        setter(() => (baseRef.current ? baseRef.current + " " : "") + finales);
       };
 
       rec.onerror = () => detener();
