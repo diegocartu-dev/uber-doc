@@ -22,6 +22,7 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 ## Reglas de desarrollo
 - SIEMPRE diseñar y validar arquitectura antes de implementar.
 - Supabase RLS activo. Usar supabaseAdmin para bypass.
+- **Grants de columna (NO confundir con RLS de fila):** `medicos` tiene columnas SIN `GRANT SELECT` para `authenticated` (PII/internas: `celular_personal`, `dni`, `cuit`, `email_personal`, `refeps_*`, `notas_admin`, etc.). Si un `SELECT` con el cliente RLS incluye **una sola** de esas columnas, PostgREST falla la query ENTERA (`permission denied for column`) y devuelve `null` SILENCIOSO. Para leer la **fila propia** con columnas sensibles, usar **service role** (`createAdminClient`) filtrando por `user_id`, NUNCA el cliente RLS. NO grantear PII a `authenticated`: la policy pública de `medicos` la expondría a cualquier paciente. Caso real: outage del dashboard médico 19-24/06 (ver `docs/sprints/2026-06-24-outage-dashboard-medico-y-diagnostico-oferta.md`).
 - Realtime: filtros en non-PK fallan. Escuchar sin filtros, filtrar en JS.
 - Video LiveKit: Safari OK, Chrome iPhone revisar.
 - UX simple para médico de 70 años.
@@ -142,7 +143,7 @@ Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env va
 - **Cambiar una env var requiere DEPLOY FRESCO** (`vercel --prod`/`git push`), nunca `vercel redeploy`.
 - **Previews:** cada preview necesita `BETA_PASSWORD` o loopea y el CI E2E muere. Fix permanente: setear "All Preview" en el dashboard de Vercel. Por-branch: la branch debe existir en el remoto ANTES del `vercel env add`.
 
-## Estado actual (07 Junio 2026)
+## Estado actual (24 Junio 2026)
 - MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
 - Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
 - REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion). **Gate duro (10/06/2026): un médico real NO puede quedar `aprobado` sin `refeps_validado=true`, jamás.** Las acciones `aprobar`/`reactivar` en `/api/admin/medicos` validan contra REFEPS en el momento (`asegurarRefepsParaAprobar`) y bloquean si la matrícula no figura encontrada+activa. Backstop a nivel DB: constraint `medicos_aprobado_requiere_refeps` (cuentas `es_cuenta_test` exentas). El botón "Validar REFEPS" del panel admin sigue para re-validar.
@@ -150,6 +151,8 @@ Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env va
 - Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
 - **LANZADO AL PÚBLICO (10/06/2026):** registro abierto (`BETA_PROTECTED` vacío en middleware; `BETA_PASSWORD` sigue seteada — fail-closed, NUNCA vaciarla) + cobro real general ON (`pago_marketplace` activo desde 10/06 19:15 ART). Prueba real de pagos validada (3 consultas con plata real, split OK: médico ~$27k, Docto $1.500/consulta a GREBA). Cuentas test SIEMPRE simulan el pago (guard en crear-v2). Para re-cerrar beta: re-agregar rutas a `BETA_PROTECTED`.
 - **Sprint 07/06/2026 — Evoluciones + HC + Orden + Alertas:** evolución auto-compuesta determinística (formato `tema: contenido`) + validación humana ("Revisé y confirmo"); "Mis pacientes" + timeline unificado CI+turnos; **unificación de canales** (`WorkspaceConsulta` channel-aware — los turnos guardan igual que CI); panel HC durante la llamada + reorden Documentar + campo Orden (`documentos.tipo='orden'`); pantalla de cierre del paciente sin preview; alertas del médico (sonido + popup "paciente listo" para CI pagada y turno en sala de espera). Detalle: `docs/sprints/2026-06-07-evoluciones-hc-orden-alertas.md`.
+- **Maratón 23/06/2026 (15 PRs #199-#213):** Dashboard CEO `/insights` (datos coherentes + toggle "Solo reales"), funnel del paciente instrumentado, **guard de rol central** (`src/lib/auth/rol.ts`, admin>médico>paciente), médicos no-validados grisados en la clínica, Matrícula Nacional como requisito + aviso en registro, canal de notificaciones admin→médico, reembolsos (refund total revierte el fee + bug del fee corregido), landing cita Ley 27.802. (Falta el doc de sprint dedicado.)
+- **24/06/2026 — Outage dashboard médico + diagnóstico de oferta:** un grant de columna faltante (`celular_personal`) tiraba a TODOS los médicos a la vista de paciente y trababa el toggle "disponible" → causa real del colapso de oferta (0 médicos disponibles). Fixes PR #214 (auto-apagar disponibilidad 4h), #215 (mail bienvenida sin "fundador/5%"), #216 (dashboard/actions/onboarding vía service role + guard). Campaña de reactivación a 6 médicas. Detalle: `docs/sprints/2026-06-24-outage-dashboard-medico-y-diagnostico-oferta.md`.
 - Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
 - Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
 - **Camino al lanzamiento:** `docs/CAMINO_A_LANZAMIENTO_V1.md` — **COMPLETADO 10/06/2026**. Prueba real de pagos OK, registro abierto, cobro real general ON. Queda: prueba con 2 testers externos (`docs/PRUEBA_PRE_LANZAMIENTO.md`) y separación GREBA→SRL (las comisiones hoy caen en GREBA).
