@@ -27,7 +27,13 @@ export default async function OnboardingPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: medico } = await supabase
+  // Fila propia del médico vía service role: el SELECT incluye celular_personal
+  // (sin GRANT para authenticated) → con el cliente RLS PostgREST falla la query
+  // entera, medico=null y el wizard rebotaba al dashboard (feature muerta en prod
+  // desde 644e9a8). Es el dato propio del usuario, leído server-side por user_id.
+  const adminDb = createAdminClient();
+
+  const { data: medico } = await adminDb
     .from("medicos")
     .select(
       "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test, celular_personal, identidad_validada, didit_status, biometria_exenta"
@@ -41,8 +47,7 @@ export default async function OnboardingPage({
     redirect("/dashboard");
   }
 
-  // Estado real de los pasos que no viven en la fila de medicos.
-  const adminDb = createAdminClient();
+  // Estado real de los pasos que no viven en la fila de medicos (mismo adminDb de arriba).
   const [mpRes, firmaRes] = await Promise.all([
     adminDb
       .from("medicos_mp_accounts")
