@@ -121,10 +121,30 @@ export async function GET(req: NextRequest) {
   const mpSet = new Set((mpRes.data ?? []).map((r) => r.medico_id));
   const firmaSet = new Set((firmaRes.data ?? []).map((r) => r.medico_id));
 
+  // Total de requisitos (calculado del mismo source of truth, no hardcodeado).
+  const totalRequisitos = camposFaltantesMedico(
+    {}, { mpConectado: false, firmaConfigurada: false }
+  ).length;
+  // Los 3 operativos que de verdad bloquean atender (sin cobrar / firmar / avisar).
+  const CRITICOS: Record<string, string> = {
+    "Cobros (Mercado Pago)": "Mercado Pago",
+    "Firma electrónica": "Firma electrónica",
+    "Celular personal": "Celular",
+  };
+
   const enriquecidos = (medicos ?? []).map((m) => {
     const onb = { mpConectado: mpSet.has(m.id), firmaConfigurada: firmaSet.has(m.id) };
     const faltantes = camposFaltantesMedico(m, onb).map((c) => c.label);
-    return { ...m, faltantes, listoParaAtender: faltantes.length === 0 };
+    const criticosFaltantes = faltantes.filter((l) => l in CRITICOS).map((l) => CRITICOS[l]);
+    return {
+      ...m,
+      faltantes,                                   // lista completa (tooltip)
+      faltantesCount: faltantes.length,
+      totalRequisitos,
+      criticosFaltantes,                           // subset operativo (chip)
+      sinEmpezar: faltantes.length >= totalRequisitos - 1, // solo tiene la matrícula
+      listoParaAtender: faltantes.length === 0,
+    };
   });
   return NextResponse.json({ medicos: enriquecidos });
 }
