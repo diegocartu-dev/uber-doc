@@ -55,7 +55,7 @@ function useDictado() {
   const [iniciando, setIniciando] = useState(false); // estado entre click y permisos
   const [interimText, setInterimText] = useState(""); // texto parcial en tiempo real
   const detenidoManual = useRef(false);
-  const procesadosRef = useRef(0); // índice del próximo resultado final a procesar (anti-duplicado Android)
+  const baseRef = useRef(""); // texto base al arrancar el dictado → reconstrucción idempotente (anti-duplicado Android)
 
   const iniciar = useCallback(
     async (setter: (fn: (prev: string) => string) => void) => {
@@ -81,27 +81,23 @@ function useDictado() {
       rec.continuous = true;
       rec.interimResults = true;
       detenidoManual.current = false;
-      procesadosRef.current = 0;
+      // Capturamos el texto ya escrito como base para reconstruir en cada evento.
+      setter((prev) => { baseRef.current = prev; return prev; });
 
       rec.onresult = (e: any) => {
-        // Finales NUEVOS por nuestro propio índice (no `e.resultIndex`, que en Android
-        // no avanza y re-emite finales ya capturados → texto duplicado).
-        let finalNuevo = "";
+        // SET idempotente: input = base + TODOS los finales del evento (el interim va
+        // aparte, en vivo). No appendea → si Android re-emite un final, no duplica.
+        let finales = "";
         let interimTranscript = "";
-        for (let i = procesadosRef.current; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
-            procesadosRef.current = i + 1;
-          } else {
-            interimTranscript += e.results[i][0].transcript;
-          }
+        for (let i = 0; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finales += (finales ? " " : "") + t.trim();
+          else interimTranscript += t;
         }
-        if (finalNuevo) {
-          setter((prev) => (prev ? prev + " " : "") + finalNuevo.trim());
-          setInterimText("");
-        } else if (interimTranscript) {
-          setInterimText(interimTranscript);
-        }
+        if (typeof window !== "undefined" && window.location.search.includes("dictdbg"))
+          console.log("[dictado] len=%d resultIndex=%s finales=%s", e.results.length, e.resultIndex, finales);
+        setter(() => (baseRef.current ? baseRef.current + " " : "") + finales);
+        setInterimText(interimTranscript);
       };
 
       rec.onerror = () => {

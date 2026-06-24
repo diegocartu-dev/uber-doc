@@ -189,11 +189,11 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
 
 function useDictado() {
   const recRef = useRef<any>(null);
-  // Índice del próximo resultado de SpeechRecognition a procesar. Robusto contra el
-  // bug de Android Chrome donde `e.resultIndex` no avanza y re-emite finales ya
-  // capturados (causaba "se indica reposo y se indica reposo y..."). Llevamos NUESTRO
-  // propio índice y agregamos cada segmento final UNA sola vez.
-  const procesadosRef = useRef(0);
+  // Texto del campo al ARRANCAR el dictado. En cada onresult reconstruimos el campo
+  // como base + (todos los finales del evento) → SET idempotente, NO append. Robusto
+  // contra Android Chrome, que re-emite finales (mismo índice o nuevos); con append
+  // duplicaba ("se indica reposo y se indica reposo y...").
+  const baseRef = useRef("");
   const [dictando, setDictando] = useState<string | null>(null);
 
   const soportado =
@@ -210,21 +210,19 @@ function useDictado() {
       rec.lang = "es-AR";
       rec.continuous = true;
       rec.interimResults = true;
-      procesadosRef.current = 0;
+      // Capturamos el texto ya escrito como base para reconstruir en cada evento.
+      setter((prev) => { baseRef.current = prev; return prev; });
 
       rec.onresult = (e: any) => {
-        // Agregar SOLO los resultados finales aún no procesados, llevando nuestro
-        // propio índice (no `e.resultIndex`, que en Android no avanza y duplica).
-        let finalNuevo = "";
-        for (let i = procesadosRef.current; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            finalNuevo += (finalNuevo ? " " : "") + e.results[i][0].transcript.trim();
-            procesadosRef.current = i + 1;
-          }
+        // SET idempotente: campo = base + TODOS los finales del evento. No appendea,
+        // así que si Android re-emite un final el resultado es siempre el mismo (no duplica).
+        let finales = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) finales += (finales ? " " : "") + e.results[i][0].transcript.trim();
         }
-        if (finalNuevo) {
-          setter((prev) => (prev ? prev + " " : "") + finalNuevo);
-        }
+        if (typeof window !== "undefined" && window.location.search.includes("dictdbg"))
+          console.log("[dictado] len=%d resultIndex=%s finales=%s", e.results.length, e.resultIndex, finales);
+        setter(() => (baseRef.current ? baseRef.current + " " : "") + finales);
       };
 
       rec.onerror = () => detener();
