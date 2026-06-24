@@ -1,16 +1,43 @@
 # ROADMAP OPERATIVO — Docto al 100% al Mundo
 
-**Ultima actualizacion:** 28 de mayo de 2026
-**Cruzado contra:** docs/STATUS_REAL_2026-05-28.md (auditoría con evidencia empírica)
+**Ultima actualizacion:** 24 de junio de 2026
+**Cruzado contra:** producción real (PRs #150-#216) — ver `docs/sprints/2026-06-changelog-04-a-24.md`
 
-**Progreso operativo: 27% (Tier 1)**
-**Tier 1 — Items completados:** 4 de 15
-**Tier 1 — Items en curso / casi hechos:** 2
-**Tier 1 — Items pendientes:** 9
+**Progreso operativo: 40% (Tier 1)**
+**Tier 1 — Items completados:** 6 de 15
+**Tier 1 — Items en curso / parciales:** 2
+**Tier 1 — Items pendientes:** 7
 
 Tier 2 — Inventario de crecimiento futuro: 111 items (94 originales + 17 features no registradas)
 
 Documento vivo. Se actualiza con cada PR que cierre un item.
+
+---
+
+## Actualización 24/06/2026 (lanzamiento + 67 PRs)
+
+Refresco tras el lanzamiento público (10/06) y todo lo mergeado desde el 04/06 (#150–#216).
+Detalle completo: `docs/sprints/2026-06-changelog-04-a-24.md`.
+
+**Tier 1 — avances:**
+- **#2 Validación REFEPS real → ✅:** gate duro en prod desde 10/06 (un médico no queda
+  `aprobado` sin `refeps_validado=true`; `asegurarRefepsParaAprobar` en `/api/admin/medicos` +
+  constraint DB `medicos_aprobado_requiere_refeps`).
+- **#10 Friends & Family / MP real → ✅:** lanzamiento 10/06, cobro real general ON, 3 consultas
+  con plata real validadas (split OK). Ver `docs/CAMINO_A_LANZAMIENTO_V1.md`.
+- **#8 Landing /medicos → ✅:** refrescada (#171) + normativa de certificados Ley 27.802 /
+  Decreto 407/2026 (#198, #213).
+
+**Tier 2 — avances destacados (no afectan la métrica):** pagos reales en prod (1g ✅), reembolsos
+que revierten la comisión con refund total (1h ✅, #209/#211/#212), grilla de Clínica Virtual con
+cards honestas + médicos grisados (6l ✅, #205), onboarding médico con wizard guiado + gate de
+disponible (5b/5g, #195/#201), validación de identidad biométrica Didit construida —gate apagado—
+(3h ⚠️), WhatsApp aviso al médico (#199), dashboard CEO `/insights` coherente + funnel del
+paciente (#203/#204), canal de notificaciones admin→médico (#208), 9 cron jobs Vercel (12p).
+
+**Nuevas features no registradas (en prod):** guard de rol central (`src/lib/auth/rol.ts`),
+notificaciones admin→médico (campanita), gate de identidad Didit, auto-apagado de disponibilidad
+a 4h (cron), oferta por horario/fecha + log de disponibilidad, vista Atenciones.
 
 ---
 
@@ -27,7 +54,7 @@ No se agregan ni quitan items sin aprobacion de Diego.
 | # | Item | Estado | Dependencia |
 |---|------|--------|-------------|
 | 1 | Firma electronica UI completa (Olas 2-5) | ✅ Completado | Olas 2-5 mergeadas, auditoria Roberto OK, firma manuscrita OK |
-| 2 | Validacion REFEPS real | ⏳ Casi hecho | Bus real en prod, validacion manual Diego durante F&F. Sprint automatico: pre-produccion |
+| 2 | Validacion REFEPS real | ✅ Completado | Gate duro en prod (10/06): `aprobar`/`reactivar` validan contra REFEPS + constraint DB `medicos_aprobado_requiere_refeps` |
 | 3 | Endpoint publico /verificar/{id} | ✅ Completado | Ola 5 mergeada (PR #79) |
 
 > **Item 1 — Evidencia (28/05/2026):** Ola 2 (PR #76), Ola 3 (PR #77), Ola 4 (PR #78),
@@ -50,7 +77,7 @@ No se agregan ni quitan items sin aprobacion de Diego.
 | 4 | Contrato Docto-Medico formal | ❌ Pendiente | Carolina |
 | 5 | Politica de comisiones formalizada | ⚠️ Parcial | Codigo OK (src/lib/comisiones.ts), falta documento legal |
 | 7 | Cuenta institucional @docto.com.ar | ✅ Completado | Diego confirmo 28/05/2026 |
-| 8 | Landing /medicos funcional | ⚠️ Parcial | src/app/medicos/page.tsx existe (448 lineas), revisar contenido |
+| 8 | Landing /medicos funcional | ✅ Completado | Refrescada (#171) + normativa certificados Ley 27.802 / Decreto 407/2026 (#198, #213) |
 | 9 | Plan captacion 30 medicos seed | ❌ Pendiente | — |
 
 > **Item 5 — Evidencia:** src/lib/comisiones.ts con RPC get_comision_medico. Tabla
@@ -63,7 +90,7 @@ No se agregan ni quitan items sin aprobacion de Diego.
 
 | # | Item | Estado | Dependencia |
 |---|------|--------|-------------|
-| 10 | Friends & Family test MP real | ❌ Pendiente | Infraestructura tecnica lista (OAuth, webhook, split) |
+| 10 | Friends & Family test MP real | ✅ Completado | Lanzamiento 10/06: cobro real ON, 3 consultas con plata real, split OK (médico ~$27k, Docto $1.500) |
 | 11 | Facturacion automatizada a medicos | ❌ Pendiente | — |
 | 12 | Cancelar app vieja "UberDoc" en MP | ❌ Pendiente | Accion manual Diego en panel MP |
 
@@ -97,8 +124,8 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 1d. Whitelist live_mode OAuth | ✅ Sprint A MP cerrado |
 | 1e. Auto-transicion pagada→en_curso | ✅ Sprint A MP cerrado |
 | 1f. Rate limiting webhook | ⚠️ Idempotencia por pago_id+status, sin rate limit HTTP |
-| 1g. Validacion pago real aprobado en prod | ❌ Pendiente |
-| 1h. Reembolsos automaticos por consulta no realizada | ⚠️ Logica de reintegro en cancelaciones.ts, sin API call automatica a MP |
+| 1g. Validacion pago real aprobado en prod | ✅ Implementado (lanzamiento 10/06) |
+| 1h. Reembolsos automaticos por consulta no realizada | ✅ Refund a MP + revierte la comisión Docto con refund total (#209/#211/#212) |
 | 1i. Dashboard de comisiones para Docto | ⚠️ Admin endpoint existe (/api/admin/comisiones), sin dashboard medico |
 
 ## 2. Facturacion y Fiscal
@@ -204,7 +231,7 @@ Se actualizan cuando se cierran, pero no bloquean la operacion.
 | 6i. Notificaciones push (Web Push) | ✅ Implementado (Sprint B, commit 4d8341f) |
 | 6j. Email transaccional pre/post consulta | ✅ Implementado |
 | 6k. Soporte paciente (canal) | ❌ Pendiente |
-| 6l. Grilla Clínica Virtual — cards honestas + orden de médicos (CI/turnos) + dato de espera | ⏳ En curso (sprint 03/06, ver DECISIONES_PRODUCTO §11) |
+| 6l. Grilla Clínica Virtual — cards honestas + orden de médicos (CI/turnos) + dato de espera | ✅ Implementado (cards honestas, orden, médicos grisados #205, auto-refresh #202) |
 
 > **6h — Evidencia:** src/app/page.tsx (614 lineas). Landing pacientes unificada como
 > pagina raiz. src/app/pacientes/page.tsx redirige. Commit 4de10c7 + b60439d.
@@ -311,7 +338,7 @@ Features en produccion que no estaban en el ROADMAP original. Detectados en audi
 | 12m. Perfil medico completo (firma manuscrita, cobros, baja, nova) | ✅ En prod | src/app/medico/perfil/ — 6 archivos |
 | 12n. Vademecum CNPM (16.878 medicamentos oficiales) | ✅ En prod | src/data/vademecum.json (2.8MB), lazy-load, deteccion dual controlados |
 | 12o. Receta estructurada Rp/IFA (formato AAIP/ReNaPDiS) | ✅ En prod | src/lib/pdf/receta.ts — renderRecetaEstructurada() |
-| 12p. 6 cron jobs Vercel | ✅ En prod | vercel.json: generar-slots, cerrar-huerfanas, recordatorios, recordatorios-10min, limpieza-estudios, sala-espera-diaria |
+| 12p. 9 cron jobs Vercel | ✅ En prod | vercel.json: generar-slots, cerrar-huerfanas, recordatorios, limpieza-estudios-temp, sala-espera-diaria, reintentar-refunds, rejoin-expirar, repush-esperando, apagar-disponibilidad |
 | 12q. Historial paciente por medico | ✅ En prod | src/app/medico/paciente/[pacienteId]/ + src/app/medico/historial/ |
 | 12r. Obras sociales (catalogo + selector) | ✅ En prod | src/app/api/obras-sociales/ + tabla obras_sociales |
 | 12s. Consentimiento informado por consulta | ✅ En prod | src/app/consulta/[id]/consentimiento/ + api/consentimiento/ + tabla consentimientos_informados |
