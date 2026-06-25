@@ -216,6 +216,16 @@ function useDictado() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
 
+      // Cambio de campo sin "Detener": cerramos y neutralizamos el rec previo para que
+      // no reinicie ni contamine el nuevo campo (acumuladoRef/ultimoFinalRef son
+      // compartidas). Hallazgo de Roberto.
+      if (recRef.current) {
+        const viejo = recRef.current;
+        viejo.onresult = null; viejo.onend = null; viejo.onerror = null;
+        try { viejo.stop(); } catch { /* ya detenido */ }
+        recRef.current = null;
+      }
+
       const rec = new SR();
       rec.lang = "es-AR";
       rec.continuous = false; // ← clave: una frase por sesión (anti-cascada Android)

@@ -68,6 +68,15 @@ function useDictado() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) return;
 
+      // Si ya había un dictado activo, lo cerramos y neutralizamos sus handlers para
+      // que no reinicie ni pise el acumulado (refs compartidas). Hallazgo de Roberto.
+      if (recRef.current) {
+        const viejo = recRef.current;
+        viejo.onresult = null; viejo.onend = null; viejo.onerror = null;
+        try { viejo.stop(); } catch { /* ya detenido */ }
+        recRef.current = null;
+      }
+
       setIniciando(true);
 
       try {
