@@ -244,8 +244,6 @@ function useDictado() {
           else if (t.length > interim.length) interim = t;
         }
         ultimoFinalRef.current = finalSesion;
-        if (typeof window !== "undefined" && window.location.search.includes("dictdbg"))
-          console.log("[dictado] len=%d isFinal=%s final=%s", e.results.length, e.results[e.results.length - 1]?.isFinal, finalSesion);
         const conf = acumuladoRef.current;
         setter(() => (conf ? conf + " " : "") + (finalSesion || interim));
       };
