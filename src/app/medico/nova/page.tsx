@@ -55,7 +55,12 @@ function useDictado() {
   const [iniciando, setIniciando] = useState(false); // estado entre click y permisos
   const [interimText, setInterimText] = useState(""); // texto parcial en tiempo real
   const detenidoManual = useRef(false);
-  const baseRef = useRef(""); // texto base al arrancar el dictado → reconstrucción idempotente (anti-duplicado Android)
+  // Modo DISCRETO (continuous=false) para esquivar el bug de Android: con `continuous=true`
+  // Chrome-Android emite finales ACUMULATIVOS (cascada "la → la me → la me puedes → ...").
+  // Con continuous=false cada sesión devuelve una frase limpia; reiniciamos en `onend` para
+  // seguir dictando a través de las pausas. Es bug del motor (Chromium 40324711), no nuestro.
+  const acumuladoRef = useRef("");   // texto confirmado (base + frases de sesiones ya cerradas)
+  const ultimoFinalRef = useRef(""); // final de la sesión en curso (se consolida en onend)
 
   const iniciar = useCallback(
     async (setter: (fn: (prev: string) => string) => void) => {
@@ -78,42 +83,62 @@ function useDictado() {
 
       const rec = new SR();
       rec.lang = "es-AR";
-      rec.continuous = true;
+      rec.continuous = false; // ← clave: una frase por sesión (anti-cascada Android)
       rec.interimResults = true;
       detenidoManual.current = false;
-      // Capturamos el texto ya escrito como base para reconstruir en cada evento.
-      setter((prev) => { baseRef.current = prev; return prev; });
+      // Capturamos el texto ya escrito como base de la acumulación.
+      setter((prev) => { acumuladoRef.current = prev; ultimoFinalRef.current = ""; return prev; });
 
       rec.onresult = (e: any) => {
-        // SET idempotente: input = base + TODOS los finales del evento (el interim va
-        // aparte, en vivo). No appendea → si Android re-emite un final, no duplica.
-        let finales = "";
-        let interimTranscript = "";
+        // Tomamos el final/interim MÁS LARGO del evento (no concatenamos): si el motor
+        // re-emite finales acumulativos, el más largo es la frase completa → nunca cascada.
+        let finalSesion = "";
+        let interim = "";
         for (let i = 0; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) finales += (finales ? " " : "") + t.trim();
-          else interimTranscript += t;
+          const t = (e.results[i][0]?.transcript || "").trim();
+          if (!t) continue;
+          if (e.results[i].isFinal) { if (t.length > finalSesion.length) finalSesion = t; }
+          else if (t.length > interim.length) interim = t;
         }
+        ultimoFinalRef.current = finalSesion;
         if (typeof window !== "undefined" && window.location.search.includes("dictdbg"))
-          console.log("[dictado] len=%d resultIndex=%s finales=%s", e.results.length, e.resultIndex, finales);
-        setter(() => (baseRef.current ? baseRef.current + " " : "") + finales);
-        setInterimText(interimTranscript);
+          console.log("[dictado] len=%d isFinal=%s final=%s", e.results.length, e.results[e.results.length - 1]?.isFinal, finalSesion);
+        const conf = acumuladoRef.current;
+        setter(() => (conf ? conf + " " : "") + (finalSesion || interim));
+        setInterimText(interim);
       };
 
-      rec.onerror = () => {
-        detenidoManual.current = true;
-        recRef.current = null;
-        setDictando(false);
-        setIniciando(false);
-        setInterimText("");
-      };
-
-      rec.onend = () => {
-        if (!detenidoManual.current) {
+      rec.onerror = (ev: any) => {
+        // Solo errores fatales detienen. 'no-speech'/'aborted' son normales entre frases
+        // (pausas) → dejamos que onend reinicie.
+        const err = ev?.error;
+        if (err === "not-allowed" || err === "service-not-allowed" || err === "audio-capture") {
+          detenidoManual.current = true;
           recRef.current = null;
           setDictando(false);
           setIniciando(false);
           setInterimText("");
+        }
+      };
+
+      rec.onend = () => {
+        // Consolidamos el final de la sesión que cierra.
+        if (ultimoFinalRef.current) {
+          acumuladoRef.current = (acumuladoRef.current ? acumuladoRef.current + " " : "") + ultimoFinalRef.current;
+          ultimoFinalRef.current = "";
+        }
+        setInterimText("");
+        // Reiniciar para seguir dictando a través de la pausa (continuous=false corta en
+        // cada silencio). Delay chico: start() inmediato en onend tira InvalidStateError.
+        if (!detenidoManual.current && recRef.current === rec) {
+          setTimeout(() => {
+            if (!detenidoManual.current && recRef.current === rec) {
+              try { rec.start(); } catch { /* ya corriendo */ }
+            }
+          }, 120);
+        } else {
+          setDictando(false);
+          setIniciando(false);
         }
       };
 
