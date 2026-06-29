@@ -42,8 +42,8 @@ export async function GET(req: NextRequest) {
     const misConsultas = consultas.filter(c => c.medico_id === m.id);
     const misTurnos = turnos.filter(t => t.medico_id === m.id);
     const completadas = misConsultas.filter(c => c.estado === "completada").length + misTurnos.filter(t => t.estado === "completado").length;
-    const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado").length;
-    const noShows = misTurnos.filter(t => t.estado === "no_show").length;
+    const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado_paciente" || t.estado === "cancelado_medico").length;
+    const noShows = misTurnos.filter(t => t.estado === "ausente_medico").length;
     const total = misConsultas.length + misTurnos.length; // todas las atenciones (sin slots)
     const gmv = completadas * (m.precio_consulta ?? 0);
 

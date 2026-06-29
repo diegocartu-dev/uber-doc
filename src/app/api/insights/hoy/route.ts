@@ -100,8 +100,9 @@ export async function GET(req: NextRequest) {
   const repiten = [...pacientesRepeat.values()].filter(n => n > 1).length;
   const retencionPct = pacientesUnicos30d.size > 0 ? Math.round((repiten / pacientesUnicos30d.size) * 100) : null;
 
-  // No-shows hoy
-  const noShowsHoy = (turnosHoy ?? []).filter(t => t.estado === "no_show").length;
+  // No-shows del médico hoy. El estado real es `ausente_medico` (NO `no_show`, que no
+  // existe en la tabla turnos → la métrica daba 0 siempre, semáforo verde falso).
+  const noShowsHoy = (turnosHoy ?? []).filter(t => t.estado === "ausente_medico").length;
 
   // Horas médico disponibles CI
   let horasDisp = 0;
@@ -113,11 +114,12 @@ export async function GET(req: NextRequest) {
     horasDisp += Math.max(0, (hH * 60 + mH - hD * 60 - mD) / 60);
   }
 
-  // Cancelaciones tardías esta semana
+  // Cancelaciones tardías esta semana. Estados reales: `cancelado_paciente` /
+  // `cancelado_medico` (NO `cancelado`, que no existe → la métrica daba 0 siempre).
   const { data: cancelsTardias } = await admin
     .from("turnos")
     .select("id, fecha, hora_inicio, updated_at")
-    .eq("estado", "cancelado")
+    .in("estado", ["cancelado_paciente", "cancelado_medico"])
     .gte("fecha", hace7);
 
   let cancelTardiasCount = 0;

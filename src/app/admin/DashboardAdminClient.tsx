@@ -102,20 +102,28 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
       {/* 7 day chart */}
       <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
         <h2 className="text-sm font-semibold text-gray-900">Últimos 7 días</h2>
+        <p className="mt-0.5 text-xs text-gray-400">Consultas realizadas (sólido) vs. creadas/ofertadas (tenue)</p>
         <div className="mt-4 flex items-end gap-3" style={{ height: 160 }}>
           {diasSemana.map((d) => {
-            const pct = (d.consultas / maxConsultas) * 100;
+            const pctTotal = (d.consultas / maxConsultas) * 100;
+            const pctReal = (d.completadas / maxConsultas) * 100;
             const dia = DIAS[new Date(d.fecha + "T12:00:00").getDay()];
             return (
               <div key={d.fecha} className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-xs font-medium text-gray-600">{d.consultas}</span>
-                <div className="w-full" style={{ height: 120 }}>
-                  <div className="flex h-full items-end">
-                    <div
-                      className="w-full rounded-t-md bg-[#378ADD]/80 transition-all"
-                      style={{ height: `${Math.max(pct, 4)}%` }}
-                    />
-                  </div>
+                <span className="text-xs font-semibold text-gray-700">
+                  {d.completadas}<span className="font-normal text-gray-400"> / {d.consultas}</span>
+                </span>
+                <div className="relative w-full" style={{ height: 120 }}>
+                  {/* creadas/ofertadas (tenue) */}
+                  <div
+                    className="absolute bottom-0 w-full rounded-t-md bg-[#378ADD]/15"
+                    style={{ height: `${Math.max(pctTotal, 2)}%` }}
+                  />
+                  {/* realizadas (sólido) */}
+                  <div
+                    className="absolute bottom-0 w-full rounded-t-md bg-[#378ADD] transition-all"
+                    style={{ height: `${pctReal}%` }}
+                  />
                 </div>
                 <span className="text-[11px] text-gray-400">{dia}</span>
               </div>
@@ -124,8 +132,12 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
         </div>
         <div className="mt-3 flex items-center gap-4 border-t border-gray-100 pt-3">
           <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]/80" />
-            <span className="text-xs text-gray-500">Total consultas</span>
+            <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]" />
+            <span className="text-xs text-gray-500">Realizadas</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]/15" />
+            <span className="text-xs text-gray-500">Creadas / ofertadas</span>
           </div>
         </div>
       </div>
