@@ -16,6 +16,7 @@ interface HoyData {
   comisionDocto: number;
   esperaPromMs: number | null;
   retencionPct: number | null;
+  retencionBase: number;
   noShowsHoy: number;
   horasDisp: number;
   medicosDispCount: number;
@@ -91,7 +92,20 @@ export default function InsightsHoyClient() {
   }
 
   const esperaSalud = data.esperaPromMs ? salud("espera", data.esperaPromMs) : null;
-  const retencionSalud = data.retencionPct != null ? salud("retencion", data.retencionPct) : null;
+  // Retención: nunca pintar verde "Buena" con muestra chica (con n=1, 100% es ruido, no señal).
+  const MUESTRA_MIN = 10;
+  const retencionConfiable = data.retencionPct != null && data.retencionBase >= MUESTRA_MIN;
+  const retencionSalud = retencionConfiable
+    ? salud("retencion", data.retencionPct!)
+    : data.retencionBase > 0
+      ? { label: "muestra chica", color: "#888780" }
+      : null;
+  const retencionValue =
+    data.retencionPct == null
+      ? "Sin datos"
+      : retencionConfiable
+        ? `${data.retencionPct}% vuelven`
+        : `${data.retencionPct}% · n=${data.retencionBase}`;
   const noshowSalud = salud("noshow", data.noShowsHoy);
 
   return (
@@ -192,12 +206,12 @@ export default function InsightsHoyClient() {
           <p className="mt-3 font-['Space_Grotesk'] text-4xl font-bold text-white">
             {formatARS(data.gmv)}
           </p>
-          <p className="mt-1 text-sm text-white/50">GMV hoy</p>
+          <p className="mt-1 text-sm text-white/50">GMV hoy · teórico (precio de lista)</p>
           <div className="mt-3 rounded-lg bg-[#378ADD]/10 px-3 py-2">
             <p className="text-sm font-medium text-[#378ADD]">
               Docto {formatARS(data.comisionDocto)}
             </p>
-            <p className="text-xs text-[#378ADD]/60">$1.500 por consulta · {data.completadasHoy} hoy</p>
+            <p className="text-xs text-[#378ADD]/60">$1.500 × {data.completadasHoy} realizadas · falta conciliar cobrado real</p>
           </div>
         </div>
       </div>
@@ -210,8 +224,8 @@ export default function InsightsHoyClient() {
           salud={esperaSalud}
         />
         <MetricSmall
-          label="Retención"
-          value={data.retencionPct != null ? `${data.retencionPct}% vuelven` : "Sin datos"}
+          label="Retención (30d)"
+          value={retencionValue}
           salud={retencionSalud}
         />
         <MetricSmall

@@ -214,6 +214,7 @@ export async function GET(req: NextRequest) {
     comisionDocto,
     esperaPromMs,
     retencionPct,
+    retencionBase: pacientesUnicos30d.size, // tamaño de muestra → la UI no pinta verde con n chico
     noShowsHoy,
     horasDisp: Math.round(horasDisp * 10) / 10,
     medicosDispCount: medicosDisp.length,
