@@ -74,8 +74,10 @@ export default async function AdminDashboardPage({
     admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("estado", "en_curso"),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
     admin.from("alertas_admin").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
-    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", desde7),
-    admin.from("turnos").select("fecha, estado, medico_id, paciente_id").gte("fecha", desde7),
+    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", desde7).limit(5000),
+    // Chart: excluir slots vacíos (no son "consultas") → alinea el chart con "Consultas
+    // hoy" y baja el volumen para que el .limit() no trunque en silencio (Roberto #224).
+    admin.from("turnos").select("fecha, estado, medico_id, paciente_id").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
