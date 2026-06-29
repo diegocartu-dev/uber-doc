@@ -119,6 +119,33 @@ No se puede "ver de una mirada qué pasa en Docto" por **4 defectos de raíz que
 
 ---
 
+## 4-bis. Estado de implementación (29/06/2026)
+
+Se atacaron primero los **bugs de correctitud** (los que mostraban datos falsos). 3 PRs mergeados:
+
+- **#222** — este doc (referencia).
+- **#223** — `fix(dashboards): graficar realizadas + revivir métricas muertas`:
+  - ✅ Quick-win 1: el chart del admin grafica **realizadas** (sólido) vs creadas (tenue), no slots.
+  - ✅ Quick-win 3: "No-show médicos" → `ausente_medico`; "Cancel. tardías" → `cancelado_paciente`/
+    `cancelado_medico` (estados reales; antes `no_show`/`cancelado` inexistentes = verde falso).
+  - Extensión de alcance: mismo bug arreglado en `insights/medicos`.
+- **#224** — `fix(admin): filtrar cuentas test en métricas de actividad`:
+  - ✅ Quick-win 2 (parcial): "Consultas hoy" / "En curso" / chart ahora **filtran cuentas test**
+    (reusa `setsDeTest`/`esTest`). "Consultas hoy" pasó de `1` (Dr. Docto Test) a `0` (real).
+  - Extensión de alcance: "Consultas hoy" y el chart **excluyen slots vacíos** (un slot no es una
+    consulta) + `.limit(5000)` en las queries del chart (evita truncado silencioso de PostgREST).
+
+**Pendiente** (anotado, no hecho):
+- Quick-win 2 (resto): badge "Solo reales" + cartel "N ocultas por test" en el admin.
+- Quick-win 4: umbral de muestra en Retención (hoy n=1 pintado de verde).
+- Quick-win 5: renombrar GMV → "GMV teórico (precio lista)".
+- Quick-win 6: número en el QuickLink "Reembolsos".
+- Todos los **cambios de fondo** (7–12): cobranza real por transacción, oferta con médico/
+  especialidad, timezone unificado, vista "¿Qué pasó hoy?" con conciliación, CI vs Turno real.
+- Refinamiento del set de estados de "En curso" (aceptada/pagada no son llamada activa).
+
+---
+
 ## 5. Observación de gestión (no de dashboard)
 
 La auditoría confirma que el problema no es solo cómo se muestran los números — es que **la
