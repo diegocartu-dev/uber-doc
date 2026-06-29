@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardAdminClient from "./DashboardAdminClient";
 import MobileControlCenter from "./MobileControlCenter";
+import { setsDeTest, esTest } from "@/lib/insights/filtro-test";
 
 function isMobileUA(ua: string): boolean {
   return /Mobile|Android|iPhone|iPad/i.test(ua);
@@ -48,36 +49,56 @@ export default async function AdminDashboardPage({
   const desde7 = hace7dias();
 
   const [
+    sets,
     { count: totalMedicos },
     { count: medicosActivos },
     { count: totalPacientes },
-    { count: consultasHoy },
-    { count: turnosHoy },
-    { count: consultasEnCurso },
-    { count: turnosEnCurso },
+    { data: consHoyRows },
+    { data: turnosHoyRows },
+    { data: consEnCursoRows },
+    { data: turnosEnCursoRows },
     { count: pendingMedicos },
     { count: pendingAlertas },
-    { data: consultasSemana },
-    { data: turnosSemana },
+    { data: consultasSemanaRaw },
+    { data: turnosSemanaRaw },
     { data: medicosDisponiblesData },
     { data: turnosDisponiblesData },
   ] = await Promise.all([
+    setsDeTest(admin),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("es_cuenta_test", false),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false),
     admin.from("pacientes").select("id", { count: "exact", head: true }).eq("es_cuenta_test", false),
-    admin.from("consultas").select("id", { count: "exact", head: true }).gte("created_at", hoy),
-    admin.from("turnos").select("id", { count: "exact", head: true }).eq("fecha", hoy),
-    admin.from("consultas").select("id", { count: "exact", head: true }).in("estado", ["aceptada", "pagada", "en_curso"]),
-    admin.from("turnos").select("id", { count: "exact", head: true }).eq("estado", "en_curso"),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id").gte("created_at", hoy),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("fecha", hoy),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id").in("estado", ["aceptada", "pagada", "en_curso"]),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("estado", "en_curso"),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
     admin.from("alertas_admin").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
-    admin.from("consultas").select("created_at, estado").gte("created_at", desde7),
-    admin.from("turnos").select("fecha, estado").gte("fecha", desde7),
+    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", desde7).limit(5000),
+    // Chart: excluir slots vacíos (no son "consultas") → alinea el chart con "Consultas
+    // hoy" y baja el volumen para que el .limit() no trunque en silencio (Roberto #224).
+    admin.from("turnos").select("fecha, estado, medico_id, paciente_id").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
     admin.from("turnos").select("medico_id").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", en7dias()),
   ]);
+
+  // Filtro de cuentas test (médico O paciente) en las métricas de ACTIVIDAD. Antes el
+  // admin no filtraba test acá → "Consultas hoy: 1" podía ser una cuenta de prueba.
+  // Reusa la fuente de verdad de /insights (setsDeTest/esTest).
+  const SLOT = new Set(["disponible", "bloqueado", "bloqueado_sin_cobro"]);
+  const real = (r: { medico_id?: string | null; paciente_id?: string | null }) =>
+    !esTest(sets, r.medico_id, r.paciente_id);
+  // "Consultas hoy" = CI reales creadas hoy + turnos reales de hoy que NO son slots vacíos.
+  const consultasHoyTotal =
+    (consHoyRows ?? []).filter(real).length +
+    (turnosHoyRows ?? []).filter((t) => real(t) && !SLOT.has(t.estado)).length;
+  const enCursoTotal =
+    (consEnCursoRows ?? []).filter(real).length +
+    (turnosEnCursoRows ?? []).filter(real).length;
+  const consultasSemana = (consultasSemanaRaw ?? []).filter(real);
+  const turnosSemana = (turnosSemanaRaw ?? []).filter(real);
 
   // Turnos disponibles agrupados por especialidad (especialidad vive en medicos)
   const medicoIdsConSlots = [...new Set((turnosDisponiblesData ?? []).map((t) => t.medico_id).filter(Boolean))];
@@ -128,11 +149,11 @@ export default async function AdminDashboardPage({
   return (
     <DashboardAdminClient
       metrics={{
-        consultasHoy: (consultasHoy ?? 0) + (turnosHoy ?? 0),
+        consultasHoy: consultasHoyTotal,
         medicosActivos: medicosActivos ?? 0,
         totalMedicos: totalMedicos ?? 0,
         totalPacientes: totalPacientes ?? 0,
-        enCursoAhora: (consultasEnCurso ?? 0) + (turnosEnCurso ?? 0),
+        enCursoAhora: enCursoTotal,
         pendingMedicos: pendingMedicos ?? 0,
         pendingAlertas: pendingAlertas ?? 0,
       }}

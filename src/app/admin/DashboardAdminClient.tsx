@@ -102,7 +102,7 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
       {/* 7 day chart */}
       <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
         <h2 className="text-sm font-semibold text-gray-900">Últimos 7 días</h2>
-        <p className="mt-0.5 text-xs text-gray-400">Consultas realizadas (sólido) vs. creadas/ofertadas (tenue)</p>
+        <p className="mt-0.5 text-xs text-gray-400">Consultas realizadas (sólido) vs. creadas/agendadas (tenue) — sin slots vacíos ni cuentas de prueba</p>
         <div className="mt-4 flex items-end gap-3" style={{ height: 160 }}>
           {diasSemana.map((d) => {
             const pctTotal = (d.consultas / maxConsultas) * 100;
@@ -114,7 +114,7 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
                   {d.completadas}<span className="font-normal text-gray-400"> / {d.consultas}</span>
                 </span>
                 <div className="relative w-full" style={{ height: 120 }}>
-                  {/* creadas/ofertadas (tenue) */}
+                  {/* creadas/agendadas (tenue) */}
                   <div
                     className="absolute bottom-0 w-full rounded-t-md bg-[#378ADD]/15"
                     style={{ height: `${Math.max(pctTotal, 2)}%` }}
@@ -137,7 +137,7 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
           </div>
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]/15" />
-            <span className="text-xs text-gray-500">Creadas / ofertadas</span>
+            <span className="text-xs text-gray-500">Creadas / agendadas</span>
           </div>
         </div>
       </div>
