@@ -16,13 +16,15 @@ interface Props {
   };
   diasSemana: { fecha: string; consultas: number; completadas: number }[];
   medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null }[];
-  turnosPorEspecialidad: { especialidad: string; slots: number; medicos: number }[];
+  turnosPorEspecialidad: { especialidad: string; slots: number; medicos: { nombre: string; slots: number }[] }[];
 }
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad }: Props) {
   const maxConsultas = Math.max(...diasSemana.map((d) => d.consultas), 1);
+  // # de médicos distintos ofertando turnos (para el resumen "de una mirada")
+  const medicosOfertando = new Set(turnosPorEspecialidad.flatMap((e) => e.medicos.map((m) => m.nombre))).size;
 
   return (
     <div className="p-6 lg:p-8">
@@ -78,20 +80,36 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
 
         {/* Turnos disponibles por especialidad */}
         <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
-          <div className="flex items-center gap-2">
-            <CalendarDays size={15} strokeWidth={1.75} className="text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-900">Turnos libres — próximos 7 días</h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={15} strokeWidth={1.75} className="text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Turnos libres — próximos 7 días</h2>
+            </div>
+            {turnosPorEspecialidad.length > 0 && (
+              <span className="shrink-0 text-xs text-gray-400">
+                {medicosOfertando} médico{medicosOfertando !== 1 ? "s" : ""} · {turnosPorEspecialidad.length} especialidad{turnosPorEspecialidad.length !== 1 ? "es" : ""}
+              </span>
+            )}
           </div>
           {turnosPorEspecialidad.length === 0 ? (
             <p className="mt-4 text-sm text-gray-400">No hay slots de turno publicados para los próximos 7 días.</p>
           ) : (
             <div className="mt-3 divide-y divide-gray-50">
               {turnosPorEspecialidad.map((e) => (
-                <div key={e.especialidad} className="flex items-center justify-between py-2.5">
-                  <p className="text-sm text-gray-700">{e.especialidad}</p>
-                  <p className="text-xs text-gray-400">
-                    <span className="text-sm font-semibold text-gray-900">{e.slots}</span> slots · {e.medicos} médico{e.medicos !== 1 ? "s" : ""}
-                  </p>
+                <div key={e.especialidad} className="py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-900">{e.especialidad}</p>
+                    <p className="shrink-0 text-xs text-gray-400">
+                      <span className="text-sm font-semibold text-gray-900">{e.slots}</span> slots
+                    </p>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {e.medicos.map((m) => (
+                      <span key={m.nombre} className="text-xs text-gray-500">
+                        {m.nombre} <span className="text-gray-400">({m.slots})</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
