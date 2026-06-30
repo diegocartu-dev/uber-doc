@@ -225,7 +225,7 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
 }
 
 function QuickLink({ icon: Icon, label, value, href, color }: {
-  icon: typeof Activity; label: string; value?: number; href: string; color: string;
+  icon: typeof Activity; label: string; value: number; href: string; color: string;
 }) {
   return (
     <Link
@@ -237,9 +237,7 @@ function QuickLink({ icon: Icon, label, value, href, color }: {
         <Icon size={18} style={{ color }} strokeWidth={1.75} />
       </div>
       <div>
-        {value !== undefined
-          ? <p className="text-lg font-semibold text-gray-900">{value}</p>
-          : <p className="text-lg font-semibold text-gray-900">Ver</p>}
+        <p className="text-lg font-semibold text-gray-900">{value}</p>
         <p className="text-xs text-gray-500">{label}</p>
       </div>
     </Link>
