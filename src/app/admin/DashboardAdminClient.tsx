@@ -16,7 +16,7 @@ interface Props {
   };
   diasSemana: { fecha: string; consultas: number; completadas: number }[];
   medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null }[];
-  turnosPorEspecialidad: { especialidad: string; slots: number; medicos: { nombre: string; slots: number }[] }[];
+  turnosPorEspecialidad: { especialidad: string; slots: number; medicos: { id: string; nombre: string; slots: number }[] }[];
 }
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -24,7 +24,7 @@ const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad }: Props) {
   const maxConsultas = Math.max(...diasSemana.map((d) => d.consultas), 1);
   // # de médicos distintos ofertando turnos (para el resumen "de una mirada")
-  const medicosOfertando = new Set(turnosPorEspecialidad.flatMap((e) => e.medicos.map((m) => m.nombre))).size;
+  const medicosOfertando = new Set(turnosPorEspecialidad.flatMap((e) => e.medicos.map((m) => m.id))).size;
 
   return (
     <div className="p-6 lg:p-8">
@@ -110,7 +110,7 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
                     // 2+: una fila por médico, número alineado a la derecha para comparar de un vistazo
                     <div className="mt-1.5 space-y-1">
                       {e.medicos.map((m) => (
-                        <div key={m.nombre} className="flex items-center justify-between gap-2 pl-3">
+                        <div key={m.id} className="flex items-center justify-between gap-2 pl-3">
                           <p className="truncate text-xs text-gray-500">{m.nombre}</p>
                           <span className="shrink-0 text-xs text-gray-400">{m.slots}</span>
                         </div>

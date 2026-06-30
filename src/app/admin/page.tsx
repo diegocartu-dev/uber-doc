@@ -109,7 +109,7 @@ export default async function AdminDashboardPage({
   const espPorMedico = new Map((medicosDeSlots ?? []).map((m) => [m.id, m]));
   // Por especialidad: total de slots + DESGLOSE por médico (nombre + sus slots), para
   // que la oferta diga de QUIÉN y de qué especialidad es, no solo "N médicos".
-  const porEspecialidad = new Map<string, { slots: number; medicos: Map<string, { nombre: string; slots: number }> }>();
+  const porEspecialidad = new Map<string, { slots: number; medicos: Map<string, { id: string; nombre: string; slots: number }> }>();
   for (const t of turnosDisponiblesData ?? []) {
     const med = espPorMedico.get(t.medico_id);
     if (!med || med.es_cuenta_test) continue;
@@ -117,7 +117,7 @@ export default async function AdminDashboardPage({
     if (!porEspecialidad.has(esp)) porEspecialidad.set(esp, { slots: 0, medicos: new Map() });
     const e = porEspecialidad.get(esp)!;
     e.slots++;
-    const m = e.medicos.get(t.medico_id) ?? { nombre: med.nombre_completo ?? "—", slots: 0 };
+    const m = e.medicos.get(t.medico_id) ?? { id: t.medico_id, nombre: med.nombre_completo ?? "—", slots: 0 };
     m.slots++;
     e.medicos.set(t.medico_id, m);
   }
