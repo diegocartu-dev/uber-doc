@@ -103,13 +103,20 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
                       <span className="text-sm font-semibold text-gray-900">{e.slots}</span> slots
                     </p>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                    {e.medicos.map((m) => (
-                      <span key={m.nombre} className="text-xs text-gray-500">
-                        {m.nombre} <span className="text-gray-400">({m.slots})</span>
-                      </span>
-                    ))}
-                  </div>
+                  {e.medicos.length === 1 ? (
+                    // Un solo médico: nombre como subtítulo (el slot total ya está arriba)
+                    <p className="mt-0.5 truncate text-xs text-gray-400">{e.medicos[0].nombre}</p>
+                  ) : (
+                    // 2+: una fila por médico, número alineado a la derecha para comparar de un vistazo
+                    <div className="mt-1.5 space-y-1">
+                      {e.medicos.map((m) => (
+                        <div key={m.nombre} className="flex items-center justify-between gap-2 pl-3">
+                          <p className="truncate text-xs text-gray-500">{m.nombre}</p>
+                          <span className="shrink-0 text-xs text-gray-400">{m.slots}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
