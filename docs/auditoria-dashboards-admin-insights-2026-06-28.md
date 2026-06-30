@@ -139,15 +139,22 @@ Se atacaron primero los **bugs de correctitud** (los que mostraban datos falsos)
     "muestra chica". La ruta devuelve `retencionBase`. (Hoy n=1 → antes verde "Buena", ahora gris.)
   - ✅ Quick-win 5: GMV rotulado "teórico (precio de lista)" + "falta conciliar cobrado real".
 - **#227** — `fix(admin): oferta de turnos con identidad`:
-  - ✅ Quick-win 9 (parcial — admin): "Turnos libres" desglosa por especialidad **los médicos con
+  - ✅ Quick-win 9 (admin): "Turnos libres" desglosa por especialidad **los médicos con
     sus slots** (filas, diseño Sofía) + resumen "N médicos · M especialidades". Deja a la vista la
-    concentración real (hoy 1 médica, 1 especialidad). Falta lo mismo en el heatmap `insights/oferta`.
+    concentración real (hoy 1 médica, 1 especialidad).
+- **#229** — `fix(insights): identidad en Oferta por horario`:
+  - ✅ Quick-win 9 (insights): el heatmap "Oferta por horario" suma "Quién oferta" (médicos con CI
+    horas y/o turnos, con nombre+especialidad; la brecha "N de M" como número grande con semáforo) y
+    "Cobertura por especialidad" (especialidades con médicos registrados pero **sin oferta** — hoy
+    Neumonología, Ortopedia). `turnosMedicoSet` se deriva del mismo cómputo del heatmap (respeta
+    vigencia de fechas → no puede divergir del mapa; fix de Roberto a un modelo vencido que inflaba).
 
 **Pendiente** (anotado, no hecho):
 - Quick-win 2 (resto): badge "Solo reales" + cartel "N ocultas por test" en el admin.
 - Quick-win 6: número en el QuickLink "Reembolsos".
-- Quick-win 9 (resto): identidad en el heatmap `insights/oferta` + "especialidades en 0" (requiere
-  definir el universo de especialidades objetivo).
+- "Especialidades en 0" **aspiracional** (universo objetivo de Docto): hoy solo se marcan las que
+  tienen médicos registrados sin oferta; falta que Diego defina las especialidades objetivo sin
+  ningún médico aún.
 - Cambios de fondo (7, 8, 10, 11, 12): cobranza real por transacción (turnos no setean
   `mp_status=approved`), timezone unificado AR, vista "¿Qué pasó hoy?" con conciliación, CI vs Turno
   real (`canal_origen` constante) + poblar `aceptada_at`/`completada_at`.
