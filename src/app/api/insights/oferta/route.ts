@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicos }, { data: modelos }, { data: franjas }, { data: log }] = await Promise.all([
     soloReales
-      ? admin.from("medicos").select("id").eq("verificado", true).eq("es_cuenta_test", false)
-      : admin.from("medicos").select("id").eq("verificado", true),
+      ? admin.from("medicos").select("id, nombre_completo, especialidad").eq("verificado", true).eq("es_cuenta_test", false)
+      : admin.from("medicos").select("id, nombre_completo, especialidad").eq("verificado", true),
     admin.from("agenda_modelos").select("id, medico_id, activo, fecha_inicio, fecha_fin"),
     admin.from("agenda_franjas").select("modelo_id, dia_semana, hora_inicio, hora_fin"),
     admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeISO).order("at", { ascending: true }),
@@ -78,6 +78,9 @@ export async function GET(req: NextRequest) {
 
   // ── Turnos: por cada fecha, # médicos con agenda habilitada en cada hora ──
   const turnosFilas = turnoDias.map((dayIdx) => diaInfo(dayIdx));
+  // "Oferta turnos" = aparecer en alguna celda del heatmap. Se acumula acá (mismo loop,
+  // misma guarda de vigencia) para que el resumen NUNCA pueda divergir del mapa (Roberto #229).
+  const turnosMedicoSet = new Set<string>();
   const turnosMatriz = turnosFilas.map((d) => {
     const sets: Set<string>[] = Array.from({ length: 24 }, () => new Set<string>());
     for (const mo of modelosActivos) {
@@ -91,6 +94,7 @@ export async function GET(req: NextRequest) {
         for (let h = fr.hIni; h <= fr.hFinIncl; h++) if (h >= 0 && h < 24) sets[h].add(mo.medico_id);
       }
     }
+    for (const s of sets) for (const id of s) turnosMedicoSet.add(id);
     return sets.map((s) => s.size);
   });
 
@@ -118,13 +122,16 @@ export async function GET(req: NextRequest) {
     porMedico.get(ev.medico_id)!.push({ online: ev.online, at: new Date(ev.at).getTime() });
   }
   const now = Date.now();
-  for (const evs of porMedico.values()) {
+  const ciHorasPorMedico = new Map<string, number>(); // para el resumen "quién oferta CI"
+  for (const [medicoId, evs] of porMedico.entries()) {
     let openAt: number | null = null;
+    let horas = 0;
     for (const ev of evs) {
       if (ev.online) { if (openAt === null) openAt = ev.at; }
-      else if (openAt !== null) { distribuir(openAt, ev.at); openAt = null; }
+      else if (openAt !== null) { distribuir(openAt, ev.at); horas += (ev.at - openAt) / 3600_000; openAt = null; }
     }
-    if (openAt !== null) distribuir(openAt, Math.min(now, openAt + CAP_MS));
+    if (openAt !== null) { const fin = Math.min(now, openAt + CAP_MS); distribuir(openAt, fin); horas += (fin - openAt) / 3600_000; }
+    if (horas > 0) ciHorasPorMedico.set(medicoId, horas);
   }
 
   const ciFilas = ciDias.map((dayIdx) => diaInfo(dayIdx));
@@ -134,6 +141,36 @@ export async function GET(req: NextRequest) {
 
   const hoyISO = diaInfo(hoyIdx).iso;
   const totalCI = ciMatriz.flat().reduce((a, b) => a + b, 0);
+
+  // ── Identidad: quién oferta (médico + especialidad) y qué especialidades quedan sin
+  //    oferta a pesar de tener médicos registrados (la brecha de activación). ──
+  const medMap = new Map(
+    (medicos ?? []).map((m) => [m.id, { nombre: m.nombre_completo ?? "—", especialidad: m.especialidad ?? "Sin especialidad" }]),
+  );
+  // turnosMedicoSet ya viene del cómputo del heatmap (respeta vigencia de fechas).
+  const medicosOferta = [...medMap.entries()]
+    .map(([id, m]) => ({
+      nombre: m.nombre,
+      especialidad: m.especialidad,
+      ciHoras: Math.round((ciHorasPorMedico.get(id) ?? 0) * 10) / 10,
+      turnos: turnosMedicoSet.has(id),
+    }))
+    .filter((m) => m.ciHoras > 0 || m.turnos)
+    .sort((a, b) => (b.ciHoras + (b.turnos ? 1000 : 0)) - (a.ciHoras + (a.turnos ? 1000 : 0)));
+
+  // Cobertura por especialidad (sobre médicos verificados no-test registrados)
+  const porEsp = new Map<string, { total: number; conOferta: number }>();
+  for (const [id, m] of medMap) {
+    if (!porEsp.has(m.especialidad)) porEsp.set(m.especialidad, { total: 0, conOferta: 0 });
+    const e = porEsp.get(m.especialidad)!;
+    e.total++;
+    if (ciHorasPorMedico.has(id) || turnosMedicoSet.has(id)) e.conOferta++;
+  }
+  const especialidadesSinOferta = [...porEsp.entries()]
+    .filter(([, v]) => v.conOferta === 0)
+    .map(([especialidad, v]) => ({ especialidad, medicos: v.total }))
+    .sort((a, b) => b.medicos - a.medicos);
+  const especialidadesConOferta = [...porEsp.values()].filter((v) => v.conOferta > 0).length;
 
   return NextResponse.json({
     hoy: hoyISO,
@@ -149,5 +186,10 @@ export async function GET(req: NextRequest) {
     hayDatosCI: totalCI > 0,
     totalMedicoHorasCI: Math.round(totalCI * 10) / 10,
     medicosConAgenda: new Set(modelosActivos.map((m) => m.medico_id)).size,
+    // Resumen de identidad
+    medicosOferta,
+    medicosRegistrados: medMap.size,
+    especialidadesConOferta,
+    especialidadesSinOferta,
   });
 }
