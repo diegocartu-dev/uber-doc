@@ -63,6 +63,7 @@ export default async function AdminDashboardPage({
     { data: turnosSemanaRaw },
     { data: medicosDisponiblesData },
     { data: turnosDisponiblesData },
+    { count: reembolsosPendientes },
   ] = await Promise.all([
     setsDeTest(admin),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("es_cuenta_test", false),
@@ -82,6 +83,8 @@ export default async function AdminDashboardPage({
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
     admin.from("turnos").select("medico_id").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", en7dias()),
+    // Reembolsos pendientes: misma cola que /admin/reembolsos (no resueltos)
+    admin.from("refunds_pendientes").select("id", { count: "exact", head: true }).neq("estado", "resuelto"),
   ]);
 
   // Filtro de cuentas test (médico O paciente) en las métricas de ACTIVIDAD. Antes el
@@ -99,6 +102,11 @@ export default async function AdminDashboardPage({
     (turnosEnCursoRows ?? []).filter(real).length;
   const consultasSemana = (consultasSemanaRaw ?? []).filter(real);
   const turnosSemana = (turnosSemanaRaw ?? []).filter(real);
+  // Cuántas atenciones de prueba se ocultaron hoy (para no confundir "día vacío" con
+  // "día sin actividad real pero con test"). Mismo criterio que "Consultas hoy".
+  const testOcultasHoy =
+    (consHoyRows ?? []).filter((r) => !real(r)).length +
+    (turnosHoyRows ?? []).filter((t) => !real(t) && !SLOT.has(t.estado)).length;
 
   // Turnos disponibles agrupados por especialidad (especialidad vive en medicos)
   const medicoIdsConSlots = [...new Set((turnosDisponiblesData ?? []).map((t) => t.medico_id).filter(Boolean))];
@@ -164,6 +172,8 @@ export default async function AdminDashboardPage({
         enCursoAhora: enCursoTotal,
         pendingMedicos: pendingMedicos ?? 0,
         pendingAlertas: pendingAlertas ?? 0,
+        reembolsosPendientes: reembolsosPendientes ?? 0,
+        testOcultasHoy,
       }}
       diasSemana={diasSemana}
       medicosDisponibles={medicosDisponibles}

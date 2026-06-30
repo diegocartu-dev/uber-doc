@@ -13,6 +13,8 @@ interface Props {
     enCursoAhora: number;
     pendingMedicos: number;
     pendingAlertas: number;
+    reembolsosPendientes: number;
+    testOcultasHoy: number;
   };
   diasSemana: { fecha: string; consultas: number; completadas: number }[];
   medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null }[];
@@ -29,9 +31,14 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
   return (
     <div className="p-6 lg:p-8">
       <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        {new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
-      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
+        <span>{new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</span>
+        <span className="text-gray-300">·</span>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+          Métricas: solo cuentas reales
+          {metrics.testOcultasHoy > 0 && ` · ${metrics.testOcultasHoy} de prueba ocultas hoy`}
+        </span>
+      </div>
 
       {/* Metric cards */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -192,9 +199,10 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
         />
         <QuickLink
           icon={Wallet}
-          label="Reembolsos"
+          label={metrics.reembolsosPendientes > 0 ? "Reembolsos pendientes" : "Reembolsos"}
+          value={metrics.reembolsosPendientes}
           href="/admin/reembolsos"
-          color="#378ADD"
+          color={metrics.reembolsosPendientes > 0 ? "#E24B4A" : "#888780"}
         />
       </div>
     </div>
@@ -217,7 +225,7 @@ function MetricCard({ icon: Icon, label, value, sub, color }: {
 }
 
 function QuickLink({ icon: Icon, label, value, href, color }: {
-  icon: typeof Activity; label: string; value?: number; href: string; color: string;
+  icon: typeof Activity; label: string; value: number; href: string; color: string;
 }) {
   return (
     <Link
@@ -229,9 +237,7 @@ function QuickLink({ icon: Icon, label, value, href, color }: {
         <Icon size={18} style={{ color }} strokeWidth={1.75} />
       </div>
       <div>
-        {value !== undefined
-          ? <p className="text-lg font-semibold text-gray-900">{value}</p>
-          : <p className="text-lg font-semibold text-gray-900">Ver</p>}
+        <p className="text-lg font-semibold text-gray-900">{value}</p>
         <p className="text-xs text-gray-500">{label}</p>
       </div>
     </Link>
