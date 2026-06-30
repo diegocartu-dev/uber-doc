@@ -103,22 +103,30 @@ export default async function AdminDashboardPage({
   // Turnos disponibles agrupados por especialidad (especialidad vive en medicos)
   const medicoIdsConSlots = [...new Set((turnosDisponiblesData ?? []).map((t) => t.medico_id).filter(Boolean))];
   const { data: medicosDeSlots } = medicoIdsConSlots.length > 0
-    ? await admin.from("medicos").select("id, especialidad, es_cuenta_test").in("id", medicoIdsConSlots)
-    : { data: [] as { id: string; especialidad: string | null; es_cuenta_test: boolean | null }[] };
+    ? await admin.from("medicos").select("id, nombre_completo, especialidad, es_cuenta_test").in("id", medicoIdsConSlots)
+    : { data: [] as { id: string; nombre_completo: string | null; especialidad: string | null; es_cuenta_test: boolean | null }[] };
 
   const espPorMedico = new Map((medicosDeSlots ?? []).map((m) => [m.id, m]));
-  const porEspecialidad = new Map<string, { slots: number; medicos: Set<string> }>();
+  // Por especialidad: total de slots + DESGLOSE por médico (nombre + sus slots), para
+  // que la oferta diga de QUIÉN y de qué especialidad es, no solo "N médicos".
+  const porEspecialidad = new Map<string, { slots: number; medicos: Map<string, { id: string; nombre: string; slots: number }> }>();
   for (const t of turnosDisponiblesData ?? []) {
     const med = espPorMedico.get(t.medico_id);
     if (!med || med.es_cuenta_test) continue;
     const esp = med.especialidad ?? "Sin especialidad";
-    if (!porEspecialidad.has(esp)) porEspecialidad.set(esp, { slots: 0, medicos: new Set() });
+    if (!porEspecialidad.has(esp)) porEspecialidad.set(esp, { slots: 0, medicos: new Map() });
     const e = porEspecialidad.get(esp)!;
     e.slots++;
-    e.medicos.add(t.medico_id);
+    const m = e.medicos.get(t.medico_id) ?? { id: t.medico_id, nombre: med.nombre_completo ?? "—", slots: 0 };
+    m.slots++;
+    e.medicos.set(t.medico_id, m);
   }
   const turnosPorEspecialidad = [...porEspecialidad.entries()]
-    .map(([especialidad, v]) => ({ especialidad, slots: v.slots, medicos: v.medicos.size }))
+    .map(([especialidad, v]) => ({
+      especialidad,
+      slots: v.slots,
+      medicos: [...v.medicos.values()].sort((a, b) => b.slots - a.slots),
+    }))
     .sort((a, b) => b.slots - a.slots);
 
   const medicosDisponibles = (medicosDisponiblesData ?? []).map((m) => ({
