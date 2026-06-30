@@ -97,6 +97,13 @@ function Heatmap({
   );
 }
 
+// Color de la brecha de activación por % de médicos ofertando (semáforo de estado).
+function gapColor(ofertando: number, total: number): string {
+  if (total === 0) return "#888780";
+  const pct = ofertando / total;
+  return pct >= 0.7 ? "#1D9E75" : pct >= 0.3 ? "#BA7517" : "#D85A30";
+}
+
 export default function OfertaClient() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,14 +153,13 @@ export default function OfertaClient() {
           {/* Resumen de identidad: quién oferta + cobertura por especialidad */}
           <section className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-white">Quién oferta</h2>
-                <span className="shrink-0 text-xs text-white/40">{data.medicosOferta.length} de {data.medicosRegistrados} médicos</span>
-              </div>
-              {data.medicosOferta.length === 0 ? (
-                <p className="text-sm text-white/40">Nadie tiene oferta activa (CI ni turnos) en la ventana.</p>
-              ) : (
-                <div className="divide-y divide-white/5">
+              <p className="text-xs font-medium uppercase tracking-wider text-white/40">Quién oferta</p>
+              <p className="mt-3 font-['Space_Grotesk'] text-4xl font-bold" style={{ color: gapColor(data.medicosOferta.length, data.medicosRegistrados) }}>
+                {data.medicosRegistrados - data.medicosOferta.length}<span className="text-2xl text-white/30"> de {data.medicosRegistrados}</span>
+              </p>
+              <p className="mt-1 text-sm text-white/50">médicos sin oferta activa</p>
+              {data.medicosOferta.length > 0 && (
+                <div className="mt-3 divide-y divide-white/5 border-t border-white/10 pt-1">
                   {data.medicosOferta.map((m, i) => (
                     <div key={i} className="flex items-center justify-between gap-2 py-2">
                       <div className="min-w-0">
@@ -161,8 +167,8 @@ export default function OfertaClient() {
                         <p className="truncate text-xs text-white/40">{m.especialidad}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        {m.turnos && <span className="rounded bg-[#378ADD]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#378ADD]">Turnos</span>}
-                        {m.ciHoras > 0 && <span className="rounded bg-[#1D9E75]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#1D9E75]">CI {m.ciHoras}h</span>}
+                        {m.turnos && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/60">Turnos</span>}
+                        {m.ciHoras > 0 && <span className="rounded bg-[#378ADD]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#378ADD]">CI {m.ciHoras}h</span>}
                       </div>
                     </div>
                   ))}
@@ -172,7 +178,7 @@ export default function OfertaClient() {
 
             <div className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-white">Cobertura por especialidad</h2>
+                <p className="text-xs font-medium uppercase tracking-wider text-white/40">Cobertura por especialidad</p>
                 <span className="shrink-0 text-xs text-white/40">{data.especialidadesConOferta} con oferta</span>
               </div>
               {data.especialidadesSinOferta.length === 0 ? (
