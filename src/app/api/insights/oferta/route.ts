@@ -78,6 +78,9 @@ export async function GET(req: NextRequest) {
 
   // ── Turnos: por cada fecha, # médicos con agenda habilitada en cada hora ──
   const turnosFilas = turnoDias.map((dayIdx) => diaInfo(dayIdx));
+  // "Oferta turnos" = aparecer en alguna celda del heatmap. Se acumula acá (mismo loop,
+  // misma guarda de vigencia) para que el resumen NUNCA pueda divergir del mapa (Roberto #229).
+  const turnosMedicoSet = new Set<string>();
   const turnosMatriz = turnosFilas.map((d) => {
     const sets: Set<string>[] = Array.from({ length: 24 }, () => new Set<string>());
     for (const mo of modelosActivos) {
@@ -91,6 +94,7 @@ export async function GET(req: NextRequest) {
         for (let h = fr.hIni; h <= fr.hFinIncl; h++) if (h >= 0 && h < 24) sets[h].add(mo.medico_id);
       }
     }
+    for (const s of sets) for (const id of s) turnosMedicoSet.add(id);
     return sets.map((s) => s.size);
   });
 
@@ -143,10 +147,7 @@ export async function GET(req: NextRequest) {
   const medMap = new Map(
     (medicos ?? []).map((m) => [m.id, { nombre: m.nombre_completo ?? "—", especialidad: m.especialidad ?? "Sin especialidad" }]),
   );
-  const turnosMedicoSet = new Set<string>();
-  for (const mo of modelosActivos) {
-    if ((franjasPorModelo.get(mo.id) ?? []).length > 0) turnosMedicoSet.add(mo.medico_id);
-  }
+  // turnosMedicoSet ya viene del cómputo del heatmap (respeta vigencia de fechas).
   const medicosOferta = [...medMap.entries()]
     .map(([id, m]) => ({
       nombre: m.nombre,
