@@ -21,6 +21,10 @@ interface Data {
   hayDatosCI: boolean;
   totalMedicoHorasCI: number;
   medicosConAgenda: number;
+  medicosOferta: { nombre: string; especialidad: string; ciHoras: number; turnos: boolean }[];
+  medicosRegistrados: number;
+  especialidadesConOferta: number;
+  especialidadesSinOferta: { especialidad: string; medicos: number }[];
 }
 
 const HORAS = Array.from({ length: 24 }, (_, h) => h);
@@ -139,6 +143,55 @@ export default function OfertaClient() {
         </div>
       ) : (
         <>
+          {/* Resumen de identidad: quién oferta + cobertura por especialidad */}
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-white">Quién oferta</h2>
+                <span className="shrink-0 text-xs text-white/40">{data.medicosOferta.length} de {data.medicosRegistrados} médicos</span>
+              </div>
+              {data.medicosOferta.length === 0 ? (
+                <p className="text-sm text-white/40">Nadie tiene oferta activa (CI ni turnos) en la ventana.</p>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {data.medicosOferta.map((m, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white/90">{m.nombre}</p>
+                        <p className="truncate text-xs text-white/40">{m.especialidad}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {m.turnos && <span className="rounded bg-[#378ADD]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#378ADD]">Turnos</span>}
+                        {m.ciHoras > 0 && <span className="rounded bg-[#1D9E75]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#1D9E75]">CI {m.ciHoras}h</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-white">Cobertura por especialidad</h2>
+                <span className="shrink-0 text-xs text-white/40">{data.especialidadesConOferta} con oferta</span>
+              </div>
+              {data.especialidadesSinOferta.length === 0 ? (
+                <p className="text-sm text-white/40">Todas las especialidades con médicos registrados tienen oferta.</p>
+              ) : (
+                <>
+                  <p className="mb-2 text-xs text-white/40">Con médicos registrados pero <span className="text-[#D85A30]">sin oferta</span>:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.especialidadesSinOferta.map((e) => (
+                      <span key={e.especialidad} className="rounded-lg border border-[#D85A30]/30 bg-[#D85A30]/10 px-2 py-1 text-xs text-white/80">
+                        {e.especialidad} <span className="text-white/40">· {e.medicos} méd.</span>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
           {/* Turnos programados: 7 días atrás · hoy · 30 adelante */}
           <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-2">
