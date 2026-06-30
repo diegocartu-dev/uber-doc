@@ -134,14 +134,23 @@ Se atacaron primero los **bugs de correctitud** (los que mostraban datos falsos)
     (reusa `setsDeTest`/`esTest`). "Consultas hoy" pasó de `1` (Dr. Docto Test) a `0` (real).
   - Extensión de alcance: "Consultas hoy" y el chart **excluyen slots vacíos** (un slot no es una
     consulta) + `.limit(5000)` en las queries del chart (evita truncado silencioso de PostgREST).
+- **#226** — `fix(insights): retención no-verde con muestra chica + GMV teórico`:
+  - ✅ Quick-win 4: Retención con n<10 ya no pinta verde "Buena"; muestra "X% · n=N" + badge gris
+    "muestra chica". La ruta devuelve `retencionBase`. (Hoy n=1 → antes verde "Buena", ahora gris.)
+  - ✅ Quick-win 5: GMV rotulado "teórico (precio de lista)" + "falta conciliar cobrado real".
+- **#227** — `fix(admin): oferta de turnos con identidad`:
+  - ✅ Quick-win 9 (parcial — admin): "Turnos libres" desglosa por especialidad **los médicos con
+    sus slots** (filas, diseño Sofía) + resumen "N médicos · M especialidades". Deja a la vista la
+    concentración real (hoy 1 médica, 1 especialidad). Falta lo mismo en el heatmap `insights/oferta`.
 
 **Pendiente** (anotado, no hecho):
 - Quick-win 2 (resto): badge "Solo reales" + cartel "N ocultas por test" en el admin.
-- Quick-win 4: umbral de muestra en Retención (hoy n=1 pintado de verde).
-- Quick-win 5: renombrar GMV → "GMV teórico (precio lista)".
 - Quick-win 6: número en el QuickLink "Reembolsos".
-- Todos los **cambios de fondo** (7–12): cobranza real por transacción, oferta con médico/
-  especialidad, timezone unificado, vista "¿Qué pasó hoy?" con conciliación, CI vs Turno real.
+- Quick-win 9 (resto): identidad en el heatmap `insights/oferta` + "especialidades en 0" (requiere
+  definir el universo de especialidades objetivo).
+- Cambios de fondo (7, 8, 10, 11, 12): cobranza real por transacción (turnos no setean
+  `mp_status=approved`), timezone unificado AR, vista "¿Qué pasó hoy?" con conciliación, CI vs Turno
+  real (`canal_origen` constante) + poblar `aceptada_at`/`completada_at`.
 - Refinamiento del set de estados de "En curso" (aceptada/pagada no son llamada activa).
 
 ---
