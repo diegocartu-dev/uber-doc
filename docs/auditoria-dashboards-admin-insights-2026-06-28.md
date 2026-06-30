@@ -149,16 +149,26 @@ Se atacaron primero los **bugs de correctitud** (los que mostraban datos falsos)
     Neumonología, Ortopedia). `turnosMedicoSet` se deriva del mismo cómputo del heatmap (respeta
     vigencia de fechas → no puede divergir del mapa; fix de Roberto a un modelo vencido que inflaba).
 
-**Pendiente** (anotado, no hecho):
-- Quick-win 2 (resto): badge "Solo reales" + cartel "N ocultas por test" en el admin.
-- Quick-win 6: número en el QuickLink "Reembolsos".
-- "Especialidades en 0" **aspiracional** (universo objetivo de Docto): hoy solo se marcan las que
-  tienen médicos registrados sin oferta; falta que Diego defina las especialidades objetivo sin
-  ningún médico aún.
-- Cambios de fondo (7, 8, 10, 11, 12): cobranza real por transacción (turnos no setean
-  `mp_status=approved`), timezone unificado AR, vista "¿Qué pasó hoy?" con conciliación, CI vs Turno
-  real (`canal_origen` constante) + poblar `aceptada_at`/`completada_at`.
+- **#231** — `fix(admin): badge "solo reales" + número de reembolsos`:
+  - ✅ Quick-win 2 (resto): badge "Métricas: solo cuentas reales · N de prueba ocultas hoy" en el
+    header del admin.
+  - ✅ Quick-win 6: el QuickLink "Reembolsos" muestra el # de pendientes (cola `refunds_pendientes`
+    no resueltos, misma que /admin/reembolsos) y salta en rojo cuando hay >0.
+
+> **✅ TODOS los quick-wins (1–6, 9) cerrados.** El tablero pasó de "logs abstractos" a una foto
+> real y honesta. Quedan solo los cambios de fondo.
+
+**Pendiente** (cambios de fondo — requieren decisión de producto/modelo de datos):
+- **Cobranza real por transacción** (8): hoy GMV = precio de lista; los turnos no setean
+  `mp_status=approved` → resolver si es bug de conciliación o de display. El de mayor valor.
+- Separar/rotular los 4 estados oferta→reservado→realizado→cobrado (7).
+- Timezone unificado AR (10) en consultas y turnos.
+- Vista única "¿Qué pasó hoy?" con conciliación (11): X atendidas → $ cobrado real → $ comisión.
+- Instrumentar CI vs Turno real (12): `canal_origen` es constante + poblar `aceptada_at`/`completada_at`.
+- "Especialidades en 0" **aspiracional**: definir el universo de especialidades objetivo sin médicos aún.
 - Refinamiento del set de estados de "En curso" (aceptada/pagada no son llamada activa).
+- **Data-hygiene** (Roberto #231): drift entre `consultas.reintegro_estado` y `refunds_pendientes.estado`
+  (2 consultas quedaron en `pendiente`/`fee_pendiente` aunque el refund está `resuelto`). Reconciliar.
 
 ---
 
