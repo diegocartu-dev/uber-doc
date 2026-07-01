@@ -4,6 +4,19 @@ import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 
+// El Bus FHIR es lento y buscarPorDNI reintenta ante timeout (hasta ~51s en el peor caso).
+// El default de Vercel (~15s) no alcanza y mataría la función. Igual que admin/medicos.
+export const maxDuration = 60;
+
+// Errores de SISTEMA (Bus lento/caído, token) NO son "no figura en REFEPS": no debemos
+// persistir refeps_validado=false ante ellos, o dejamos pegado un falso negativo (el mismo
+// bug que el gate de aprobar ya evita). Solo guardamos el diagnóstico y devolvemos 503.
+const ERRORES_SISTEMA = new Set([
+  "REFEPS_TIMEOUT",
+  "REFEPS_AUTH_ERROR",
+  "REFEPS_ERROR_INTERNO",
+]);
+
 /**
  * POST /api/admin/medicos/refeps
  * Body: { medicoId: string }
@@ -100,7 +113,25 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // No encontrado o error — guardar el intento igual (sin raw)
+  // Error de sistema (Bus no respondió): NO tocar refeps_validado — solo guardar el
+  // diagnóstico y devolver 503. Reintentar el botón re-valida limpio. El dato del
+  // médico puede estar perfecto; no lo marcamos como "no validado" por un timeout.
+  if (resultado.error && ERRORES_SISTEMA.has(resultado.error)) {
+    await admin
+      .from("medicos")
+      .update({ refeps_data: resultadoSinRaw })
+      .eq("id", medicoId);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "No pudimos verificar REFEPS en este momento: el registro del Ministerio no respondió. Reintentá en unos minutos (el dato del médico puede estar perfecto).",
+      },
+      { status: 503 }
+    );
+  }
+
+  // No encontrado / matrícula inactiva — sí es un "no" real: guardar el intento (sin raw).
   const { error: updateError } = await admin
     .from("medicos")
     .update({

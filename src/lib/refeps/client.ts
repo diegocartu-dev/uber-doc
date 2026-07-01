@@ -168,10 +168,13 @@ export function dniToRefepsId(dni: string): string {
 
 // ─── Buscar Practitioner por DNI ────────────────────────────────────────────
 
-// El Bus FHIR del Ministerio es LENTO e intermitente. Timeout largo (la función admin
-// tiene maxDuration=60) + reintentos SOLO ante timeout: un timeout no es "no figura",
-// es "no respondió". 2 intentos × 20s + backoff ≈ 42s, dentro del presupuesto de 60s.
-const BUS_TIMEOUT_MS = 20_000;
+// El Bus FHIR del Ministerio es LENTO e intermitente. Timeout generoso + reintentos SOLO
+// ante timeout: un timeout no es "no figura", es "no respondió". Presupuesto del PEOR caso
+// (token frío + los 2 fetch al Bus hacen timeout): obtenerToken 20s + 2×15s + backoff ≈ 51s,
+// dentro del maxDuration=60 de las rutas que lo llaman (admin/medicos, admin/medicos/refeps).
+// NO subir estos valores sin subir también maxDuration, o Vercel mata la función y el
+// usuario recibe el mismo error opaco que este mecanismo intenta evitar.
+const BUS_TIMEOUT_MS = 15_000;
 const BUS_MAX_INTENTOS = 2;
 
 function esErrorDeTimeout(err: unknown): boolean {

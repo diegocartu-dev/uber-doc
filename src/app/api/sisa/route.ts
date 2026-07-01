@@ -8,6 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 
+// validarMedicoREFEPS puede reintentar ante timeout del Bus (hasta ~51s). El default de
+// Vercel (~15s) mataría la función a mitad de camino y devolvería un error de plataforma.
+export const maxDuration = 60;
+
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 5;
 const WINDOW_MS = 60 * 60 * 1000;

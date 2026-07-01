@@ -8,6 +8,10 @@ import {
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import type { DiditWebhookPayload } from "@/lib/didit/types";
 
+// El cruce contra REFEPS (validarMedicoREFEPS) puede reintentar ante timeout del Bus.
+// Sin esto, el default de Vercel (~15s) mataría el webhook a mitad del cruce.
+export const maxDuration = 60;
+
 // Normaliza un número (DNI/matrícula) a solo dígitos para comparar.
 function soloDigitos(v: string | null | undefined): string {
   return (v ?? "").replace(/\D/g, "");
