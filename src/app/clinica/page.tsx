@@ -107,6 +107,28 @@ export default async function ClinicaPage() {
     .gte("fecha", hoy);
   const medicosEnTurno = [...new Set((turnosActivos ?? []).map((t) => t.medico_id).filter(Boolean))];
 
+  // R2 (decisión Diego 30/06): la CI NO se ofrece en el bloque horario de un turno
+  // RESERVADO (confirmado/en_espera/en_curso), ni 30 min antes ni después — el turno
+  // programado tiene prioridad. Solo turnos con paciente (no slots vacíos). Se computa
+  // server-side con la hora AR: un médico cuyo AHORA cae dentro de [inicio-30, fin+30] de
+  // algún turno reservado de hoy queda NO reservable para CI (ver puedeAtenderAhora).
+  const { data: turnosReservadosHoy } = await supabaseAdmin
+    .from("turnos")
+    .select("medico_id, hora_inicio, hora_fin")
+    .in("estado", ["confirmado", "en_espera", "en_curso"])
+    .eq("fecha", hoy);
+  const aMin = (h: string) => { const [a, b] = h.split(":").map(Number); return a * 60 + b; };
+  const ahoraMin = ahoraAR.getHours() * 60 + ahoraAR.getMinutes();
+  const GRACIA_TURNO_MIN = 30;
+  const medicosCiBloqueada = new Set<string>();
+  for (const t of turnosReservadosHoy ?? []) {
+    if (!t.medico_id || !t.hora_inicio || !t.hora_fin) continue;
+    if (ahoraMin >= aMin(t.hora_inicio) - GRACIA_TURNO_MIN && ahoraMin <= aMin(t.hora_fin) + GRACIA_TURNO_MIN) {
+      medicosCiBloqueada.add(t.medico_id);
+    }
+  }
+  const medicosConEstado = medicos.map((m) => ({ ...m, ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id) }));
+
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
       <AppNavbar userName={fullName} userRole="paciente" />
@@ -120,7 +142,7 @@ export default async function ClinicaPage() {
         </div>
 
         <GrillaEspecialidades
-          medicos={medicos ?? []}
+          medicos={medicosConEstado}
           consultasEspera={consultasEspera ?? []}
           turnosClinicaVirtual={turnosDisponibles ?? []}
           medicosEnTurno={medicosEnTurno}
