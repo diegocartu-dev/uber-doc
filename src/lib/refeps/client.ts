@@ -117,7 +117,7 @@ export async function obtenerToken(): Promise<string> {
         "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
       clientAssertion: jwt,
     }),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(20_000),
   });
   console.log(`[refeps/token] HTTP ${resp.status} en ${Date.now() - _tTok}ms`);
 
@@ -168,64 +168,64 @@ export function dniToRefepsId(dni: string): string {
 
 // ─── Buscar Practitioner por DNI ────────────────────────────────────────────
 
+// El Bus FHIR del Ministerio es LENTO e intermitente. Timeout generoso + reintentos SOLO
+// ante timeout: un timeout no es "no figura", es "no respondió". Presupuesto del PEOR caso
+// (token frío + los 2 fetch al Bus hacen timeout): obtenerToken 20s + 2×15s + backoff ≈ 51s,
+// dentro del maxDuration=60 de las rutas que lo llaman (admin/medicos, admin/medicos/refeps).
+// NO subir estos valores sin subir también maxDuration, o Vercel mata la función y el
+// usuario recibe el mismo error opaco que este mecanismo intenta evitar.
+const BUS_TIMEOUT_MS = 15_000;
+const BUS_MAX_INTENTOS = 2;
+
+function esErrorDeTimeout(err: unknown): boolean {
+  const m = err instanceof Error ? err.message + " " + err.name : String(err);
+  return m.includes("Timeout") || m.includes("timeout") || m.includes("abort");
+}
+
 export async function buscarPorDNI(
   dni: string
 ): Promise<FHIRPractitioner | null> {
-  const token = await obtenerToken();
   const refepsId = dniToRefepsId(dni);
-
   const url = new URL(`${FHIR_BASE_URL}/Practitioner`);
   url.searchParams.set("identifier", `${IDENTIFIER_SYSTEMS.REFEPS}|${refepsId}`);
   url.searchParams.set("_format", "json");
 
-  const _tBus = Date.now();
-  const resp = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/fhir+json",
-    },
-    signal: AbortSignal.timeout(10_000),
-  });
-  console.log(`[refeps/buscar] HTTP ${resp.status} en ${Date.now() - _tBus}ms`);
-
-  // Si 401, invalidar token e intentar una vez más
-  if (resp.status === 401) {
-    invalidarToken();
-    const newToken = await obtenerToken();
-    const retryResp = await fetch(url.toString(), {
+  const pedir = async (token: string): Promise<Response> =>
+    fetch(url.toString(), {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${newToken}`,
-        Accept: "application/fhir+json",
-      },
-      signal: AbortSignal.timeout(10_000),
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/fhir+json" },
+      signal: AbortSignal.timeout(BUS_TIMEOUT_MS),
     });
 
-    // 404 = profesional no encontrado en REFEPS
-    if (retryResp.status === 404) return null;
+  for (let intento = 1; intento <= BUS_MAX_INTENTOS; intento++) {
+    try {
+      let token = await obtenerToken();
+      const _tBus = Date.now();
+      let resp = await pedir(token);
+      console.log(`[refeps/buscar] intento ${intento}: HTTP ${resp.status} en ${Date.now() - _tBus}ms`);
 
-    if (!retryResp.ok) {
-      const body = await retryResp.text().catch(() => "");
-      throw new Error(
-        `REFEPS Practitioner error (${retryResp.status}): ${body.slice(0, 200)}`
-      );
+      // 401 → token vencido: invalidar, renovar y reintentar una vez (no cuenta como intento).
+      if (resp.status === 401) {
+        invalidarToken();
+        token = await obtenerToken();
+        resp = await pedir(token);
+      }
+
+      if (resp.status === 404) return null; // no encontrado (definitivo — no reintentar)
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(`REFEPS Practitioner error (${resp.status}): ${body.slice(0, 200)}`);
+      }
+
+      const data = (await resp.json()) as FHIRBundle;
+      return data.entry?.[0]?.resource ?? null;
+    } catch (err) {
+      // Reintentar SOLO ante timeout (el Bus lento). Otros errores se propagan.
+      if (!esErrorDeTimeout(err) || intento === BUS_MAX_INTENTOS) throw err;
+      console.warn(`[refeps/buscar] timeout en intento ${intento}, reintento…`);
+      await new Promise((r) => setTimeout(r, 800 * intento));
     }
-
-    const retryData = (await retryResp.json()) as FHIRBundle;
-    return retryData.entry?.[0]?.resource ?? null;
   }
-
-  // 404 = profesional no encontrado en REFEPS
-  if (resp.status === 404) return null;
-
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    throw new Error(
-      `REFEPS Practitioner error (${resp.status}): ${body.slice(0, 200)}`
-    );
-  }
-
-  const data = (await resp.json()) as FHIRBundle;
-  return data.entry?.[0]?.resource ?? null;
+  // Inalcanzable (el loop siempre retorna o lanza), pero TS lo exige.
+  throw new Error("REFEPS: sin resultado tras reintentos");
 }
