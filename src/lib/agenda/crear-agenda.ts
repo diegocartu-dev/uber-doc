@@ -39,6 +39,7 @@ export type ConflictoConPaciente = {
 export type CrearAgendaResult =
   | { ok: false; motivo: "validacion"; mensaje: string }
   | { ok: false; motivo: "conflicto_pacientes"; conflictos: ConflictoConPaciente[]; mensaje: string }
+  | { ok: false; motivo: "conflicto_agenda"; mensaje: string }
   | {
       ok: true;
       modeloId: string;
@@ -176,6 +177,39 @@ export async function crearAgendaModelo(
         motivo: "conflicto_pacientes",
         conflictos,
         mensaje: `Hay ${conflictos.length} turno${conflictos.length > 1 ? "s" : ""} reservado${conflictos.length > 1 ? "s" : ""} por pacientes en ese horario. No creo nada para no generar una doble reserva: revisá esa agenda manualmente si querés modificarla.`,
+      };
+    }
+  }
+
+  // 3.5. R1 — no crear una agenda que se PISE EN HORARIO con otra agenda ya existente
+  //      (turnos disponibles de otro modelo, CUALQUIER canal). El médico no puede atender
+  //      dos cosas a la vez → se bloquea con aviso y NO se crea nada. Ojo: dos agendas que
+  //      NO se pisan en horario (aunque compartan el día / sean de otro canal) SÍ conviven
+  //      (eso lo resuelve la coexistencia canal+hora-aware — BUG2). El índice único no
+  //      incluye canal, así que además el mismo horario exacto entre canales no podría
+  //      coexistir a nivel de datos: bloquear al crear es lo correcto y honesto.
+  const { data: agendados } = await supabase
+    .from("turnos")
+    .select("fecha, hora_inicio, hora_fin, canal_origen")
+    .eq("medico_id", medicoId)
+    .eq("estado", "disponible")
+    .gte("fecha", fecha_inicio)
+    .lte("fecha", fecha_fin);
+
+  if (agendados && agendados.length > 0) {
+    const choque = agendados.find((t) => {
+      const tIni = aMinutos(t.hora_inicio);
+      const tFin = aMinutos(t.hora_fin);
+      return slotsNuevos.some(
+        (s) => s.fecha === t.fecha && aMinutos(s.hora_inicio) < tFin && tIni < aMinutos(s.hora_fin)
+      );
+    });
+    if (choque) {
+      const canalNombre = choque.canal_origen === "consultorio_privado" ? "Consultorio particular" : "Clínica virtual";
+      return {
+        ok: false,
+        motivo: "conflicto_agenda",
+        mensaje: `Ya tenés una agenda de ${canalNombre} que se pisa con ese horario (${choque.fecha} desde las ${choque.hora_inicio.slice(0, 5)}). Elegí otro horario o editá la agenda que ya tenés.`,
       };
     }
   }
