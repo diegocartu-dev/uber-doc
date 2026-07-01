@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notificarMedicoPlantados } from "@/lib/notificaciones-medico";
+import { resolverNoShowMedico } from "@/lib/cancelaciones";
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
@@ -57,9 +58,37 @@ export async function GET(req: Request) {
     }
   }
 
+  // PASO 4: Turnos que quedaron en `en_espera` y el médico NUNCA atendió (no-show).
+  // El "tiempo de vida" del turno: pasado el horario del turno + 1h de gracia, se marca
+  // `ausente_medico` y se reembolsa al paciente (mismo motor que una cancelación de médico;
+  // aparece en el dashboard de reembolsos). Antes quedaban en_espera para siempre (BUG4).
+  const nowMs = Date.now();
+  const GRACIA_MS = 60 * 60 * 1000; // 1h después del fin del turno
+  const { data: enEspera } = await supabase
+    .from("turnos")
+    .select("id, fecha, hora_fin")
+    .eq("estado", "en_espera");
+
+  let noShowResueltos = 0;
+  let noShowReembolsados = 0;
+  for (const t of enEspera ?? []) {
+    // AR es UTC−3 fijo (sin DST). Solo resolver si el horario del turno + gracia ya pasó.
+    const finMs = new Date(`${t.fecha}T${t.hora_fin}-03:00`).getTime();
+    if (Number.isNaN(finMs) || nowMs < finMs + GRACIA_MS) continue;
+    const res = await resolverNoShowMedico(t.id);
+    if (res.ok) {
+      noShowResueltos++;
+      if (res.reembolso === "reembolsado" || res.reembolso === "pendiente" || res.reembolso === "fee_pendiente") {
+        noShowReembolsados++;
+      }
+    }
+  }
+
   return NextResponse.json({
     zombies_cerradas: zombies?.length || 0,
     medicos_notificados: notificados,
     pacientes_plantados_total: plantados?.length || 0,
+    no_show_resueltos: noShowResueltos,
+    no_show_reembolsados: noShowReembolsados,
   });
 }

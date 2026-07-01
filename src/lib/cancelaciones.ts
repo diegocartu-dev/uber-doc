@@ -270,6 +270,73 @@ export async function cancelarTurnoPorMedico(
   return { ok: true, reembolso: true };
 }
 
+// Resolución automática de un turno que quedó en `en_espera` y el médico NUNCA atendió
+// (no-show): el paciente entró a la sala, el médico no (nunca pasó a en_curso). El cron
+// `sala-espera-diaria` llama a esto pasado el horario del turno + gracia → marca
+// `ausente_medico` y reembolsa con el MISMO motor que una cancelación de médico (ejecutarRefund
+// + auto-retry). Idempotente: solo actúa si el turno SIGUE en `en_espera`.
+export async function resolverNoShowMedico(
+  turnoId: string
+): Promise<{ ok: boolean; reembolso: ReintegroEstado }> {
+  const supabase = createAdminClient();
+
+  const { data: turno } = await supabase
+    .from("turnos")
+    .select("id, estado, paciente_id, medico_id, fecha, pago_id, mp_net_amount_medico, mp_application_fee")
+    .eq("id", turnoId)
+    .single();
+
+  if (!turno || turno.estado !== "en_espera") return { ok: false, reembolso: null };
+
+  let reintegroEstado: ReintegroEstado = null;
+  if (turno.pago_id) {
+    reintegroEstado = await ejecutarRefund(
+      turnoId,
+      turno.medico_id,
+      turno.pago_id,
+      turno.mp_net_amount_medico ?? 0,
+      turno.mp_application_fee ?? 0
+    );
+  }
+
+  // Idempotencia: el `.eq("estado","en_espera")` evita que dos corridas re-resuelvan.
+  // `motivo_cancelacion` = texto que el dashboard de reembolsos muestra al lado del paciente.
+  const { error } = await supabase
+    .from("turnos")
+    .update({
+      estado: "ausente_medico",
+      resolucion_motivo: "medico_ausente",
+      motivo_cancelacion: "Médico ausente — no atendió el turno",
+      reintegro_estado: reintegroEstado,
+    })
+    .eq("id", turnoId)
+    .eq("estado", "en_espera");
+  if (error) return { ok: false, reembolso: reintegroEstado };
+
+  if (turno.paciente_id) {
+    const reembolsoMsg =
+      reintegroEstado === "reembolsado"
+        ? " Te reembolsamos la consulta."
+        : reintegroEstado
+          ? " Tu reembolso está en proceso."
+          : "";
+    await insertarMensajeSistema(
+      turnoId,
+      turno.paciente_id,
+      turno.medico_id,
+      `El médico no se presentó al turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
+    );
+    pushAlPaciente(turno.paciente_id, {
+      title: "🔴 Docto",
+      body: `El médico no se presentó a tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
+      url: "/mis-consultas",
+      tag: `noshow-${turnoId}`,
+    }).catch(() => {});
+  }
+
+  return { ok: true, reembolso: reintegroEstado };
+}
+
 export async function reprogramarTurno(
   turnoOrigenId: string,
   nuevoTurnoId: string,

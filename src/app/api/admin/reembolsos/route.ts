@@ -171,6 +171,8 @@ export async function GET() {
       pendientes: cola.length,
       accionRequerida: accionRequerida.length,
       deudaTotalRestante: deudasView.reduce((s, d) => s + d.restante, 0),
+      // Plata total pendiente de devolver (suma de la cola) — para verlo de una mirada.
+      montoPendienteTotal: cola.reduce((s, r) => s + r.monto, 0),
     },
   });
 }
