@@ -96,6 +96,17 @@ export default async function ClinicaPage() {
     .select("medico_id")
     .in("estado", ["esperando", "en_curso"]);
 
+  // Médicos con un turno RESERVADO activo ahora (en_espera/en_curso, hoy en adelante):
+  // para que el semáforo diga "En consulta" en vez de "Sin espera" cuando el médico está
+  // ocupado con un turno. NO cambia la reservabilidad (sigue reservable — decisión 30/06).
+  // Solo medico_id agregado, con admin client (igual criterio que consultasEspera).
+  const { data: turnosActivos } = await supabaseAdmin
+    .from("turnos")
+    .select("medico_id")
+    .in("estado", ["en_espera", "en_curso"])
+    .gte("fecha", hoy);
+  const medicosEnTurno = [...new Set((turnosActivos ?? []).map((t) => t.medico_id).filter(Boolean))];
+
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
       <AppNavbar userName={fullName} userRole="paciente" />
@@ -112,6 +123,7 @@ export default async function ClinicaPage() {
           medicos={medicos ?? []}
           consultasEspera={consultasEspera ?? []}
           turnosClinicaVirtual={turnosDisponibles ?? []}
+          medicosEnTurno={medicosEnTurno}
           flagCiActiva={await getFlag("consulta_inmediata_global")}
           flagTurnosActivos={await getFlag("turnos_global")}
         />
