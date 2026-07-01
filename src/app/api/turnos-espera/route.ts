@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     .from("turnos")
     .select("id, fecha, hora_inicio, paciente_id")
     .eq("medico_id", medicoId)
-    .eq("fecha", hoy)
+    .gte("fecha", hoy)
     .eq("estado", "en_espera")
     .order("hora_inicio", { ascending: true });
 

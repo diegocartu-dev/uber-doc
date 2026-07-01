@@ -261,11 +261,14 @@ export default async function DashboardPage({
         });
       }
 
-      // Turnos en espera
+      // Turnos en espera (solo de HOY en adelante — un turno de días pasados que quedó
+      // "en espera" es stale y no debe seguir apareciéndole al médico. gte, no eq, para
+      // no descartar el borde de medianoche. El TTL real se resuelve aparte (Fase 3).
       const { data: turnosEspera } = await supabase
         .from("turnos")
         .select("id, fecha, hora_inicio, paciente_id, estado, canal_origen")
         .eq("medico_id", data.id).eq("estado", "en_espera")
+        .gte("fecha", hoy)
         .order("hora_inicio", { ascending: true });
 
       if (turnosEspera && turnosEspera.length > 0) {
