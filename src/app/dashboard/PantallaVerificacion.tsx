@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Clock, ShieldX, ShieldAlert, Stethoscope } from "lucide-react";
+import { Clock, ShieldX, ShieldAlert, Stethoscope, Upload, CheckCircle2 } from "lucide-react";
 import LogoutButton from "./LogoutButton";
+import { resubirCredencial } from "./credencial-actions";
 
 const estadoConfig = {
   pendiente_revision: {
@@ -57,6 +58,32 @@ export default function PantallaVerificacion({
   const router = useRouter();
   const estado = estadoConfig[estadoRegistro as keyof typeof estadoConfig] ?? estadoConfig.pendiente_revision;
   const IconComponent = estado.icon;
+
+  const [subiendo, setSubiendo] = useState(false);
+  const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
+  const [msgCredencial, setMsgCredencial] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function handleResubir(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const f = fd.get("credencial");
+    if (!(f instanceof File) || f.size === 0) {
+      setMsgCredencial({ ok: false, text: "Elegí un archivo." });
+      return;
+    }
+    setSubiendo(true);
+    setMsgCredencial(null);
+    const res = await resubirCredencial(fd);
+    setSubiendo(false);
+    if (res.ok) {
+      setMsgCredencial({ ok: true, text: "¡Listo! Tu credencial fue actualizada. La revisamos en breve." });
+      form.reset();
+      setNombreArchivo(null);
+    } else {
+      setMsgCredencial({ ok: false, text: res.error ?? "No pudimos subir el archivo." });
+    }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -119,6 +146,43 @@ export default function PantallaVerificacion({
             )}
           </div>
         </div>
+
+        {/* Re-subir credencial: para el médico que subió el documento equivocado (ej. su CV). */}
+        <form onSubmit={handleResubir} className="mt-4 rounded-xl bg-white p-5 text-left" style={{ border: "1px solid #e5e7eb" }}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Credencial de matrícula</p>
+          <p className="mt-2 text-sm text-gray-500">
+            ¿Subiste el documento equivocado? Volvé a subir la <strong>credencial de tu matrícula</strong> (el documento oficial que la acredita).
+          </p>
+          <label
+            htmlFor="credencial-resubir"
+            className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm text-gray-600 transition hover:bg-[#f8f9fa]"
+            style={{ borderColor: "#cbd5e1" }}
+          >
+            <Upload size={16} strokeWidth={1.75} />
+            <span className="truncate">{nombreArchivo ?? "Elegí un archivo (JPG, PNG o PDF)"}</span>
+          </label>
+          <input
+            id="credencial-resubir"
+            name="credencial"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="hidden"
+            onChange={(e) => setNombreArchivo(e.target.files?.[0]?.name ?? null)}
+          />
+          {msgCredencial && (
+            <p className="mt-3 flex items-center gap-1.5 text-sm" style={{ color: msgCredencial.ok ? "#1D9E75" : "#E24B4A" }}>
+              {msgCredencial.ok && <CheckCircle2 size={16} strokeWidth={1.75} />}
+              {msgCredencial.text}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={subiendo}
+            className="mt-3 w-full rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97] disabled:opacity-50"
+          >
+            {subiendo ? "Subiendo…" : "Subir credencial"}
+          </button>
+        </form>
 
         <p className="mt-6 text-sm text-gray-400">
           ¿Preguntas? Escribinos a{" "}
