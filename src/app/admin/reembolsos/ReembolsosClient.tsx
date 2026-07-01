@@ -47,7 +47,7 @@ interface Data {
   cola: ColaRow[];
   accionRequerida: AccionRow[];
   deudas: DeudaRow[];
-  resumen: { pendientes: number; accionRequerida: number; deudaTotalRestante: number };
+  resumen: { pendientes: number; accionRequerida: number; deudaTotalRestante: number; montoPendienteTotal: number };
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("es-AR")}`;
@@ -134,7 +134,8 @@ export default function ReembolsosClient() {
       </div>
 
       {/* KPIs */}
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KPI icon={Wallet} label="Total a devolver" value={money(resumen.montoPendienteTotal)} color="#BA7517" />
         <KPI icon={Clock} label="Reembolsos pendientes" value={resumen.pendientes.toString()} color="#BA7517" />
         <KPI icon={AlertTriangle} label="Acción requerida (CVU)" value={resumen.accionRequerida.toString()} color="#E24B4A" />
         <KPI icon={Wallet} label="Deuda médicos (restante)" value={money(resumen.deudaTotalRestante)} color="#378ADD" />
