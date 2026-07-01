@@ -133,44 +133,26 @@ export async function guardarModelo(data: {
     if (turnosErr) return { error: `Error al generar turnos: ${turnosErr.message}` };
   }
 
-  // Resolución automática de conflictos — el modelo más nuevo tiene prioridad
-  // Bloquear turnos disponibles de modelos anteriores en fechas/días que se pisan
-  const diasDelModelo = [...new Set(data.franjas.map((f) => f.dia_semana))];
-
-  const { data: turnosAnteriores } = await supabase
-    .from("turnos")
-    .select("id, fecha")
-    .eq("medico_id", medico.id)
-    .eq("estado", "disponible")
-    .neq("modelo_id", modelo.id)
-    .gte("fecha", data.fecha_inicio)
-    .lte("fecha", data.fecha_fin);
-
-  if (turnosAnteriores && turnosAnteriores.length > 0) {
-    const idsABloquear = turnosAnteriores.filter((t) => {
-      const d = new Date(t.fecha + "T12:00:00");
-      const jsDay = d.getDay();
-      const diaSemana = jsDay === 0 ? 7 : jsDay;
-      return diasDelModelo.includes(diaSemana);
-    }).map((t) => t.id);
-
-    for (let i = 0; i < idsABloquear.length; i += 500) {
-      const lote = idsABloquear.slice(i, i + 500);
-      await supabase.from("turnos").update({ estado: "bloqueado" }).in("id", lote);
-    }
-  }
+  // Resolución de conflictos: usar el MISMO algoritmo canal+hora-aware que toggle/eliminar
+  // (recalcularBloqueos), en vez de la lógica propia por-día que bloqueaba turnos de otro
+  // canal/hora. Manual/toggle/eliminar convergen acá; Nova (crear-agenda.ts paso 7) mantiene
+  // su propio bloqueo incremental, también canal-aware → coinciden en la convivencia de canales.
+  await recalcularBloqueos(supabase, medico.id);
 
   redirect("/medico/agenda");
 }
 
 // TODO [edición]: agregar editarModelo() que actualice modelo + regenere turnos futuros no reservados
 
-// Helper: recalcular bloqueos para un médico después de cambiar un modelo
+// Helper: recalcular bloqueos para un médico después de cambiar un modelo.
+// Resolución CANAL + HORA aware: clínica virtual y consultorio particular conviven, y
+// dos agendas del MISMO canal solo se pisan en su solape horario real (no todo el día).
 async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClient>>, medicoId: string) {
-  // Traer todos los modelos activos ordenados por created_at desc (más nuevo = más prioridad)
+  // Modelos activos, más nuevo primero (más prioridad). canal_origen: cada modelo solo
+  // compite con otros de SU canal.
   const { data: modelosActivos } = await supabase
     .from("agenda_modelos")
-    .select("id, fecha_inicio, fecha_fin, created_at")
+    .select("id, fecha_inicio, fecha_fin, created_at, canal_origen")
     .eq("medico_id", medicoId)
     .eq("activo", true)
     .order("created_at", { ascending: false });
@@ -186,23 +168,27 @@ async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClie
     return;
   }
 
-  // Traer franjas de todos los modelos activos
+  // Franjas CON hora (no solo día): la resolución es también por hora.
   const modeloIds = modelosActivos.map((m) => m.id);
   const { data: franjas } = await supabase
     .from("agenda_franjas")
-    .select("modelo_id, dia_semana")
+    .select("modelo_id, dia_semana, hora_inicio, hora_fin")
     .in("modelo_id", modeloIds);
 
-  const diasPorModelo = new Map<string, Set<number>>();
+  const franjasPorModelo = new Map<string, { dia: number; hIni: string; hFin: string }[]>();
   for (const f of franjas ?? []) {
-    if (!diasPorModelo.has(f.modelo_id)) diasPorModelo.set(f.modelo_id, new Set());
-    diasPorModelo.get(f.modelo_id)!.add(f.dia_semana);
+    if (!franjasPorModelo.has(f.modelo_id)) franjasPorModelo.set(f.modelo_id, []);
+    franjasPorModelo.get(f.modelo_id)!.push({ dia: f.dia_semana as number, hIni: f.hora_inicio as string, hFin: f.hora_fin as string });
   }
+  // ¿El modelo cubre (día de semana + hora) de este turno? (hora en formato "HH:MM:SS",
+  // comparación lexicográfica correcta; el turno pertenece a la franja [hIni, hFin)).
+  const modeloCubre = (modeloId: string, diaSemana: number, hora: string) =>
+    (franjasPorModelo.get(modeloId) ?? []).some((f) => f.dia === diaSemana && hora >= f.hIni && hora < f.hFin);
 
-  // Traer todos los turnos bloqueados y disponibles del médico
+  // Traer todos los turnos bloqueados y disponibles del médico (con canal + hora)
   const { data: todosTurnos } = await supabase
     .from("turnos")
-    .select("id, fecha, modelo_id, estado")
+    .select("id, fecha, modelo_id, estado, canal_origen, hora_inicio")
     .eq("medico_id", medicoId)
     .in("estado", ["disponible", "bloqueado"]);
 
@@ -216,16 +202,18 @@ async function recalcularBloqueos(supabase: Awaited<ReturnType<typeof createClie
     const jsDay = d.getDay();
     const diaSemana = jsDay === 0 ? 7 : jsDay;
 
-    // Encontrar el modelo ACTIVO más nuevo que cubre esta fecha/día
-    const modeloGanador = modelosActivos.find((m) => {
-      const dias = diasPorModelo.get(m.id);
-      return dias?.has(diaSemana) && turno.fecha >= m.fecha_inicio && turno.fecha <= m.fecha_fin;
-    });
+    // Ganador de ESTE slot: el modelo activo MÁS NUEVO, del MISMO canal, que cubre la
+    // fecha + el día de semana + la HORA del turno. Un turno queda DISPONIBLE solo si su
+    // propio modelo es el ganador de su slot. Así clínica y consultorio conviven (distinto
+    // canal → distinto ganador) y dos agendas del mismo canal solo se pisan donde se solapan.
+    const modeloGanador = modelosActivos.find(
+      (m) =>
+        m.canal_origen === turno.canal_origen &&
+        turno.fecha >= m.fecha_inicio &&
+        turno.fecha <= m.fecha_fin &&
+        modeloCubre(m.id, diaSemana, turno.hora_inicio)
+    );
 
-    // Un turno debe quedar DISPONIBLE solo si su propio modelo es el ganador
-    // (activo, cubre la fecha y es el más nuevo). Si el modelo del turno está
-    // inhabilitado, o gana otro modelo más nuevo, o ningún modelo activo cubre
-    // esa fecha → debe quedar BLOQUEADO (no reservable, oculto en el calendario).
     const debeEstarDisponible = !!modeloGanador && modeloGanador.id === turno.modelo_id;
 
     if (debeEstarDisponible) {

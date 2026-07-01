@@ -255,6 +255,7 @@ export async function crearAgendaModelo(
         .eq("medico_id", medicoId)
         .eq("estado", "disponible")
         .neq("modelo_id", modelo.id)
+        .eq("canal_origen", canal_origen) // solo pisa turnos del MISMO canal (clínica/consultorio conviven)
         .gte("fecha", fecha_inicio)
         .lte("fecha", fecha_fin)
     : { data: null };
