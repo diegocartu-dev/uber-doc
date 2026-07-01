@@ -283,12 +283,14 @@ export default function GrillaEspecialidades({
   medicos,
   consultasEspera,
   turnosClinicaVirtual,
+  medicosEnTurno,
   flagCiActiva = true,
   flagTurnosActivos = true,
 }: {
   medicos: Medico[];
   consultasEspera: ConsultaEspera[];
   turnosClinicaVirtual: TurnoClinicaVirtual[];
+  medicosEnTurno: string[];
   flagCiActiva?: boolean;
   flagTurnosActivos?: boolean;
 }) {
@@ -381,6 +383,9 @@ export default function GrillaEspecialidades({
       (esperasPorMedico.get(c.medico_id) ?? 0) + 1
     );
   }
+  // Médicos con un turno RESERVADO activo (en_espera/en_curso): el semáforo dirá
+  // "En consulta" en vez de "Sin espera". NO afecta puedeAtenderAhora ni el botón.
+  const medicosEnTurnoSet = new Set(medicosEnTurno);
 
   const medicosDelModalSinOrden = modalEspecialidad
     ? medicos.filter((m) =>
@@ -731,7 +736,12 @@ export default function GrillaEspecialidades({
                 {medicosDelModal.map((m) => {
                   const enEspera = esperasPorMedico.get(m.id) ?? 0;
                   const disponibleAhora = puedeAtenderAhora(m);
-                  const esperaInfo = semaforoEspera(enEspera);
+                  // "Con un paciente" (amarillo) si el médico tiene un turno reservado activo:
+                  // no miente "Sin espera", comunica que se libera pronto (no una cola larga).
+                  // La reservabilidad (disponibleAhora/botón) NO cambia.
+                  const esperaInfo = medicosEnTurnoSet.has(m.id)
+                    ? { color: "#BA7517", texto: "Con un paciente" }
+                    : semaforoEspera(enEspera);
                   const proxTurno = turnoMasCercano.get(m.id);
 
                   return (
