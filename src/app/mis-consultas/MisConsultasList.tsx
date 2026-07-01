@@ -40,6 +40,7 @@ const estadoConfig: Record<string, { color: string; bg: string; label: string }>
   cancelado_paciente: { color: "var(--color-danger)", bg: "var(--color-danger-soft)", label: "Cancelado" },
   cancelado_medico: { color: "var(--color-danger)", bg: "var(--color-danger-soft)", label: "Cancelado" },
   ausente_paciente: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Ausente" },
+  ausente_medico: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Ausente" },
 };
 
 const tipoDocLabel: Record<string, string> = {
@@ -132,12 +133,6 @@ export default function MisConsultasList({ items }: Props) {
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
                     className="flex w-full items-center gap-3 p-4 text-left"
                   >
-                    {/* Status dot */}
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: cfg.color }}
-                    />
-
                     <div className="min-w-0 flex-1">
                       <p
                         className="text-sm font-medium truncate"
@@ -155,6 +150,14 @@ export default function MisConsultasList({ items }: Props) {
                         <OrigenBadge canalOrigen={item.canalOrigen} />
                       </div>
                     </div>
+
+                    {/* Chip de estado — texto + color (legible y accesible, no solo un dot) */}
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      style={{ color: cfg.color, backgroundColor: cfg.bg }}
+                    >
+                      {cfg.label}
+                    </span>
 
                     {item.documentos.length > 0 && (
                       <ChevronDown
