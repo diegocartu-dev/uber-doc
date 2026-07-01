@@ -108,11 +108,15 @@ export async function GET(req: NextRequest) {
   const pad = (n: number) => n.toString().padStart(2, "0");
   const hoy = `${ahoraAR.getFullYear()}-${pad(ahoraAR.getMonth() + 1)}-${pad(ahoraAR.getDate())}`;
 
+  // Solo turnos en espera de HOY en adelante: uno de días pasados es stale y no debe
+  // realimentar la alerta "paciente listo". gte (no eq) para no perder el borde de
+  // medianoche. `hoy` ya calculado arriba en TZ AR. El TTL real va aparte (Fase 3).
   const { data: turnosEspera } = await supabase
     .from("turnos")
     .select("id, fecha, hora_inicio, paciente_id, estado, canal_origen")
     .eq("medico_id", medicoId)
     .eq("estado", "en_espera")
+    .gte("fecha", hoy)
     .order("hora_inicio", { ascending: true });
 
   const pacIdsEsp = [
