@@ -139,7 +139,7 @@ export async function fetchMetricasMedico(
 
   const { count: turnosEspera } = await supabase
     .from("turnos").select("id", { count: "exact", head: true })
-    .eq("medico_id", medicoId).eq("estado", "en_espera");
+    .eq("medico_id", medicoId).eq("estado", "en_espera").gte("fecha", hoy);
   const { count: consultasEspera } = await supabase
     .from("consultas").select("id", { count: "exact", head: true })
     .eq("medico_id", medicoId).eq("estado", "esperando");
