@@ -72,6 +72,8 @@ export default function FormularioModelo({
   const [errores, setErrores] = useState<Record<string, string>>({});
   // Error del SERVER (falló el guardado) — banner general cerca del botón, no de campo.
   const [errorServer, setErrorServer] = useState<string | null>(null);
+  // Aviso resoluble (R1 / turnos reservados) → naranja; error duro del sistema → rojo.
+  const [avisoServer, setAvisoServer] = useState(false);
   // Recién después del primer intento de guardar revalidamos onChange (no antes — sería agresivo).
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -206,7 +208,10 @@ export default function FormularioModelo({
         franjas: construirFranjas(),
         canal_origen: soloConsultorioPrivado ? "consultorio_privado" : "clinica_virtual",
       });
-      if (result?.error) setErrorServer(result.error);
+      if (result?.error) {
+        setErrorServer(result.error);
+        setAvisoServer((result as { esAviso?: boolean })?.esAviso ?? false);
+      }
     });
   }
 
@@ -461,9 +466,15 @@ export default function FormularioModelo({
         <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
       </label>
 
-      {/* Error del server (falló el guardado) — banner general, cerca del botón Guardar */}
+      {/* Banner del server. Aviso resoluble (R1 / turnos reservados) → naranja alerta;
+          error duro del sistema → rojo. */}
       {errorServer && (
-        <div className="mt-6 rounded-lg p-3 text-sm" style={{ backgroundColor: "#FDECEC", color: "#E24B4A" }}>
+        <div
+          className="mt-6 rounded-lg p-3 text-sm"
+          style={avisoServer
+            ? { backgroundColor: "#FBEEE6", color: "#D85A30" }
+            : { backgroundColor: "#FDECEC", color: "#E24B4A" }}
+        >
           {errorServer}
         </div>
       )}

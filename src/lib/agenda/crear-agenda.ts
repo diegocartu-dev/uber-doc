@@ -67,6 +67,14 @@ function jsDayToDbDay(jsDay: number): number {
   return jsDay === 0 ? 7 : jsDay;
 }
 
+const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+/** "2026-06-30" → "el martes 30/6" (para mensajes al médico). Pivot T12:00:00 para no
+ *  caer en el drift de zona horaria (new Date("YYYY-MM-DD") interpreta UTC → día anterior). */
+function fechaAmigable(fecha: string): string {
+  const d = new Date(fecha + "T12:00:00");
+  return `el ${DIAS_SEMANA[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
+}
+
 /** Genera los slots [inicio,fin) de duración fija dentro de una franja. */
 function generarSlots(
   horaInicio: string,
@@ -209,7 +217,7 @@ export async function crearAgendaModelo(
       return {
         ok: false,
         motivo: "conflicto_agenda",
-        mensaje: `Ya tenés una agenda de ${canalNombre} que se pisa con ese horario (${choque.fecha} desde las ${choque.hora_inicio.slice(0, 5)}). Elegí otro horario o editá la agenda que ya tenés.`,
+        mensaje: `Ya tenés una agenda de ${canalNombre} que se pisa con ese horario (${fechaAmigable(choque.fecha)} desde las ${choque.hora_inicio.slice(0, 5)}). Elegí otro horario o editá la agenda que ya tenés.`,
       };
     }
   }

@@ -51,7 +51,12 @@ export async function guardarModelo(data: {
     creado_por_nova: false,
   });
 
-  if (!result.ok) return { error: result.mensaje };
+  if (!result.ok) {
+    // Los conflictos (R1 / turnos reservados) son avisos que el médico puede resolver
+    // (naranja), no errores duros del sistema (rojo). El form los pinta distinto.
+    const esAviso = result.motivo === "conflicto_agenda" || result.motivo === "conflicto_pacientes";
+    return { error: result.mensaje, esAviso };
+  }
 
   redirect("/medico/agenda");
 }
