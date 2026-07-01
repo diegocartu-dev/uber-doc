@@ -137,7 +137,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
           </div>
         )}
         <a
-          href="/paciente/historial"
+          href="/mis-consultas"
           className="mt-4 block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
         >
           Ver consultas anteriores
