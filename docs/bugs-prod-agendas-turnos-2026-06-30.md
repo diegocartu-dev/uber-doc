@@ -62,6 +62,8 @@ investigación read-only (5 agentes, causa raíz confirmada contra prod). Fuente
   aviso, sin crear nada a medias. (NO se permite solape → NO se migra el índice único.)
 - **R2 (CI vs turno):** la **Consulta Inmediata no se habilita** en el bloque de un turno
   programado, **ni 30 min antes ni 30 min después**. El turno programado tiene prioridad.
+  **Alcance (decisión 30/06): solo turnos RESERVADOS con paciente** (confirmado/en_espera/en_curso),
+  NO slots vacíos ofrecidos. Un slot disponible no apaga la CI; solo un turno con paciente reservado.
 - **BUG 4 (en vivo):** médico con turno activo/paciente en espera **sigue reservable**, pero el
   semáforo deja de decir "Sin espera" (cuenta el turno) + TTL para que el turno expire.
 
@@ -103,3 +105,57 @@ investigación read-only (5 agentes, causa raíz confirmada contra prod). Fuente
   de cada agente).
 - BUG 3: gate de regresión — un paciente real NO debe poder generar turno/CI contra `docto-test`
   (que tiene MP real) por ningún camino.
+
+---
+
+## Revisión de riesgo — ajustes (Roberto + Sofía, 30/06)
+
+Ambos aprobaron la **dirección**, con correcciones que entran ANTES de codear. El riesgo no está en
+*qué* arreglamos sino en *cómo* (copy + definición exacta). **Este orden y estas correcciones
+reemplazan a las de arriba.**
+
+**Correcciones por bug:**
+- **R2:** opera sobre turnos **RESERVADOS** (no slots). UX (Sofía): NO caer en "Sin médicos
+  disponibles" → mostrar estado **"Solo programada"** + *"Está atendiendo por turnos — reservá el
+  próximo"* + `turnoMasCercano`; **no expulsar** a quien ya entró al flujo de CI. Test obligatorio
+  en preview: la oferta de CI no baja (médico `disponible=true` + agenda de turnos reservados).
+- **BUG 4 (defensivo) — riesgo MEDIO, no bajo:** query del médico con **`.gte("fecha", hoy)` (NO
+  `.eq`)** — evita ocultar un turno legítimo en el cruce de medianoche. Semáforo del paciente
+  (`GrillaEspecialidades.tsx` `semaforoEspera`): estado propio **"En consulta" (amarillo #BA7517)**,
+  NO sumar el turno al contador de cola. Assert explícito: `puedeAtenderAhora` NO cambia (solo
+  texto/color). 2 commits separados (filtro / semáforo).
+- **BUG 3:** NO editar el copy del `not-found.tsx` compartido (también cubre slug inexistente). En
+  `consultorio/page.tsx`, para el cruce test/real, **redirigir a la landing `/dr/[slug]`** (que sí
+  carga) en vez de `notFound()`. El 404 genérico: suavizar copy + CTA a **/clinica** + sacar el "404".
+- **BUG 2:** el fix es canal-aware **Y hora-aware**, en `recalcularBloqueos` (actions.ts) **Y** en
+  `crear-agenda.ts` paso 7 (productor de Nova, mismo bug latente). Reproducir primero con **dos
+  modelos AMBOS activos** (el registro de prod estaba `activo=false` → no era prueba limpia). Matriz
+  de 4 casos: mismo-canal/mismo-hora → bloquea; mismo-canal/distinta-hora → conviven;
+  distinto-canal/misma-hora → conviven (R1 prohíbe crear, pero el recálculo no rompe datos previos);
+  distinto-canal/distinta-hora → conviven.
+- **BUG 1 (R1):** que `guardarModelo` **delegue en `crearAgendaModelo`** (único punto de verdad, ya
+  valida bien) en vez de reescribir. Definir explícito el mecanismo anti-huérfano (RPC transaccional
+  o limpieza compensatoria) + test que fuerce el fallo del insert de turnos y verifique cero modelo
+  huérfano. UX (Sofía): mensaje inline junto al campo de horario, sin jerga ("Ya tenés una agenda en
+  ese horario…", nombrar la agenda que choca), **conservar los datos del formulario**, naranja #D85A30.
+- **BUG 5:** ❌ NO íconos por estado → **chip de texto** con `cfg.label` (que ya existe) + color/bg
+  (accesible, legible). Link roto `MisTurnosPaciente.tsx:140` → `/mis-consultas` **primero** (es el
+  de más valor). Es el bug de menor valor: no es prioridad frente a #3/#4.
+
+**Orden final:**
+1. **Fase 0** — BUG 3 (redirect + copy 404).
+2. **Fase 1a** — BUG 5 (link roto, luego chip de texto). Aislado.
+3. **Fase 1b** — BUG 4 defensivo (2 commits: filtro `.gte` / semáforo "En consulta"). Riesgo medio.
+4. **Fase 2** — BUG 2 (canal+hora-aware, ambos productores) **primero** → luego BUG 1/R1 (reusa la
+   detección de solape que BUG 2 deja sana) → **R2 al final**, detrás del feature flag, con el test
+   de oferta.
+5. **Fase 3** — BUG 4 TTL (motor F2).
+
+**Validaciones agregadas:**
+- R2/semáforo: contar médicos reservables para CI por especialidad **antes/después**, construido en
+  preview con un médico `disponible=true` + agenda (hoy la oferta real es ~0, no alcanza para el test).
+- BUG 4: assert de que la reservabilidad no cambia; verificar que `cancelarTurno*` y LiveKit token
+  siguen OK para un `en_espera` legítimo de hoy.
+- BUG 2: matriz de 4 casos; reproducir con dos modelos activos antes de tocar.
+- BUG 1: test de fallo forzado del insert de turnos → cero huérfano.
+- Guards test/real REALES (no aflojar): `clinica/actions.ts:76`, `[medicoId]/turnos/actions.ts:44`.
