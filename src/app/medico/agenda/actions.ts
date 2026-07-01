@@ -135,7 +135,8 @@ export async function guardarModelo(data: {
 
   // Resolución de conflictos: usar el MISMO algoritmo canal+hora-aware que toggle/eliminar
   // (recalcularBloqueos), en vez de la lógica propia por-día que bloqueaba turnos de otro
-  // canal/hora. Un solo algoritmo → los caminos manual/Nova/toggle no divergen.
+  // canal/hora. Manual/toggle/eliminar convergen acá; Nova (crear-agenda.ts paso 7) mantiene
+  // su propio bloqueo incremental, también canal-aware → coinciden en la convivencia de canales.
   await recalcularBloqueos(supabase, medico.id);
 
   redirect("/medico/agenda");
