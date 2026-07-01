@@ -10,31 +10,25 @@ export default function ConsultorioNotFound() {
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
-        <p
-          className="text-5xl font-bold"
-          style={{ color: "var(--color-text-tertiary)" }}
-        >
-          404
-        </p>
         <h1
-          className="mt-4 text-lg font-semibold"
+          className="text-lg font-semibold"
           style={{ color: "var(--color-text-primary)" }}
         >
-          Consultorio no encontrado
+          No pudimos abrir este consultorio
         </h1>
         <p
           className="mt-2 text-sm"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          El link que usaste no corresponde a ningún médico registrado en Docto.
+          Puede que el link esté incompleto o que este consultorio no esté disponible. Explorá los médicos disponibles en la clínica.
         </p>
 
         <Link
-          href="/"
+          href="/clinica"
           className="mt-8 inline-block rounded-[var(--radius-md)] px-6 py-2.5 text-sm font-medium text-white"
           style={{ backgroundColor: "var(--color-primary)" }}
         >
-          Ir al inicio
+          Ver médicos disponibles
         </Link>
       </div>
     </div>
