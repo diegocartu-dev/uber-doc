@@ -61,6 +61,9 @@ export async function resubirCredencial(
     .eq("id", medico.id);
   if (updErr) {
     console.error("[resubirCredencial] update foto_credencial_url falló:", updErr.message);
+    // El update falló: el archivo recién subido quedó huérfano (la fila sigue apuntando
+    // a la credencial anterior). Lo borramos para no dejar basura en el bucket.
+    await admin.storage.from("credenciales-medicos").remove([path]);
     return { ok: false, error: "Subimos el archivo pero no pudimos guardarlo. Escribinos a soporte@docto.com.ar." };
   }
 
