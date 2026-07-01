@@ -64,7 +64,35 @@ export default async function ConsultorioPrivadoPage({
   // guards de CI/turnos). Un paciente real no llega a la página de un médico test ni
   // viceversa, ni por link directo. Defensa en profundidad.
   const esPacienteTest = pacienteCheck?.es_cuenta_test === true;
-  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico)) || medico.es_cuenta_test !== esPacienteTest) notFound();
+  // Casos "no existe / no disponible públicamente" → 404 honesto.
+  if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) notFound();
+  // Carril de prueba (defensa en profundidad — NO aflojar): el médico EXISTE pero no es del
+  // universo del paciente (test↔real). No es un 404 ("no existe"), y NO se puede redirigir a la
+  // landing porque ésta reenvía a los logueados de vuelta acá → loop infinito. Pantalla inline
+  // honesta, sin renderizar datos del médico. Los guards reales (crearConsulta/reservarTurno)
+  // siguen bloqueando cualquier cobro contra la cuenta test.
+  if (medico.es_cuenta_test !== esPacienteTest) {
+    return (
+      <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
+        <AppNavbar userName={fullName} userRole={role} logoHref="/clinica" />
+        <main className="mx-auto max-w-lg px-4 py-16 text-center">
+          <h1 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            Este consultorio no está disponible
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            No está habilitado para tu cuenta en este momento. Explorá los médicos disponibles en la clínica.
+          </p>
+          <Link
+            href="/clinica"
+            className="mt-6 inline-block rounded-[var(--radius-md)] px-5 py-2.5 text-sm font-medium text-white"
+            style={{ backgroundColor: "var(--color-brand)" }}
+          >
+            Ver médicos disponibles
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   // Calcular disponibilidad
   const ahora = new Date();
