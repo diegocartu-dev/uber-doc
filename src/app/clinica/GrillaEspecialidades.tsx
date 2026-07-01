@@ -570,6 +570,13 @@ export default function GrillaEspecialidades({
           );
           const botonAgendarDeshabilitado = !tieneTurnosCV;
 
+          // R2: ¿algún médico de la especialidad quedó no-reservable AHORA por estar en el
+          // bloque de un turno reservado? Se usa para comunicar "está atendiendo por turnos"
+          // (retiene al paciente) en vez de un "programada" genérico que parece ausencia.
+          const algunoR2Bloqueado = medicos.some(
+            (m) => m.especialidad === esp.nombre && m.ciBloqueadaPorTurno
+          );
+
           const medicosMatch =
             termino && espPorMedico.has(esp.nombre)
               ? medicos.filter(
@@ -626,7 +633,9 @@ export default function GrillaEspecialidades({
                     </p>
                   )}
                   <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-                    {tieneTurnosCV ? "Turnos: sí" : "Turnos: no"}
+                    {estado === "programada" && algunoR2Bloqueado
+                      ? "Un médico está atendiendo por turnos. Reservá el próximo."
+                      : tieneTurnosCV ? "Turnos: sí" : "Turnos: no"}
                   </p>
                 </div>
               )}
@@ -657,7 +666,7 @@ export default function GrillaEspecialidades({
                       color: "var(--color-text-secondary)",
                     }}
                   >
-                    Agendar turno
+                    {algunoR2Bloqueado ? "Reservar próximo turno" : "Agendar turno"}
                   </button>
                 </div>
               ) : (
@@ -790,9 +799,24 @@ export default function GrillaEspecialidades({
                               : "Sin turnos disponibles"}
                           </p>
                         ) : (
-                          <p className="mt-0.5 text-sm font-medium" style={{ color: esperaInfo.color }}>
-                            {disponibleAhora ? esperaInfo.texto : "No disponible ahora"}
-                          </p>
+                          <>
+                            <p
+                              className="mt-0.5 text-sm font-medium"
+                              style={{ color: m.ciBloqueadaPorTurno ? "#BA7517" : esperaInfo.color }}
+                            >
+                              {disponibleAhora
+                                ? esperaInfo.texto
+                                : m.ciBloqueadaPorTurno
+                                  ? "Atendiendo un turno ahora"
+                                  : "No disponible ahora"}
+                            </p>
+                            {/* R2 sin turnos futuros: cerrar el loop para que la fila no quede muda. */}
+                            {!disponibleAhora && m.ciBloqueadaPorTurno && !medicosConTurnos.has(m.id) && (
+                              <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                                Vuelve a estar disponible al terminar el turno
+                              </p>
+                            )}
+                          </>
                         )}
                         {/* Línea secundaria = ficha del médico: precio + duración. */}
                         <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>
