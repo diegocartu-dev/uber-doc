@@ -736,10 +736,11 @@ export default function GrillaEspecialidades({
                 {medicosDelModal.map((m) => {
                   const enEspera = esperasPorMedico.get(m.id) ?? 0;
                   const disponibleAhora = puedeAtenderAhora(m);
-                  // "En consulta" (amarillo) si el médico tiene un turno reservado activo:
-                  // no miente "Sin espera". La reservabilidad (disponibleAhora/botón) NO cambia.
+                  // "Con un paciente" (amarillo) si el médico tiene un turno reservado activo:
+                  // no miente "Sin espera", comunica que se libera pronto (no una cola larga).
+                  // La reservabilidad (disponibleAhora/botón) NO cambia.
                   const esperaInfo = medicosEnTurnoSet.has(m.id)
-                    ? { color: "#BA7517", texto: "En consulta" }
+                    ? { color: "#BA7517", texto: "Con un paciente" }
                     : semaforoEspera(enEspera);
                   const proxTurno = turnoMasCercano.get(m.id);
 
