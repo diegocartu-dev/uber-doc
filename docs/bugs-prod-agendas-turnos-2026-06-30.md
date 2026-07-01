@@ -159,3 +159,34 @@ reemplazan a las de arriba.**
 - BUG 2: matriz de 4 casos; reproducir con dos modelos activos antes de tocar.
 - BUG 1: test de fallo forzado del insert de turnos → cero huérfano.
 - Guards test/real REALES (no aflojar): `clinica/actions.ts:76`, `[medicoId]/turnos/actions.ts:44`.
+
+---
+
+## Cierre — SPRINT COMPLETO (01/07/2026)
+
+Los 5 reportes de QA del 30/06 quedaron resueltos. Todo verificado empíricamente contra prod y
+con doble gate (Roberto + Sofía donde tocaba UI). Un commit por PR, cero `--admin`.
+
+| PR | Qué cerró |
+|----|-----------|
+| [#235](https://github.com/diegocartu-dev/uber-doc/pull/235) | Link "Ver consultas anteriores" (404 → /mis-consultas) |
+| [#236](https://github.com/diegocartu-dev/uber-doc/pull/236) | BUG 3 — consultorio: pantalla honesta para cruce test/real + copy 404 (guard intacto) |
+| [#237](https://github.com/diegocartu-dev/uber-doc/pull/237) | BUG 5 — estado como chip de texto en "Mis consultas" |
+| [#238](https://github.com/diegocartu-dev/uber-doc/pull/238) | BUG 4a — turnos `en_espera` stale no se cuelgan en el dashboard del médico |
+| [#239](https://github.com/diegocartu-dev/uber-doc/pull/239) | BUG 4b — semáforo "Con un paciente" (no miente "Sin espera") |
+| [#240](https://github.com/diegocartu-dev/uber-doc/pull/240) | BUG 2 — resolución de conflictos canal+hora aware (clínica y consultorio conviven) |
+| [#241](https://github.com/diegocartu-dev/uber-doc/pull/241) | BUG 1 / R1 — bloquear solape al crear + fin de la agenda huérfana (delegar en Nova) |
+| [#242](https://github.com/diegocartu-dev/uber-doc/pull/242) | R2 — CI no reservable ±30min de un turno reservado + UX "atendiendo por turnos" |
+| [#243](https://github.com/diegocartu-dev/uber-doc/pull/243) | BUG 4 (Fase 3) — TTL de turnos no-show → `ausente_medico` + reembolso + KPI "Total a devolver" |
+
+**Decisión clave (01/07):** el reembolso del no-show es **automático** (como una cancelación de
+médico) — se descubrió que el sistema de reembolsos ya es 100% automático (cron `reintentar-refunds`
+diario). El dashboard muestra "Total a devolver" + "Médico ausente" por fila.
+
+**Backlog (no urgente):**
+- Limpiar el dead code del semáforo #239 (`medicosEnTurno`), superado por R2 (ticket propio para
+  revertir aislado).
+- `sala-espera-diaria` corre 02:59 AR → hasta 24h de latencia para resolver un no-show. Bajar a
+  horario si se quiere resolución más rápida.
+- Motor F2 completo (video_presencia + T&C de Carolina) para el caso ambiguo de corte a mitad de
+  llamada (`en_curso`) — separado del no-show `en_espera` que este sprint sí resolvió.
