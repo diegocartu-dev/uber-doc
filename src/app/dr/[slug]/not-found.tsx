@@ -20,13 +20,13 @@ export default function ConsultorioNotFound() {
           className="mt-2 text-sm"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Puede que el link esté incompleto o que este consultorio no esté disponible. Explorá los médicos disponibles en la clínica.
+          Puede que el link esté incompleto o que este consultorio no esté disponible. Encontrá otros médicos en la clínica.
         </p>
 
         <Link
           href="/clinica"
           className="mt-8 inline-block rounded-[var(--radius-md)] px-6 py-2.5 text-sm font-medium text-white"
-          style={{ backgroundColor: "var(--color-primary)" }}
+          style={{ backgroundColor: "var(--color-brand)" }}
         >
           Ver médicos disponibles
         </Link>
