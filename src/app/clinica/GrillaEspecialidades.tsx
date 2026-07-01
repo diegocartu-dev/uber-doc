@@ -27,6 +27,9 @@ type Medico = {
   // ¿Pasa el gate de identidad? (validado/exento/test, o gate apagado). Si es false, el
   // médico se muestra GRISADO y no reservable — el candado real está en la reserva.
   habilitadoIdentidad: boolean;
+  // R2: ¿ahora cae en el bloque (±30min) de un turno RESERVADO del médico? Si sí, no es
+  // reservable para CI (el turno programado tiene prioridad). Se computa server-side (hora AR).
+  ciBloqueadaPorTurno: boolean;
 };
 
 type ConsultaEspera = { medico_id: string };
@@ -176,7 +179,8 @@ function estaEnHorario(medico: Medico): boolean {
 // horario (indistinguible para el paciente). Reemplaza a estaEnHorario en todos los
 // puntos donde se decide si se puede atender/reservar ahora.
 function puedeAtenderAhora(medico: Medico): boolean {
-  return medico.habilitadoIdentidad && estaEnHorario(medico);
+  // R2: un turno reservado ±30min tiene prioridad sobre la CI → no reservable en ese bloque.
+  return medico.habilitadoIdentidad && estaEnHorario(medico) && !medico.ciBloqueadaPorTurno;
 }
 
 function calcularDisponibilidad(
