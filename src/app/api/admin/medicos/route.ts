@@ -54,6 +54,23 @@ async function asegurarRefepsParaAprobar(
   const { raw: _raw, ...resultadoSinRaw } = resultado;
   const ahora = new Date().toISOString();
 
+  // Errores de SISTEMA (el Bus del Ministerio no respondió) NO son "no figura en REFEPS":
+  // son transitorios. Un timeout devuelve encontrado=false igual que un no-encontrado real,
+  // pero significan cosas distintas. NO persistir un falso negativo ni bloquear como
+  // no-encontrado — dejar refeps_validado como estaba y pedir reintento. (El médico puede
+  // estar perfectamente registrado; solo el Bus estaba lento/caído.)
+  const ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
+  if (!resultado.encontrado && resultado.error && ERRORES_SISTEMA.has(resultado.error)) {
+    // Solo dejamos rastro del intento (refeps_data) para diagnóstico; NO tocamos refeps_validado.
+    await admin.from("medicos").update({ refeps_data: resultadoSinRaw }).eq("id", medicoId);
+    return {
+      ok: false,
+      error:
+        "No pudimos verificar REFEPS en este momento: el registro del Ministerio no respondió. Reintentá en unos minutos (el dato del médico puede estar perfecto).",
+      status: 503,
+    };
+  }
+
   if (resultado.encontrado && resultado.activo) {
     await admin
       .from("medicos")
