@@ -83,34 +83,43 @@ export default function ListadoMedicos({
     router.push(`/triage?medicoId=${encodeURIComponent(m.id)}&especialidad=${encodeURIComponent(m.especialidad)}`);
   }
 
+  // Chip completo tappable (min 44px) para que "cambiar" sea alcanzable por un mayor.
   const chip = (
-    <div className="mb-5 inline-flex items-center gap-1.5 text-[14px]">
+    <button
+      type="button"
+      onClick={onCambiarProvincia}
+      className="mb-5 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 py-2 text-[14px] transition-colors hover:bg-black/[0.03]"
+      style={{ border: "1px solid #e5e7eb" }}
+    >
       <MapPin size={15} strokeWidth={1.75} style={{ color: "#888780" }} />
       <span className="font-medium text-gray-700">{provincia}</span>
       <span className="text-gray-300">·</span>
-      <button type="button" onClick={onCambiarProvincia} className="font-medium text-[#378ADD] underline">
-        cambiar
-      </button>
-    </div>
+      <span className="font-medium text-[#378ADD] underline">cambiar</span>
+    </button>
   );
 
   // ── Estado vacío: no hay médicos habilitados en la provincia (captura de lead). ──
   if (medicos.length === 0) {
+    const emailValido = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailLead.trim());
+    const enviarLead = () => {
+      if (!emailValido) return;
+      // Persistimos el email en la metadata del evento (jsonb) para no perderlo: la
+      // promesa "te avisamos" deja de ser vacía. Follow-up: tabla de leads dedicada.
+      trackFunnel("medico_elegido", { medicoId: "sin-oferta", modo: "lead", provincia, email: emailLead.trim() });
+      setLeadEnviado(true);
+    };
     return (
-      <div className="mx-auto max-w-md px-5 py-8">
-        <h1 className="text-[22px] font-bold text-gray-900">Médicos habilitados para tu jurisdicción</h1>
+      <div data-testid="listado-vacio" className="mx-auto max-w-md px-5 py-8">
+        <h1 className="text-[22px] font-bold text-gray-900">Todavía no tenemos médicos en {provincia}</h1>
         <div className="mt-3">{chip}</div>
         <div className="mt-4 rounded-xl bg-white p-6 text-center" style={{ border: "1px solid #e5e7eb" }}>
-          <p className="text-[18px] font-semibold text-gray-900">
-            Todavía no tenemos médicos habilitados en {provincia}.
-          </p>
           {leadEnviado ? (
-            <p className="mt-4 text-[15px] font-medium" style={{ color: "#1D9E75" }}>
+            <p className="text-[15px] font-medium" style={{ color: "#1D9E75" }}>
               Listo. Te escribimos apenas haya un médico en {provincia}.
             </p>
           ) : (
             <>
-              <p className="mt-2 text-[15px] leading-relaxed text-gray-500">
+              <p className="text-[15px] leading-relaxed text-gray-500">
                 Estamos sumando médicos nuevos cada semana. Dejanos tu email y te avisamos apenas haya uno para vos.
               </p>
               <div className="mt-4 flex flex-col gap-2">
@@ -126,8 +135,9 @@ export default function ListadoMedicos({
                 />
                 <button
                   type="button"
-                  onClick={() => { if (emailLead.trim()) { trackFunnel("medico_elegido", { medicoId: "sin-oferta", modo: "lead", especialidad: provincia }); setLeadEnviado(true); } }}
-                  className="h-12 w-full rounded-lg text-[16px] font-semibold text-white active:scale-[0.98]"
+                  onClick={enviarLead}
+                  disabled={!emailValido}
+                  className="h-12 w-full rounded-lg text-[16px] font-semibold text-white transition-opacity active:scale-[0.98] disabled:opacity-40"
                   style={{ backgroundColor: "#378ADD" }}
                 >
                   Avisarme
@@ -135,7 +145,7 @@ export default function ListadoMedicos({
               </div>
             </>
           )}
-          <button type="button" onClick={onCambiarProvincia} className="mt-5 text-[14px] font-medium text-[#378ADD] underline">
+          <button type="button" onClick={onCambiarProvincia} className="mt-5 min-h-[44px] px-2 text-[14px] font-medium text-[#378ADD] underline">
             ¿Estás en otra provincia? Cambiar jurisdicción
           </button>
         </div>
@@ -144,7 +154,7 @@ export default function ListadoMedicos({
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-8">
+    <div data-testid="listado-medicos" className="mx-auto max-w-2xl px-5 py-8">
       <h1 className="text-[22px] font-bold text-gray-900">Médicos habilitados para tu jurisdicción</h1>
       <p className="mt-1 text-[14px] text-gray-500">
         {medicos.length} {medicos.length === 1 ? "médico habilitado" : "médicos habilitados"} en {provincia}
@@ -192,6 +202,7 @@ export default function ListadoMedicos({
             return (
               <div
                 key={m.id}
+                data-testid="medico-fila"
                 className={`flex items-center justify-between rounded-xl bg-white p-4 ${disponibleAhora ? "" : "opacity-70"}`}
                 style={{ border: "1px solid #e5e7eb" }}
               >
