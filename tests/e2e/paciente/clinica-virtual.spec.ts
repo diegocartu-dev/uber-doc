@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginPaciente } from "../../helpers/auth";
-import { PACIENTE_NORMAL, MEDICO_TEST } from "../../fixtures/cuentas-prueba";
+import { PACIENTE_NORMAL } from "../../fixtures/cuentas-prueba";
 
 // Post ruteo por jurisdicción (PR #249): /clinica muestra PRIMERO la pantalla de provincia
 // (siempre) y luego el LISTADO plano de médicos habilitados. Reemplaza la grilla de
@@ -80,9 +80,12 @@ test.describe("Clínica Virtual — ruteo por jurisdicción", () => {
     }
   });
 
-  test("TEST 10 — médico solo consultorio privado (oculto_clinica) no aparece en el listado", async ({ page }) => {
-    // El médico de test tiene oculto_clinica = true: no debe aparecer en el listado.
-    await expect(page.locator(`text=${MEDICO_TEST.nombre}`)).not.toBeVisible();
-    await expect(page.locator(`a[href*="${MEDICO_TEST.id}"]`)).toHaveCount(0);
+  test("TEST 10 — un médico oculto/suspendido no se filtra al listado", async ({ page }) => {
+    // "Dr Prueba 1" está oculto_clinica=true + suspendido + no verificado: el SELECT de la
+    // clínica (verificado ∧ aprobado ∧ !oculto_clinica) lo excluye, así que NUNCA debe
+    // aparecer en el listado. Guarda la regresión del filtro end-to-end.
+    // (Nota: "Dr. Docto Test" ya NO sirve para este invariante — hoy es un médico visible y
+    //  reservable, usado en onboarding.spec para reservar turnos.)
+    await expect(page.getByText("Dr Prueba 1", { exact: false })).not.toBeVisible();
   });
 });
