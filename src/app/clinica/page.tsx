@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
-import GrillaEspecialidades from "./GrillaEspecialidades";
+import ClinicaFlow from "./ClinicaFlow";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { guardRutaPaciente } from "@/lib/auth/rol";
@@ -127,21 +127,32 @@ export default async function ClinicaPage() {
       medicosCiBloqueada.add(t.medico_id);
     }
   }
-  const medicosConEstado = medicos.map((m) => ({ ...m, ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id) }));
+  // Jurisdicciones de cada médico (ruteo Regla A) — leídas con SERVICE ROLE. La columna
+  // `medicos.jurisdicciones` no tiene GRANT SELECT para `authenticated`: con el cliente RLS,
+  // PostgREST fallaría la query entera (permission denied) y rompería la página.
+  const { data: jurisRows } = await supabaseAdmin.from("medicos").select("id, jurisdicciones");
+  const jurisMap = new Map<string, string[]>((jurisRows ?? []).map((j) => [j.id, (j.jurisdicciones ?? []) as string[]]));
+
+  // Provincia guardada del paciente (solo para pre-seleccionar; se valida igual cada vez).
+  const { data: provinciaRow } = await supabaseAdmin
+    .from("pacientes")
+    .select("provincia")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const medicosConEstado = medicos.map((m) => ({
+    ...m,
+    ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
+    jurisdicciones: jurisMap.get(m.id) ?? [],
+  }));
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
       <AppNavbar userName={fullName} userRole="paciente" />
 
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Clínica Virtual</h1>
-          <p className="mt-2 text-gray-600">
-            Elegí una especialidad para consultar con un médico.
-          </p>
-        </div>
-
-        <GrillaEspecialidades
+      <main>
+        <ClinicaFlow
+          provinciaGuardada={provinciaRow?.provincia ?? null}
           medicos={medicosConEstado}
           consultasEspera={consultasEspera ?? []}
           turnosClinicaVirtual={turnosDisponibles ?? []}
