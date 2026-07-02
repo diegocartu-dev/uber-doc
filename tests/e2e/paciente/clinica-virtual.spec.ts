@@ -10,10 +10,16 @@ test.describe("Clínica Virtual — ruteo por jurisdicción", () => {
     await loginPaciente(page, PACIENTE_NORMAL.email, PACIENTE_NORMAL.password);
     await page.goto("/clinica");
 
-    // Pantalla de provincia. Si viene pre-seleccionada (estado A), "Cambiar provincia"
-    // abre la lista (estado B). Elegimos CABA (siempre con oferta) y confirmamos.
-    const cambiar = page.getByRole("button", { name: "Cambiar provincia" });
-    if ((await cambiar.count()) > 0) await cambiar.click();
+    // Pantalla de provincia (siempre primero). Esperar que cargue en cualquiera de sus dos
+    // variantes, y branchear sin carreras: estado A (confirmar) → abrir la lista con
+    // "Cambiar provincia"; estado B (elegir) → la lista ya está. Luego elegir CABA (siempre
+    // con oferta) y confirmar.
+    const headingA = page.getByRole("heading", { name: "Confirmá tu jurisdicción" });
+    const headingB = page.getByRole("heading", { name: "¿En qué provincia estás?" });
+    await expect(headingA.or(headingB)).toBeVisible({ timeout: 15000 });
+    if (await headingA.isVisible()) {
+      await page.getByRole("button", { name: "Cambiar provincia" }).click();
+    }
     await page.getByRole("button", { name: "CABA", exact: true }).click();
     await page.getByRole("button", { name: "Ver médicos habilitados" }).click();
 
