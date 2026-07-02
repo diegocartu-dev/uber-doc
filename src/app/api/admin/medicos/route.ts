@@ -5,6 +5,7 @@ import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { enviarEmailMedicoAprobado } from "@/lib/email";
 import { camposFaltantesMedico } from "@/lib/perfil-medico";
+import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -72,12 +73,20 @@ async function asegurarRefepsParaAprobar(
   }
 
   if (resultado.encontrado && resultado.activo) {
+    // Alcance del médico para el ruteo por jurisdicción (Regla A): las provincias de sus
+    // matrículas HABILITADAS, derivadas de REFEPS. Solo se persiste si viene con contenido,
+    // para no pisar con vacío un set ya válido (fail-safe). Si viene vacío se loguea.
+    const { jurisdicciones, sinResolver } = derivarJurisdicciones(resultado.matriculas);
+    if (jurisdicciones.length === 0) {
+      console.warn(`[aprobar/refeps] médico ${medicoId} sin jurisdicción canónica derivable (sinResolver=${JSON.stringify(sinResolver)})`);
+    }
     await admin
       .from("medicos")
       .update({
         refeps_validado: true,
         refeps_data: resultadoSinRaw,
         refeps_validado_at: ahora,
+        ...(jurisdicciones.length ? { jurisdicciones } : {}),
       })
       .eq("id", medicoId);
     return { ok: true };
