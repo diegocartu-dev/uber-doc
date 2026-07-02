@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 
 // El Bus FHIR es lento y buscarPorDNI reintenta ante timeout (hasta ~51s en el peor caso).
 // El default de Vercel (~15s) no alcanza y mataría la función. Igual que admin/medicos.
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
   const { raw: _raw, ...resultadoSinRaw } = resultado;
 
   if (resultado.encontrado) {
+    // Alcance para el ruteo por jurisdicción (Regla A): provincias de matrículas habilitadas.
+    // Solo se persiste si viene con contenido, para no pisar un set válido con vacío (fail-safe).
+    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas);
     // Guardar resultado exitoso (sin raw)
     const { error: updateError } = await admin
       .from("medicos")
@@ -80,6 +84,7 @@ export async function POST(req: NextRequest) {
         refeps_validado: true,
         refeps_data: resultadoSinRaw,
         refeps_validado_at: ahora,
+        ...(jurisdicciones.length ? { jurisdicciones } : {}),
       })
       .eq("id", medicoId);
 
