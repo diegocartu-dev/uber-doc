@@ -1,12 +1,40 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { avisarMedicoAceptarWhatsApp } from "@/lib/whatsapp";
+import { JURISDICCIONES } from "@/lib/jurisdicciones";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Guarda la provincia declarada por el paciente (ruteo por jurisdicción). Se escribe con
+// service role filtrando por el user_id de la sesión: la columna `provincia` es nueva y
+// podría no tener GRANT UPDATE para `authenticated` — el service role evita esa trampa.
+export async function guardarProvincia(
+  provincia: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "No autenticado." };
+  if (!(JURISDICCIONES as readonly string[]).includes(provincia)) {
+    return { ok: false, error: "Provincia inválida." };
+  }
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("pacientes")
+    .update({ provincia })
+    .eq("user_id", user.id);
+  if (error) {
+    console.error("[guardarProvincia]", error.message);
+    return { ok: false, error: "No se pudo guardar tu provincia." };
+  }
+  return { ok: true };
+}
 
 export async function crearConsulta(
   medicoId: string,
