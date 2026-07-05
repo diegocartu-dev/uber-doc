@@ -395,7 +395,7 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     const supabase = createAdminClient();
     const { data: medico } = await supabase
       .from("medicos")
-      .select("nombre_completo, slug, email, user_id")
+      .select("nombre_completo, slug, email, user_id, jurisdicciones")
       .eq("id", medicoId)
       .single();
     if (!medico) return;
@@ -410,12 +410,32 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
 
     const linkConsultorio = medico.slug ? `docto.com.ar/dr/${medico.slug}` : "docto.com.ar/dr/tu-nombre";
 
+    // Dónde está habilitado a atender (jurisdicciones REFEPS). Encuadre de alcance
+    // maximizado (decisión Diego 05/07): cualquier persona dentro de esas provincias
+    // puede atenderse con él. Si por excepción no hay jurisdicciones cargadas, el
+    // bloque no se muestra — nunca un mail con un hueco.
+    const juris = (medico.jurisdicciones as string[] | null) ?? [];
+    const listaJuris = juris.length > 1
+      ? `${juris.slice(0, -1).join(", ")} y ${juris[juris.length - 1]}`
+      : (juris[0] ?? "");
+    const bloqueJurisdicciones = juris.length
+      ? `
+      <div style="margin:0 0 24px;padding:14px 16px;border:1px solid #d3e5f7;border-radius:10px;background:#f4f9fe;">
+        <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:${GRIS};">D&oacute;nde est&aacute;s habilitado a atender</p>
+        <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.55;">
+          Tu matr&iacute;cula te habilita a atender en: <strong style="color:${GRIS};">${listaJuris}</strong>.
+          Cualquier persona que se encuentre en ${juris.length > 1 ? "esas jurisdicciones" : listaJuris} puede atenderse con vos por Docto &mdash; tu consultorio digital llega a todo ese territorio, sin l&iacute;mite de distancia.
+        </p>
+      </div>`
+      : "";
+
     const html = wrapHtml("¡Bienvenido a Docto! — tu cuenta está activa", `
       <div style="margin-bottom:20px;">${chip("Cuenta verificada", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">&iexcl;Hola ${formatNombreMedico(medico.nombre_completo)}! 🎉</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
         Tu cuenta ya est&aacute; <strong>aprobada y verificada</strong>. De ac&aacute; en m&aacute;s, Docto es tu consultorio digital: vos atend&eacute;s, del resto nos encargamos nosotros.
       </p>
+      ${bloqueJurisdicciones}
       <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Para arrancar en 5 minutos:</p>
       <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
         <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Conect&aacute; tu Mercado Pago</strong> (Perfil &rarr; Cobros) &mdash; es donde vas a recibir tus honorarios, directo a tu cuenta.</li>

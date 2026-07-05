@@ -31,6 +31,7 @@ interface Medico {
   refeps_validado: boolean | null;
   refeps_data: Record<string, unknown> | null;
   refeps_validado_at: string | null;
+  jurisdicciones: string[] | null;
   // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
   faltantes?: string[];
   faltantesCount?: number;
@@ -113,6 +114,23 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
     await navigator.clipboard.writeText(`${tipo} ${numero}`);
     setCopiado(id);
     setTimeout(() => setCopiado(null), 2000);
+  }
+
+  // Tras una validación REFEPS manual (red de respaldo), reflejar el resultado en la
+  // lista para que la card y el diálogo de aprobar muestren el estado fresco.
+  function actualizarRefeps(
+    medicoId: string,
+    validado: boolean,
+    data: Record<string, unknown> | null,
+    jurisdicciones?: string[]
+  ) {
+    setMedicos((prev) =>
+      prev.map((m) =>
+        m.id === medicoId
+          ? { ...m, refeps_validado: validado, refeps_data: data, ...(jurisdicciones?.length ? { jurisdicciones } : {}) }
+          : m
+      )
+    );
   }
 
   async function handleImpersonate(userId: string, nombre: string) {
@@ -237,6 +255,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 onCancelConfirm={() => setConfirmando(null)}
                 onCopiar={() => copiarMatricula(m.tipo_matricula, m.numero_matricula, m.id)}
                 onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
+                onRefepsActualizado={(validado, data, juris) => actualizarRefeps(m.id, validado, data, juris)}
               />
             ))
           : filtered.map((m) => (
@@ -267,6 +286,123 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
   );
 }
 
+// Errores de SISTEMA del Bus (timeout/caído): el resultado NO es definitivo — la
+// validación automática (registro + cron) lo va a reintentar sola.
+const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
+
+// Jurisdicciones habilitadas para mostrar: preferir la columna derivada; si no, sacarlas
+// de las matrículas habilitadas del resultado REFEPS.
+function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Record<string, unknown> | null }): string[] {
+  if (m.jurisdicciones?.length) return m.jurisdicciones;
+  const mats = (m.refeps_data as { matriculas?: Array<{ tipo?: string; habilitada?: boolean }> } | null)?.matriculas;
+  return [...new Set((mats ?? []).filter((x) => x.habilitada).map((x) => x.tipo).filter((t): t is string => !!t))];
+}
+
+// Estado REFEPS resuelto de antemano (la validación corre sola al registrarse + cron cada
+// 10min/6h). El admin se encuentra al médico YA verificado o no; el botón manual es SOLO
+// la red para cuando la automática no pudo correr (Bus del Ministerio caído).
+function BloqueRefeps({
+  medico: m,
+  onResultado,
+}: {
+  medico: Medico;
+  onResultado: (validado: boolean, data: Record<string, unknown> | null, jurisdicciones?: string[]) => void;
+}) {
+  const [validando, setValidando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const rd = m.refeps_data as { error?: string; encontrado?: boolean; activo?: boolean } | null;
+  const esPendiente = m.refeps_validado !== true && (!rd || (rd.error ? REFEPS_ERRORES_SISTEMA.has(rd.error) : false));
+
+  async function validarAhora() {
+    setValidando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/medicos/refeps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ medicoId: m.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Error desconocido");
+        return;
+      }
+      const juris = [...new Set(((data.resultado?.matriculas ?? []) as Array<{ tipo?: string; habilitada?: boolean }>)
+        .filter((x) => x.habilitada).map((x) => x.tipo).filter((t): t is string => !!t))];
+      onResultado(data.refeps_validado, data.resultado ?? null, juris);
+    } catch {
+      setError("Error de conexión");
+    } finally {
+      setValidando(false);
+    }
+  }
+
+  if (m.refeps_validado === true) {
+    const juris = jurisdiccionesDe(m);
+    return (
+      <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+          <ShieldCheck size={16} /> Verificado en REFEPS — matrícula activa
+        </div>
+        {juris.length > 0 && (
+          <p className="mt-1 text-xs text-green-700">
+            Habilitado para atender en: <strong>{juris.join(", ")}</strong>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!esPendiente) {
+    // "No" definitivo: no figura / matrícula inactiva / sin matrícula registrada.
+    const detalle =
+      rd?.encontrado && rd?.activo === false
+        ? "La matrícula figura INACTIVA en REFEPS."
+        : rd?.error === "SIN_MATRICULA_REGISTRADA"
+          ? "Figura en REFEPS pero sin matrícula registrada."
+          : "El DNI no tiene matrícula registrada en REFEPS.";
+    return (
+      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+          <ShieldAlert size={16} /> No verificado en REFEPS
+        </div>
+        <p className="mt-1 text-xs text-amber-700">{detalle} No se puede aprobar así.</p>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        <button
+          onClick={validarAhora}
+          disabled={validando || !m.dni}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+        >
+          {validando ? <><Loader2 size={13} className="animate-spin" /> Re-verificando…</> : <>Re-verificar en REFEPS</>}
+        </button>
+      </div>
+    );
+  }
+
+  // Pendiente: la automática no llegó a un resultado (Bus caído/lento). Acá SÍ tiene
+  // sentido el botón manual — es la única situación en la que el admin aprieta algo.
+  return (
+    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <Loader2 size={16} className={validando ? "animate-spin" : ""} /> Verificación REFEPS pendiente
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        {rd?.error ? "El registro del Ministerio no respondió; se reintenta solo (10 min la primera hora, después cada 6 h)." : "La verificación automática todavía no corrió."}
+      </p>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      <button
+        onClick={validarAhora}
+        disabled={validando || !m.dni}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
+      >
+        {validando ? <><Loader2 size={13} className="animate-spin" /> Verificando…</> : <><ShieldCheck size={13} /> Verificar ahora</>}
+      </button>
+      {!m.dni && <p className="mt-1 text-xs text-gray-400">El médico no tiene DNI cargado</p>}
+    </div>
+  );
+}
+
 function PendienteCard({
   medico: m,
   procesando,
@@ -278,6 +414,7 @@ function PendienteCard({
   onCancelConfirm,
   onCopiar,
   onImpersonate,
+  onRefepsActualizado,
 }: {
   medico: Medico;
   procesando: boolean;
@@ -289,6 +426,7 @@ function PendienteCard({
   onCancelConfirm: () => void;
   onCopiar: () => void;
   onImpersonate: () => void;
+  onRefepsActualizado: (validado: boolean, data: Record<string, unknown> | null, jurisdicciones?: string[]) => void;
 }) {
   return (
     <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
@@ -308,6 +446,8 @@ function PendienteCard({
         <Field label="Domicilio" value={m.domicilio} />
         <Field label="Registro" value={new Date(m.created_at).toLocaleDateString("es-AR")} />
       </div>
+
+      <BloqueRefeps medico={m} onResultado={onRefepsActualizado} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <a
@@ -343,7 +483,11 @@ function PendienteCard({
       {confirmando === "aprobar" ? (
         <ConfirmDialog
           title={`Aprobar a ${m.nombre_completo}?`}
-          description={`${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. El medico podra atender pacientes en la plataforma.`}
+          description={`${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. ${
+            m.refeps_validado === true
+              ? `REFEPS OK${jurisdiccionesDe(m).length ? ` — habilitado en ${jurisdiccionesDe(m).join(", ")}` : ""}.`
+              : "REFEPS aún sin verificar: se valida en este paso y bloquea si no figura."
+          } El medico podra atender pacientes en la plataforma.`}
           confirmLabel="Si, aprobar"
           variant="primary"
           onConfirm={() => onAprobar()}
