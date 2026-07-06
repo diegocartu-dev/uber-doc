@@ -30,6 +30,7 @@ export async function validarYPersistirRefeps(medicoId: string): Promise<Resulta
     .eq("id", medicoId)
     .single();
   if (!medico?.dni) return "sin_dni";
+  if (medico.es_cuenta_test === true) return "sin_dni"; // cuentas test: nunca pegar al Bus real
   if (medico.refeps_validado === true) return "validado"; // ya resuelto, no re-pegar al Bus
 
   const resultado = await validarMedicoREFEPS(medico.dni);

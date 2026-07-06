@@ -23,6 +23,10 @@ const ESPACIADO_LENTO_MS = 6 * 60 * 60 * 1000; // después: cada 6 horas
 const MAX_POR_CORRIDA = 10;
 
 export async function GET(req: Request) {
+  // Fail-closed: sin CRON_SECRET configurado, "Bearer undefined" pasaría el check.
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 500 });
+  }
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -35,7 +39,8 @@ export async function GET(req: Request) {
     .eq("estado_registro", "pendiente_revision")
     .eq("es_cuenta_test", false)
     .not("dni", "is", null)
-    .neq("refeps_validado", true);
+    .neq("refeps_validado", true)
+    .order("created_at", { ascending: true });
   if (error) {
     console.error("[cron/refeps] query falló:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });

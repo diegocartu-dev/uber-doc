@@ -5,6 +5,7 @@ import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
+import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
 
 interface Medico {
   id: string;
@@ -291,11 +292,14 @@ function estadoRefeps(m: Pick<Medico, "refeps_validado" | "refeps_data">): "ok" 
 }
 
 // Jurisdicciones habilitadas para mostrar: preferir la columna derivada; si no, sacarlas
-// de las matrículas habilitadas del resultado REFEPS.
+// de las matrículas habilitadas del resultado REFEPS, normalizadas a la lista canónica
+// (sin normalizar podría mostrar "Provincial", que no es una jurisdicción).
 function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Record<string, unknown> | null }): string[] {
   if (m.jurisdicciones?.length) return m.jurisdicciones;
   const mats = (m.refeps_data as { matriculas?: Array<{ tipo?: string; habilitada?: boolean }> } | null)?.matriculas;
-  return [...new Set((mats ?? []).filter((x) => x.habilitada).map((x) => x.tipo).filter((t): t is string => !!t))];
+  return [...new Set(
+    (mats ?? []).filter((x) => x.habilitada).map((x) => normalizarJurisdiccion(x.tipo)).filter((j): j is NonNullable<typeof j> => !!j)
+  )];
 }
 
 // Estado REFEPS resuelto de antemano (la validación corre sola al registrarse + cron cada

@@ -73,7 +73,10 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw: _raw, ...resultadoSinRaw } = resultado;
 
-  if (resultado.encontrado) {
+  // encontrado && activo — MISMO criterio que el gate de aprobar (#246) y persistir.ts.
+  // Con solo `encontrado`, una matrícula INACTIVA quedaba refeps_validado=true y el gate
+  // de aprobar la dejaba pasar por el early-return (hallazgo Roberto, PR #250).
+  if (resultado.encontrado && resultado.activo) {
     // Alcance para el ruteo por jurisdicción (Regla A): provincias de matrículas habilitadas.
     // Solo se persiste si viene con contenido, para no pisar un set válido con vacío (fail-safe).
     const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas);
