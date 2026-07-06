@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, XCircle, ExternalLink, FileText, Copy, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn } from "lucide-react";
+import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
@@ -56,7 +56,6 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
   const [search, setSearch] = useState("");
   const [procesando, setProcesando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<{ id: string; accion: string } | null>(null);
-  const [copiado, setCopiado] = useState<string | null>(null);
   const [panelMedico, setPanelMedico] = useState<Medico | null>(null);
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
@@ -108,12 +107,6 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
     }
     setProcesando(null);
     setConfirmando(null);
-  }
-
-  async function copiarMatricula(tipo: string, numero: string, id: string) {
-    await navigator.clipboard.writeText(`${tipo} ${numero}`);
-    setCopiado(id);
-    setTimeout(() => setCopiado(null), 2000);
   }
 
   // Tras una validación REFEPS manual (red de respaldo), reflejar el resultado en la
@@ -248,12 +241,10 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
                 medico={m}
                 procesando={procesando === m.id}
                 confirmando={confirmando?.id === m.id ? confirmando.accion : null}
-                copiado={copiado === m.id}
                 onAprobar={() => handleAccion(m.id, "aprobar")}
                 onRechazar={(motivo) => handleAccion(m.id, "rechazar", motivo)}
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
-                onCopiar={() => copiarMatricula(m.tipo_matricula, m.numero_matricula, m.id)}
                 onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
                 onRefepsActualizado={(validado, data, juris) => actualizarRefeps(m.id, validado, data, juris)}
               />
@@ -290,6 +281,15 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
 // validación automática (registro + cron) lo va a reintentar sola.
 const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
 
+// Estado ternario ÚNICO — lo leen la card Y el diálogo de aprobar, para que nunca
+// cuenten historias distintas (gate Sofía #250).
+function estadoRefeps(m: Pick<Medico, "refeps_validado" | "refeps_data">): "ok" | "no" | "pendiente" {
+  if (m.refeps_validado === true) return "ok";
+  const rd = m.refeps_data as { error?: string } | null;
+  if (!rd || (rd.error ? REFEPS_ERRORES_SISTEMA.has(rd.error) : false)) return "pendiente";
+  return "no";
+}
+
 // Jurisdicciones habilitadas para mostrar: preferir la columna derivada; si no, sacarlas
 // de las matrículas habilitadas del resultado REFEPS.
 function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Record<string, unknown> | null }): string[] {
@@ -312,7 +312,7 @@ function BloqueRefeps({
   const [error, setError] = useState<string | null>(null);
 
   const rd = m.refeps_data as { error?: string; encontrado?: boolean; activo?: boolean } | null;
-  const esPendiente = m.refeps_validado !== true && (!rd || (rd.error ? REFEPS_ERRORES_SISTEMA.has(rd.error) : false));
+  const estado = estadoRefeps(m);
 
   async function validarAhora() {
     setValidando(true);
@@ -338,44 +338,65 @@ function BloqueRefeps({
     }
   }
 
-  if (m.refeps_validado === true) {
+  if (estado === "ok") {
     const juris = jurisdiccionesDe(m);
     return (
       <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3">
         <div className="flex items-center gap-2 text-sm font-medium text-green-800">
           <ShieldCheck size={16} /> Verificado en REFEPS — matrícula activa
         </div>
-        {juris.length > 0 && (
+        {juris.length > 0 ? (
           <p className="mt-1 text-xs text-green-700">
             Habilitado para atender en: <strong>{juris.join(", ")}</strong>
+          </p>
+        ) : (
+          // Fail-open de la clínica: sin jurisdicciones derivadas, el médico aparece para
+          // TODAS las provincias. La aprobación es el momento de enterarse y resolverlo.
+          <p className="mt-1 text-xs text-amber-700">
+            Sin jurisdicciones derivadas de REFEPS — va a aparecer para pacientes de todas las provincias hasta resolverlo.
           </p>
         )}
       </div>
     );
   }
 
-  if (!esPendiente) {
+  if (estado === "no") {
     // "No" definitivo: no figura / matrícula inactiva / sin matrícula registrada.
     const detalle =
       rd?.encontrado && rd?.activo === false
         ? "La matrícula figura INACTIVA en REFEPS."
         : rd?.error === "SIN_MATRICULA_REGISTRADA"
           ? "Figura en REFEPS pero sin matrícula registrada."
-          : "El DNI no tiene matrícula registrada en REFEPS.";
+          : rd?.error === "REGISTRO_NO_ENCONTRADO"
+            ? "El DNI no tiene matrícula registrada en REFEPS."
+            : `REFEPS no pudo verificar la matrícula${rd?.error ? ` (código: ${rd.error})` : ""}.`;
     return (
       <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
         <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
           <ShieldAlert size={16} /> No verificado en REFEPS
         </div>
         <p className="mt-1 text-xs text-amber-700">{detalle} No se puede aprobar así.</p>
+        <p className="mt-1 text-xs text-amber-700">
+          Compará el DNI con la credencial: si está mal cargado, re-verificar no cambia nada.
+        </p>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-        <button
-          onClick={validarAhora}
-          disabled={validando || !m.dni}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
-        >
-          {validando ? <><Loader2 size={13} className="animate-spin" /> Re-verificando…</> : <>Re-verificar en REFEPS</>}
-        </button>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={validarAhora}
+            disabled={validando || !m.dni}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+          >
+            {validando ? <><Loader2 size={13} className="animate-spin" /> Re-verificando…</> : <>Re-verificar en REFEPS</>}
+          </button>
+          <a
+            href="https://sisa.msal.gov.ar/refeps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-amber-800 underline"
+          >
+            <ExternalLink size={12} /> Ver en SISA
+          </a>
+        </div>
       </div>
     );
   }
@@ -385,7 +406,7 @@ function BloqueRefeps({
   return (
     <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-        <Loader2 size={16} className={validando ? "animate-spin" : ""} /> Verificación REFEPS pendiente
+        {validando ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />} Verificación REFEPS pendiente
       </div>
       <p className="mt-1 text-xs text-gray-500">
         {rd?.error ? "El registro del Ministerio no respondió; se reintenta solo (10 min la primera hora, después cada 6 h)." : "La verificación automática todavía no corrió."}
@@ -407,24 +428,20 @@ function PendienteCard({
   medico: m,
   procesando,
   confirmando,
-  copiado,
   onAprobar,
   onRechazar,
   onStartConfirm,
   onCancelConfirm,
-  onCopiar,
   onImpersonate,
   onRefepsActualizado,
 }: {
   medico: Medico;
   procesando: boolean;
   confirmando: string | null;
-  copiado: boolean;
   onAprobar: () => void;
   onRechazar: (motivo: string) => void;
   onStartConfirm: (accion: string) => void;
   onCancelConfirm: () => void;
-  onCopiar: () => void;
   onImpersonate: () => void;
   onRefepsActualizado: (validado: boolean, data: Record<string, unknown> | null, jurisdicciones?: string[]) => void;
 }) {
@@ -450,19 +467,6 @@ function PendienteCard({
       <BloqueRefeps medico={m} onResultado={onRefepsActualizado} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <a
-          href="https://sisa.msal.gov.ar/refeps"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onCopiar}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-        >
-          {copiado ? (
-            <><CheckCircle size={14} className="text-[#1D9E75]" /> Matrícula copiada</>
-          ) : (
-            <><ExternalLink size={14} /> Verificar en REFEPS <Copy size={12} className="text-gray-400" /></>
-          )}
-        </a>
         {m.foto_credencial_url && (
           <button
             onClick={() => window.open(`/api/admin/credencial?path=${encodeURIComponent(m.foto_credencial_url!)}`, "_blank")}
@@ -484,9 +488,11 @@ function PendienteCard({
         <ConfirmDialog
           title={`Aprobar a ${m.nombre_completo}?`}
           description={`${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. ${
-            m.refeps_validado === true
+            estadoRefeps(m) === "ok"
               ? `REFEPS OK${jurisdiccionesDe(m).length ? ` — habilitado en ${jurisdiccionesDe(m).join(", ")}` : ""}.`
-              : "REFEPS aún sin verificar: se valida en este paso y bloquea si no figura."
+              : estadoRefeps(m) === "no"
+                ? "REFEPS dice que la matrícula no figura o está inactiva. Al aprobar se re-verifica contra el registro; si sigue igual, la aprobación se bloquea."
+                : "REFEPS todavía sin resultado: se verifica en este paso y se bloquea si no figura."
           } El medico podra atender pacientes en la plataforma.`}
           confirmLabel="Si, aprobar"
           variant="primary"
