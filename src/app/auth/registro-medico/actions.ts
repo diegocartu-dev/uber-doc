@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { capitalizarNombre } from "@/lib/utils/texto";
 import { headers } from "next/headers";
+import { waitUntil } from "@vercel/functions";
+import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 5;
@@ -305,6 +307,25 @@ export async function registrarMedico(formData: FormData) {
 
   // ═══ Registro exitoso — marcar borrador como completado ═══
   if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "completado");
+
+  // Validación REFEPS automática en segundo plano: el admin debe encontrarse al médico
+  // YA resuelto (✓/✗) al abrir el panel, sin apretar nada. waitUntil mantiene viva la
+  // función después del redirect (un fire-and-forget pelado moriría al congelarse la
+  // lambda). Si igual falla (Bus caído), el cron validar-refeps-pendientes lo reintenta.
+  {
+    const { data: creado } = await supabaseAdmin
+      .from("medicos")
+      .select("id")
+      .eq("user_id", authData.user.id)
+      .single();
+    if (creado?.id) {
+      waitUntil(
+        validarYPersistirRefeps(creado.id).catch((e) =>
+          console.error("[registro-medico] validación REFEPS en background falló:", e instanceof Error ? e.message : e)
+        )
+      );
+    }
+  }
 
   redirect("/dashboard");
 }

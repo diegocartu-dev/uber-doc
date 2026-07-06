@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/apagar-disponibilidad",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/validar-refeps-pendientes",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
