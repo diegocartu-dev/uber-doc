@@ -32,9 +32,55 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   if (!paciente) return { error: `Perfil de paciente no encontrado. ${pacErr?.message ?? ""}` };
 
   const { data: turno } = await supabase
-    .from("turnos").select("id, estado, medico_id").eq("id", turnoId).single();
+    .from("turnos").select("id, estado, medico_id, fecha, hora_inicio").eq("id", turnoId).single();
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.estado !== "disponible") return { error: "Este turno ya no está disponible." };
+
+  // Guard de hora (incidente 08/07: un slot de HOY 11:40 se compró a las 11:38, durante
+  // una CI en curso para esa misma hora). Server-side con hora AR — el filtro del
+  // cliente no alcanza (TZ del browser + datos stale). Margen 15 min (decisión Diego):
+  // el médico necesita enterarse antes de que el turno empiece.
+  const MARGEN_MIN = 15;
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const hoyAR = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
+  if (turno.fecha < hoyAR) return { error: "Este turno ya no está disponible." };
+  if (turno.fecha === hoyAR && turno.hora_inicio) {
+    const [h, m] = turno.hora_inicio.split(":").map(Number);
+    if (h * 60 + m <= ahoraAR.getHours() * 60 + ahoraAR.getMinutes() + MARGEN_MIN) {
+      return { error: "Este turno está por comenzar y ya no se puede reservar. Elegí un horario más adelante." };
+    }
+  }
+
+  // Guard de atención activa con el MISMO médico (incidente 08/07: reservó un turno con
+  // el médico mientras estaba EN LA VIDEOLLAMADA con él). Solo bloquea atención ACTIVA
+  // con ese médico — agendar un control futuro con OTRO profesional sigue permitido
+  // (decisión Diego). OJO: consultas.paciente_id = user_id; turnos.paciente_id = pacientes.id.
+  {
+    // Solo CI de las últimas 24 h: no existe cron que expire "esperando"/"aceptada"
+    // stale (Roberto, gate #253) — sin esta cota, una CI abandonada bloquearía las
+    // reservas con ese médico para siempre. Falla permisiva: mejor dejar reservar de
+    // más que bloquear por dato viejo.
+    const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: ciActivas } = await supabase
+      .from("consultas")
+      .select("id", { count: "exact", head: true })
+      .eq("paciente_id", user.id)
+      .eq("medico_id", turno.medico_id)
+      .in("estado", ["esperando", "aceptada", "pagada", "en_curso"])
+      .gte("created_at", hace24h);
+    if (ciActivas && ciActivas > 0) {
+      return { error: "Ya tenés una consulta activa con este profesional. Cuando termine, vas a poder reservar un nuevo turno." };
+    }
+    const { count: turnosActivos } = await supabase
+      .from("turnos")
+      .select("id", { count: "exact", head: true })
+      .eq("paciente_id", paciente.id)
+      .eq("medico_id", turno.medico_id)
+      .in("estado", ["en_espera", "en_curso"]);
+    if (turnosActivos && turnosActivos > 0) {
+      return { error: "Ya tenés una consulta activa con este profesional. Cuando termine, vas a poder reservar un nuevo turno." };
+    }
+  }
 
   // Carril de prueba (universos paralelos): un paciente test solo reserva turnos de
   // médicos test, y un paciente real solo de médicos reales. Cubre el link directo.

@@ -30,14 +30,6 @@ function formatFechaCorta(f: string) {
 
 export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Turno[]; proximosTurnos?: TurnoProximo[] }) {
   const [alertas, setAlertas] = useState<{ id: string; nombre: string; hora: string; minutos: number }[]>([]);
-  const [permisoNotif, setPermisoNotif] = useState(false);
-
-  // Solo verificar permiso actual — no pedir automáticamente (Safari lo bloquea)
-  useEffect(() => {
-    if (typeof Notification !== "undefined") {
-      setPermisoNotif(Notification.permission === "granted");
-    }
-  }, []);
 
   // Verificar alertas de 15 minutos cada 30 segundos
   useEffect(() => {
@@ -70,18 +62,12 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
     return () => clearInterval(interval);
   }, [turnos]);
 
-  // Browser notification cuando un paciente entra a espera
-  useEffect(() => {
-    const enEspera = turnos.filter((t) => t.estado === "en_espera");
-    if (permisoNotif && enEspera.length > 0) {
-      for (const t of enEspera) {
-        new Notification("Docto — Paciente esperando", {
-          body: `${capitalizarNombre(t.paciente_nombre)} está esperando tu consulta`,
-          icon: "/favicon.ico",
-        });
-      }
-    }
-  }, [turnos.filter((t) => t.estado === "en_espera").length, permisoNotif]);
+  // OJO: acá vivía un `new Notification(...)` legacy (30/03) que en Chrome Android tira
+  // TypeError SIEMPRE (constructor prohibido desde Chrome 42 — usar showNotification del
+  // service worker) y, sin error boundary, mataba TODO el dashboard justo cuando un
+  // paciente entraba en sala de espera (incidente 08/07/2026). Se eliminó: el aviso
+  // "paciente listo" ya lo cubren el popup del provider + el push server-side (07/06).
+  // NO reintroducir el constructor Notification en componentes.
 
   const bloqueProximos = proximosTurnos.length > 0 ? (
     <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
