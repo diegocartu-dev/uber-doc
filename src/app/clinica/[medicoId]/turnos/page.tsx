@@ -53,7 +53,7 @@ export default async function TurnosPage({
   // Traer turnos disponibles futuros (fecha en ART, no UTC)
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
-  const { data: turnos } = await supabase
+  const { data: turnosRaw } = await supabase
     .from("turnos")
     .select("id, fecha, hora_inicio, hora_fin, monto")
     .eq("medico_id", medicoId)
@@ -62,6 +62,17 @@ export default async function TurnosPage({
     .gte("fecha", hoy)
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true });
+
+  // Los slots de HOY ya empezados (o por empezar en <15 min) no se ofrecen — server-side
+  // con hora AR, mismo margen que valida reservarTurno (incidente 08/07: un slot de las
+  // 11:40 se compraba a las 11:38). El cliente re-filtra por frescura, pero la verdad es esta.
+  const MARGEN_MIN = 15;
+  const corteMin = ahoraAR.getHours() * 60 + ahoraAR.getMinutes() + MARGEN_MIN;
+  const turnos = (turnosRaw ?? []).filter((t) => {
+    if (t.fecha !== hoy) return true;
+    const [h, m] = (t.hora_inicio ?? "00:00").split(":").map(Number);
+    return h * 60 + m > corteMin;
+  });
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
