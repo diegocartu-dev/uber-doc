@@ -26,7 +26,8 @@ export default function CalendarioTurnos({
   medico: Medico;
   canalOrigen?: "clinica_virtual" | "consultorio_privado";
 }) {
-  const hoy = new Date();
+  // Mes/año inicial del calendario también en hora AR (borde de mes con TZ corrida).
+  const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const [mes, setMes] = useState(hoy.getMonth());
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
@@ -40,15 +41,18 @@ export default function CalendarioTurnos({
 
   useEffect(() => { limpiarReservasExpiradas(); }, []);
 
-  const ahora = new Date();
+  // Hora ARGENTINA, no la del browser (bug de TZ: un paciente con el reloj/TZ corrido
+  // veía slots ya pasados o perdía slots válidos). Mismo margen de 15 min que el server
+  // (page + reservarTurno) — este filtro es solo frescura sobre datos que envejecen.
+  const ahora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoyStr = `${ahora.getFullYear()}-${(ahora.getMonth() + 1).toString().padStart(2, "0")}-${ahora.getDate().toString().padStart(2, "0")}`;
-  const enUnaHora = ahora.getHours() * 60 + ahora.getMinutes();
+  const corteMin = ahora.getHours() * 60 + ahora.getMinutes() + 15;
 
   const turnosFiltrados = turnos.filter((t) => {
     if (t.fecha > hoyStr) return true;
     if (t.fecha < hoyStr) return false;
     const [h, m] = t.hora_inicio.split(":").map(Number);
-    return h * 60 + m >= enUnaHora;
+    return h * 60 + m > corteMin;
   });
 
   const turnosPorFecha = new Map<string, Turno[]>();
