@@ -56,12 +56,18 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   // con ese médico — agendar un control futuro con OTRO profesional sigue permitido
   // (decisión Diego). OJO: consultas.paciente_id = user_id; turnos.paciente_id = pacientes.id.
   {
+    // Solo CI de las últimas 24 h: no existe cron que expire "esperando"/"aceptada"
+    // stale (Roberto, gate #253) — sin esta cota, una CI abandonada bloquearía las
+    // reservas con ese médico para siempre. Falla permisiva: mejor dejar reservar de
+    // más que bloquear por dato viejo.
+    const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: ciActivas } = await supabase
       .from("consultas")
       .select("id", { count: "exact", head: true })
       .eq("paciente_id", user.id)
       .eq("medico_id", turno.medico_id)
-      .in("estado", ["esperando", "aceptada", "pagada", "en_curso"]);
+      .in("estado", ["esperando", "aceptada", "pagada", "en_curso"])
+      .gte("created_at", hace24h);
     if (ciActivas && ciActivas > 0) {
       return { error: "Ya tenés una consulta activa con este profesional. Cuando termine, vas a poder reservar un nuevo turno." };
     }
