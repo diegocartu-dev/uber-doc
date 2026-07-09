@@ -75,15 +75,14 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         setTimeout(() => { window.location.href = returnUrl; }, 3000);
         return;
       }
+      // Estados terminales con PLATA: sin auto-redirect (gate Sofía) — el paciente cierra
+      // cuando terminó de entender qué pasó con su pago (botón "Volver al inicio").
       if (data.estado === "cancelado_medico") {
         setEstado("cancelado");
-        setTimeout(() => { window.location.href = returnUrl; }, 3000);
         return;
       }
-      // El motor de no-show lo resolvió mientras esperaba: avisar reembolso antes de sacar.
       if (data.estado === "ausente_medico") {
         setEstado("ausente");
-        setTimeout(() => { window.location.href = returnUrl; }, 4000);
         return;
       }
       if (["cancelado_paciente", "ausente_paciente"].includes(data.estado)) {
@@ -141,12 +140,16 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       <p className="mt-2 text-sm text-gray-600">
         {estado === "esperando"
           ? (medicoOcupado
-              ? `El ${formatNombreMedico(medicoNombre)} está terminando con otro paciente. Tu turno comienza apenas se libere — gracias por esperar.`
-              : `Esperando que el ${formatNombreMedico(medicoNombre)} inicie la consulta...`)
+              // Sin nombre acá (evita "El Dra." — el nombre ya está en la card de abajo).
+              // "Tu turno sigue reservado" es lo que de verdad tranquiliza (gate Sofía).
+              ? "Tu médico está terminando con otro paciente. Tu turno sigue reservado y comienza apenas termine. Gracias por esperar."
+              : "Esperando que tu médico inicie la consulta...")
           : estado === "iniciando" ? "Preparando la videollamada..."
           : estado === "finalizado" ? "Los documentos están disponibles en tu perfil. Redirigiendo..."
-          : estado === "cancelado" ? "Redirigiendo al inicio..."
-          : estado === "ausente" ? "Te reembolsamos la consulta. Vas a poder reservar un nuevo turno cuando quieras."
+          // Presente-neutro ("te devolvemos"): verdadero tanto si el refund ya procesó
+          // como si quedó en cola de reintentos (no afirmar en pasado lo que puede no ser).
+          : estado === "cancelado" ? "Te devolvemos el pago completo. Podés reservar un nuevo turno cuando quieras."
+          : estado === "ausente" ? "Te devolvemos el pago completo. Podés reservar un nuevo turno cuando quieras."
           : "Redirigiendo..."}
       </p>
 
@@ -170,13 +173,21 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
               <span className="text-gray-500">Estado</span>
               <span
                 className="font-medium"
-                style={{ color: estado === "esperando" ? "#378ADD" : "#1D9E75" }}
+                style={{
+                  color:
+                    estado === "esperando" ? "#378ADD"
+                    : estado === "cancelado" || estado === "ausente" ? "#E24B4A"
+                    : estado === "finalizado" ? "#888780"
+                    : "#1D9E75",
+                }}
               >
                 {estado === "esperando"
                   ? (medicoOcupado ? "Atendiendo otra consulta" : "En espera")
-                  : estado === "iniciando"
-                    ? "Médico listo"
-                    : "Videollamada lista"}
+                  : estado === "iniciando" ? "Médico listo"
+                  : estado === "ausente" ? "Cancelado — con reembolso"
+                  : estado === "cancelado" ? "Cancelado"
+                  : estado === "finalizado" ? "Finalizada"
+                  : "Videollamada lista"}
               </span>
             </div>
           </div>
@@ -194,9 +205,22 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         </a>
       )}
 
-      <p className="mt-6 text-xs text-gray-400">
-        No cierres esta pestaña
-      </p>
+      {/* Terminales con plata: el paciente se va cuando terminó de leer, no a los 4s. */}
+      {(estado === "cancelado" || estado === "ausente") && (
+        <a
+          href={returnUrl}
+          className="mt-6 block w-full rounded-xl px-6 py-3 text-center text-sm font-semibold text-white active:scale-95 active:opacity-80 transition-all duration-100"
+          style={{ background: "#378ADD" }}
+        >
+          Volver al inicio
+        </a>
+      )}
+
+      {(estado === "esperando" || estado === "iniciando" || estado === "redirigiendo") && (
+        <p className="mt-6 text-xs text-gray-400">
+          No cierres esta pestaña
+        </p>
+      )}
     </div>
   );
 }

@@ -330,15 +330,17 @@ export async function resolverNoShowMedico(
         : reintegroEstado
           ? " Tu reembolso está en proceso."
           : "";
+    // Mismo framing que la pantalla de espera ("no pudo atender", no "no se presentó" —
+    // innecesariamente incendiario contra el médico). Gate Sofía.
     await insertarMensajeSistema(
       turnoId,
       turno.paciente_id,
       turno.medico_id,
-      `El médico no se presentó al turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
+      `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
     );
     pushAlPaciente(turno.paciente_id, {
       title: "🔴 Docto",
-      body: `El médico no se presentó a tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
+      body: `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
       url: "/mis-consultas",
       tag: `noshow-${turnoId}`,
     }).catch(() => {});
@@ -378,11 +380,13 @@ export async function resolverAusentePaciente(
   if (error || !actualizado) return { ok: false };
 
   if (turno.paciente_id) {
+    // Hecho verificable (no acusación) + regla + salida + recurso (gate Sofía): lo que el
+    // sistema SABE es que no registró su ingreso — no que "no se presentó".
     await insertarMensajeSistema(
       turnoId,
       turno.paciente_id,
       turno.medico_id,
-      `No te presentaste al turno del ${formatearFechaCorta(turno.fecha)}. El turno no es reembolsable. Podés reservar uno nuevo cuando quieras.`
+      `Tu turno del ${formatearFechaCorta(turno.fecha)} venció sin que registráramos tu ingreso a la consulta. Los turnos no utilizados no tienen reembolso. Podés reservar uno nuevo cuando quieras. Si creés que hubo un error, escribinos a soporte@docto.com.ar.`
     ).catch(() => {});
   }
 
