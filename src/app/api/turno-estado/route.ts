@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   // No desplegar este SELECT antes de aplicar la migración. Ver regla en CLAUDE.md.
   let query = supabase
     .from("turnos")
-    .select("estado, sala_video_url, desconectado_at")
+    .select("estado, sala_video_url, desconectado_at, medico_id")
     .eq("id", turnoId);
 
   if (medico) {
@@ -60,5 +60,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ estado, sala_video_url: data.sala_video_url, desconectado_at });
+  // ¿El médico está atendiendo a OTRO paciente ahora? (CI o turno en_curso). La sala de
+  // espera lo muestra para que una demora >20 min se entienda como legítima (decisión
+  // Diego 08/07: el motor de no-show no resuelve mientras el médico esté atendiendo).
+  // Solo se computa para el paciente esperando — con admin client (agregado, sin PII).
+  let medico_ocupado = false;
+  if (!medico && estado === "en_espera" && data.medico_id) {
+    const admin = createAdminClient();
+    const [{ count: cis }, { count: tns }] = await Promise.all([
+      admin.from("consultas").select("id", { count: "exact", head: true }).eq("medico_id", data.medico_id).eq("estado", "en_curso"),
+      admin.from("turnos").select("id", { count: "exact", head: true }).eq("medico_id", data.medico_id).eq("estado", "en_curso"),
+    ]);
+    medico_ocupado = (cis ?? 0) > 0 || (tns ?? 0) > 0;
+  }
+
+  return NextResponse.json({ estado, sala_video_url: data.sala_video_url, desconectado_at, medico_ocupado });
 }

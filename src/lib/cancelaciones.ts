@@ -208,7 +208,11 @@ export async function cancelarTurnoPorMedico(
 
   if (!turno) return { ok: false, reembolso: false, error: "Turno no encontrado." };
   if (turno.medico_id !== medicoId) return { ok: false, reembolso: false, error: "No es tu turno." };
-  if (turno.estado !== "confirmado" && turno.estado !== "en_espera") {
+  // `en_curso` incluido (08/07, decisión Diego): ante una falla técnica en plena consulta,
+  // el médico necesita una salida que reembolse al paciente — sin esto, su única opción
+  // era marcarla "completada" (paciente pagó y no recibió nada, sin camino de reembolso).
+  const CANCELABLES = ["confirmado", "en_espera", "en_curso"];
+  if (!CANCELABLES.includes(turno.estado)) {
     return { ok: false, reembolso: false, error: "Este turno no se puede cancelar." };
   }
 
@@ -223,16 +227,22 @@ export async function cancelarTurnoPorMedico(
     );
   }
 
-  const { error } = await supabase
+  // Guard de estado en el UPDATE: si otra corrida/acción lo movió (ej. completado)
+  // entre la lectura y acá, no lo pisamos.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_medico",
       motivo_cancelacion: motivo || null,
       reintegro_estado: reintegroEstado,
     })
-    .eq("id", turnoId);
+    .eq("id", turnoId)
+    .in("estado", CANCELABLES)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+  if (!actualizado) return { ok: false, reembolso: false, error: "El turno cambió de estado. Recargá la página." };
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_medico" }).catch(() => {});
 
@@ -335,6 +345,48 @@ export async function resolverNoShowMedico(
   }
 
   return { ok: true, reembolso: reintegroEstado };
+}
+
+// Turno `confirmado` que NADIE tomó: el paciente nunca entró a la sala (si hubiera
+// entrado estaría en_espera) y pasó el fin del turno + gracia. Decisión Diego (08/07):
+// es ausencia del PACIENTE → SIN reembolso, el médico conserva el cobro, y queda
+// medible en reportes como consulta no realizada (estado ausente_paciente).
+// Idempotente: solo actúa si el turno SIGUE en `confirmado`.
+export async function resolverAusentePaciente(
+  turnoId: string
+): Promise<{ ok: boolean }> {
+  const supabase = createAdminClient();
+
+  const { data: turno } = await supabase
+    .from("turnos")
+    .select("id, estado, paciente_id, medico_id, fecha")
+    .eq("id", turnoId)
+    .single();
+  if (!turno || turno.estado !== "confirmado") return { ok: false };
+
+  const { data: actualizado, error } = await supabase
+    .from("turnos")
+    .update({
+      estado: "ausente_paciente",
+      resolucion_motivo: "paciente_ausente",
+      motivo_cancelacion: "Paciente ausente — no se presentó al turno",
+    })
+    .eq("id", turnoId)
+    .eq("estado", "confirmado")
+    .select("id")
+    .maybeSingle();
+  if (error || !actualizado) return { ok: false };
+
+  if (turno.paciente_id) {
+    await insertarMensajeSistema(
+      turnoId,
+      turno.paciente_id,
+      turno.medico_id,
+      `No te presentaste al turno del ${formatearFechaCorta(turno.fecha)}. El turno no es reembolsable. Podés reservar uno nuevo cuando quieras.`
+    ).catch(() => {});
+  }
+
+  return { ok: true };
 }
 
 export async function reprogramarTurno(

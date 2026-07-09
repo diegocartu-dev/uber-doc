@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/validar-refeps-pendientes",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/resolver-turnos-vencidos",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -19,6 +19,7 @@ import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
 import PantallaIdentidad from "./PantallaIdentidad";
+import BotonNoPudeAtender from "./BotonNoPudeAtender";
 import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
 import AvatarDropdown from "./AvatarDropdown";
@@ -497,6 +498,9 @@ export default async function DashboardPage({
                 Ver consulta
               </Link>
             </div>
+            {/* Salida ante falla técnica: cancela + reembolsa (antes la única opción era
+                marcarlo completado — paciente pagaba sin recibir nada). */}
+            <BotonNoPudeAtender turnoId={turnoEnCurso.id} />
           </div>
         )}
 
