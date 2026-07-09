@@ -23,7 +23,10 @@ const GRACIA_MIN = 20;
 const MAX_POR_CORRIDA = 20;
 
 // fecha "YYYY-MM-DD" + hora "HH:MM[:SS]" en AR (UTC-3 fijo, sin DST) → epoch ms.
-function epochAR(fecha: string, hora: string): number {
+// Defensivo ante null (las columnas son NOT NULL, pero un dato roto no debe matar
+// la corrida entera del cron): NaN → el filtro lo saltea.
+function epochAR(fecha: string | null, hora: string | null): number {
+  if (!fecha || !hora) return NaN;
   const h = hora.length === 5 ? `${hora}:00` : hora;
   return new Date(`${fecha}T${h}-03:00`).getTime();
 }

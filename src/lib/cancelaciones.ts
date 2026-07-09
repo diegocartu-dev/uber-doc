@@ -143,16 +143,23 @@ export async function cancelarTurnoPorPaciente(
     );
   }
 
-  const { error } = await supabase
+  // Guard de estado en el UPDATE (gate Roberto #256): en carrera con el motor de
+  // no-show, un update incondicional podía pisar `ausente_medico` recién escrito
+  // (borrando su reintegro_estado) y encima duplicar el slot como disponible.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_paciente",
       motivo_cancelacion: motivo || null,
       reintegro_estado: reintegroEstado,
     })
-    .eq("id", turnoId);
+    .eq("id", turnoId)
+    .in("estado", ["confirmado", "en_espera"])
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+  if (!actualizado) return { ok: false, reembolso: false, error: "El turno cambió de estado. Recargá la página." };
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_paciente" }).catch(() => {});
 
@@ -311,7 +318,9 @@ export async function resolverNoShowMedico(
 
   // Idempotencia: el `.eq("estado","en_espera")` evita que dos corridas re-resuelvan.
   // `motivo_cancelacion` = texto que el dashboard de reembolsos muestra al lado del paciente.
-  const { error } = await supabase
+  // Filas afectadas verificadas (gate Roberto): el perdedor de una carrera no debe
+  // mandar mensaje + push duplicado al paciente.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "ausente_medico",
@@ -320,8 +329,10 @@ export async function resolverNoShowMedico(
       reintegro_estado: reintegroEstado,
     })
     .eq("id", turnoId)
-    .eq("estado", "en_espera");
-  if (error) return { ok: false, reembolso: reintegroEstado };
+    .eq("estado", "en_espera")
+    .select("id")
+    .maybeSingle();
+  if (error || !actualizado) return { ok: false, reembolso: reintegroEstado };
 
   if (turno.paciente_id) {
     const reembolsoMsg =
