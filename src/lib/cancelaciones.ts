@@ -143,16 +143,23 @@ export async function cancelarTurnoPorPaciente(
     );
   }
 
-  const { error } = await supabase
+  // Guard de estado en el UPDATE (gate Roberto #256): en carrera con el motor de
+  // no-show, un update incondicional podía pisar `ausente_medico` recién escrito
+  // (borrando su reintegro_estado) y encima duplicar el slot como disponible.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_paciente",
       motivo_cancelacion: motivo || null,
       reintegro_estado: reintegroEstado,
     })
-    .eq("id", turnoId);
+    .eq("id", turnoId)
+    .in("estado", ["confirmado", "en_espera"])
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+  if (!actualizado) return { ok: false, reembolso: false, error: "El turno cambió de estado. Recargá la página." };
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_paciente" }).catch(() => {});
 
@@ -208,7 +215,11 @@ export async function cancelarTurnoPorMedico(
 
   if (!turno) return { ok: false, reembolso: false, error: "Turno no encontrado." };
   if (turno.medico_id !== medicoId) return { ok: false, reembolso: false, error: "No es tu turno." };
-  if (turno.estado !== "confirmado" && turno.estado !== "en_espera") {
+  // `en_curso` incluido (08/07, decisión Diego): ante una falla técnica en plena consulta,
+  // el médico necesita una salida que reembolse al paciente — sin esto, su única opción
+  // era marcarla "completada" (paciente pagó y no recibió nada, sin camino de reembolso).
+  const CANCELABLES = ["confirmado", "en_espera", "en_curso"];
+  if (!CANCELABLES.includes(turno.estado)) {
     return { ok: false, reembolso: false, error: "Este turno no se puede cancelar." };
   }
 
@@ -223,16 +234,22 @@ export async function cancelarTurnoPorMedico(
     );
   }
 
-  const { error } = await supabase
+  // Guard de estado en el UPDATE: si otra corrida/acción lo movió (ej. completado)
+  // entre la lectura y acá, no lo pisamos.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "cancelado_medico",
       motivo_cancelacion: motivo || null,
       reintegro_estado: reintegroEstado,
     })
-    .eq("id", turnoId);
+    .eq("id", turnoId)
+    .in("estado", CANCELABLES)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, reembolso: false, error: error.message };
+  if (!actualizado) return { ok: false, reembolso: false, error: "El turno cambió de estado. Recargá la página." };
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_medico" }).catch(() => {});
 
@@ -301,7 +318,9 @@ export async function resolverNoShowMedico(
 
   // Idempotencia: el `.eq("estado","en_espera")` evita que dos corridas re-resuelvan.
   // `motivo_cancelacion` = texto que el dashboard de reembolsos muestra al lado del paciente.
-  const { error } = await supabase
+  // Filas afectadas verificadas (gate Roberto): el perdedor de una carrera no debe
+  // mandar mensaje + push duplicado al paciente.
+  const { data: actualizado, error } = await supabase
     .from("turnos")
     .update({
       estado: "ausente_medico",
@@ -310,8 +329,10 @@ export async function resolverNoShowMedico(
       reintegro_estado: reintegroEstado,
     })
     .eq("id", turnoId)
-    .eq("estado", "en_espera");
-  if (error) return { ok: false, reembolso: reintegroEstado };
+    .eq("estado", "en_espera")
+    .select("id")
+    .maybeSingle();
+  if (error || !actualizado) return { ok: false, reembolso: reintegroEstado };
 
   if (turno.paciente_id) {
     const reembolsoMsg =
@@ -320,21 +341,67 @@ export async function resolverNoShowMedico(
         : reintegroEstado
           ? " Tu reembolso está en proceso."
           : "";
+    // Mismo framing que la pantalla de espera ("no pudo atender", no "no se presentó" —
+    // innecesariamente incendiario contra el médico). Gate Sofía.
     await insertarMensajeSistema(
       turnoId,
       turno.paciente_id,
       turno.medico_id,
-      `El médico no se presentó al turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
+      `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
     );
     pushAlPaciente(turno.paciente_id, {
       title: "🔴 Docto",
-      body: `El médico no se presentó a tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
+      body: `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
       url: "/mis-consultas",
       tag: `noshow-${turnoId}`,
     }).catch(() => {});
   }
 
   return { ok: true, reembolso: reintegroEstado };
+}
+
+// Turno `confirmado` que NADIE tomó: el paciente nunca entró a la sala (si hubiera
+// entrado estaría en_espera) y pasó el fin del turno + gracia. Decisión Diego (08/07):
+// es ausencia del PACIENTE → SIN reembolso, el médico conserva el cobro, y queda
+// medible en reportes como consulta no realizada (estado ausente_paciente).
+// Idempotente: solo actúa si el turno SIGUE en `confirmado`.
+export async function resolverAusentePaciente(
+  turnoId: string
+): Promise<{ ok: boolean }> {
+  const supabase = createAdminClient();
+
+  const { data: turno } = await supabase
+    .from("turnos")
+    .select("id, estado, paciente_id, medico_id, fecha")
+    .eq("id", turnoId)
+    .single();
+  if (!turno || turno.estado !== "confirmado") return { ok: false };
+
+  const { data: actualizado, error } = await supabase
+    .from("turnos")
+    .update({
+      estado: "ausente_paciente",
+      resolucion_motivo: "paciente_ausente",
+      motivo_cancelacion: "Paciente ausente — no se presentó al turno",
+    })
+    .eq("id", turnoId)
+    .eq("estado", "confirmado")
+    .select("id")
+    .maybeSingle();
+  if (error || !actualizado) return { ok: false };
+
+  if (turno.paciente_id) {
+    // Hecho verificable (no acusación) + regla + salida + recurso (gate Sofía): lo que el
+    // sistema SABE es que no registró su ingreso — no que "no se presentó".
+    await insertarMensajeSistema(
+      turnoId,
+      turno.paciente_id,
+      turno.medico_id,
+      `Tu turno del ${formatearFechaCorta(turno.fecha)} venció sin que registráramos tu ingreso a la consulta. Los turnos no utilizados no tienen reembolso. Podés reservar uno nuevo cuando quieras. Si creés que hubo un error, escribinos a soporte@docto.com.ar.`
+    ).catch(() => {});
+  }
+
+  return { ok: true };
 }
 
 export async function reprogramarTurno(

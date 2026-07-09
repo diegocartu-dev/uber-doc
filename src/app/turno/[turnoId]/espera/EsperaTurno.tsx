@@ -13,10 +13,14 @@ type Props = {
   returnUrl?: string;
 };
 
-type Estado = "esperando" | "iniciando" | "redirigiendo" | "finalizado" | "cancelado";
+type Estado = "esperando" | "iniciando" | "redirigiendo" | "finalizado" | "cancelado" | "ausente";
 
 export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad, horaInicio, returnUrl = "/dashboard" }: Props) {
   const [estado, setEstado] = useState<Estado>("esperando");
+  // El médico está atendiendo a OTRO paciente: la demora es legítima y hay que decírselo
+  // al que espera (decisión Diego 08/07 — el motor de no-show tampoco resuelve mientras
+  // el médico esté atendiendo).
+  const [medicoOcupado, setMedicoOcupado] = useState(false);
   const estadoRef = useRef<Estado>("esperando");
   estadoRef.current = estado;
 
@@ -47,6 +51,8 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         const data = await res.json();
         if (!data.estado) return;
 
+        setMedicoOcupado(data.medico_ocupado === true);
+
       // en_curso detectado
       if (data.estado === "en_curso" && estadoRef.current === "esperando") {
         setEstado("iniciando");
@@ -69,9 +75,14 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         setTimeout(() => { window.location.href = returnUrl; }, 3000);
         return;
       }
+      // Estados terminales con PLATA: sin auto-redirect (gate Sofía) — el paciente cierra
+      // cuando terminó de entender qué pasó con su pago (botón "Volver al inicio").
       if (data.estado === "cancelado_medico") {
         setEstado("cancelado");
-        setTimeout(() => { window.location.href = returnUrl; }, 3000);
+        return;
+      }
+      if (data.estado === "ausente_medico") {
+        setEstado("ausente");
         return;
       }
       if (["cancelado_paciente", "ausente_paciente"].includes(data.estado)) {
@@ -98,7 +109,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       {/* Animación de estado */}
       <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full" style={{
         background: estado === "esperando" ? "#378ADD15"
-          : estado === "cancelado" ? "#E24B4A15"
+          : estado === "cancelado" || estado === "ausente" ? "#E24B4A15"
           : "#1D9E7515"
       }}>
         {estado === "esperando" ? (
@@ -110,7 +121,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
           <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
         ) : estado === "finalizado" ? (
           <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
-        ) : estado === "cancelado" ? (
+        ) : estado === "cancelado" || estado === "ausente" ? (
           <XCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-danger)" }} />
         ) : (
           <Video size={40} strokeWidth={1.75} style={{ color: "var(--color-info)" }} />
@@ -118,18 +129,27 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
       </div>
 
       <h1 className="mt-6 text-xl font-bold text-gray-900">
-        {estado === "esperando" ? "Esperando al médico..."
+        {estado === "esperando" ? (medicoOcupado ? "El médico está atendiendo otra consulta" : "Esperando al médico...")
           : estado === "iniciando" ? "¡Tu médico está listo!"
           : estado === "finalizado" ? "Tu consulta ha finalizado"
           : estado === "cancelado" ? "El médico canceló el turno"
+          : estado === "ausente" ? "El médico no pudo atenderte"
           : "Entrando a la videollamada..."}
       </h1>
 
       <p className="mt-2 text-sm text-gray-600">
-        {estado === "esperando" ? `Esperando que el ${formatNombreMedico(medicoNombre)} inicie la consulta...`
+        {estado === "esperando"
+          ? (medicoOcupado
+              // Sin nombre acá (evita "El Dra." — el nombre ya está en la card de abajo).
+              // "Tu turno sigue reservado" es lo que de verdad tranquiliza (gate Sofía).
+              ? "Tu médico está terminando con otro paciente. Tu turno sigue reservado y comienza apenas termine. Gracias por esperar."
+              : "Esperando que tu médico inicie la consulta...")
           : estado === "iniciando" ? "Preparando la videollamada..."
           : estado === "finalizado" ? "Los documentos están disponibles en tu perfil. Redirigiendo..."
-          : estado === "cancelado" ? "Redirigiendo al inicio..."
+          // Presente-neutro ("te devolvemos"): verdadero tanto si el refund ya procesó
+          // como si quedó en cola de reintentos (no afirmar en pasado lo que puede no ser).
+          : estado === "cancelado" ? "Te devolvemos el pago completo. Podés reservar un nuevo turno cuando quieras."
+          : estado === "ausente" ? "Te devolvemos el pago completo. Podés reservar un nuevo turno cuando quieras."
           : "Redirigiendo..."}
       </p>
 
@@ -153,13 +173,21 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
               <span className="text-gray-500">Estado</span>
               <span
                 className="font-medium"
-                style={{ color: estado === "esperando" ? "#378ADD" : "#1D9E75" }}
+                style={{
+                  color:
+                    estado === "esperando" ? "#378ADD"
+                    : estado === "cancelado" || estado === "ausente" ? "#E24B4A"
+                    : estado === "finalizado" ? "#888780"
+                    : "#1D9E75",
+                }}
               >
                 {estado === "esperando"
-                  ? "En espera"
-                  : estado === "iniciando"
-                    ? "Médico listo"
-                    : "Videollamada lista"}
+                  ? (medicoOcupado ? "Atendiendo otra consulta" : "En espera")
+                  : estado === "iniciando" ? "Médico listo"
+                  : estado === "ausente" ? "Cancelado — con reembolso"
+                  : estado === "cancelado" ? "Cancelado"
+                  : estado === "finalizado" ? "Finalizada"
+                  : "Videollamada lista"}
               </span>
             </div>
           </div>
@@ -177,9 +205,22 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoEspecialidad,
         </a>
       )}
 
-      <p className="mt-6 text-xs text-gray-400">
-        No cierres esta pestaña
-      </p>
+      {/* Terminales con plata: el paciente se va cuando terminó de leer, no a los 4s. */}
+      {(estado === "cancelado" || estado === "ausente") && (
+        <a
+          href={returnUrl}
+          className="mt-6 block w-full rounded-xl px-6 py-3 text-center text-sm font-semibold text-white active:scale-95 active:opacity-80 transition-all duration-100"
+          style={{ background: "#378ADD" }}
+        >
+          Volver al inicio
+        </a>
+      )}
+
+      {(estado === "esperando" || estado === "iniciando" || estado === "redirigiendo") && (
+        <p className="mt-6 text-xs text-gray-400">
+          No cierres esta pestaña
+        </p>
+      )}
     </div>
   );
 }

@@ -581,6 +581,20 @@ export default function SalaConsultaPaciente({
           setEstado(estadoCompletado);
           setMostrandoRejoin(false);
           setVideoVisible(false);
+          return;
+        }
+        // Cancelación mientras está EN la llamada (ej: "No pude atender" del médico
+        // sobre un turno en_curso): el poll también converge — regla del proyecto:
+        // NUNCA depender solo de Realtime para transiciones críticas del paciente.
+        const esCancelTerminal = tipo === "turno"
+          ? data.estado === "cancelado_medico" || data.estado === "cancelado_paciente"
+          : data.estado === "cancelada";
+        if (esCancelTerminal) {
+          yaCerroRef.current = true;
+          clearInterval(interval);
+          setEstado(data.estado);
+          setMostrandoRejoin(false);
+          setVideoVisible(false);
         }
       } catch {
         // Polling: falla silenciosamente, el siguiente tick reintenta
@@ -588,7 +602,7 @@ export default function SalaConsultaPaciente({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [pollingUrl, estadoCompletado]);
+  }, [pollingUrl, estadoCompletado, tipo]);
 
   // --- Fallback anti-trabado: si tras ~20s en "cerrando" el estado sigue sin ser
   // completado (el update del médico falló silenciosamente), forzamos una pantalla
