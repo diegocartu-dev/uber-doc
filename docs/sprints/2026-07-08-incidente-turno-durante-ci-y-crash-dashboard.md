@@ -23,3 +23,25 @@ Roberto: **APROBADO los 3**, con RLS/policies y grants verificados contra produc
 - Centralizar `ahoraAR()` + `MARGEN_MIN` en `src/lib/` (hoy duplicado en 3 archivos).
 - `AgendaHoy` se monta 2 veces (grid desktop + stack mobile, CSS oculta pero React monta) → intervals duplicados.
 - CI E2E corre solo chromium desktop — este crash era Android-only e invisible para Playwright (refuerza el pendiente `mobile-safari`/device testing pre-F&F).
+
+---
+
+# Parte 2 (mismo día) — resolución de turnos vencidos + salida del médico (#256)
+
+**Reporte de Diego (video 2 + captura):** el turno colgado `en_curso` de la prueba solo se podía "completar" (paciente pagó sin recibir nada, sin reembolso) y el turno de las 12:00 que nadie tomó seguía vigente a las 17:00. El motor existente solo cubría `en_espera`, con 1 h de gracia, una vez al día (02:59).
+
+## Decisiones de Diego
+- `en_espera` + **20 min del inicio** → `ausente_medico` + reembolso, **salvo que el médico esté atendiendo** a otro paciente (CI o turno `en_curso`) — en ese caso la espera es legítima y a la sala de espera se le informa ("está atendiendo otra consulta — tu turno sigue reservado").
+- `confirmado` que **nadie** tomó + **20 min del fin** → `ausente_paciente`, **SIN reembolso** (ganancia del médico), medible en reportes como consulta no realizada.
+
+## Qué quedó en prod (#256)
+- Cron **`resolver-turnos-vencidos`** cada 10 min (el diario 02:59 queda de backstop). `resolverAusentePaciente()` nueva; sin migración de estados (ya existían en el CHECK).
+- **Botón del médico "No pude atender este turno"** en la card TURNO EN CURSO → dialog inline → cancela + reembolso completo ("no se te paga; queda registrada"). `cancelarTurnoPorMedico` acepta `en_curso`.
+- Sala de espera del paciente: banner médico-ocupado, terminal "El médico no pudo atenderte" **sin auto-redirect** (botón Volver al inicio), copys gate Sofía (sin "El Dra.", "Te devolvemos el pago completo" presente-neutro, mensaje al ausente con hecho verificable + recurso a soporte).
+- Carreras (gate Roberto): poll de `SalaConsultaPaciente` converge también en cancelación (no solo Realtime); guards de estado en TODOS los UPDATEs de cancelación; sin doble refund (idempotency key MP compartida + anti-over-refund + guards — verificado en 3 capas).
+- **CRÍTICO cerrado:** `marcar_ausente_paciente()` y `expirar_turno(uuid)` eran ejecutables por PUBLIC/anon/authenticated vía PostgREST — con la política nueva, un médico podía anular el reembolso de su paciente con un POST anónimo. `REVOKE` aplicado y verificado en prod (`20260708_revoke_rpc_turnos.sql`); cierra también el backlog `project_backlog_rpc_revoke`.
+
+## Decisiones pendientes (próximo sprint, anotadas por Roberto)
+- Ventana efectiva del botón en desconexión total: el auto-cierre del rejoin marca `completado` a los 2 min — el caso que motivó el botón puede escapársele. ¿Extender la ventana / permitir cancelar post-cierre?
+- `ausente_paciente` bypasseable: un paciente que entra 1 segundo a la sala queda `en_espera` para siempre (cobra reembolso a inicio+20 aunque no vuelva). ¿Gatear la entrada a T-15 min o exigir presencia reciente?
+- Patrón claim-first (UPDATE antes del refund) en `cancelarTurnoPorMedico`/`resolverNoShowMedico` — elimina el refund huérfano de ventana ~1-2 s.
