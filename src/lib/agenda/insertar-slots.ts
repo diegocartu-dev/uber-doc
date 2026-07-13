@@ -19,12 +19,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // arbitra cada fila.
 
 // Estados que OCUPAN la clave (medico_id, fecha, hora_inicio) — espejo del
-// predicado del índice único parcial (todo lo NO terminal). `reprogramado` y
-// `bloqueado_sin_cobro` incluidos (gate Roberto #261): no están excluidos del
-// índice, así que retienen la clave; si no figuraran acá, el filtro no los vería
-// y cada corrida re-intentaría el insert (churn 23505 perpetuo).
-// Si un turno reprogramado debe re-ofrecer su horario origen es una decisión de
-// producto pendiente (Diego) — hoy se comporta como siempre: lo retiene.
+// predicado del índice único parcial (todo lo NO terminal). Mantener en sync con
+// la migración vigente del índice (20260713_reprogramado_reofrece).
+// `reprogramado` NO está (decisión Diego 13/07): un turno reprogramado re-ofrece
+// su horario origen — la fila es histórico/contable, no retiene la clave; el cron
+// regenera esos huecos dentro del horizonte del modelo como backstop.
 export const ESTADOS_ACTIVOS_SLOT = [
   "disponible",
   "bloqueado",
@@ -32,7 +31,6 @@ export const ESTADOS_ACTIVOS_SLOT = [
   "confirmado",
   "en_espera",
   "en_curso",
-  "reprogramado",
   "bloqueado_sin_cobro",
 ];
 
