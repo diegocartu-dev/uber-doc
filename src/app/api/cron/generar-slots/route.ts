@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
+import { insertarSlotsSinDuplicar } from "@/lib/agenda/insertar-slots";
 
 function getHoyAR(): string {
   const ar = new Date(
@@ -156,25 +157,25 @@ async function handler(req: NextRequest) {
 
     if (turnosAInsertar.length === 0) continue;
 
-    // Insert en batches de 500 con ON CONFLICT DO NOTHING
-    // Supabase no soporta ON CONFLICT nativo, usamos upsert con ignoreDuplicates
-    const BATCH = 500;
-    let insertados = 0;
-    for (let i = 0; i < turnosAInsertar.length; i += BATCH) {
-      const batch = turnosAInsertar.slice(i, i + BATCH);
-      const { data: inserted, error: errInsert } = await supabase
-        .from("turnos")
-        .upsert(batch, {
-          onConflict: "medico_id,fecha,hora_inicio",
-          ignoreDuplicates: true,
-        })
-        .select("id");
-
-      if (errInsert) {
-        logError("[CRON/SLOTS]", "Error insertando slots", { modeloId: modelo.id, error: errInsert.message });
-      } else {
-        insertados += inserted?.length ?? 0;
-      }
+    // Insert vía helper compartido (src/lib/agenda/insertar-slots.ts): dedup
+    // contra slots ACTIVOS + insert con degradación 23505. Sin upsert/onConflict
+    // (incompatible con el índice parcial 20260713 — ver comentario del helper).
+    // Bonus: los slots cuya única fila es terminal (cancelado/ausente/completado)
+    // se REGENERAN si siguen dentro del horizonte del modelo — backstop del
+    // horario perdido al cancelar.
+    const { insertados, errorLectura } = await insertarSlotsSinDuplicar(
+      supabase,
+      modelo.medico_id,
+      turnosAInsertar,
+      (msg, detalle) => logError("[CRON/SLOTS]", msg, { modeloId: modelo.id, ...detalle })
+    );
+    if (errorLectura) {
+      // Fail-safe del helper: no insertó a ciegas.
+      logError("[CRON/SLOTS]", "Error leyendo slots existentes — se saltea el modelo", {
+        modeloId: modelo.id,
+        error: errorLectura,
+      });
+      continue;
     }
 
     resumen.push({
