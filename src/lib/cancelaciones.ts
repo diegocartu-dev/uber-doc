@@ -109,6 +109,69 @@ export async function ejecutarRefund(
   return "pendiente";
 }
 
+// Re-ofrece el horario de un turno que dejó de retenerlo (cancelación del
+// paciente o reprogramación del médico): inserta una fila `disponible` nueva con
+// la misma clave. Requiere el índice PARCIAL (migraciones 20260713): la fila
+// origen, ya en estado terminal, no choca. Copia modelo_id y canal_origen (gate
+// Roberto #261: sin modelo_id, recalcularBloqueos mata el slot re-creado; sin
+// canal, un turno de consultorio se re-ofrecería en el canal público).
+// El flujo principal NO se aborta si esto falla (el turno ya transicionó): se
+// loguea + alerta para reponer a mano. Backstop: generar-slots re-crea slots sin
+// fila activa dentro del horizonte del modelo.
+// OJO: la reprogramación CON CRÉDITO del paciente NO llama esto — su horario ya
+// se re-ofreció cuando el turno se canceló.
+async function reofrecerHorario(
+  supabase: ReturnType<typeof createAdminClient>,
+  turnoOrigenId: string,
+  contexto: string
+): Promise<void> {
+  const { data: turno, error: errLectura } = await supabase
+    .from("turnos")
+    .select("medico_id, modelo_id, fecha, hora_inicio, hora_fin, monto, canal_origen")
+    .eq("id", turnoOrigenId)
+    .maybeSingle();
+  if (!turno) {
+    // Distinguir fallo de lectura de not-found real (gate Roberto #262 obs.1) y
+    // alertar en ambos: un horario que no se re-ofrece es pérdida silenciosa.
+    const motivo = errLectura
+      ? `error leyendo el turno: ${errLectura.message}`
+      : "turno origen no encontrado";
+    logError("[CANCELACIONES]", `reofrecerHorario: ${motivo}`, {
+      turnoOrigenId,
+      contexto,
+    });
+    sendDoctoAlert(
+      `⚠️ Horario no re-ofrecido tras ${contexto}`,
+      `No se pudo re-ofrecer el horario del turno ${turnoOrigenId} (${motivo}). Queda sin ofrecer hasta que generar-slots lo reponga o se reponga a mano.`
+    ).catch(() => {});
+    return;
+  }
+
+  const { error: errSlot } = await supabase.from("turnos").insert({
+    medico_id: turno.medico_id,
+    modelo_id: turno.modelo_id,
+    fecha: turno.fecha,
+    hora_inicio: turno.hora_inicio,
+    hora_fin: turno.hora_fin,
+    estado: "disponible",
+    monto: turno.monto,
+    canal_origen: turno.canal_origen,
+  });
+  if (errSlot) {
+    logError("[CANCELACIONES]", "No se pudo re-ofrecer el horario (queda sin ofrecer)", {
+      turnoOrigenId,
+      contexto,
+      medicoId: turno.medico_id,
+      fecha: turno.fecha,
+      error: errSlot.message,
+    });
+    sendDoctoAlert(
+      `⚠️ Horario no re-ofrecido tras ${contexto}`,
+      `Tras ${contexto} del turno ${turnoOrigenId} no se pudo volver a ofrecer el horario ${turno.fecha} ${turno.hora_inicio} del médico ${turno.medico_id}:\n\n${errSlot.message}\n\nQueda sin ofrecer hasta que generar-slots lo reponga o se reponga a mano.`
+    ).catch(() => {});
+  }
+}
+
 export async function cancelarTurnoPorPaciente(
   turnoId: string,
   pacienteId: string,
@@ -163,39 +226,7 @@ export async function cancelarTurnoPorPaciente(
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_paciente" }).catch(() => {});
 
-  // Re-ofrecer el horario liberado. OJO: este insert FALLABA SILENCIOSAMENTE al
-  // 100% (choque con el índice único medico_id+fecha+hora_inicio, que hasta la
-  // migración 20260713 abarcaba también la fila recién cancelada) y el error no
-  // se chequeaba → 9 slots vendibles evaporados sin rastro (auditoría 13/07).
-  // La cancelación del paciente NO se aborta si esto falla (ya está cancelada y
-  // reembolsada); se alerta para reponer el slot a mano. Backstop: generar-slots
-  // re-crea slots sin fila activa dentro del horizonte del modelo.
-  // Copiar modelo_id y canal_origen (gate Roberto #261): sin modelo_id, el slot
-  // re-creado queda huérfano y recalcularBloqueos lo bloquea en la próxima
-  // recalculación sin poder desbloquearlo jamás; sin canal_origen, un turno de
-  // consultorio se re-ofrecería en el canal público (default 'clinica_virtual').
-  const { error: errSlot } = await supabase.from("turnos").insert({
-    medico_id: turno.medico_id,
-    modelo_id: turno.modelo_id,
-    fecha: turno.fecha,
-    hora_inicio: turno.hora_inicio,
-    hora_fin: turno.hora_fin,
-    estado: "disponible",
-    monto: turno.monto,
-    canal_origen: turno.canal_origen,
-  });
-  if (errSlot) {
-    logError("[CANCELACIONES]", "No se pudo re-crear el slot al cancelar (queda sin ofrecer)", {
-      turnoId,
-      medicoId: turno.medico_id,
-      fecha: turno.fecha,
-      error: errSlot.message,
-    });
-    sendDoctoAlert(
-      "⚠️ Slot no re-creado tras cancelación de paciente",
-      `Al cancelar el turno ${turnoId} no se pudo volver a ofrecer el horario ${turno.fecha} ${turno.hora_inicio} del médico ${turno.medico_id}:\n\n${errSlot.message}\n\nEl slot queda sin ofrecer hasta que generar-slots lo reponga o se reponga a mano.`
-    ).catch(() => {});
-  }
+  await reofrecerHorario(supabase, turnoId, "cancelación de paciente");
 
   enviarEmailTurnoCancelado(turnoId, "paciente").catch(console.error);
 
@@ -485,6 +516,12 @@ export async function reprogramarTurnoMedico(
 
   const resultado = data as string;
   if (resultado !== "ok") return { ok: false, error: resultado };
+
+  // El turno origen era un confirmado VIVO que retenía su horario; al moverse, el
+  // horario queda libre → re-ofrecerlo (decisión Diego 13/07). La reprogramación
+  // con crédito (reprogramarTurno) NO hace esto: su horario ya se re-ofreció al
+  // cancelar.
+  await reofrecerHorario(supabase, turnoOrigenId, "reprogramación del médico");
 
   // Notificar al paciente del nuevo horario (paciente_id se deriva del turno movido)
   const { data: nuevoTurno } = await supabase
