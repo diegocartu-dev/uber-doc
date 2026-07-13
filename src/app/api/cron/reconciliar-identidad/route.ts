@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconciliar";
+import { withCron } from "@/lib/cron-guard";
 
 /**
  * Cron cada 10 min: BACKSTOP de la validación de identidad biométrica (Didit).
@@ -31,7 +32,7 @@ const MAX_POR_CORRIDA = 10;
 // a nadie y el backfill los procesa a todos.
 const TERMINALES = new Set(["Declined", "Expired", "Abandoned"]);
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   // Fail-closed: sin CRON_SECRET configurado, "Bearer undefined" pasaría el check.
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 500 });
@@ -106,3 +107,5 @@ export async function GET(req: Request) {
   );
   return NextResponse.json({ ok: true, procesados: candidatos.length, validados, resumen });
 }
+
+export const GET = withCron("reconciliar-identidad", handler);

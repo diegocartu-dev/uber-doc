@@ -5,6 +5,7 @@ import { decrypt } from "@/lib/mp-crypto";
 import { pushAlMedico } from "@/lib/push";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
+import { withCron } from "@/lib/cron-guard";
 
 // Horas tras las cuales un refund sin saldo del médico se escala a cobertura
 // manual por CVU (sección 2.2 de la política de reembolsos).
@@ -41,7 +42,7 @@ interface RefundPendiente {
   docto_refund_id: string | null;
 }
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -277,3 +278,5 @@ async function escalarPorDeuda(admin: Admin, r: RefundPendiente, ahora: Date): P
     tag: `deuda-${r.recurso_id}`,
   }).catch(() => {});
 }
+
+export const GET = withCron("reintentar-refunds", handler);

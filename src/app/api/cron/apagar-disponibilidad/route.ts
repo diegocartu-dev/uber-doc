@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlMedico } from "@/lib/push";
+import { withCron } from "@/lib/cron-guard";
 
 /**
  * Cron cada 30 min (decisión Diego 24/06/2026): apaga la disponibilidad de
@@ -28,7 +29,7 @@ import { pushAlMedico } from "@/lib/push";
 const HORAS_MAX_ENCENDIDO = 4;
 const CONSULTA_ACTIVA = ["esperando", "aceptada", "en_curso"];
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -128,3 +129,5 @@ export async function GET(req: Request) {
     sinAncla: sinAncla ?? 0,
   });
 }
+
+export const GET = withCron("apagar-disponibilidad", handler);

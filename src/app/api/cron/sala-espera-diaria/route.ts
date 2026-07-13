@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notificarMedicoPlantados } from "@/lib/notificaciones-medico";
 import { resolverNoShowMedico } from "@/lib/cancelaciones";
+import { withCron } from "@/lib/cron-guard";
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -92,3 +93,5 @@ export async function GET(req: Request) {
     no_show_reembolsados: noShowReembolsados,
   });
 }
+
+export const GET = withCron("sala-espera-diaria", handler);

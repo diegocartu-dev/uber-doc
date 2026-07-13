@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
+import { withCron } from "@/lib/cron-guard";
 
 /**
  * Cron cada 10 min: resuelve la validación REFEPS de médicos pendientes cuya validación
@@ -22,7 +23,7 @@ const INTENTOS_FASE_RAPIDA = 6; // primera hora: cada corrida del cron (10 min)
 const ESPACIADO_LENTO_MS = 6 * 60 * 60 * 1000; // después: cada 6 horas
 const MAX_POR_CORRIDA = 10;
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   // Fail-closed: sin CRON_SECRET configurado, "Bearer undefined" pasaría el check.
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 500 });
@@ -73,3 +74,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ ok: true, procesados: candidatos.length, resumen });
 }
+
+export const GET = withCron("validar-refeps-pendientes", handler);

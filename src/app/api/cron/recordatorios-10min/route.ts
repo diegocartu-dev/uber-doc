@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlPaciente } from "@/lib/push";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { withCron } from "@/lib/cron-guard";
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -50,3 +51,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ ok: true, enviados });
 }
+
+// No agendado en vercel.json (decisión de producto pendiente + bug TZ conocido).
+// Se envuelve igual para cerrar el fail-open de auth (gate Roberto #260 O4);
+// NO va en ESPERADOS del watchdog hasta que se agende.
+export const GET = withCron("recordatorios-10min", handler);

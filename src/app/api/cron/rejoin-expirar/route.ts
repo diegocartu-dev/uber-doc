@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
+import { withCron } from "@/lib/cron-guard";
 
 // ---------------------------------------------------------------------------
 // GET /api/cron/rejoin-expirar  (BACKSTOP diario — ver vercel.json)
@@ -26,7 +27,7 @@ import { logInfo, logError } from "@/lib/logger";
 // Si dos ticks se solapan, el segundo ya no encuentra en_curso → no re-resuelve.
 // ---------------------------------------------------------------------------
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -89,3 +90,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ ok: true, total_cerradas: totalCerradas, detalle });
 }
+
+export const GET = withCron("rejoin-expirar", handler);
