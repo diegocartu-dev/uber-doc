@@ -118,7 +118,7 @@ export async function cancelarTurnoPorPaciente(
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, estado, paciente_id, fecha, hora_inicio, hora_fin, medico_id, monto, pago_id, mp_net_amount_medico, mp_application_fee")
+    .select("id, estado, paciente_id, fecha, hora_inicio, hora_fin, medico_id, monto, pago_id, mp_net_amount_medico, mp_application_fee, modelo_id, canal_origen")
     .eq("id", turnoId)
     .single();
 
@@ -163,14 +163,39 @@ export async function cancelarTurnoPorPaciente(
 
   cerrarEntradaSala({ turnoId, motivo: "cancelado_paciente" }).catch(() => {});
 
-  await supabase.from("turnos").insert({
+  // Re-ofrecer el horario liberado. OJO: este insert FALLABA SILENCIOSAMENTE al
+  // 100% (choque con el índice único medico_id+fecha+hora_inicio, que hasta la
+  // migración 20260713 abarcaba también la fila recién cancelada) y el error no
+  // se chequeaba → 9 slots vendibles evaporados sin rastro (auditoría 13/07).
+  // La cancelación del paciente NO se aborta si esto falla (ya está cancelada y
+  // reembolsada); se alerta para reponer el slot a mano. Backstop: generar-slots
+  // re-crea slots sin fila activa dentro del horizonte del modelo.
+  // Copiar modelo_id y canal_origen (gate Roberto #261): sin modelo_id, el slot
+  // re-creado queda huérfano y recalcularBloqueos lo bloquea en la próxima
+  // recalculación sin poder desbloquearlo jamás; sin canal_origen, un turno de
+  // consultorio se re-ofrecería en el canal público (default 'clinica_virtual').
+  const { error: errSlot } = await supabase.from("turnos").insert({
     medico_id: turno.medico_id,
+    modelo_id: turno.modelo_id,
     fecha: turno.fecha,
     hora_inicio: turno.hora_inicio,
     hora_fin: turno.hora_fin,
     estado: "disponible",
     monto: turno.monto,
+    canal_origen: turno.canal_origen,
   });
+  if (errSlot) {
+    logError("[CANCELACIONES]", "No se pudo re-crear el slot al cancelar (queda sin ofrecer)", {
+      turnoId,
+      medicoId: turno.medico_id,
+      fecha: turno.fecha,
+      error: errSlot.message,
+    });
+    sendDoctoAlert(
+      "⚠️ Slot no re-creado tras cancelación de paciente",
+      `Al cancelar el turno ${turnoId} no se pudo volver a ofrecer el horario ${turno.fecha} ${turno.hora_inicio} del médico ${turno.medico_id}:\n\n${errSlot.message}\n\nEl slot queda sin ofrecer hasta que generar-slots lo reponga o se reponga a mano.`
+    ).catch(() => {});
+  }
 
   enviarEmailTurnoCancelado(turnoId, "paciente").catch(console.error);
 

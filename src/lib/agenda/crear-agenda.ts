@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { insertarSlotsSinDuplicar } from "@/lib/agenda/insertar-slots";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // crearAgendaModelo — ÚNICO punto de verdad para crear una agenda (modelo +
@@ -261,7 +262,11 @@ export async function crearAgendaModelo(
     console.error("[crearAgendaModelo] insert agenda_franjas falló:", errFranjas.message);
   }
 
-  // 6. INSERT de turnos (lotes de 500, idempotente por índice único medico_id,fecha,hora_inicio)
+  // 6. INSERT de turnos vía helper compartido (idempotente contra slots ACTIVOS).
+  // Gate Roberto #261: acá había un upsert onConflict que (a) REQUIERE el índice
+  // único total — con el índice parcial 20260713 fallaría ENTERO en cada creación
+  // de agenda — y (b) descartaba el error → modelo+franjas creados con CERO turnos
+  // y mensaje de éxito (agenda huérfana silenciosa, en el flujo de onboarding).
   const turnosParaInsertar = slotsNuevos.map((s) => ({
     medico_id: medicoId,
     modelo_id: modelo.id,
@@ -273,14 +278,21 @@ export async function crearAgendaModelo(
     canal_origen,
   }));
 
-  let turnosCreados = 0;
-  for (let i = 0; i < turnosParaInsertar.length; i += 500) {
-    const lote = turnosParaInsertar.slice(i, i + 500);
-    const { data: insertados } = await supabase
-      .from("turnos")
-      .upsert(lote, { onConflict: "medico_id,fecha,hora_inicio", ignoreDuplicates: true })
-      .select("id");
-    turnosCreados += insertados?.length ?? 0;
+  const { insertados: turnosCreados, errorLectura } = await insertarSlotsSinDuplicar(
+    supabase,
+    medicoId,
+    turnosParaInsertar,
+    (msg, detalle) => console.error(`[crearAgendaModelo] ${msg}:`, JSON.stringify(detalle))
+  );
+  if (errorLectura) {
+    // No se pudo leer los slots existentes → el helper no insertó nada (fail-safe).
+    // El modelo/franjas ya existen; devolvemos error real en vez de éxito vacío.
+    console.error("[crearAgendaModelo] lectura de slots existentes falló:", errorLectura);
+    return {
+      ok: false,
+      motivo: "validacion",
+      mensaje: "No se pudieron crear los turnos de la agenda. Probá de nuevo en unos minutos.",
+    };
   }
 
   // 7. Resolución de choques con agendas VACÍAS: el modelo más nuevo gana →
