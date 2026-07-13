@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
+import { withCron } from "@/lib/cron-guard";
 
 function getHoyAR(): string {
   const ar = new Date(
@@ -45,7 +46,7 @@ function generarSlotsParaFranja(
   return slots;
 }
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -199,3 +200,5 @@ export async function GET(req: NextRequest) {
     detalle: resumen,
   });
 }
+
+export const GET = withCron("generar-slots", handler);

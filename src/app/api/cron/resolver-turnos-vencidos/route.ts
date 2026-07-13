@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolverNoShowMedico, resolverAusentePaciente } from "@/lib/cancelaciones";
+import { withCron } from "@/lib/cron-guard";
 
 /**
  * Cron cada 10 min (decisión Diego 08/07/2026): resuelve turnos vencidos sin esperar al
@@ -31,7 +32,7 @@ function epochAR(fecha: string | null, hora: string | null): number {
   return new Date(`${fecha}T${h}-03:00`).getTime();
 }
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 500 });
   }
@@ -109,3 +110,5 @@ export async function GET(req: Request) {
   }
   return NextResponse.json(resumen);
 }
+
+export const GET = withCron("resolver-turnos-vencidos", handler);

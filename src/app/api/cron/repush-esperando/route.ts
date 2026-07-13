@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlMedico } from "@/lib/push";
 import { avisarMedicoEsperandoWhatsApp } from "@/lib/whatsapp";
+import { withCron } from "@/lib/cron-guard";
 
 /**
  * Cron cada 10 min (decisión Diego 11/06/2026): re-notificar al médico mientras
@@ -25,7 +26,7 @@ const PENDIENTES_CONSULTA = new Set(["esperando", "aceptada", "pagada"]);
 const PENDIENTES_TURNO = new Set(["en_espera"]);
 const EDAD_MINIMA_MIN = 8;
 
-export async function GET(req: Request) {
+async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -120,3 +121,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ ok: true, recordatorios, medicosConPendientes: porMedico.size });
 }
+
+export const GET = withCron("repush-esperando", handler);

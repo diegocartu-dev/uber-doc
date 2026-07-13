@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { sendDoctoAlert } from "@/lib/alertas";
+import { withCron } from "@/lib/cron-guard";
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -165,3 +166,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(payload);
 }
+
+export const GET = withCron("cerrar-huerfanas", handler);

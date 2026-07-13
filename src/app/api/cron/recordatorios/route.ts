@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailRecordatorio24h } from "@/lib/email";
 import { logInfo, logError } from "@/lib/logger";
+import { withCron } from "@/lib/cron-guard";
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -46,3 +47,5 @@ export async function GET(req: NextRequest) {
   logInfo("[CRON/RECORDATORIOS]", "Recordatorios enviados", { enviados, fecha: fechaManana });
   return NextResponse.json({ ok: true, enviados, fecha: fechaManana });
 }
+
+export const GET = withCron("recordatorios", handler);
