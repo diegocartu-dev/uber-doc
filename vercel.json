@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/resolver-turnos-vencidos",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/reconciliar-identidad",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

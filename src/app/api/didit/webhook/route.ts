@@ -1,28 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  obtenerDecisionDidit,
-  verificarFirmaWebhook,
-  timestampEsValido,
-} from "@/lib/didit/client";
-import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+import { verificarFirmaWebhook, timestampEsValido } from "@/lib/didit/client";
+import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconciliar";
 import type { DiditWebhookPayload } from "@/lib/didit/types";
 
 // El cruce contra REFEPS (validarMedicoREFEPS) puede reintentar ante timeout del Bus.
 // Sin esto, el default de Vercel (~15s) mataría el webhook a mitad del cruce.
 export const maxDuration = 60;
 
-// Normaliza un número (DNI/matrícula) a solo dígitos para comparar.
-function soloDigitos(v: string | null | undefined): string {
-  return (v ?? "").replace(/\D/g, "");
-}
-
 // POST /api/didit/webhook
 // Didit notifica cuando cambia el estado de una sesión.
 // SEGURIDAD: no confiamos en el payload. Verificamos firma + RE-CONSULTAMOS la
 // decisión autoritativa a la API de Didit con nuestra API key. Solo marcamos
 // identidad_validada si Didit aprobó Y la matrícula declarada pertenece al DNI
-// que Didit verificó biométricamente (cruce contra REFEPS).
+// que Didit verificó biométricamente (cruce contra REFEPS). Esa lógica vive en
+// `reconciliarIdentidad` (compartida con el cron de reconciliación — única fuente
+// de verdad del control anti-suplantación).
 export async function POST(req: NextRequest) {
   // 1. Raw body — necesario para verificar la firma (no re-serializar).
   const rawBody = await req.text();
@@ -80,32 +73,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // 3. RE-CONSULTAR la decisión autoritativa a Didit.
-  let decisionStatus: string;
-  let dniDidit = "";
-  try {
-    const decision = await obtenerDecisionDidit(sessionId);
-    decisionStatus = decision.status;
-    // Solo extraemos lo mínimo. NO persistimos ni logueamos liveness/face_match.
-    dniDidit = soloDigitos(decision.id_verifications?.[0]?.document_number);
-  } catch (e) {
-    console.error(
-      "[didit/webhook] no se pudo obtener la decisión:",
-      e instanceof Error ? e.message : "error"
-    );
-    return NextResponse.json({ error: "decision" }, { status: 502 });
-  }
-
   const admin = createAdminClient();
 
-  // 4. Resolver médico por vendor_data (medico_id) o por didit_session_id.
-  let medico: {
-    id: string;
-    dni: string | null;
-    numero_matricula: string | null;
-    identidad_validada: boolean;
-  } | null = null;
-
+  // 3. Resolver médico por vendor_data (medico_id) o por didit_session_id.
+  let medico: MedicoIdentidad | null = null;
   if (medicoId) {
     const { data } = await admin
       .from("medicos")
@@ -127,53 +98,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Ya validado → solo actualizamos estado, no rehacemos el cruce.
-  if (medico.identidad_validada) {
-    await admin
-      .from("medicos")
-      .update({ didit_status: decisionStatus })
-      .eq("id", medico.id);
-    return NextResponse.json({ ok: true });
+  // 4. Decisión autoritativa + cruce anti-suplantación + persistencia (compartido).
+  const resultado = await reconciliarIdentidad(admin, medico, sessionId);
+
+  if (resultado.outcome === "error_decision") {
+    // No pudimos consultar la decisión → 502 para que Didit reintente.
+    console.error(
+      "[didit/webhook] no se pudo obtener la decisión:",
+      resultado.error
+    );
+    return NextResponse.json({ error: "decision" }, { status: 502 });
   }
-
-  const updates: Record<string, unknown> = { didit_status: decisionStatus };
-
-  // 5. Si Didit aprobó, hacemos el cruce anti-suplantación.
-  if (decisionStatus === "Approved") {
-    const dniDocto = soloDigitos(medico.dni);
-    const matriculaDocto = soloDigitos(medico.numero_matricula);
-
-    // (a) El DNI que verificó Didit debe coincidir con el DNI registrado.
-    const dniCoincide = !!dniDidit && !!dniDocto && dniDidit === dniDocto;
-
-    // (b) La matrícula declarada debe pertenecer al DNI verificado (REFEPS).
-    let matriculaPertenece = false;
-    if (dniDidit) {
-      try {
-        const refeps = await validarMedicoREFEPS(dniDidit);
-        if (refeps.encontrado && refeps.matriculas?.length) {
-          matriculaPertenece = refeps.matriculas.some(
-            (m) => soloDigitos(m.numero) === matriculaDocto && !!matriculaDocto
-          );
-        }
-      } catch {
-        // REFEPS puede fallar puntualmente → lo tratamos como no-confirmado.
-      }
-    }
-
-    if (dniCoincide && matriculaPertenece) {
-      updates.identidad_validada = true;
-      updates.identidad_validada_at = new Date().toISOString();
-    } else {
-      // Didit aprobó pero el cruce no cierra → revisión manual, NO validar.
-      console.warn(
-        `[didit/webhook] aprobado por Didit pero el cruce no cierra (dniCoincide=${dniCoincide}, matriculaPertenece=${matriculaPertenece}) medico=${medico.id}`
-      );
-      updates.didit_status = "In Review";
-    }
+  if (resultado.outcome === "en_revision") {
+    console.warn(
+      `[didit/webhook] aprobado por Didit pero el cruce no cierra (${resultado.motivo}) medico=${medico.id}`
+    );
   }
-
-  await admin.from("medicos").update(updates).eq("id", medico.id);
+  if (resultado.outcome === "refeps_transitorio") {
+    // REFEPS no respondió → no decidimos; el cron de reconciliación reintenta.
+    console.warn(
+      `[didit/webhook] REFEPS transitorio; se reintentará por el cron; medico=${medico.id}`
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
