@@ -100,6 +100,10 @@ export default function DisponibilidadMedico({
     if (result?.error) {
       setDisponibleCtx(!nuevoEstado);
       setMensaje(result.error);
+      // Abrir el panel para que el médico VEA el error + el campo a completar
+      // (ej. el precio de CI). Sin esto, con el panel colapsado el switch rebota
+      // mudo — dead-end (gate Roberto #270).
+      setAbierto(true);
     }
   }
 
