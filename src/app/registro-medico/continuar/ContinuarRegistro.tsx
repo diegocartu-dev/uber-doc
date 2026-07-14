@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera } from "lucide-react";
+import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
@@ -87,14 +87,14 @@ const PROVINCIAS = [
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-function BloqueHeader({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
+// Encabezado de bloque — SIN número: los números quedan reservados para la barra
+// de progreso (pasos 1·2·3). Acento azul a la izquierda para jerarquía, sin badge
+// circular que el ojo confunda con un "paso".
+function BloqueHeader({ titulo, subtitulo }: { titulo: string; subtitulo: string }) {
   return (
-    <div className="mb-1">
-      <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#378ADD] text-[11px] font-semibold text-white">{n}</span>
-        <span className="text-[15px] font-semibold text-gray-900">{titulo}</span>
-      </div>
-      <p className="ml-7 text-xs text-gray-500">{subtitulo}</p>
+    <div className="mb-1 border-l-2 border-[#378ADD] pl-3">
+      <p className="text-[15px] font-semibold text-gray-900">{titulo}</p>
+      <p className="mt-0.5 text-[13px] text-gray-500">{subtitulo}</p>
     </div>
   );
 }
@@ -105,7 +105,7 @@ function BloqueHeader({ n, titulo, subtitulo }: { n: number; titulo: string; sub
 // La cuenta (nombre/email/password) ya existe: acá NO se pide de nuevo.
 export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   const [paso, setPaso] = useState(1);
-  const [tipoMatricula, setTipoMatricula] = useState("MN");
+  const [tipoMatricula, setTipoMatricula] = useState(""); // nada prellenado
   const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -126,6 +126,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     const requeridos: { name: string; label: string }[] = [
       { name: "titulo", label: "Título profesional" },
       { name: "especialidad", label: "Especialidad" },
+      { name: "tipo_matricula", label: "Tipo de matrícula" },
       { name: "numero_matricula", label: "Número de matrícula" },
       { name: "dni", label: "DNI" },
       { name: "cuit", label: "CUIT" },
@@ -186,9 +187,9 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   }
 
   const inputClass =
-    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
+    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border border-gray-300 px-3 text-[15px] shadow-sm focus:outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#378ADD]/30";
   const labelClass = "block text-[13px] font-medium text-gray-700";
-  const hintClass = "mt-1 text-xs text-gray-400";
+  const hintClass = "mt-1 text-[13px] text-gray-500";
   const pasoTitulos = ["Completá tus datos", "Tu credencial", "Verificá tu identidad"];
 
   return (
@@ -242,7 +243,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
           <div className={paso === 1 ? "space-y-6" : "hidden"}>
             {/* 1 · Tus datos profesionales */}
             <div className="space-y-3">
-              <BloqueHeader n={1} titulo="Tus datos profesionales" subtitulo="Con esto validamos tu matrícula y te mostramos a los pacientes." />
+              <BloqueHeader titulo="Tus datos profesionales" subtitulo="Con esto validamos tu matrícula y te mostramos a los pacientes." />
               <div>
                 <label htmlFor="titulo" className={labelClass}>Título profesional</label>
                 <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
@@ -274,6 +275,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                       if (e.target.value === "MP") setTieneMatriculaExtra(false);
                     }}
                   >
+                    <option value="" disabled>Elegí</option>
                     <option value="MN">MN — Nacional</option>
                     <option value="MP">MP — Provincial</option>
                   </select>
@@ -338,7 +340,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
 
             {/* 2 · Tu consultorio */}
             <div className="space-y-3">
-              <BloqueHeader n={2} titulo="Tu consultorio" subtitulo="Estos datos aparecen impresos en tus recetas." />
+              <BloqueHeader titulo="Tu consultorio" subtitulo="Estos datos aparecen impresos en tus recetas." />
               <div>
                 <label htmlFor="domicilio_consultorio" className={labelClass}>Domicilio del consultorio</label>
                 <input id="domicilio_consultorio" name="domicilio_consultorio" type="text" required className={inputClass} placeholder="Av. Rivadavia 4500, CABA" />
@@ -390,7 +392,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
 
             {/* 3 · Cómo te avisamos */}
             <div className="space-y-3">
-              <BloqueHeader n={3} titulo="Cómo te avisamos" subtitulo="Solo uso interno administrativo." />
+              <BloqueHeader titulo="Cómo te avisamos" subtitulo="Solo uso interno administrativo." />
               <div>
                 <label htmlFor="celular_personal" className={labelClass}>Celular personal</label>
                 <input id="celular_personal" name="celular_personal" type="tel" required className={inputClass} placeholder="11 2345-6789" />
@@ -447,7 +449,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               <ul className="mt-2 space-y-1.5">
                 <li className="flex items-start gap-2 text-gray-600"><CheckCircle size={16} className="mt-0.5 shrink-0 text-[#1D9E75]" /><span>El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio Médico).</span></li>
                 <li className="flex items-start gap-2 text-gray-600"><X size={16} className="mt-0.5 shrink-0 text-[#E24B4A]" /><span>No es tu DNI ni tu CV ni tu título.</span></li>
-                <li className="flex items-start gap-2 text-gray-600"><span className="mt-0.5 shrink-0 text-[#BA7517]">💡</span><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
+                <li className="flex items-start gap-2 text-gray-600"><Lightbulb size={16} className="mt-0.5 shrink-0 text-[#BA7517]" /><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
               </ul>
             </div>
             <p className={hintClass}>Podés subirla ahora o después desde tu perfil.</p>

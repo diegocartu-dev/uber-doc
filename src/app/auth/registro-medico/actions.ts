@@ -105,6 +105,22 @@ export async function iniciarRegistroMedico(formData: FormData) {
   return { ok: true, email };
 }
 
+// Reenvío del mail de confirmación (por si no llegó o cayó en spam).
+export async function reenviarConfirmacionMedico(email: string) {
+  const limpio = (email || "").trim().toLowerCase();
+  if (!limpio) return { error: "Falta el email." };
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: limpio,
+    options: {
+      emailRedirectTo: "https://www.docto.com.ar/auth/callback?next=/registro-medico/continuar",
+    },
+  });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 // ═══════════════════════ FASE B — Completar registro ═════════════════════════
 // El médico ya está logueado (confirmó el mail). Crea la fila de `medicos`.
 export async function completarRegistroMedico(formData: FormData) {
@@ -187,10 +203,12 @@ export async function completarRegistroMedico(formData: FormData) {
   }
 
   // Credencial (opcional) → bucket credenciales-medicos, path definitivo con user_id.
+  // Extensión whitelisteada + tope de tamaño server-side (mismo rigor que foto_perfil).
   let foto_credencial_url: string | null = null;
   const fotoFile = formData.get("foto_credencial") as File | null;
-  if (fotoFile && fotoFile.size > 0) {
-    const ext = fotoFile.name.split(".").pop() || "jpg";
+  if (fotoFile && fotoFile.size > 0 && fotoFile.size <= 5 * 1024 * 1024) {
+    const rawExt = fotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const ext = ["jpg", "jpeg", "png", "webp", "pdf"].includes(rawExt) ? rawExt : "jpg";
     const path = `${user.id}/credencial-${Date.now()}.${ext}`;
     const { error: upErr } = await supabaseAdmin.storage
       .from("credenciales-medicos")
@@ -223,7 +241,7 @@ export async function completarRegistroMedico(formData: FormData) {
     .replace(/\s+/g, "-") + "-" + tipo_matricula + numero_matricula;
 
   const ahora = new Date().toISOString();
-  const { error: dbError } = await supabaseAdmin.from("medicos").insert({
+  const nuevoMedico = {
     user_id: user.id,
     titulo,
     nombre_completo,
@@ -247,12 +265,34 @@ export async function completarRegistroMedico(formData: FormData) {
     foto_credencial_url,
     verificado: false,
     estado_registro: "pendiente_revision",
-  });
+  };
+
+  // Retry con backoff ante errores transitorios de DB (repone la robustez del
+  // flujo viejo). NO reintentar violaciones de unique (23505): son determinísticas.
+  let dbError = null;
+  for (let intento = 0; intento < 3; intento++) {
+    const res = await supabaseAdmin.from("medicos").insert(nuevoMedico);
+    dbError = res.error;
+    if (!dbError || dbError.code === "23505") break;
+    await new Promise((r) => setTimeout(r, 300 * (intento + 1)));
+  }
 
   if (dbError) {
-    if (dbError.code === "23505") redirect("/registro-medico/identidad");
+    if (dbError.code === "23505") {
+      // Colisión de unique. ¿Por MI user_id (doble submit → ya tengo ficha) o por
+      // matrícula (carrera con otro registro)? En vez de hardcodear el nombre del
+      // constraint, chequeo si ahora tengo ficha: si sí, sigo a biometría; si no,
+      // la colisión fue de matrícula → devuelvo el mensaje correcto.
+      const { data: miFicha } = await supabaseAdmin
+        .from("medicos")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (miFicha) redirect("/registro-medico/identidad");
+      return { error: "Esta matrícula ya está registrada en Docto." };
+    }
     console.error("[completarRegistro] insert medico falló:", dbError.message, { ip, userAgent });
-    return { error: `No se pudo crear tu perfil: ${dbError.message}` };
+    return { error: "No se pudo crear tu perfil. Reintentá en unos segundos." };
   }
 
   // Validación REFEPS automática en background (waitUntil sobrevive al redirect).

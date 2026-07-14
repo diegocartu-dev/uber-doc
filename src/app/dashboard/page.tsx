@@ -199,16 +199,22 @@ export default async function DashboardPage({
     // a cualquier paciente vía la policy pública de medicos). Es el dato propio del
     // usuario, leído server-side por su user_id: seguro.
     const adminDb = createAdminClient();
-    const { data } = await adminDb
+    const { data, error: medicoError } = await adminDb
       .from("medicos")
       .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, celular_personal, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, biometria_exenta, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
       .single();
     medico = data;
 
-    // Defensa en profundidad: si el rol es médico pero la fila no cargó, NO caer
-    // al render de paciente (mostraría chrome del rol equivocado). Fallar ruidoso.
+    // Estado "limbo" del registro en 2 fases: el médico confirmó el mail (rol
+    // 'medico' en metadata) pero todavía no completó datos (Fase B), así que NO
+    // tiene ficha. PostgREST devuelve PGRST116 (0 filas) → lo mandamos a terminar
+    // el registro, no a un 500. Cualquier OTRO error (fallo real de carga) sí es
+    // fail-closed ruidoso: no caemos al render de paciente con el rol equivocado.
     if (!medico) {
+      if (!medicoError || medicoError.code === "PGRST116") {
+        redirect("/registro-medico/continuar");
+      }
       throw new Error("No se pudo cargar el perfil del médico. Reintentá en unos segundos.");
     }
 

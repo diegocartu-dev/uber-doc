@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Stethoscope, MailCheck } from "lucide-react";
-import { iniciarRegistroMedico } from "./actions";
+import { Stethoscope, MailCheck, Eye, EyeOff } from "lucide-react";
+import { iniciarRegistroMedico, reenviarConfirmacionMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 
 // Rediseño 14/07/2026 — FASE A del registro médico: crear la cuenta con lo
@@ -14,6 +14,9 @@ export default function RegistroMedicoPage() {
   const [enviadoA, setEnviadoA] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mostrarPwd, setMostrarPwd] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,8 +37,27 @@ export default function RegistroMedicoPage() {
     }
   }
 
+  async function handleReenviar() {
+    if (!enviadoA) return;
+    setReenviando(true);
+    setReenviado(false);
+    try {
+      await reenviarConfirmacionMedico(enviadoA);
+      setReenviado(true);
+    } finally {
+      setReenviando(false);
+    }
+  }
+
+  function usarOtroEmail() {
+    setEnviadoA(null);
+    setReenviado(false);
+    setError(null);
+    setLoading(false);
+  }
+
   const inputClass =
-    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
+    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border border-gray-300 px-3 text-[15px] shadow-sm focus:outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#378ADD]/30";
   const labelClass = "block text-[13px] font-medium text-gray-700";
 
   return (
@@ -63,16 +85,44 @@ export default function RegistroMedicoPage() {
                 no deseados. <strong>Seguí la registración desde ahí.</strong>
               </p>
             </div>
-            <p className="mt-5 text-xs text-gray-400">
+            <p className="mt-5 text-[13px] text-gray-500">
               Al tocar el link del mail vas a entrar y continuar tu registro.
             </p>
+
+            {/* Salidas: reenviar / corregir email — evita el callejón sin salida */}
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              {reenviado ? (
+                <p className="text-[13px] font-medium" style={{ color: "#1D9E75" }}>
+                  Te lo reenviamos. Revisá tu bandeja (y el spam).
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleReenviar}
+                  disabled={reenviando}
+                  className="text-[13px] font-medium underline disabled:opacity-50"
+                  style={{ color: "#378ADD" }}
+                >
+                  {reenviando ? "Reenviando…" : "¿No te llegó? Reenviar mail"}
+                </button>
+              )}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={usarOtroEmail}
+                  className="text-[13px] font-medium text-gray-500 underline"
+                >
+                  Usar otro email
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           // ── Crear cuenta (lo mínimo) ──
           <>
             <h2 className="text-center text-xl font-semibold text-gray-900">Creá tu cuenta</h2>
             <p className="mt-1 text-center text-sm text-gray-500">
-              Empezá con lo básico. Los datos profesionales van en el siguiente paso.
+              Empezá con lo básico. Los datos profesionales van en los siguientes pasos.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -92,7 +142,26 @@ export default function RegistroMedicoPage() {
               </div>
               <div>
                 <label htmlFor="password" className={labelClass}>Contraseña</label>
-                <input id="password" name="password" type="password" required minLength={8} autoComplete="new-password" className={inputClass} placeholder="Mínimo 8 caracteres" />
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={mostrarPwd ? "text" : "password"}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    className={inputClass + " pr-11"}
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarPwd((v) => !v)}
+                    aria-label={mostrarPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute inset-y-0 right-0 mt-1 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {mostrarPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <LoadingButton
