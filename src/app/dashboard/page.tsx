@@ -18,10 +18,10 @@ import { BadgeEsperando, BotonSilenciar, PopupEsperando, PopupPagada } from "./N
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
 import PantallaVerificacion from "./PantallaVerificacion";
-import PantallaIdentidad from "./PantallaIdentidad";
 import BotonNoPudeAtender from "./BotonNoPudeAtender";
 import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
+import BannerIdentidad from "./BannerIdentidad";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
@@ -36,7 +36,9 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ aviso?: string; from?: string; identidad?: string }>;
 }) {
-  const { aviso, from, identidad } = await searchParams;
+  // `identidad` (callback de Didit) ya no se usa acá: la verificación vive en
+  // /medico/identidad; si un callback viejo cae en /dashboard, se ignora.
+  const { aviso, from } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -419,25 +421,17 @@ export default async function DashboardPage({
     );
   }
 
-  // Gate de identidad biométrica (Didit). Detrás de feature flag para no
-  // bloquear médicos antes de tiempo. Va DESPUÉS de la verificación de matrícula.
-  if (
+  // Gate de identidad biométrica (Didit) SIN MURO (13/07/2026). Antes esto
+  // devolvía PantallaIdentidad EN LUGAR del dashboard entero — el muro que dejó
+  // 14 médicos presos 3 semanas cuando el webhook de Didit se rompió (22/06→12/07).
+  // Ahora el médico entra normal y ve un banner que lo lleva a /medico/identidad;
+  // el enforcement real (no aparecer en clínica/CI/turnos hasta validar) sigue
+  // en listados y acciones vía identidadHabilitada().
+  const identidadPendiente =
     role === "medico" &&
-    medico &&
+    !!medico &&
     flagIdentidadGate &&
-    !identidadHabilitada(medico)
-  ) {
-    return (
-      <>
-        <PantallaIdentidad
-          diditStatus={medico.didit_status}
-          recienVolvio={identidad === "verificada"}
-          userId={user.id}
-        />
-        <CampanaMedico flotante />
-      </>
-    );
-  }
+    !identidadHabilitada(medico);
 
   if (role === "medico" && medico) {
     const capacidadCI = (() => {
@@ -602,6 +596,13 @@ export default async function DashboardPage({
             <div className="mt-4">
               <BotonPush rol="medico" />
             </div>
+
+            {/* Identidad pendiente (gate activo) → banner, nunca muro. */}
+            {identidadPendiente && (
+              <div className="mt-4">
+                <BannerIdentidad />
+              </div>
+            )}
 
             {/* Activación pendiente → una sola tarjeta que lleva al wizard guiado
                 (/medico/onboarding). Reemplaza el viejo collage de perfil+MP+firma. */}

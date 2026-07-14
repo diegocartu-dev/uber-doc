@@ -473,3 +473,100 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     console.error("[email] enviarEmailMedicoAprobado falló:", err);
   }
 }
+
+// ─── Recordatorio de verificación de identidad (gate identidad, 13/07/2026) ──
+// Va al MÉDICO trabado (decisión Diego: el aviso al admin es el badge del panel,
+// no un mail). Lo dispara el cron reconciliar-identidad con gate activo, para
+// aprobados no exentos sin validar, con throttle vía identidad_recordatorio_at.
+export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "recordatorio_identidad"); return; }
+  try {
+    const supabase = createAdminClient();
+    const { data: medico } = await supabase
+      .from("medicos")
+      .select("nombre_completo, email, user_id")
+      .eq("id", medicoId)
+      .single();
+    if (!medico) return;
+
+    let email = (medico.email as string | null) ?? null;
+    if (!email && medico.user_id) {
+      const { data: { user } } = await supabase.auth.admin.getUserById(medico.user_id);
+      email = user?.email ?? null;
+    }
+    if (!email) { console.warn("[email] médico sin email, no se envía recordatorio identidad:", medicoId); return; }
+
+    // Faltantes REALES del médico (decisión Diego 13/07: no avisar "un paso" si
+    // le faltan tres — misma fuente de verdad que el dashboard: MP = cuenta
+    // activa en medicos_mp_accounts, firma = fila en medico_claves).
+    const [mpRes, firmaRes] = await Promise.all([
+      supabase.from("medicos_mp_accounts").select("estado").eq("medico_id", medicoId).eq("estado", "activo").maybeSingle(),
+      supabase.from("medico_claves").select("id").eq("medico_id", medicoId).eq("activa", true).maybeSingle(),
+    ]);
+    const faltaMp = !mpRes.data;
+    const faltaFirma = !firmaRes.data;
+    const soloIdentidad = !faltaMp && !faltaFirma;
+
+    const nombre = (medico.nombre_completo as string | null)?.trim().split(/\s+/)[0] ?? "Doctor/a";
+
+    // Variante solo-identidad: párrafo completo (aprobado). Variante multi:
+    // recortado — el "3 minutos + DNI y cámara" ya está en el bullet (gate Sofía).
+    const bloqueIdentidadCompleto = `
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
+        La <strong>verificaci&oacute;n de identidad</strong> es un requisito de seguridad que
+        protege a tus pacientes y a tu matr&iacute;cula: confirma que quien atiende sos
+        realmente vos. Lleva unos 3 minutos &mdash; solo necesit&aacute;s tu DNI y la
+        c&aacute;mara de tu tel&eacute;fono o computadora. Hasta completarla, tu perfil no se
+        muestra en la cl&iacute;nica virtual y los pacientes no pueden reservar consultas con vos.
+      </p>`;
+    const bloqueIdentidadBreve = `
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
+        La <strong>verificaci&oacute;n de identidad</strong> es un requisito de seguridad que
+        protege a tus pacientes y a tu matr&iacute;cula: confirma que quien atiende sos
+        realmente vos. Hasta completarla, tu perfil no se muestra en la cl&iacute;nica
+        virtual y los pacientes no pueden reservar consultas con vos.
+      </p>`;
+
+    const contenido = soloIdentidad
+      ? `
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Hola, ${nombre}</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
+        Tu cuenta en Docto est&aacute; activa, pero te falta un paso para que los pacientes puedan encontrarte:
+        la <strong>verificaci&oacute;n de identidad</strong>.
+      </p>
+      ${bloqueIdentidadCompleto}
+      ${boton("Verificar mi identidad", `${BASE_URL}/medico/identidad`, AZUL)}
+      <p style="margin:24px 0 0;font-size:14px;color:#6b7280;line-height:1.55;">
+        Si ten&eacute;s alg&uacute;n inconveniente con la verificaci&oacute;n, escribinos a
+        <a href="mailto:soporte@docto.com.ar" style="color:${AZUL};">soporte@docto.com.ar</a> y te ayudamos.
+      </p>
+      <p style="margin:16px 0 0;font-size:14px;color:#6b7280;">&mdash; El equipo de Docto</p>`
+      : `
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Hola, ${nombre}</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
+        Tu cuenta en Docto est&aacute; activa, pero todav&iacute;a te faltan estos pasos para
+        empezar a recibir pacientes:
+      </p>
+      <ul style="margin:0 0 16px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
+        <li style="margin-bottom:8px;"><strong>Verificar tu identidad</strong> &mdash; unos 3 minutos, con tu DNI y la c&aacute;mara.</li>
+        ${faltaMp ? '<li style="margin-bottom:8px;"><strong>Conectar Mercado Pago</strong> &mdash; para que recibas el cobro de tus consultas.</li>' : ""}
+        ${faltaFirma ? '<li style="margin-bottom:8px;"><strong>Cargar tu firma</strong> &mdash; para recetas y documentos.</li>' : ""}
+      </ul>
+      ${bloqueIdentidadBreve}
+      ${boton("Completar mi cuenta", `${BASE_URL}/medico/onboarding`, AZUL)}
+      <p style="margin:24px 0 0;font-size:14px;color:#6b7280;line-height:1.55;">
+        Todo se hace desde tu panel, paso a paso. Si ten&eacute;s alg&uacute;n inconveniente,
+        escribinos a <a href="mailto:soporte@docto.com.ar" style="color:${AZUL};">soporte@docto.com.ar</a> y te ayudamos.
+      </p>
+      <p style="margin:16px 0 0;font-size:14px;color:#6b7280;">&mdash; El equipo de Docto</p>`;
+
+    await resend().emails.send({
+      from: FROM,
+      to: email,
+      subject: "Verificá tu identidad para empezar a recibir pacientes",
+      html: wrapHtml("Verificación de identidad pendiente", contenido),
+    });
+  } catch (e) {
+    console.error("[email] recordatorio identidad falló:", e instanceof Error ? e.message : e);
+  }
+}

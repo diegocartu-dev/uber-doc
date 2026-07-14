@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   Stethoscope,
@@ -194,7 +195,7 @@ export default function PantallaIdentidad({
       const resp = await fetch("/api/didit/crear-sesion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consentimiento: true }),
+        body: JSON.stringify({ consentimiento: true, origin: "identidad" }),
       });
       const data = await resp.json();
       if (data?.yaValidado) {
@@ -484,7 +485,18 @@ export default function PantallaIdentidad({
                 docto
               </span>
             </div>
-            <LogoutButton />
+            {/* Salida SIEMPRE visible (gate Sofía #263): como página dedicada,
+                sin este link se reconstruye el callejón sin salida del muro. */}
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="text-sm transition hover:underline"
+                style={{ color: GRIS }}
+              >
+                ← Volver al panel
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
         </div>
       </nav>
