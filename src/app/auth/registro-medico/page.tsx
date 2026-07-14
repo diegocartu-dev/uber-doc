@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useRef } from "react";
-import { Stethoscope, X, Upload, CheckCircle, ChevronLeft } from "lucide-react";
+import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera } from "lucide-react";
 import { registrarMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
@@ -89,6 +89,25 @@ const PROVINCIAS = [
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+// Encabezado de bloque (agrupación por propósito). Componente estable a nivel de
+// módulo — no depende del estado del formulario.
+function BloqueHeader({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
+  return (
+    <div className="mb-1">
+      <div className="flex items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#378ADD] text-[11px] font-semibold text-white">{n}</span>
+        <span className="text-[15px] font-semibold text-gray-900">{titulo}</span>
+      </div>
+      <p className="ml-7 text-xs text-gray-500">{subtitulo}</p>
+    </div>
+  );
+}
+
+// Rediseño 14/07/2026 (spec docs/specs/2026-07-14-rediseno-registro-medico.md).
+// Etapa 1 (versión B): el paso de datos se reordena en 3 bloques POR PROPÓSITO
+// (profesionales / consultorio-receta / cómo-te-avisamos), la credencial pasa a
+// su propio paso con el "qué es / qué NO es", y el paso "Tu consulta" se
+// mantiene TEMPORALMENTE (sale con la Parte 2, que le da a la config su lugar).
 export default function RegistroMedicoPage() {
   const [paso, setPaso] = useState(1);
   const [tipoMatricula, setTipoMatricula] = useState("MN");
@@ -100,18 +119,40 @@ export default function RegistroMedicoPage() {
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalMatricula, setModalMatricula] = useState(false);
   const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
+  const [fotoPerfil, setFotoPerfil] = useState<File | null>(null);
+  const [numeroMatricula, setNumeroMatricula] = useState("");
   const [precioConsulta, setPrecioConsulta] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Paso 1 — "Completá tus datos": valida los 3 bloques (cuenta + profesionales +
+  // consultorio + avisos). El teléfono profesional y la foto de perfil son OPCIONALES.
   function validarPaso1(): boolean {
     const form = formRef.current;
     if (!form) return false;
-    const fields = ["titulo", "nombre_completo", "email", "password", "dni"];
-    for (const name of fields) {
+    const requeridos: { name: string; label: string }[] = [
+      { name: "email", label: "Email" },
+      { name: "password", label: "Contraseña" },
+      { name: "titulo", label: "Título profesional" },
+      { name: "nombre_completo", label: "Nombre y apellido" },
+      { name: "especialidad", label: "Especialidad" },
+      { name: "numero_matricula", label: "Número de matrícula" },
+      { name: "dni", label: "DNI" },
+      { name: "cuit", label: "CUIT" },
+      { name: "domicilio_consultorio", label: "Domicilio del consultorio" },
+      { name: "celular_personal", label: "Celular personal" },
+    ];
+    for (const { name, label } of requeridos) {
       const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
       if (!el || !el.value.trim()) {
-        setError(`Completá el campo "${el?.labels?.[0]?.textContent || name}".`);
+        setError(`Completá el campo "${label}".`);
         el?.focus();
+        return false;
+      }
+    }
+    if (tipoMatricula === "MP") {
+      const prov = (form.elements.namedItem("provincia") as HTMLSelectElement)?.value;
+      if (!prov) {
+        setError("Seleccioná la provincia de tu matrícula.");
         return false;
       }
     }
@@ -128,36 +169,8 @@ export default function RegistroMedicoPage() {
     return true;
   }
 
+  // Paso 2 — "Tu credencial": la credencial es opcional (se puede subir después).
   function validarPaso2(): boolean {
-    const form = formRef.current;
-    if (!form) return false;
-    const numero = (form.elements.namedItem("numero_matricula") as HTMLInputElement)?.value;
-    if (!numero?.trim()) {
-      setError("Ingresá tu número de matrícula.");
-      return false;
-    }
-    if (tipoMatricula === "MP") {
-      const prov = (form.elements.namedItem("provincia") as HTMLSelectElement)?.value;
-      if (!prov) {
-        setError("Seleccioná la provincia de tu matrícula.");
-        return false;
-      }
-    }
-    const cuit = (form.elements.namedItem("cuit") as HTMLInputElement)?.value;
-    if (!cuit?.trim()) {
-      setError("Ingresá tu CUIT.");
-      return false;
-    }
-    const esp = (form.elements.namedItem("especialidad") as HTMLSelectElement)?.value;
-    if (!esp) {
-      setError("Seleccioná tu especialidad.");
-      return false;
-    }
-    const domicilio = (form.elements.namedItem("domicilio") as HTMLInputElement)?.value;
-    if (!domicilio?.trim()) {
-      setError("Ingresá tu domicilio profesional.");
-      return false;
-    }
     return true;
   }
 
@@ -194,8 +207,9 @@ export default function RegistroMedicoPage() {
 
   const inputClass =
     "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
-  const labelClass = "block text-[13px] font-medium";
-  const pasoTitulos = ["Tu cuenta", "Tu matrícula", "Tu consulta"];
+  const labelClass = "block text-[13px] font-medium text-gray-700";
+  const hintClass = "mt-1 text-xs text-gray-400";
+  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Tu consulta"];
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
@@ -205,7 +219,7 @@ export default function RegistroMedicoPage() {
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
-        {/* Progress indicator */}
+        {/* Progreso */}
         <div className="mb-6 flex items-center justify-center gap-2">
           {[1, 2, 3].map((n) => (
             <div key={n} className="flex items-center gap-2">
@@ -218,7 +232,7 @@ export default function RegistroMedicoPage() {
                       : "bg-gray-100 text-gray-400"
                 }`}
               >
-                {n < paso ? "\u2713" : n}
+                {n < paso ? "✓" : n}
               </div>
               {n < 3 && (
                 <div className={`h-0.5 w-6 rounded transition-colors ${n < paso ? "bg-[#378ADD]/40" : "bg-gray-200"}`} />
@@ -230,202 +244,250 @@ export default function RegistroMedicoPage() {
         <h2 className="text-center text-xl font-semibold text-gray-900">
           {pasoTitulos[paso - 1]}
         </h2>
-        <p className="mt-1 text-center text-sm text-gray-500">
-          Paso {paso} de 3
-        </p>
-
-        {/* Aviso al inicio del registro: Docto opera nacional → se requiere Matrícula
-            Nacional (MN). Deja la expectativa clara de entrada para que un profesional
-            con matrícula solo provincial no llegue hasta el final y sea rechazado. */}
-        {paso === 1 && (
-          <div
-            className="mt-4 rounded-lg p-3 text-sm"
-            style={{ backgroundColor: "#378ADD12", border: "1px solid #378ADD33", color: "var(--color-text-secondary)" }}
-          >
-            <p className="font-medium" style={{ color: "var(--color-text-primary)" }}>
-              En Docto atendés de forma virtual a pacientes de todo el país.
-            </p>
-            <p className="mt-1">
-              Por eso, para inscribirte pedimos <strong>Matrícula Nacional (MN)</strong> — es el estándar
-              que nos permite habilitarte para atender en cualquier provincia con respaldo.
-            </p>
-          </div>
-        )}
+        <p className="mt-1 text-center text-sm text-gray-500">Paso {paso} de 3</p>
 
         <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(226,75,74,0.08)", color: "#E24B4A" }}>
               {error}
             </div>
           )}
 
-          {/* ═══ PASO 1: Tu cuenta ═══ */}
-          <div className={paso === 1 ? "space-y-4" : "hidden"}>
-            <div>
-              <label htmlFor="titulo" className={labelClass}>Título profesional</label>
-              <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
-                <option value="" disabled>Seleccioná tu título</option>
-                <option value="Dr.">Dr.</option>
-                <option value="Dra.">Dra.</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="nombre_completo" className={labelClass}>Nombre completo</label>
-              <input id="nombre_completo" name="nombre_completo" type="text" required className={inputClass} placeholder="Juan Pérez" />
-            </div>
-
-            <div>
-              <label htmlFor="email" className={labelClass}>Email</label>
-              <input id="email" name="email" type="email" required className={inputClass} placeholder="doctor@email.com" />
-            </div>
-
-            <div>
-              <label htmlFor="password" className={labelClass}>Contraseña</label>
-              <input id="password" name="password" type="password" required minLength={8} className={inputClass} placeholder="Mínimo 8 caracteres" />
-            </div>
-
-            <div>
-              <label htmlFor="dni" className={labelClass}>DNI</label>
-              <input id="dni" name="dni" type="text" required inputMode="numeric" pattern="\d{7,8}" maxLength={8} className={inputClass} placeholder="12345678" />
-              <p className="mt-1 text-xs text-gray-400">7 u 8 dígitos, sin puntos</p>
-            </div>
-          </div>
-
-          {/* ═══ PASO 2: Tu matrícula ═══ */}
-          <div className={paso === 2 ? "space-y-4" : "hidden"}>
-            <div>
-              <label htmlFor="tipo_matricula" className={labelClass}>Tipo de matrícula</label>
-              <select
-                id="tipo_matricula"
-                name="tipo_matricula"
-                required
-                className={inputClass}
-                value={tipoMatricula}
-                onChange={(e) => {
-                  setTipoMatricula(e.target.value);
-                  if (e.target.value === "MP") setTieneMatriculaExtra(false);
-                }}
-              >
-                <option value="MN">MN - Matrícula Nacional</option>
-                <option value="MP">MP - Matrícula Provincial</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="numero_matricula" className={labelClass}>Número de matrícula</label>
-              <input id="numero_matricula" name="numero_matricula" type="text" required className={inputClass} placeholder="Ej: 123456" />
-            </div>
-
-            {tipoMatricula === "MP" && (
+          {/* ═══ PASO 1: Completá tus datos (3 bloques por propósito) ═══ */}
+          <div className={paso === 1 ? "space-y-6" : "hidden"}>
+            {/* Tu cuenta */}
+            <div className="space-y-3">
+              <p className="text-[15px] font-semibold text-gray-900">Tu cuenta</p>
               <div>
-                <label htmlFor="provincia" className={labelClass}>Provincia</label>
-                <select id="provincia" name="provincia" required className={inputClass} defaultValue="">
-                  <option value="" disabled>Seleccioná tu provincia</option>
-                  {PROVINCIAS.map((prov) => (
-                    <option key={prov} value={prov}>{prov}</option>
+                <label htmlFor="email" className={labelClass}>Email</label>
+                <input id="email" name="email" type="email" required className={inputClass} placeholder="doctor@email.com" />
+              </div>
+              <div>
+                <label htmlFor="password" className={labelClass}>Contraseña</label>
+                <input id="password" name="password" type="password" required minLength={8} className={inputClass} placeholder="Mínimo 8 caracteres" />
+              </div>
+            </div>
+
+            {/* 1 · Tus datos profesionales */}
+            <div className="space-y-3">
+              <BloqueHeader n={1} titulo="Tus datos profesionales" subtitulo="Con esto validamos tu matrícula y te mostramos a los pacientes." />
+              <div className="flex gap-3">
+                <div className="w-28">
+                  <label htmlFor="titulo" className={labelClass}>Título</label>
+                  <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
+                    <option value="" disabled>Elegí</option>
+                    <option value="Dr.">Dr.</option>
+                    <option value="Dra.">Dra.</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="nombre_completo" className={labelClass}>Nombre y apellido</label>
+                  <input id="nombre_completo" name="nombre_completo" type="text" required className={inputClass} placeholder="María Pérez" />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
+                <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
+                  <option value="" disabled>Seleccioná tu especialidad</option>
+                  {ESPECIALIDADES.map((esp) => (
+                    <option key={esp} value={esp}>{esp}</option>
                   ))}
                 </select>
               </div>
-            )}
-
-            <div>
-              <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
-              <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
-                <option value="" disabled>Seleccioná tu especialidad</option>
-                {ESPECIALIDADES.map((esp) => (
-                  <option key={esp} value={esp}>{esp}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="cuit" className={labelClass}>CUIT</label>
-              <input id="cuit" name="cuit" type="text" required className={inputClass} placeholder="20-12345678-9" />
-            </div>
-
-            <div>
-              <label htmlFor="domicilio" className={labelClass}>Domicilio profesional</label>
-              <input id="domicilio" name="domicilio" type="text" required className={inputClass} placeholder="Calle, número, ciudad" />
-              <p className="mt-1 text-xs text-gray-400">Requerido por Ley 17.132 para recetas</p>
-            </div>
-
-            {/* Matrícula adicional — solo si MN y el médico tiene otra provincial */}
-            {tipoMatricula === "MN" && (
-              <div>
-                <label className="flex items-center gap-2 text-sm text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={tieneMatriculaExtra}
-                    onChange={(e) => setTieneMatriculaExtra(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  También tengo matrícula provincial
-                </label>
-                {tieneMatriculaExtra && (
-                  <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
-                    <div>
-                      <label htmlFor="matricula_provincial" className={labelClass}>
-                        Número de matrícula provincial
-                      </label>
-                      <input id="matricula_provincial" name="matricula_provincial" type="text" className={inputClass} placeholder="MP 45678" />
-                    </div>
-                    <div>
-                      <label htmlFor="provincia_matricula" className={labelClass}>Provincia</label>
-                      <select id="provincia_matricula" name="provincia_matricula" className={inputClass} defaultValue="">
-                        <option value="">Seleccioná</option>
-                        {PROVINCIAS.map((prov) => (
-                          <option key={prov} value={prov}>{prov}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
+              <div className="flex gap-3">
+                <div className="w-40">
+                  <label htmlFor="tipo_matricula" className={labelClass}>Matrícula</label>
+                  <select
+                    id="tipo_matricula"
+                    name="tipo_matricula"
+                    required
+                    className={inputClass}
+                    value={tipoMatricula}
+                    onChange={(e) => {
+                      setTipoMatricula(e.target.value);
+                      if (e.target.value === "MP") setTieneMatriculaExtra(false);
+                    }}
+                  >
+                    <option value="MN">MN — Nacional</option>
+                    <option value="MP">MP — Provincial</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="numero_matricula" className={labelClass}>Número</label>
+                  <input id="numero_matricula" name="numero_matricula" type="text" required className={inputClass} placeholder="123456" value={numeroMatricula} onChange={(e) => setNumeroMatricula(e.target.value)} />
+                </div>
               </div>
-            )}
+              {tipoMatricula === "MP" && (
+                <div>
+                  <label htmlFor="provincia" className={labelClass}>Provincia de la matrícula</label>
+                  <select id="provincia" name="provincia" required className={inputClass} defaultValue="">
+                    <option value="" disabled>Seleccioná tu provincia</option>
+                    {PROVINCIAS.map((prov) => (
+                      <option key={prov} value={prov}>{prov}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {tipoMatricula === "MN" && (
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={tieneMatriculaExtra}
+                      onChange={(e) => setTieneMatriculaExtra(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    También tengo matrícula provincial
+                  </label>
+                  {tieneMatriculaExtra && (
+                    <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
+                      <div>
+                        <label htmlFor="matricula_provincial" className={labelClass}>Número de matrícula provincial</label>
+                        <input id="matricula_provincial" name="matricula_provincial" type="text" className={inputClass} placeholder="MP 45678" />
+                      </div>
+                      <div>
+                        <label htmlFor="provincia_matricula" className={labelClass}>Provincia</label>
+                        <select id="provincia_matricula" name="provincia_matricula" className={inputClass} defaultValue="">
+                          <option value="">Seleccioná</option>
+                          {PROVINCIAS.map((prov) => (
+                            <option key={prov} value={prov}>{prov}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label htmlFor="dni" className={labelClass}>DNI</label>
+                  <input id="dni" name="dni" type="text" required inputMode="numeric" pattern="\d{7,8}" maxLength={8} className={inputClass} placeholder="25086458" />
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="cuit" className={labelClass}>CUIT</label>
+                  <input id="cuit" name="cuit" type="text" required className={inputClass} placeholder="27-25086458-4" />
+                </div>
+              </div>
+            </div>
 
-            <div>
-              <label htmlFor="foto_credencial" className={labelClass}>Foto de credencial de matrícula <span className="font-normal text-gray-400">(opcional)</span></label>
-              <div className="mt-1">
+            {/* 2 · Tu consultorio */}
+            <div className="space-y-3">
+              <BloqueHeader n={2} titulo="Tu consultorio" subtitulo="Estos datos aparecen impresos en tus recetas." />
+              <div>
+                <label htmlFor="domicilio_consultorio" className={labelClass}>Domicilio del consultorio</label>
+                <input id="domicilio_consultorio" name="domicilio_consultorio" type="text" required className={inputClass} placeholder="Av. Rivadavia 4500, CABA" />
+                <p className={hintClass}>Va en el pie de tus recetas, como pide la normativa.</p>
+              </div>
+              <div>
+                <label htmlFor="telefono" className={labelClass}>Teléfono profesional <span className="font-normal text-gray-400">(opcional)</span></label>
+                <input id="telefono" name="telefono" type="tel" className={inputClass} placeholder="11 4000-0000" />
+                <p className={hintClass}>Este teléfono sí aparece en tus recetas.</p>
+              </div>
+              <div>
+                <label htmlFor="foto_perfil" className={labelClass}>Foto de perfil <span className="font-normal text-gray-400">(opcional)</span></label>
                 <label
-                  htmlFor="foto_credencial"
-                  className="flex cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-4 text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
+                  htmlFor="foto_perfil"
+                  className="mt-1 flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
                 >
-                  {fotoCredencial ? (
+                  {fotoPerfil ? (
                     <>
-                      <CheckCircle size={18} className="text-[#1D9E75]" />
-                      <span className="text-gray-700">{fotoCredencial.name}</span>
+                      <CheckCircle size={20} className="text-[#1D9E75]" />
+                      <span className="text-gray-700">{fotoPerfil.name}</span>
                     </>
                   ) : (
                     <>
-                      <Upload size={18} />
-                      <span>Subir imagen o PDF de tu credencial</span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#378ADD]/10 text-[#378ADD]"><Camera size={18} /></span>
+                      <span>Subir foto</span>
                     </>
                   )}
                 </label>
                 <input
-                  id="foto_credencial"
-                  name="foto_credencial"
+                  id="foto_perfil"
+                  name="foto_perfil"
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/*"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0] ?? null;
                     if (file && file.size > MAX_FILE_SIZE) {
-                      setError("El archivo no puede superar 5 MB.");
+                      setError("La foto no puede superar 5 MB.");
                       e.target.value = "";
                       return;
                     }
                     setError(null);
-                    setFotoCredencial(file);
+                    setFotoPerfil(file);
                   }}
                 />
-                <p className="mt-1 text-xs text-gray-400">Podés subirla después desde tu perfil. JPG, PNG o PDF. Máximo 5 MB.</p>
+                <p className={hintClass}>La ven los pacientes en tu bio. Distinta de la credencial (próximo paso).</p>
+              </div>
+            </div>
+
+            {/* 3 · Cómo te avisamos */}
+            <div className="space-y-3">
+              <BloqueHeader n={3} titulo="Cómo te avisamos" subtitulo="Solo uso interno administrativo." />
+              <div>
+                <label htmlFor="celular_personal" className={labelClass}>Celular personal</label>
+                <input id="celular_personal" name="celular_personal" type="tel" required className={inputClass} placeholder="11 2345-6789" />
+                <p className={hintClass}>Te avisamos acá cuando un paciente te está esperando. Los pacientes no ven este teléfono.</p>
               </div>
             </div>
           </div>
 
-          {/* ═══ PASO 3: Tu consulta ═══ */}
+          {/* ═══ PASO 2: Tu credencial ═══ */}
+          <div className={paso === 2 ? "space-y-4" : "hidden"}>
+            <p className="text-sm text-gray-500">
+              Así confirmamos que la matrícula{" "}
+              <strong className="text-gray-700">{tipoMatricula} {numeroMatricula || "…"}</strong> es tuya.
+            </p>
+            <div>
+              <label
+                htmlFor="foto_credencial"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
+              >
+                {fotoCredencial ? (
+                  <>
+                    <CheckCircle size={22} className="text-[#1D9E75]" />
+                    <span className="text-gray-700">{fotoCredencial.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={22} />
+                    <span className="font-medium text-gray-700">Sacale una foto o subila</span>
+                    <span className="text-xs text-gray-400">JPG, PNG o PDF · hasta 5 MB</span>
+                  </>
+                )}
+              </label>
+              <input
+                id="foto_credencial"
+                name="foto_credencial"
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file && file.size > MAX_FILE_SIZE) {
+                    setError("El archivo no puede superar 5 MB.");
+                    e.target.value = "";
+                    return;
+                  }
+                  setError(null);
+                  setFotoCredencial(file);
+                }}
+              />
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+              <p className="font-medium text-gray-900">¿Qué es la credencial?</p>
+              <ul className="mt-2 space-y-1.5">
+                <li className="flex items-start gap-2 text-gray-600"><CheckCircle size={16} className="mt-0.5 shrink-0 text-[#1D9E75]" /><span>El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio Médico).</span></li>
+                <li className="flex items-start gap-2 text-gray-600"><X size={16} className="mt-0.5 shrink-0 text-[#E24B4A]" /><span>No es tu DNI ni tu CV ni tu título.</span></li>
+                <li className="flex items-start gap-2 text-gray-600"><span className="mt-0.5 shrink-0 text-[#BA7517]">💡</span><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
+              </ul>
+            </div>
+            <p className={hintClass}>Podés subirla ahora o después desde tu perfil.</p>
+          </div>
+
+          {/* ═══ PASO 3: Tu consulta (TEMPORAL — sale con la Parte 2) ═══ */}
           <div className={paso === 3 ? "space-y-4" : "hidden"}>
             <div>
               <label htmlFor="precio_consulta" className={labelClass}>Valor de consulta</label>
@@ -437,7 +499,7 @@ export default function RegistroMedicoPage() {
                   onChange={setPrecioConsulta}
                   required
                   min={1}
-                  placeholder="15.000"
+                  placeholder="50.000"
                   className={inputClass}
                 />
               </div>
@@ -463,9 +525,8 @@ export default function RegistroMedicoPage() {
               </select>
             </div>
 
-            {/* Términos y condiciones */}
             <div className="space-y-3 pt-2">
-              <label className="flex items-start gap-3 py-2 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-3 py-2">
                 <input
                   type="checkbox"
                   checked={checkTerminos}
@@ -481,7 +542,7 @@ export default function RegistroMedicoPage() {
                 </span>
               </label>
 
-              <label className="flex items-start gap-3 py-2 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-3 py-2">
                 <input
                   type="checkbox"
                   checked={checkMatricula}
@@ -501,7 +562,7 @@ export default function RegistroMedicoPage() {
             {checkMatricula && <input type="hidden" name="declaracion_matricula" value="true" />}
           </div>
 
-          {/* Navegación entre pasos */}
+          {/* Navegación */}
           <div className="flex gap-3 pt-2">
             {paso > 1 && (
               <button
@@ -538,7 +599,6 @@ export default function RegistroMedicoPage() {
 
         <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} perfil="medico" />
 
-        {/* Modal declaracion de matricula */}
         {modalMatricula && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
@@ -553,15 +613,10 @@ export default function RegistroMedicoPage() {
               <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
                 <h3 className="font-semibold">Declaración jurada de responsabilidad profesional</h3>
                 <p className="mt-2">Al aceptar esta declaración, el profesional médico certifica que:</p>
-
                 <p className="mt-2"><strong>1.</strong> La información de matrícula profesional proporcionada es verídica, se encuentra vigente y corresponde a su persona. Cualquier falsedad constituye un delito penal conforme al artículo 292 del Código Penal Argentino.</p>
-
                 <p className="mt-2"><strong>2.</strong> Actúa como profesional independiente conforme a la Ley 17.132 de Ejercicio de la Medicina. Es el único responsable de sus actos profesionales, diagnósticos, indicaciones y prescripciones realizadas a través de la plataforma.</p>
-
                 <p className="mt-2"><strong>3.</strong> Se compromete a ejercer la telemedicina dentro de los límites de su especialidad y competencia, derivando a atención presencial cuando la situación clínica lo requiera.</p>
-
                 <p className="mt-2"><strong>4.</strong> Docto no interviene en las decisiones médicas del profesional ni asume responsabilidad por las mismas. La plataforma actúa exclusivamente como intermediaria tecnológica.</p>
-
                 <p className="mt-2"><strong>5.</strong> Se compromete a mantener actualizada su información profesional y a informar inmediatamente cualquier cambio en el estado de su matrícula.</p>
               </div>
               <button

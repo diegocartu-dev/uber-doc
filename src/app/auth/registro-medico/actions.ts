@@ -125,7 +125,12 @@ export async function registrarMedico(formData: FormData) {
   const duracion_consulta = parseInt(formData.get("duracion_consulta") as string, 10);
   const modalidad_atencion = formData.get("modalidad_atencion") as string;
   const cuit = formData.get("cuit") as string;
-  const domicilio = formData.get("domicilio") as string;
+  // Rediseño 14/07: el domicilio del consultorio (va en la receta) reemplaza al
+  // `domicilio` genérico. Teléfono profesional (receta, opcional) y celular
+  // personal (canal de aviso interno) son campos nuevos del registro.
+  const domicilio_consultorio = ((formData.get("domicilio_consultorio") as string) || "").trim();
+  const telefono = ((formData.get("telefono") as string) || "").trim() || null;
+  const celular_personal = ((formData.get("celular_personal") as string) || "").trim() || null;
   const dni = (formData.get("dni") as string)?.trim();
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
   const provincia_matricula = (formData.get("provincia_matricula") as string) || null;
@@ -133,7 +138,7 @@ export async function registrarMedico(formData: FormData) {
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
   const declaracionMatricula = (formData.get("declaracion_matricula") as string) === "true";
 
-  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio || !dni) {
+  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
   }
 
@@ -181,7 +186,7 @@ export async function registrarMedico(formData: FormData) {
     duracion_consulta,
     modalidad_atencion,
     cuit: cuitLimpio,
-    domicilio,
+    domicilio: domicilio_consultorio,
     dni,
     matricula_provincial,
     provincia_matricula,
@@ -257,6 +262,24 @@ export async function registrarMedico(formData: FormData) {
     }
   }
 
+  // ═══ Foto de perfil (opcional) → bucket avatars (público) → foto_url ═══
+  // Mismo patrón que /api/medico/foto: path medicos/{userId}/perfil.ext + URL
+  // pública con cache-bust. Es opcional; si falla, el registro NO se aborta.
+  let foto_url: string | null = null;
+  const fotoPerfilFile = formData.get("foto_perfil") as File | null;
+  if (fotoPerfilFile && fotoPerfilFile.size > 0 && fotoPerfilFile.size <= 5 * 1024 * 1024) {
+    const rawExt = fotoPerfilFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const ext = ["jpg", "jpeg", "png", "webp"].includes(rawExt) ? rawExt : "jpg";
+    const path = `medicos/${authData.user.id}/perfil.${ext}`;
+    const { error: fotoErr } = await supabaseAdmin.storage
+      .from("avatars")
+      .upload(path, fotoPerfilFile, { contentType: fotoPerfilFile.type, upsert: true });
+    if (!fotoErr) {
+      const { data: pub } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
+      if (pub?.publicUrl) foto_url = `${pub.publicUrl}?v=${Date.now()}`;
+    }
+  }
+
   const slug = nombre_completo
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -283,7 +306,14 @@ export async function registrarMedico(formData: FormData) {
       duracion_consulta,
       modalidad_atencion,
       cuit: cuitLimpio,
-      domicilio,
+      // Guardamos el domicilio del consultorio en AMBAS columnas: `domicilio`
+      // (paths de receta que la leen) y `domicilio_consultorio` (el que prefiere
+      // el PDF y el gate perfilMedicoCompleto). Así la receta funciona en todos lados.
+      domicilio: domicilio_consultorio,
+      domicilio_consultorio,
+      telefono,
+      celular_personal,
+      foto_url,
       dni,
       matricula_provincial,
       ...(terminosAceptados ? { terminos_aceptados_at: ahora } : {}),
