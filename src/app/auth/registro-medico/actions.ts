@@ -8,6 +8,15 @@ import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
 import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
 
+// ─── Rediseño 14/07/2026 — registro en DOS fases ─────────────────────────────
+// FASE A `iniciarRegistroMedico`: crea la CUENTA con lo mínimo (nombre + email +
+//   contraseña) y manda el mail de validación. NO crea la fila de `medicos`.
+// FASE B `completarRegistroMedico`: el médico, YA LOGUEADO (confirmó el mail →
+//   /auth/callback canjea la sesión → /registro-medico/continuar), completa sus
+//   datos + credencial → recién ahí se crea la fila de `medicos` → biometría.
+// Motivo: la confirmación de email rompía el flujo seamless (biometría quedaba
+// del otro lado del login). Ahora el mail se valida ANTES de pedir datos pesados.
+
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 5;
 const WINDOW_MS = 60 * 60 * 1000;
@@ -38,235 +47,164 @@ function dniEnCUIT(dni: string, cuitLimpio: string): boolean {
   return cuitLimpio.substring(2, 10) === dni.padStart(8, "0");
 }
 
-/**
- * Guarda todos los datos del formulario en registros_borrador ANTES de
- * intentar crear la cuenta. Si algo falla después, los datos quedan
- * guardados y se pueden completar desde el admin.
- */
-async function guardarBorrador(
-  supabaseAdmin: ReturnType<typeof createAdminClient>,
-  datos: Record<string, unknown>,
-  ip: string,
-  userAgent: string,
-): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
-    .from("registros_borrador")
-    .insert({
-      email: datos.email as string,
-      nombre_completo: datos.nombre_completo as string,
-      datos,
-      estado: "pendiente",
-      ip_address: ip,
-      user_agent: userAgent,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[registro] Error guardando borrador:", error);
-    return null;
-  }
-  return data.id;
-}
-
-async function actualizarBorrador(
-  supabaseAdmin: ReturnType<typeof createAdminClient>,
-  borradorId: string,
-  estado: "pendiente" | "completado" | "error",
-  extra?: { error_mensaje?: string; foto_credencial_url?: string },
-) {
-  await supabaseAdmin
-    .from("registros_borrador")
-    .update({ estado, ...extra })
-    .eq("id", borradorId);
-}
-
-export async function registrarMedico(formData: FormData) {
-  // Feature flag: registro de médicos
+// ═══════════════════════════ FASE A — Crear cuenta ═══════════════════════════
+export async function iniciarRegistroMedico(formData: FormData) {
   const { getFlag } = await import("@/lib/feature-flags");
-  const registroAbierto = await getFlag("registro_medicos_publico");
-  if (!registroAbierto) {
+  if (!(await getFlag("registro_medicos_publico"))) {
     return { error: "El registro de médicos está temporalmente cerrado. Volvé a intentar pronto." };
   }
 
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const userAgent = hdrs.get("user-agent") ?? "unknown";
   if (!checkRateLimit(ip)) {
-    return { error: "Demasiados intentos de registro. Intentá de nuevo en una hora." };
+    return { error: "Demasiados intentos. Intentá de nuevo en una hora." };
   }
 
-  const supabase = await createClient();
-  const supabaseAdmin = createAdminClient();
+  const email = ((formData.get("email") as string) || "").trim().toLowerCase();
+  const password = formData.get("password") as string;
+  const nombre_completo = capitalizarNombre((formData.get("nombre_completo") as string) || "");
 
-  const email = formData.get("email") as string;
-
-  // Whitelist de beta privada — si SIGNUP_WHITELIST_EMAILS está definida,
-  // solo esos emails pueden registrarse. Vacía o ausente = registro abierto.
   const whitelist = process.env.SIGNUP_WHITELIST_EMAILS;
   if (whitelist) {
     const allowed = whitelist.split(",").map((e) => e.trim().toLowerCase());
-    if (!allowed.includes(email.trim().toLowerCase())) {
-      return {
-        error:
-          "Docto está en beta privada. Tu acceso será habilitado próximamente.",
-      };
+    if (!allowed.includes(email)) {
+      return { error: "Docto está en beta privada. Tu acceso será habilitado próximamente." };
     }
   }
 
-  const password = formData.get("password") as string;
+  if (!email || !password || !nombre_completo) {
+    return { error: "Completá nombre y apellido, email y contraseña." };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "El email no parece válido. Revisalo." };
+  }
+  if (password.length < 8) {
+    return { error: "La contraseña debe tener al menos 8 caracteres." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: nombre_completo, role: "medico" },
+      // El mail de confirmación redirige acá → /auth/callback canjea el código
+      // por sesión (LOGUEA) y manda a completar el registro. Browser redirect →
+      // el apex 307ea a www y el navegador lo sigue; usamos www directo igual.
+      emailRedirectTo: "https://www.docto.com.ar/auth/callback?next=/registro-medico/continuar",
+    },
+  });
+
+  if (error) {
+    if (/already registered|already been registered/i.test(error.message)) {
+      return { error: "Ese email ya tiene una cuenta en Docto. Iniciá sesión." };
+    }
+    return { error: error.message };
+  }
+
+  return { ok: true, email };
+}
+
+// ═══════════════════════ FASE B — Completar registro ═════════════════════════
+// El médico ya está logueado (confirmó el mail). Crea la fila de `medicos`.
+export async function completarRegistroMedico(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Tu sesión expiró. Iniciá sesión de nuevo para continuar." };
+  }
+
+  const supabaseAdmin = createAdminClient();
+
+  // Idempotencia: si ya tiene ficha, saltar directo a la biometría.
+  const { data: yaMedico } = await supabaseAdmin
+    .from("medicos")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (yaMedico) redirect("/registro-medico/identidad");
+
+  const hdrs = await headers();
+  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const userAgent = hdrs.get("user-agent") ?? "unknown";
+
+  const nombre_completo = capitalizarNombre(
+    (user.user_metadata?.full_name as string) || (formData.get("nombre_completo") as string) || ""
+  );
+  const email = user.email ?? "";
   const titulo = formData.get("titulo") as string;
-  const nombre_completo = capitalizarNombre(formData.get("nombre_completo") as string);
   const especialidad = formData.get("especialidad") as string;
   const tipo_matricula = formData.get("tipo_matricula") as string;
   const numero_matricula = formData.get("numero_matricula") as string;
   const provincia = formData.get("provincia") as string | null;
-  // Rediseño 14/07: precio/duración/modalidad SALEN del registro (se setean al
-  // configurar CI y agendas). El registro es solo validación de identidad.
   const cuit = formData.get("cuit") as string;
-  // Rediseño 14/07: el domicilio del consultorio (va en la receta) reemplaza al
-  // `domicilio` genérico. Teléfono profesional (receta, opcional) y celular
-  // personal (canal de aviso interno) son campos nuevos del registro.
   const domicilio_consultorio = ((formData.get("domicilio_consultorio") as string) || "").trim();
   const telefono = ((formData.get("telefono") as string) || "").trim() || null;
   const celular_personal = ((formData.get("celular_personal") as string) || "").trim() || null;
   const dni = (formData.get("dni") as string)?.trim();
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
-  const provincia_matricula = (formData.get("provincia_matricula") as string) || null;
 
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
   const declaracionMatricula = (formData.get("declaracion_matricula") as string) === "true";
 
-  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
+  if (!titulo || !especialidad || !tipo_matricula || !numero_matricula || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
   }
-
   if (!terminosAceptados || !declaracionMatricula) {
-    return { error: "Debés aceptar los términos y condiciones y la declaración de matrícula." };
+    return { error: "Debés aceptar los términos y la declaración de matrícula." };
   }
-
   if (titulo !== "Dr." && titulo !== "Dra.") {
     return { error: "El título profesional debe ser Dr. o Dra." };
   }
-
   if (tipo_matricula === "MP" && !provincia) {
-    return { error: "Debe seleccionar una provincia para matrícula provincial." };
+    return { error: "Seleccioná la provincia de tu matrícula provincial." };
   }
-
-  if (password.length < 8) {
-    return { error: "La contraseña debe tener al menos 8 caracteres." };
-  }
-
   if (!validarDNI(dni)) {
     return { error: "El DNI debe tener 7 u 8 dígitos numéricos." };
   }
-
   const cuitLimpio = validarCUIT(cuit);
   if (!cuitLimpio) {
     return { error: "El CUIT debe tener 11 dígitos (formato: XX-XXXXXXXX-X)." };
   }
-
   if (!dniEnCUIT(dni, cuitLimpio)) {
     return { error: "El DNI no coincide con los dígitos centrales del CUIT." };
   }
 
-  // ═══ BORRADOR: guardar TODO antes de intentar crear la cuenta ═══
-  // Si algo falla después, los datos quedan en registros_borrador
-  // y se pueden completar desde el panel admin.
-  const datosBorrador = {
-    email,
-    titulo,
-    nombre_completo,
-    especialidad,
-    tipo_matricula,
-    numero_matricula,
-    provincia,
-    cuit: cuitLimpio,
-    domicilio: domicilio_consultorio,
-    dni,
-    matricula_provincial,
-    provincia_matricula,
-    terminos_aceptados: terminosAceptados,
-    declaracion_matricula: declaracionMatricula,
-  };
-
-  const borradorId = await guardarBorrador(supabaseAdmin, datosBorrador, ip, userAgent);
-
-  // ═══ Verificar duplicados ═══
-  let duplicateQuery = supabaseAdmin
+  // Duplicado de matrícula
+  let dup = supabaseAdmin
     .from("medicos")
     .select("id")
     .eq("tipo_matricula", tipo_matricula)
     .eq("numero_matricula", numero_matricula);
-
-  if (tipo_matricula === "MP" && provincia) {
-    duplicateQuery = duplicateQuery.eq("provincia_matricula", provincia);
-  } else {
-    duplicateQuery = duplicateQuery.or("provincia_matricula.is.null,provincia_matricula.eq.");
-  }
-
-  const { data: existente } = await duplicateQuery.maybeSingle();
-
+  dup = tipo_matricula === "MP" && provincia
+    ? dup.eq("provincia_matricula", provincia)
+    : dup.or("provincia_matricula.is.null,provincia_matricula.eq.");
+  const { data: existente } = await dup.maybeSingle();
   if (existente) {
-    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: "Matrícula duplicada" });
     return { error: "Esta matrícula ya está registrada en Docto." };
   }
 
-  // ═══ Subir foto ANTES del signUp (así queda guardada pase lo que pase) ═══
+  // Credencial (opcional) → bucket credenciales-medicos, path definitivo con user_id.
   let foto_credencial_url: string | null = null;
   const fotoFile = formData.get("foto_credencial") as File | null;
   if (fotoFile && fotoFile.size > 0) {
     const ext = fotoFile.name.split(".").pop() || "jpg";
-    const path = `borrador-${borradorId || "unknown"}/credencial-${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabaseAdmin.storage
+    const path = `${user.id}/credencial-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabaseAdmin.storage
       .from("credenciales-medicos")
-      .upload(path, fotoFile, { contentType: fotoFile.type });
-    if (!uploadError) {
-      foto_credencial_url = path;
-      if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "pendiente", { foto_credencial_url: path });
-    }
+      .upload(path, fotoFile, { contentType: fotoFile.type, upsert: true });
+    if (!upErr) foto_credencial_url = path;
   }
 
-  // ═══ Crear cuenta en Supabase Auth ═══
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: nombre_completo, role: "medico" },
-    },
-  });
-
-  if (authError) {
-    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: `Auth: ${authError.message}` });
-    return { error: authError.message };
-  }
-
-  if (!authData.user) {
-    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: "Auth: no user returned" });
-    return { error: "No se pudo crear el usuario." };
-  }
-
-  // Si la foto se subió con path temporal, moverla al path definitivo con user_id
-  if (foto_credencial_url && foto_credencial_url.startsWith("borrador-")) {
-    const ext = foto_credencial_url.split(".").pop() || "jpg";
-    const newPath = `${authData.user.id}/credencial-${Date.now()}.${ext}`;
-    const { error: moveError } = await supabaseAdmin.storage
-      .from("credenciales-medicos")
-      .move(foto_credencial_url, newPath);
-    if (!moveError) {
-      foto_credencial_url = newPath;
-    }
-  }
-
-  // ═══ Foto de perfil (opcional) → bucket avatars (público) → foto_url ═══
-  // Mismo patrón que /api/medico/foto: path medicos/{userId}/perfil.ext + URL
-  // pública con cache-bust. Es opcional; si falla, el registro NO se aborta.
+  // Foto de perfil (opcional) → bucket avatars (público) → foto_url.
   let foto_url: string | null = null;
   const fotoPerfilFile = formData.get("foto_perfil") as File | null;
   if (fotoPerfilFile && fotoPerfilFile.size > 0 && fotoPerfilFile.size <= 5 * 1024 * 1024) {
     const rawExt = fotoPerfilFile.name.split(".").pop()?.toLowerCase() || "jpg";
     const ext = ["jpg", "jpeg", "png", "webp"].includes(rawExt) ? rawExt : "jpg";
-    const path = `medicos/${authData.user.id}/perfil.${ext}`;
+    const path = `medicos/${user.id}/perfil.${ext}`;
     const { error: fotoErr } = await supabaseAdmin.storage
       .from("avatars")
       .upload(path, fotoPerfilFile, { contentType: fotoPerfilFile.type, upsert: true });
@@ -282,76 +220,57 @@ export async function registrarMedico(formData: FormData) {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
     .trim()
-    .replace(/\s+/g, "-")
-    + "-" + tipo_matricula + numero_matricula;
+    .replace(/\s+/g, "-") + "-" + tipo_matricula + numero_matricula;
 
   const ahora = new Date().toISOString();
-  let dbError = null;
-  for (let i = 0; i < 3; i++) {
-    const { error } = await supabaseAdmin.from("medicos").insert({
-      user_id: authData.user.id,
-      titulo,
-      nombre_completo,
-      email,
-      especialidad,
-      tipo_matricula,
-      numero_matricula,
-      provincia: tipo_matricula === "MP" ? provincia : null,
-      provincia_matricula: tipo_matricula === "MP" ? provincia : null,
-      cuit: cuitLimpio,
-      // Guardamos el domicilio del consultorio en AMBAS columnas: `domicilio`
-      // (paths de receta que la leen) y `domicilio_consultorio` (el que prefiere
-      // el PDF y el gate perfilMedicoCompleto). Así la receta funciona en todos lados.
-      domicilio: domicilio_consultorio,
-      domicilio_consultorio,
-      telefono,
-      celular_personal,
-      foto_url,
-      dni,
-      matricula_provincial,
-      ...(terminosAceptados ? { terminos_aceptados_at: ahora } : {}),
-      ...(declaracionMatricula ? { declaracion_matricula_at: ahora } : {}),
-      slug,
-      foto_credencial_url,
-      verificado: false,
-      estado_registro: "pendiente_revision",
-    });
-
-    if (!error) { dbError = null; break; }
-    dbError = error;
-    if (error.code === "23505") { dbError = null; break; }
-    if (i < 2) await new Promise((r) => setTimeout(r, 1000));
-  }
+  const { error: dbError } = await supabaseAdmin.from("medicos").insert({
+    user_id: user.id,
+    titulo,
+    nombre_completo,
+    email,
+    especialidad,
+    tipo_matricula,
+    numero_matricula,
+    provincia: tipo_matricula === "MP" ? provincia : null,
+    provincia_matricula: tipo_matricula === "MP" ? provincia : null,
+    cuit: cuitLimpio,
+    domicilio: domicilio_consultorio,
+    domicilio_consultorio,
+    telefono,
+    celular_personal,
+    foto_url,
+    dni,
+    matricula_provincial,
+    ...(terminosAceptados ? { terminos_aceptados_at: ahora } : {}),
+    ...(declaracionMatricula ? { declaracion_matricula_at: ahora } : {}),
+    slug,
+    foto_credencial_url,
+    verificado: false,
+    estado_registro: "pendiente_revision",
+  });
 
   if (dbError) {
-    if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "error", { error_mensaje: `DB: ${dbError.message}` });
-    return { error: `Error al crear el perfil: ${dbError.message}` };
+    if (dbError.code === "23505") redirect("/registro-medico/identidad");
+    console.error("[completarRegistro] insert medico falló:", dbError.message, { ip, userAgent });
+    return { error: `No se pudo crear tu perfil: ${dbError.message}` };
   }
 
-  // ═══ Registro exitoso — marcar borrador como completado ═══
-  if (borradorId) await actualizarBorrador(supabaseAdmin, borradorId, "completado");
-
-  // Validación REFEPS automática en segundo plano: el admin debe encontrarse al médico
-  // YA resuelto (✓/✗) al abrir el panel, sin apretar nada. waitUntil mantiene viva la
-  // función después del redirect (un fire-and-forget pelado moriría al congelarse la
-  // lambda). Si igual falla (Bus caído), el cron validar-refeps-pendientes lo reintenta.
+  // Validación REFEPS automática en background (waitUntil sobrevive al redirect).
   {
     const { data: creado } = await supabaseAdmin
       .from("medicos")
       .select("id")
-      .eq("user_id", authData.user.id)
+      .eq("user_id", user.id)
       .single();
     if (creado?.id) {
       waitUntil(
         validarYPersistirRefeps(creado.id).catch((e) =>
-          console.error("[registro-medico] validación REFEPS en background falló:", e instanceof Error ? e.message : e)
+          console.error("[completarRegistro] REFEPS background falló:", e instanceof Error ? e.message : e)
         )
       );
     }
   }
 
-  // Rediseño 14/07: la validación biométrica es el ÚLTIMO paso del registro
-  // (pre-aprobación). El médico ya quedó logueado con el signUp → va directo a
-  // la pantalla de identidad, que crea la sesión Didit con su medico.id.
+  // Ficha creada → paso final: validación biométrica.
   redirect("/registro-medico/identidad");
 }
