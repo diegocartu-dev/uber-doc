@@ -50,7 +50,9 @@ export default function DisponibilidadMedico({
   const [mensaje, setMensaje] = useState<string | null>(null);
   const autoDesactivadoRef = useRef(false);
 
-  const capacidad = calcularCapacidad(desde, hasta, duracion);
+  // Guard: con duración NULL (modelo nuevo sin config) calcularCapacidad daría
+  // Infinity. Sin duración no hay capacidad calculable → 0. (Gate Roberto #269.)
+  const capacidad = duracion ? calcularCapacidad(desde, hasta, duracion) : 0;
 
   // Validación: al menos un canal seleccionado si está activo
   const sinCanal = activo && !bloqueado && !visibleClinica && !visibleConsultorio;
@@ -346,7 +348,7 @@ export default function DisponibilidadMedico({
 
           <div className="mt-3 flex items-center gap-6 text-sm text-gray-500">
             <span>
-              Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracion} min c/u)
+              Capacidad: <span className="font-medium text-gray-700">{capacidad}</span> ({duracion ?? "—"} min c/u)
             </span>
             <span>
               En espera: <span className="font-medium text-gray-700">{pacientesEnEspera}/{capacidad}</span>

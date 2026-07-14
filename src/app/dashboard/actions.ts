@@ -43,7 +43,7 @@ export async function actualizarDisponibilidad(data: {
   const adminDb = createAdminClient();
   const { data: previo } = await adminDb
     .from("medicos")
-    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test")
+    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test, precio_consulta")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -67,6 +67,15 @@ export async function actualizarDisponibilidad(data: {
       const faltan = camposFaltantesMedico(previo, onb).map((c) => c.label);
       return {
         error: `Completá tu perfil para poder atender. Falta: ${faltan.join(", ")}.`,
+      };
+    }
+    // Invariante modelo nuevo (Roberto #269): tras sacar la config del registro,
+    // precio_consulta puede ser NULL. Sin precio no puede ofrecer CI — si no, la
+    // clínica lo mostraría reservable a "$0" y el paciente choca 422 al pagar.
+    // Test exento (igual que perfilMedicoCompleto).
+    if (!previo.es_cuenta_test && !previo.precio_consulta) {
+      return {
+        error: "Configurá el valor de tu consulta inmediata antes de activarte.",
       };
     }
   }
