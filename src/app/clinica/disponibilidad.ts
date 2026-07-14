@@ -12,7 +12,7 @@ export type Medico = {
   disponible_desde: string | null;
   disponible_hasta: string | null;
   disponible_desde_at: string | null;
-  precio_consulta: number;
+  precio_consulta: number | null;
   duracion_consulta: number;
   foto_url: string | null;
   habilitadoIdentidad: boolean;
@@ -42,9 +42,18 @@ export function estaEnHorario(medico: Medico): boolean {
   return horaActual >= normalizeTime(medico.disponible_desde) && horaActual <= normalizeTime(medico.disponible_hasta);
 }
 
-// "Reservable AHORA": en su horario, habilitado por identidad, y sin turno reservado ±30min.
+// "Reservable AHORA": en su horario, habilitado por identidad, sin turno reservado
+// ±30min, y CON precio de CI cargado. El chequeo de precio es la defensa en la
+// clínica contra el modelo nuevo (precio_consulta nullable): un médico sin precio
+// nunca aparece reservable a "$0" (backup del gate del toggle "disponible").
 export function puedeAtenderAhora(medico: Medico): boolean {
-  return medico.habilitadoIdentidad && estaEnHorario(medico) && !medico.ciBloqueadaPorTurno;
+  return (
+    medico.habilitadoIdentidad &&
+    !!medico.precio_consulta &&
+    medico.precio_consulta > 0 &&
+    estaEnHorario(medico) &&
+    !medico.ciBloqueadaPorTurno
+  );
 }
 
 // Color semáforo del conteo de cola: 0 verde, 1-3 amarillo, 4+ naranja.
@@ -75,7 +84,11 @@ export function formatFechaTurno(fecha: string, horaInicio: string): string {
   return `${dia} - ${normalizeTime(horaInicio)} h`;
 }
 
-export function formatPrecio(precio: number): string {
+export function formatPrecio(precio: number | null): string {
+  // precio_consulta puede ser NULL (modelo nuevo sin config). En ese caso no
+  // mostramos "$0" (engañoso) sino un placeholder; igual esos médicos no son
+  // reservables por CI (ver puedeAtenderAhora).
+  if (precio == null) return "Precio a confirmar";
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(precio);
 }
 
