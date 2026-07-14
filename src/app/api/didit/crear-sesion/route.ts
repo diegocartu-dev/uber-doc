@@ -86,11 +86,13 @@ export async function POST(req: NextRequest) {
     // (Es un redirect de BROWSER — el apex acá es tolerable porque el navegador
     // sigue el 307 a www; el que NUNCA puede ser apex es el webhook.)
     const callbackUrl =
-      body?.origin === "onboarding"
-        ? "https://docto.com.ar/medico/onboarding?paso=6&identidad=verificada"
-        : body?.origin === "identidad"
-          ? "https://docto.com.ar/medico/identidad?identidad=verificada"
-          : "https://docto.com.ar/dashboard?identidad=verificada";
+      body?.origin === "registro"
+        ? "https://www.docto.com.ar/registro-medico/identidad?identidad=verificada"
+        : body?.origin === "onboarding"
+          ? "https://docto.com.ar/medico/onboarding?paso=6&identidad=verificada"
+          : body?.origin === "identidad"
+            ? "https://docto.com.ar/medico/identidad?identidad=verificada"
+            : "https://docto.com.ar/dashboard?identidad=verificada";
 
     // Crear la sesión de verificación en Didit
     const sesion = await crearSesionDidit({

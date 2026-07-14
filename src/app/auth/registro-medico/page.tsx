@@ -6,7 +6,6 @@ import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera } from "lucide
 import { registrarMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
-import InputMoneda from "@/components/ui/InputMoneda";
 
 const ESPECIALIDADES = [
   "Alergia e inmunología",
@@ -104,10 +103,11 @@ function BloqueHeader({ n, titulo, subtitulo }: { n: number; titulo: string; sub
 }
 
 // Rediseño 14/07/2026 (spec docs/specs/2026-07-14-rediseno-registro-medico.md).
-// Etapa 1 (versión B): el paso de datos se reordena en 3 bloques POR PROPÓSITO
-// (profesionales / consultorio-receta / cómo-te-avisamos), la credencial pasa a
-// su propio paso con el "qué es / qué NO es", y el paso "Tu consulta" se
-// mantiene TEMPORALMENTE (sale con la Parte 2, que le da a la config su lugar).
+// Registro = SOLO validación: (1) datos por propósito, (2) credencial,
+// (3) validación biométrica (en /registro-medico/identidad, tras crear la cuenta).
+// La config de consulta (precio/duración/modalidad) SALIÓ del registro → se setea
+// al configurar CI y agendas. Este formulario cubre los pasos 1 y 2; al enviarlo
+// se crea la cuenta y se redirige al paso 3 (biometría).
 export default function RegistroMedicoPage() {
   const [paso, setPaso] = useState(1);
   const [tipoMatricula, setTipoMatricula] = useState("MN");
@@ -121,11 +121,10 @@ export default function RegistroMedicoPage() {
   const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
   const [fotoPerfil, setFotoPerfil] = useState<File | null>(null);
   const [numeroMatricula, setNumeroMatricula] = useState("");
-  const [precioConsulta, setPrecioConsulta] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Paso 1 — "Completá tus datos": valida los 3 bloques (cuenta + profesionales +
-  // consultorio + avisos). El teléfono profesional y la foto de perfil son OPCIONALES.
+  // Paso 1 — "Completá tus datos": valida los 3 bloques. Teléfono profesional y
+  // foto de perfil son OPCIONALES.
   function validarPaso1(): boolean {
     const form = formRef.current;
     if (!form) return false;
@@ -169,15 +168,9 @@ export default function RegistroMedicoPage() {
     return true;
   }
 
-  // Paso 2 — "Tu credencial": la credencial es opcional (se puede subir después).
-  function validarPaso2(): boolean {
-    return true;
-  }
-
   function siguiente() {
     setError(null);
     if (paso === 1 && validarPaso1()) setPaso(2);
-    else if (paso === 2 && validarPaso2()) setPaso(3);
   }
 
   function anterior() {
@@ -187,14 +180,14 @@ export default function RegistroMedicoPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (paso < 3) { siguiente(); return; }
+    if (paso < 2) { siguiente(); return; }
     setLoading(true);
     setError(null);
 
     try {
       const formData = new FormData(e.currentTarget);
       const result = await registrarMedico(formData);
-
+      // Éxito = redirect server-side a /registro-medico/identidad (no vuelve).
       if (result?.error) {
         setError(result.error);
         setLoading(false);
@@ -209,7 +202,7 @@ export default function RegistroMedicoPage() {
     "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
   const labelClass = "block text-[13px] font-medium text-gray-700";
   const hintClass = "mt-1 text-xs text-gray-400";
-  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Tu consulta"];
+  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Verificá tu identidad"];
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
@@ -219,7 +212,7 @@ export default function RegistroMedicoPage() {
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
-        {/* Progreso */}
+        {/* Progreso — 3 pasos: datos, credencial, identidad (este form cubre 1 y 2). */}
         <div className="mb-6 flex items-center justify-center gap-2">
           {[1, 2, 3].map((n) => (
             <div key={n} className="flex items-center gap-2">
@@ -433,7 +426,7 @@ export default function RegistroMedicoPage() {
             </div>
           </div>
 
-          {/* ═══ PASO 2: Tu credencial ═══ */}
+          {/* ═══ PASO 2: Tu credencial + términos ═══ */}
           <div className={paso === 2 ? "space-y-4" : "hidden"}>
             <p className="text-sm text-gray-500">
               Así confirmamos que la matrícula{" "}
@@ -485,48 +478,10 @@ export default function RegistroMedicoPage() {
               </ul>
             </div>
             <p className={hintClass}>Podés subirla ahora o después desde tu perfil.</p>
-          </div>
 
-          {/* ═══ PASO 3: Tu consulta (TEMPORAL — sale con la Parte 2) ═══ */}
-          <div className={paso === 3 ? "space-y-4" : "hidden"}>
-            <div>
-              <label htmlFor="precio_consulta" className={labelClass}>Valor de consulta</label>
-              <div className="mt-1">
-                <InputMoneda
-                  id="precio_consulta"
-                  name="precio_consulta"
-                  value={precioConsulta}
-                  onChange={setPrecioConsulta}
-                  required
-                  min={1}
-                  placeholder="50.000"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="duracion_consulta" className={labelClass}>Duración de consulta</label>
-              <select id="duracion_consulta" name="duracion_consulta" required className={inputClass} defaultValue="">
-                <option value="" disabled>Seleccioná la duración</option>
-                <option value="20">20 minutos</option>
-                <option value="30">30 minutos</option>
-                <option value="45">45 minutos</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="modalidad_atencion" className={labelClass}>Modalidad de atención</label>
-              <select id="modalidad_atencion" name="modalidad_atencion" required className={inputClass} defaultValue="">
-                <option value="" disabled>Seleccioná la modalidad</option>
-                <option value="programada">Programada</option>
-                <option value="inmediata">Inmediata</option>
-                <option value="ambas">Ambas</option>
-              </select>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <label className="flex cursor-pointer items-start gap-3 py-2">
+            {/* Términos y declaración — antes de crear la cuenta */}
+            <div className="space-y-3 border-t border-gray-100 pt-3">
+              <label className="flex cursor-pointer items-start gap-3 py-1">
                 <input
                   type="checkbox"
                   checked={checkTerminos}
@@ -541,8 +496,7 @@ export default function RegistroMedicoPage() {
                   de Docto
                 </span>
               </label>
-
-              <label className="flex cursor-pointer items-start gap-3 py-2">
+              <label className="flex cursor-pointer items-start gap-3 py-1">
                 <input
                   type="checkbox"
                   checked={checkMatricula}
@@ -575,7 +529,7 @@ export default function RegistroMedicoPage() {
               </button>
             )}
 
-            {paso < 3 ? (
+            {paso < 2 ? (
               <button
                 type="button"
                 onClick={siguiente}
@@ -591,7 +545,7 @@ export default function RegistroMedicoPage() {
                 className="flex-1 h-11 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-100"
                 style={{ backgroundColor: "#378ADD" }}
               >
-                Completar registro
+                Continuar a la verificación
               </LoadingButton>
             )}
           </div>
