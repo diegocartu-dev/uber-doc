@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconciliar";
+import { getFlag } from "@/lib/feature-flags";
+import { enviarEmailRecordatorioIdentidad } from "@/lib/email";
 import { withCron } from "@/lib/cron-guard";
 
 /**
@@ -68,10 +70,9 @@ async function handler(req: Request) {
     )
     .slice(0, MAX_POR_CORRIDA);
 
-  if (candidatos.length === 0) {
-    return NextResponse.json({ ok: true, procesados: 0 });
-  }
-
+  // OJO: sin early-return acá — aunque no haya nada que reconciliar, el bloque
+  // de recordatorios de abajo tiene que correr igual (con 0 candidatos,
+  // allSettled([]) resuelve vacío y sigue de largo).
   const resultados = await Promise.allSettled(
     candidatos.map((m) =>
       reconciliarIdentidad(
@@ -101,11 +102,74 @@ async function handler(req: Request) {
     (r) => r.status === "fulfilled" && r.value.outcome === "validado"
   ).length;
 
-  console.log(
-    "[cron/reconciliar-identidad]",
-    JSON.stringify({ procesados: candidatos.length, validados, resumen })
-  );
-  return NextResponse.json({ ok: true, procesados: candidatos.length, validados, resumen });
+  if (candidatos.length > 0) {
+    console.log(
+      "[cron/reconciliar-identidad]",
+      JSON.stringify({ procesados: candidatos.length, validados, resumen })
+    );
+  }
+
+  // ── Recordatorio al MÉDICO trabado (gate sin muro, 13/07/2026) ──────────────
+  // Con el gate ACTIVO, un aprobado no exento sin validar no aparece en la
+  // clínica. El empujón va al médico por mail (decisión Diego: al admin se le
+  // avisa con el badge del panel, no por mail). Timing: >24 h desde la
+  // aprobación (que no pise el mail de bienvenida) y máximo 1 mail cada 72 h
+  // por médico (identidad_recordatorio_at). Incluye a los que nunca iniciaron
+  // sesión de Didit (didit_session_id null — el filtro de arriba no los ve).
+  let recordatorios = 0;
+  if (await getFlag("identidad_gate_activa")) {
+    const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const hace72h = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+    // Tope temporal (gate Roberto #263 O2): se insiste solo los primeros 30 días
+    // post-aprobación (~10 mails máx.); después queda el badge del panel admin y
+    // la gestión manual. Los "Declined" se excluyen del mail automático: un
+    // rechazo de Didit lo revisa el admin (badge rojo) ANTES de invitar a
+    // reintentar — puede no ser un problema de foto.
+    const hace30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: trabados, error: errTrabados } = await admin
+      .from("medicos")
+      .select("id, nombre_completo, identidad_recordatorio_at, didit_status")
+      .eq("estado_registro", "aprobado")
+      .eq("es_cuenta_test", false)
+      .neq("identidad_validada", true)
+      .neq("biometria_exenta", true)
+      .lt("verificado_at", hace24h)
+      .gte("verificado_at", hace30d)
+      .order("verificado_at", { ascending: true })
+      .limit(50);
+    if (errTrabados) {
+      console.error("[cron/reconciliar-identidad] query trabados falló:", errTrabados.message);
+    } else {
+      const aRecordar = (trabados ?? [])
+        .filter((m) => m.didit_status !== "Declined")
+        .filter((m) => !m.identidad_recordatorio_at || m.identidad_recordatorio_at < hace72h)
+        .slice(0, 10);
+      for (const m of aRecordar) {
+        await enviarEmailRecordatorioIdentidad(m.id);
+        // Chequear el error del throttle (gate Roberto #263 O3): si este update
+        // falla, el médico se re-mailearía a los 10 min — al menos que quede rastro.
+        const { error: errThrottle } = await admin
+          .from("medicos")
+          .update({ identidad_recordatorio_at: new Date().toISOString() })
+          .eq("id", m.id);
+        if (errThrottle) {
+          console.error(
+            "[cron/reconciliar-identidad] no se pudo registrar el throttle del recordatorio:",
+            errThrottle.message
+          );
+        }
+        recordatorios++;
+      }
+      if (recordatorios > 0) {
+        console.log(
+          "[cron/reconciliar-identidad] recordatorios enviados:",
+          JSON.stringify(aRecordar.map((m) => m.nombre_completo))
+        );
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, procesados: candidatos.length, validados, recordatorios, resumen });
 }
 
 export const GET = withCron("reconciliar-identidad", handler);

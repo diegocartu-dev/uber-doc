@@ -33,6 +33,9 @@ interface Medico {
   refeps_data: Record<string, unknown> | null;
   refeps_validado_at: string | null;
   jurisdicciones: string[] | null;
+  identidad_validada: boolean | null;
+  biometria_exenta: boolean | null;
+  didit_status: string | null;
   // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
   faltantes?: string[];
   faltantesCount?: number;
@@ -591,6 +594,28 @@ function MedicoRow({
                   {m.sinEmpezar
                     ? "No puede atender · perfil sin empezar"
                     : `No puede atender · faltan ${m.faltantesCount} de ${m.totalRequisitos}${m.criticosFaltantes && m.criticosFaltantes.length ? ` · ${m.criticosFaltantes.join(", ")}` : ""}`}
+                </span>
+              )
+            )}
+            {/* Identidad biométrica (Didit) — aviso al admin en el panel, sin mails.
+                Verde=validada (estado OK), gris=exenta, rojo=rechazada por Didit,
+                ámbar=pendiente (aún no la completó). */}
+            {m.estado_registro === "aprobado" && (
+              m.identidad_validada ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#0F6E56]">
+                  <CheckCircle size={11} /> Identidad ✓
+                </span>
+              ) : m.biometria_exenta ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                  Identidad exenta
+                </span>
+              ) : m.didit_status === "Declined" ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]">
+                  <ShieldAlert size={11} /> Identidad rechazada — revisar
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]">
+                  <ShieldAlert size={11} /> Identidad pendiente
                 </span>
               )
             )}

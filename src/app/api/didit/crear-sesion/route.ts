@@ -80,13 +80,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Callback consciente del origen: desde el wizard de onboarding, el médico
-    // vuelve al paso 6 del caminito (no al dashboard) para ver el estado y cerrar.
-    // Desde la PantallaIdentidad del dashboard (sin origin), vuelve al dashboard.
+    // Callback consciente del origen: desde el wizard de onboarding vuelve al
+    // paso 6; desde la página dedicada /medico/identidad (gate sin muro, 13/07)
+    // vuelve ahí para ver el estado con el polling. Default legacy: dashboard.
+    // (Es un redirect de BROWSER — el apex acá es tolerable porque el navegador
+    // sigue el 307 a www; el que NUNCA puede ser apex es el webhook.)
     const callbackUrl =
       body?.origin === "onboarding"
         ? "https://docto.com.ar/medico/onboarding?paso=6&identidad=verificada"
-        : "https://docto.com.ar/dashboard?identidad=verificada";
+        : body?.origin === "identidad"
+          ? "https://docto.com.ar/medico/identidad?identidad=verificada"
+          : "https://docto.com.ar/dashboard?identidad=verificada";
 
     // Crear la sesión de verificación en Didit
     const sesion = await crearSesionDidit({
