@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
       ? admin.from("medicos_mp_accounts").select("medico_id").eq("estado", "activo").in("medico_id", ids)
       : Promise.resolve({ data: [] as { medico_id: string }[] }),
     ids.length
-      ? admin.from("medico_claves").select("medico_id").in("medico_id", ids)
+      ? admin.from("medico_claves").select("medico_id").eq("activa", true).in("medico_id", ids)
       : Promise.resolve({ data: [] as { medico_id: string }[] }),
   ]);
   const mpSet = new Set((mpRes.data ?? []).map((r) => r.medico_id));

@@ -388,6 +388,7 @@ export default async function DashboardPage({
         .from("medico_claves")
         .select("id")
         .eq("medico_id", medico.id)
+        .eq("activa", true)
         .maybeSingle(),
     ]);
     mpConectado = !!mpRes.data;

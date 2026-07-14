@@ -60,7 +60,7 @@ export async function actualizarDisponibilidad(data: {
         .eq("medico_id", previo.id)
         .eq("estado", "activo")
         .maybeSingle(),
-      adminDb.from("medico_claves").select("id").eq("medico_id", previo.id).maybeSingle(),
+      adminDb.from("medico_claves").select("id").eq("medico_id", previo.id).eq("activa", true).maybeSingle(),
     ]);
     const onb = { mpConectado: !!mpRes.data, firmaConfigurada: !!firmaRes.data };
     if (!perfilMedicoCompleto(previo, onb)) {

@@ -55,7 +55,7 @@ export default async function OnboardingPage({
       .eq("medico_id", medico.id)
       .eq("estado", "activo")
       .maybeSingle(),
-    adminDb.from("medico_claves").select("id").eq("medico_id", medico.id).maybeSingle(),
+    adminDb.from("medico_claves").select("id").eq("medico_id", medico.id).eq("activa", true).maybeSingle(),
   ]);
 
   // El biométrico cuenta como hecho si quedó validado o si la cuenta está exenta.
