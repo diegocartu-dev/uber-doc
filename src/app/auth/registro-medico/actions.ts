@@ -121,9 +121,8 @@ export async function registrarMedico(formData: FormData) {
   const tipo_matricula = formData.get("tipo_matricula") as string;
   const numero_matricula = formData.get("numero_matricula") as string;
   const provincia = formData.get("provincia") as string | null;
-  const precio_consulta = parseInt(formData.get("precio_consulta") as string, 10);
-  const duracion_consulta = parseInt(formData.get("duracion_consulta") as string, 10);
-  const modalidad_atencion = formData.get("modalidad_atencion") as string;
+  // Rediseño 14/07: precio/duración/modalidad SALEN del registro (se setean al
+  // configurar CI y agendas). El registro es solo validación de identidad.
   const cuit = formData.get("cuit") as string;
   // Rediseño 14/07: el domicilio del consultorio (va en la receta) reemplaza al
   // `domicilio` genérico. Teléfono profesional (receta, opcional) y celular
@@ -138,7 +137,7 @@ export async function registrarMedico(formData: FormData) {
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
   const declaracionMatricula = (formData.get("declaracion_matricula") as string) === "true";
 
-  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !precio_consulta || !duracion_consulta || !modalidad_atencion || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
+  if (!email || !password || !titulo || !nombre_completo || !especialidad || !tipo_matricula || !numero_matricula || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
   }
 
@@ -182,9 +181,6 @@ export async function registrarMedico(formData: FormData) {
     tipo_matricula,
     numero_matricula,
     provincia,
-    precio_consulta,
-    duracion_consulta,
-    modalidad_atencion,
     cuit: cuitLimpio,
     domicilio: domicilio_consultorio,
     dni,
@@ -302,9 +298,6 @@ export async function registrarMedico(formData: FormData) {
       numero_matricula,
       provincia: tipo_matricula === "MP" ? provincia : null,
       provincia_matricula: tipo_matricula === "MP" ? provincia : null,
-      precio_consulta,
-      duracion_consulta,
-      modalidad_atencion,
       cuit: cuitLimpio,
       // Guardamos el domicilio del consultorio en AMBAS columnas: `domicilio`
       // (paths de receta que la leen) y `domicilio_consultorio` (el que prefiere
@@ -357,5 +350,8 @@ export async function registrarMedico(formData: FormData) {
     }
   }
 
-  redirect("/dashboard");
+  // Rediseño 14/07: la validación biométrica es el ÚLTIMO paso del registro
+  // (pre-aprobación). El médico ya quedó logueado con el signUp → va directo a
+  // la pantalla de identidad, que crea la sesión Didit con su medico.id.
+  redirect("/registro-medico/identidad");
 }

@@ -231,7 +231,7 @@ export default function PantallaIdentidad({
           Procesando tu verificación…
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-gray-500">
-          Esto toma unos segundos. No cierres esta pantalla.
+          Estamos procesando tu verificación. No cierres esta pantalla.
         </p>
       </div>
     );
@@ -243,12 +243,12 @@ export default function PantallaIdentidad({
           color={AZUL}
           bg={AZUL_BG}
           titulo="Estamos revisando tu verificación"
-          subtitulo="Casi listo. Te avisamos enseguida."
+          subtitulo="Casi listo. Te avisamos por email."
         />
         <p className="mt-5 text-left text-sm leading-relaxed text-gray-600">
           Verificamos tu identidad correctamente. Solo nos falta confirmar tu
-          matrícula profesional. Es un paso rápido y manual — te avisamos por
-          email apenas esté lista, normalmente en menos de 24 horas.
+          matrícula profesional. Es un paso manual — te avisamos por email
+          apenas esté lista.
         </p>
         <div
           className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
