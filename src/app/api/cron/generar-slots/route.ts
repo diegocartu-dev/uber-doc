@@ -60,7 +60,7 @@ async function handler(req: NextRequest) {
   // 1. Obtener modelos activos
   const { data: modelos, error: errModelos } = await supabase
     .from("agenda_modelos")
-    .select("id, medico_id, fecha_inicio, fecha_fin, duracion_turno, precio")
+    .select("id, medico_id, fecha_inicio, fecha_fin, duracion_turno, precio, canal_origen")
     .eq("activo", true);
 
   if (errModelos) {
@@ -121,6 +121,7 @@ async function handler(req: NextRequest) {
       hora_fin: string;
       estado: string;
       monto: number | null;
+      canal_origen: string;
     }[] = [];
 
     // Iterar cada dia del rango
@@ -148,6 +149,10 @@ async function handler(req: NextRequest) {
             hora_fin: slot.hora_fin,
             estado: "disponible",
             monto: modelo.precio ?? null,
+            // Propagar el canal del modelo: sin esto los slots regenerados de
+            // agendas privadas caían al DEFAULT clinica_virtual y se filtraban
+            // al listado público (fix 15/07, detectado en el mapeo del sprint).
+            canal_origen: modelo.canal_origen ?? "clinica_virtual",
           });
         }
       }
