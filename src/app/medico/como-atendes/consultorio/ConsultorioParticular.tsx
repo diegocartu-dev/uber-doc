@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { ChevronLeft, Link2, Copy, Check } from "lucide-react";
 import LinkNav from "@/components/ui/LinkNav";
 import ListaModelos from "@/app/medico/agenda/ListaModelos";
+import { actualizarVisibleConsultorio } from "@/app/dashboard/actions";
 
 type Franja = { id: string; modelo_id: string; dia_semana: number; hora_inicio: string; hora_fin: string };
 type Modelo = {
@@ -24,8 +25,27 @@ type Modelo = {
 // Consultorio particular — el link a NIVEL CONSULTORIO es el protagonista (un
 // solo link para todo el canal privado, no uno por agenda — decisión registrada
 // en la spec). Copiar + WhatsApp (la vía natural de un médico argentino).
-export default function ConsultorioParticular({ slug, modelos, comisionPct }: { slug: string | null; modelos: Modelo[]; comisionPct: number }) {
+export default function ConsultorioParticular({ slug, modelos, comisionPct, visibleInicial }: { slug: string | null; modelos: Modelo[]; comisionPct: number; visibleInicial: boolean }) {
   const [copiado, setCopiado] = useState(false);
+  // Estado del canal (Sofía R3): con el enforcement nuevo, canal apagado = link
+  // muerto — el médico tiene que VERLO y poder prenderlo acá, no compartir a ciegas.
+  const [canalActivo, setCanalActivo] = useState(visibleInicial);
+  const [errorCanal, setErrorCanal] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function toggleCanal() {
+    if (isPending) return;
+    const nuevo = !canalActivo;
+    setCanalActivo(nuevo); // optimista
+    setErrorCanal(null);
+    startTransition(async () => {
+      const r = await actualizarVisibleConsultorio(nuevo);
+      if (r && "error" in r && r.error) {
+        setCanalActivo(!nuevo); // revertir
+        setErrorCanal("No pudimos guardar el cambio. Probá de nuevo.");
+      }
+    });
+  }
 
   const url = slug ? `https://www.docto.com.ar/dr/${slug}` : null;
   const urlVisible = slug ? `docto.com.ar/dr/${slug}` : null;
@@ -67,6 +87,33 @@ export default function ConsultorioParticular({ slug, modelos, comisionPct }: { 
 
       {/* ── El link, protagonista ── */}
       <div className="mt-5 rounded-xl bg-white p-4 md:p-5" style={cardBorder}>
+        {/* Estado del canal — visible y controlable al lado del link (Sofía R3) */}
+        <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="pr-3">
+            <p className="text-[14px] font-semibold text-gray-900">Consultorio activado</p>
+            <p className="text-[12px] text-gray-500">
+              {canalActivo ? "Tu link funciona y tus agendas privadas aceptan reservas." : "Apagado: el link no funciona hasta que lo actives."}
+            </p>
+          </div>
+          <button
+            onClick={toggleCanal}
+            disabled={isPending}
+            role="switch"
+            aria-checked={canalActivo}
+            aria-label={canalActivo ? "Desactivar consultorio" : "Activar consultorio"}
+            className={`relative inline-flex h-[26px] w-[44px] shrink-0 items-center rounded-full transition-colors ${canalActivo ? "bg-[#378ADD]" : "bg-gray-300"}`}
+          >
+            <span className={`inline-block h-[20px] w-[20px] rounded-full bg-white shadow transition-transform ${canalActivo ? "translate-x-[20px]" : "translate-x-[3px]"}`} />
+          </button>
+        </div>
+        {errorCanal && (
+          <p role="alert" className="mb-3 rounded-lg p-2.5 text-[13px]" style={{ backgroundColor: "#FDECEC", color: "#E24B4A" }}>{errorCanal}</p>
+        )}
+        {!canalActivo && (
+          <p className="mb-3 rounded-lg p-2.5 text-[13px]" style={{ backgroundColor: "#FBEEE6", color: "#D85A30" }}>
+            Con el consultorio apagado, quien abra tu link no va a poder verte ni reservar.
+          </p>
+        )}
         <p className="text-[13px] font-medium text-gray-700">Link para compartir</p>
         {url ? (
           <>
@@ -77,8 +124,10 @@ export default function ConsultorioParticular({ slug, modelos, comisionPct }: { 
               <button
                 onClick={copiar}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-all duration-100 active:scale-[0.98]"
-                style={{ backgroundColor: copiado ? "#1D9E75" : "#378ADD" }}
+                style={{ backgroundColor: "#378ADD" }}
               >
+                {/* Feedback = ícono + texto; el control no cambia de color (verde
+                    es solo para estados — sistema de colores, gate Sofía B1). */}
                 {copiado ? <><Check size={16} /> Copiado</> : <><Copy size={16} /> Copiar</>}
               </button>
               <a

@@ -20,7 +20,7 @@ export default async function ConsultorioParticularPage() {
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, slug")
+    .select("id, slug, visible_consultorio_particular")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
@@ -53,7 +53,12 @@ export default async function ConsultorioParticularPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f9fa]">
       <AppNavbar userName={fullName} userRole="medico" />
-      <ConsultorioParticular slug={medico.slug} modelos={modelosCompletos} comisionPct={comisionPct} />
+      <ConsultorioParticular
+        slug={medico.slug}
+        modelos={modelosCompletos}
+        comisionPct={comisionPct}
+        visibleInicial={medico.visible_consultorio_particular !== false}
+      />
     </div>
   );
 }

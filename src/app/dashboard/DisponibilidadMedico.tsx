@@ -42,8 +42,11 @@ export default function DisponibilidadMedico({
   const [visibleClinica, setVisibleClinica] = useState(!ocultoClinica);
   const [visibleConsultorio, setVisibleConsultorio] = useState(visibleConsultorioParticular);
   const [guardandoCanal, setGuardandoCanal] = useState(false);
-  const [desde, setDesde] = useState(disponibleDesde ?? "08:00");
-  const [hasta, setHasta] = useState(disponibleHasta ?? "18:00");
+  // Regla "nada prellenado" (spec 14/07, gate Sofía B2): sin valor guardado, los
+  // campos arrancan VACÍOS — el médico elige, no hereda 08:00/18:00. El server
+  // exige horario/duración/precio al activar (gate #270 ampliado 15/07).
+  const [desde, setDesde] = useState(disponibleDesde ?? "");
+  const [hasta, setHasta] = useState(disponibleHasta ?? "");
   const [duracion, setDuracion] = useState(duracionConsulta);
   const [precio, setPrecio] = useState(precioConsulta);
   const [guardando, setGuardando] = useState(false);
@@ -52,7 +55,7 @@ export default function DisponibilidadMedico({
 
   // Guard: con duración NULL (modelo nuevo sin config) calcularCapacidad daría
   // Infinity. Sin duración no hay capacidad calculable → 0. (Gate Roberto #269.)
-  const capacidad = duracion ? calcularCapacidad(desde, hasta, duracion) : 0;
+  const capacidad = duracion && desde && hasta ? calcularCapacidad(desde, hasta, duracion) : 0;
 
   // Validación: al menos un canal seleccionado si está activo
   const sinCanal = activo && !bloqueado && !visibleClinica && !visibleConsultorio;
@@ -158,6 +161,7 @@ export default function DisponibilidadMedico({
   const MINUTOS = ["00", "15", "30", "45"];
 
   function parseHM(val: string): [string, string] {
+    if (!val) return ["", ""]; // sin valor guardado → selects en "--"
     const [h, m] = val.split(":");
     const mSnap = MINUTOS.reduce((prev, cur) =>
       Math.abs(parseInt(cur) - parseInt(m)) < Math.abs(parseInt(prev) - parseInt(m)) ? cur : prev
@@ -281,10 +285,11 @@ export default function DisponibilidadMedico({
               <div className="mt-1 flex items-center gap-1">
                 <select
                   value={desdeH}
-                  onChange={(e) => setDesde(`${e.target.value}:${desdeM}`)}
+                  onChange={(e) => setDesde(`${e.target.value}:${desdeM || "00"}`)}
                   className={selectClass}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: desdeH === "" ? "#9ca3af" : undefined }}
                 >
+                  <option value="" disabled>--</option>
                   {HORAS.map((h) => (
                     <option key={h} value={h}>{h}</option>
                   ))}
@@ -292,10 +297,11 @@ export default function DisponibilidadMedico({
                 <span className="text-gray-300">:</span>
                 <select
                   value={desdeM}
-                  onChange={(e) => setDesde(`${desdeH}:${e.target.value}`)}
+                  onChange={(e) => setDesde(`${desdeH || "08"}:${e.target.value}`)}
                   className={selectClass}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: desdeM === "" ? "#9ca3af" : undefined }}
                 >
+                  <option value="" disabled>--</option>
                   {MINUTOS.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
@@ -308,10 +314,11 @@ export default function DisponibilidadMedico({
               <div className="mt-1 flex items-center gap-1">
                 <select
                   value={hastaH}
-                  onChange={(e) => setHasta(`${e.target.value}:${hastaM}`)}
+                  onChange={(e) => setHasta(`${e.target.value}:${hastaM || "00"}`)}
                   className={selectClass}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: hastaH === "" ? "#9ca3af" : undefined }}
                 >
+                  <option value="" disabled>--</option>
                   {HORAS.map((h) => (
                     <option key={h} value={h}>{h}</option>
                   ))}
@@ -319,10 +326,11 @@ export default function DisponibilidadMedico({
                 <span className="text-gray-300">:</span>
                 <select
                   value={hastaM}
-                  onChange={(e) => setHasta(`${hastaH}:${e.target.value}`)}
+                  onChange={(e) => setHasta(`${hastaH || "18"}:${e.target.value}`)}
                   className={selectClass}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: hastaM === "" ? "#9ca3af" : undefined }}
                 >
+                  <option value="" disabled>--</option>
                   {MINUTOS.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
@@ -335,7 +343,13 @@ export default function DisponibilidadMedico({
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-400">Duración</label>
-              <select value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value))} className={`mt-1 w-full ${selectClass}`} style={selectStyle}>
+              <select
+                value={duracion ?? ""}
+                onChange={(e) => setDuracion(parseInt(e.target.value))}
+                className={`mt-1 w-full ${selectClass}`}
+                style={{ ...selectStyle, color: duracion ? undefined : "#9ca3af" }}
+              >
+                <option value="" disabled>Elegí</option>
                 <option value={20}>20 min</option>
                 <option value={30}>30 min</option>
                 <option value={45}>45 min</option>
@@ -345,7 +359,7 @@ export default function DisponibilidadMedico({
             <div>
               <label className="block text-sm text-gray-400">Valor de consulta</label>
               <div className="mt-1">
-                <InputMoneda value={precio} onChange={setPrecio} className={`w-full ${selectClass}`} style={selectStyle} />
+                <InputMoneda value={precio} onChange={setPrecio} placeholder="50.000" className={`w-full ${selectClass}`} style={selectStyle} />
               </div>
             </div>
           </div>
