@@ -117,7 +117,7 @@ export default async function ComoAtendesPage() {
               <span className="min-w-0 flex-1">
                 <span className="block text-[15px] font-semibold text-gray-900">Clínica virtual</span>
                 <span className="mt-0.5 block text-[13px] leading-snug text-gray-500">
-                  Pacientes que ingresan a Docto y ven tu perfil.
+                  Todos los pacientes de Docto te ven y pueden reservar turno.
                 </span>
                 <span className="mt-1.5 block text-[13px] font-medium" style={{ color: agendasClinica > 0 ? "#374151" : "#BA7517" }}>
                   {agendasClinica > 0 ? `${agendasClinica} agenda${agendasClinica > 1 ? "s" : ""} activa${agendasClinica > 1 ? "s" : ""}` : "Sin agendas"}

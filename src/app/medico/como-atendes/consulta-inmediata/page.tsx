@@ -21,7 +21,7 @@ export default async function ConfigCIPage() {
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, es_cuenta_test")
+    .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, es_cuenta_test, ci_en_consultorio")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
@@ -46,6 +46,7 @@ export default async function ConfigCIPage() {
           hasta: medico.disponible_hasta?.slice(0, 5) ?? "",
           duracion: medico.duracion_consulta ? String(medico.duracion_consulta) : "",
           precio: medico.precio_consulta ?? 0,
+          ciEnConsultorio: medico.ci_en_consultorio === true,
         }}
         activacionCompleta={activacionCompleta}
       />

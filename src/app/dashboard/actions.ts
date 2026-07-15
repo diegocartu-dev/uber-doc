@@ -11,6 +11,8 @@ export async function actualizarDisponibilidad(data: {
   disponible_hasta: string;
   duracion_consulta?: number;
   precio_consulta?: number;
+  /** Tilde "CI también en mi consultorio particular" (decisión Diego 15/07). */
+  ci_en_consultorio?: boolean;
 }) {
   const supabase = await createClient();
   const {
@@ -30,6 +32,8 @@ export async function actualizarDisponibilidad(data: {
   if (data.disponible_hasta) updateData.disponible_hasta = data.disponible_hasta;
   if (data.duracion_consulta) updateData.duracion_consulta = data.duracion_consulta;
   if (data.precio_consulta) updateData.precio_consulta = data.precio_consulta;
+  // Booleano: chequear tipo, no truthiness (false también debe persistirse).
+  if (typeof data.ci_en_consultorio === "boolean") updateData.ci_en_consultorio = data.ci_en_consultorio;
 
   // Desempate FIFO de la grilla de Clínica Virtual (§11.2/§11.4): `disponible_desde_at`
   // marca el instante en que el médico se habilita de forma CONTINUA. Solo se toca en la
