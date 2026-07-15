@@ -48,6 +48,13 @@ export async function GET(request: Request) {
   // Si es médico → forzar redirect a /dashboard (evita que caiga en / → onboarding).
   // Si es admin → redirect a /admin y NO crearle registro de paciente.
   if (data.user) {
+    // Recuperación de contraseña: el link del mail loguea y va SIEMPRE a definir
+    // la clave nueva, sin importar el rol (médico/paciente/admin). Tiene que ir
+    // ANTES del ruteo por rol — la rama médico ignora `next` y se comería el flujo.
+    if (safeNext === "/auth/nueva-contrasena") {
+      return response;
+    }
+
     const admin = createAdminClient();
 
     const { isAdmin } = await import("@/lib/admin-auth");

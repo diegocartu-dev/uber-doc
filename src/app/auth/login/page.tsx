@@ -139,6 +139,11 @@ export default function LoginPage() {
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
             />
+            <div className="mt-1.5 text-right">
+              <Link href="/auth/recuperar" className="text-[13px] font-medium" style={{ color: "var(--color-text-link)" }}>
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </div>
 
           <LoadingButton
