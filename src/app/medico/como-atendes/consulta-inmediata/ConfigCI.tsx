@@ -50,6 +50,7 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
   // Opt-in explícito (decisión Diego 15/07): la CI en el consultorio particular
   // se activa SOLO con este tilde. DEFAULT false — nadie queda incluido sin elegirlo.
   const [ciEnConsultorio, setCiEnConsultorio] = useState(inicial.ciEnConsultorio);
+  const [ciConfirmado, setCiConfirmado] = useState(inicial.ciEnConsultorio);
   // Último estado CONFIRMADO por el server — el revert de un error vuelve acá,
   // no al valor del primer render (Roberto: toggle OK + toggle fallido dejaba
   // el switch desincronizado hasta el refresh).
@@ -78,10 +79,12 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
       if (result?.error) {
         setError(result.error);
         setDisponible(confirmado); // revertir al último estado confirmado
+        setCiEnConsultorio(ciConfirmado); // ídem el tilde (Roberto, gate #279)
         return;
       }
       setDisponible(nuevoDisponible);
       setConfirmado(nuevoDisponible);
+      setCiConfirmado(ciEnConsultorio);
       setGuardado(true);
     });
   }
@@ -237,7 +240,7 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
               Ofrecer la consulta inmediata también en mi <strong>Consultorio Particular</strong>
               <span className="mt-0.5 block text-[13px] font-normal text-gray-500">
                 Los pacientes que entren por tu link privado van a poder consultarte al instante,
-                con el mismo valor y horario de arriba. Se guarda al tocar Guardar.
+                con el mismo valor y horario de arriba.
               </span>
             </span>
           </label>
