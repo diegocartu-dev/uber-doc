@@ -22,7 +22,7 @@ export default async function ComoAtendesPage() {
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, slug")
+    .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, slug, categoria")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
@@ -156,10 +156,19 @@ export default async function ComoAtendesPage() {
         <p className="mt-5 text-[13px] text-gray-500">
           El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees.
         </p>
-        <p className="mt-2 text-[13px] text-gray-500">
-          Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
-          consulta realizada; el resto va directo a tu Mercado Pago.
-        </p>
+        {/* Founders ven la felicitación con su beneficio (pedido Diego 15/07). */}
+        {medico.categoria === "founder" ? (
+          <p className="mt-2 text-[13px] text-gray-500">
+            <strong className="text-gray-700">¡Felicitaciones por tu categoría de Médico Fundador!</strong>{" "}
+            Docto te descuenta una comisión de solo el <strong className="text-gray-700">{comisionPct}%</strong> por
+            consulta realizada; el resto va directo a tu Mercado Pago.
+          </p>
+        ) : (
+          <p className="mt-2 text-[13px] text-gray-500">
+            Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
+            consulta realizada; el resto va directo a tu Mercado Pago.
+          </p>
+        )}
       </div>
     </div>
   );

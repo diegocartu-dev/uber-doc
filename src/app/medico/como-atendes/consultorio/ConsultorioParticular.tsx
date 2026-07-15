@@ -25,7 +25,7 @@ type Modelo = {
 // Consultorio particular — el link a NIVEL CONSULTORIO es el protagonista (un
 // solo link para todo el canal privado, no uno por agenda — decisión registrada
 // en la spec). Copiar + WhatsApp (la vía natural de un médico argentino).
-export default function ConsultorioParticular({ slug, modelos, comisionPct, visibleInicial }: { slug: string | null; modelos: Modelo[]; comisionPct: number; visibleInicial: boolean }) {
+export default function ConsultorioParticular({ slug, modelos, comisionPct, visibleInicial, esFounder }: { slug: string | null; modelos: Modelo[]; comisionPct: number; visibleInicial: boolean; esFounder: boolean }) {
   const [copiado, setCopiado] = useState(false);
   // Estado del canal (Sofía R3): con el enforcement nuevo, canal apagado = link
   // muerto — el médico tiene que VERLO y poder prenderlo acá, no compartir a ciegas.
@@ -146,10 +146,18 @@ export default function ConsultorioParticular({ slug, modelos, comisionPct, visi
               Solo quien tenga este link ve tus agendas de acá y puede reservar. Ideal para tus
               pacientes de siempre.
             </p>
-            <p className="mt-1.5 text-[13px] text-gray-500">
-              Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
-              consulta realizada; el resto va directo a tu Mercado Pago.
-            </p>
+            {esFounder ? (
+              <p className="mt-1.5 text-[13px] text-gray-500">
+                <strong className="text-gray-700">¡Felicitaciones por tu categoría de Médico Fundador!</strong>{" "}
+                Docto te descuenta una comisión de solo el <strong className="text-gray-700">{comisionPct}%</strong> por
+                consulta realizada; el resto va directo a tu Mercado Pago.
+              </p>
+            ) : (
+              <p className="mt-1.5 text-[13px] text-gray-500">
+                Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
+                consulta realizada; el resto va directo a tu Mercado Pago.
+              </p>
+            )}
           </>
         ) : (
           <p className="mt-1 text-sm text-gray-500">
