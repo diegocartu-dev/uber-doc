@@ -73,6 +73,12 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
   const [minFin, setMinFin] = useState("");
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
+  // "Sin fecha de fin" (Martín, gate 15/07): el médico que atiende lunes y
+  // miércoles indefinidamente no tiene por qué inventar un vencimiento (la
+  // agenda con fecha_fin vencida moría en silencio). Sentinel 2099-12-31: el
+  // cron extiende el horizonte día a día; la generación inicial está capeada
+  // a 30 días en crearAgendaModelo.
+  const [sinFin, setSinFin] = useState(false);
   const [errores, setErrores] = useState<Record<string, string>>({});
   // Error del SERVER — aviso resoluble (conflicto) en naranja, error duro en rojo.
   const [errorServer, setErrorServer] = useState<string | null>(null);
@@ -104,9 +110,9 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
     } else if (`${horaIni}:${minIni}` >= `${horaFin}:${minFin}`) {
       errs.horario = "El horario de fin debe ser posterior al de inicio.";
     }
-    if (!fechaInicio || !fechaFin) errs.fechas = "Elegí desde y hasta qué fecha vale esta agenda.";
+    if (!fechaInicio || (!sinFin && !fechaFin)) errs.fechas = sinFin ? "Elegí desde qué fecha vale esta agenda." : "Elegí desde y hasta qué fecha vale esta agenda.";
     else if (fechaInicio < hoy) errs.fechas = "La vigencia arranca desde hoy — no se pueden elegir fechas pasadas.";
-    else if (fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
+    else if (!sinFin && fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
     return errs;
   }
 
@@ -158,7 +164,7 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
       const result = await guardarModelo({
         nombre: nombre.trim(),
         fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
+        fecha_fin: sinFin ? "2099-12-31" : fechaFin,
         duracion_turno: parseInt(duracion, 10),
         precio,
         franjas,
@@ -284,7 +290,8 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
         {errores.horario && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.horario}</p>}
       </div>
 
-      {/* Vigencia — desde HOY, fechas pasadas bloqueadas */}
+      {/* Vigencia — desde HOY, fechas pasadas bloqueadas. "Sin fecha de fin" evita
+          el vencimiento inventado (y silencioso) para el que atiende siempre. */}
       <div className="mt-5">
         <label className={labelClass}>Vigencia</label>
         <div className="mt-1 flex flex-col md:flex-row gap-4">
@@ -292,11 +299,22 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
             <span className="text-[12px] text-gray-400">Desde</span>
             <input ref={fechasRef} type="date" value={fechaInicio} min={hoy} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
           </div>
-          <div className="flex-1">
-            <span className="text-[12px] text-gray-400">Hasta</span>
-            <input type="date" value={fechaFin} min={fechaInicio || hoy} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
-          </div>
+          {!sinFin && (
+            <div className="flex-1">
+              <span className="text-[12px] text-gray-400">Hasta</span>
+              <input type="date" value={fechaFin} min={fechaInicio || hoy} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
+            </div>
+          )}
         </div>
+        <label className="mt-2 flex cursor-pointer items-center gap-2.5 py-1">
+          <input
+            type="checkbox"
+            checked={sinFin}
+            onChange={(e) => setSinFin(e.target.checked)}
+            className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
+          />
+          <span className="text-[13px] text-gray-700">Sin fecha de fin — la agenda sigue hasta que la pauses</span>
+        </label>
         {errores.fechas && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
       </div>
 

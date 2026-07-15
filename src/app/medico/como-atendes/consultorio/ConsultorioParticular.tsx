@@ -24,7 +24,7 @@ type Modelo = {
 // Consultorio particular — el link a NIVEL CONSULTORIO es el protagonista (un
 // solo link para todo el canal privado, no uno por agenda — decisión registrada
 // en la spec). Copiar + WhatsApp (la vía natural de un médico argentino).
-export default function ConsultorioParticular({ slug, modelos }: { slug: string | null; modelos: Modelo[] }) {
+export default function ConsultorioParticular({ slug, modelos, comisionPct }: { slug: string | null; modelos: Modelo[]; comisionPct: number }) {
   const [copiado, setCopiado] = useState(false);
 
   const url = slug ? `https://www.docto.com.ar/dr/${slug}` : null;
@@ -41,8 +41,10 @@ export default function ConsultorioParticular({ slug, modelos }: { slug: string 
     }
   }
 
+  // Trato de usted y tono sobrio: el default habla por el médico (Martín, gate
+  // 15/07 — "el mensaje me representa como profesional, no como promo de app").
   const textoWhatsApp = url
-    ? encodeURIComponent(`Podés atenderte conmigo por videoconsulta en Docto. Ingresá acá: ${url}`)
+    ? encodeURIComponent(`Le comparto mi enlace para reservar una videoconsulta conmigo: ${url}`)
     : "";
 
   const cardBorder = { border: "0.5px solid #e5e7eb" };
@@ -95,9 +97,18 @@ export default function ConsultorioParticular({ slug, modelos }: { slug: string 
               Solo quien tenga este link ve tus agendas de acá y puede reservar. Ideal para tus
               pacientes de siempre.
             </p>
+            <p className="mt-1.5 text-[13px] text-gray-500">
+              Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
+              consulta realizada; el resto va directo a tu Mercado Pago.
+            </p>
           </>
         ) : (
-          <p className="mt-1 text-sm text-gray-500">Tu link se genera al completar tu perfil.</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Tu link se genera al completar tu perfil.{" "}
+            <Link href="/medico/perfil" className="font-medium underline" style={{ color: "var(--color-text-link)" }}>
+              Completalo acá.
+            </Link>
+          </p>
         )}
       </div>
 

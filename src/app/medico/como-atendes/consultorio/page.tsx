@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
+import { getComisionForMedico } from "@/lib/comisiones";
 import ConsultorioParticular from "./ConsultorioParticular";
 
 export const dynamic = "force-dynamic";
@@ -46,11 +47,13 @@ export default async function ConsultorioParticularPage() {
   const modelosCompletos = (modelos ?? []).map((m) => ({ ...m, franjas: franjasPorModelo.get(m.id) ?? [] }));
 
   const fullName = user.user_metadata?.full_name || user.email;
+  // Transparencia de comisión (Martín): acá quema más — el paciente lo trae el médico.
+  const comisionPct = await getComisionForMedico(medico.id);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f9fa]">
       <AppNavbar userName={fullName} userRole="medico" />
-      <ConsultorioParticular slug={medico.slug} modelos={modelosCompletos} />
+      <ConsultorioParticular slug={medico.slug} modelos={modelosCompletos} comisionPct={comisionPct} />
     </div>
   );
 }

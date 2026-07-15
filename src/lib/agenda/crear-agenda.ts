@@ -143,7 +143,16 @@ export async function crearAgendaModelo(
   let diasConFranja = 0;
 
   const inicio = new Date(fecha_inicio + "T12:00:00");
-  const fin = new Date(fecha_fin + "T12:00:00");
+  // Cap de generación inicial a 30 días: el cron generar-slots extiende el
+  // horizonte día a día hasta fecha_fin (min(fecha_fin, hoy+30)), igual que
+  // siempre. Sin el cap, una agenda "sin fecha de fin" (sentinel 2099-12-31,
+  // Martín 15/07) generaría décadas de slots en el acto. También alinea el
+  // productor on-demand con el horizonte real de reserva del paciente (30 días).
+  const finRango = new Date(fecha_fin + "T12:00:00");
+  const cap = new Date();
+  cap.setDate(cap.getDate() + 30);
+  cap.setHours(12, 0, 0, 0);
+  const fin = finRango < cap ? finRango : cap;
   for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
     const dbDay = jsDayToDbDay(d.getDay());
     const franjasDelDia = franjasPorDia.get(dbDay);
@@ -159,7 +168,11 @@ export async function crearAgendaModelo(
     if (huboSlot) diasConFranja++;
   }
 
-  if (slotsNuevos.length === 0) {
+  // Con el cap de 30 días, una agenda que arranca más adelante genera 0 slots
+  // AHORA y el cron los crea cuando el horizonte la alcanza — eso es válido.
+  // Solo es error si el rango completo quedó dentro del horizonte y aun así no
+  // salió ningún turno (franjas más cortas que la duración, etc.).
+  if (slotsNuevos.length === 0 && finRango <= cap) {
     return { ok: false, motivo: "validacion", mensaje: "El rango y la duración no permiten crear ningún turno." };
   }
 

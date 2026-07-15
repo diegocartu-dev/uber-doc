@@ -200,7 +200,7 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
                   )}
                 </div>
                 <p className="mt-0.5 text-[13px] text-gray-500">
-                  {formatFecha(m.fecha_inicio)} — {formatFecha(m.fecha_fin)}
+                  {formatFecha(m.fecha_inicio)} — {m.fecha_fin >= "2099-01-01" ? "sin fecha de fin" : formatFecha(m.fecha_fin)}
                 </p>
               </div>
               <div className="flex items-center gap-3">
