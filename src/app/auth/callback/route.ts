@@ -8,8 +8,15 @@ export async function GET(request: Request) {
   const next = searchParams.get("next") ?? "";
   const safeNext = next.startsWith("/") && !next.includes("://") ? next : "";
 
+  // Links de recuperación vencidos/ya usados (o prefetcheados por el cliente de
+  // mail): Supabase redirige SIN code. Mandar al login mudo es un dead-end — se
+  // reencamina a pedir un link nuevo con aviso visible.
+  const esRecuperacion = safeNext === "/auth/nueva-contrasena";
+
   if (!code) {
-    return NextResponse.redirect(`${origin}/auth/login`);
+    return NextResponse.redirect(
+      `${origin}${esRecuperacion ? "/auth/recuperar?motivo=link-invalido" : "/auth/login"}`
+    );
   }
 
   const destination = safeNext && safeNext !== "/" ? safeNext : "/";
@@ -40,7 +47,11 @@ export async function GET(request: Request) {
   const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return NextResponse.redirect(`${origin}/auth/login`);
+    // Mismo criterio: en recuperación, el exchange fallido (link usado dos veces,
+    // vencido, u otro navegador que el que lo pidió — PKCE) vuelve a pedir link.
+    return NextResponse.redirect(
+      `${origin}${esRecuperacion ? "/auth/recuperar?motivo=link-invalido" : "/auth/login"}`
+    );
   }
 
   // Crear registro paciente si no existe (bypass RLS con admin client)
@@ -48,6 +59,13 @@ export async function GET(request: Request) {
   // Si es médico → forzar redirect a /dashboard (evita que caiga en / → onboarding).
   // Si es admin → redirect a /admin y NO crearle registro de paciente.
   if (data.user) {
+    // Recuperación de contraseña: el link del mail loguea y va SIEMPRE a definir
+    // la clave nueva, sin importar el rol (médico/paciente/admin). Tiene que ir
+    // ANTES del ruteo por rol — la rama médico ignora `next` y se comería el flujo.
+    if (safeNext === "/auth/nueva-contrasena") {
+      return response;
+    }
+
     const admin = createAdminClient();
 
     const { isAdmin } = await import("@/lib/admin-auth");
