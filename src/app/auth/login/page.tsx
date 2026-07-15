@@ -69,7 +69,21 @@ export default function LoginPage() {
     setReenviando(true);
     try {
       const supabase = createClient();
-      await supabase.auth.resend({ type: "signup", email: email.trim().toLowerCase() });
+      // El cliente de Supabase NO lanza excepciones: devuelve { error }. Sin este
+      // chequeo, un 429 del rate limit mostraba "te lo reenviamos" sin enviar
+      // nada — éxito falso (gate Roberto #276).
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim().toLowerCase(),
+      });
+      if (resendError) {
+        setError(
+          /after \d+ seconds|security purposes|rate limit/i.test(resendError.message)
+            ? "Ya te enviamos un mail hace instantes. Esperá un minuto antes de pedir otro."
+            : "No pudimos reenviar el mail. Intentá de nuevo en unos minutos."
+        );
+        return; // emailNoConfirmado queda true → el botón sigue disponible
+      }
       setReenviado(true);
       setEmailNoConfirmado(false);
       setError(null);
