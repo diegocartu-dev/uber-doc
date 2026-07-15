@@ -44,6 +44,17 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
     return { error: "Este turno ya no está disponible." };
   }
 
+  // Enforcement del toggle del consultorio (Roberto, gate 15/07): con el canal
+  // privado apagado por el médico, sus slots privados tampoco se reservan por
+  // URL directa. La página ya lo corta; esto es la autoridad server-side.
+  if (turno.canal_origen === "consultorio_privado") {
+    const { data: medicoCanal } = await supabase
+      .from("medicos").select("visible_consultorio_particular").eq("id", turno.medico_id).maybeSingle();
+    if (medicoCanal?.visible_consultorio_particular === false) {
+      return { error: "Este turno ya no está disponible." };
+    }
+  }
+
   // Guard de hora (incidente 08/07: un slot de HOY 11:40 se compró a las 11:38, durante
   // una CI en curso para esa misma hora). Server-side con hora AR — el filtro del
   // cliente no alcanza (TZ del browser + datos stale). Margen 15 min (decisión Diego):

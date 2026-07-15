@@ -89,11 +89,17 @@ export async function crearConsulta(
 
   const { data: medico, error: medicoError } = await supabase
     .from("medicos")
-    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test, identidad_validada, biometria_exenta")
+    .select("id, especialidad, disponible, verificado, estado_registro, es_cuenta_test, identidad_validada, biometria_exenta, visible_consultorio_particular")
     .eq("id", medicoId)
     .single();
 
   if (medicoError || !medico) {
+    return { error: "El médico seleccionado no está disponible." };
+  }
+
+  // Enforcement del toggle del consultorio (Roberto, gate 15/07): CI por el
+  // canal privado con el consultorio apagado tampoco pasa por deep-link.
+  if (canalOrigen === "consultorio_privado" && medico.visible_consultorio_particular === false) {
     return { error: "El médico seleccionado no está disponible." };
   }
 

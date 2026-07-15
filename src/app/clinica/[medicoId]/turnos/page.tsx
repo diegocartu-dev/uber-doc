@@ -41,7 +41,7 @@ export default async function TurnosPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta, es_cuenta_test")
+    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
     .eq("id", medicoId)
     .single();
 
@@ -49,6 +49,12 @@ export default async function TurnosPage({
   // médico sin validar (consistencia con las otras puertas de visibilidad).
   const { getFlag } = await import("@/lib/feature-flags");
   if (!medico || ((await getFlag("identidad_gate_activa")) && !identidadHabilitada(medico))) redirect("/clinica");
+
+  // Enforcement del canal privado (Roberto, gate 15/07): consultorio apagado =
+  // su calendario privado tampoco se ve por URL directa.
+  if (canalOrigen === "consultorio_privado" && medico.visible_consultorio_particular === false) {
+    redirect("/clinica");
+  }
 
   // Traer turnos disponibles futuros (fecha en ART, no UTC)
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -89,8 +95,12 @@ export default async function TurnosPage({
             AGENDAR TURNO
           </p>
           <p className="mt-2 text-lg font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo)}</p>
+          {/* Modelo B: duración/precio del PERFIL pueden ser NULL (viven por agenda;
+              cada slot muestra su monto real en el calendario). Solo se muestran si existen. */}
           <p className="mt-0.5 text-sm text-gray-500">
-            {medico.especialidad} · {medico.duracion_consulta} min · ${medico.precio_consulta?.toLocaleString("es-AR")}
+            {medico.especialidad}
+            {medico.duracion_consulta ? ` · ${medico.duracion_consulta} min` : ""}
+            {medico.precio_consulta ? ` · desde $${Number(medico.precio_consulta).toLocaleString("es-AR")}` : ""}
           </p>
         </div>
 

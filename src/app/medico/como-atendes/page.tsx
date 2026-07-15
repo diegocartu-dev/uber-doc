@@ -32,7 +32,9 @@ export default async function ComoAtendesPage() {
     .select("canal_origen, activo, fecha_fin")
     .eq("medico_id", medico.id);
 
-  const hoy = new Date().toLocaleDateString("sv-SE");
+  // Hora ARGENTINA, no UTC del server: entre 21:00 y 00:00 ART el conteo de
+  // agendas activas correría un día adelantado (Sofía R5 / Roberto, patrón #252).
+  const hoy = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
   const activasPorCanal = (canal: string) =>
     (modelos ?? []).filter((m) => m.canal_origen === canal && m.activo && m.fecha_fin >= hoy).length;
   const agendasClinica = activasPorCanal("clinica_virtual");

@@ -46,6 +46,10 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
   const [horaFin, setHoraFin] = useState(inicial.hasta.split(":")[0] ?? "");
   const [minFin, setMinFin] = useState(inicial.hasta ? (inicial.hasta.split(":")[1] ?? "00") : "");
   const [disponible, setDisponible] = useState(inicial.disponible);
+  // Último estado CONFIRMADO por el server — el revert de un error vuelve acá,
+  // no al valor del primer render (Roberto: toggle OK + toggle fallido dejaba
+  // el switch desincronizado hasta el refresh).
+  const [confirmado, setConfirmado] = useState(inicial.disponible);
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -68,21 +72,34 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
       });
       if (result?.error) {
         setError(result.error);
-        setDisponible(inicial.disponible); // revertir el optimista
+        setDisponible(confirmado); // revertir al último estado confirmado
         return;
       }
       setDisponible(nuevoDisponible);
+      setConfirmado(nuevoDisponible);
       setGuardado(true);
     });
   }
 
   function handleToggle() {
-    if (!completo || isPending) return;
+    if (isPending) return;
+    // APAGAR está permitido SIEMPRE (Sofía R2): el gate de completitud aplica
+    // solo para activarse — un médico legacy disponible con config incompleta
+    // tiene que poder desactivarse desde acá.
+    if (!disponible && !completo) {
+      setError("Completá valor, duración y horario para poder activarte.");
+      return;
+    }
     persistir(!disponible);
   }
 
   function handleGuardar() {
-    if (!completo || isPending) return;
+    if (isPending) return;
+    // Sin dead-end mudo (Sofía R1): el click con campos incompletos explica qué falta.
+    if (!completo) {
+      setError("Completá valor, duración y horario para guardar.");
+      return;
+    }
     persistir(disponible);
   }
 
@@ -184,13 +201,13 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
             </div>
             <button
               onClick={handleToggle}
-              disabled={!completo || isPending}
+              disabled={isPending}
               aria-label={disponible ? "Desactivar disponibilidad" : "Activar disponibilidad"}
               aria-checked={disponible}
               role="switch"
               className={`relative inline-flex h-[30px] w-[52px] shrink-0 items-center rounded-full transition-colors ${
-                disponible ? "bg-[#1D9E75]" : "bg-gray-300"
-              } ${!completo || isPending ? "cursor-not-allowed" : "cursor-pointer"}`}
+                disponible ? "bg-[#378ADD]" : "bg-gray-300"
+              } ${isPending ? "cursor-wait" : "cursor-pointer"}`}
             >
               <span className={`inline-block h-[24px] w-[24px] rounded-full bg-white shadow transition-transform ${disponible ? "translate-x-[24px]" : "translate-x-[3px]"}`} />
             </button>
