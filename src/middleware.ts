@@ -132,6 +132,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // auth/confirmar excluido igual que auth/callback: ambos setean cookies de
+    // sesión en el route handler y el updateSession del middleware podría
+    // pisarlas con un refresh concurrente (visto en commits 787c163/0d04628).
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirmar|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
