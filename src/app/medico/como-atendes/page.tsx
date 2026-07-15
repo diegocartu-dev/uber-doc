@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
+import { getComisionForMedico } from "@/lib/comisiones";
 import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,10 @@ export default async function ComoAtendesPage() {
     (modelos ?? []).filter((m) => m.canal_origen === canal && m.activo && m.fecha_fin >= hoy).length;
   const agendasClinica = activasPorCanal("clinica_virtual");
   const agendasConsultorio = activasPorCanal("consultorio_privado");
+
+  // Transparencia de comisión (Martín, gate 15/07): el % REAL del médico según
+  // su categoría (founder/tradicional), nunca un número hardcodeado.
+  const comisionPct = await getComisionForMedico(medico.id);
 
   const ciConfigurada =
     !!medico.precio_consulta && !!medico.duracion_consulta && !!medico.disponible_desde && !!medico.disponible_hasta;
@@ -148,6 +153,10 @@ export default async function ComoAtendesPage() {
 
         <p className="mt-5 text-[13px] text-gray-500">
           El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees.
+        </p>
+        <p className="mt-2 text-[13px] text-gray-500">
+          Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
+          consulta realizada; el resto va directo a tu Mercado Pago.
         </p>
       </div>
     </div>
