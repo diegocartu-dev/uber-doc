@@ -32,9 +32,17 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   if (!paciente) return { error: `Perfil de paciente no encontrado. ${pacErr?.message ?? ""}` };
 
   const { data: turno } = await supabase
-    .from("turnos").select("id, estado, medico_id, fecha, hora_inicio").eq("id", turnoId).single();
+    .from("turnos").select("id, estado, medico_id, fecha, hora_inicio, canal_origen").eq("id", turnoId).single();
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.estado !== "disponible") return { error: "Este turno ya no está disponible." };
+
+  // Guard de canal (sprint cómo-atendés 15/07): el slot pertenece a UN canal —
+  // un turno del consultorio privado no se reserva desde la clínica pública ni
+  // al revés. Antes el filtro vivía solo en el SELECT de la página y la reserva
+  // PISABA canal_origen con el canal pedido. Mensaje genérico: no filtra info.
+  if (turno.canal_origen && turno.canal_origen !== canalOrigen) {
+    return { error: "Este turno ya no está disponible." };
+  }
 
   // Guard de hora (incidente 08/07: un slot de HOY 11:40 se compró a las 11:38, durante
   // una CI en curso para esa misma hora). Server-side con hora AR — el filtro del
@@ -117,7 +125,8 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
       paciente_id: paciente.id,
       reservado_hasta: reservadoHasta,
       recordatorios,
-      canal_origen: canalOrigen,
+      // El canal del slot es la verdad (validado arriba) — ya no se pisa con el
+      // canal pedido, que permitía "mover" un turno privado a la clínica.
     })
     .eq("id", turnoId)
     .eq("estado", "disponible");

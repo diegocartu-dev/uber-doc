@@ -44,12 +44,16 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, foto_url")
+    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, foto_url, visible_consultorio_particular")
     .eq("slug", slug)
     .maybeSingle();
 
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
   if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) notFound();
+  // Enforcement del toggle (15/07): antes era decorativo — el link seguía
+  // funcionando con el canal apagado. false explícito = consultorio cerrado.
+  // Los 17 médicos reales lo tienen en true (verificado contra prod).
+  if (medico.visible_consultorio_particular === false) notFound();
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();
