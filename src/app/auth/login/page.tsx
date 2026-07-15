@@ -14,6 +14,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [emailNoConfirmado, setEmailNoConfirmado] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
 
   async function handleGoogle() {
     setLoadingGoogle(true);
@@ -34,6 +37,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setEmailNoConfirmado(false);
+    setReenviado(false);
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
@@ -42,12 +47,35 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // Errores de GoTrue en castellano claro (observación Roberto 15/07). El
+      // "Email not confirmed" además ofrece reenviar la confirmación — antes era
+      // un dead-end en inglés para el que nunca tocó el link del mail.
+      if (/email not confirmed/i.test(error.message)) {
+        setEmailNoConfirmado(true);
+        setError("Tu cuenta todavía no está confirmada. Buscá el mail de Docto en tu bandeja (incluí Spam) y tocá el link, o pedí uno nuevo.");
+      } else if (/invalid login credentials/i.test(error.message)) {
+        setError("Email o contraseña incorrectos. Revisalos e intentá de nuevo.");
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
 
     window.location.href = "/dashboard";
+  }
+
+  async function handleReenviarConfirmacion() {
+    setReenviando(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.resend({ type: "signup", email: email.trim().toLowerCase() });
+      setReenviado(true);
+      setEmailNoConfirmado(false);
+      setError(null);
+    } finally {
+      setReenviando(false);
+    }
   }
 
   const inputClass =
@@ -77,6 +105,27 @@ export default function LoginPage() {
             style={{ backgroundColor: "var(--color-danger-soft)", color: "var(--color-danger)" }}
           >
             {error}
+            {emailNoConfirmado && (
+              <button
+                type="button"
+                onClick={handleReenviarConfirmacion}
+                disabled={reenviando}
+                className="mt-2 block font-medium underline disabled:opacity-50"
+                style={{ color: "var(--color-danger)" }}
+              >
+                {reenviando ? "Reenviando…" : "Reenviar mail de confirmación"}
+              </button>
+            )}
+          </div>
+        )}
+        {reenviado && (
+          <div
+            role="alert"
+            className="mt-4 rounded-[var(--radius-md)] p-3 text-sm"
+            style={{ backgroundColor: "var(--color-success-soft)", color: "var(--color-success)" }}
+          >
+            Te reenviamos el mail de confirmación a <strong>{email}</strong>. Revisá tu bandeja
+            (incluí Spam) y tocá el link para entrar.
           </div>
         )}
 
