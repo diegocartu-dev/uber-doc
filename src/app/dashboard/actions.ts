@@ -23,9 +23,11 @@ export async function actualizarDisponibilidad(data: {
 
   const updateData: Record<string, unknown> = {
     disponible: data.disponible,
-    disponible_desde: data.disponible_desde,
-    disponible_hasta: data.disponible_hasta,
   };
+  // Solo pisar el horario si viene con valor — un payload vacío no debe borrar
+  // la franja guardada (la pantalla nueva de config manda solo lo elegido).
+  if (data.disponible_desde) updateData.disponible_desde = data.disponible_desde;
+  if (data.disponible_hasta) updateData.disponible_hasta = data.disponible_hasta;
   if (data.duracion_consulta) updateData.duracion_consulta = data.duracion_consulta;
   if (data.precio_consulta) updateData.precio_consulta = data.precio_consulta;
 
@@ -43,7 +45,7 @@ export async function actualizarDisponibilidad(data: {
   const adminDb = createAdminClient();
   const { data: previo } = await adminDb
     .from("medicos")
-    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test, precio_consulta")
+    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test, precio_consulta, duracion_consulta, disponible_desde, disponible_hasta")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -77,6 +79,18 @@ export async function actualizarDisponibilidad(data: {
       return {
         error: "Configurá el valor de tu consulta inmediata antes de activarte.",
       };
+    }
+    // Spec "cómo atendés" (15/07): activar exige también duración y horario —
+    // sin duración la capacidad es incalculable, sin franja el "disponible" es
+    // ambiguo. Se acepta del payload O de la fila (los 17 médicos existentes
+    // tienen duración; el horario lo manda siempre el panel del dashboard).
+    if (!previo.es_cuenta_test && !(data.duracion_consulta || previo.duracion_consulta)) {
+      return { error: "Elegí la duración de tu consulta inmediata antes de activarte." };
+    }
+    const desdeOk = data.disponible_desde || previo.disponible_desde;
+    const hastaOk = data.disponible_hasta || previo.disponible_hasta;
+    if (!previo.es_cuenta_test && (!desdeOk || !hastaOk)) {
+      return { error: "Configurá el horario en que aceptás consultas antes de activarte." };
     }
   }
 
