@@ -34,6 +34,25 @@ const DIAS = [
 const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
 const MINUTOS = ["00", "15", "30", "45"];
 
+const SELECT_BORDER = { border: "0.5px solid #e5e7eb" };
+
+// A nivel módulo (no dentro del render): un componente creado en cada render
+// resetea su estado y dispara la regla react "no components during render".
+function SelectHora({ value, onChange, opciones, ariaLabel }: { value: string; onChange: (v: string) => void; opciones: string[]; ariaLabel: string }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      className="appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]"
+      style={{ ...SELECT_BORDER, color: value === "" ? "#9ca3af" : "#111827" }}
+    >
+      <option value="" disabled>--</option>
+      {opciones.map((o) => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
+    </select>
+  );
+}
+
 // Formato yyyy-mm-dd local (el que esperan los <input type="date">).
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -153,28 +172,11 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
   }
 
   const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
-  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
-  const borderStyle = { border: "0.5px solid #e5e7eb" };
+  const borderStyle = SELECT_BORDER;
   const borderError = { border: "1px solid #E24B4A" };
   const bordeDe = (campo: string) => (errores[campo] ? borderError : borderStyle);
   const labelClass = "text-xs text-gray-500";
   const errClass = "mt-1 text-[13px]";
-
-  // Selects de hora con placeholder "--" (gris hasta elegir).
-  function SelectHora({ value, onChange, opciones, ariaLabel }: { value: string; onChange: (v: string) => void; opciones: string[]; ariaLabel: string }) {
-    return (
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={ariaLabel}
-        className={selectClass}
-        style={{ ...borderStyle, color: value === "" ? "#9ca3af" : "#111827" }}
-      >
-        <option value="" disabled>--</option>
-        {opciones.map((o) => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
-      </select>
-    );
-  }
 
   const esPrivado = canal === "consultorio_privado";
 
