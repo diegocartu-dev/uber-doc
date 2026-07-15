@@ -10,7 +10,7 @@ import { getFlag } from "@/lib/feature-flags";
 export default async function AgendaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ nuevo?: string }>;
+  searchParams: Promise<{ nuevo?: string; canal?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -50,6 +50,9 @@ export default async function AgendaPage({
   }));
 
   const mostrarFormulario = params.nuevo === "1";
+  // Modelo B: el canal viene del punto de entrada (?canal=consultorio_privado
+  // desde la pantalla del consultorio particular); default clínica virtual.
+  const canalNuevo = params.canal === "consultorio_privado" ? "consultorio_privado" as const : "clinica_virtual" as const;
 
   return (
     <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
@@ -85,11 +88,8 @@ export default async function AgendaPage({
 
           {mostrarFormulario ? (
             <div className="mt-6">
-              <FormularioModelo
-                modelosExistentes={modelosCompletos}
-                duracionConsulta={medico.duracion_consulta}
-                precioConsulta={medico.precio_consulta}
-              />
+              {/* Modelo B: precio/duración son POR AGENDA, nada se hereda del perfil */}
+              <FormularioModelo canal={canalNuevo} />
             </div>
           ) : (
             <div className="mt-6">

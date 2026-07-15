@@ -115,6 +115,12 @@ export async function crearAgendaModelo(
   if (!Number.isFinite(duracion_turno) || duracion_turno <= 0) {
     return { ok: false, motivo: "validacion", mensaje: "La duración del turno debe ser un número positivo." };
   }
+  // Invariante (mismo espíritu que #270): una agenda sin precio genera slots
+  // imposibles de pagar (crear-v2 los rechaza con 422). Corta acá — cubre el form
+  // Y el camino de Nova, que cae a medicos.precio_consulta (NULL en médicos nuevos).
+  if (!Number.isFinite(precio) || precio <= 0) {
+    return { ok: false, motivo: "validacion", mensaje: "Poné el valor de la consulta para esta agenda." };
+  }
   for (const f of franjas) {
     if (!HORA_RE.test(f.hora_inicio) || !HORA_RE.test(f.hora_fin) || aMinutos(f.hora_inicio) >= aMinutos(f.hora_fin)) {
       return { ok: false, motivo: "validacion", mensaje: "Franja horaria inválida (inicio debe ser anterior a fin)." };
