@@ -620,6 +620,20 @@ export default async function DashboardPage({
               </div>
             )}
 
+            {/* Hub "cómo atendés" (spec 14/07): entrada única a la config de CI,
+                agendas y consultorio privado. Sin estado acá — el hub calcula. */}
+            <a
+              href="/medico/como-atendes"
+              className="mt-4 flex items-center justify-between rounded-xl bg-white px-4 py-3 transition hover:bg-gray-50"
+              style={{ border: "0.5px solid #e5e7eb" }}
+            >
+              <div>
+                <p className="text-[14px] font-semibold text-gray-900">Configurá cómo atendés</p>
+                <p className="text-[12px] text-gray-500">Consulta inmediata, agendas y tu consultorio privado</p>
+              </div>
+              <span className="text-sm font-medium" style={{ color: "var(--color-text-link)" }}>→</span>
+            </a>
+
             {/* Métricas full width */}
             <MetricasMedico
               medicoId={medico.id}
