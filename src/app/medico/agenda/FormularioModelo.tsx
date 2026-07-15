@@ -1,35 +1,40 @@
 "use client";
 
-// Formulario para crear/editar modelos de agenda
-// Extensiones pendientes:
-// - Modo edicion: recibir modeloId como prop, precargar datos, usar editarModelo()
-// - Preview de turnos generados antes de guardar
-// - Selector de bloqueos dentro del modelo
+// Crear agenda — MODELO B (spec docs/specs/2026-07-14-rediseno-como-atiende-medico.md,
+// aprobada por Diego 14/07, implementada 15/07).
+//
+// DECISIÓN registrada: cada agenda tiene UN solo horario, aplicado a uno o varios
+// días. La semana se compone APILANDO agendas simples ("Mañanas" 9-13 + "Tardes"
+// 15-19 = dos agendas). Fundamento: pausar/editar granular + EL PRECIO ES POR
+// AGENDA (mañanas $50k / guardias $70k). Se descarta el modelo rico (franjas
+// múltiples + horario propio por día) que vivía acá antes.
+//
+// Regla transversal aprobada: NADA prellenado — todo campo arranca vacío y es
+// obligatorio; el valor sugerido va como placeholder gris ($ 50.000). La duración
+// y el precio son POR AGENDA: no se heredan de medicos.duracion_consulta (que en
+// médicos del registro nuevo es NULL — causaba "La duración del turno debe ser un
+// número positivo" al guardar).
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { guardarModelo } from "./actions";
 import InputMoneda from "@/components/ui/InputMoneda";
 
-type Modelo = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; activo: boolean; prioridad: number };
-type Franja = { dia_semana: number; hora_inicio: string; hora_fin: string };
+type Canal = "clinica_virtual" | "consultorio_privado";
 
 const DIAS = [
-  { num: 1, label: "L" },
-  { num: 2, label: "M" },
-  { num: 3, label: "X" },
-  { num: 4, label: "J" },
-  { num: 5, label: "V" },
-  { num: 6, label: "S" },
-  { num: 7, label: "D" },
+  { num: 1, label: "L", nombre: "Lunes" },
+  { num: 2, label: "M", nombre: "Martes" },
+  { num: 3, label: "X", nombre: "Miércoles" },
+  { num: 4, label: "J", nombre: "Jueves" },
+  { num: 5, label: "V", nombre: "Viernes" },
+  { num: 6, label: "S", nombre: "Sábado" },
+  { num: 7, label: "D", nombre: "Domingo" },
 ];
 
 const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
 const MINUTOS = ["00", "15", "30", "45"];
 
-// 0 = no atiende · 1 = horario común (azul lleno) · 2 = horario propio (azul borde)
-type DiaEstado = 0 | 1 | 2;
-
-// Formato yyyy-mm-dd (el que esperan los <input type="date"> y guardarModelo)
+// Formato yyyy-mm-dd local (el que esperan los <input type="date">).
 function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = (d.getMonth() + 1).toString().padStart(2, "0");
@@ -37,147 +42,72 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function defaultFechaInicio(): string {
-  return toISODate(new Date());
-}
-
-function defaultFechaFin(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
-  return toISODate(d);
-}
-
-export default function FormularioModelo({
-  modelosExistentes,
-  duracionConsulta,
-  precioConsulta,
-}: {
-  modelosExistentes: Modelo[];
-  duracionConsulta: number;
-  precioConsulta: number;
-}) {
+export default function FormularioModelo({ canal }: { canal: Canal }) {
   const [nombre, setNombre] = useState("");
-  const [duracionTurno, setDuracionTurno] = useState(duracionConsulta);
-  const [precio, setPrecio] = useState(precioConsulta);
-  const [fechaInicio, setFechaInicio] = useState(defaultFechaInicio);
-  const [fechaFin, setFechaFin] = useState(defaultFechaFin);
-  const [dias, setDias] = useState<Record<number, DiaEstado>>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 });
-  const [franjasBase, setFranjasBase] = useState<{ inicio: string; fin: string }[]>([
-    { inicio: "09:00", fin: "13:00" },
-  ]);
-  const [franjasCustom, setFranjasCustom] = useState<Record<number, { inicio: string; fin: string }[]>>({});
-  const [soloConsultorioPrivado, setSoloConsultorioPrivado] = useState(false);
-  // Errores por campo (clave: nombre | fechas | dias | franjas). Cada campo muestra
-  // SU mensaje pegado debajo + borde rojo. Reemplaza el banner global "mudo".
+  const [precio, setPrecio] = useState(0); // 0 = vacío (InputMoneda)
+  const [duracion, setDuracion] = useState(""); // "" = sin elegir
+  const [dias, setDias] = useState<Record<number, boolean>>({ 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false });
+  // UN solo horario para todos los días seleccionados. "" = sin elegir (placeholder --).
+  const [horaIni, setHoraIni] = useState("");
+  const [minIni, setMinIni] = useState("");
+  const [horaFin, setHoraFin] = useState("");
+  const [minFin, setMinFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
-  // Error del SERVER (falló el guardado) — banner general cerca del botón, no de campo.
+  // Error del SERVER — aviso resoluble (conflicto) en naranja, error duro en rojo.
   const [errorServer, setErrorServer] = useState<string | null>(null);
-  // Aviso resoluble (R1 / turnos reservados) → naranja; error duro del sistema → rojo.
   const [avisoServer, setAvisoServer] = useState(false);
-  // Recién después del primer intento de guardar revalidamos onChange (no antes — sería agresivo).
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // Refs por campo validable — para hacer scrollIntoView + focus al primero con error.
-  const nombreRef = useRef<HTMLInputElement>(null);
-  const fechaInicioRef = useRef<HTMLInputElement>(null);
-  const diasRef = useRef<HTMLDivElement>(null);
-  const franjasRef = useRef<HTMLDivElement>(null);
+  const hoy = toISODate(new Date());
 
-  // Una vez que el médico tocó Guardar, revalidamos en vivo para que el rojo
-  // desaparezca solo al corregir. Antes del primer intento NO validamos (sería agresivo).
+  const nombreRef = useRef<HTMLInputElement>(null);
+  const precioRef = useRef<HTMLDivElement>(null);
+  const duracionRef = useRef<HTMLSelectElement>(null);
+  const diasRef = useRef<HTMLDivElement>(null);
+  const horarioRef = useRef<HTMLDivElement>(null);
+  const fechasRef = useRef<HTMLInputElement>(null);
+
+  const inicioCompleto = horaIni !== "" && minIni !== "";
+  const finCompleto = horaFin !== "" && minFin !== "";
+
+  // Validación pura — se reusa al Guardar y en la revalidación en vivo post-intento.
+  function validar(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!nombre.trim()) errs.nombre = "Poné un nombre a la agenda.";
+    if (!precio || precio <= 0) errs.precio = "Poné el valor de la consulta.";
+    if (!duracion) errs.duracion = "Elegí la duración de cada turno.";
+    if (!Object.values(dias).some(Boolean)) errs.dias = "Elegí al menos un día.";
+    if (!inicioCompleto || !finCompleto) {
+      errs.horario = "Completá el horario (desde y hasta).";
+    } else if (`${horaIni}:${minIni}` >= `${horaFin}:${minFin}`) {
+      errs.horario = "El horario de fin debe ser posterior al de inicio.";
+    }
+    if (!fechaInicio || !fechaFin) errs.fechas = "Elegí desde y hasta qué fecha vale esta agenda.";
+    else if (fechaInicio < hoy) errs.fechas = "La vigencia arranca desde hoy — no se pueden elegir fechas pasadas.";
+    else if (fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
+    return errs;
+  }
+
+  const completo = Object.keys(validar()).length === 0;
+
+  // Revalidar en vivo recién después del primer intento (antes sería agresivo).
   useEffect(() => {
     if (!intentoGuardar) return;
     setErrores(validar());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intentoGuardar, nombre, fechaInicio, fechaFin, dias, franjasBase, franjasCustom]);
+  }, [intentoGuardar, nombre, precio, duracion, dias, horaIni, minIni, horaFin, minFin, fechaInicio, fechaFin]);
 
-  // Tocar un día cicla su estado: apagado → horario común → horario propio → apagado.
-  // Todo se maneja desde la grilla de arriba (el color dice en qué estado está).
-  // Las franjas propias NO se borran al ciclar: quedan guardadas por si vuelve a propio.
-  function toggleDia(num: number) {
-    const next: DiaEstado = dias[num] === 0 ? 1 : dias[num] === 1 ? 2 : 0;
-    setDias((prev) => ({ ...prev, [num]: next }));
-    if (next === 2 && !franjasCustom[num]) {
-      setFranjasCustom((fc) => (fc[num] ? fc : { ...fc, [num]: [{ inicio: "09:00", fin: "13:00" }] }));
-    }
-  }
-
-  // Volver un día a usar el horario común (propio → común), sin ciclar por "apagado".
-  // No pierde sus franjas propias.
-  function usarHorarioComun(num: number) {
-    setDias((prev) => ({ ...prev, [num]: 1 }));
-  }
-
-  function addFranjaBase() {
-    setFranjasBase((prev) => [...prev, { inicio: "14:00", fin: "18:00" }]);
-  }
-
-  function removeFranjaBase(idx: number) {
-    setFranjasBase((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  function addFranjaCustom(dia: number) {
-    setFranjasCustom((prev) => ({
-      ...prev,
-      [dia]: [...(prev[dia] ?? []), { inicio: "14:00", fin: "18:00" }],
-    }));
-  }
-
-  function removeFranjaCustom(dia: number, idx: number) {
-    setFranjasCustom((prev) => ({
-      ...prev,
-      [dia]: (prev[dia] ?? []).filter((_, i) => i !== idx),
-    }));
-  }
-
-  function updateFranjaBase(idx: number, field: "inicio" | "fin", val: string) {
-    setFranjasBase((prev) => prev.map((f, i) => i === idx ? { ...f, [field]: val } : f));
-  }
-
-  function updateFranjaCustom(dia: number, idx: number, field: "inicio" | "fin", val: string) {
-    setFranjasCustom((prev) => ({
-      ...prev,
-      [dia]: (prev[dia] ?? []).map((f, i) => i === idx ? { ...f, [field]: val } : f),
-    }));
-  }
-
-  // Construye la lista de franjas a enviar según días seleccionados.
-  function construirFranjas(): Franja[] {
-    const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0).map(([k]) => parseInt(k));
-    const todasFranjas: Franja[] = [];
-    for (const diaNum of diasSeleccionados) {
-      const estado = dias[diaNum];
-      const franjasDelDia = estado === 2 ? (franjasCustom[diaNum] ?? []) : franjasBase;
-      for (const f of franjasDelDia) {
-        todasFranjas.push({ dia_semana: diaNum, hora_inicio: f.inicio, hora_fin: f.fin });
-      }
-    }
-    return todasFranjas;
-  }
-
-  // Validación pura: devuelve un mapa de errores por campo (vacío = todo OK).
-  // Se reusa al Guardar y en la revalidación onChange post-primer-intento.
-  function validar(): Record<string, string> {
-    const errs: Record<string, string> = {};
-    if (!nombre.trim()) errs.nombre = "Ingresá un nombre para el modelo.";
-    if (!fechaInicio || !fechaFin) errs.fechas = "Seleccioná fechas de inicio y fin.";
-    else if (fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
-
-    const diasSeleccionados = Object.entries(dias).filter(([, v]) => v > 0);
-    if (diasSeleccionados.length === 0) errs.dias = "Seleccioná al menos un día.";
-    else if (construirFranjas().length === 0) errs.franjas = "Agregá al menos una franja horaria.";
-
-    return errs;
-  }
-
-  // Lleva al primer campo con error (en orden visual), foco adentro.
   function enfocarPrimerError(errs: Record<string, string>) {
     const orden: [string, React.RefObject<HTMLElement | null>][] = [
       ["nombre", nombreRef],
-      ["fechas", fechaInicioRef],
+      ["precio", precioRef],
+      ["duracion", duracionRef],
       ["dias", diasRef],
-      ["franjas", franjasRef],
+      ["horario", horarioRef],
+      ["fechas", fechasRef],
     ];
     for (const [campo, ref] of orden) {
       if (errs[campo] && ref.current) {
@@ -198,15 +128,22 @@ export default function FormularioModelo({
       return;
     }
 
+    const horario = { inicio: `${horaIni}:${minIni}`, fin: `${horaFin}:${minFin}` };
+    const franjas = DIAS.filter((d) => dias[d.num]).map((d) => ({
+      dia_semana: d.num,
+      hora_inicio: horario.inicio,
+      hora_fin: horario.fin,
+    }));
+
     startTransition(async () => {
       const result = await guardarModelo({
         nombre: nombre.trim(),
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
-        duracion_turno: duracionTurno,
+        duracion_turno: parseInt(duracion, 10),
         precio,
-        franjas: construirFranjas(),
-        canal_origen: soloConsultorioPrivado ? "consultorio_privado" : "clinica_virtual",
+        franjas,
+        canal_origen: canal,
       });
       if (result?.error) {
         setErrorServer(result.error);
@@ -216,261 +153,162 @@ export default function FormularioModelo({
   }
 
   const inputClass = "rounded-lg bg-[#f8f9fa] px-3 py-2 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
-  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
+  const selectClass = "appearance-none rounded-lg bg-[#f8f9fa] px-2 py-1.5 text-[15px] md:text-sm focus:outline-none focus:ring-1 focus:ring-[#378ADD] min-h-[44px]";
   const borderStyle = { border: "0.5px solid #e5e7eb" };
   const borderError = { border: "1px solid #E24B4A" };
-  // Borde rojo si el campo tiene error, gris si no.
   const bordeDe = (campo: string) => (errores[campo] ? borderError : borderStyle);
+  const labelClass = "text-xs text-gray-500";
+  const errClass = "mt-1 text-[13px]";
 
-  function FranjaRow({
-    franja,
-    onUpdate,
-    onRemove,
-    canRemove,
-  }: {
-    franja: { inicio: string; fin: string };
-    onUpdate: (field: "inicio" | "fin", val: string) => void;
-    onRemove: () => void;
-    canRemove: boolean;
-  }) {
-    const [ih, im] = franja.inicio.split(":");
-    const [fh, fm] = franja.fin.split(":");
+  // Selects de hora con placeholder "--" (gris hasta elegir).
+  function SelectHora({ value, onChange, opciones, ariaLabel }: { value: string; onChange: (v: string) => void; opciones: string[]; ariaLabel: string }) {
     return (
-      <div>
-        {/* Mobile: 2 filas — Desde / Hasta */}
-        <div className="md:hidden space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Desde</span>
-            <select value={ih} onChange={(e) => onUpdate("inicio", `${e.target.value}:${im}`)} className={selectClass} style={borderStyle}>
-              {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-            </select>
-            <span className="text-gray-300">:</span>
-            <select value={im} onChange={(e) => onUpdate("inicio", `${ih}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-              {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Hasta</span>
-            <select value={fh} onChange={(e) => onUpdate("fin", `${e.target.value}:${fm}`)} className={selectClass} style={borderStyle}>
-              {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-            </select>
-            <span className="text-gray-300">:</span>
-            <select value={fm} onChange={(e) => onUpdate("fin", `${fh}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-              {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            {canRemove && (
-              <button onClick={onRemove} className="flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-400 hover:text-red-500 text-[16px]"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
-            )}
-          </div>
-        </div>
-
-        {/* Desktop: 1 fila inline */}
-        <div className="hidden md:flex items-center gap-2">
-          <select value={ih} onChange={(e) => onUpdate("inicio", `${e.target.value}:${im}`)} className={selectClass} style={borderStyle}>
-            {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-          </select>
-          <span className="text-gray-300">:</span>
-          <select value={im} onChange={(e) => onUpdate("inicio", `${ih}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-            {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <span className="text-xs text-gray-400">a</span>
-          <select value={fh} onChange={(e) => onUpdate("fin", `${e.target.value}:${fm}`)} className={selectClass} style={borderStyle}>
-            {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
-          </select>
-          <span className="text-gray-300">:</span>
-          <select value={fm} onChange={(e) => onUpdate("fin", `${fh}:${e.target.value}`)} className={selectClass} style={borderStyle}>
-            {MINUTOS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          {canRemove && (
-            <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></button>
-          )}
-        </div>
-      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        className={selectClass}
+        style={{ ...borderStyle, color: value === "" ? "#9ca3af" : "#111827" }}
+      >
+        <option value="" disabled>--</option>
+        {opciones.map((o) => <option key={o} value={o} style={{ color: "#111827" }}>{o}</option>)}
+      </select>
     );
   }
 
-  const NOMBRE_DIA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-  const diasComun = DIAS.filter((d) => dias[d.num] === 1); // azul lleno: comparten horario común
-  const diasPropio = DIAS.filter((d) => dias[d.num] === 2); // azul borde: horario propio
+  const esPrivado = canal === "consultorio_privado";
 
   return (
     <div className="rounded-xl bg-white p-4 md:p-6" style={borderStyle}>
-      <h2 className="text-sm font-medium text-gray-900">Nueva agenda</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-gray-900">Nueva agenda</h2>
+        {/* Chip de canal — viene del punto de entrada, no se elige acá */}
+        <span
+          className="shrink-0 rounded-full px-3 py-1 text-[12px] font-medium"
+          style={esPrivado
+            ? { background: "var(--color-bg-tertiary)", color: "var(--color-text-secondary)", border: "1px solid #e5e7eb" }
+            : { background: "var(--color-primary-soft)", color: "var(--color-primary)", border: "1px solid var(--color-primary-border)" }}
+        >
+          {esPrivado ? "Consultorio particular · privado" : "Clínica virtual"}
+        </span>
+      </div>
 
       {/* Nombre */}
       <div className="mt-4">
-        <label className="text-xs text-gray-400">Nombre</label>
+        <label className={labelClass}>Nombre de la agenda</label>
         <input
           ref={nombreRef}
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder="Ej: Semana laboral, Guardias, Vacaciones"
+          placeholder="Ej: Mañanas de consultorio"
           className={`mt-1 w-full ${inputClass}`}
           style={bordeDe("nombre")}
         />
-        {errores.nombre && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.nombre}</p>}
+        {errores.nombre && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.nombre}</p>}
       </div>
 
-      {/* Duracion y precio */}
+      {/* Valor y duración — POR AGENDA */}
       <div className="mt-4 flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
-          <label className="text-xs text-gray-400">Duracion del turno</label>
-          <select value={duracionTurno} onChange={(e) => setDuracionTurno(parseInt(e.target.value))} className={`mt-1 w-full ${inputClass}`} style={borderStyle}>
-            <option value={20}>20 minutos</option>
-            <option value={30}>30 minutos</option>
-            <option value={45}>45 minutos</option>
-            <option value={60}>60 minutos</option>
-          </select>
-        </div>
-        <div className="flex-1">
-          <label className="text-xs text-gray-400">Valor de consulta</label>
+        <div className="flex-1" ref={precioRef} tabIndex={-1}>
+          <label className={labelClass}>Valor de la consulta</label>
           <div className="mt-1">
-            <InputMoneda value={precio} onChange={setPrecio} className={`w-full ${inputClass}`} style={borderStyle} />
+            <InputMoneda value={precio} onChange={setPrecio} placeholder="50.000" className={`w-full ${inputClass}`} style={bordeDe("precio")} />
           </div>
+          {errores.precio && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.precio}</p>}
+        </div>
+        <div className="flex-1">
+          <label className={labelClass}>Duración de cada turno</label>
+          <select
+            ref={duracionRef}
+            value={duracion}
+            onChange={(e) => setDuracion(e.target.value)}
+            className={`mt-1 w-full ${inputClass}`}
+            style={{ ...bordeDe("duracion"), color: duracion === "" ? "#9ca3af" : "#111827" }}
+          >
+            <option value="" disabled>Elegí</option>
+            <option value="20">20 minutos</option>
+            <option value="30">30 minutos</option>
+            <option value="45">45 minutos</option>
+            <option value="60">60 minutos</option>
+          </select>
+          {errores.duracion && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.duracion}</p>}
         </div>
       </div>
 
-      {/* Fechas */}
-      <div className="mt-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <label className="text-xs text-gray-400">Desde</label>
-            <input ref={fechaInicioRef} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-400">Hasta</label>
-            <input type="date" value={fechaFin} min={fechaInicio || undefined} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
-          </div>
-        </div>
-        {errores.fechas && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
-      </div>
-
-      {/* Selector de dias — tocar prende/apaga el día (horario común) */}
+      {/* Días — multiselección simple, nada preseleccionado */}
       <div className="mt-5">
-        <label className="text-xs text-gray-400">Días de atención</label>
+        <label className={labelClass}>Días que atendés</label>
         <div
           ref={diasRef}
           tabIndex={-1}
           className="mt-2 flex flex-wrap gap-[6px] rounded-lg focus:outline-none"
           style={errores.dias ? { ...borderError, padding: "6px" } : undefined}
         >
-          {DIAS.map((d) => {
-            const estado = dias[d.num];
-            return (
-              <button
-                key={d.num}
-                onClick={() => toggleDia(d.num)}
-                aria-label={`${NOMBRE_DIA[d.num]}${estado === 1 ? " — atiende" : estado === 2 ? " — horario propio" : ""}`}
-                className="relative flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95"
-                style={
-                  estado === 1
-                    ? { background: "var(--color-primary)", color: "#fff" }
-                    : estado === 2
-                      ? { background: "var(--color-primary-soft)", color: "var(--color-brand-dark)", border: "2px solid var(--color-primary)" }
-                      : { background: "var(--color-bg-tertiary)", color: "var(--color-muted)" }
-                }
-              >
-                {d.label}
-                {estado === 2 && (
-                  <span
-                    className="absolute -top-1 -right-1 h-[10px] w-[10px] rounded-full"
-                    style={{ background: "var(--color-primary)", border: "2px solid #fff" }}
-                  />
-                )}
-              </button>
-            );
-          })}
+          {DIAS.map((d) => (
+            <button
+              key={d.num}
+              onClick={() => setDias((prev) => ({ ...prev, [d.num]: !prev[d.num] }))}
+              aria-label={`${d.nombre}${dias[d.num] ? " — atiende" : ""}`}
+              aria-pressed={dias[d.num]}
+              className="flex min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-100 active:scale-95"
+              style={dias[d.num]
+                ? { background: "var(--color-primary)", color: "#fff" }
+                : { background: "var(--color-bg-tertiary)", color: "var(--color-muted)" }}
+            >
+              {d.label}
+            </button>
+          ))}
         </div>
-        {/* Leyenda: qué SIGNIFICA cada color (no cómo se llega) */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]" style={{ color: "var(--color-muted)" }}>
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 shrink-0 rounded" style={{ background: "var(--color-primary)" }} />
-            comparten el horario común
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 shrink-0 rounded" style={{ background: "var(--color-primary-soft)", border: "2px solid var(--color-primary)" }} />
-            tiene su horario propio
-          </span>
-        </div>
-        {errores.dias && <p className="mt-1 text-[13px]" style={{ color: "#E24B4A" }}>{errores.dias}</p>}
+        {errores.dias && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.dias}</p>}
       </div>
 
-      {/* Zona de franjas (base + personalizadas) — ancla de scroll/foco para error de franjas */}
-      <div ref={franjasRef} tabIndex={-1} className="focus:outline-none">
-        {/* Horario común — conecta con sus días (barra azul + las letras de los días) */}
-        {diasComun.length > 0 && (
-          <div className="mt-5 rounded-lg bg-white p-4" style={{ border: "0.5px solid #e5e7eb", borderLeft: "4px solid var(--color-primary)" }}>
-            <div className="flex items-center justify-between">
-              <div className="flex flex-wrap items-baseline gap-x-1.5">
-                <span className="text-[13px] font-medium" style={{ color: "var(--color-brand-dark)" }}>Horario común</span>
-                <span className="text-[13px] font-semibold tracking-[0.12em]" style={{ color: "var(--color-primary)" }}>
-                  {diasComun.map((d) => d.label).join(" ")}
-                </span>
-              </div>
-              <button onClick={addFranjaBase} className="shrink-0 text-xs hover:underline min-h-[44px] md:min-h-0 px-2" style={{ color: "var(--color-text-link)" }}>+ Agregar franja</button>
-            </div>
-            <p className="mt-0.5 text-[12px]" style={{ color: "var(--color-muted)" }}>Estos días comparten este horario · {duracionTurno} min por turno</p>
-            <div className="mt-2 space-y-3 md:space-y-2">
-              {franjasBase.map((f, i) => (
-                <FranjaRow
-                  key={i}
-                  franja={f}
-                  onUpdate={(field, val) => updateFranjaBase(i, field, val)}
-                  onRemove={() => removeFranjaBase(i)}
-                  canRemove={franjasBase.length > 1}
-                />
-              ))}
-            </div>
+      {/* Horario — UNO solo, el mismo para esos días */}
+      <div className="mt-5" ref={horarioRef} tabIndex={-1}>
+        <label className={labelClass}>Horario (el mismo para esos días)</label>
+        <div className="mt-2 space-y-2 rounded-lg p-3" style={errores.horario ? borderError : borderStyle}>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Desde</span>
+            <SelectHora value={horaIni} onChange={setHoraIni} opciones={HORAS} ariaLabel="Hora de inicio" />
+            <span className="text-gray-300">:</span>
+            <SelectHora value={minIni} onChange={setMinIni} opciones={MINUTOS} ariaLabel="Minutos de inicio" />
           </div>
-        )}
-
-        {/* Horario propio por día */}
-        {diasPropio.map((d) => {
-          const diaNum = d.num;
-          const franjasDelDia = franjasCustom[diaNum] ?? [];
-          return (
-            <div key={diaNum} className="mt-4 rounded-lg p-4" style={{ background: "var(--color-primary-soft)", border: "1px solid var(--color-primary-border)" }}>
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium" style={{ color: "var(--color-brand-dark)" }}>
-                  {NOMBRE_DIA[diaNum]} · horario propio
-                </label>
-                <button onClick={() => addFranjaCustom(diaNum)} className="text-xs hover:underline min-h-[44px] md:min-h-0 px-2" style={{ color: "var(--color-text-link)" }}>+ Agregar franja</button>
-              </div>
-              <div className="mt-2 space-y-3 md:space-y-2">
-                {franjasDelDia.map((f, i) => (
-                  <FranjaRow
-                    key={i}
-                    franja={f}
-                    onUpdate={(field, val) => updateFranjaCustom(diaNum, i, field, val)}
-                    onRemove={() => removeFranjaCustom(diaNum, i)}
-                    canRemove={franjasDelDia.length > 1}
-                  />
-                ))}
-              </div>
-              <button onClick={() => usarHorarioComun(diaNum)} className="mt-2 flex items-center min-h-[40px] text-[12px] hover:underline" style={{ color: "var(--color-muted)" }}>← Usar el horario común</button>
-            </div>
-          );
-        })}
-
-        {errores.franjas && <p className="mt-2 text-[13px]" style={{ color: "#E24B4A" }}>{errores.franjas}</p>}
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-400 w-[44px] shrink-0">Hasta</span>
+            <SelectHora value={horaFin} onChange={setHoraFin} opciones={HORAS} ariaLabel="Hora de fin" />
+            <span className="text-gray-300">:</span>
+            <SelectHora value={minFin} onChange={setMinFin} opciones={MINUTOS} ariaLabel="Minutos de fin" />
+          </div>
+        </div>
+        {errores.horario && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.horario}</p>}
       </div>
 
-      {/* Canal */}
-      <label className="mt-5 flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={soloConsultorioPrivado}
-          onChange={(e) => setSoloConsultorioPrivado(e.target.checked)}
-          className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
-        />
-        <span className="text-sm text-gray-700">Estos turnos son solo para mi Consultorio Particular</span>
-      </label>
+      {/* Vigencia — desde HOY, fechas pasadas bloqueadas */}
+      <div className="mt-5">
+        <label className={labelClass}>Vigencia</label>
+        <div className="mt-1 flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <span className="text-[12px] text-gray-400">Desde</span>
+            <input ref={fechasRef} type="date" value={fechaInicio} min={hoy} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
+          </div>
+          <div className="flex-1">
+            <span className="text-[12px] text-gray-400">Hasta</span>
+            <input type="date" value={fechaFin} min={fechaInicio || hoy} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
+          </div>
+        </div>
+        {errores.fechas && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
+      </div>
 
-      {/* Banner del server. Aviso resoluble (R1 / turnos reservados) → naranja alerta;
-          error duro del sistema → rojo. */}
+      {/* Tip modelo B — comunicado como ventaja */}
+      <p className="mt-5 rounded-lg px-3 py-2.5 text-[13px]" style={{ background: "var(--color-primary-soft)", color: "var(--color-text-secondary)" }}>
+        ¿Atendés mañana y tarde, o con otro precio? <strong>Creá otra agenda</strong> — así podés
+        pausar o editar cada bloque por separado.
+      </p>
+
+      {/* Banner del server: aviso resoluble naranja / error duro rojo */}
       {errorServer && (
         <div
-          className="mt-6 rounded-lg p-3 text-sm"
+          role="alert"
+          className="mt-4 rounded-lg p-3 text-sm"
           style={avisoServer
             ? { backgroundColor: "#FBEEE6", color: "#D85A30" }
             : { backgroundColor: "#FDECEC", color: "#E24B4A" }}
@@ -479,15 +317,15 @@ export default function FormularioModelo({
         </div>
       )}
 
-      {/* Acciones */}
+      {/* Acciones — CTA atenuado hasta completar (pero clickeable: marca qué falta) */}
       <div className="mt-6 flex flex-col md:flex-row gap-3">
-        <a href="/medico/agenda" className="flex-1 flex items-center justify-center rounded-lg bg-gray-100 px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-center text-sm text-gray-700 hover:bg-gray-200">
+        <a href={esPrivado ? "/medico/como-atendes/consultorio" : "/medico/agenda"} className="flex-1 flex items-center justify-center rounded-lg bg-gray-100 px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-center text-sm text-gray-700 hover:bg-gray-200">
           Cancelar
         </a>
         <button
           onClick={handleGuardar}
           disabled={isPending}
-          className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-70 active:scale-95 active:opacity-80 transition-all duration-100"
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#378ADD] px-4 min-h-[48px] md:min-h-0 md:py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] active:scale-95 active:opacity-80 transition-all duration-100 ${completo && !isPending ? "" : "opacity-50"}`}
         >
           {isPending && (
             <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -495,7 +333,7 @@ export default function FormularioModelo({
               <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
             </svg>
           )}
-          {isPending ? "Guardando..." : "Guardar modelo"}
+          {isPending ? "Creando..." : "Crear agenda"}
         </button>
       </div>
     </div>
