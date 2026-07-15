@@ -14,5 +14,5 @@ export default async function NuevaContrasenaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  return <NuevaContrasena />;
+  return <NuevaContrasena email={user.email ?? ""} />;
 }

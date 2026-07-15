@@ -72,6 +72,7 @@ export default function LoginPage() {
 
         {error && (
           <div
+            role="alert"
             className="mt-4 rounded-[var(--radius-md)] p-3 text-sm"
             style={{ backgroundColor: "var(--color-danger-soft)", color: "var(--color-danger)" }}
           >
@@ -139,8 +140,8 @@ export default function LoginPage() {
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
             />
-            <div className="mt-1.5 text-right">
-              <Link href="/auth/recuperar" className="text-[13px] font-medium" style={{ color: "var(--color-text-link)" }}>
+            <div className="mt-0.5 text-right">
+              <Link href="/auth/recuperar" className="inline-block py-2 text-[13px] font-medium" style={{ color: "var(--color-text-link)" }}>
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
