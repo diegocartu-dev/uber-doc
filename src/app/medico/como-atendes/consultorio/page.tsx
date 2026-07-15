@@ -20,7 +20,7 @@ export default async function ConsultorioParticularPage() {
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, slug, visible_consultorio_particular")
+    .select("id, slug, visible_consultorio_particular, categoria")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
@@ -58,6 +58,7 @@ export default async function ConsultorioParticularPage() {
         modelos={modelosCompletos}
         comisionPct={comisionPct}
         visibleInicial={medico.visible_consultorio_particular !== false}
+        esFounder={medico.categoria === "founder"}
       />
     </div>
   );
