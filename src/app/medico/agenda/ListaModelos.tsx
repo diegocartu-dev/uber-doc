@@ -160,6 +160,10 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
       {modelos.map((m) => {
         const diasActivos = [...new Set(m.franjas.map((f) => f.dia_semana))].sort();
         const isExpanded = expandedIds.has(m.id);
+        // Agenda vencida = fecha_fin pasada: dejó de generar slots aunque el
+        // toggle siga verde. Antes moría en silencio (bug conocido de la spec).
+        const hoyISO = new Date().toLocaleDateString("sv-SE");
+        const vencida = m.fecha_fin < hoyISO;
 
         // Group franjas by dia for readable display
         const franjasPorDia = new Map<number, string[]>();
@@ -183,6 +187,11 @@ export default function ListaModelos({ modelos: modelosIniciales }: { modelos: M
                 <p className="text-[16px] md:text-[18px] font-semibold text-gray-900 truncate">{m.nombre.charAt(0).toUpperCase() + m.nombre.slice(1)}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <OrigenBadge canalOrigen={m.canal_origen} />
+                  {vencida && (
+                    <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "#FBEEE6", color: "#D85A30" }}>
+                      Vencida — ya no ofrece turnos
+                    </span>
+                  )}
                   {m.duracion_turno && (
                     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">{m.duracion_turno} min</span>
                   )}
