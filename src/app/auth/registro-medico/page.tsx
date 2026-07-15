@@ -20,10 +20,16 @@ export default function RegistroMedicoPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    const fdCheck = new FormData(e.currentTarget);
+    // Pedido de Diego (15/07): repetir la contraseña para salvar errores de tipeo.
+    if (fdCheck.get("password") !== fdCheck.get("password_confirmar")) {
+      setError("Las contraseñas no coinciden. Revisalas.");
+      return;
+    }
+    setLoading(true);
     try {
-      const fd = new FormData(e.currentTarget);
+      const fd = fdCheck;
       const r = await iniciarRegistroMedico(fd);
       if (r?.error) {
         setError(r.error);
@@ -157,11 +163,23 @@ export default function RegistroMedicoPage() {
                     type="button"
                     onClick={() => setMostrarPwd((v) => !v)}
                     aria-label={mostrarPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    className="absolute inset-y-0 right-0 mt-1 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                    className="absolute inset-y-0 right-0 mt-1 flex items-center px-3 text-gray-500 hover:text-gray-700"
                   >
                     {mostrarPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+              </div>
+              <div>
+                <label htmlFor="password_confirmar" className={labelClass}>Repetí la contraseña</label>
+                <input
+                  id="password_confirmar"
+                  name="password_confirmar"
+                  type={mostrarPwd ? "text" : "password"}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  className={inputClass}
+                />
               </div>
 
               <LoadingButton
