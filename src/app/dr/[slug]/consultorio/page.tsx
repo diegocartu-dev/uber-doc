@@ -54,7 +54,7 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -66,6 +66,9 @@ export default async function ConsultorioPrivadoPage({
   const esPacienteTest = pacienteCheck?.es_cuenta_test === true;
   // Casos "no existe / no disponible públicamente" → 404 honesto.
   if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) notFound();
+  // Enforcement del toggle (15/07): consultorio apagado por el médico = cerrado
+  // también acá (la landing ya lo corta; esto cubre a los logueados que entran directo).
+  if (medico.visible_consultorio_particular === false) notFound();
   // Carril de prueba (defensa en profundidad — NO aflojar): el médico EXISTE pero no es del
   // universo del paciente (test↔real). No es un 404 ("no existe"), y NO se puede redirigir a la
   // landing porque ésta reenvía a los logueados de vuelta acá → loop infinito. Pantalla inline
