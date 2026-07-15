@@ -54,7 +54,7 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, modalidad_atencion, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
+    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, ci_en_consultorio, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -109,9 +109,10 @@ export default async function ConsultorioPrivadoPage({
       (horaActual >= medico.disponible_desde.slice(0, 5) &&
        horaActual <= medico.disponible_hasta.slice(0, 5)));
 
-  const puedeInmediata =
-    enHorario &&
-    (medico.modalidad_atencion === "inmediata" || medico.modalidad_atencion === "ambas");
+  // CI en el consultorio = opt-in explícito (tilde en la config de CI, decisión
+  // Diego 15/07). Reemplaza el gate legacy por modalidad_atencion, que quedaba
+  // NULL en médicos del registro nuevo y les negaba CI acá para siempre.
+  const puedeInmediata = enHorario && medico.ci_en_consultorio === true;
 
   // Contar pacientes en espera
   const { data: consultasEspera } = await supabase

@@ -34,6 +34,7 @@ type Inicial = {
   hasta: string;
   duracion: string; // "20" | ... | ""
   precio: number; // 0 = vacío
+  ciEnConsultorio: boolean; // tilde "CI también en mi consultorio particular"
 };
 
 // Configurar Consulta Inmediata — spec aprobada 14/07. Toggle "Disponible ahora"
@@ -46,6 +47,9 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
   const [horaFin, setHoraFin] = useState(inicial.hasta.split(":")[0] ?? "");
   const [minFin, setMinFin] = useState(inicial.hasta ? (inicial.hasta.split(":")[1] ?? "00") : "");
   const [disponible, setDisponible] = useState(inicial.disponible);
+  // Opt-in explícito (decisión Diego 15/07): la CI en el consultorio particular
+  // se activa SOLO con este tilde. DEFAULT false — nadie queda incluido sin elegirlo.
+  const [ciEnConsultorio, setCiEnConsultorio] = useState(inicial.ciEnConsultorio);
   // Último estado CONFIRMADO por el server — el revert de un error vuelve acá,
   // no al valor del primer render (Roberto: toggle OK + toggle fallido dejaba
   // el switch desincronizado hasta el refresh).
@@ -69,6 +73,7 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
         disponible_hasta: hasta,
         duracion_consulta: duracion ? parseInt(duracion, 10) : undefined,
         precio_consulta: precio > 0 ? precio : undefined,
+        ci_en_consultorio: ciEnConsultorio,
       });
       if (result?.error) {
         setError(result.error);
@@ -217,6 +222,25 @@ export default function ConfigCI({ inicial, activacionCompleta }: { inicial: Ini
               Completá valor, duración y horario para poder activarte.
             </p>
           )}
+        </div>
+
+        {/* Tilde CI en consultorio particular — opt-in explícito (Diego 15/07) */}
+        <div className="border-t border-gray-100 pt-4">
+          <label className="flex cursor-pointer items-start gap-3 py-1">
+            <input
+              type="checkbox"
+              checked={ciEnConsultorio}
+              onChange={(e) => setCiEnConsultorio(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
+            />
+            <span className="text-sm text-gray-700">
+              Ofrecer la consulta inmediata también en mi <strong>Consultorio Particular</strong>
+              <span className="mt-0.5 block text-[13px] font-normal text-gray-500">
+                Los pacientes que entren por tu link privado van a poder consultarte al instante,
+                con el mismo valor y horario de arriba. Se guarda al tocar Guardar.
+              </span>
+            </span>
+          </label>
         </div>
 
         {/* Guardar */}
