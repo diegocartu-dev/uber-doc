@@ -202,19 +202,28 @@ export async function completarRegistroMedico(formData: FormData) {
     return { error: "Esta matrícula ya está registrada en Docto." };
   }
 
-  // Credencial (opcional) → bucket credenciales-medicos, path definitivo con user_id.
-  // Extensión whitelisteada + tope de tamaño server-side (mismo rigor que foto_perfil).
-  let foto_credencial_url: string | null = null;
+  // Credencial OBLIGATORIA (Diego, 15/07) → bucket credenciales-medicos, path
+  // definitivo con user_id. Extensión whitelisteada + tope de tamaño server-side.
   const fotoFile = formData.get("foto_credencial") as File | null;
-  if (fotoFile && fotoFile.size > 0 && fotoFile.size <= 5 * 1024 * 1024) {
-    const rawExt = fotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
-    const ext = ["jpg", "jpeg", "png", "webp", "pdf"].includes(rawExt) ? rawExt : "jpg";
-    const path = `${user.id}/credencial-${Date.now()}.${ext}`;
-    const { error: upErr } = await supabaseAdmin.storage
-      .from("credenciales-medicos")
-      .upload(path, fotoFile, { contentType: fotoFile.type, upsert: true });
-    if (!upErr) foto_credencial_url = path;
+  if (!fotoFile || fotoFile.size === 0) {
+    return { error: "Subí la foto de tu credencial médica para continuar." };
   }
+  if (fotoFile.size > 5 * 1024 * 1024) {
+    return { error: "La credencial no puede superar 5 MB." };
+  }
+  const rawExt = fotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+  const ext = ["jpg", "jpeg", "png", "webp", "pdf"].includes(rawExt) ? rawExt : "jpg";
+  const credencialPath = `${user.id}/credencial-${Date.now()}.${ext}`;
+  const { error: upErr } = await supabaseAdmin.storage
+    .from("credenciales-medicos")
+    .upload(credencialPath, fotoFile, { contentType: fotoFile.type, upsert: true });
+  if (upErr) {
+    // Si es obligatoria, una subida fallida NO puede terminar en ficha sin
+    // credencial: se corta acá y el médico reintenta (el archivo sigue elegido).
+    console.error("[completarRegistro] upload credencial falló:", upErr.message);
+    return { error: "No pudimos subir tu credencial. Probá de nuevo en un momento." };
+  }
+  const foto_credencial_url: string = credencialPath;
 
   // Foto de perfil (opcional) → bucket avatars (público) → foto_url.
   let foto_url: string | null = null;

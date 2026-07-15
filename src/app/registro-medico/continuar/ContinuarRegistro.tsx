@@ -169,6 +169,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (paso < 2) { siguiente(); return; }
+    // La credencial es OBLIGATORIA (Diego, 15/07): el registro es validación y
+    // sin credencial el admin no puede confirmar que la matrícula es tuya.
+    if (!fotoCredencial) {
+      setError("Subí la foto de tu credencial médica para continuar.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -452,7 +458,6 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                 <li className="flex items-start gap-2 text-gray-600"><Lightbulb size={16} className="mt-0.5 shrink-0 text-[#BA7517]" /><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
               </ul>
             </div>
-            <p className={hintClass}>Podés subirla ahora o después desde tu perfil.</p>
 
             {/* Términos y declaración — antes de crear la ficha */}
             <div className="space-y-3 border-t border-gray-100 pt-3">
