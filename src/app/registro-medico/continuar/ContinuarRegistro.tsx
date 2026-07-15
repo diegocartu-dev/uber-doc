@@ -158,12 +158,18 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
 
   function siguiente() {
     setError(null);
-    if (paso === 1 && validarPaso1()) setPaso(2);
+    if (paso === 1 && validarPaso1()) {
+      setPaso(2);
+      // El paso 1 es largo: al cambiar de paso el scroll queda al pie y el
+      // médico ve el paso nuevo "desde abajo" (bug reportado por Diego 15/07).
+      window.scrollTo(0, 0);
+    }
   }
 
   function anterior() {
     setError(null);
     setPaso((p) => Math.max(1, p - 1));
+    window.scrollTo(0, 0);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -173,6 +179,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     // sin credencial el admin no puede confirmar que la matrícula es tuya.
     if (!fotoCredencial) {
       setError("Subí la foto de tu credencial médica para continuar.");
+      window.scrollTo(0, 0); // el banner de error vive arriba del form
       return;
     }
     setLoading(true);
@@ -185,10 +192,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       if (result?.error) {
         setError(result.error);
         setLoading(false);
+        window.scrollTo(0, 0);
       }
     } catch {
       setError("Error al enviar el registro. Recargá la página e intentá de nuevo.");
       setLoading(false);
+      window.scrollTo(0, 0);
     }
   }
 
