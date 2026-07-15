@@ -26,7 +26,9 @@ export default async function RegistroIdentidadPage({
     .select("id, didit_status, identidad_validada, biometria_exenta")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!medico) redirect("/dashboard");
+  // Sin ficha todavía = confirmó el mail pero no completó datos (Fase B). Lo
+  // mandamos a completar, no al dashboard (que asume médico con ficha).
+  if (!medico) redirect("/registro-medico/continuar");
 
   const { identidad } = await searchParams;
 

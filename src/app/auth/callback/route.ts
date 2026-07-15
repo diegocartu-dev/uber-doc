@@ -59,16 +59,22 @@ export async function GET(request: Request) {
       return adminResponse;
     }
 
-    const { data: esMedico } = await admin
+    // Médico = rol en metadata (signUp de Fase A) O ficha ya existente. En el
+    // registro nuevo la cuenta se crea (Fase A) ANTES de la ficha (Fase B), así
+    // que NO alcanza con mirar la tabla. La ficha, si existe, manda a /dashboard
+    // (preserva el comportamiento de los médicos ya registrados). Si es médico →
+    // nunca se le crea fila de paciente.
+    const esMedicoRol = data.user.user_metadata?.role === "medico";
+    const { data: medicoRow } = await admin
       .from("medicos")
       .select("id")
       .eq("user_id", data.user.id)
       .maybeSingle();
-
-    if (esMedico) {
-      // Médico: redirect directo a dashboard (ignora next param que puede perderse)
-      const medicoResponse = NextResponse.redirect(`${origin}/dashboard`);
-      // Copiar cookies de sesión al nuevo response
+    if (esMedicoRol || medicoRow) {
+      // Con ficha → dashboard (médico existente). Sin ficha → completar registro
+      // (recién confirmó el mail en Fase A).
+      const dest = medicoRow ? "/dashboard" : "/registro-medico/continuar";
+      const medicoResponse = NextResponse.redirect(`${origin}${dest}`);
       response.cookies.getAll().forEach((cookie) => {
         medicoResponse.cookies.set(cookie.name, cookie.value, cookie);
       });

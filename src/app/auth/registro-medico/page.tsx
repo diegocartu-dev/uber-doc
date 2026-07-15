@@ -1,208 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef } from "react";
-import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera } from "lucide-react";
-import { registrarMedico } from "./actions";
+import { useState } from "react";
+import { Stethoscope, MailCheck, Eye, EyeOff } from "lucide-react";
+import { iniciarRegistroMedico, reenviarConfirmacionMedico } from "./actions";
 import LoadingButton from "@/components/ui/LoadingButton";
-import ModalTerminos from "@/components/ModalTerminos";
 
-const ESPECIALIDADES = [
-  "Alergia e inmunología",
-  "Anatomía patológica",
-  "Anestesiología",
-  "Cardiología",
-  "Cirugía cardiovascular",
-  "Cirugía general",
-  "Cirugía pediátrica",
-  "Cirugía plástica y reparadora",
-  "Cirugía torácica",
-  "Clínica médica",
-  "Coloproctología",
-  "Dermatología",
-  "Diagnóstico por imágenes",
-  "Endocrinología",
-  "Farmacología clínica",
-  "Fisiatría",
-  "Gastroenterología",
-  "Genética médica",
-  "Geriatría",
-  "Ginecología",
-  "Hematología",
-  "Hemoterapia e inmunohematología",
-  "Hepatología",
-  "Infectología",
-  "Mastología",
-  "Medicina del deporte",
-  "Medicina del trabajo",
-  "Medicina familiar",
-  "Medicina legal",
-  "Medicina nuclear",
-  "Nefrología",
-  "Neonatología",
-  "Neumonología",
-  "Neurocirugía",
-  "Neurología",
-  "Nutrición",
-  "Obstetricia",
-  "Oftalmología",
-  "Oncología",
-  "Ortopedia y traumatología",
-  "Otorrinolaringología",
-  "Patología",
-  "Pediatría",
-  "Psiquiatría",
-  "Radioterapia",
-  "Reumatología",
-  "Terapia intensiva",
-  "Toxicología",
-  "Urología",
-];
-
-const PROVINCIAS = [
-  "Buenos Aires",
-  "CABA",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
-];
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
-
-// Encabezado de bloque (agrupación por propósito). Componente estable a nivel de
-// módulo — no depende del estado del formulario.
-function BloqueHeader({ n, titulo, subtitulo }: { n: number; titulo: string; subtitulo: string }) {
-  return (
-    <div className="mb-1">
-      <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#378ADD] text-[11px] font-semibold text-white">{n}</span>
-        <span className="text-[15px] font-semibold text-gray-900">{titulo}</span>
-      </div>
-      <p className="ml-7 text-xs text-gray-500">{subtitulo}</p>
-    </div>
-  );
-}
-
-// Rediseño 14/07/2026 (spec docs/specs/2026-07-14-rediseno-registro-medico.md).
-// Registro = SOLO validación: (1) datos por propósito, (2) credencial,
-// (3) validación biométrica (en /registro-medico/identidad, tras crear la cuenta).
-// La config de consulta (precio/duración/modalidad) SALIÓ del registro → se setea
-// al configurar CI y agendas. Este formulario cubre los pasos 1 y 2; al enviarlo
-// se crea la cuenta y se redirige al paso 3 (biometría).
+// Rediseño 14/07/2026 — FASE A del registro médico: crear la cuenta con lo
+// mínimo (nombre + email + contraseña) y mandar el mail de validación. Los datos
+// profesionales + credencial + biometría se completan DESPUÉS de confirmar el
+// mail, ya logueado (/registro-medico/continuar). Spec: docs/specs/2026-07-14.
 export default function RegistroMedicoPage() {
-  const [paso, setPaso] = useState(1);
-  const [tipoMatricula, setTipoMatricula] = useState("MN");
-  const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
+  const [enviadoA, setEnviadoA] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [checkTerminos, setCheckTerminos] = useState(false);
-  const [checkMatricula, setCheckMatricula] = useState(false);
-  const [modalTerminos, setModalTerminos] = useState(false);
-  const [modalMatricula, setModalMatricula] = useState(false);
-  const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
-  const [fotoPerfil, setFotoPerfil] = useState<File | null>(null);
-  const [numeroMatricula, setNumeroMatricula] = useState("");
-  const formRef = useRef<HTMLFormElement>(null);
-
-  // Paso 1 — "Completá tus datos": valida los 3 bloques. Teléfono profesional y
-  // foto de perfil son OPCIONALES.
-  function validarPaso1(): boolean {
-    const form = formRef.current;
-    if (!form) return false;
-    const requeridos: { name: string; label: string }[] = [
-      { name: "email", label: "Email" },
-      { name: "password", label: "Contraseña" },
-      { name: "titulo", label: "Título profesional" },
-      { name: "nombre_completo", label: "Nombre y apellido" },
-      { name: "especialidad", label: "Especialidad" },
-      { name: "numero_matricula", label: "Número de matrícula" },
-      { name: "dni", label: "DNI" },
-      { name: "cuit", label: "CUIT" },
-      { name: "domicilio_consultorio", label: "Domicilio del consultorio" },
-      { name: "celular_personal", label: "Celular personal" },
-    ];
-    for (const { name, label } of requeridos) {
-      const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
-      if (!el || !el.value.trim()) {
-        setError(`Completá el campo "${label}".`);
-        el?.focus();
-        return false;
-      }
-    }
-    if (tipoMatricula === "MP") {
-      const prov = (form.elements.namedItem("provincia") as HTMLSelectElement)?.value;
-      if (!prov) {
-        setError("Seleccioná la provincia de tu matrícula.");
-        return false;
-      }
-    }
-    const pwd = (form.elements.namedItem("password") as HTMLInputElement).value;
-    if (pwd.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres.");
-      return false;
-    }
-    const dni = (form.elements.namedItem("dni") as HTMLInputElement).value;
-    if (!/^\d{7,8}$/.test(dni)) {
-      setError("El DNI debe tener 7 u 8 dígitos numéricos.");
-      return false;
-    }
-    return true;
-  }
-
-  function siguiente() {
-    setError(null);
-    if (paso === 1 && validarPaso1()) setPaso(2);
-  }
-
-  function anterior() {
-    setError(null);
-    setPaso((p) => Math.max(1, p - 1));
-  }
+  const [mostrarPwd, setMostrarPwd] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (paso < 2) { siguiente(); return; }
     setLoading(true);
     setError(null);
-
     try {
-      const formData = new FormData(e.currentTarget);
-      const result = await registrarMedico(formData);
-      // Éxito = redirect server-side a /registro-medico/identidad (no vuelve).
-      if (result?.error) {
-        setError(result.error);
+      const fd = new FormData(e.currentTarget);
+      const r = await iniciarRegistroMedico(fd);
+      if (r?.error) {
+        setError(r.error);
         setLoading(false);
+        return;
       }
+      setEnviadoA((r?.email as string) ?? (fd.get("email") as string));
     } catch {
-      setError("Error al enviar el registro. Recargá la página e intentá de nuevo.");
+      setError("No se pudo crear la cuenta. Probá de nuevo en un momento.");
       setLoading(false);
     }
   }
 
+  async function handleReenviar() {
+    if (!enviadoA) return;
+    setReenviando(true);
+    setReenviado(false);
+    try {
+      await reenviarConfirmacionMedico(enviadoA);
+      setReenviado(true);
+    } finally {
+      setReenviando(false);
+    }
+  }
+
+  function usarOtroEmail() {
+    setEnviadoA(null);
+    setReenviado(false);
+    setError(null);
+    setLoading(false);
+  }
+
   const inputClass =
-    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border px-3 text-[15px] shadow-sm focus:outline-none";
+    "mt-1 block w-full h-11 rounded-[var(--radius-md)] border border-gray-300 px-3 text-[15px] shadow-sm focus:outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#378ADD]/30";
   const labelClass = "block text-[13px] font-medium text-gray-700";
-  const hintClass = "mt-1 text-xs text-gray-400";
-  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Verificá tu identidad"];
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
@@ -212,376 +68,112 @@ export default function RegistroMedicoPage() {
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </Link>
 
-        {/* Progreso — 3 pasos: datos, credencial, identidad (este form cubre 1 y 2). */}
-        <div className="mb-6 flex items-center justify-center gap-2">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="flex items-center gap-2">
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                  n === paso
-                    ? "bg-[#378ADD] text-white"
-                    : n < paso
-                      ? "bg-[#378ADD]/20 text-[#378ADD]"
-                      : "bg-gray-100 text-gray-400"
-                }`}
-              >
-                {n < paso ? "✓" : n}
-              </div>
-              {n < 3 && (
-                <div className={`h-0.5 w-6 rounded transition-colors ${n < paso ? "bg-[#378ADD]/40" : "bg-gray-200"}`} />
+        {enviadoA ? (
+          // ── Mensaje inmediato: revisá tu mail (incluí spam) ──
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm">
+            <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "rgba(55,138,221,0.1)" }}>
+              <MailCheck size={28} style={{ color: "#378ADD" }} />
+            </span>
+            <h2 className="text-xl font-semibold text-gray-900">Revisá tu email</h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              Te enviamos un mail a <strong className="text-gray-800">{enviadoA}</strong> para
+              validar la creación de tu cuenta.
+            </p>
+            <div className="mt-4 rounded-xl px-4 py-3 text-left" style={{ background: "rgba(186,117,23,0.08)" }}>
+              <p className="text-sm leading-relaxed" style={{ color: "#BA7517" }}>
+                Si no lo ves en tu bandeja principal, revisá en <strong>Spam</strong> o correos
+                no deseados. <strong>Seguí la registración desde ahí.</strong>
+              </p>
+            </div>
+            <p className="mt-5 text-[13px] text-gray-500">
+              Al tocar el link del mail vas a entrar y continuar tu registro.
+            </p>
+
+            {/* Salidas: reenviar / corregir email — evita el callejón sin salida */}
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              {reenviado ? (
+                <p className="text-[13px] font-medium" style={{ color: "#1D9E75" }}>
+                  Te lo reenviamos. Revisá tu bandeja (y el spam).
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleReenviar}
+                  disabled={reenviando}
+                  className="text-[13px] font-medium underline disabled:opacity-50"
+                  style={{ color: "#378ADD" }}
+                >
+                  {reenviando ? "Reenviando…" : "¿No te llegó? Reenviar mail"}
+                </button>
               )}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={usarOtroEmail}
+                  className="text-[13px] font-medium text-gray-500 underline"
+                >
+                  Usar otro email
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          // ── Crear cuenta (lo mínimo) ──
+          <>
+            <h2 className="text-center text-xl font-semibold text-gray-900">Creá tu cuenta</h2>
+            <p className="mt-1 text-center text-sm text-gray-500">
+              Empezá con lo básico. Los datos profesionales van en los siguientes pasos.
+            </p>
 
-        <h2 className="text-center text-xl font-semibold text-gray-900">
-          {pasoTitulos[paso - 1]}
-        </h2>
-        <p className="mt-1 text-center text-sm text-gray-500">Paso {paso} de 3</p>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {error && (
+                <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(226,75,74,0.08)", color: "#E24B4A" }}>
+                  {error}
+                </div>
+              )}
 
-        <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
-          {error && (
-            <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(226,75,74,0.08)", color: "#E24B4A" }}>
-              {error}
-            </div>
-          )}
-
-          {/* ═══ PASO 1: Completá tus datos (3 bloques por propósito) ═══ */}
-          <div className={paso === 1 ? "space-y-6" : "hidden"}>
-            {/* Tu cuenta */}
-            <div className="space-y-3">
-              <p className="text-[15px] font-semibold text-gray-900">Tu cuenta</p>
+              <div>
+                <label htmlFor="nombre_completo" className={labelClass}>Nombre y apellido</label>
+                <input id="nombre_completo" name="nombre_completo" type="text" required autoComplete="name" className={inputClass} placeholder="María Pérez" />
+              </div>
               <div>
                 <label htmlFor="email" className={labelClass}>Email</label>
-                <input id="email" name="email" type="email" required className={inputClass} placeholder="doctor@email.com" />
+                <input id="email" name="email" type="email" required autoComplete="email" className={inputClass} placeholder="doctor@email.com" />
               </div>
               <div>
                 <label htmlFor="password" className={labelClass}>Contraseña</label>
-                <input id="password" name="password" type="password" required minLength={8} className={inputClass} placeholder="Mínimo 8 caracteres" />
-              </div>
-            </div>
-
-            {/* 1 · Tus datos profesionales */}
-            <div className="space-y-3">
-              <BloqueHeader n={1} titulo="Tus datos profesionales" subtitulo="Con esto validamos tu matrícula y te mostramos a los pacientes." />
-              <div className="flex gap-3">
-                <div className="w-28">
-                  <label htmlFor="titulo" className={labelClass}>Título</label>
-                  <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
-                    <option value="" disabled>Elegí</option>
-                    <option value="Dr.">Dr.</option>
-                    <option value="Dra.">Dra.</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label htmlFor="nombre_completo" className={labelClass}>Nombre y apellido</label>
-                  <input id="nombre_completo" name="nombre_completo" type="text" required className={inputClass} placeholder="María Pérez" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
-                <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
-                  <option value="" disabled>Seleccioná tu especialidad</option>
-                  {ESPECIALIDADES.map((esp) => (
-                    <option key={esp} value={esp}>{esp}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3">
-                <div className="w-40">
-                  <label htmlFor="tipo_matricula" className={labelClass}>Matrícula</label>
-                  <select
-                    id="tipo_matricula"
-                    name="tipo_matricula"
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={mostrarPwd ? "text" : "password"}
                     required
-                    className={inputClass}
-                    value={tipoMatricula}
-                    onChange={(e) => {
-                      setTipoMatricula(e.target.value);
-                      if (e.target.value === "MP") setTieneMatriculaExtra(false);
-                    }}
+                    minLength={8}
+                    autoComplete="new-password"
+                    className={inputClass + " pr-11"}
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarPwd((v) => !v)}
+                    aria-label={mostrarPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute inset-y-0 right-0 mt-1 flex items-center px-3 text-gray-400 hover:text-gray-600"
                   >
-                    <option value="MN">MN — Nacional</option>
-                    <option value="MP">MP — Provincial</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label htmlFor="numero_matricula" className={labelClass}>Número</label>
-                  <input id="numero_matricula" name="numero_matricula" type="text" required className={inputClass} placeholder="123456" value={numeroMatricula} onChange={(e) => setNumeroMatricula(e.target.value)} />
-                </div>
-              </div>
-              {tipoMatricula === "MP" && (
-                <div>
-                  <label htmlFor="provincia" className={labelClass}>Provincia de la matrícula</label>
-                  <select id="provincia" name="provincia" required className={inputClass} defaultValue="">
-                    <option value="" disabled>Seleccioná tu provincia</option>
-                    {PROVINCIAS.map((prov) => (
-                      <option key={prov} value={prov}>{prov}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {tipoMatricula === "MN" && (
-                <div>
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={tieneMatriculaExtra}
-                      onChange={(e) => setTieneMatriculaExtra(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    También tengo matrícula provincial
-                  </label>
-                  {tieneMatriculaExtra && (
-                    <div className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
-                      <div>
-                        <label htmlFor="matricula_provincial" className={labelClass}>Número de matrícula provincial</label>
-                        <input id="matricula_provincial" name="matricula_provincial" type="text" className={inputClass} placeholder="MP 45678" />
-                      </div>
-                      <div>
-                        <label htmlFor="provincia_matricula" className={labelClass}>Provincia</label>
-                        <select id="provincia_matricula" name="provincia_matricula" className={inputClass} defaultValue="">
-                          <option value="">Seleccioná</option>
-                          {PROVINCIAS.map((prov) => (
-                            <option key={prov} value={prov}>{prov}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label htmlFor="dni" className={labelClass}>DNI</label>
-                  <input id="dni" name="dni" type="text" required inputMode="numeric" pattern="\d{7,8}" maxLength={8} className={inputClass} placeholder="25086458" />
-                </div>
-                <div className="flex-1">
-                  <label htmlFor="cuit" className={labelClass}>CUIT</label>
-                  <input id="cuit" name="cuit" type="text" required className={inputClass} placeholder="27-25086458-4" />
-                </div>
-              </div>
-            </div>
-
-            {/* 2 · Tu consultorio */}
-            <div className="space-y-3">
-              <BloqueHeader n={2} titulo="Tu consultorio" subtitulo="Estos datos aparecen impresos en tus recetas." />
-              <div>
-                <label htmlFor="domicilio_consultorio" className={labelClass}>Domicilio del consultorio</label>
-                <input id="domicilio_consultorio" name="domicilio_consultorio" type="text" required className={inputClass} placeholder="Av. Rivadavia 4500, CABA" />
-                <p className={hintClass}>Va en el pie de tus recetas, como pide la normativa.</p>
-              </div>
-              <div>
-                <label htmlFor="telefono" className={labelClass}>Teléfono profesional <span className="font-normal text-gray-400">(opcional)</span></label>
-                <input id="telefono" name="telefono" type="tel" className={inputClass} placeholder="11 4000-0000" />
-                <p className={hintClass}>Este teléfono sí aparece en tus recetas.</p>
-              </div>
-              <div>
-                <label htmlFor="foto_perfil" className={labelClass}>Foto de perfil <span className="font-normal text-gray-400">(opcional)</span></label>
-                <label
-                  htmlFor="foto_perfil"
-                  className="mt-1 flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
-                >
-                  {fotoPerfil ? (
-                    <>
-                      <CheckCircle size={20} className="text-[#1D9E75]" />
-                      <span className="text-gray-700">{fotoPerfil.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#378ADD]/10 text-[#378ADD]"><Camera size={18} /></span>
-                      <span>Subir foto</span>
-                    </>
-                  )}
-                </label>
-                <input
-                  id="foto_perfil"
-                  name="foto_perfil"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    if (file && file.size > MAX_FILE_SIZE) {
-                      setError("La foto no puede superar 5 MB.");
-                      e.target.value = "";
-                      return;
-                    }
-                    setError(null);
-                    setFotoPerfil(file);
-                  }}
-                />
-                <p className={hintClass}>La ven los pacientes en tu bio. Distinta de la credencial (próximo paso).</p>
-              </div>
-            </div>
-
-            {/* 3 · Cómo te avisamos */}
-            <div className="space-y-3">
-              <BloqueHeader n={3} titulo="Cómo te avisamos" subtitulo="Solo uso interno administrativo." />
-              <div>
-                <label htmlFor="celular_personal" className={labelClass}>Celular personal</label>
-                <input id="celular_personal" name="celular_personal" type="tel" required className={inputClass} placeholder="11 2345-6789" />
-                <p className={hintClass}>Te avisamos acá cuando un paciente te está esperando. Los pacientes no ven este teléfono.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* ═══ PASO 2: Tu credencial + términos ═══ */}
-          <div className={paso === 2 ? "space-y-4" : "hidden"}>
-            <p className="text-sm text-gray-500">
-              Así confirmamos que la matrícula{" "}
-              <strong className="text-gray-700">{tipoMatricula} {numeroMatricula || "…"}</strong> es tuya.
-            </p>
-            <div>
-              <label
-                htmlFor="foto_credencial"
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 transition hover:border-gray-400 hover:bg-gray-50"
-              >
-                {fotoCredencial ? (
-                  <>
-                    <CheckCircle size={22} className="text-[#1D9E75]" />
-                    <span className="text-gray-700">{fotoCredencial.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload size={22} />
-                    <span className="font-medium text-gray-700">Sacale una foto o subila</span>
-                    <span className="text-xs text-gray-400">JPG, PNG o PDF · hasta 5 MB</span>
-                  </>
-                )}
-              </label>
-              <input
-                id="foto_credencial"
-                name="foto_credencial"
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  if (file && file.size > MAX_FILE_SIZE) {
-                    setError("El archivo no puede superar 5 MB.");
-                    e.target.value = "";
-                    return;
-                  }
-                  setError(null);
-                  setFotoCredencial(file);
-                }}
-              />
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
-              <p className="font-medium text-gray-900">¿Qué es la credencial?</p>
-              <ul className="mt-2 space-y-1.5">
-                <li className="flex items-start gap-2 text-gray-600"><CheckCircle size={16} className="mt-0.5 shrink-0 text-[#1D9E75]" /><span>El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio Médico).</span></li>
-                <li className="flex items-start gap-2 text-gray-600"><X size={16} className="mt-0.5 shrink-0 text-[#E24B4A]" /><span>No es tu DNI ni tu CV ni tu título.</span></li>
-                <li className="flex items-start gap-2 text-gray-600"><span className="mt-0.5 shrink-0 text-[#BA7517]">💡</span><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
-              </ul>
-            </div>
-            <p className={hintClass}>Podés subirla ahora o después desde tu perfil.</p>
-
-            {/* Términos y declaración — antes de crear la cuenta */}
-            <div className="space-y-3 border-t border-gray-100 pt-3">
-              <label className="flex cursor-pointer items-start gap-3 py-1">
-                <input
-                  type="checkbox"
-                  checked={checkTerminos}
-                  onChange={(e) => setCheckTerminos(e.target.checked)}
-                  className="mt-0.5 h-5 w-5 rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">
-                  Leí y acepto los{" "}
-                  <button type="button" onClick={() => setModalTerminos(true)} className="font-medium underline" style={{ color: "#378ADD" }}>
-                    términos y condiciones
-                  </button>{" "}
-                  de Docto
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 py-1">
-                <input
-                  type="checkbox"
-                  checked={checkMatricula}
-                  onChange={(e) => setCheckMatricula(e.target.checked)}
-                  className="mt-0.5 h-5 w-5 rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">
-                  Declaro que la información de mi matrícula profesional es
-                  verídica y que soy responsable de mis actos médicos como{" "}
-                  <button type="button" onClick={() => setModalMatricula(true)} className="font-medium underline" style={{ color: "#378ADD" }}>
-                    profesional independiente
+                    {mostrarPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
-                </span>
-              </label>
-            </div>
-            {checkTerminos && <input type="hidden" name="terminos_aceptados" value="true" />}
-            {checkMatricula && <input type="hidden" name="declaracion_matricula" value="true" />}
-          </div>
+                </div>
+              </div>
 
-          {/* Navegación */}
-          <div className="flex gap-3 pt-2">
-            {paso > 1 && (
-              <button
-                type="button"
-                onClick={anterior}
-                className="flex h-11 items-center gap-1 rounded-[var(--radius-md)] border border-gray-200 px-4 text-sm font-medium text-gray-600 transition hover:bg-gray-50 active:scale-[0.97]"
-              >
-                <ChevronLeft size={16} />
-                Atrás
-              </button>
-            )}
-
-            {paso < 2 ? (
-              <button
-                type="button"
-                onClick={siguiente}
-                className="flex-1 h-11 rounded-[var(--radius-md)] bg-[#378ADD] text-sm font-semibold text-white shadow-sm transition hover:bg-[#2d75c4] active:scale-[0.97]"
-              >
-                Siguiente
-              </button>
-            ) : (
               <LoadingButton
                 type="submit"
                 isLoading={loading}
-                disabled={!checkTerminos || !checkMatricula}
-                className="flex-1 h-11 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-100"
+                className="h-11 w-full rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-sm active:scale-[0.98] transition-all"
                 style={{ backgroundColor: "#378ADD" }}
               >
-                Continuar a la verificación
+                Crear cuenta
               </LoadingButton>
-            )}
-          </div>
-        </form>
-
-        <ModalTerminos open={modalTerminos} onClose={() => setModalTerminos(false)} perfil="medico" />
-
-        {modalMatricula && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Declaración de responsabilidad profesional
-                </h2>
-                <button onClick={() => setModalMatricula(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={20} strokeWidth={1.75} />
-                </button>
-              </div>
-              <div className="mt-4 h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
-                <h3 className="font-semibold">Declaración jurada de responsabilidad profesional</h3>
-                <p className="mt-2">Al aceptar esta declaración, el profesional médico certifica que:</p>
-                <p className="mt-2"><strong>1.</strong> La información de matrícula profesional proporcionada es verídica, se encuentra vigente y corresponde a su persona. Cualquier falsedad constituye un delito penal conforme al artículo 292 del Código Penal Argentino.</p>
-                <p className="mt-2"><strong>2.</strong> Actúa como profesional independiente conforme a la Ley 17.132 de Ejercicio de la Medicina. Es el único responsable de sus actos profesionales, diagnósticos, indicaciones y prescripciones realizadas a través de la plataforma.</p>
-                <p className="mt-2"><strong>3.</strong> Se compromete a ejercer la telemedicina dentro de los límites de su especialidad y competencia, derivando a atención presencial cuando la situación clínica lo requiera.</p>
-                <p className="mt-2"><strong>4.</strong> Docto no interviene en las decisiones médicas del profesional ni asume responsabilidad por las mismas. La plataforma actúa exclusivamente como intermediaria tecnológica.</p>
-                <p className="mt-2"><strong>5.</strong> Se compromete a mantener actualizada su información profesional y a informar inmediatamente cualquier cambio en el estado de su matrícula.</p>
-              </div>
-              <button
-                onClick={() => setModalMatricula(false)}
-                className="mt-4 w-full rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
-                style={{ backgroundColor: "#378ADD" }}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
+            </form>
+          </>
         )}
 
         <p className="mt-6 text-center text-sm text-gray-600">
