@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/watchdog",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/aviso-agenda-vencida",
+      "schedule": "0 12 * * *"
     }
   ]
 }
