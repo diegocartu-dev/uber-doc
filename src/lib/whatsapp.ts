@@ -20,8 +20,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID ?? "";
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? "";
+
+/**
+ * Twilio exige el prefijo "whatsapp:" en el From; sin él rechaza TODO con error 21910
+ * (canal incompatible). La env var de producción estuvo semanas sin el prefijo y el
+ * canal entero murió en silencio (caso Verónica/Romina, 16/07/2026). Normalizamos acá
+ * para que el formato de la env var nunca más pueda apagar el canal: aceptamos el
+ * número con o sin prefijo, y con espacios/saltos de línea colgados (trampa conocida
+ * de `vercel env add`).
+ */
+function normalizarFromWhatsApp(raw: string | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "";
+  return s.startsWith("whatsapp:") ? s : `whatsapp:${s}`;
+}
+
 // Número emisor en formato Twilio, ej: "whatsapp:+15722339571" (sender productivo de Docto)
-const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM ?? "";
+const TWILIO_FROM = normalizarFromWhatsApp(process.env.TWILIO_WHATSAPP_FROM);
 
 // ContentSids de las plantillas Meta aprobadas (UTILITY). NO son secretos.
 export const PLANTILLA_ACEPTAR_PACIENTE = "HX28f31177bfee51e64e6432754fb08899"; // docto_aceptar_paciente
