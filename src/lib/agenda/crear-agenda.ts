@@ -112,6 +112,17 @@ export async function crearAgendaModelo(
   if (fecha_inicio > fecha_fin) {
     return { ok: false, motivo: "validacion", mensaje: "La fecha de inicio no puede ser posterior a la de fin." };
   }
+  // Regla Diego 17/07: vigencia máxima 60 días — sin agendas eternas (terminan
+  // ofreciendo turnos que nadie atiende, por olvido o error). Autoridad server:
+  // cubre el form, Nova y cualquier caller futuro.
+  {
+    const maxFin = new Date(fecha_inicio + "T12:00:00");
+    maxFin.setDate(maxFin.getDate() + 60);
+    const maxFinISO = `${maxFin.getFullYear()}-${(maxFin.getMonth() + 1).toString().padStart(2, "0")}-${maxFin.getDate().toString().padStart(2, "0")}`;
+    if (fecha_fin > maxFinISO) {
+      return { ok: false, motivo: "validacion", mensaje: "Una agenda puede durar hasta 60 días. Creála con un fin dentro de ese plazo y renovála cuando venza." };
+    }
+  }
   if (!Number.isFinite(duracion_turno) || duracion_turno <= 0) {
     return { ok: false, motivo: "validacion", mensaje: "La duración del turno debe ser un número positivo." };
   }
@@ -145,9 +156,9 @@ export async function crearAgendaModelo(
   const inicio = new Date(fecha_inicio + "T12:00:00");
   // Cap de generación inicial a 30 días: el cron generar-slots extiende el
   // horizonte día a día hasta fecha_fin (min(fecha_fin, hoy+30)), igual que
-  // siempre. Sin el cap, una agenda "sin fecha de fin" (sentinel 2099-12-31,
-  // Martín 15/07) generaría décadas de slots en el acto. También alinea el
-  // productor on-demand con el horizonte real de reserva del paciente (30 días).
+  // siempre. Alinea el productor on-demand con el horizonte real de reserva del
+  // paciente (30 días) y acota el batch inicial (una agenda de 60 días no
+  // necesita sus ~última quincena materializada el día uno).
   const finRango = new Date(fecha_fin + "T12:00:00");
   const cap = new Date();
   cap.setDate(cap.getDate() + 30);
