@@ -595,11 +595,16 @@ export async function enviarAvisoAgendaVencida(email: string, nombre: string): P
     <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">Gracias por atender en Docto,<br/>Diego &mdash; Docto</p>
   `);
 
-  await resend().emails.send({
+  // El cliente de Resend NO lanza excepciones: devuelve { error } incluso ante
+  // red caída (gate Roberto #283, verificado en resend@6.12.0). Sin este throw,
+  // el cron marcaría el aviso como enviado sin haberse enviado — falla muda, y
+  // la ventana de reintento del cron sería código muerto.
+  const { error } = await resend().emails.send({
     from: FROM,
     to: email,
     subject: "Tu agenda en Docto vence hoy — renovala para seguir visible",
     html,
   });
+  if (error) throw new Error(`Resend: ${error.message}`);
   console.log("[email] aviso agenda vencida enviado a:", email);
 }
