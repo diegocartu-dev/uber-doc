@@ -570,3 +570,36 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
     console.error("[email] recordatorio identidad falló:", e instanceof Error ? e.message : e);
   }
 }
+
+// ─── Aviso de vencimiento de agenda ──────────────────────────────────────────
+// Decisión Diego 17/07: el día en que vence su agenda, el médico SIN otras
+// agendas activas a futuro recibe UNA invitación a renovarla — la contracara
+// sana del límite de 60 días (sin esto, la agenda muere en silencio y el médico
+// desaparece de Docto sin saberlo). Texto aprobado por Diego (17/07).
+export async function enviarAvisoAgendaVencida(email: string, nombre: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "aviso_agenda_vencida"); return; }
+
+  const html = wrapHtml("Tu agenda en Docto vence hoy", `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu agenda vence hoy</h1>
+    <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">Hola ${nombre},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
+      Tu agenda de turnos termina hoy. Cuando vence, tus horarios dejan de ofrecerse
+      y los pacientes ya no pueden reservarte.
+    </p>
+    <p style="margin:0 0 8px;font-size:15px;color:#6b7280;">
+      Renovarla lleva un minuto: entr&aacute; a tu panel, le ped&iacute;s a <strong>Nova</strong> que cree
+      tu agenda o toc&aacute; <strong>Crear agenda</strong> y eleg&iacute; las fechas del pr&oacute;ximo
+      per&iacute;odo (hasta 60 d&iacute;as).
+    </p>
+    ${boton("Renovar mi agenda", "https://www.docto.com.ar/medico/agenda?nuevo=1", AZUL)}
+    <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">Gracias por atender en Docto,<br/>Diego &mdash; Docto</p>
+  `);
+
+  await resend().emails.send({
+    from: FROM,
+    to: email,
+    subject: "Tu agenda en Docto vence hoy — renovala para seguir visible",
+    html,
+  });
+  console.log("[email] aviso agenda vencida enviado a:", email);
+}
