@@ -494,15 +494,29 @@ function PendienteCard({
       {confirmando === "aprobar" ? (
         <ConfirmDialog
           title={`Aprobar a ${m.nombre_completo}?`}
-          description={`${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. ${
+          description={`${
+            // Guard anti aprobación-a-ciegas (Diego 17/07, caso real: se aprobó
+            // una médica con identidad Declined sin que el panel lo mostrara).
+            m.didit_status === "Declined" && !m.identidad_validada && !m.biometria_exenta
+              ? "⚠️ IDENTIDAD RECHAZADA POR DIDIT: el cruce biométrico (cara + DNI) falló. Podés aprobar igual, pero revisá la credencial y el caso antes. "
+              : ""
+          }${m.especialidad} — ${m.tipo_matricula} ${m.numero_matricula}. ${
             estadoRefeps(m) === "ok"
               ? `REFEPS OK${jurisdiccionesDe(m).length ? ` — habilitado en ${jurisdiccionesDe(m).join(", ")}` : ""}.`
               : estadoRefeps(m) === "no"
                 ? "REFEPS dice que la matrícula no figura o está inactiva. Al aprobar se re-verifica contra el registro; si sigue igual, la aprobación se bloquea."
                 : "REFEPS todavía sin resultado: se verifica en este paso y se bloquea si no figura."
           } El medico podra atender pacientes en la plataforma.`}
-          confirmLabel="Si, aprobar"
-          variant="primary"
+          confirmLabel={
+            m.didit_status === "Declined" && !m.identidad_validada && !m.biometria_exenta
+              ? "Aprobar igual (identidad rechazada)"
+              : "Si, aprobar"
+          }
+          variant={
+            m.didit_status === "Declined" && !m.identidad_validada && !m.biometria_exenta
+              ? "danger"
+              : "primary"
+          }
           onConfirm={() => onAprobar()}
           onCancel={onCancelConfirm}
           isLoading={procesando}
@@ -599,8 +613,10 @@ function MedicoRow({
             )}
             {/* Identidad biométrica (Didit) — aviso al admin en el panel, sin mails.
                 Verde=validada (estado OK), gris=exenta, rojo=rechazada por Didit,
-                ámbar=pendiente (aún no la completó). */}
-            {m.estado_registro === "aprobado" && (
+                ámbar=pendiente (aún no la completó). TAMBIÉN en Pendientes (Diego
+                17/07): el dato existe ANTES de aprobar y esconderlo produjo una
+                aprobación a ciegas con identidad rechazada. */}
+            {(m.estado_registro === "aprobado" || m.estado_registro === "pendiente_revision") && (
               m.identidad_validada ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#0F6E56]">
                   <CheckCircle size={11} /> Identidad ✓

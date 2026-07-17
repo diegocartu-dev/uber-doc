@@ -439,6 +439,16 @@ export default async function DashboardPage({
     flagIdentidadGate &&
     !identidadHabilitada(medico);
 
+  // Identidad RECHAZADA por Didit → invitación a repetir SIEMPRE, con o sin
+  // gate (Diego 17/07): sin esto, un médico Declined no tenía ningún camino
+  // visible al reintento (el mecanismo existía; la puerta no).
+  const identidadRechazada =
+    role === "medico" &&
+    !!medico &&
+    medico.didit_status === "Declined" &&
+    !medico.identidad_validada &&
+    !medico.biometria_exenta;
+
   if (role === "medico" && medico) {
     const capacidadCI = (() => {
       const d = medico.disponible_desde ?? "08:00";
@@ -603,12 +613,17 @@ export default async function DashboardPage({
               <BotonPush rol="medico" />
             </div>
 
-            {/* Identidad pendiente (gate activo) → banner, nunca muro. */}
-            {identidadPendiente && (
+            {/* Identidad: rechazada → invitación a repetir SIEMPRE (prioridad);
+                pendiente (gate activo) → banner, nunca muro. */}
+            {identidadRechazada ? (
+              <div className="mt-4">
+                <BannerIdentidad variante="rechazada" />
+              </div>
+            ) : identidadPendiente ? (
               <div className="mt-4">
                 <BannerIdentidad />
               </div>
-            )}
+            ) : null}
 
             {/* Activación pendiente → una sola tarjeta que lleva al wizard guiado
                 (/medico/onboarding). Reemplaza el viejo collage de perfil+MP+firma. */}
