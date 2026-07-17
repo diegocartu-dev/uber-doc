@@ -61,6 +61,14 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+// Máximo de vigencia: 60 días desde el inicio (regla Diego 17/07 — las agendas
+// eternas terminan atendidas por nadie; renovarlas es un acto consciente).
+function maxFechaFin(inicio: string): string {
+  const d = new Date(inicio + "T12:00:00");
+  d.setDate(d.getDate() + 60);
+  return toISODate(d);
+}
+
 export default function FormularioModelo({ canal }: { canal: Canal }) {
   const [nombre, setNombre] = useState("");
   const [precio, setPrecio] = useState(0); // 0 = vacío (InputMoneda)
@@ -73,12 +81,6 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
   const [minFin, setMinFin] = useState("");
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
-  // "Sin fecha de fin" (Martín, gate 15/07): el médico que atiende lunes y
-  // miércoles indefinidamente no tiene por qué inventar un vencimiento (la
-  // agenda con fecha_fin vencida moría en silencio). Sentinel 2099-12-31: el
-  // cron extiende el horizonte día a día; la generación inicial está capeada
-  // a 30 días en crearAgendaModelo.
-  const [sinFin, setSinFin] = useState(false);
   const [errores, setErrores] = useState<Record<string, string>>({});
   // Error del SERVER — aviso resoluble (conflicto) en naranja, error duro en rojo.
   const [errorServer, setErrorServer] = useState<string | null>(null);
@@ -110,9 +112,13 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
     } else if (`${horaIni}:${minIni}` >= `${horaFin}:${minFin}`) {
       errs.horario = "El horario de fin debe ser posterior al de inicio.";
     }
-    if (!fechaInicio || (!sinFin && !fechaFin)) errs.fechas = sinFin ? "Elegí desde qué fecha vale esta agenda." : "Elegí desde y hasta qué fecha vale esta agenda.";
+    // Regla Diego 17/07: toda agenda tiene inicio y fin EXPLÍCITOS (nada
+    // prellenado) y dura como máximo 60 días — las agendas eternas terminan
+    // atendidas por nadie, por olvido o error. Renovarla es un acto consciente.
+    if (!fechaInicio || !fechaFin) errs.fechas = "Elegí desde y hasta qué fecha vale esta agenda.";
     else if (fechaInicio < hoy) errs.fechas = "La vigencia arranca desde hoy — no se pueden elegir fechas pasadas.";
-    else if (!sinFin && fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
+    else if (fechaFin < fechaInicio) errs.fechas = "La fecha de fin debe ser igual o posterior a la de inicio.";
+    else if (fechaFin > maxFechaFin(fechaInicio)) errs.fechas = "Una agenda puede durar hasta 60 días. Para seguir después, la renovás en un toque cuando venza.";
     return errs;
   }
 
@@ -164,7 +170,7 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
       const result = await guardarModelo({
         nombre: nombre.trim(),
         fecha_inicio: fechaInicio,
-        fecha_fin: sinFin ? "2099-12-31" : fechaFin,
+        fecha_fin: fechaFin,
         duracion_turno: parseInt(duracion, 10),
         precio,
         franjas,
@@ -290,8 +296,10 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
         {errores.horario && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.horario}</p>}
       </div>
 
-      {/* Vigencia — desde HOY, fechas pasadas bloqueadas. "Sin fecha de fin" evita
-          el vencimiento inventado (y silencioso) para el que atiende siempre. */}
+      {/* Vigencia — desde HOY, fechas pasadas bloqueadas, fin OBLIGATORIO y máximo
+          60 días (regla Diego 17/07: nada de agendas eternas — se renuevan a
+          conciencia; una agenda olvidada termina ofreciendo turnos que nadie
+          atiende). Nada prellenado: las dos fechas las pone el médico. */}
       <div className="mt-5">
         <label className={labelClass}>Vigencia</label>
         <div className="mt-1 flex flex-col md:flex-row gap-4">
@@ -299,22 +307,20 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
             <span className="text-[12px] text-gray-400">Desde</span>
             <input ref={fechasRef} type="date" value={fechaInicio} min={hoy} onChange={(e) => setFechaInicio(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
           </div>
-          {!sinFin && (
-            <div className="flex-1">
-              <span className="text-[12px] text-gray-400">Hasta</span>
-              <input type="date" value={fechaFin} min={fechaInicio || hoy} onChange={(e) => setFechaFin(e.target.value)} className={`mt-1 w-full ${inputClass}`} style={bordeDe("fechas")} />
-            </div>
-          )}
+          <div className="flex-1">
+            <span className="text-[12px] text-gray-400">Hasta</span>
+            <input
+              type="date"
+              value={fechaFin}
+              min={fechaInicio || hoy}
+              max={fechaInicio ? maxFechaFin(fechaInicio) : undefined}
+              onChange={(e) => setFechaFin(e.target.value)}
+              className={`mt-1 w-full ${inputClass}`}
+              style={bordeDe("fechas")}
+            />
+          </div>
         </div>
-        <label className="mt-2 flex cursor-pointer items-center gap-2.5 py-1">
-          <input
-            type="checkbox"
-            checked={sinFin}
-            onChange={(e) => setSinFin(e.target.checked)}
-            className="h-5 w-5 shrink-0 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
-          />
-          <span className="text-[13px] text-gray-700">Sin fecha de fin — la agenda sigue hasta que la pauses</span>
-        </label>
+        <p className="mt-1 text-[12px] text-gray-500">Máximo 60 días. Cuando venza, la renovás en un toque.</p>
         {errores.fechas && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.fechas}</p>}
       </div>
 
