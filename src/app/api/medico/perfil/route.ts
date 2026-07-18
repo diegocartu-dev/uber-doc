@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizarTelefonoAR } from "@/lib/whatsapp";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,7 +18,27 @@ export async function POST(req: NextRequest) {
     if (tipo_matricula !== undefined) updates.tipo_matricula = tipo_matricula?.trim() || null;
     if (numero_matricula !== undefined) updates.numero_matricula = numero_matricula?.trim() || null;
     if (provincia !== undefined) updates.provincia = provincia?.trim() || null;
-    if (celular_personal !== undefined) updates.celular_personal = celular_personal?.trim() || null;
+    if (celular_personal !== undefined) {
+      const celularRaw = celular_personal?.trim() || null;
+      if (celularRaw === null) {
+        updates.celular_personal = null;
+      } else {
+        // El celular es el destino de los avisos WhatsApp. Un número que la
+        // normalización no resuelve se guardaba igual y el aviso moría en
+        // silencio al enviar — se valida acá, donde el médico puede corregirlo.
+        const celularNormalizado = normalizarTelefonoAR(celularRaw);
+        if (!celularNormalizado) {
+          return NextResponse.json(
+            {
+              error:
+                "Revisá el celular: tiene que ser un móvil argentino de 10 dígitos (código de área + número, ej: 11 4028 9141).",
+            },
+            { status: 400 }
+          );
+        }
+        updates.celular_personal = celularNormalizado;
+      }
+    }
     if (email_personal !== undefined) updates.email_personal = email_personal?.trim() || null;
 
     if (Object.keys(updates).length === 0) {
