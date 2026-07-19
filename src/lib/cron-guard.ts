@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlert } from "@/lib/alertas";
+import { CRONS_META, horaArgentina } from "@/lib/crons-meta";
 
 // ─── Guard + heartbeat de crons ───────────────────────────────────────────────
 // Nacido de la auditoría de fallas silenciosas (13/07/2026): ningún cron avisaba
@@ -23,6 +24,21 @@ async function latido(key: string, ok: boolean, error?: string): Promise<void> {
   try {
     const admin = createAdminClient();
     const now = new Date().toISOString();
+
+    // ¿Este cron estaba en alerta? Hay que mirarlo ANTES de pisar la fila:
+    // es el único momento en que se ve la transición caído→ok, y ahí va el
+    // mail verde de recuperación (pedido Diego 18/07: cerrar el ciclo del
+    // mail rojo explícitamente, no por ausencia de más mails).
+    let estabaAlertado = false;
+    if (ok) {
+      const { data: prev } = await admin
+        .from("cron_runs")
+        .select("last_alerted_at")
+        .eq("cron_key", key)
+        .maybeSingle();
+      estabaAlertado = Boolean(prev?.last_alerted_at);
+    }
+
     await admin.from("cron_runs").upsert({
       cron_key: key,
       last_run_at: now,
@@ -35,6 +51,15 @@ async function latido(key: string, ok: boolean, error?: string): Promise<void> {
       last_error: ok ? null : (error ?? "error").slice(0, 500),
       updated_at: now,
     });
+
+    if (ok && estabaAlertado) {
+      const meta = CRONS_META[key];
+      const nombre = meta?.nombre ?? `Tarea "${key}"`;
+      await sendDoctoAlert(
+        `✅ Tarea recuperada: ${nombre}`,
+        `${nombre} volvió a correr bien (${horaArgentina()} hs). No tenés que hacer nada.\n\n———\nDetalle técnico (para Claude): cron ${key}, corrida OK registrada tras alerta previa.`
+      );
+    }
   } catch {
     // El heartbeat jamás debe tirar el cron que vigila.
   }
@@ -88,20 +113,24 @@ export function withCron(key: string, handler: CronHandler): CronHandler {
       const res = await handler(req);
       await latido(key, res.status < 500, `HTTP ${res.status}`);
       if (res.status >= 500) {
+        const meta = CRONS_META[key];
+        const nombre = meta?.nombre ?? `Tarea "${key}"`;
         await alertarCron(
           key,
-          `⚠️ cron ${key} terminó con HTTP ${res.status}`,
-          `El cron ${key} devolvió HTTP ${res.status}. Revisar logs en Vercel/Axiom.`
+          `🔴 Tarea automática fallando: ${nombre}`,
+          `${nombre} intentó correr pero terminó con error.\n${meta ? `Qué hace: ${meta.queHace}.\nImpacto mientras falle: ${meta.impacto}.` : ""}\n\n¿Tenés que hacer algo? Sí: una tarea que corre y falla no suele arreglarse sola. Abrí Claude Code y decime: "investigá el cron ${key}". Si igual se recupera sola, te llega un mail verde "✅ Tarea recuperada" y no hace falta nada.\n\n———\nDetalle técnico (para Claude): cron ${key} devolvió HTTP ${res.status}. Revisar logs en Vercel.`
         );
       }
       return res;
     } catch (e) {
       const msg = (e instanceof Error ? e.message : String(e)).slice(0, 500);
       await latido(key, false, msg);
+      const meta = CRONS_META[key];
+      const nombre = meta?.nombre ?? `Tarea "${key}"`;
       await alertarCron(
         key,
-        `🔴 cron ${key} crasheó`,
-        `Excepción no capturada en el cron ${key}:\n\n${msg}`
+        `🔴 Tarea automática fallando: ${nombre}`,
+        `${nombre} intentó correr pero se rompió a mitad de camino.\n${meta ? `Qué hace: ${meta.queHace}.\nImpacto mientras falle: ${meta.impacto}.` : ""}\n\n¿Tenés que hacer algo? Sí: una tarea que corre y falla no suele arreglarse sola. Abrí Claude Code y decime: "investigá el cron ${key}". Si igual se recupera sola, te llega un mail verde "✅ Tarea recuperada" y no hace falta nada.\n\n———\nDetalle técnico (para Claude): excepción no capturada en el cron ${key}: ${msg}`
       );
       return NextResponse.json({ error: "cron error" }, { status: 500 });
     }
