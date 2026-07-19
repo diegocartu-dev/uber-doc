@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { CRONS_META, duracionHumana } from "@/lib/crons-meta";
 
 /**
  * Cron guardián ("dead man's switch"), cada 30 min: detecta crons que DEJARON de
@@ -84,12 +85,41 @@ export const GET = withCron("watchdog", async () => {
   }
 
   if (caidos.length > 0) {
-    const detalle = caidos
-      .map((c) => `• ${c.cron}: sin latido hace ${c.sin_latido_min} min`)
-      .join("\n");
+    // Mail en criollo (pedido Diego 18/07): cada alerta dice QUÉ es la tarea,
+    // QUÉ impacto tiene, y si hay que HACER algo o solo esperar. La jerga va
+    // al pie, en "Detalle técnico".
+    const bloques = caidos.map((c) => {
+      const meta = CRONS_META[c.cron];
+      if (!meta) {
+        return `● Tarea "${c.cron}" (sin ficha): dejó de reportar hace ${duracionHumana(c.sin_latido_min)}.\n¿Tenés que hacer algo? Sí: abrí Claude Code y decime "investigá el cron ${c.cron}".`;
+      }
+      const accion =
+        meta.accion ??
+        (meta.autoRecupera
+          ? `Probablemente no: corre ${meta.cadencia} y una corrida perdida suele ser un golpe puntual (deploy u outage justo en su horario). Reintenta sola en su próximo horario y ahí te llega un mail verde "✅ Tarea recuperada". Si ese mail verde NO llega después de su próximo horario, abrí Claude Code y decime: "investigá el cron ${c.cron}".`
+          : `Sí, avisá ahora: corre ${meta.cadencia}, así que ya falló varios intentos seguidos y no se va a arreglar sola. Abrí Claude Code y decime: "investigá el cron ${c.cron}".`);
+      return [
+        `● ${meta.nombre}`,
+        `Qué hace: ${meta.queHace}.`,
+        `Sin señales de vida hace ${duracionHumana(c.sin_latido_min)}.`,
+        `Impacto mientras no corra: ${meta.impacto}.`,
+        ``,
+        `¿Tenés que hacer algo? ${accion}`,
+      ].join("\n");
+    });
+
+    const asunto =
+      caidos.length === 1
+        ? `🔴 Tarea automática caída: ${CRONS_META[caidos[0].cron]?.nombre ?? caidos[0].cron}`
+        : `🔴 ${caidos.length} tareas automáticas caídas`;
+
+    const detalleTecnico = caidos
+      .map((c) => `${c.cron}: sin latido hace ${c.sin_latido_min} min`)
+      .join(" · ");
+
     await sendDoctoAlert(
-      `🔴 ${caidos.length} cron(s) sin latido`,
-      `Estos crons dejaron de reportar corridas (posible schedule roto, ruta caída o CRON_SECRET inválido):\n\n${detalle}\n\nRevisar Vercel → Settings → Cron Jobs y los logs del deploy.`
+      asunto,
+      `${bloques.join("\n\n———\n\n")}\n\n———\nDetalle técnico (para Claude): ${detalleTecnico}. Posibles causas: schedule roto, ruta caída, CRON_SECRET inválido, outage en el horario de la corrida.`
     );
   }
 
