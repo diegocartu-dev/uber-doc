@@ -24,6 +24,14 @@ export interface CronMeta {
    * ya falló varios intentos seguidos → el mail recomienda AVISAR ya.
    */
   autoRecupera: boolean;
+  /**
+   * Texto especial para "¿Tenés que hacer algo?" cuando ninguna de las dos
+   * ramas genéricas aplica. Caso que lo motivó (auditoría Roberto PR #287):
+   * `recordatorios` es diario PERO su trabajo perdido NO se recupera solo
+   * (consulta "turnos de mañana" con fecha exacta — la cohorte salteada queda
+   * sin aviso para siempre), y correrlo a mano el mismo día todavía la salva.
+   */
+  accion?: string;
 }
 
 export const CRONS_META: Record<string, CronMeta> = {
@@ -44,9 +52,11 @@ export const CRONS_META: Record<string, CronMeta> = {
   recordatorios: {
     nombre: "Recordatorios de turnos a pacientes",
     queHace: "manda por mail el recordatorio de 24 horas a cada paciente con turno confirmado para mañana",
-    impacto: "los pacientes con turno mañana no reciben el recordatorio (más riesgo de ausencias)",
+    impacto: "los pacientes con turno mañana no reciben el recordatorio (más riesgo de ausencias) — y OJO: esa tanda perdida no se recupera sola al día siguiente",
     cadencia: "una vez por día a las 09:00",
-    autoRecupera: true,
+    autoRecupera: false,
+    accion:
+      "Sí, avisá HOY: esta tarea busca los turnos de mañana con fecha exacta, así que la tanda salteada no se recupera sola — pero si se corre a mano antes de medianoche, esos pacientes todavía reciben su recordatorio. Abrí Claude Code y decime: \"investigá el cron recordatorios y corré la tanda perdida\".",
   },
   "limpieza-estudios-temp": {
     nombre: "Limpieza de archivos temporales",
@@ -118,6 +128,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 09:00",
     autoRecupera: true,
   },
+  // El guardián no se monitorea a sí mismo (no está en ESPERADOS del watchdog),
+  // pero sus propias fallas al correr sí alertan vía cron-guard — con ficha.
+  watchdog: {
+    nombre: "Guardián de tareas automáticas",
+    queHace: "vigila que todas las demás tareas automáticas sigan corriendo y te avisa si alguna se calla",
+    impacto: "si una tarea se cae, nadie te avisa (volvemos a las fallas silenciosas)",
+    cadencia: "cada 30 minutos",
+    autoRecupera: false,
+  },
 };
 
 /** "45 minutos" / "43 horas" / "3 días" — para mails, sin decimales raros. */
@@ -128,7 +147,7 @@ export function duracionHumana(minutos: number): string {
   return `${Math.round(horas / 24)} días`;
 }
 
-/** Hora actual (o de `d`) en formato argentino corto, ej: "18/07 21:15". */
+/** Hora actual (o de `d`) en formato argentino corto 24 h, ej: "18/07, 21:15". */
 export function horaArgentina(d: Date = new Date()): string {
   return d.toLocaleString("es-AR", {
     timeZone: "America/Argentina/Buenos_Aires",
@@ -136,5 +155,6 @@ export function horaArgentina(d: Date = new Date()): string {
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }

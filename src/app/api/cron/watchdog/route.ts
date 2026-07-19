@@ -93,9 +93,11 @@ export const GET = withCron("watchdog", async () => {
       if (!meta) {
         return `● Tarea "${c.cron}" (sin ficha): dejó de reportar hace ${duracionHumana(c.sin_latido_min)}.\n¿Tenés que hacer algo? Sí: abrí Claude Code y decime "investigá el cron ${c.cron}".`;
       }
-      const accion = meta.autoRecupera
-        ? `Probablemente no: corre ${meta.cadencia} y una corrida perdida suele ser un golpe puntual (deploy u outage justo en su horario). Reintenta sola en su próximo horario y ahí te llega un mail verde "✅ Tarea recuperada". Si ese mail verde NO llega después de su próximo horario, abrí Claude Code y decime: "investigá el cron ${c.cron}".`
-        : `Sí, avisá ahora: corre ${meta.cadencia}, así que ya falló varios intentos seguidos y no se va a arreglar sola. Abrí Claude Code y decime: "investigá el cron ${c.cron}".`;
+      const accion =
+        meta.accion ??
+        (meta.autoRecupera
+          ? `Probablemente no: corre ${meta.cadencia} y una corrida perdida suele ser un golpe puntual (deploy u outage justo en su horario). Reintenta sola en su próximo horario y ahí te llega un mail verde "✅ Tarea recuperada". Si ese mail verde NO llega después de su próximo horario, abrí Claude Code y decime: "investigá el cron ${c.cron}".`
+          : `Sí, avisá ahora: corre ${meta.cadencia}, así que ya falló varios intentos seguidos y no se va a arreglar sola. Abrí Claude Code y decime: "investigá el cron ${c.cron}".`);
       return [
         `● ${meta.nombre}`,
         `Qué hace: ${meta.queHace}.`,
