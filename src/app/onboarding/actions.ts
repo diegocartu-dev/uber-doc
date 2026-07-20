@@ -120,12 +120,18 @@ export async function completarPerfil(formData: FormData) {
   if (datosSensiblesAceptados) {
     (async () => {
       try {
+        // Versión FIJA "v1" del texto de datos sensibles del PACIENTE. Nunca
+        // "la más reciente por created_at": el texto biométrico de médicos
+        // (biometria_didit_v1) comparte el tipo 'datos_sensibles' y es más
+        // nuevo — elegirlo registraba al paciente aceptando un consentimiento
+        // que jamás vio (664 filas contaminadas 02/06→20/07, auditoría Roberto
+        // PR #289; backfill aplicado por migración). Si algún día se versiona
+        // el texto del paciente, actualizar acá la versión explícita.
         const { data: version } = await supabase
           .from("versiones_textos_legales")
           .select("id")
           .eq("tipo", "datos_sensibles")
-          .order("created_at", { ascending: false })
-          .limit(1)
+          .eq("version", "v1")
           .maybeSingle();
 
         if (version) {
