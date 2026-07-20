@@ -4,20 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import {
-  Stethoscope,
-  ShieldCheck,
-  ScanLine,
-  Camera,
-  BadgeCheck,
-  Clock,
-  Lock,
-  RefreshCw,
-  Loader2,
-} from "lucide-react";
+import { Stethoscope, ShieldCheck, Clock, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import LogoutButton from "./LogoutButton";
-import { CONSENTIMIENTO_IDENTIDAD_TEXTO } from "@/lib/didit/consentimiento";
+import PasosDidit from "@/components/identidad/PasosDidit";
+import ConsentimientoIdentidad from "@/components/identidad/ConsentimientoIdentidad";
+import CtaSticky from "@/components/identidad/CtaSticky";
 
 // ─── Colores del design system ────────────────────────────────────────────────
 const AZUL = "#378ADD";
@@ -28,7 +20,6 @@ const NARANJA = "#D85A30";
 const NARANJA_BG = "rgba(216, 90, 48, 0.1)";
 const VERDE = "#1D9E75";
 const GRIS = "#888780";
-const ROJO = "#E24B4A";
 
 type Estado =
   | "sin_empezar"
@@ -85,72 +76,19 @@ function Header({
   );
 }
 
-// ─── CTA principal sticky bottom (componente de módulo, estable) ───────────────
-function CtaSticky({
-  label,
-  onClick,
-  cargando,
-  error,
-  atenuado = false,
-  hint,
-  loadingLabel,
-}: {
-  label: string;
-  onClick: () => void;
-  cargando: boolean;
-  error: string | null;
-  atenuado?: boolean;
-  hint?: string;
-  loadingLabel?: string;
-}) {
-  return (
-    <div
-      className="sticky bottom-0 z-10 -mx-6 mt-8 border-t border-gray-100 px-6 pt-4"
-      style={{
-        background: "rgba(248, 249, 250, 0.95)",
-        backdropFilter: "blur(8px)",
-        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-      }}
-    >
-      {hint && (
-        <p className="mb-2 text-center text-xs text-gray-500">{hint}</p>
-      )}
-      {/* El botón NUNCA se deshabilita por falta de checkbox (Safari iOS no
-          dispara click en disabled → callejón sin salida). Se atenúa por estilo
-          y la guarda vive en el onClick del caller. */}
-      <button
-        onClick={onClick}
-        disabled={cargando}
-        className="flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-60"
-        style={{ background: AZUL, opacity: atenuado && !cargando ? 0.6 : undefined }}
-      >
-        {cargando ? (
-          <>
-            <Loader2 size={18} className="animate-spin" />
-            {loadingLabel ?? "Conectando con Didit…"}
-          </>
-        ) : (
-          <>
-            {label}
-            <span aria-hidden>→</span>
-          </>
-        )}
-      </button>
-      {error && (
-        <p className="mt-2 text-center text-xs" style={{ color: ROJO }}>
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
 interface Props {
   diditStatus: string | null;
   recienVolvio: boolean;
   userId: string;
 }
 
+// Respec Sofía 20/07: se fusionaron las dos pantallas del flujo "sin empezar"
+// (intro con "Comenzar" + pantalla de consentimiento) en UNA sola, idéntica al
+// registro por construcción (componentes compartidos en src/components/identidad).
+// El CTA nunca se atenúa: la guarda scrollea y resalta la casilla. Reintentos
+// (rechazada / a medias) van DIRECTO amparados en el consentimiento registrado
+// (dictamen Carolina 20/07); si el servidor no encuentra aceptación previa
+// (consentimiento_requerido), se cae al flujo con checkbox.
 export default function PantallaIdentidad({
   diditStatus,
   recienVolvio,
@@ -159,11 +97,14 @@ export default function PantallaIdentidad({
   const router = useRouter();
   const estado = mapEstado(diditStatus, recienVolvio);
 
-  const [paso, setPaso] = useState<"intro" | "consentimiento">("intro");
   const [aceptado, setAceptado] = useState(false);
+  const [guardActiva, setGuardActiva] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [intentoSinAceptar, setIntentoSinAceptar] = useState(false);
+  // Un retry directo que el servidor rechazó por falta de aceptación previa
+  // (caso borde) fuerza el flujo completo con checkbox.
+  const [forzarConsentimiento, setForzarConsentimiento] = useState(false);
+  const consentRef = useRef<HTMLDivElement>(null);
 
   // Polling: cuando el webhook marca validado o cambia el didit_status → refresh.
   const estadoInicialRef = useRef(diditStatus);
@@ -188,18 +129,28 @@ export default function PantallaIdentidad({
     return () => clearInterval(interval);
   }, [userId, router]);
 
-  async function iniciarVerificacion() {
+  async function iniciarVerificacion(conConsentimiento: boolean) {
     setCargando(true);
     setError(null);
     try {
       const resp = await fetch("/api/didit/crear-sesion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consentimiento: true, origin: "identidad" }),
+        body: JSON.stringify(
+          conConsentimiento
+            ? { consentimiento: true, origin: "identidad" }
+            : { origin: "identidad" }
+        ),
       });
       const data = await resp.json();
       if (data?.yaValidado) {
         router.refresh();
+        return;
+      }
+      if (resp.status === 400 && data?.error === "consentimiento_requerido") {
+        // Caso borde: no hay aceptación registrada → mostrar el flujo completo.
+        setForzarConsentimiento(true);
+        setCargando(false);
         return;
       }
       if (!resp.ok || !data?.url) {
@@ -214,6 +165,55 @@ export default function PantallaIdentidad({
       setCargando(false);
     }
   }
+
+  // Guard del CTA de consentimiento: el botón nunca parece muerto — si falta la
+  // casilla, lleva al médico hasta ella (scroll + resaltado).
+  function onCtaConsentimiento() {
+    if (!aceptado) {
+      setGuardActiva(true);
+      consentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    iniciarVerificacion(true);
+  }
+
+  // Pantalla única de inicio/consentimiento (compartida con el registro).
+  const pantallaConsentimiento = (
+    <div>
+      <span
+        className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full"
+        style={{ background: AZUL_BG }}
+      >
+        <ShieldCheck size={22} strokeWidth={1.75} style={{ color: AZUL }} />
+      </span>
+      <h2 className="text-center text-xl font-semibold text-gray-900">
+        Verificá tu identidad
+      </h2>
+      <p className="mt-2 text-center text-sm leading-relaxed text-gray-500">
+        Confirmamos que quien atiende sos realmente vos.
+      </p>
+
+      <PasosDidit />
+
+      <ConsentimientoIdentidad
+        ref={consentRef}
+        aceptado={aceptado}
+        onAceptadoChange={(v) => {
+          setAceptado(v);
+          if (v) setGuardActiva(false);
+        }}
+        guardActiva={guardActiva}
+      />
+
+      <CtaSticky
+        label="Verificar mi identidad"
+        onClick={onCtaConsentimiento}
+        cargando={cargando}
+        error={error}
+        aviso="Al continuar, seguís en Didit, nuestro proveedor de verificación."
+      />
+    </div>
+  );
 
   // ─── Contenido por estado (JSX calculado, NO componente anidado) ────────────
   let contenido: React.ReactNode;
@@ -278,7 +278,7 @@ export default function PantallaIdentidad({
         </button>
       </div>
     );
-  } else if (estado === "rechazada") {
+  } else if (estado === "rechazada" && !forzarConsentimiento) {
     contenido = (
       <div>
         <Header
@@ -305,9 +305,10 @@ export default function PantallaIdentidad({
             <li>• Tu cara despejada, sin lentes oscuros</li>
           </ul>
         </div>
+        <PasosDidit />
         <CtaSticky
           label="Volver a intentar"
-          onClick={iniciarVerificacion}
+          onClick={() => iniciarVerificacion(false)}
           cargando={cargando}
           error={error}
         />
@@ -323,7 +324,7 @@ export default function PantallaIdentidad({
         </p>
       </div>
     );
-  } else if (estado === "en_progreso") {
+  } else if (estado === "en_progreso" && !forzarConsentimiento) {
     contenido = (
       <div>
         <Header
@@ -337,141 +338,18 @@ export default function PantallaIdentidad({
           Empezaste a verificar tu identidad pero no llegaste a terminar. No te
           preocupes, no perdiste nada.
         </p>
+        <PasosDidit />
         <CtaSticky
           label="Continuar verificación"
-          onClick={iniciarVerificacion}
+          onClick={() => iniciarVerificacion(false)}
           cargando={cargando}
           error={error}
-        />
-      </div>
-    );
-  } else if (paso === "consentimiento") {
-    // SIN EMPEZAR — Paso 2: consentimiento
-    contenido = (
-      <div>
-        <Header
-          Icon={ShieldCheck}
-          color={AZUL}
-          bg={AZUL_BG}
-          titulo="Cómo funciona la verificación"
-          subtitulo="Leé y aceptá para continuar a Didit"
-        />
-
-        {/* Resumen escaneable */}
-        <div
-          className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
-          style={{ border: "1px solid #e5e7eb" }}
-        >
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <ScanLine size={20} style={{ color: AZUL }} className="shrink-0" />
-            Escaneás tu documento (DNI)
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <Camera size={20} style={{ color: AZUL }} className="shrink-0" />
-            Te sacás una selfie para confirmar que sos vos
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <BadgeCheck size={20} style={{ color: AZUL }} className="shrink-0" />
-            Validamos tu identidad contra RENAPER
-          </div>
-        </div>
-
-        {/* Microcopy de tranquilidad */}
-        <p className="mt-4 text-left text-sm leading-relaxed text-gray-600">
-          Tus datos biométricos los procesa Didit, un proveedor especializado —
-          Docto nunca recibe ni guarda tu selfie. Solo conservamos el resultado
-          de la verificación.
-        </p>
-
-        {/* Texto legal completo (scroll propio) */}
-        <p className="mt-5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Consentimiento
-        </p>
-        <div className="mt-2 max-h-48 overflow-y-auto overscroll-contain whitespace-pre-line rounded-lg bg-white p-4 text-left text-xs leading-relaxed text-gray-600" style={{ border: "1px solid #e5e7eb" }}>
-          {CONSENTIMIENTO_IDENTIDAD_TEXTO}
-        </div>
-
-        {/* Checkbox grande, fila completa clickeable */}
-        <label
-          className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg bg-white p-3"
-          style={{ border: "1px solid #e5e7eb" }}
-        >
-          <input
-            type="checkbox"
-            checked={aceptado}
-            onChange={(e) => {
-              setAceptado(e.target.checked);
-              if (e.target.checked) setIntentoSinAceptar(false);
-            }}
-            className="mt-0.5 h-6 w-6 shrink-0 rounded border-gray-300"
-            style={{ accentColor: AZUL }}
-          />
-          <span className="text-left text-sm text-gray-700">
-            Presto mi consentimiento expreso para verificar mi identidad con
-            Didit, según el texto de arriba.
-          </span>
-        </label>
-
-        <CtaSticky
-          label="Aceptar y verificar"
-          onClick={() => {
-            if (!aceptado) {
-              setIntentoSinAceptar(true);
-              return;
-            }
-            iniciarVerificacion();
-          }}
-          cargando={cargando}
-          error={error}
-          atenuado={!aceptado}
-          hint={
-            intentoSinAceptar && !aceptado
-              ? "Marcá la casilla para continuar"
-              : undefined
-          }
         />
       </div>
     );
   } else {
-    // SIN EMPEZAR — Paso 1: intro
-    contenido = (
-      <div>
-        <Header
-          Icon={ShieldCheck}
-          color={AZUL}
-          bg={AZUL_BG}
-          titulo="Verificá tu identidad"
-          subtitulo="Un paso único para activar tu cuenta"
-        />
-        <p className="mt-5 text-left text-sm leading-relaxed text-gray-600">
-          Validamos que sos el titular de la matrícula que registraste. Esto te
-          protege contra la suplantación de identidad y le da confianza a tus
-          pacientes.
-        </p>
-        <div
-          className="mt-6 space-y-3 rounded-xl bg-white p-4 text-left"
-          style={{ border: "1px solid #e5e7eb" }}
-        >
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <Clock size={18} style={{ color: GRIS }} className="shrink-0" />
-            Toma menos de 2 minutos
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <Lock size={18} style={{ color: GRIS }} className="shrink-0" />
-            Una sola vez, para siempre
-          </div>
-        </div>
-        <CtaSticky
-          label="Comenzar"
-          onClick={() => setPaso("consentimiento")}
-          cargando={false}
-          error={null}
-        />
-        <p className="mt-3 text-center text-xs text-gray-400">
-          Vas a continuar en Didit, nuestro proveedor de verificación.
-        </p>
-      </div>
-    );
+    // SIN EMPEZAR (o retry sin aceptación previa registrada) — pantalla única.
+    contenido = pantallaConsentimiento;
   }
 
   return (
@@ -500,7 +378,7 @@ export default function PantallaIdentidad({
           </div>
         </div>
       </nav>
-      <div className="mx-auto max-w-lg px-6 pb-8 pt-12 sm:pt-16">{contenido}</div>
+      <div className="mx-auto max-w-lg px-6 pb-8 pt-6 sm:pt-10">{contenido}</div>
     </div>
   );
 }
