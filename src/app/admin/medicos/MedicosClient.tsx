@@ -308,6 +308,62 @@ function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Rec
 // Estado REFEPS resuelto de antemano (la validación corre sola al registrarse + cron cada
 // 10min/6h). El admin se encuentra al médico YA verificado o no; el botón manual es SOLO
 // la red para cuando la automática no pudo correr (Bus del Ministerio caído).
+/**
+ * Estado de la verificación biométrica (Didit) en la tarjeta de PENDIENTES —
+ * mismo lenguaje visual que el bloque REFEPS. El PR #284 puso el badge en la
+ * tarjeta general pero la pestaña Pendientes usa ESTA tarjeta y quedó sin nada
+ * (reclamo Diego 18/07: "sigo sin ver si realizó o no la verificación").
+ * Solo display: los campos ya viajan en el select del page.
+ */
+function BloqueIdentidad({ medico: m }: { medico: Medico }) {
+  if (m.identidad_validada) {
+    return (
+      <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+          <ShieldCheck size={16} /> Identidad biométrica verificada
+        </div>
+        <p className="mt-1 text-xs text-green-700">
+          Completó la verificación (selfie + DNI) y la identidad coincide.
+        </p>
+      </div>
+    );
+  }
+  if (m.biometria_exenta) {
+    return (
+      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <ShieldCheck size={16} /> Identidad exenta
+        </div>
+        <p className="mt-1 text-xs text-gray-600">Cuenta test o excepción aprobada por Diego.</p>
+      </div>
+    );
+  }
+  if (m.didit_status === "Declined") {
+    return (
+      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-red-800">
+          <ShieldAlert size={16} /> Identidad RECHAZADA por el verificador
+        </div>
+        <p className="mt-1 text-xs text-red-700">
+          Didit no pudo confirmar que sea quien dice ser. Revisar la credencial y el caso antes de aprobar
+          (el botón de aprobar te lo va a volver a advertir).
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+        <ShieldAlert size={16} /> Identidad biométrica NO realizada
+      </div>
+      <p className="mt-1 text-xs text-amber-700">
+        Todavía no hizo la verificación de identidad (selfie + DNI). Se puede aprobar igual — el gate está
+        apagado — pero que sea una decisión consciente.
+      </p>
+    </div>
+  );
+}
+
 function BloqueRefeps({
   medico: m,
   onResultado,
@@ -472,6 +528,8 @@ function PendienteCard({
       </div>
 
       <BloqueRefeps medico={m} onResultado={onRefepsActualizado} />
+
+      <BloqueIdentidad medico={m} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {m.foto_credencial_url && (
