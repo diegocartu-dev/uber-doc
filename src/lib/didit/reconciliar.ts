@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { obtenerDecisionDidit } from "./client";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
+import { sendDoctoAlert } from "@/lib/alertas";
 
 // ─── Reconciliación de identidad biométrica (Didit) ──────────────────────────
 // ÚNICA fuente de verdad del control anti-suplantación. La usan DOS caminos:
@@ -31,6 +32,11 @@ export interface MedicoIdentidad {
   dni: string | null;
   numero_matricula: string | null;
   identidad_validada: boolean;
+  /** Para alertas legibles al admin y detección de transición (caso Williana). */
+  nombre_completo?: string | null;
+  /** didit_status ANTES de reconciliar — las alertas disparan solo en transición
+   *  (mismo patrón que el mail verde de cron-guard), nunca en cada corrida. */
+  didit_status?: string | null;
 }
 
 export type ResultadoReconciliacion =
@@ -134,6 +140,8 @@ export async function reconciliarIdentidad(
     if (dniCoincide && matriculaPertenece) {
       updates.identidad_validada = true;
       updates.identidad_validada_at = new Date().toISOString();
+      // Se resolvió (p.ej. matrícula corregida en el panel): limpiar el motivo.
+      updates.identidad_revision_motivo = null;
       await admin.from("medicos").update(updates).eq("id", medico.id);
       return { outcome: "validado", diditStatus: decisionStatus };
     }
@@ -141,8 +149,26 @@ export async function reconciliarIdentidad(
     // Didit aprobó pero el cruce (respondido por REFEPS) no cierra → revisión
     // manual, NO validar. Acá REFEPS SÍ respondió (un fallo transitorio ya
     // retornó arriba): o el DNI no coincide, o la matrícula no pertenece / no figura.
+    //
+    // Este "In Review" es SINTÉTICO (lo pone Docto, no Didit) y necesita acción
+    // HUMANA del admin — el caso Williana (20/07) vivió días invisible porque
+    // era indistinguible del In Review real y no alertaba a nadie. Ahora:
+    // motivo persistido (visible en el panel) + mail al admin SOLO en la
+    // transición (no en cada corrida de 10 min del cron).
+    const motivoHumano = !dniCoincide
+      ? "Didit aprobó la identidad, pero el DNI del documento escaneado no coincide con el DNI registrado en Docto."
+      : "Didit aprobó la identidad, pero la matrícula declarada no figura para ese DNI en REFEPS — suele ser un número mal tipeado en el registro.";
     updates.didit_status = "In Review";
+    updates.identidad_revision_motivo = motivoHumano;
     await admin.from("medicos").update(updates).eq("id", medico.id);
+
+    if (medico.didit_status !== "In Review") {
+      const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
+      await sendDoctoAlert(
+        `🟠 Identidad de ${nombre}: necesita TU revisión`,
+        `${nombre} completó la verificación biométrica y Didit la APROBÓ — la persona es quien dice ser. Pero el cruce automático no cierra:\n\n${motivoHumano}\n\n¿Tenés que hacer algo? Sí: entrá al panel de médicos y compará el dato declarado contra la credencial y REFEPS. Si es un typo (como el caso Williana: un dígito de matrícula), corregilo en la ficha y el sistema valida solo en menos de 10 minutos — te llega la confirmación por el panel. Nadie más va a revisar este caso: es tuyo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, dniCoincide=${dniCoincide}, matriculaPertenece=${matriculaPertenece}.`
+      );
+    }
     return {
       outcome: "en_revision",
       diditStatus: "In Review",
@@ -150,7 +176,24 @@ export async function reconciliarIdentidad(
     };
   }
 
-  // 4. Estado no-aprobado (In Progress, Declined, Expired…) → solo registramos.
+  // 4. Estado no-aprobado (In Progress, Declined, Expired…) → solo registramos,
+  //    con dos alertas de transición al admin (nunca repetidas por corrida):
+  //    - "In Review" REAL de Didit: informativa — la revisión es de ellos, esperar.
+  //    - "Declined": el verificador rechazó — revisar el caso en el panel.
   await admin.from("medicos").update(updates).eq("id", medico.id);
+  if (decisionStatus !== medico.didit_status) {
+    const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
+    if (decisionStatus === "In Review") {
+      await sendDoctoAlert(
+        `🟡 Identidad de ${nombre}: Didit la está revisando`,
+        `${nombre} completó la verificación y quedó en la cola de revisión manual de DIDIT (no nuestra — suele pasar con documentos extranjeros o fotos dudosas).\n\n¿Tenés que hacer algo? No: la resuelven ellos, normalmente en horas. Cuando Didit decida, el sistema sigue solo y si hace falta algo tuyo te llega otro mail.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=In Review (real, reportado por Didit).`
+      );
+    } else if (decisionStatus === "Declined") {
+      await sendDoctoAlert(
+        `🔴 Identidad de ${nombre}: RECHAZADA por el verificador`,
+        `Didit no pudo confirmar que ${nombre} sea quien dice ser (documento ilegible, selfie que no coincide, o intento de suplantación).\n\n¿Tenés que hacer algo? Sí, cuando puedas: mirá el caso en el panel de médicos (badge rojo) y la credencial. El médico ya ve en su pantalla la opción de reintentar con mejores fotos; si insiste en fallar, es señal de alerta real.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=Declined.`
+      );
+    }
+  }
   return { outcome: "no_aprobado", diditStatus: decisionStatus };
 }

@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   if (medicoId) {
     const { data } = await admin
       .from("medicos")
-      .select("id, dni, numero_matricula, identidad_validada")
+      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status")
       .eq("id", medicoId)
       .maybeSingle();
     medico = data;
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
   if (!medico) {
     const { data } = await admin
       .from("medicos")
-      .select("id, dni, numero_matricula, identidad_validada")
+      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status")
       .eq("didit_session_id", sessionId)
       .maybeSingle();
     medico = data;

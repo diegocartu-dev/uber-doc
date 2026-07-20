@@ -82,6 +82,8 @@ async function handler(req: Request) {
           dni: m.dni,
           numero_matricula: m.numero_matricula,
           identidad_validada: !!m.identidad_validada,
+          nombre_completo: m.nombre_completo,
+          didit_status: m.didit_status,
         } satisfies MedicoIdentidad,
         m.didit_session_id as string
       )
