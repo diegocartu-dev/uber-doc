@@ -1,25 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import {
-  Stethoscope,
-  ShieldCheck,
-  ScanLine,
-  Camera,
-  Check,
-  RefreshCw,
-  Clock,
-  Loader2,
-} from "lucide-react";
-import { CONSENTIMIENTO_IDENTIDAD_TEXTO } from "@/lib/didit/consentimiento";
+import { Stethoscope, ShieldCheck, Check, RefreshCw, Clock } from "lucide-react";
+import PasosDidit from "@/components/identidad/PasosDidit";
+import ConsentimientoIdentidad from "@/components/identidad/ConsentimientoIdentidad";
+import CtaSticky from "@/components/identidad/CtaSticky";
 
 // ─── Design system ─────────────────────────────────────────────────────────
 const AZUL = "#378ADD";
 const NARANJA = "#D85A30";
 const VERDE = "#1D9E75";
-const GRIS = "#888780";
-const ROJO = "#E24B4A";
 
 type Fase = "intro" | "completo" | "rechazada";
 
@@ -41,29 +32,46 @@ interface Props {
   recienVolvio: boolean;
 }
 
+// Respec Sofía 20/07: la pantalla anterior ponía la burocracia antes que la
+// acción (pared legal de 200px, checkbox perdido, CTA al 60% de opacidad abajo
+// del fold) — las 2 primeras médicas reales que llegaron acá abandonaron sin
+// crear sesión. Ahora: acción visible desde el primer paint (CTA sólido sticky),
+// legal compacto expandible, y preparación explícita para los 2 pasos de Didit.
+// Criterio de aceptación: en un iPhone SE se ve título + pasos + consentimiento
+// con su casilla + CTA sin scrollear.
 export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVolvio }: Props) {
   const [fase, setFase] = useState<Fase>(() => faseInicial(diditStatus, yaHabilitado, recienVolvio));
   const [aceptado, setAceptado] = useState(false);
-  const [intentoSinAceptar, setIntentoSinAceptar] = useState(false);
+  const [guardActiva, setGuardActiva] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const consentRef = useRef<HTMLDivElement>(null);
 
-  async function iniciarVerificacion() {
-    if (!aceptado) {
-      setIntentoSinAceptar(true);
-      return;
-    }
+  // Reintentos (rechazada) van DIRECTO sin re-consentir, amparados en la
+  // aceptación registrada (dictamen Carolina 20/07 — el consentimiento cubre la
+  // finalidad, no cada intento). Si el servidor no encuentra aceptación previa
+  // (consentimiento_requerido, caso borde), se cae al flujo con checkbox.
+  async function iniciarVerificacion(conConsentimiento: boolean) {
     setCargando(true);
     setError(null);
     try {
       const resp = await fetch("/api/didit/crear-sesion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consentimiento: true, origin: "registro" }),
+        body: JSON.stringify(
+          conConsentimiento
+            ? { consentimiento: true, origin: "registro" }
+            : { origin: "registro" }
+        ),
       });
       const data = await resp.json();
       if (data?.yaValidado) {
         setFase("completo");
+        return;
+      }
+      if (resp.status === 400 && data?.error === "consentimiento_requerido") {
+        setFase("intro");
+        setCargando(false);
         return;
       }
       if (!resp.ok || !data?.url) throw new Error(data?.error ?? "error");
@@ -72,6 +80,17 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
       setError("No pudimos iniciar la verificación. Probá de nuevo en un momento.");
       setCargando(false);
     }
+  }
+
+  // Guard del CTA: el botón NUNCA parece muerto — si falta la casilla, lleva al
+  // médico hasta ella (scroll + resaltado) en el momento exacto de intención.
+  function onCtaClick() {
+    if (!aceptado) {
+      setGuardActiva(true);
+      consentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    iniciarVerificacion(true);
   }
 
   let contenido: React.ReactNode;
@@ -123,81 +142,44 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
           luz y el documento sin reflejos.
         </p>
         <button
-          onClick={() => { setFase("intro"); setAceptado(false); setIntentoSinAceptar(false); }}
-          className="mt-6 inline-flex w-full items-center justify-center rounded-lg py-3.5 text-sm font-semibold text-white"
+          onClick={() => iniciarVerificacion(false)}
+          disabled={cargando}
+          className="mt-6 inline-flex w-full items-center justify-center rounded-lg py-3.5 text-sm font-semibold text-white disabled:opacity-60"
           style={{ background: AZUL }}
         >
-          Repetir verificación
+          {cargando ? "Conectando con Didit…" : "Repetir verificación"}
         </button>
+        {error && <p className="mt-2 text-center text-xs" style={{ color: "#E24B4A" }}>{error}</p>}
       </div>
     );
   } else {
     contenido = (
       <div>
-        <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: "rgba(55,138,221,0.1)" }}>
-          <ShieldCheck size={28} strokeWidth={1.75} style={{ color: AZUL }} />
+        <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(55,138,221,0.1)" }}>
+          <ShieldCheck size={22} strokeWidth={1.75} style={{ color: AZUL }} />
         </span>
         <h2 className="text-center text-xl font-semibold text-gray-900">Verificá tu identidad</h2>
         <p className="mt-2 text-center text-sm leading-relaxed text-gray-500">
-          El último paso. Por la seguridad de tus pacientes, confirmamos que quien
-          atiende sos realmente vos.
+          Último paso: confirmamos que quien atiende sos realmente vos.
         </p>
 
-        <div className="mt-5 rounded-xl border p-3.5" style={{ borderColor: "#e5e7eb", background: "#f8f9fa" }}>
-          <p className="text-sm font-medium text-gray-900">Vas a necesitar</p>
-          <div className="mt-2 space-y-2">
-            {[
-              { Icon: ScanLine, t: "Tu DNI físico a mano" },
-              { Icon: Camera, t: "La cámara, para una selfie" },
-            ].map(({ Icon, t }) => (
-              <div key={t} className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "rgba(55,138,221,0.1)", color: AZUL }}>
-                  <Icon size={17} />
-                </span>
-                <span className="text-sm text-gray-800">{t}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PasosDidit />
 
-        {/* Consentimiento — dato biométrico = sensible (art. 7 Ley 25.326) →
-            consentimiento EXPRESO con el texto completo a la vista (Carolina). */}
-        <p className="mt-5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Consentimiento</p>
-        <div className="mt-2 max-h-52 overflow-y-auto overscroll-contain whitespace-pre-line rounded-lg bg-white p-4 text-left text-xs leading-relaxed text-gray-600" style={{ border: "1px solid #e5e7eb" }}>
-          {CONSENTIMIENTO_IDENTIDAD_TEXTO}
-        </div>
-        <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg bg-white p-3" style={{ border: `1px solid ${intentoSinAceptar && !aceptado ? ROJO : "#e5e7eb"}` }}>
-          <input
-            type="checkbox"
-            checked={aceptado}
-            onChange={(e) => { setAceptado(e.target.checked); if (e.target.checked) setIntentoSinAceptar(false); }}
-            className="mt-0.5 h-6 w-6 shrink-0 rounded border-gray-300"
-            style={{ accentColor: AZUL }}
-          />
-          <span className="text-left text-sm text-gray-700">
-            Presto mi consentimiento expreso para verificar mi identidad con Didit, según el texto de arriba.
-          </span>
-        </label>
-        {intentoSinAceptar && !aceptado && (
-          <p className="mt-1.5 text-xs" style={{ color: ROJO }}>Marcá la casilla para continuar.</p>
-        )}
+        <ConsentimientoIdentidad
+          ref={consentRef}
+          aceptado={aceptado}
+          onAceptadoChange={(v) => { setAceptado(v); if (v) setGuardActiva(false); }}
+          guardActiva={guardActiva}
+        />
 
-        <button
-          onClick={iniciarVerificacion}
-          disabled={cargando}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: AZUL, opacity: !aceptado && !cargando ? 0.6 : undefined }}
-        >
-          {cargando ? (
-            <><Loader2 size={18} className="animate-spin" /> Conectando…</>
-          ) : (
-            <>Aceptar y verificar <span aria-hidden>→</span></>
-          )}
-        </button>
-        {error && <p className="mt-2 text-center text-xs" style={{ color: ROJO }}>{error}</p>}
-        <p className="mt-2 text-center text-[11px]" style={{ color: GRIS }}>
-          Vas a continuar en Didit, nuestro proveedor de verificación.
-        </p>
+        <CtaSticky
+          label="Verificar mi identidad"
+          onClick={onCtaClick}
+          cargando={cargando}
+          error={error}
+          aviso="Al continuar, seguís en Didit, nuestro proveedor de verificación."
+          loadingLabel="Conectando con Didit…"
+        />
       </div>
     );
   }
@@ -210,7 +192,7 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
           <span className="text-lg font-bold lowercase text-gray-900">docto</span>
         </div>
       </nav>
-      <div className="mx-auto max-w-md px-6 pb-10 pt-10">{contenido}</div>
+      <div className="mx-auto max-w-md px-6 pb-10 pt-6">{contenido}</div>
     </div>
   );
 }
