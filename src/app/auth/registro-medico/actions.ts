@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizarTelefonoAR } from "@/lib/whatsapp";
 import { redirect } from "next/navigation";
 import { capitalizarNombre } from "@/lib/utils/texto";
 import { headers } from "next/headers";
@@ -158,7 +159,19 @@ export async function completarRegistroMedico(formData: FormData) {
   const cuit = formData.get("cuit") as string;
   const domicilio_consultorio = ((formData.get("domicilio_consultorio") as string) || "").trim();
   const telefono = ((formData.get("telefono") as string) || "").trim() || null;
-  const celular_personal = ((formData.get("celular_personal") as string) || "").trim() || null;
+  const celularCrudo = ((formData.get("celular_personal") as string) || "").trim() || null;
+  // El celular es el destino de los avisos WhatsApp: se valida y normaliza ACÁ
+  // (día cero), igual que en el perfil (#286). Sin esto, un autocompletado con
+  // formato raro entraba crudo y el aviso moría mudo al enviar (follow-up
+  // Roberto #286; caso Diego 21/07: el autofill pega "91140289141" — ese SÍ
+  // normaliza, pero el que no normalice no debe entrar).
+  const celular_personal = celularCrudo ? normalizarTelefonoAR(celularCrudo) : null;
+  if (celularCrudo && !celular_personal) {
+    return {
+      error:
+        "Revisá el celular: tiene que ser un móvil argentino de 10 dígitos (código de área + número, ej: 11 4028 9141).",
+    };
+  }
   const dni = (formData.get("dni") as string)?.trim();
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
 
