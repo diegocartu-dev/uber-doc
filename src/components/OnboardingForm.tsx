@@ -115,6 +115,28 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     }
   }
 
+  // DD/MM/AAAA → ISO, o null si no es una fecha real. La fuente de verdad es
+  // el campo VISIBLE: el espejo oculto solo se sincronizaba en onChange, así que
+  // autocompletar de Safari o volver-atrás (el navegador restaura lo visible
+  // pero no lo oculto) dejaban la fecha en rojo con un valor perfecto a la
+  // vista, y había que "tocar algún número" para despertarla (bug Diego 21/07).
+  function parseFechaDisplay(v: string): string | null {
+    const m = v.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return null;
+    const [, dd, mm, yyyy] = m;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    if (
+      d.getDate() === Number(dd) &&
+      d.getMonth() === Number(mm) - 1 &&
+      d.getFullYear() === Number(yyyy) &&
+      d <= new Date() &&
+      d.getFullYear() > 1900
+    ) {
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  }
+
   function validate(): FieldErrors {
     const form = formRef.current;
     if (!form) return {};
@@ -122,7 +144,6 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     const errs: FieldErrors = {};
     const nombre = (form.elements.namedItem("nombre_completo") as HTMLInputElement)?.value?.trim();
     const dni = (form.elements.namedItem("dni") as HTMLInputElement)?.value?.trim();
-    const fechaNac = (document.getElementById("fecha_nacimiento") as HTMLInputElement)?.value?.trim();
     const sexo = (form.elements.namedItem("sexo_dni") as RadioNodeList)?.value;
 
     if (!nombre) errs.nombre_completo = "Ingresá tu nombre completo.";
@@ -131,7 +152,17 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     } else if (!/^\d{7,8}$/.test(dni)) {
       errs.dni = "El DNI debe tener 7 u 8 números, sin puntos.";
     }
-    if (!fechaNac) errs.fecha_nacimiento = "Ingresá tu fecha de nacimiento (DD/MM/AAAA).";
+    // Fecha: parsear LO QUE SE VE y sincronizar el oculto acá mismo — cualquier
+    // camino que haya llenado el visible sin onChange queda cubierto.
+    const displayEl = document.getElementById("fecha_nacimiento_display") as HTMLInputElement | null;
+    const hidden = document.getElementById("fecha_nacimiento") as HTMLInputElement | null;
+    const fechaIso = parseFechaDisplay(displayEl?.value ?? "");
+    if (fechaIso && hidden) hidden.value = fechaIso;
+    if (!fechaIso) {
+      errs.fecha_nacimiento = displayEl?.value?.trim()
+        ? "Revisá la fecha: tiene que ser una fecha real en formato DD/MM/AAAA."
+        : "Ingresá tu fecha de nacimiento (DD/MM/AAAA).";
+    }
     if (!sexo) errs.sexo_dni = "Seleccioná tu sexo según DNI.";
 
     const telefono = (form.elements.namedItem("telefono") as HTMLInputElement)?.value?.trim();
@@ -155,6 +186,19 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
 
     if (Object.keys(errs).length > 0) {
       e.preventDefault();
+      // El error puede quedar fuera de pantalla (form largo en mobile) y el
+      // toque parece "muerto" → llevar al usuario al primer campo con error.
+      const anclas: Record<string, string> = {
+        nombre_completo: "nombre_completo",
+        dni: "dni",
+        fecha_nacimiento: "fecha_nacimiento_display",
+        sexo_dni: "fecha_nacimiento_display",
+        telefono: "telefono",
+        nro_afiliado: "nro_afiliado",
+      };
+      const primera = Object.keys(anclas).find((k) => k in errs);
+      const el = primera ? document.getElementById(anclas[primera]) : null;
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
@@ -448,7 +492,8 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
               <label className="mb-1.5 block text-[13px] text-gray-500">Nro. de afiliado</label>
               <input
                 type="text"
-                name="nro_afiliado"
+                id="nro_afiliado"
+            name="nro_afiliado"
                 value={nroAfiliado}
                 onChange={(e) => { setNroAfiliado(e.target.value); if (errors.nro_afiliado) setErrors((er) => ({ ...er, nro_afiliado: undefined })); }}
                 placeholder="Número de afiliado"
