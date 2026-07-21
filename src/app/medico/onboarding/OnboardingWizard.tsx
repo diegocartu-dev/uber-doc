@@ -515,7 +515,7 @@ function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () =
   };
 
   return (
-    <Centro icono="✍️" titulo="Tu firma para las recetas" sub="Dibujá tu firma o subí una foto, y tocá «Guardar firma». Después continuás.">
+    <Centro icono="✍️" titulo="Tu firma para las recetas" sub={firmaUrl ? "Tu firma ya está cargada. Revisala y continuá — vamos a activar tu firma electrónica." : "Dibujá tu firma o subí una foto, y tocá «Guardar firma». Después continuás."}>
       <FirmaManuscrita firmaUrl={firmaUrl} onGuardada={() => setFirmaLista(true)} />
       {error && <p className="text-center text-sm" style={{ color: C.rojo }}>{error}</p>}
       <CTA onClick={continuar} disabled={!firmaLista || provisionando}>{provisionando ? "Activando…" : "Continuar"}</CTA>
