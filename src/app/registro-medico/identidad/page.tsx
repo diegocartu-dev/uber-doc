@@ -23,7 +23,7 @@ export default async function RegistroIdentidadPage({
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, didit_status, identidad_validada, biometria_exenta")
+    .select("id, didit_status, identidad_validada, biometria_exenta, didit_session_id")
     .eq("user_id", user.id)
     .maybeSingle();
   // Sin ficha todavía = confirmó el mail pero no completó datos (Fase B). Lo
@@ -36,7 +36,10 @@ export default async function RegistroIdentidadPage({
     <RegistroIdentidad
       diditStatus={medico.didit_status}
       yaHabilitado={!!medico.identidad_validada || !!medico.biometria_exenta}
-      recienVolvio={identidad === "verificada"}
+      // El callback ?identidad=verificada solo cuenta si HAY una sesión Didit real:
+      // una URL vieja del historial (o un typo) no puede fabricar un "completo"
+      // fantasma con la cuenta reseteada (caso Diego 20/07).
+      recienVolvio={identidad === "verificada" && !!medico.didit_session_id}
     />
   );
 }
