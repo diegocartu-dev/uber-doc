@@ -110,10 +110,10 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
         </span>
         <h2 className="text-xl font-semibold text-gray-900">¡Tu registro está completo!</h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-600">
-          Recibimos tus datos, tu credencial y tu verificación de identidad.
+          Recibimos tus datos, tu credencial, tu firma y tu verificación de identidad.
         </p>
         <div className="mt-5 rounded-xl border p-3 text-left" style={{ borderColor: "#e5e7eb" }}>
-          {["Datos profesionales", "Credencial recibida", "Identidad verificada"].map((t) => (
+          {["Datos profesionales", "Credencial recibida", "Firma registrada", "Identidad verificada"].map((t) => (
             <div key={t} className="flex items-center gap-2 py-1">
               <Check size={16} style={{ color: VERDE }} />
               <span className="text-sm text-gray-800">{t}</span>

@@ -122,16 +122,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Guardar path en medicos (no URL pública — bucket privado)
-    const { error: updateError } = await supabase
+    // Guardar path en medicos (no URL pública — bucket privado).
+    // SERVICE ROLE + verificación de fila afectada (hallazgo Sofía 20/07): con
+    // el cliente RLS, un UPDATE que matchea 0 filas (ficha inexistente) o que
+    // una policy/grant bloquea devuelve éxito igual — imagen huérfana en el
+    // bucket y firma_manuscrita_url jamás seteado. Misma clase de bug que el
+    // outage 19-24/06. select("id") fuerza representación: data vacía = 0 filas.
+    const adminDb = createAdminClient();
+    const { data: filas, error: updateError } = await adminDb
       .from("medicos")
       .update({ firma_manuscrita_url: storagePath })
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .select("id");
 
     if (updateError) {
       return NextResponse.json(
         { error: updateError.message },
         { status: 500 }
+      );
+    }
+    if (!filas || filas.length === 0) {
+      console.error("[medico/firma] update no afectó filas — ¿ficha inexistente?", user.id);
+      return NextResponse.json(
+        { error: "No encontramos tu ficha de médico. Completá primero tu registro." },
+        { status: 409 }
       );
     }
 

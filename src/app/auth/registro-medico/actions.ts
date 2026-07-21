@@ -225,6 +225,32 @@ export async function completarRegistroMedico(formData: FormData) {
   }
   const foto_credencial_url: string = credencialPath;
 
+  // Firma manuscrita OBLIGATORIA (Diego 20/07, "todo de un tirón"): viaja en el
+  // mismo FormData y se sube con service role ANTES del insert — la ficha aún no
+  // existe, así que /api/medico/firma (UPDATE por user_id) sería un éxito
+  // silencioso falso (hallazgo Sofía). Mismo criterio de corte que la credencial:
+  // subida fallida = error y reintento, nunca ficha sin firma.
+  const firmaFile = formData.get("firma_manuscrita") as File | null;
+  if (!firmaFile || firmaFile.size === 0) {
+    return { error: "Dibujá tu firma para continuar." };
+  }
+  if (firmaFile.size > 2 * 1024 * 1024) {
+    return { error: "La firma no puede superar 2 MB." };
+  }
+  if (!["image/png", "image/jpeg"].includes(firmaFile.type)) {
+    return { error: "La firma debe ser PNG o JPG." };
+  }
+  const firmaExt = firmaFile.type === "image/jpeg" ? "jpg" : "png";
+  // Mismo path que ya espera el GET de /api/medico/firma.
+  const firmaPath = `medicos/${user.id}/firma.${firmaExt}`;
+  const { error: firmaUpErr } = await supabaseAdmin.storage
+    .from("firmas-medicos")
+    .upload(firmaPath, firmaFile, { contentType: firmaFile.type, upsert: true });
+  if (firmaUpErr) {
+    console.error("[completarRegistro] upload firma falló:", firmaUpErr.message);
+    return { error: "No pudimos guardar tu firma. Probá de nuevo en un momento." };
+  }
+
   // Foto de perfil (opcional) → bucket avatars (público) → foto_url.
   let foto_url: string | null = null;
   const fotoPerfilFile = formData.get("foto_perfil") as File | null;
@@ -272,6 +298,7 @@ export async function completarRegistroMedico(formData: FormData) {
     ...(declaracionMatricula ? { declaracion_matricula_at: ahora } : {}),
     slug,
     foto_credencial_url,
+    firma_manuscrita_url: firmaPath,
     verificado: false,
     estado_registro: "pendiente_revision",
   };

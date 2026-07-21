@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
+import FirmaCanvas, { type FirmaCanvasHandle } from "@/components/firma/FirmaCanvas";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
 
@@ -117,6 +118,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   const [fotoPerfil, setFotoPerfil] = useState<File | null>(null);
   const [numeroMatricula, setNumeroMatricula] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
+  const firmaRef = useRef<FirmaCanvasHandle>(null);
 
   // Paso 1 — "Completá tus datos": valida los 3 bloques. Teléfono profesional y
   // foto de perfil son OPCIONALES. La cuenta (email/password/nombre) ya existe.
@@ -156,12 +158,31 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     return true;
   }
 
+  // Paso 2 — credencial obligatoria + ambos checks legales, ANTES de avanzar
+  // al paso de firma (spec Sofía 20/07: el submit real ocurre en el paso 3).
+  function validarPaso2(): boolean {
+    if (!fotoCredencial) {
+      setError("Subí la foto de tu credencial médica para continuar.");
+      return false;
+    }
+    if (!checkTerminos || !checkMatricula) {
+      setError("Aceptá los términos y la declaración de matrícula para continuar.");
+      return false;
+    }
+    return true;
+  }
+
   function siguiente() {
     setError(null);
     if (paso === 1 && validarPaso1()) {
       setPaso(2);
       // El paso 1 es largo: al cambiar de paso el scroll queda al pie y el
       // médico ve el paso nuevo "desde abajo" (bug reportado por Diego 15/07).
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (paso === 2 && validarPaso2()) {
+      setPaso(3);
       window.scrollTo(0, 0);
     }
   }
@@ -174,11 +195,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (paso < 2) { siguiente(); return; }
-    // La credencial es OBLIGATORIA (Diego, 15/07): el registro es validación y
-    // sin credencial el admin no puede confirmar que la matrícula es tuya.
-    if (!fotoCredencial) {
-      setError("Subí la foto de tu credencial médica para continuar.");
+    if (paso < 3) { siguiente(); return; }
+    // Firma OBLIGATORIA (Diego 20/07, "todo de un tirón"): sin ficha creada
+    // todavía, el blob viaja en el MISMO FormData del registro y la action lo
+    // sube con service role (insert atómico — patrón credencial).
+    if (firmaRef.current?.isEmpty()) {
+      setError("Dibujá tu firma para continuar.");
       window.scrollTo(0, 0); // el banner de error vive arriba del form
       return;
     }
@@ -187,6 +209,14 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
 
     try {
       const formData = new FormData(e.currentTarget);
+      const firmaBlob = await firmaRef.current?.getBlob();
+      if (!firmaBlob) {
+        setError("Dibujá tu firma para continuar.");
+        setLoading(false);
+        window.scrollTo(0, 0);
+        return;
+      }
+      formData.append("firma_manuscrita", firmaBlob, "firma.png");
       const result = await completarRegistroMedico(formData);
       // Éxito = redirect server-side a /registro-medico/identidad (no vuelve).
       if (result?.error) {
@@ -205,7 +235,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     "mt-1 block w-full h-11 rounded-[var(--radius-md)] border border-gray-300 px-3 text-[15px] shadow-sm focus:outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#378ADD]/30";
   const labelClass = "block text-[13px] font-medium text-gray-700";
   const hintClass = "mt-1 text-[13px] text-gray-500";
-  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Verificá tu identidad"];
+  const pasoTitulos = ["Completá tus datos", "Tu credencial", "Tu firma", "Verificá tu identidad"];
 
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-8">
@@ -215,9 +245,9 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
           <span className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>docto</span>
         </div>
 
-        {/* Progreso — 3 pasos: datos, credencial, identidad (este form cubre 1 y 2). */}
+        {/* Progreso — 4 pasos: datos, credencial, firma, identidad (este form cubre 1-3). */}
         <div className="mb-6 flex items-center justify-center gap-2">
-          {[1, 2, 3].map((n) => (
+          {[1, 2, 3, 4].map((n) => (
             <div key={n} className="flex items-center gap-2">
               <div
                 className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
@@ -230,7 +260,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               >
                 {n < paso ? "✓" : n}
               </div>
-              {n < 3 && (
+              {n < 4 && (
                 <div className={`h-0.5 w-6 rounded transition-colors ${n < paso ? "bg-[#378ADD]/40" : "bg-gray-200"}`} />
               )}
             </div>
@@ -245,7 +275,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         <h2 className="text-center text-xl font-semibold text-gray-900">
           {pasoTitulos[paso - 1]}
         </h2>
-        <p className="mt-1 text-center text-sm text-gray-500">Paso {paso} de 3</p>
+        <p className="mt-1 text-center text-sm text-gray-500">Paso {paso} de 4</p>
 
         <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
@@ -505,6 +535,15 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
             {checkMatricula && <input type="hidden" name="declaracion_matricula" value="true" />}
           </div>
 
+          {/* ── Paso 3: Tu firma (spec Sofía 20/07 — "todo de un tirón") ── */}
+          <div className={paso === 3 ? "space-y-4" : "hidden"}>
+            <p className="text-sm text-gray-600">
+              Aparece impresa en cada receta, certificado e indicación que
+              emitas. Firmá en el recuadro como lo hacés en papel.
+            </p>
+            <FirmaCanvas ref={firmaRef} activo={paso === 3} altura={200} />
+          </div>
+
           {/* Navegación */}
           <div className="flex gap-3 pt-2">
             {paso > 1 && (
@@ -518,7 +557,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               </button>
             )}
 
-            {paso < 2 ? (
+            {paso < 3 ? (
               <button
                 type="button"
                 onClick={siguiente}
@@ -530,7 +569,6 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               <LoadingButton
                 type="submit"
                 isLoading={loading}
-                disabled={!checkTerminos || !checkMatricula}
                 className="flex-1 h-11 rounded-[var(--radius-md)] px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-100"
                 style={{ backgroundColor: "#378ADD" }}
               >
