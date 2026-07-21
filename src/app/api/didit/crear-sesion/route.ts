@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { crearSesionDidit } from "@/lib/didit/client";
+import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import {
   CONSENTIMIENTO_TIPO,
   CONSENTIMIENTO_VERSION,
@@ -151,6 +152,27 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error interno";
     console.error("[didit/crear-sesion]", msg);
+
+    // Sin créditos en Didit = NINGÚN médico puede verificarse (caso 20/07:
+    // white label activado convirtió las sesiones gratis en pagas con saldo 0
+    // y el error vivía solo en los logs). Alerta inmediata a Diego (throttle
+    // 6 h) + mensaje honesto al médico en vez de "probá de nuevo".
+    if (/enough credits/i.test(msg)) {
+      await sendDoctoAlertThrottled(
+        "svc-didit-creditos",
+        6,
+        "🔴 Didit SIN CRÉDITOS — los médicos no pueden verificarse",
+        `Un médico intentó verificar su identidad y Didit rechazó la sesión por falta de créditos.\n\nImpacto mientras dure: ningún médico puede completar la verificación biométrica (y con el gate encendido, los nuevos no aparecen en la clínica hasta verificarse).\n\n¿Tenés que hacer algo? Sí, ahora: entrá a https://business.didit.me → botón "Recargar saldo" (con US$50 alcanza para ~150 verificaciones; los créditos no vencen). El cron diario de saldos también vigila esto, pero este mail salió porque un médico real ya chocó con el error.\n\n———\nDetalle técnico (para Claude): crear-sesion recibió "not enough credits" de Didit.`
+      );
+      return NextResponse.json(
+        {
+          error: "didit_sin_creditos",
+          mensaje:
+            "La verificación no está disponible en este momento. Ya avisamos al equipo de Docto — probá de nuevo más tarde.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { error: "No se pudo iniciar la verificación de identidad." },
       { status: 500 }

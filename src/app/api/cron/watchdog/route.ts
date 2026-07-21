@@ -33,6 +33,7 @@ const ESPERADOS: Record<string, number> = {
   "resolver-turnos-vencidos": 10,
   "reconciliar-identidad": 10,
   "aviso-agenda-vencida": 1440,
+  "saldo-servicios": 1440,
 };
 
 const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;

@@ -128,6 +128,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 09:00",
     autoRecupera: true,
   },
+  "saldo-servicios": {
+    nombre: "Vigía de saldos de servicios",
+    queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
+    impacto: "un saldo puede agotarse en silencio y frenar verificaciones o WhatsApps sin que nadie lo sepa (caso Didit 20/07)",
+    cadencia: "una vez por día a las 09:00",
+    autoRecupera: true,
+  },
   // El guardián no se monitorea a sí mismo (no está en ESPERADOS del watchdog),
   // pero sus propias fallas al correr sí alertan vía cron-guard — con ficha.
   watchdog: {
