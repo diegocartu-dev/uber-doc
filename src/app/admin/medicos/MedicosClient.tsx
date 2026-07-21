@@ -36,6 +36,7 @@ interface Medico {
   identidad_validada: boolean | null;
   biometria_exenta: boolean | null;
   didit_status: string | null;
+  identidad_revision_motivo: string | null;
   // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
   faltantes?: string[];
   faltantesCount?: number;
@@ -347,6 +348,32 @@ function BloqueIdentidad({ medico: m }: { medico: Medico }) {
         <p className="mt-1 text-xs text-red-700">
           Didit no pudo confirmar que sea quien dice ser. Revisar la credencial y el caso antes de aprobar
           (el botón de aprobar te lo va a volver a advertir).
+        </p>
+      </div>
+    );
+  }
+  // "In Review" con motivo = SINTÉTICO (Didit aprobó, el cruce de Docto no cierra)
+  // → necesita acción del ADMIN, nadie más lo va a resolver (caso Williana 20/07).
+  // Sin motivo = revisión manual REAL de Didit → esperar.
+  if (m.didit_status === "In Review" || m.didit_status === "Resubmitted") {
+    return m.identidad_revision_motivo ? (
+      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-red-800">
+          <ShieldAlert size={16} /> Necesita TU revisión — identidad aprobada, cruce sin cerrar
+        </div>
+        <p className="mt-1 text-xs text-red-700">{m.identidad_revision_motivo}</p>
+        <p className="mt-1 text-xs text-red-700">
+          Compará el dato declarado contra la credencial y REFEPS; si es un typo, corregilo en la ficha y
+          el sistema valida solo en menos de 10 minutos.
+        </p>
+      </div>
+    ) : (
+      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+          <Clock size={16} /> Didit está revisando la verificación
+        </div>
+        <p className="mt-1 text-xs text-amber-700">
+          Revisión manual del verificador (suele resolverse en horas). Nada que hacer de nuestro lado.
         </p>
       </div>
     );
@@ -686,6 +713,18 @@ function MedicoRow({
               ) : m.didit_status === "Declined" ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]">
                   <ShieldAlert size={11} /> Identidad rechazada — revisar
+                </span>
+              ) : (m.didit_status === "In Review" || m.didit_status === "Resubmitted") &&
+                m.identidad_revision_motivo ? (
+                <span
+                  title={m.identidad_revision_motivo}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
+                >
+                  <ShieldAlert size={11} /> Necesita tu revisión — cruce sin cerrar
+                </span>
+              ) : m.didit_status === "In Review" || m.didit_status === "Resubmitted" ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]">
+                  <Clock size={11} /> En revisión de Didit
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]">
