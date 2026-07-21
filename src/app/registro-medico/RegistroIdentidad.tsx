@@ -74,6 +74,13 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
         setCargando(false);
         return;
       }
+      if (!resp.ok && typeof data?.mensaje === "string") {
+        // Mensaje honesto del server (ej. Didit sin créditos): mostrarlo tal
+        // cual en vez del genérico "probá de nuevo" que no ayuda.
+        setError(data.mensaje);
+        setCargando(false);
+        return;
+      }
       if (!resp.ok || !data?.url) throw new Error(data?.error ?? "error");
       window.location.href = data.url; // redirect full a Didit (dominio externo)
     } catch {
