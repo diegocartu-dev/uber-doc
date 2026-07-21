@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertarSlotsSinDuplicar } from "@/lib/agenda/insertar-slots";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // crearAgendaModelo — ÚNICO punto de verdad para crear una agenda (modelo +
@@ -101,6 +103,44 @@ export async function crearAgendaModelo(
   input: CrearAgendaInput
 ): Promise<CrearAgendaResult> {
   const { medicoId, nombre, fecha_inicio, fecha_fin, duracion_turno, precio, franjas, canal_origen } = input;
+
+  // 0. Gate duro (Diego 20/07): sin Mercado Pago activo (+ perfil completo:
+  // firma, celular, etc.) NO se publica agenda — el paciente reservaría y el
+  // pago explotaría contra una cuenta MP inexistente. Espejo exacto del gate
+  // de "disponible" (dashboard/actions.ts). Vale para el formulario Y para
+  // Nova (ambos entran por acá — único punto de verdad). Cuentas test exentas
+  // vía perfilMedicoCompleto. Lecturas por SERVICE ROLE: la completitud
+  // incluye celular_personal (sin GRANT para authenticated — el cliente RLS
+  // devolvería null silencioso, lección del outage 19-24/06).
+  const adminGate = createAdminClient();
+  const [medicoRes, mpRes, firmaRes] = await Promise.all([
+    adminGate
+      .from("medicos")
+      .select(
+        "nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test"
+      )
+      .eq("id", medicoId)
+      .maybeSingle(),
+    adminGate
+      .from("medicos_mp_accounts")
+      .select("estado")
+      .eq("medico_id", medicoId)
+      .eq("estado", "activo")
+      .maybeSingle(),
+    adminGate.from("medico_claves").select("id").eq("medico_id", medicoId).maybeSingle(),
+  ]);
+  if (medicoRes.error || !medicoRes.data) {
+    return { ok: false, motivo: "validacion", mensaje: "No se pudo verificar tu perfil. Probá de nuevo." };
+  }
+  const onbGate = { mpConectado: !!mpRes.data, firmaConfigurada: !!firmaRes.data };
+  if (!perfilMedicoCompleto(medicoRes.data, onbGate)) {
+    const faltan = camposFaltantesMedico(medicoRes.data, onbGate).map((c) => c.label);
+    return {
+      ok: false,
+      motivo: "validacion",
+      mensaje: `Antes de abrir tu agenda completá tu perfil para poder cobrar y firmar. Falta: ${faltan.join(", ")}.`,
+    };
+  }
 
   // 1. Validación
   if (!nombre?.trim() || !fecha_inicio || !fecha_fin || !franjas || franjas.length === 0) {
