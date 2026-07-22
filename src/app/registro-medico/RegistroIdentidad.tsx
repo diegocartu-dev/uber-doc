@@ -128,12 +128,34 @@ export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVol
             Ahora Docto revisa tu cuenta. Te avisamos por email cuando esté aprobada.
           </p>
         </div>
+        {/* MP opcional en el momento perfecto (Diego 21/07): el registro YA
+            está enviado — no hay nada que perder — y el médico sigue en modo
+            trámite. 13/20 aprobados nunca conectaron MP en el "segundo viaje"
+            post-aprobación; esto captura el momentum sin arriesgar el registro.
+            El OAuth de MP no exige estar aprobado (verificado). */}
+        <div className="mt-5 rounded-xl p-4 text-left" style={{ border: "1.5px solid #378ADD", background: "rgba(55,138,221,0.05)" }}>
+          <p className="text-sm font-semibold text-gray-900">
+            ¿Querés dejar todo listo para cobrar?
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-gray-600">
+            Mientras revisamos tu cuenta, podés conectar tu Mercado Pago: los
+            pacientes te pagan ahí directo. Apenas te aprobemos, quedás listo
+            para atender.
+          </p>
+          <a
+            href="/api/mp/oauth/start"
+            className="mt-3 inline-flex w-full items-center justify-center rounded-lg py-3 text-sm font-semibold text-white transition active:scale-[0.98]"
+            style={{ background: AZUL }}
+          >
+            Conectar Mercado Pago →
+          </a>
+        </div>
         <Link
           href="/dashboard"
-          className="mt-6 inline-flex w-full items-center justify-center rounded-lg py-3.5 text-sm font-semibold text-white"
-          style={{ background: AZUL }}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-lg py-3 text-sm font-medium"
+          style={{ color: "#888780" }}
         >
-          Ir a mi panel
+          Lo hago después — ir a mi panel
         </Link>
       </div>
     );

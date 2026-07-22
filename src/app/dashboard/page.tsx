@@ -21,6 +21,7 @@ import PantallaVerificacion from "./PantallaVerificacion";
 import BotonNoPudeAtender from "./BotonNoPudeAtender";
 import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
+import BannerMercadoPago from "./BannerMercadoPago";
 import BannerIdentidad from "./BannerIdentidad";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
@@ -625,15 +626,32 @@ export default async function DashboardPage({
               </div>
             ) : null}
 
-            {/* Activación pendiente → una sola tarjeta que lleva al wizard guiado
-                (/medico/onboarding). Reemplaza el viejo collage de perfil+MP+firma. */}
-            {!perfilCompletoReal && (
+            {/* Cartel grande de MP (Diego 21/07): médico aprobado sin cuenta MP
+                activa → invitación protagonista a conectar (13/20 aprobados
+                nunca lo hicieron — el paso post-aprobación era el cementerio). */}
+            {medico.estado_registro === "aprobado" && !mpConectado && (
               <div className="mt-4">
-                <BannerActivacion
-                  faltan={camposFaltantesMedico(medico, { mpConectado, firmaConfigurada }).length}
-                />
+                <BannerMercadoPago />
               </div>
             )}
+
+            {/* Activación pendiente → una sola tarjeta que lleva al wizard guiado
+                (/medico/onboarding). MP tiene su cartel propio arriba: acá solo
+                los OTROS faltantes, para no duplicar el mismo pedido. */}
+            {!perfilCompletoReal &&
+              camposFaltantesMedico(medico, { mpConectado, firmaConfigurada }).some(
+                (c) => c.anchor !== "cobros"
+              ) && (
+                <div className="mt-4">
+                  <BannerActivacion
+                    faltan={
+                      camposFaltantesMedico(medico, { mpConectado, firmaConfigurada }).filter(
+                        (c) => c.anchor !== "cobros"
+                      ).length
+                    }
+                  />
+                </div>
+              )}
 
             {/* Hub "cómo atendés" (spec 14/07): entrada única a la config de CI,
                 agendas y consultorio privado. Sin estado acá — el hub calcula. */}

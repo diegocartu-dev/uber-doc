@@ -1,33 +1,52 @@
-"use client";
+// Cartel de conexión de Mercado Pago (pedido Diego 21/07: "un cartel grande
+// lindo que redireccione a conectar MP a todos los médicos que tengan ya
+// completa su etapa de registro"). Dato que lo motiva: 13 de 20 aprobados
+// reales (65%) nunca conectaron MP — el paso post-aprobación era el cementerio
+// del funnel, y este componente existía pero quedó huérfano (sin montar) cuando
+// BannerActivacion reemplazó al viejo collage.
+//
+// Se muestra a todo médico APROBADO sin cuenta MP activa (condición en el
+// dashboard). Azul (acción/invitación), no naranja (alerta): el registro ya
+// está completo, esto es el último empujón. CTA directo al OAuth de MP.
+// Sin promesas de tiempo (regla de la casa).
 
-interface Props {
-  mpConectado: boolean;
-}
+import { Wallet } from "lucide-react";
 
-export default function BannerMercadoPago({ mpConectado }: Props) {
-  if (mpConectado) return null;
-
+export default function BannerMercadoPago() {
   return (
-    <div className="mb-4 rounded-xl p-5" style={{ background: "#EBF4FF", border: "1px solid #378ADD" }}>
-      {/* Logo MP */}
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="6" fill="#009EE3" />
-        <path d="M8 16c0-2.5 1.5-5 4.5-5 2 0 3 1 3.5 2 .5-1 1.5-2 3.5-2 3 0 4.5 2.5 4.5 5s-2 6-8 9c-6-3-8-6.5-8-9z" fill="white" />
-      </svg>
-
-      <p className="mt-3 text-sm font-semibold text-gray-900">
-        Conectá Mercado Pago para recibir pagos
-      </p>
-      <p className="mt-1 text-sm text-gray-600">
-        Tus pacientes pagan online y vos cobrás al instante en tu cuenta.
-      </p>
-
-      <a
-        href="/api/mp/oauth/start"
-        className="mt-4 block w-full rounded-lg bg-[#378ADD] px-5 py-2.5 text-center text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
-      >
-        Conectar ahora
-      </a>
+    <div
+      className="mb-4 rounded-2xl p-6"
+      style={{
+        border: "1.5px solid #378ADD",
+        background: "linear-gradient(135deg, rgba(55,138,221,0.08), rgba(55,138,221,0.02))",
+      }}
+    >
+      <div className="flex items-start gap-4">
+        <span
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+          style={{ background: "rgba(55,138,221,0.12)" }}
+        >
+          <Wallet size={24} strokeWidth={1.75} style={{ color: "#378ADD" }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold leading-snug text-gray-900">
+            Conectá tu Mercado Pago para empezar a cobrar
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+            Tu registro ya está completo — este es el paso que te habilita a
+            atender. Los pacientes pagan la consulta y el dinero va directo a tu
+            cuenta de Mercado Pago. Sin esto no podés publicar tu agenda ni
+            activar la consulta inmediata.
+          </p>
+          <a
+            href="/api/mp/oauth/start"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-7 py-3 text-[15px] font-semibold text-white transition active:scale-[0.98] sm:w-auto"
+            style={{ backgroundColor: "#378ADD" }}
+          >
+            Conectar Mercado Pago →
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
