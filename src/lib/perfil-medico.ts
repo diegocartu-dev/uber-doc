@@ -52,7 +52,10 @@ export function camposFaltantesMedico(m: MedicoCompletitud, onb: OnboardingMedic
   if (!lleno(m.especialidad)) faltantes.push({ label: "Especialidad", anchor: "especialidad" });
   if (!lleno(m.tipo_matricula) || !lleno(m.numero_matricula))
     faltantes.push({ label: "Matrícula", anchor: "matricula" });
-  if (!lleno(m.telefono)) faltantes.push({ label: "Teléfono profesional", anchor: "telefono" });
+  // Teléfono profesional: OPCIONAL desde 22/07 (decisión Diego, caso Williana —
+  // bloqueaba a una médica 100% lista por un dato que además hoy no se imprime
+  // en ninguna receta). El BLOQUEANTE de contacto es celular_personal (avisos
+  // WhatsApp). Quien quiera un teléfono de consultorio, lo carga en su perfil.
   if (!lleno(m.celular_personal)) faltantes.push({ label: "Celular personal", anchor: "celular" });
   if (!lleno(m.domicilio_consultorio))
     faltantes.push({ label: "Domicilio del consultorio", anchor: "domicilio" });
