@@ -24,6 +24,11 @@ function fechaAR(offset = 0) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Medianoche ART expresada en UTC (ART = UTC-3 fijo, sin horario de verano).
+// Comparar timestamptz contra la fecha a secas corta a las 21:00 ART del día
+// anterior y mezcla los días.
+const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
+
 const SLOT = new Set(["disponible", "bloqueado"]);
 
 type FilaPago = {
@@ -52,6 +57,7 @@ export async function GET(req: NextRequest) {
   const sets = await setsDeTest(admin);
   const hoy = fechaAR(0);
   const hace7 = fechaAR(7);
+  const hace6 = fechaAR(6);
 
   const [
     { data: consultasHoyRaw },
@@ -61,10 +67,10 @@ export async function GET(req: NextRequest) {
     { count: ciEsperando },
     { data: medicosDispRaw },
   ] = await Promise.all([
-    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", hoy),
+    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(hoy)),
     admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct").eq("fecha", hoy),
-    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id").gte("created_at", hace7).lte("created_at", hoy + "T00:00:00"),
-    admin.from("turnos").select("id, estado, fecha, medico_id, paciente_id").gte("fecha", hace7).lte("fecha", hoy),
+    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hace7)).lt("created_at", medianocheARenUTC(hace6)),
+    admin.from("turnos").select("id, estado, fecha, medico_id, paciente_id").eq("fecha", hace7),
     admin.from("consultas").select("id", { count: "exact", head: true }).eq("estado", "esperando"),
     soloReales
       ? admin.from("medicos").select("id, nombre_completo, especialidad, disponible_desde, disponible_hasta, jurisdicciones").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false)
@@ -83,10 +89,9 @@ export async function GET(req: NextRequest) {
   const ciHoy = consultasHoy.filter(c => c.canal_origen !== "turno").length;
   const turnosHoyCount = turnosAtencionHoy.length;
 
-  const completadas7dAgo = (consultas7d ?? []).filter(c => {
-    const d = c.created_at?.slice(0, 10);
-    return d === hace7 && c.estado === "completada" && (!soloReales || !esTest(sets, c.medico_id, c.paciente_id));
-  }).length + (turnos7d ?? []).filter(t => t.fecha === hace7 && t.estado === "completado" && (!soloReales || !esTest(sets, t.medico_id, t.paciente_id))).length;
+  const completadas7dAgo = (consultas7d ?? []).filter(c =>
+    c.estado === "completada" && (!soloReales || !esTest(sets, c.medico_id, c.paciente_id))
+  ).length + (turnos7d ?? []).filter(t => t.estado === "completado" && (!soloReales || !esTest(sets, t.medico_id, t.paciente_id))).length;
 
   const delta = completadasHoy - completadas7dAgo;
 
@@ -169,7 +174,9 @@ export async function GET(req: NextRequest) {
         especialidad: med?.especialidad ?? "",
         monto: Number(t.monto) || med?.precio_consulta || 0,
         pagada: t.mp_status === "approved",
-        inicio: `${t.fecha}T${t.hora_inicio}`,
+        // Offset explícito: sin él, el server (UTC) y el sort lo leerían como
+        // UTC y el turno ordenaría 3 h antes que las CI (que traen instante real).
+        inicio: `${t.fecha}T${t.hora_inicio}-03:00`,
       };
     }),
   ].sort((a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime());
