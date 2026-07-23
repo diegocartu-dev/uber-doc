@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
+import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 
 // ── Página "Hoy" v2 (rediseño Diego 23/07) ────────────────────────────────────
 // 1. PLATA REAL, no teórica: cobrado = suma de `monto` PAGADO (mp_status
@@ -16,18 +17,6 @@ import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 // 4. Atenciones de hoy = el día completo: pendientes (turnos reservados) y
 //    hechas (con resultado), en orden cronológico, con lo PAGADO (no el precio
 //    de lista actual del médico, que reescribe el pasado si lo cambia).
-
-function fechaAR(offset = 0) {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  d.setDate(d.getDate() - offset);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-// Medianoche ART expresada en UTC (ART = UTC-3 fijo, sin horario de verano).
-// Comparar timestamptz contra la fecha a secas corta a las 21:00 ART del día
-// anterior y mezcla los días.
-const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 
 const SLOT = new Set(["disponible", "bloqueado"]);
 

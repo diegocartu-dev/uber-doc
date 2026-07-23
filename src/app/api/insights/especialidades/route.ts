@@ -3,12 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 
-function fechaAR(offset = 0) {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  d.setDate(d.getDate() - offset);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -21,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicos }, { data: consultasRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, especialidad, precio_consulta, disponible, es_cuenta_test").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, aceptada_at").gte("created_at", desde),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, aceptada_at").gte("created_at", medianocheARenUTC(desde)),
     setsDeTest(admin),
   ]);
 
