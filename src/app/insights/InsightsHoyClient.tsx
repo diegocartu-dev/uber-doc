@@ -1,65 +1,44 @@
 "use client";
 
+// Página "Hoy" v2 (rediseño Diego 23/07): plata REAL de MP (no GMV teórico ni
+// comisión hardcodeada), disponibles con jurisdicciones y CI diferenciada, sin
+// la fila de métricas chicas ("no suma en nada"), y la tabla cuenta el día
+// completo: pendientes + hechas con resultado, en orden cronológico.
+
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface HoyData {
   completadasHoy: number;
-  totalHoy: number;
   delta: number;
   ciHoy: number;
   turnosHoy: number;
   medicosActivos: number;
   ciEsperando: number;
-  gmv: number;
+  cobradoHoy: number;
   comisionDocto: number;
-  esperaPromMs: number | null;
-  retencionPct: number | null;
-  retencionBase: number;
-  noShowsHoy: number;
-  horasDisp: number;
-  medicosDispCount: number;
-  cancelTardiasCount: number;
+  netoMedicos: number;
   disponiblesAhora: {
     id: string; nombre: string; especialidad: string;
-    modos: string[]; desde: string | null; hasta: string | null;
+    ci: boolean; turnosHoy: boolean; jurisdicciones: string[];
+    desde: string | null; hasta: string | null;
   }[];
   actividad: {
     id: string; tipo: "CI" | "Turno"; estado: string;
     medico: string; paciente: string; especialidad: string;
-    precio: number; inicio: string;
+    monto: number; pagada: boolean; inicio: string;
   }[];
-}
-
-function formatMs(ms: number) {
-  const totalSec = Math.round(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${min} min ${sec} seg`;
 }
 
 function formatARS(n: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 }
 
-function salud(metrica: string, valor: number): { label: string; color: string } {
-  if (metrica === "espera") {
-    if (valor <= 5 * 60 * 1000) return { label: "Excelente", color: "#1D9E75" };
-    if (valor <= 15 * 60 * 1000) return { label: "Aceptable", color: "#BA7517" };
-    return { label: "Crítico", color: "#D85A30" };
-  }
-  if (metrica === "retencion") {
-    if (valor >= 30) return { label: "Buena", color: "#1D9E75" };
-    if (valor >= 15) return { label: "Mejorable", color: "#BA7517" };
-    return { label: "Baja", color: "#D85A30" };
-  }
-  if (metrica === "noshow") {
-    if (valor === 0) return { label: "OK", color: "#1D9E75" };
-    if (valor <= 2) return { label: "Atención", color: "#BA7517" };
-    return { label: "Crítico", color: "#D85A30" };
-  }
-  return { label: "—", color: "#888780" };
+function horaDe(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
 }
 
 export default function InsightsHoyClient() {
@@ -91,22 +70,7 @@ export default function InsightsHoyClient() {
     );
   }
 
-  const esperaSalud = data.esperaPromMs ? salud("espera", data.esperaPromMs) : null;
-  // Retención: nunca pintar verde "Buena" con muestra chica (con n=1, 100% es ruido, no señal).
-  const MUESTRA_MIN = 10;
-  const retencionConfiable = data.retencionPct != null && data.retencionBase >= MUESTRA_MIN;
-  const retencionSalud = retencionConfiable
-    ? salud("retencion", data.retencionPct!)
-    : data.retencionBase > 0
-      ? { label: "muestra chica", color: "#888780" }
-      : null;
-  const retencionValue =
-    data.retencionPct == null
-      ? "Sin datos"
-      : retencionConfiable
-        ? `${data.retencionPct}% vuelven`
-        : `${data.retencionPct}% · n=${data.retencionBase}`;
-  const noshowSalud = salud("noshow", data.noShowsHoy);
+  const pendientes = data.actividad.filter(a => ["confirmado", "en_espera", "reservado_pendiente", "esperando", "aceptada", "pagada", "en_curso"].includes(a.estado)).length;
 
   return (
     <div className="space-y-6">
@@ -117,34 +81,36 @@ export default function InsightsHoyClient() {
         </p>
       </div>
 
-      {/* DISPONIBLES AHORA — quién puede atender en este momento y en qué modo */}
+      {/* DISPONIBLES — turnos habilitados hoy y/o consulta inmediata activa */}
       {data.disponiblesAhora.length > 0 ? (
         <div className="rounded-xl bg-[#1E293B] p-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wider text-white/40">Disponibles ahora</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-white/40">Atendiendo hoy</p>
             <span className="text-xs text-white/40">{data.disponiblesAhora.length} médico(s)</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {data.disponiblesAhora.map((m) => (
-              <div key={m.id} className="min-w-[210px] flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 sm:max-w-[280px]">
+              <div key={m.id} className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 sm:max-w-[300px]">
                 <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-[#1D9E75]" />
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${m.ci ? "bg-[#1D9E75]" : "bg-white/30"}`} />
                   <span className="truncate text-sm font-medium text-white/90">{m.nombre}</span>
                 </div>
-                <p className="mt-0.5 truncate text-xs text-white/40">{m.especialidad || "—"}</p>
+                <p className="mt-0.5 truncate text-xs text-white/40">
+                  {m.especialidad || "—"}
+                  {m.jurisdicciones.length > 0 && (
+                    <span className="text-white/60"> · {m.jurisdicciones.join(", ")}</span>
+                  )}
+                </p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {m.modos.map((modo) => (
-                    <span
-                      key={modo}
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                        modo === "CI" ? "bg-[#378ADD]/20 text-[#378ADD]" : "bg-white/10 text-white/60"
-                      }`}
-                    >
-                      {modo === "CI" ? "Consulta inmediata" : "Turnos hoy"}
+                  {m.ci && (
+                    <span className="rounded bg-[#1D9E75]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#1D9E75]">
+                      CI activa{m.desde && m.hasta ? ` ${m.desde}–${m.hasta}` : ""}
                     </span>
-                  ))}
-                  {m.desde && m.hasta && (
-                    <span className="text-[10px] text-white/35">{m.desde}–{m.hasta}</span>
+                  )}
+                  {m.turnosHoy && (
+                    <span className="rounded bg-[#378ADD]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#378ADD]">
+                      Turnos hoy
+                    </span>
                   )}
                 </div>
               </div>
@@ -153,12 +119,12 @@ export default function InsightsHoyClient() {
         </div>
       ) : (
         <div className="rounded-xl border border-[#D85A30]/30 bg-[#D85A30]/10 px-4 py-3 text-center">
-          <p className="text-sm font-semibold text-[#D85A30]">Nadie disponible ahora mismo</p>
-          <p className="mt-0.5 text-xs text-white/40">Ningún médico está atendiendo en este momento.</p>
+          <p className="text-sm font-semibold text-[#D85A30]">Nadie atendiendo hoy</p>
+          <p className="mt-0.5 text-xs text-white/40">Ningún médico tiene turnos habilitados ni consulta inmediata activa.</p>
         </div>
       )}
 
-      {/* FILA 1 — Las 3 preguntas */}
+      {/* Las 3 preguntas */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Crecimiento */}
         <div className="rounded-xl bg-[#1E293B] p-6" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -182,13 +148,13 @@ export default function InsightsHoyClient() {
           </div>
         </div>
 
-        {/* Supply vs Demanda */}
+        {/* Oferta vs demanda */}
         <div className="rounded-xl bg-[#1E293B] p-6" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          <p className="text-xs font-medium uppercase tracking-wider text-white/40">¿Supply vs Demanda?</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-white/40">¿Oferta vs demanda?</p>
           <p className="mt-3 font-['Space_Grotesk'] text-4xl font-bold text-white">
             {data.medicosActivos}
           </p>
-          <p className="mt-1 text-sm text-white/50">médicos activos ahora</p>
+          <p className="mt-1 text-sm text-white/50">médicos con CI activa ahora</p>
           <p className="mt-3 text-sm text-white/40">
             {data.ciEsperando} pacientes en espera CI
           </p>
@@ -200,73 +166,54 @@ export default function InsightsHoyClient() {
           </div>
         </div>
 
-        {/* Plata */}
+        {/* Plata REAL */}
         <div className="rounded-xl bg-[#1E293B] p-6" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
           <p className="text-xs font-medium uppercase tracking-wider text-white/40">¿La plata cierra?</p>
           <p className="mt-3 font-['Space_Grotesk'] text-4xl font-bold text-white">
-            {formatARS(data.gmv)}
+            {formatARS(data.cobradoHoy)}
           </p>
-          <p className="mt-1 text-sm text-white/50">GMV hoy · teórico (precio de lista)</p>
+          <p className="mt-1 text-sm text-white/50">cobrado hoy · pagos aprobados en MP</p>
           <div className="mt-3 rounded-lg bg-[#378ADD]/10 px-3 py-2">
             <p className="text-sm font-medium text-[#378ADD]">
               Docto {formatARS(data.comisionDocto)}
             </p>
-            <p className="text-xs text-[#378ADD]/60">$1.500 × {data.completadasHoy} realizadas · falta conciliar cobrado real</p>
+            <p className="text-xs text-[#378ADD]/60">
+              comisión real de MP · médicos {formatARS(data.netoMedicos)}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* FILA 2 — 5 métricas de Elena */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <MetricSmall
-          label="Espera prom. CI"
-          value={data.esperaPromMs ? formatMs(data.esperaPromMs) : "Sin datos"}
-          salud={esperaSalud}
-        />
-        <MetricSmall
-          label="Retención (30d)"
-          value={retencionValue}
-          salud={retencionSalud}
-        />
-        <MetricSmall
-          label="No-show médicos"
-          value={`${data.noShowsHoy} hoy`}
-          salud={noshowSalud}
-        />
-        <MetricSmall
-          label="Hs médicos CI"
-          value={`${data.horasDisp} hs`}
-          sub={`${data.medicosDispCount} médicos`}
-        />
-        <MetricSmall
-          label="Cancel. tardías"
-          value={`${data.cancelTardiasCount} esta semana`}
-        />
-      </div>
-
-      {/* FILA 3 — Atenciones de hoy (reales, no slots de agenda) */}
+      {/* El día completo: pendientes + hechas */}
       <div className="rounded-xl bg-[#1E293B]" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="border-b border-white/5 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
           <h2 className="text-sm font-semibold text-white/80">Atenciones de hoy</h2>
+          {pendientes > 0 && (
+            <span className="rounded bg-[#BA7517]/20 px-2 py-0.5 text-xs font-medium text-[#BA7517]">
+              {pendientes} pendiente(s)
+            </span>
+          )}
         </div>
         {data.actividad.length === 0 ? (
-          <div className="p-8 text-center text-sm text-white/30">Todavía no hubo atenciones hoy</div>
+          <div className="p-8 text-center text-sm text-white/30">Sin atenciones ni turnos reservados para hoy</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
+                  <th className="px-5 py-3">Hora</th>
                   <th className="px-5 py-3">Médico</th>
                   <th className="hidden px-5 py-3 sm:table-cell">Paciente</th>
                   <th className="hidden px-5 py-3 lg:table-cell">Especialidad</th>
                   <th className="px-5 py-3">Canal</th>
-                  <th className="hidden px-5 py-3 sm:table-cell">Precio</th>
+                  <th className="hidden px-5 py-3 sm:table-cell">Pagado</th>
                   <th className="px-5 py-3">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {data.actividad.map((a) => (
                   <tr key={`${a.tipo}-${a.id}`} className="hover:bg-white/[0.02]">
+                    <td className="px-5 py-3 text-white/60">{horaDe(a.inicio)}</td>
                     <td className="max-w-[140px] truncate px-5 py-3 font-medium text-white/90">{a.medico}</td>
                     <td className="hidden max-w-[140px] truncate px-5 py-3 text-white/60 sm:table-cell">{a.paciente}</td>
                     <td className="hidden px-5 py-3 text-white/40 lg:table-cell">{a.especialidad || "—"}</td>
@@ -277,7 +224,13 @@ export default function InsightsHoyClient() {
                         {a.tipo}
                       </span>
                     </td>
-                    <td className="hidden px-5 py-3 text-white/70 sm:table-cell">{formatARS(a.precio)}</td>
+                    <td className="hidden px-5 py-3 sm:table-cell">
+                      {a.pagada ? (
+                        <span className="text-white/70">{formatARS(a.monto)}</span>
+                      ) : (
+                        <span className="text-white/30">{a.monto ? `${formatARS(a.monto)} · sin pago` : "—"}</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <EstadoBadge estado={a.estado} />
                     </td>
@@ -292,36 +245,32 @@ export default function InsightsHoyClient() {
   );
 }
 
-function MetricSmall({ label, value, salud, sub }: {
-  label: string; value: string; salud?: { label: string; color: string } | null; sub?: string;
-}) {
-  return (
-    <div className="rounded-xl bg-[#1E293B] p-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-      <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
-      {salud && (
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: salud.color }} />
-          <span className="text-xs" style={{ color: salud.color }}>{salud.label}</span>
-        </div>
-      )}
-      {sub && <p className="mt-1 text-xs text-white/30">{sub}</p>}
-    </div>
-  );
-}
-
+// Estados en criollo: qué pasó (o va a pasar) con esa atención.
 function EstadoBadge({ estado }: { estado: string }) {
-  const styles: Record<string, string> = {
-    completada: "bg-[#1D9E75]/20 text-[#1D9E75]",
-    completado: "bg-[#1D9E75]/20 text-[#1D9E75]",
-    en_curso: "bg-[#378ADD]/20 text-[#378ADD]",
-    esperando: "bg-[#BA7517]/20 text-[#BA7517]",
-    cancelada: "bg-[#E24B4A]/20 text-[#E24B4A]",
-    cancelado: "bg-[#E24B4A]/20 text-[#E24B4A]",
+  const map: Record<string, { label: string; cls: string }> = {
+    completada: { label: "completada", cls: "bg-[#1D9E75]/20 text-[#1D9E75]" },
+    completado: { label: "completado", cls: "bg-[#1D9E75]/20 text-[#1D9E75]" },
+    en_curso: { label: "en curso", cls: "bg-[#378ADD]/20 text-[#378ADD]" },
+    esperando: { label: "esperando al médico", cls: "bg-[#BA7517]/20 text-[#BA7517]" },
+    aceptada: { label: "aceptada · sin pagar", cls: "bg-[#BA7517]/20 text-[#BA7517]" },
+    pagada: { label: "pagada · por empezar", cls: "bg-[#BA7517]/20 text-[#BA7517]" },
+    confirmado: { label: "reservado · pendiente", cls: "bg-[#BA7517]/20 text-[#BA7517]" },
+    en_espera: { label: "paciente en sala", cls: "bg-[#378ADD]/20 text-[#378ADD]" },
+    reservado_pendiente: { label: "reservando…", cls: "bg-white/10 text-white/50" },
+    cancelada: { label: "cancelada", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    cancelado_paciente: { label: "canceló el paciente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    cancelado_medico: { label: "canceló el médico", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    ausente_medico: { label: "médico ausente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    ausente_paciente: { label: "paciente ausente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    no_show_paciente: { label: "paciente ausente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    medico_ausente: { label: "médico ausente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
+    reprogramado: { label: "reprogramado", cls: "bg-white/10 text-white/50" },
+    interrumpida: { label: "interrumpida", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
   };
+  const e = map[estado] ?? { label: estado, cls: "bg-white/10 text-white/50" };
   return (
-    <span className={`rounded px-2 py-0.5 text-xs font-medium ${styles[estado] ?? "bg-white/10 text-white/50"}`}>
-      {estado}
+    <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${e.cls}`}>
+      {e.label}
     </span>
   );
 }
