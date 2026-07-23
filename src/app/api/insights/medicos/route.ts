@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales, COMISION_DOCTO_POR_CONSULTA } from "@/lib/insights/filtro-test";
-
-function fechaAR(offset = 0) {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  d.setDate(d.getDate() - offset);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
 
 // Estados de turno que NO son atenciones (slots de agenda). Se excluyen de todo conteo.
 const SLOT = new Set(["disponible", "bloqueado"]);
@@ -26,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, precio_consulta, disponible, verificado, estado_registro, es_cuenta_test").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at").gte("created_at", desde),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at").gte("created_at", medianocheARenUTC(desde)),
     admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio").gte("fecha", desde),
     setsDeTest(admin),
   ]);
@@ -63,8 +57,10 @@ export async function GET(req: NextRequest) {
     // Última actividad: solo atenciones que OCURRIERON (atendidas) y nunca futura
     // (antes tomaba la fecha de slots de agenda futura → "30/7/2026").
     const ultimaAct = [
-      ...misConsultas.filter(c => ATENDIDA.has(c.estado)).map(c => c.created_at).filter((d): d is string => !!d && d.slice(0, 10) <= hoy),
-      ...misTurnos.filter(t => ATENDIDA.has(t.estado)).map(t => t.fecha).filter((d): d is string => !!d && d.slice(0, 10) <= hoy),
+      // fechaARdeISO: el día ARGENTINO de la consulta — el slice del ISO UTC
+      // corría al día siguiente las de 21:00-24:00 ART.
+      ...misConsultas.filter(c => ATENDIDA.has(c.estado) && c.created_at).map(c => fechaARdeISO(c.created_at)).filter(d => d <= hoy),
+      ...misTurnos.filter(t => ATENDIDA.has(t.estado)).map(t => t.fecha).filter((d): d is string => !!d && d <= hoy),
     ].sort().pop() ?? null;
 
     return {

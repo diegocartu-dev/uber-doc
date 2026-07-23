@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
+import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 
 // Panel "Funnel": recorrido del paciente en Consulta Inmediata
 //   Entró (sala de espera) → Pagó → Entró al video → Completó, + los que cancelaron,
@@ -13,13 +14,6 @@ import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 //  - Las etapas se miden por SEÑAL combinada (estado + timestamps + pago) para
 //    sortear los huecos de los timestamps.
 //  - Toggle test: por defecto excluye consultas de médicos de prueba.
-
-function fechaAR(offset = 0) {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  d.setDate(d.getDate() - offset);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 type C = { medico_id: string; paciente_id: string; estado: string; en_curso_at: string | null; mp_status: string | null; pago_id: string | null };
 const pago = (c: C) => !!(c.pago_id || c.mp_status === "approved" || ["pagada", "aceptada", "en_curso", "completada"].includes(c.estado));
@@ -35,10 +29,10 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
 
   const [{ data: consultas }, { data: medicos }, { data: pacientes }, { data: eventos }, sets] = await Promise.all([
-    admin.from("consultas").select("id, medico_id, paciente_id, estado, en_curso_at, mp_status, pago_id, created_at").gte("created_at", desde),
+    admin.from("consultas").select("id, medico_id, paciente_id, estado, en_curso_at, mp_status, pago_id, created_at").gte("created_at", medianocheARenUTC(desde)),
     admin.from("medicos").select("id, nombre_completo, es_cuenta_test"),
-    admin.from("pacientes").select("user_id, dni, fecha_nacimiento, sexo_dni, es_cuenta_test, created_at").gte("created_at", desde),
-    admin.from("eventos_funnel").select("evento, paciente_id, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado"]).gte("created_at", desde),
+    admin.from("pacientes").select("user_id, dni, fecha_nacimiento, sexo_dni, es_cuenta_test, created_at").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("eventos_funnel").select("evento, paciente_id, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado"]).gte("created_at", medianocheARenUTC(desde)),
     setsDeTest(admin),
   ]);
 

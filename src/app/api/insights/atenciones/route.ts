@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
+import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 
 // Panel "Atenciones": una fila por atención REAL (no por slot de agenda), para
 // saber qué pasó — médico, paciente, tipo, estado, duración, cobro y documentos.
@@ -12,13 +13,6 @@ import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 //  - documentos se relacionan por consulta_id / turno_id (tipo: receta, etc.).
 //  - cobro: mp_status='approved' + monto. duración: en_curso_at → fin.
 // Argentina es UTC-3 fijo.
-
-function fechaAR(offset = 0) {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  d.setDate(d.getDate() - offset);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 const ESTADO_LABEL: Record<string, string> = {
   completada: "Atendida",
@@ -56,7 +50,7 @@ export async function GET(req: NextRequest) {
       admin
         .from("consultas")
         .select("id, medico_id, paciente_id, estado, especialidad, created_at, en_curso_at, completada_at, desconectado_at, monto, mp_status")
-        .gte("created_at", desde),
+        .gte("created_at", medianocheARenUTC(desde)),
       admin
         .from("turnos")
         .select("id, medico_id, paciente_id, estado, fecha, hora_inicio, en_curso_at, desconectado_at, monto, mp_status")
