@@ -208,37 +208,6 @@ const novaTools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "reprogramar_turno",
-    description:
-      "Mueve el turno CONFIRMADO de un paciente a otro horario disponible. ANTES de llamar: 1) usá ver_agenda en la fecha actual del turno para obtener turno_origen_id (el turno del paciente); 2) usá ver_agenda en la fecha destino para encontrar un turno DISPONIBLE (nuevo_turno_id) en el horario nuevo. Si no hay un turno disponible en el horario destino, NO inventes un id: avisale al médico que no hay lugar ahí y ofrecé crear el turno o elegir otro horario. Requiere confirmación. El pago del paciente se mueve con el turno; el paciente recibe la notificación. IMPORTANTE: incluí paciente_nombre, fecha_origen y fecha_nueva legibles para que la confirmación sea clara.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        turno_origen_id: {
-          type: "string",
-          description: "UUID del turno actual del paciente (de ver_agenda en la fecha origen).",
-        },
-        nuevo_turno_id: {
-          type: "string",
-          description: "UUID de un turno DISPONIBLE al que se mueve el paciente (de ver_agenda en la fecha destino).",
-        },
-        paciente_nombre: {
-          type: "string",
-          description: "Nombre del paciente, para mostrar en la confirmación.",
-        },
-        fecha_origen: {
-          type: "string",
-          description: "Fecha y hora actuales del turno, legibles (ej: 'lunes 9 a las 10:00').",
-        },
-        fecha_nueva: {
-          type: "string",
-          description: "Fecha y hora nuevas, legibles (ej: 'jueves 12 a las 15:00').",
-        },
-      },
-      required: ["turno_origen_id", "nuevo_turno_id"],
-    },
-  },
-  {
     name: "ver_estado_pago",
     description:
       "Consulta el estado de pago de un turno específico.",
@@ -501,7 +470,7 @@ ACCIONES QUE PODÉS EJECUTAR
    - cancelar_turno: para cancelar UN turno específico.
    - cancelar_turnos_dia: para cancelar TODOS los turnos con paciente de un día entero. Usá esta cuando el médico pide cancelar "la agenda del día X" o "todos los turnos del martes". Primero usá ver_agenda para saber cuántos turnos con paciente hay, después informá el resumen ("Hay 3 turnos confirmados: Juan 10:00, María 10:30, Pedro 11:00. Voy a cancelarlos y cada paciente va a recibir la notificación para reprogramar.") y llamá cancelar_turnos_dia. La interfaz muestra confirmación al médico. No preguntés verbalmente.
 5. Desactivar disponibilidad inmediata — Describís lo que vas a hacer ("Voy a desactivar su disponibilidad — los pacientes no van a poder encontrarle hasta que la reactive"). La interfaz maneja la confirmación.
-6. Reprogramar el turno de un paciente (reprogramar_turno) — moverlo a otro horario disponible. Primero ubicás el turno con ver_agenda en la fecha actual (turno_origen_id), después buscás un turno DISPONIBLE en la fecha destino con ver_agenda (nuevo_turno_id). Si no hay lugar en el horario destino, avisás y ofrecés crear el turno o elegir otro. El pago se mueve con el turno y el paciente recibe la notificación.
+6. Mover/reprogramar un turno reservado — NO PODÉS y no existe forma de hacerlo: mover un turno pago requiere la aceptación del paciente (regla de Docto). Si el médico no puede atender un turno, ofrecele cancelarlo (cancelar_turno — el paciente recibe el aviso y el reembolso completo) o escribir a soporte@docto.com.ar si es un caso especial. Nunca sugieras cancelar-y-que-reserve-de-nuevo como forma encubierta de mover el turno.
 
 LO QUE SOLO INFORMÁS, NUNCA MODIFICÁS
 El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide cambiarlo le explicás que eso se hace desde la configuración de su perfil, no a través tuyo.
@@ -509,7 +478,7 @@ El valor de la consulta del médico: podés decirle cuánto cobra, pero si pide 
 CONFIRMACIÓN Y BOTONES — REGLA ÚNICA
 Distinguí dos cosas que NUNCA se mezclan:
 
-A) CONFIRMAR UNA ACCIÓN (crear disponibilidad, bloquear, cancelar, reprogramar, activar o desactivar disponibilidad inmediata).
+A) CONFIRMAR UNA ACCIÓN (crear disponibilidad, bloquear, cancelar, activar o desactivar disponibilidad inmediata).
 Describís lo que vas a hacer en UNA oración afirmativa y en el mismo turno llamás la herramienta. La interfaz muestra sola un botón [Confirmar]/[Cancelar]: esa es la ÚNICA confirmación. NUNCA pidas confirmación en texto ("¿confirma?", "¿avanzamos?", "¿lo bloqueo?"), NUNCA uses mostrar_opciones para un sí/no de una acción (es doble confirmación), y NUNCA digas que ya hiciste algo antes de que el médico toque Confirmar.
 Correcto: "Hay un turno de José Vélez el 29/04 a las 19:20. Lo cancelo y se le avisa al paciente." → llamás la herramienta → la UI muestra [Confirmar][Cancelar].
 Prohibido: ofrecer "[Sí, cancelar][No]" y DESPUÉS el Confirmar de la herramienta. Es doble confirmación.
@@ -544,7 +513,7 @@ El médico puede pedir lo mismo de muchas formas. Todas estas expresiones llevan
 "me desconecto / cerrá / no atiendo más / pará todo / apagá" → desactivar disponibilidad (con confirmación)
 "qué tengo / mostrá mi agenda / cómo estoy / qué turnos hay / qué me queda" → ver agenda
 "cancelá / borrá / sacá ese turno / eliminá" → cancelar (con confirmación)
-"mové / cambiá / pasá / reprogramá el turno de X al [día/hora]" → reprogramar_turno (con confirmación)
+"mové / cambiá / pasá / reprogramá el turno de X" → NO se puede: explicás que mover un turno reservado requiere la aceptación del paciente y ofrecés cancelar_turno (con reembolso al paciente) o soporte@docto.com.ar
 Si el pedido no encaja en ninguna categoría, preguntás con una sola pregunta amable qué necesita exactamente.
 
 CUANDO NO ENTENDÉS O NO PODÉS AYUDAR
@@ -678,7 +647,6 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
                       : `Cancelar turno ${toolInput.turno_id}`,
                     cancelar_turnos_dia: `Cancelar turnos del ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"}: ${toolInput.resumen ?? ""}`,
-                    reprogramar_turno: `Reprogramar a ${toolInput.paciente_nombre ?? "el paciente"}${toolInput.fecha_origen ? ` (${toolInput.fecha_origen})` : ""} → ${toolInput.fecha_nueva ?? "nuevo horario"}`,
                   };
                   controller.enqueue(
                     encoder.encode(
