@@ -58,14 +58,22 @@ eliminó entera.
    nadie lee (la Dra. escribió 3 veces). Mitigación: pie "no responder" en
    v2. Queda pensar si algún día hay atención humana por ese canal.
 
-## Decisiones pendientes de Diego al cierre de este doc
+## Resolución (Diego, 25/07 — ejecutada esa misma noche)
 
-- Reembolso de los $50.000 a la paciente Glauciana (recomendado: total y
-  proactivo; llegó puntual a su horario original y el riesgo alternativo
-  es contracargo en MP).
-- Respuesta a la Dra. Almeida Midlej (en pausa hasta definir el punto
-  anterior; su saldo real son 2 × $47.500 = $95.000 netos ya en su MP —
-  consulta del 23/07 + turno del 24/07 —, sujeto a lo que se decida sobre
-  el reembolso del turno).
-- Spec del flujo bueno a futuro: médico **propone** nuevo horario →
-  paciente **acepta** → recién ahí se mueve el turno (con Sofía/Elena).
+- **Reembolso TOTAL a la paciente: EJECUTADO** (~23:55 ART del 25/07).
+  Mecanismo: fila en `refunds_pendientes` (tipo `turno`, pago
+  `170311817924`, neto médico $47.500 + fee $2.500) + disparo manual del
+  cron `reintentar-refunds` con `CRON_SECRET` → `resueltos: 1`. El refund
+  total revierte en una llamada la parte de la médica Y el fee de Docto.
+  Regla confirmada por Diego: si el cambio de horario no fue aceptado por
+  el paciente, el médico pierde el cobro ("se jode").
+- **Mail de resolución a la Dra. Almeida Midlej: ENVIADO** (Resend
+  `9b165e9e`): reembolso realizado porque la paciente no aceptó el cambio
+  de horario; regla "los turnos otorgados no se reprograman porque el
+  proceso de cobro ya está realizado — solo el paciente puede"; su saldo
+  real ($47.500 de la consulta del 23/07, ya en su MP, liberación según
+  calendario de MP); soporte SIEMPRE por soporte@docto.com.ar.
+- **PR #304**: Nova responde con el copy exacto de la regla a cualquier
+  médico que quiera modificar un turno.
+- Queda para spec (Sofía/Elena, sin fecha): flujo médico **propone** nuevo
+  horario → paciente **acepta** → recién ahí se mueve el turno.
