@@ -39,8 +39,12 @@ function normalizarFromWhatsApp(raw: string | undefined): string {
 const TWILIO_FROM = normalizarFromWhatsApp(process.env.TWILIO_WHATSAPP_FROM);
 
 // ContentSids de las plantillas Meta aprobadas (UTILITY). NO son secretos.
-export const PLANTILLA_ACEPTAR_PACIENTE = "HX28f31177bfee51e64e6432754fb08899"; // docto_aceptar_paciente
-export const PLANTILLA_PACIENTE_ESPERANDO = "HX5b80894015160f73a08fa5b6731c5528"; // docto_paciente_esperando
+// v2 (aprobadas por Meta 26/07/2026): mismo cuerpo + cierre "No respondas este
+// canal: es solo de alertas de turnos. Escribinos a soporte@docto.com.ar" —
+// regla de Diego 25/07 tras el caso Almeida (la médica escribió 3 veces al
+// canal de avisos y nadie lee ahí). v1: HX28f31177… / HX5b80894…
+export const PLANTILLA_ACEPTAR_PACIENTE = "HX25f4187f6a159560fe86ed3087ceb8ca"; // docto_aceptar_paciente_v2
+export const PLANTILLA_PACIENTE_ESPERANDO = "HX8023671239ec07bdd66e6e238438b81b"; // docto_paciente_esperando_v2
 
 // No reenviar "paciente esperando" al mismo médico dentro de esta ventana. Cubre dos
 // casos a la vez: el cron repush cada 10 min y los re-render de la página de sala.
