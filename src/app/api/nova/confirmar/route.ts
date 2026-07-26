@@ -310,7 +310,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         exito: false,
         mensaje:
-          "Mover un turno reservado ya no está disponible: requiere la aceptación del paciente. Si no podés atender, cancelá el turno (el paciente recibe el aviso y el reembolso completo) o escribí a soporte@docto.com.ar.",
+          "No se pueden reprogramar turnos otorgados: el proceso de cobro ya está realizado. Solo el paciente puede reprogramar su turno. Si no podés atender, cancelá el turno (el paciente recibe el aviso y el reembolso completo) o escribí a soporte@docto.com.ar.",
       });
     }
 
