@@ -128,6 +128,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 09:00",
     autoRecupera: true,
   },
+  uptime: {
+    nombre: "Monitor de disponibilidad del sitio",
+    queHace: "golpea docto.com.ar cada minuto como si fuera un paciente; si el sitio no responde dos veces seguidas manda el mail rojo, y el verde cuando vuelve",
+    impacto: "sin esto, el sitio puede estar caído y nos enteramos solo si un usuario avisa (caso 504 del 27/07 que vio Diego)",
+    cadencia: "cada minuto",
+    autoRecupera: true,
+  },
   "saldo-servicios": {
     nombre: "Vigía de saldos de servicios",
     queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
