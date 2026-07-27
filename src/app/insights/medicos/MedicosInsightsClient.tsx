@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, ArrowUpDown } from "lucide-react";
+import { Loader2, ArrowUpDown, Search } from "lucide-react";
 
 interface MedicoStat {
   id: string;
@@ -14,14 +14,15 @@ interface MedicoStat {
   total: number;
   canceladas: number;
   noShows: number;
-  gmv: number;
+  cobrado: number;
   comision: number;
+  jurisdicciones: string[];
   esperaPromMs: number | null;
   retencion: number | null;
   ultimaActividad: string | null;
 }
 
-type SortKey = "nombre" | "consultas" | "gmv" | "canceladas" | "noShows" | "retencion";
+type SortKey = "nombre" | "consultas" | "cobrado" | "provincia" | "canceladas" | "noShows" | "retencion";
 
 function formatARS(n: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
@@ -33,12 +34,16 @@ function formatMs(ms: number) {
   return `${min}m ${sec}s`;
 }
 
+// Búsqueda sin tildes ni mayúsculas ("perez" encuentra "Pérez").
+const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
 export default function MedicosInsightsClient() {
   const [medicos, setMedicos] = useState<MedicoStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(30);
-  const [sortKey, setSortKey] = useState<SortKey>("gmv");
+  const [sortKey, setSortKey] = useState<SortKey>("cobrado");
   const [sortAsc, setSortAsc] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
   const sp = useSearchParams();
   const real = sp.get("real") !== "0";
 
@@ -55,29 +60,54 @@ export default function MedicosInsightsClient() {
     else { setSortKey(key); setSortAsc(false); }
   }
 
-  const sorted = [...medicos].sort((a, b) => {
-    const va = a[sortKey] ?? 0;
-    const vb = b[sortKey] ?? 0;
+  // Valor comparable por columna (provincia = jurisdicciones unidas como texto).
+  function valorDe(m: MedicoStat, key: SortKey): string | number {
+    if (key === "provincia") return m.jurisdicciones.join(", ");
+    return (m[key] as string | number | null) ?? 0;
+  }
+
+  const q = normalizar(busqueda.trim());
+  const filtrados = q
+    ? medicos.filter(m =>
+        normalizar(`${m.nombre} ${m.especialidad} ${m.jurisdicciones.join(" ")}`).includes(q)
+      )
+    : medicos;
+
+  const sorted = [...filtrados].sort((a, b) => {
+    const va = valorDe(a, sortKey);
+    const vb = valorDe(b, sortKey);
     if (typeof va === "string") return sortAsc ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
     return sortAsc ? (va as number) - (vb as number) : (vb as number) - (va as number);
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-white">Médicos</h1>
-        <div className="flex gap-1">
-          {[7, 30, 90].map(d => (
-            <button
-              key={d}
-              onClick={() => setDias(d)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                dias === d ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
-              }`}
-            >
-              {d}D
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar médico, especialidad o provincia…"
+              className="w-64 rounded-lg border border-white/10 bg-white/5 py-1.5 pl-8 pr-3 text-sm text-white placeholder-white/30 outline-none focus:border-[#378ADD]"
+            />
+          </div>
+          <div className="flex gap-1">
+            {[7, 30, 90].map(d => (
+              <button
+                key={d}
+                onClick={() => setDias(d)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  dias === d ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+                }`}
+              >
+                {d}D
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -93,9 +123,10 @@ export default function MedicosInsightsClient() {
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
                   <SortHeader label="Médico" sortKey="nombre" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 md:table-cell">Especialidad</th>
+                  <SortHeader label="Provincia" sortKey="provincia" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <SortHeader label="Atendidas" sortKey="consultas" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 md:table-cell">Total</th>
-                  <SortHeader label="GMV" sortKey="gmv" current={sortKey} asc={sortAsc} onClick={toggleSort} />
+                  <SortHeader label="Cobrado" sortKey="cobrado" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Comisión</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Espera CI</th>
                   <SortHeader label="No-shows" sortKey="noShows" current={sortKey} asc={sortAsc} onClick={toggleSort} className="hidden md:table-cell" />
@@ -105,6 +136,13 @@ export default function MedicosInsightsClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
+                {sorted.length === 0 && (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-10 text-center text-white/40">
+                      {q ? `Sin resultados para "${busqueda.trim()}".` : "Sin médicos en el período."}
+                    </td>
+                  </tr>
+                )}
                 {sorted.map(m => (
                   <tr key={m.id} className="hover:bg-white/[0.02]">
                     <td className="px-4 py-3">
@@ -114,9 +152,12 @@ export default function MedicosInsightsClient() {
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 text-white/50 md:table-cell">{m.especialidad}</td>
+                    <td className="px-4 py-3 text-white/60">
+                      {m.jurisdicciones.length > 0 ? m.jurisdicciones.join(", ") : <span className="text-white/25">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-white/70">{m.atendidas ?? m.consultas}</td>
                     <td className="hidden px-4 py-3 text-white/40 md:table-cell">{m.total ?? "—"}</td>
-                    <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.gmv)}</td>
+                    <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.cobrado)}</td>
                     <td className="hidden px-4 py-3 text-[#378ADD] lg:table-cell">{formatARS(m.comision)}</td>
                     <td className="hidden px-4 py-3 text-white/50 lg:table-cell">
                       {m.esperaPromMs ? formatMs(m.esperaPromMs) : "—"}
@@ -141,7 +182,7 @@ export default function MedicosInsightsClient() {
                       )}
                     </td>
                     <td className="hidden px-4 py-3 text-white/30 lg:table-cell">
-                      {m.ultimaActividad ? new Date(m.ultimaActividad).toLocaleDateString("es-AR") : "—"}
+                      {m.ultimaActividad ? new Date(m.ultimaActividad + "T12:00:00").toLocaleDateString("es-AR") : "—"}
                     </td>
                   </tr>
                 ))}
@@ -150,6 +191,9 @@ export default function MedicosInsightsClient() {
           </div>
         </div>
       )}
+      <p className="text-center text-[11px] text-white/25">
+        Cobrado = pagos aprobados en Mercado Pago del período (excluye reembolsos). Comisión = el fee real que registró MP.
+      </p>
     </div>
   );
 }
