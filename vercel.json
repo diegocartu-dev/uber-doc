@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/saldo-servicios",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/uptime",
+      "schedule": "* * * * *"
     }
   ]
 }
