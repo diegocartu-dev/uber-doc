@@ -7,10 +7,10 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-// Comisión de Docto por consulta ATENDIDA. Modelo vigente en producción
-// (CLAUDE.md — prueba real de pagos 10/06/2026): monto FIJO a GREBA, no un % del
-// precio. Si cambia el modelo, se cambia acá y en ningún otro lado.
-export const COMISION_DOCTO_POR_CONSULTA = 1500;
+// ⚠️ Acá vivió COMISION_DOCTO_POR_CONSULTA = 1500 — estaba MAL: la comisión
+// NUNCA fue fija, es 5% founders / 10% socios tradicionales (era 5% × $30.000
+// que coincidía). La plata real del tablero sale de lib/insights/plata.ts
+// (mp_application_fee que registró MP). No revivir la constante.
 
 export type SetsTest = { testMed: Set<string>; testPac: Set<string> };
 

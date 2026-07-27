@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
-import { setsDeTest, esTest, leerSoloReales, COMISION_DOCTO_POR_CONSULTA } from "@/lib/insights/filtro-test";
+import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
+import { cobradoDe, comisionTotalDe } from "@/lib/insights/plata";
 import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
 
 // Estados de turno que NO son atenciones (slots de agenda). Se excluyen de todo conteo.
@@ -18,12 +19,30 @@ export async function GET(req: NextRequest) {
   const hoy = fechaAR(0);
   const admin = createAdminClient();
 
-  const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, sets] = await Promise.all([
-    admin.from("medicos").select("id, nombre_completo, especialidad, precio_consulta, disponible, verificado, estado_registro, es_cuenta_test").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio").gte("fecha", desde),
+  const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
+    admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones").eq("verificado", true),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id").gte("fecha", desde),
+    // Refunds ejecutados: esos pagos siguen "approved" en consultas/turnos pero la
+    // plata VOLVIÓ al paciente (caso turno de Alexandra 24/07) — se excluyen del cobrado.
+    admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
     setsDeTest(admin),
   ]);
+  const refundeados = new Set((refundsRaw ?? []).map((r) => `${r.tipo}:${r.recurso_id}`));
+  // Un turno reprogramado guarda la plata en la fila ORIGINAL de la cadena
+  // (el pago viaja por turno_origen_id) — si el refund apunta a la fila final,
+  // hay que excluir también a sus ancestros (caso Alexandra/Glauciana 24/07).
+  {
+    const origenDe = new Map((turnosRaw ?? []).map((t) => [t.id, t.turno_origen_id as string | null]));
+    for (const r of refundsRaw ?? []) {
+      if (r.tipo !== "turno") continue;
+      let cursor = origenDe.get(r.recurso_id) ?? null;
+      for (let paso = 0; cursor && paso < 10; paso++) {
+        refundeados.add(`turno:${cursor}`);
+        cursor = origenDe.get(cursor) ?? null;
+      }
+    }
+  }
 
   // Filtro test unificado (médico O paciente) + sacar slots de agenda (no son atenciones).
   const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
@@ -39,7 +58,15 @@ export async function GET(req: NextRequest) {
     const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado_paciente" || t.estado === "cancelado_medico").length;
     const noShows = misTurnos.filter(t => t.estado === "ausente_medico").length;
     const total = misConsultas.length + misTurnos.length; // todas las atenciones (sin slots)
-    const gmv = completadas * (m.precio_consulta ?? 0);
+    // Plata REAL (ver lib/insights/plata.ts): lo aprobado en MP y el fee que MP
+    // registró — muere el GMV teórico (precio de lista × atendidas) y el
+    // hardcode de $1.500 por consulta.
+    const filasPago = [
+      ...misConsultas.filter(c => !refundeados.has(`consulta:${c.id}`)),
+      ...misTurnos.filter(t => !refundeados.has(`turno:${t.id}`)),
+    ];
+    const cobrado = cobradoDe(filasPago);
+    const comision = comisionTotalDe(filasPago);
 
     const ciConEspera = misConsultas.filter(c => c.aceptada_at && c.created_at);
     const esperaPromMs = ciConEspera.length > 0
@@ -73,15 +100,16 @@ export async function GET(req: NextRequest) {
       total,
       canceladas,
       noShows,
-      gmv,
-      comision: completadas * COMISION_DOCTO_POR_CONSULTA,
+      cobrado,
+      comision,
+      jurisdicciones: (m.jurisdicciones as string[] | null) ?? [],
       esperaPromMs,
       retencion,
       ultimaActividad: ultimaAct,
     };
   });
 
-  stats.sort((a, b) => b.gmv - a.gmv);
+  stats.sort((a, b) => b.cobrado - a.cobrado);
 
   return NextResponse.json({ medicos: stats });
 }
