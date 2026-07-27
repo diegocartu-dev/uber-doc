@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         .gte("fecha", desde),
       admin.from("documentos").select("consulta_id, turno_id, tipo"),
       admin.from("medicos").select("id, nombre_completo"),
-      admin.from("pacientes").select("user_id, nombre_completo"),
+      admin.from("pacientes").select("id, user_id, nombre_completo, provincia"),
       setsDeTest(admin),
     ]);
 
@@ -68,7 +68,17 @@ export async function GET(req: NextRequest) {
   const turnos = (turnosRaw ?? []).filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
 
   const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
-  const pacMap = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo])); // join por user_id
+  // Doble join: consultas.paciente_id = pacientes.USER_ID, pero turnos.paciente_id
+  // = pacientes.ID (caso Glauciana 24/07). Con user_id solo, los turnos quedaban "—".
+  type Pac = { nombre_completo: string | null; provincia: string | null };
+  const pacMapUser = new Map<string, Pac>();
+  const pacMapId = new Map<string, Pac>();
+  for (const p of pacientes ?? []) {
+    const pac: Pac = { nombre_completo: p.nombre_completo, provincia: p.provincia };
+    if (p.user_id) pacMapUser.set(p.user_id, pac);
+    pacMapId.set(p.id, pac);
+  }
+  const pacDe = (pid: string): Pac | undefined => pacMapUser.get(pid) ?? pacMapId.get(pid);
   const docsCI = new Map<string, Set<string>>();
   const docsTurno = new Map<string, Set<string>>();
   for (const d of documentos ?? []) {
@@ -78,7 +88,8 @@ export async function GET(req: NextRequest) {
 
   type Atencion = {
     cuandoSort: number; cuando: string; tipo: "CI" | "Turno";
-    medico: string; paciente: string; estado: string; estadoLabel: string;
+    medico: string; paciente: string; provincia: string | null;
+    estado: string; estadoLabel: string;
     atendida: boolean; duracionMin: number | null;
     cobro: { pagado: boolean; monto: number | null } | null; docs: string[];
   };
@@ -86,10 +97,12 @@ export async function GET(req: NextRequest) {
 
   for (const c of consultas ?? []) {
     const sort = new Date(c.en_curso_at ?? c.created_at).getTime();
+    const pac = pacDe(c.paciente_id);
     atenciones.push({
       cuandoSort: sort, cuando: labelAR(sort), tipo: "CI",
       medico: medMap.get(c.medico_id) ?? "—",
-      paciente: pacMap.get(c.paciente_id) ?? "—",
+      paciente: pac?.nombre_completo ?? "—",
+      provincia: pac?.provincia ?? null,
       estado: c.estado, estadoLabel: ESTADO_LABEL[c.estado] ?? c.estado,
       atendida: ATENDIDA.has(c.estado),
       duracionMin: durMin(c.en_curso_at, c.completada_at ?? c.desconectado_at),
@@ -98,10 +111,12 @@ export async function GET(req: NextRequest) {
   }
   for (const t of turnos ?? []) {
     const sort = Date.parse(`${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`);
+    const pac = pacDe(t.paciente_id);
     atenciones.push({
       cuandoSort: sort, cuando: labelAR(sort), tipo: "Turno",
       medico: medMap.get(t.medico_id) ?? "—",
-      paciente: pacMap.get(t.paciente_id) ?? "—",
+      paciente: pac?.nombre_completo ?? "—",
+      provincia: pac?.provincia ?? null,
       estado: t.estado, estadoLabel: ESTADO_LABEL[t.estado] ?? t.estado,
       atendida: ATENDIDA.has(t.estado),
       duracionMin: durMin(t.en_curso_at, t.desconectado_at),

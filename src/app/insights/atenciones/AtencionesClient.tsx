@@ -13,6 +13,7 @@ interface Atencion {
   tipo: "CI" | "Turno";
   medico: string;
   paciente: string;
+  provincia: string | null;
   estado: string;
   estadoLabel: string;
   atendida: boolean;
@@ -106,6 +107,7 @@ export default function AtencionesClient() {
                   <th className="px-3 py-3 font-medium">Tipo</th>
                   <th className="px-3 py-3 font-medium">Médico</th>
                   <th className="px-3 py-3 font-medium">Paciente</th>
+                  <th className="px-3 py-3 font-medium">Provincia</th>
                   <th className="px-3 py-3 font-medium">Estado</th>
                   <th className="px-3 py-3 font-medium">Duró</th>
                   <th className="px-3 py-3 font-medium">Documentó</th>
@@ -115,7 +117,7 @@ export default function AtencionesClient() {
               <tbody>
                 {data.atenciones.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-white/40">
+                    <td colSpan={9} className="px-4 py-10 text-center text-white/40">
                       Sin atenciones en el período.
                     </td>
                   </tr>
@@ -134,6 +136,9 @@ export default function AtencionesClient() {
                       </td>
                       <td className="px-3 py-3 text-white/90">{a.medico}</td>
                       <td className="px-3 py-3 text-white/90">{a.paciente}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                        {a.provincia ?? <span className="text-white/25">—</span>}
+                      </td>
                       <td className="px-3 py-3">
                         <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: ec + "22", color: ec }}>
                           {a.estadoLabel}
