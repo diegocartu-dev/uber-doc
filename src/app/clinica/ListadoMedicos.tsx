@@ -53,7 +53,18 @@ export default function ListadoMedicos({
     return () => clearInterval(id);
   }, [router]);
 
-  useEffect(() => { trackFunnel("clinica_vista"); }, []);
+  // Foto de la oferta EN el momento de la vista (pedido Diego 28/07: el tablero
+  // Demanda responde "¿el match estaba o no?"). Sin esto, la reconstrucción
+  // histórica es aproximada; con esto, exacta.
+  useEffect(() => {
+    trackFunnel("clinica_vista", {
+      provincia,
+      medicosVisibles: medicos.length,
+      ciOnline: medicos.filter((m) => m.habilitadoIdentidad && puedeAtenderAhora(m)).length,
+      conAgendaTurnos: new Set(turnosClinicaVirtual.map((t) => t.medico_id)).size,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const habilitadosIdentidad = useMemo(
     () => new Set(medicos.filter((m) => m.habilitadoIdentidad).map((m) => m.id)),

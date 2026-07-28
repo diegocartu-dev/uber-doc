@@ -4,20 +4,26 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 
-// Panel "Funnel": recorrido del paciente en Consulta Inmediata
-//   Entró (sala de espera) → Pagó → Entró al video → Completó, + los que cancelaron,
-// y la demanda por médico (cuántos pacientes eligieron a cada uno).
+// ── Página "Demanda" (ex Funnel) — directiva Diego 28/07 ─────────────────────
+// "Deberíamos ver esto pero desagregado: qué buscaban, cuándo, y si estaba o no
+//  disponible. Un paciente de La Pampa no encontró nada porque no hay médicos de
+//  La Pampa. Un paciente buscó CI en CABA y no había nadie disponible. ¿Los
+//  match estaban o no?"
 //
-// Notas de datos (ver memoria project_esquema_atenciones_insights):
-//  - "Aceptado" no tiene timestamp confiable (aceptada_at casi nunca se guarda) →
-//    se usa "entró al video" como proxy (si entró al video, el médico lo aceptó).
-//  - Las etapas se miden por SEÑAL combinada (estado + timestamps + pago) para
-//    sortear los huecos de los timestamps.
-//  - Toggle test: por defecto excluye consultas de médicos de prueba.
+// Cada BÚSQUEDA = una sesión de vistas de la clínica (mismo paciente, huecos de
+// más de 30 min separan sesiones). Para cada una respondemos:
+//  - quién y de qué provincia
+//  - cuánta oferta había PARA ÉL en ese momento:
+//      · snapshot exacto si el evento lo trae (se graba desde el 28/07)
+//      · si no, reconstrucción: médicos cuya jurisdicción cubre su provincia
+//        (estado ACTUAL, aproximación) + CI en línea EXACTA a esa hora vía
+//        disponibilidad_log
+//  - qué pasó después (eligió → pagó → se atendió), ventana de 2 h.
 
-type C = { medico_id: string; paciente_id: string; estado: string; en_curso_at: string | null; mp_status: string | null; pago_id: string | null };
-const pago = (c: C) => !!(c.pago_id || c.mp_status === "approved" || ["pagada", "aceptada", "en_curso", "completada"].includes(c.estado));
-const video = (c: C) => !!(c.en_curso_at || ["en_curso", "completada"].includes(c.estado));
+const SESION_GAP_MS = 30 * 60_000;
+const VENTANA_RESULTADO_MS = 2 * 3600_000;
+
+type Snapshot = { provincia?: string; medicosVisibles?: number; ciOnline?: number; conAgendaTurnos?: number };
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -26,86 +32,176 @@ export async function GET(req: NextRequest) {
   const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "30", 10) || 30, 1), 365);
   const soloReales = leerSoloReales(req.nextUrl.searchParams);
   const desde = fechaAR(dias);
+  const desdeUTC = medianocheARenUTC(desde);
   const admin = createAdminClient();
 
-  const [{ data: consultas }, { data: medicos }, { data: pacientes }, { data: eventos }, sets] = await Promise.all([
-    admin.from("consultas").select("id, medico_id, paciente_id, estado, en_curso_at, mp_status, pago_id, created_at").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("medicos").select("id, nombre_completo, es_cuenta_test"),
-    admin.from("pacientes").select("user_id, dni, fecha_nacimiento, sexo_dni, es_cuenta_test, created_at").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("eventos_funnel").select("evento, paciente_id, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado"]).gte("created_at", medianocheARenUTC(desde)),
-    setsDeTest(admin),
-  ]);
+  const [{ data: eventosRaw }, { data: pacientesRaw }, { data: medicosRaw }, { data: logRaw }, { data: consultasRaw }, sets] =
+    await Promise.all([
+      admin.from("eventos_funnel").select("evento, paciente_id, metadata, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado", "pago_aprobado"]).gte("created_at", desdeUTC).order("created_at", { ascending: true }),
+      admin.from("pacientes").select("id, user_id, nombre_completo, provincia, es_cuenta_test"),
+      admin.from("medicos").select("id, jurisdicciones, es_cuenta_test").eq("verificado", true),
+      admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeUTC).order("at", { ascending: true }),
+      admin.from("consultas").select("paciente_id, estado, created_at").gte("created_at", desdeUTC),
+      setsDeTest(admin),
+    ]);
 
-  const medMap = new Map((medicos ?? []).map((m) => [m.id, { nombre: m.nombre_completo as string, test: !!m.es_cuenta_test }]));
-  let cs = (consultas ?? []) as C[];
-  // Solo reales (default): excluye si el médico O el paciente son cuenta test.
-  if (soloReales) cs = cs.filter((c) => !esTest(sets, c.medico_id, c.paciente_id));
-
-  // Funnel TARDÍO (Consulta Inmediata, por consulta) — el que ya existía.
-  const funnel = {
-    entraron: cs.length,
-    pagaron: cs.filter(pago).length,
-    video: cs.filter(video).length,
-    completaron: cs.filter((c) => c.estado === "completada").length,
-    cancelaron: cs.filter((c) => c.estado === "cancelada").length,
-  };
-
-  // RECORRIDO COMPLETO del paciente: pacientes DISTINTOS por etapa en el período.
-  //   registró → completó perfil → entró a la clínica → eligió médico → inició pago → pagó → se atendió
-  // Las dos etapas del medio (clínica/médico) se instrumentaron el 22/06 → para
-  // períodos viejos dan 0 aunque haya habido visitas (antes no se medían). Se marcan
-  // `nuevo:true` para que la UI lo aclare y no se lea como bug.
-  let pac = (pacientes ?? []) as { user_id: string | null; dni: string | null; fecha_nacimiento: string | null; sexo_dni: string | null; es_cuenta_test: boolean | null }[];
-  if (soloReales) pac = pac.filter((p) => !p.es_cuenta_test);
-  const registro = pac.length;
-  const perfil = pac.filter((p) => p.dni && p.fecha_nacimiento && p.sexo_dni).length;
-
-  const distinctPac = (evt: string) => {
-    const s = new Set<string>();
-    for (const e of (eventos ?? []) as { evento: string; paciente_id: string | null }[]) {
-      if (e.evento !== evt || !e.paciente_id) continue;
-      if (soloReales && sets.testPac.has(e.paciente_id)) continue;
-      s.add(e.paciente_id);
-    }
-    return s.size;
-  };
-  const pagoSet = new Set<string>();
-  const atendioSet = new Set<string>();
-  for (const c of cs) {
-    if (pago(c)) pagoSet.add(c.paciente_id);
-    if (c.estado === "completada") atendioSet.add(c.paciente_id);
+  // Pacientes: eventos y consultas usan user_id, turnos usan id → doble mapa.
+  type Pac = { nombre: string; provincia: string | null; test: boolean };
+  const pacPorUser = new Map<string, Pac>();
+  const pacPorId = new Map<string, Pac>();
+  for (const p of pacientesRaw ?? []) {
+    const pac: Pac = { nombre: p.nombre_completo, provincia: p.provincia, test: !!p.es_cuenta_test };
+    if (p.user_id) pacPorUser.set(p.user_id, pac);
+    pacPorId.set(p.id, pac);
   }
+  const pacDe = (pid: string) => pacPorUser.get(pid) ?? pacPorId.get(pid);
 
-  const etapas = [
-    { etapa: "Se registró", n: registro, nuevo: false },
-    { etapa: "Completó su perfil", n: perfil, nuevo: false },
-    { etapa: "Entró a la clínica", n: distinctPac("clinica_vista"), nuevo: true },
-    { etapa: "Eligió un médico", n: distinctPac("medico_elegido"), nuevo: true },
-    { etapa: "Inició el pago", n: distinctPac("pago_creado"), nuevo: false },
-    { etapa: "Pagó", n: pagoSet.size, nuevo: false },
-    { etapa: "Se atendió", n: atendioSet.size, nuevo: false },
-  ];
-  const base = registro || 1;
-  const recorrido = etapas.map((e, i) => {
-    const prev = i > 0 ? etapas[i - 1].n : null;
-    // Sin "% del paso anterior" si no hay paso anterior o ese paso está en 0 (caso de
-    // las etapas recién instrumentadas sin historia → un % sería engañoso, no >100%).
-    const pctPaso = prev && prev > 0 ? Math.round((e.n / prev) * 100) : null;
-    return { ...e, pct: Math.round((e.n / base) * 100), pctPaso };
+  const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
+  const medicosDeProvincia = (prov: string | null): number =>
+    prov ? medicos.filter((m) => ((m.jurisdicciones as string[] | null) ?? []).includes(prov)).length : 0;
+
+  // Log de disponibilidad por médico (ordenado asc) para reconstruir CI online a un instante.
+  const logPorMedico = new Map<string, { atMs: number; online: boolean }[]>();
+  for (const l of logRaw ?? []) {
+    const arr = logPorMedico.get(l.medico_id) ?? [];
+    arr.push({ atMs: Date.parse(l.at), online: !!l.online });
+    logPorMedico.set(l.medico_id, arr);
+  }
+  const ciOnlineEn = (tMs: number, prov: string | null): number => {
+    let n = 0;
+    for (const m of medicos) {
+      if (prov && !(((m.jurisdicciones as string[] | null) ?? []).includes(prov))) continue;
+      const arr = logPorMedico.get(m.id);
+      if (!arr) continue;
+      let estado = false;
+      for (const e of arr) {
+        if (e.atMs > tMs) break;
+        estado = e.online;
+      }
+      if (estado) n++;
+    }
+    return n;
+  };
+
+  const eventos = (eventosRaw ?? []).filter((e) => {
+    if (!e.paciente_id) return false;
+    if (!soloReales) return true;
+    const pac = pacDe(e.paciente_id);
+    return !esTest(sets, null, e.paciente_id) && !pac?.test;
   });
 
-  const porMed = new Map<string, { medico: string; test: boolean; pacientes: Set<string>; consultas: number; video: number }>();
-  for (const c of cs) {
-    const info = medMap.get(c.medico_id);
-    if (!porMed.has(c.medico_id)) porMed.set(c.medico_id, { medico: info?.nombre ?? "—", test: !!info?.test, pacientes: new Set(), consultas: 0, video: 0 });
-    const e = porMed.get(c.medico_id)!;
-    e.pacientes.add(c.paciente_id);
-    e.consultas++;
-    if (video(c)) e.video++;
+  // ── Sesiones de búsqueda (clinica_vista agrupadas) ──
+  type Sesion = { pacienteId: string; t0: number; tFin: number; vistas: number; snapshot: Snapshot | null };
+  const sesiones: Sesion[] = [];
+  const ultimaSesionPorPac = new Map<string, Sesion>();
+  for (const e of eventos) {
+    if (e.evento !== "clinica_vista") continue;
+    const t = Date.parse(e.created_at);
+    const meta = (e.metadata ?? {}) as Snapshot;
+    const conSnapshot = meta.provincia != null || meta.medicosVisibles != null;
+    const prev = ultimaSesionPorPac.get(e.paciente_id);
+    if (prev && t - prev.tFin <= SESION_GAP_MS) {
+      prev.tFin = t;
+      prev.vistas++;
+      if (conSnapshot && !prev.snapshot) prev.snapshot = meta;
+    } else {
+      const s: Sesion = { pacienteId: e.paciente_id, t0: t, tFin: t, vistas: 1, snapshot: conSnapshot ? meta : null };
+      sesiones.push(s);
+      ultimaSesionPorPac.set(e.paciente_id, s);
+    }
   }
-  const demandaPorMedico = [...porMed.values()]
-    .map((e) => ({ medico: e.medico, test: e.test, pacientes: e.pacientes.size, consultas: e.consultas, video: e.video }))
-    .sort((a, b) => b.pacientes - a.pacientes || b.consultas - a.consultas);
 
-  return NextResponse.json({ dias, soloReales, recorrido, funnel, demandaPorMedico });
+  // Eventos de avance por paciente (para el resultado de cada búsqueda).
+  const avancesPorPac = new Map<string, { evento: string; tMs: number }[]>();
+  for (const e of eventos) {
+    if (e.evento === "clinica_vista") continue;
+    const arr = avancesPorPac.get(e.paciente_id) ?? [];
+    arr.push({ evento: e.evento, tMs: Date.parse(e.created_at) });
+    avancesPorPac.set(e.paciente_id, arr);
+  }
+  const consultasPorPac = new Map<string, { estado: string; tMs: number }[]>();
+  for (const c of consultasRaw ?? []) {
+    const arr = consultasPorPac.get(c.paciente_id) ?? [];
+    arr.push({ estado: c.estado, tMs: Date.parse(c.created_at) });
+    consultasPorPac.set(c.paciente_id, arr);
+  }
+
+  const busquedas = sesiones.map((s) => {
+    const pac = pacDe(s.pacienteId);
+    const provincia = s.snapshot?.provincia ?? pac?.provincia ?? null;
+    const medicosProv = s.snapshot?.medicosVisibles ?? medicosDeProvincia(provincia);
+    const ciOnline = s.snapshot?.ciOnline ?? ciOnlineEn(s.t0, provincia);
+
+    const en = (tMs: number) => tMs >= s.t0 && tMs <= s.tFin + VENTANA_RESULTADO_MS;
+    const avances = avancesPorPac.get(s.pacienteId) ?? [];
+    const eligio = avances.some((a) => a.evento === "medico_elegido" && en(a.tMs));
+    const pago = avances.some((a) => (a.evento === "pago_creado" || a.evento === "pago_aprobado") && en(a.tMs));
+    const cons = consultasPorPac.get(s.pacienteId) ?? [];
+    const seAtendio = cons.some((c) => c.estado === "completada" && en(c.tMs));
+    const pagoConsulta = pago || cons.some((c) => en(c.tMs) && ["pagada", "aceptada", "en_curso", "completada", "esperando"].includes(c.estado));
+
+    let resultado: string;
+    let matchHabia: boolean;
+    if (!provincia) {
+      resultado = "sin provincia cargada";
+      matchHabia = medicos.length > 0;
+    } else if (medicosProv === 0) {
+      resultado = "sin médicos para su provincia";
+      matchHabia = false;
+    } else if (seAtendio) {
+      resultado = "se atendió";
+      matchHabia = true;
+    } else if (pagoConsulta) {
+      resultado = "pagó";
+      matchHabia = true;
+    } else if (eligio) {
+      resultado = "eligió médico, no pagó";
+      matchHabia = true;
+    } else if (ciOnline === 0) {
+      resultado = "había médicos pero ninguno en línea";
+      matchHabia = false;
+    } else {
+      resultado = "había oferta, no eligió";
+      matchHabia = true;
+    }
+
+    return {
+      cuando: s.t0,
+      paciente: pac?.nombre ?? "—",
+      provincia,
+      vistas: s.vistas,
+      medicosProvincia: medicosProv,
+      ciOnline,
+      exacto: !!s.snapshot,
+      resultado,
+      matchHabia,
+    };
+  }).sort((a, b) => b.cuando - a.cuando);
+
+  // ── Resúmenes ──
+  const etapas = {
+    busquedas: busquedas.length,
+    eligieron: busquedas.filter((b) => ["se atendió", "pagó", "eligió médico, no pagó"].includes(b.resultado)).length,
+    pagaron: busquedas.filter((b) => ["se atendió", "pagó"].includes(b.resultado)).length,
+    seAtendieron: busquedas.filter((b) => b.resultado === "se atendió").length,
+    sinMatch: busquedas.filter((b) => !b.matchHabia).length,
+  };
+
+  const porProvincia = new Map<string, { busquedas: number; sinMatch: number; medicosHoy: number }>();
+  for (const b of busquedas) {
+    const key = b.provincia ?? "Sin provincia";
+    const e = porProvincia.get(key) ?? { busquedas: 0, sinMatch: 0, medicosHoy: medicosDeProvincia(b.provincia) };
+    e.busquedas++;
+    if (!b.matchHabia) e.sinMatch++;
+    porProvincia.set(key, e);
+  }
+
+  return NextResponse.json({
+    dias,
+    etapas,
+    porProvincia: [...porProvincia.entries()]
+      .map(([provincia, d]) => ({ provincia, ...d }))
+      .sort((a, b) => b.busquedas - a.busquedas),
+    busquedas: busquedas.slice(0, 100),
+  });
 }

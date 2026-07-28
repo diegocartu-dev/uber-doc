@@ -4,36 +4,41 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-interface Funnel {
-  entraron: number;
-  pagaron: number;
-  video: number;
-  completaron: number;
-  cancelaron: number;
-}
-interface MedFila {
-  medico: string;
-  test: boolean;
-  pacientes: number;
-  consultas: number;
-  video: number;
-}
-interface Etapa {
-  etapa: string;
-  n: number;
-  nuevo: boolean;
-  pct: number;
-  pctPaso: number | null;
-}
-interface Data {
-  dias: number;
-  soloReales: boolean;
-  recorrido: Etapa[];
-  funnel: Funnel;
-  demandaPorMedico: MedFila[];
+interface Busqueda {
+  cuando: number;
+  paciente: string;
+  provincia: string | null;
+  vistas: number;
+  medicosProvincia: number;
+  ciOnline: number;
+  exacto: boolean;
+  resultado: string;
+  matchHabia: boolean;
 }
 
-const pct = (n: number, base: number) => (base > 0 ? Math.round((n / base) * 100) : 0);
+interface Data {
+  dias: number;
+  etapas: { busquedas: number; eligieron: number; pagaron: number; seAtendieron: number; sinMatch: number };
+  porProvincia: { provincia: string; busquedas: number; sinMatch: number; medicosHoy: number }[];
+  busquedas: Busqueda[];
+}
+
+const RESULTADO_COLOR: Record<string, string> = {
+  "se atendió": "#1D9E75",
+  "pagó": "#1D9E75",
+  "eligió médico, no pagó": "#BA7517",
+  "había oferta, no eligió": "#888780",
+  "había médicos pero ninguno en línea": "#D85A30",
+  "sin médicos para su provincia": "#E24B4A",
+  "sin provincia cargada": "#888780",
+};
+
+function horaDe(ms: number) {
+  return new Date(ms).toLocaleString("es-AR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    hour12: false, timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
 
 export default function FunnelClient() {
   const [data, setData] = useState<Data | null>(null);
@@ -50,118 +55,122 @@ export default function FunnelClient() {
       .finally(() => setLoading(false));
   }, [dias, real]);
 
-  const recorrido = data?.recorrido ?? [];
-  const registro = recorrido[0]?.n ?? 0;
-
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">Funnel de pacientes</h1>
-          <p className="text-sm text-white/50">El recorrido completo: de cuántos se registran, cuántos llegan a cada paso hasta atenderse.</p>
+          <h1 className="text-xl font-semibold text-white">Demanda</h1>
+          <p className="text-sm text-white/50">
+            Quién buscó atención, cuándo, y si el match estaba: cuánta oferta había para su provincia en ese momento.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1">
-            {[7, 30, 90].map((d) => (
-              <button
-                key={d}
-                onClick={() => setDias(d)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                  dias === d ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
-                }`}
-              >
-                {d}D
-              </button>
-            ))}
-          </div>
+        <div className="flex gap-1">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDias(d)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                dias === d ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              {d}D
+            </button>
+          ))}
         </div>
       </div>
 
       {loading || !data ? (
-        <div className="flex justify-center py-16">
+        <div className="flex items-center justify-center py-16">
           <Loader2 size={24} className="animate-spin text-white/30" />
         </div>
       ) : (
         <>
-          {/* Recorrido completo del paciente */}
-          <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
-            <h2 className="mb-1 text-sm font-semibold text-white">Recorrido del paciente</h2>
-            <p className="mb-4 text-xs text-white/40">
-              Pacientes distintos que llegan a cada paso. El % es sobre los que se registraron.
-            </p>
-            {registro === 0 ? (
-              <p className="py-8 text-center text-sm text-white/40">Sin registros reales en el período.</p>
-            ) : (
-              <div className="space-y-3">
-                {recorrido.map((e, i) => {
-                  const esFinal = i === recorrido.length - 1;
-                  const color = esFinal ? "#1D9E75" : "#378ADD";
-                  return (
-                    <div key={e.etapa}>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="text-white/80">
-                          {e.etapa}
-                          {e.nuevo && (
-                            <span className="ml-2 text-[10px] text-white/30">midiendo desde 22/06</span>
-                          )}
-                        </span>
-                        <span className="text-white/50">
-                          <span className="font-semibold text-white">{e.n}</span> · {e.pct}%
-                          {e.pctPaso != null && <span className="ml-2 text-[11px] text-white/35">({e.pctPaso}% del paso anterior)</span>}
-                        </span>
-                      </div>
-                      <div className="h-7 w-full overflow-hidden rounded bg-white/5">
-                        <div className="h-full rounded" style={{ width: `${Math.max(e.pct, 2)}%`, background: color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="flex items-center justify-between pt-2 text-sm">
-                  <span className="text-[#E24B4A]">Cancelaron / se cayeron (de las consultas)</span>
-                  <span className="font-semibold text-[#E24B4A]">{data.funnel.cancelaron}</span>
-                </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {[
+              { l: "Búsquedas", v: data.etapas.busquedas, c: "text-white" },
+              { l: "Eligieron médico", v: data.etapas.eligieron, c: "text-white" },
+              { l: "Pagaron", v: data.etapas.pagaron, c: "text-white" },
+              { l: "Se atendieron", v: data.etapas.seAtendieron, c: "text-[#1D9E75]" },
+              { l: "Sin match", v: data.etapas.sinMatch, c: data.etapas.sinMatch > 0 ? "text-[#E24B4A]" : "text-white/40" },
+            ].map((k) => (
+              <div key={k.l} className="rounded-xl border border-white/10 bg-[#1E293B] p-4">
+                <div className={`text-2xl font-bold ${k.c}`}>{k.v}</div>
+                <div className="text-xs text-white/40">{k.l}</div>
               </div>
-            )}
-          </section>
+            ))}
+          </div>
 
-          {/* Demanda por médico */}
-          <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
-            <h2 className="mb-1 text-sm font-semibold text-white">¿A qué médico eligieron?</h2>
-            <p className="mb-4 text-xs text-white/40">Cuántos pacientes distintos eligieron a cada médico (y cuántos llegaron al video).</p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
-                    <th className="py-2 pr-3 font-medium">Médico</th>
-                    <th className="px-3 py-2 font-medium">Pacientes</th>
-                    <th className="px-3 py-2 font-medium">Consultas (total)</th>
-                    <th className="px-3 py-2 font-medium">Llegaron al video</th>
+          <div className="rounded-xl border border-white/10 bg-[#1E293B] p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Demanda por provincia</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {data.porProvincia.map((p) => (
+                <div
+                  key={p.provincia}
+                  className={`rounded-lg border px-3 py-1.5 text-xs ${
+                    p.sinMatch > 0 ? "border-[#E24B4A]/40 bg-[#E24B4A]/10" : "border-white/10 bg-white/[0.03]"
+                  }`}
+                >
+                  <span className="font-medium text-white/80">{p.provincia}</span>
+                  <span className="ml-2 text-white/50">{p.busquedas} búsq.</span>
+                  <span className="ml-2 text-white/35">{p.medicosHoy} méd. hoy</span>
+                  {p.sinMatch > 0 && <span className="ml-2 font-medium text-[#E24B4A]">{p.sinMatch} sin match</span>}
+                </div>
+              ))}
+              {data.porProvincia.length === 0 && <p className="text-xs text-white/30">Sin búsquedas en el período.</p>}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#1E293B]">
+            <table className="w-full min-w-[880px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
+                  <th className="px-4 py-3 font-medium">Cuándo</th>
+                  <th className="px-3 py-3 font-medium">Paciente</th>
+                  <th className="px-3 py-3 font-medium">Provincia</th>
+                  <th className="px-3 py-3 font-medium" title="Médicos habilitados para su provincia en ese momento">Méd. p/su prov.</th>
+                  <th className="px-3 py-3 font-medium" title="De esos, cuántos estaban EN LÍNEA para consulta inmediata en ese instante">CI en línea</th>
+                  <th className="px-3 py-3 font-medium">Qué pasó</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.busquedas.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-white/40">Sin búsquedas en el período.</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {data.demandaPorMedico.length === 0 && (
-                    <tr><td colSpan={4} className="py-8 text-center text-white/40">Sin datos en el período.</td></tr>
-                  )}
-                  {data.demandaPorMedico.map((m, i) => (
+                )}
+                {data.busquedas.map((b, i) => {
+                  const c = RESULTADO_COLOR[b.resultado] ?? "#888780";
+                  return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
-                      <td className="py-2.5 pr-3 text-white/90">
-                        {m.medico}
-                        {m.test && <span className="ml-2 rounded bg-[#BA7517]/20 px-1.5 py-0.5 text-[10px] text-[#BA7517]">test</span>}
+                      <td className="whitespace-nowrap px-4 py-3 text-white/70">
+                        {horaDe(b.cuando)}
+                        {b.vistas > 1 && <span className="ml-1 text-[10px] text-white/30">×{b.vistas}</span>}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-white">{m.pacientes}</td>
-                      <td className="px-3 py-2.5 text-white/70">{m.consultas}</td>
-                      <td className="px-3 py-2.5 text-white/70">
-                        {m.video} <span className="text-white/35">({pct(m.video, m.consultas)}%)</span>
+                      <td className="px-3 py-3 text-white/90">{b.paciente}</td>
+                      <td className="px-3 py-3 text-white/60">{b.provincia ?? <span className="text-white/25">—</span>}</td>
+                      <td className="px-3 py-3 text-white/70">
+                        {b.medicosProvincia}
+                        {!b.exacto && <span className="ml-0.5 text-white/25" title="Reconstruido con la oferta actual (el evento no guardó la foto)">*</span>}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={b.ciOnline > 0 ? "text-white/70" : "text-[#D85A30]"}>{b.ciOnline}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: c + "22", color: c }}>
+                          {b.resultado}
+                        </span>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           <p className="text-center text-[11px] text-white/25">
-            "Entró a la clínica" y "Eligió un médico" se empezaron a medir el 22/06 — para períodos anteriores dan 0 aunque haya habido visitas (antes no se registraban). De acá en adelante se llenan con cada paciente que entra.
+            Una búsqueda = una visita a la clínica (entradas del mismo paciente con menos de 30 min de diferencia cuentan como una).
+            "CI en línea" se reconstruye del registro histórico de disponibilidad al instante exacto de la búsqueda.
+            * = médicos por provincia estimados con la oferta actual; desde el 28/07 cada búsqueda guarda la foto exacta.
           </p>
         </>
       )}
