@@ -47,11 +47,15 @@ export default function FunnelClient() {
   const sp = useSearchParams();
   const real = sp.get("real") !== "0";
 
+  const [error, setError] = useState(false);
+
   useEffect(() => {
     setLoading(true);
+    setError(false);
     fetch(`/api/insights/funnel?dias=${dias}&real=${real ? 1 : 0}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then(setData)
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [dias, real]);
 
@@ -79,7 +83,14 @@ export default function FunnelClient() {
         </div>
       </div>
 
-      {loading || !data ? (
+      {error ? (
+        <div className="rounded-xl border border-white/10 bg-[#1E293B] p-12 text-center">
+          <p className="text-sm text-white/50">No se pudieron cargar los datos.</p>
+          <button onClick={() => window.location.reload()} className="mt-3 rounded-lg bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">
+            Reintentar
+          </button>
+        </div>
+      ) : loading || !data ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 size={24} className="animate-spin text-white/30" />
         </div>
