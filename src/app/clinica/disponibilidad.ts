@@ -84,6 +84,21 @@ export function formatFechaTurno(fecha: string, horaInicio: string): string {
   return `${dia} - ${normalizeTime(horaInicio)} h`;
 }
 
+// Versión relativa en criollo para el BOTÓN de turno (pedido Diego 28/07):
+// "Hoy 16:00", "Mañana 09:30", después "jue 30 jul 16:00".
+export function formatFechaTurnoCorta(fecha: string, horaInicio: string): string {
+  const hoy = new Date();
+  const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  const man = new Date(hoy.getTime() + 86_400_000);
+  const manISO = `${man.getFullYear()}-${String(man.getMonth() + 1).padStart(2, "0")}-${String(man.getDate()).padStart(2, "0")}`;
+  const hora = normalizeTime(horaInicio);
+  if (fecha === hoyISO) return `Hoy ${hora}`;
+  if (fecha === manISO) return `Mañana ${hora}`;
+  const [y, mo, d] = fecha.split("-").map(Number);
+  const dt = new Date(y, (mo ?? 1) - 1, d ?? 1);
+  return `${dt.toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })} ${hora}`;
+}
+
 export function formatPrecio(precio: number | null): string {
   // precio_consulta puede ser NULL (modelo nuevo sin config). En ese caso no
   // mostramos "$0" (engañoso) sino un placeholder; igual esos médicos no son

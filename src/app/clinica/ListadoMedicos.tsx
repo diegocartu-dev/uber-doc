@@ -12,7 +12,7 @@ import {
   puedeAtenderAhora,
   semaforoEspera,
   proximoTurnoPorMedico,
-  formatFechaTurno,
+  formatFechaTurnoCorta,
   formatPrecio,
   normalizeTexto,
   ordenarMedicos,
@@ -45,6 +45,8 @@ export default function ListadoMedicos({
   const [busqueda, setBusqueda] = useState("");
   const [emailLead, setEmailLead] = useState("");
   const [leadEnviado, setLeadEnviado] = useState(false);
+  // Atajo "sin CI → próximo turno" (Diego 28/07): se ofrece UNA vez por visita.
+  const [atajoCerrado, setAtajoCerrado] = useState(false);
 
   // Polling cada 15s: mantiene el semáforo vivo sin refresh manual (regla del proyecto:
   // no depender solo de Realtime). Conserva el comportamiento de la grilla anterior.
@@ -62,6 +64,7 @@ export default function ListadoMedicos({
       medicosVisibles: medicos.length,
       ciOnline: medicos.filter((m) => m.habilitadoIdentidad && puedeAtenderAhora(m)).length,
       conAgendaTurnos: new Set(turnosClinicaVirtual.map((t) => t.medico_id)).size,
+      atajoVisible,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -88,6 +91,31 @@ export default function ListadoMedicos({
     ? medicos.filter((m) => normalizeTexto(m.especialidad).includes(termino) || normalizeTexto(m.nombre_completo).includes(termino))
     : medicos;
   const ordenados = ordenarMedicos(filtrados, esperasPorMedico, turnoMasCercano, medicosConTurnos);
+
+  // Nadie del listado visible puede atender AHORA pero hay turnos → ofrecer el
+  // más próximo de la especialidad visible (sin precio: el precio se ve recién
+  // en la pantalla de reserva — decisión Diego 28/07).
+  const hayCIVisible = ordenados.some((m) => puedeAtenderAhora(m));
+  const mejorTurno = useMemo(() => {
+    let best: { medico: Medico; turno: TurnoClinicaVirtual } | null = null;
+    for (const m of ordenados) {
+      if (!medicosConTurnos.has(m.id)) continue;
+      const t = turnoMasCercano.get(m.id);
+      if (!t) continue;
+      if (!best || t.fecha < best.turno.fecha || (t.fecha === best.turno.fecha && t.hora_inicio < best.turno.hora_inicio)) {
+        best = { medico: m, turno: t };
+      }
+    }
+    return best;
+  }, [ordenados, medicosConTurnos, turnoMasCercano]);
+  const atajoVisible = flagTurnosActivos && !atajoCerrado && ordenados.length > 0 && !hayCIVisible && !!mejorTurno;
+
+  function reservarAtajo() {
+    if (!mejorTurno) return;
+    trackFunnel("medico_elegido", { medicoId: mejorTurno.medico.id, modo: "turno", origen: "atajo_sin_ci" });
+    setAtajoCerrado(true);
+    router.push(`/clinica/${mejorTurno.medico.id}/turnos`);
+  }
 
   function elegirCI(m: Medico) {
     trackFunnel("medico_elegido", { medicoId: m.id, modo: "ci", especialidad: m.especialidad });
@@ -200,6 +228,33 @@ export default function ListadoMedicos({
         <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "#D85A30" }} />Solo programada</span>
       </div>
 
+      {atajoVisible && mejorTurno && (
+        <div className="fixed inset-0 flex items-center justify-center p-5" style={{ zIndex: 9999, backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="w-full max-w-[340px] rounded-2xl bg-white p-5 text-center" role="dialog" aria-modal="true">
+            <p className="text-[16px] font-semibold text-gray-900">Sin médicos en consulta inmediata en este momento.</p>
+            <p className="mt-2.5 text-[14px] leading-relaxed text-gray-700">
+              El próximo turno de <span className="font-medium">{mejorTurno.medico.especialidad}</span> es{" "}
+              <span className="font-medium text-gray-900">{formatFechaTurnoCorta(mejorTurno.turno.fecha, mejorTurno.turno.hora_inicio)} h</span>
+              <br />con {capitalizarNombre(mejorTurno.medico.nombre_completo)}
+            </p>
+            <button
+              onClick={reservarAtajo}
+              className="mt-4 w-full rounded-xl py-3 text-[15px] font-medium text-white active:scale-[0.98]"
+              style={{ backgroundColor: "#378ADD" }}
+            >
+              Reservar ese turno
+            </button>
+            <button
+              onClick={() => setAtajoCerrado(true)}
+              className="mt-2 w-full rounded-xl border py-2.5 text-[14px] font-medium text-gray-600"
+              style={{ borderColor: "#d6d3d1" }}
+            >
+              Buscar otro turno
+            </button>
+          </div>
+        </div>
+      )}
+
       {ordenados.length === 0 ? (
         <p className="py-10 text-center text-[15px] text-gray-500">No encontramos médicos para “{busqueda}”.</p>
       ) : (
@@ -231,14 +286,12 @@ export default function ListadoMedicos({
                       <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
                     </div>
                     <p className="mt-0.5 truncate text-[13px] text-gray-500">{m.especialidad}</p>
-                    <p className="mt-0.5 text-[13px] font-medium" style={{ color: disponibleAhora ? esperaInfo.color : m.ciBloqueadaPorTurno ? "#BA7517" : tieneTurno && proxTurno ? "#374151" : "#9ca3af" }}>
+                    <p className="mt-0.5 text-[13px] font-medium" style={{ color: disponibleAhora ? esperaInfo.color : m.ciBloqueadaPorTurno ? "#BA7517" : "#9ca3af" }}>
                       {disponibleAhora
                         ? esperaInfo.texto
                         : m.ciBloqueadaPorTurno
                           ? "Atendiendo un turno ahora"
-                          : tieneTurno && proxTurno
-                            ? `Próximo turno: ${formatFechaTurno(proxTurno.fecha, proxTurno.hora_inicio)}`
-                            : "No disponible ahora"}
+                          : "No disponible ahora"}
                     </p>
                     <p className="mt-0.5 text-[12px] text-gray-400">{formatPrecio(m.precio_consulta)} · {m.duracion_consulta} min</p>
                   </div>
@@ -258,10 +311,15 @@ export default function ListadoMedicos({
                     <a
                       href={`/clinica/${m.id}/turnos`}
                       onClick={() => trackFunnel("medico_elegido", { medicoId: m.id, modo: "turno" })}
-                      className="rounded-lg px-3 py-2 text-center text-[13px] font-medium transition-colors hover:bg-[#f0f0f0]"
+                      className="rounded-lg px-3 py-2 text-center text-[13px] font-medium leading-snug transition-colors hover:bg-[#f0f0f0]"
                       style={{ backgroundColor: "#f5f5f4", color: "#57534e" }}
                     >
                       Agendar turno
+                      {proxTurno && (
+                        <span className="block text-[12px] font-medium" style={{ color: "#378ADD" }}>
+                          {formatFechaTurnoCorta(proxTurno.fecha, proxTurno.hora_inicio)}
+                        </span>
+                      )}
                     </a>
                   )}
                 </div>
