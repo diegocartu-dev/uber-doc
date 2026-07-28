@@ -27,6 +27,13 @@ test.describe("Clínica Virtual — ruteo por jurisdicción", () => {
     await expect(
       page.getByTestId("listado-medicos").or(page.getByTestId("listado-vacio"))
     ).toBeVisible({ timeout: 15000 });
+
+    // Atajo "sin CI → próximo turno" (28/07): si nadie está en línea, el dialog
+    // se superpone al listado. Cerrarlo como lo haría un usuario real.
+    const cerrarAtajo = page.getByRole("button", { name: "Buscar otro turno" });
+    if (await cerrarAtajo.isVisible().catch(() => false)) {
+      await cerrarAtajo.click();
+    }
   });
 
   test("TEST 08 — el listado ofrece médicos accionables o un estado claro (o captura de lead si vacío)", async ({ page }) => {
