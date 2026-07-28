@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
 
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
-    admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, aceptada_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones, precio_consulta").eq("verificado", true),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
     admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id").gte("fecha", desde),
     // Refunds ejecutados: esos pagos siguen "approved" en consultas/turnos pero la
     // plata VOLVIÓ al paciente (caso turno de Alexandra 24/07) — se excluyen del cobrado.
@@ -29,6 +29,18 @@ export async function GET(req: NextRequest) {
     setsDeTest(admin),
   ]);
   const refundeados = new Set((refundsRaw ?? []).map((r) => `${r.tipo}:${r.recurso_id}`));
+
+  // Valor por canal (pedido Diego 27/07): el monto de la ÚLTIMA CI y del ÚLTIMO
+  // turno de cada médico, sobre TODO el histórico (no la ventana del período).
+  // Escala actual (~centenares de filas) banca el reduce en JS sin distinct-on.
+  const [{ data: ultimasCI }, { data: ultimosTurnos }] = await Promise.all([
+    admin.from("consultas").select("medico_id, monto, created_at").not("monto", "is", null).order("created_at", { ascending: false }).limit(2000),
+    admin.from("turnos").select("medico_id, monto, fecha, hora_inicio").not("monto", "is", null).order("fecha", { ascending: false }).order("hora_inicio", { ascending: false }).limit(2000),
+  ]);
+  const valorCIde = new Map<string, number>();
+  for (const c of ultimasCI ?? []) if (!valorCIde.has(c.medico_id)) valorCIde.set(c.medico_id, Number(c.monto));
+  const valorTurnoDe = new Map<string, number>();
+  for (const t of ultimosTurnos ?? []) if (!valorTurnoDe.has(t.medico_id)) valorTurnoDe.set(t.medico_id, Number(t.monto));
   // Un turno reprogramado guarda la plata en la fila ORIGINAL de la cadena
   // (el pago viaja por turno_origen_id) — si el refund apunta a la fila final,
   // hay que excluir también a sus ancestros (caso Alexandra/Glauciana 24/07).
@@ -68,19 +80,6 @@ export async function GET(req: NextRequest) {
     const cobrado = cobradoDe(filasPago);
     const comision = comisionTotalDe(filasPago);
 
-    const ciConEspera = misConsultas.filter(c => c.aceptada_at && c.created_at);
-    const esperaPromMs = ciConEspera.length > 0
-      ? ciConEspera.reduce((s, c) => s + (new Date(c.aceptada_at!).getTime() - new Date(c.created_at).getTime()), 0) / ciConEspera.length
-      : null;
-
-    const pacientes = new Set([...misConsultas.map(c => c.paciente_id), ...misTurnos.map(t => t.paciente_id)]);
-    const pacientesRepeat = new Map<string, number>();
-    for (const c of misConsultas) pacientesRepeat.set(c.paciente_id, (pacientesRepeat.get(c.paciente_id) ?? 0) + 1);
-    for (const t of misTurnos) pacientesRepeat.set(t.paciente_id, (pacientesRepeat.get(t.paciente_id) ?? 0) + 1);
-    const repiten = [...pacientesRepeat.values()].filter(n => n > 1).length;
-    // Sin pacientes → retención indefinida ("—"), NO 0% ni 100%.
-    const retencion = pacientes.size > 0 ? Math.round((repiten / pacientes.size) * 100) : null;
-
     // Última actividad: solo atenciones que OCURRIERON (atendidas) y nunca futura
     // (antes tomaba la fecha de slots de agenda futura → "30/7/2026").
     const ultimaAct = [
@@ -103,8 +102,11 @@ export async function GET(req: NextRequest) {
       cobrado,
       comision,
       jurisdicciones: (m.jurisdicciones as string[] | null) ?? [],
-      esperaPromMs,
-      retencion,
+      // Valor CI: última CI real; si nunca tuvo, su precio configurado (lo que
+      // costaría hoy). Valor turno: su último turno con precio (incluye slots
+      // ofrecidos → refleja el precio vigente de su agenda).
+      valorCI: valorCIde.get(m.id) ?? m.precio_consulta ?? null,
+      valorTurno: valorTurnoDe.get(m.id) ?? null,
       ultimaActividad: ultimaAct,
     };
   });

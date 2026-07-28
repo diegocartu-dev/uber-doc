@@ -17,22 +17,17 @@ interface MedicoStat {
   cobrado: number;
   comision: number;
   jurisdicciones: string[];
-  esperaPromMs: number | null;
-  retencion: number | null;
+  valorCI: number | null;
+  valorTurno: number | null;
   ultimaActividad: string | null;
 }
 
-type SortKey = "nombre" | "consultas" | "cobrado" | "provincia" | "canceladas" | "noShows" | "retencion";
+type SortKey = "nombre" | "consultas" | "cobrado" | "provincia" | "canceladas" | "noShows" | "valorCI" | "valorTurno";
 
 function formatARS(n: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 }
 
-function formatMs(ms: number) {
-  const min = Math.floor(ms / 60000);
-  const sec = Math.round((ms % 60000) / 1000);
-  return `${min}m ${sec}s`;
-}
 
 // Búsqueda sin tildes ni mayúsculas ("perez" encuentra "Pérez").
 const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -128,10 +123,10 @@ export default function MedicosInsightsClient() {
                   <th className="hidden px-4 py-3 md:table-cell">Total</th>
                   <SortHeader label="Cobrado" sortKey="cobrado" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Comisión</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">Espera CI</th>
+                  <SortHeader label="Valor turno" sortKey="valorTurno" current={sortKey} asc={sortAsc} onClick={toggleSort} />
+                  <SortHeader label="Valor CI" sortKey="valorCI" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <SortHeader label="No-shows" sortKey="noShows" current={sortKey} asc={sortAsc} onClick={toggleSort} className="hidden md:table-cell" />
                   <SortHeader label="Cancel." sortKey="canceladas" current={sortKey} asc={sortAsc} onClick={toggleSort} className="hidden md:table-cell" />
-                  <SortHeader label="Retención" sortKey="retencion" current={sortKey} asc={sortAsc} onClick={toggleSort} />
                   <th className="hidden px-4 py-3 lg:table-cell">Última act.</th>
                 </tr>
               </thead>
@@ -159,27 +154,17 @@ export default function MedicosInsightsClient() {
                     <td className="hidden px-4 py-3 text-white/40 md:table-cell">{m.total ?? "—"}</td>
                     <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.cobrado)}</td>
                     <td className="hidden px-4 py-3 text-[#378ADD] lg:table-cell">{formatARS(m.comision)}</td>
-                    <td className="hidden px-4 py-3 text-white/50 lg:table-cell">
-                      {m.esperaPromMs ? formatMs(m.esperaPromMs) : "—"}
+                    <td className="px-4 py-3 text-white/70">
+                      {m.valorTurno != null ? formatARS(m.valorTurno) : <span className="text-white/25">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-white/70">
+                      {m.valorCI != null ? formatARS(m.valorCI) : <span className="text-white/25">—</span>}
                     </td>
                     <td className="hidden px-4 py-3 md:table-cell">
                       <span className={m.noShows > 0 ? "text-[#D85A30]" : "text-white/40"}>{m.noShows}</span>
                     </td>
                     <td className="hidden px-4 py-3 md:table-cell">
                       <span className={m.canceladas > 2 ? "text-[#D85A30]" : "text-white/40"}>{m.canceladas}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.retencion == null ? (
-                        <span className="text-white/25" title="Sin consultas en el período">—</span>
-                      ) : (
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          m.retencion >= 30 ? "bg-[#1D9E75]/20 text-[#1D9E75]" :
-                          m.retencion >= 15 ? "bg-[#BA7517]/20 text-[#BA7517]" :
-                          "bg-white/10 text-white/40"
-                        }`}>
-                          {m.retencion}%
-                        </span>
-                      )}
                     </td>
                     <td className="hidden px-4 py-3 text-white/30 lg:table-cell">
                       {m.ultimaActividad ? new Date(m.ultimaActividad + "T12:00:00").toLocaleDateString("es-AR") : "—"}
@@ -192,7 +177,7 @@ export default function MedicosInsightsClient() {
         </div>
       )}
       <p className="text-center text-[11px] text-white/25">
-        Cobrado = pagos aprobados en Mercado Pago del período (excluye reembolsos). Comisión = el fee real que registró MP.
+        Cobrado = pagos aprobados en Mercado Pago del período (excluye reembolsos). Comisión = el fee real que registró MP. Valor turno / Valor CI = el precio de su última atención de cada tipo (o su precio configurado si aún no tuvo).
       </p>
     </div>
   );
