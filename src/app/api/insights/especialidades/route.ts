@@ -2,8 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
-
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+
+// ── Página "Especialidades" v2 (directivas Diego 28/07) ──────────────────────
+// 1. Solo las especialidades que TENEMOS (con médicos; una sin médicos solo
+//    aparece si tuvo demanda en el período → señal de reclutamiento).
+// 2. Cada card lista QUÉ médicos la componen y DE QUÉ provincias son.
+// 3. Doctrina de plata del tablero: Cobrado real de MP (CI + turnos, refunds
+//    excluidos) — muere el GMV teórico. Espera CI: afuera (no es un indicador
+//    que sirva hoy — dicho por Diego en la página Médicos).
+// 4. Cuenta también TURNOS (antes solo CI): la especialidad del turno es la
+//    del médico.
+
+const SLOT = new Set(["disponible", "bloqueado"]);
+
+type Esp = {
+  total: number;
+  atendidas: number;
+  cobrado: number;
+  medicosActivos: Set<string>;
+  medicosTotal: Set<string>;
+  medicos: { nombre: string; jurisdicciones: string[]; disponible: boolean }[];
+};
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -14,72 +34,99 @@ export async function GET(req: NextRequest) {
   const desde = fechaAR(dias);
   const admin = createAdminClient();
 
-  const [{ data: medicos }, { data: consultasRaw }, sets] = await Promise.all([
-    admin.from("medicos").select("id, especialidad, precio_consulta, disponible, es_cuenta_test").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, aceptada_at").gte("created_at", medianocheARenUTC(desde)),
+  const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
+    admin.from("medicos").select("id, nombre_completo, especialidad, disponible, es_cuenta_test, jurisdicciones").eq("verificado", true),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, monto, mp_status").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id").gte("fecha", desde),
+    admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
     setsDeTest(admin),
   ]);
 
-  // Mismo filtro test que el resto del dash: médico O paciente. Aplicado a médicos
-  // (para no contar test en medicosTotal/Activos) y a consultas (para no inflar el
-  // conteo con atenciones de prueba — era la causa de "21 consultas, GMV $0").
-  const medicosFiltrados = (medicos ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
+  const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
   const consultas = (consultasRaw ?? []).filter((c) => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
+  const turnos = (turnosRaw ?? [])
+    .filter((t) => !SLOT.has(t.estado))
+    .filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
 
-  const espMap = new Map<string, {
-    consultas: number; completadas: number; gmv: number;
-    medicosActivos: Set<string>; medicosTotal: Set<string>;
-    esperaMs: number[];
-  }>();
-
-  for (const m of medicosFiltrados) {
-    const esp = m.especialidad;
-    if (!espMap.has(esp)) {
-      espMap.set(esp, { consultas: 0, completadas: 0, gmv: 0, medicosActivos: new Set(), medicosTotal: new Set(), esperaMs: [] });
+  // Refunds ejecutados: el pago sigue "approved" pero la plata volvió al
+  // paciente. En turnos reprogramados la plata vive en la fila ORIGINAL de la
+  // cadena (turno_origen_id) — se excluyen también los ancestros.
+  const refundeados = new Set((refundsRaw ?? []).map((r) => `${r.tipo}:${r.recurso_id}`));
+  {
+    const origenDe = new Map((turnosRaw ?? []).map((t) => [t.id, t.turno_origen_id as string | null]));
+    for (const r of refundsRaw ?? []) {
+      if (r.tipo !== "turno") continue;
+      let cursor = origenDe.get(r.recurso_id) ?? null;
+      for (let paso = 0; cursor && paso < 10; paso++) {
+        refundeados.add(`turno:${cursor}`);
+        cursor = origenDe.get(cursor) ?? null;
+      }
     }
-    const e = espMap.get(esp)!;
+  }
+
+  const espMap = new Map<string, Esp>();
+  const espDe = (nombre: string): Esp => {
+    let e = espMap.get(nombre);
+    if (!e) {
+      e = { total: 0, atendidas: 0, cobrado: 0, medicosActivos: new Set(), medicosTotal: new Set(), medicos: [] };
+      espMap.set(nombre, e);
+    }
+    return e;
+  };
+
+  const especialidadDeMedico = new Map(medicos.map((m) => [m.id, m.especialidad]));
+
+  for (const m of medicos) {
+    const e = espDe(m.especialidad);
     e.medicosTotal.add(m.id);
     if (m.disponible) e.medicosActivos.add(m.id);
+    e.medicos.push({
+      nombre: m.nombre_completo,
+      jurisdicciones: (m.jurisdicciones as string[] | null) ?? [],
+      disponible: !!m.disponible,
+    });
   }
 
-  for (const c of consultas ?? []) {
-    const esp = c.especialidad;
-    if (!espMap.has(esp)) {
-      espMap.set(esp, { consultas: 0, completadas: 0, gmv: 0, medicosActivos: new Set(), medicosTotal: new Set(), esperaMs: [] });
-    }
-    const e = espMap.get(esp)!;
-    e.consultas++;
-    if (c.estado === "completada") {
-      e.completadas++;
-      const med = medicosFiltrados.find(m => m.id === c.medico_id);
-      e.gmv += med?.precio_consulta ?? 0;
-    }
-    if (c.aceptada_at && c.created_at) {
-      e.esperaMs.push(new Date(c.aceptada_at).getTime() - new Date(c.created_at).getTime());
-    }
+  for (const c of consultas) {
+    const e = espDe(c.especialidad ?? especialidadDeMedico.get(c.medico_id) ?? "Sin especialidad");
+    e.total++;
+    if (c.estado === "completada") e.atendidas++;
+    if (c.mp_status === "approved" && !refundeados.has(`consulta:${c.id}`)) e.cobrado += Number(c.monto) || 0;
+  }
+  for (const t of turnos) {
+    const esp = especialidadDeMedico.get(t.medico_id);
+    if (!esp) continue; // médico test filtrado o no verificado
+    const e = espDe(esp);
+    e.total++;
+    if (t.estado === "completado") e.atendidas++;
+    if (t.mp_status === "approved" && !refundeados.has(`turno:${t.id}`)) e.cobrado += Number(t.monto) || 0;
   }
 
-  const result = [...espMap.entries()].map(([esp, d]) => {
-    const sinMedicos = d.medicosActivos.size === 0 && d.consultas > 0;
-    const ratio = d.medicosActivos.size > 0 ? d.consultas / d.medicosActivos.size : sinMedicos ? Infinity : 0;
-    let demanda: "alta" | "media" | "ok" = "ok";
-    if (ratio > 10 || (d.consultas > 3 && d.medicosActivos.size === 0)) demanda = "alta";
-    else if (ratio > 5) demanda = "media";
+  const result = [...espMap.entries()]
+    // "Solo las que tenemos": con médicos. Sin médicos solo si hubo demanda
+    // en el período (señal de reclutamiento, no catálogo fantasma).
+    .filter(([, d]) => d.medicosTotal.size > 0 || d.total > 0)
+    .map(([especialidad, d]) => {
+      const sinMedicos = d.medicosActivos.size === 0 && d.total > 0;
+      const ratio = d.medicosActivos.size > 0 ? d.total / d.medicosActivos.size : sinMedicos ? Infinity : 0;
+      let demanda: "alta" | "media" | "ok" = "ok";
+      if (ratio > 10 || (d.total > 3 && d.medicosActivos.size === 0)) demanda = "alta";
+      else if (ratio > 5) demanda = "media";
 
-    return {
-      especialidad: esp,
-      consultas: d.consultas,      // Total (todas, incl. canceladas) — el cliente lo rotula "Total"
-      completadas: d.completadas,  // Atendidas — el cliente lo rotula "Atendidas"
-      gmv: d.gmv,
-      medicosActivos: d.medicosActivos.size,
-      medicosTotal: d.medicosTotal.size,
-      esperaPromMs: d.esperaMs.length > 0 ? d.esperaMs.reduce((a, b) => a + b, 0) / d.esperaMs.length : null,
-      demanda,
-      // Para explicar el badge: "X consultas por médico activo" (null si no hay médicos).
-      consultasPorMedicoActivo: d.medicosActivos.size > 0 ? Math.round((d.consultas / d.medicosActivos.size) * 10) / 10 : null,
-      sinMedicos, // hay demanda pero 0 médicos activos → caso de reclutamiento urgente
-    };
-  }).sort((a, b) => b.consultas - a.consultas);
+      return {
+        especialidad,
+        total: d.total,
+        atendidas: d.atendidas,
+        cobrado: d.cobrado,
+        medicosActivos: d.medicosActivos.size,
+        medicosTotal: d.medicosTotal.size,
+        medicos: d.medicos.sort((a, b) => Number(b.disponible) - Number(a.disponible) || a.nombre.localeCompare(b.nombre)),
+        demanda,
+        atencionesPorMedicoActivo: d.medicosActivos.size > 0 ? Math.round((d.total / d.medicosActivos.size) * 10) / 10 : null,
+        sinMedicos,
+      };
+    })
+    .sort((a, b) => b.cobrado - a.cobrado || b.total - a.total || b.medicosTotal - a.medicosTotal);
 
   return NextResponse.json({ especialidades: result });
 }

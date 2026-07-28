@@ -4,27 +4,27 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+interface MedicoDeEsp {
+  nombre: string;
+  jurisdicciones: string[];
+  disponible: boolean;
+}
+
 interface EspStat {
   especialidad: string;
-  consultas: number;   // Total (todas, incl. canceladas)
-  completadas: number; // Atendidas
-  gmv: number;
+  total: number;
+  atendidas: number;
+  cobrado: number;
   medicosActivos: number;
   medicosTotal: number;
-  esperaPromMs: number | null;
+  medicos: MedicoDeEsp[];
   demanda: "alta" | "media" | "ok";
-  consultasPorMedicoActivo: number | null;
+  atencionesPorMedicoActivo: number | null;
   sinMedicos: boolean;
 }
 
 function formatARS(n: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
-}
-
-function formatMs(ms: number) {
-  const min = Math.floor(ms / 60000);
-  const sec = Math.round((ms % 60000) / 1000);
-  return `${min}m ${sec}s`;
 }
 
 const demandaStyles = {
@@ -73,24 +73,24 @@ export default function EspecialidadesClient() {
         </div>
       ) : data.length === 0 ? (
         <div className="rounded-xl bg-[#1E293B] p-12 text-center" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          <p className="text-sm text-white/30">Sin datos de especialidades en este período</p>
+          <p className="text-sm text-white/30">Sin especialidades con médicos todavía</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {data.map(esp => {
             const d = demandaStyles[esp.demanda];
-            const convRate = esp.consultas > 0 ? Math.round((esp.completadas / esp.consultas) * 100) : 0;
+            const convRate = esp.total > 0 ? Math.round((esp.atendidas / esp.total) * 100) : 0;
             return (
               <div
                 key={esp.especialidad}
-                className="rounded-xl bg-[#1E293B] p-5"
+                className="flex flex-col rounded-xl bg-[#1E293B] p-5"
                 style={{ border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <div className="flex items-start justify-between">
                   <h3 className="text-base font-semibold text-white">{esp.especialidad}</h3>
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${d.bg} ${d.text}`}
-                    title="Demanda vs oferta: cuántas consultas llegan por cada médico activo. Alta = conviene reclutar."
+                    title="Demanda vs oferta: cuántas atenciones llegan por cada médico activo. Alta = conviene reclutar."
                   >
                     {d.label}
                   </span>
@@ -98,36 +98,49 @@ export default function EspecialidadesClient() {
                 <p className="mt-1 text-[11px] text-white/35">
                   {esp.sinMedicos
                     ? "⚠ Hay demanda y 0 médicos activos — reclutar"
-                    : esp.consultasPorMedicoActivo != null
-                      ? `${esp.consultasPorMedicoActivo} consultas por médico activo`
+                    : esp.atencionesPorMedicoActivo != null
+                      ? `${esp.atencionesPorMedicoActivo} atenciones por médico activo`
                       : "Sin actividad en el período"}
                 </p>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-3 gap-3">
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Total</p>
-                    <p className="mt-1 text-lg font-semibold text-white">{esp.consultas}</p>
+                    <p className="mt-1 text-lg font-semibold text-white">{esp.total}</p>
                   </div>
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Atendidas</p>
                     <p className="mt-1 text-lg font-semibold text-white">
-                      {esp.completadas}
+                      {esp.atendidas}
                       <span className="ml-1 text-sm font-normal text-white/40">({convRate}%)</span>
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">GMV</p>
-                    <p className="mt-1 text-lg font-semibold text-white">{formatARS(esp.gmv)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Espera CI</p>
-                    <p className="mt-1 text-lg font-semibold text-white">
-                      {esp.esperaPromMs ? formatMs(esp.esperaPromMs) : "—"}
-                    </p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/30">Cobrado</p>
+                    <p className="mt-1 text-lg font-semibold text-white">{formatARS(esp.cobrado)}</p>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2">
+                {/* Qué médicos la componen y de qué provincias (directiva Diego 28/07) */}
+                <div className="mt-4 flex-1 space-y-1.5 rounded-lg bg-white/[0.03] px-3 py-2.5">
+                  {esp.medicos.length === 0 ? (
+                    <p className="text-xs text-white/30">Sin médicos en esta especialidad</p>
+                  ) : (
+                    esp.medicos.map(m => (
+                      <div key={m.nombre} className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 text-white/70">
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${m.disponible ? "bg-[#1D9E75]" : "bg-white/20"}`} />
+                          {m.nombre}
+                        </span>
+                        <span className="shrink-0 text-right text-white/35">
+                          {m.jurisdicciones.length > 0 ? m.jurisdicciones.join(", ") : "—"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center gap-3 px-1">
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-[#1D9E75]" />
                     <span className="text-xs text-white/50">{esp.medicosActivos} activos</span>
@@ -140,6 +153,9 @@ export default function EspecialidadesClient() {
           })}
         </div>
       )}
+      <p className="text-center text-[11px] text-white/25">
+        Total y Atendidas incluyen consultas inmediatas y turnos. Cobrado = pagos aprobados en Mercado Pago del período (excluye reembolsos). Punto verde = disponible ahora.
+      </p>
     </div>
   );
 }
