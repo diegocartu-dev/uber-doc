@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin } from "lucide-react";
 import { capitalizarNombre } from "@/lib/utils/texto";
@@ -55,20 +55,6 @@ export default function ListadoMedicos({
     return () => clearInterval(id);
   }, [router]);
 
-  // Foto de la oferta EN el momento de la vista (pedido Diego 28/07: el tablero
-  // Demanda responde "¿el match estaba o no?"). Sin esto, la reconstrucción
-  // histórica es aproximada; con esto, exacta.
-  useEffect(() => {
-    trackFunnel("clinica_vista", {
-      provincia,
-      medicosVisibles: medicos.length,
-      ciOnline: medicos.filter((m) => m.habilitadoIdentidad && puedeAtenderAhora(m)).length,
-      conAgendaTurnos: new Set(turnosClinicaVirtual.map((t) => t.medico_id)).size,
-      atajoVisible,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const habilitadosIdentidad = useMemo(
     () => new Set(medicos.filter((m) => m.habilitadoIdentidad).map((m) => m.id)),
     [medicos]
@@ -109,6 +95,25 @@ export default function ListadoMedicos({
     return best;
   }, [ordenados, medicosConTurnos, turnoMasCercano]);
   const atajoVisible = flagTurnosActivos && !atajoCerrado && ordenados.length > 0 && !hayCIVisible && !!mejorTurno;
+
+  // Foto de la oferta EN el momento de la vista (pedido Diego 28/07: el tablero
+  // Demanda responde "¿el match estaba o no?"). Se emite UNA vez, pero con los
+  // valores del ÚLTIMO render vía ref y un pequeño delay: en el primer render
+  // los turnos podían no estar cargados y la foto salía con atajoVisible=false
+  // aunque el popup apareciera (visto en la verificación empírica 28/07).
+  const snapshotRef = useRef<Record<string, unknown>>({});
+  snapshotRef.current = {
+    provincia,
+    medicosVisibles: medicos.length,
+    ciOnline: medicos.filter((m) => m.habilitadoIdentidad && puedeAtenderAhora(m)).length,
+    conAgendaTurnos: new Set(turnosClinicaVirtual.map((t) => t.medico_id)).size,
+    atajoVisible,
+  };
+  useEffect(() => {
+    const t = setTimeout(() => trackFunnel("clinica_vista", snapshotRef.current), 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function reservarAtajo() {
     if (!mejorTurno) return;
