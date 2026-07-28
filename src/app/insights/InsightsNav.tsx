@@ -10,7 +10,7 @@ const LINKS = [
   { href: "/insights/medicos", label: "Médicos" },
   { href: "/insights/especialidades", label: "Especialidades" },
   { href: "/insights/oferta", label: "Oferta" },
-  { href: "/insights/funnel", label: "Funnel" },
+  { href: "/insights/funnel", label: "Demanda" },
 ];
 
 export default function InsightsNav() {
