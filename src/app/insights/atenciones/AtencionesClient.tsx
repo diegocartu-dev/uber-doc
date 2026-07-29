@@ -11,6 +11,7 @@ interface Cobro {
 interface Atencion {
   cuando: string;
   tipo: "CI" | "Turno";
+  canal: "clinica_virtual" | "consultorio_privado" | null;
   medico: string;
   paciente: string;
   provincia: string | null;
@@ -124,14 +125,17 @@ export default function AtencionesClient() {
                 )}
                 {data.atenciones.map((a, i) => {
                   const ec = ESTADO_COLOR[a.estado] ?? "#888780";
-                  // CI = azul (acción), Turno = gris (categoría). Verde es solo para estados.
-                  const tc = a.tipo === "CI" ? "#378ADD" : "#888780";
+                  // Tres categorías (Diego 28/07): CI azul, turno clínica gris,
+                  // turno consultorio particular ámbar. Verde es solo para estados.
+                  const esConsultorio = a.tipo === "Turno" && a.canal === "consultorio_privado";
+                  const tc = a.tipo === "CI" ? "#378ADD" : esConsultorio ? "#BA7517" : "#888780";
+                  const tipoLabel = a.tipo === "CI" ? "CI" : esConsultorio ? "Turno consult." : "Turno clínica";
                   return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
                       <td className="whitespace-nowrap px-4 py-3 text-white/70">{a.cuando}</td>
                       <td className="px-3 py-3">
-                        <span className="rounded px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: tc + "22", color: tc }}>
-                          {a.tipo}
+                        <span className="whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: tc + "22", color: tc }}>
+                          {tipoLabel}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-white/90">{a.medico}</td>

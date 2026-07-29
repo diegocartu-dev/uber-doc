@@ -19,6 +19,9 @@ const SLOT = new Set(["disponible", "bloqueado"]);
 type Esp = {
   total: number;
   atendidas: number;
+  totalCI: number;
+  totalTurnoClinica: number;
+  totalTurnoConsultorio: number;
   cobrado: number;
   medicosActivos: Set<string>;
   medicosTotal: Set<string>;
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, es_cuenta_test, jurisdicciones").eq("verificado", true),
     admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, monto, mp_status").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id").gte("fecha", desde),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id, canal_origen").gte("fecha", desde),
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
     setsDeTest(admin),
   ]);
@@ -68,7 +71,7 @@ export async function GET(req: NextRequest) {
   const espDe = (nombre: string): Esp => {
     let e = espMap.get(nombre);
     if (!e) {
-      e = { total: 0, atendidas: 0, cobrado: 0, medicosActivos: new Set(), medicosTotal: new Set(), medicos: [] };
+      e = { total: 0, atendidas: 0, totalCI: 0, totalTurnoClinica: 0, totalTurnoConsultorio: 0, cobrado: 0, medicosActivos: new Set(), medicosTotal: new Set(), medicos: [] };
       espMap.set(nombre, e);
     }
     return e;
@@ -90,6 +93,7 @@ export async function GET(req: NextRequest) {
   for (const c of consultas) {
     const e = espDe(c.especialidad ?? especialidadDeMedico.get(c.medico_id) ?? "Sin especialidad");
     e.total++;
+    e.totalCI++;
     if (c.estado === "completada") e.atendidas++;
     if (c.mp_status === "approved" && !refundeados.has(`consulta:${c.id}`)) e.cobrado += Number(c.monto) || 0;
   }
@@ -98,6 +102,8 @@ export async function GET(req: NextRequest) {
     if (!esp) continue; // médico test filtrado o no verificado
     const e = espDe(esp);
     e.total++;
+    if (t.canal_origen === "consultorio_privado") e.totalTurnoConsultorio++;
+    else e.totalTurnoClinica++;
     if (t.estado === "completado") e.atendidas++;
     if (t.mp_status === "approved" && !refundeados.has(`turno:${t.id}`)) e.cobrado += Number(t.monto) || 0;
   }
@@ -117,6 +123,9 @@ export async function GET(req: NextRequest) {
         especialidad,
         total: d.total,
         atendidas: d.atendidas,
+        totalCI: d.totalCI,
+        totalTurnoClinica: d.totalTurnoClinica,
+        totalTurnoConsultorio: d.totalTurnoConsultorio,
         cobrado: d.cobrado,
         medicosActivos: d.medicosActivos.size,
         medicosTotal: d.medicosTotal.size,
