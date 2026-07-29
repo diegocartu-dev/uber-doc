@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         .gte("created_at", medianocheARenUTC(desde)),
       admin
         .from("turnos")
-        .select("id, medico_id, paciente_id, estado, fecha, hora_inicio, en_curso_at, desconectado_at, monto, mp_status")
+        .select("id, medico_id, paciente_id, estado, fecha, hora_inicio, en_curso_at, desconectado_at, monto, mp_status, canal_origen")
         .not("estado", "in", "(disponible,bloqueado)")
         .gte("fecha", desde),
       admin.from("documentos").select("consulta_id, turno_id, tipo"),
@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
 
   type Atencion = {
     cuandoSort: number; cuando: string; tipo: "CI" | "Turno";
+    canal: "clinica_virtual" | "consultorio_privado" | null;
     medico: string; paciente: string; provincia: string | null;
     estado: string; estadoLabel: string;
     atendida: boolean; duracionMin: number | null;
@@ -99,7 +100,7 @@ export async function GET(req: NextRequest) {
     const sort = new Date(c.en_curso_at ?? c.created_at).getTime();
     const pac = pacDe(c.paciente_id);
     atenciones.push({
-      cuandoSort: sort, cuando: labelAR(sort), tipo: "CI",
+      cuandoSort: sort, cuando: labelAR(sort), tipo: "CI", canal: null,
       medico: medMap.get(c.medico_id) ?? "—",
       paciente: pac?.nombre_completo ?? "—",
       provincia: pac?.provincia ?? null,
@@ -114,6 +115,7 @@ export async function GET(req: NextRequest) {
     const pac = pacDe(t.paciente_id);
     atenciones.push({
       cuandoSort: sort, cuando: labelAR(sort), tipo: "Turno",
+      canal: (t.canal_origen as "clinica_virtual" | "consultorio_privado" | null) ?? "clinica_virtual",
       medico: medMap.get(t.medico_id) ?? "—",
       paciente: pac?.nombre_completo ?? "—",
       provincia: pac?.provincia ?? null,

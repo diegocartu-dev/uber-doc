@@ -14,6 +14,9 @@ interface EspStat {
   especialidad: string;
   total: number;
   atendidas: number;
+  totalCI: number;
+  totalTurnoClinica: number;
+  totalTurnoConsultorio: number;
   cobrado: number;
   medicosActivos: number;
   medicosTotal: number;
@@ -120,6 +123,12 @@ export default function EspecialidadesClient() {
                     <p className="mt-1 text-lg font-semibold text-white">{formatARS(esp.cobrado)}</p>
                   </div>
                 </div>
+
+                {esp.total > 0 && (
+                  <p className="mt-2 text-[11px] text-white/35">
+                    {esp.totalCI} CI · {esp.totalTurnoClinica} turnos clínica · {esp.totalTurnoConsultorio} consultorio
+                  </p>
+                )}
 
                 {/* Qué médicos la componen y de qué provincias (directiva Diego 28/07) */}
                 <div className="mt-4 flex-1 space-y-1.5 rounded-lg bg-white/[0.03] px-3 py-2.5">

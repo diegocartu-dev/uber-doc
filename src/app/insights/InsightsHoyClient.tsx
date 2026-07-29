@@ -25,7 +25,7 @@ interface HoyData {
     desde: string | null; hasta: string | null;
   }[];
   actividad: {
-    id: string; tipo: "CI" | "Turno"; estado: string;
+    id: string; tipo: "CI" | "Turno"; canal: string | null; estado: string;
     medico: string; paciente: string; especialidad: string;
     monto: number; pagada: boolean; inicio: string;
   }[];
@@ -219,9 +219,13 @@ export default function InsightsHoyClient() {
                     <td className="hidden px-5 py-3 text-white/40 lg:table-cell">{a.especialidad || "—"}</td>
                     <td className="px-5 py-3">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        a.tipo === "CI" ? "bg-[#378ADD]/20 text-[#378ADD]" : "bg-white/10 text-white/60"
+                        a.tipo === "CI"
+                          ? "bg-[#378ADD]/20 text-[#378ADD]"
+                          : a.canal === "consultorio_privado"
+                            ? "bg-[#BA7517]/20 text-[#BA7517]"
+                            : "bg-white/10 text-white/60"
                       }`}>
-                        {a.tipo}
+                        {a.tipo === "CI" ? "CI" : a.canal === "consultorio_privado" ? "Turno consult." : "Turno clínica"}
                       </span>
                     </td>
                     <td className="hidden px-5 py-3 sm:table-cell">

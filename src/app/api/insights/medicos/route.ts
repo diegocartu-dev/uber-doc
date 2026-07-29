@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones, precio_consulta").eq("verificado", true),
     admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id").gte("fecha", desde),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id, canal_origen").gte("fecha", desde),
     // Refunds ejecutados: esos pagos siguen "approved" en consultas/turnos pero la
     // plata VOLVIÓ al paciente (caso turno de Alexandra 24/07) — se excluyen del cobrado.
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
@@ -67,6 +67,10 @@ export async function GET(req: NextRequest) {
     const misConsultas = consultas.filter(c => c.medico_id === m.id);
     const misTurnos = turnos.filter(t => t.medico_id === m.id);
     const completadas = misConsultas.filter(c => c.estado === "completada").length + misTurnos.filter(t => t.estado === "completado").length;
+    // Tres categorías (Diego 28/07): CI / turno clínica virtual / turno consultorio.
+    const atendidasCI = misConsultas.filter(c => c.estado === "completada").length;
+    const atendidasTurnoClinica = misTurnos.filter(t => t.estado === "completado" && t.canal_origen !== "consultorio_privado").length;
+    const atendidasTurnoConsultorio = misTurnos.filter(t => t.estado === "completado" && t.canal_origen === "consultorio_privado").length;
     const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado_paciente" || t.estado === "cancelado_medico").length;
     const noShows = misTurnos.filter(t => t.estado === "ausente_medico").length;
     const total = misConsultas.length + misTurnos.length; // todas las atenciones (sin slots)
@@ -96,6 +100,9 @@ export async function GET(req: NextRequest) {
       disponible: m.disponible,
       consultas: completadas, // atendidas (compat con el cliente)
       atendidas: completadas,
+      atendidasCI,
+      atendidasTurnoClinica,
+      atendidasTurnoConsultorio,
       total,
       canceladas,
       noShows,

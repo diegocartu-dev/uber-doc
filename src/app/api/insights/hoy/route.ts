@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     { data: medicosDispRaw },
   ] = await Promise.all([
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(hoy)),
-    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct").eq("fecha", hoy),
+    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct, canal_origen").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hace7)).lt("created_at", medianocheARenUTC(hace6)),
     admin.from("turnos").select("id, estado, fecha, medico_id, paciente_id").eq("fecha", hace7),
     admin.from("consultas").select("id", { count: "exact", head: true }).eq("estado", "esperando"),
@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     ...consultasHoy.map(c => {
       const med = medMap.get(c.medico_id);
       return {
-        id: c.id, tipo: "CI" as const, estado: c.estado,
+        id: c.id, tipo: "CI" as const, canal: null as string | null, estado: c.estado,
         medico: med?.nombre_completo ?? "—",
         paciente: nombrePaciente(c.paciente_id),
         especialidad: c.especialidad ?? med?.especialidad ?? "",
@@ -157,7 +157,9 @@ export async function GET(req: NextRequest) {
     ...turnosAtencionHoy.map(t => {
       const med = medMap.get(t.medico_id);
       return {
-        id: t.id, tipo: "Turno" as const, estado: t.estado,
+        id: t.id, tipo: "Turno" as const,
+        canal: (t.canal_origen as string | null) ?? "clinica_virtual",
+        estado: t.estado,
         medico: med?.nombre_completo ?? "—",
         paciente: nombrePaciente(t.paciente_id),
         especialidad: med?.especialidad ?? "",

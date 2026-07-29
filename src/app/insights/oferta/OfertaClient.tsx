@@ -21,6 +21,7 @@ interface Data {
   hayDatosCI: boolean;
   totalMedicoHorasCI: number;
   medicosConAgenda: number;
+  medicosConConsultorio: number;
   medicosOferta: { nombre: string; especialidad: string; ciHoras: number; turnos: boolean }[];
   medicosRegistrados: number;
   especialidadesConOferta: number;
@@ -202,9 +203,10 @@ export default function OfertaClient() {
           <section className="rounded-xl border border-white/10 bg-[#1E293B] p-5">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Calendar size={16} color="#378ADD" />
-              <h2 className="text-sm font-semibold text-white">Turnos programados habilitados</h2>
+              <h2 className="text-sm font-semibold text-white">Turnos programados habilitados (clínica virtual)</h2>
               <span className="text-xs text-white/40">
                 {data.medicosConAgenda} con agenda · 7 días atrás · hoy · 30 adelante
+                {data.medicosConConsultorio > 0 && ` · consultorio particular: ${data.medicosConConsultorio} médico${data.medicosConConsultorio !== 1 ? "s" : ""} (aparte)`}
               </span>
             </div>
             <p className="mb-2 text-[11px] text-white/35">

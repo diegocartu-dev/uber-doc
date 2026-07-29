@@ -11,6 +11,9 @@ interface MedicoStat {
   disponible: boolean;
   consultas: number; // = atendidas (compat)
   atendidas: number;
+  atendidasCI: number;
+  atendidasTurnoClinica: number;
+  atendidasTurnoConsultorio: number;
   total: number;
   canceladas: number;
   noShows: number;
@@ -150,7 +153,14 @@ export default function MedicosInsightsClient() {
                     <td className="px-4 py-3 text-white/60">
                       {m.jurisdicciones.length > 0 ? m.jurisdicciones.join(", ") : <span className="text-white/25">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-white/70">{m.atendidas ?? m.consultas}</td>
+                    <td className="px-4 py-3 text-white/70">
+                      {m.atendidas ?? m.consultas}
+                      {(m.atendidas ?? 0) > 0 && (
+                        <span className="block whitespace-nowrap text-[11px] text-white/35">
+                          {m.atendidasCI} CI · {m.atendidasTurnoClinica} clín. · {m.atendidasTurnoConsultorio} consult.
+                        </span>
+                      )}
+                    </td>
                     <td className="hidden px-4 py-3 text-white/40 md:table-cell">{m.total ?? "—"}</td>
                     <td className="px-4 py-3 font-medium text-white/90">{formatARS(m.cobrado)}</td>
                     <td className="hidden px-4 py-3 text-[#378ADD] lg:table-cell">{formatARS(m.comision)}</td>

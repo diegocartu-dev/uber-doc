@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     soloReales
       ? admin.from("medicos").select("id, nombre_completo, especialidad").eq("verificado", true).eq("es_cuenta_test", false)
       : admin.from("medicos").select("id, nombre_completo, especialidad").eq("verificado", true),
-    admin.from("agenda_modelos").select("id, medico_id, activo, fecha_inicio, fecha_fin"),
+    admin.from("agenda_modelos").select("id, medico_id, activo, fecha_inicio, fecha_fin, canal_origen"),
     admin.from("agenda_franjas").select("modelo_id, dia_semana, hora_inicio, hora_fin"),
     admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeISO).order("at", { ascending: true }),
   ]);
@@ -74,7 +74,12 @@ export async function GET(req: NextRequest) {
     if (!franjasPorModelo.has(f.modelo_id)) franjasPorModelo.set(f.modelo_id, []);
     franjasPorModelo.get(f.modelo_id)!.push({ dia: f.dia_semana as number, hIni, hFinIncl });
   }
-  const modelosActivos = (modelos ?? []).filter((mo) => mo.activo && medicosOk.has(mo.medico_id));
+  // Tres categorías (Diego 28/07): el heatmap de turnos muestra SOLO clínica
+  // virtual (lo reservable por pacientes de Docto); el consultorio particular
+  // se reporta aparte para no inflar la oferta de la clínica.
+  const modelosTodos = (modelos ?? []).filter((mo) => mo.activo && medicosOk.has(mo.medico_id));
+  const modelosActivos = modelosTodos.filter((mo) => mo.canal_origen !== "consultorio_privado");
+  const modelosConsultorio = modelosTodos.filter((mo) => mo.canal_origen === "consultorio_privado");
 
   // ── Turnos: por cada fecha, # médicos con agenda habilitada en cada hora ──
   const turnosFilas = turnoDias.map((dayIdx) => diaInfo(dayIdx));
@@ -186,6 +191,7 @@ export async function GET(req: NextRequest) {
     hayDatosCI: totalCI > 0,
     totalMedicoHorasCI: Math.round(totalCI * 10) / 10,
     medicosConAgenda: new Set(modelosActivos.map((m) => m.medico_id)).size,
+    medicosConConsultorio: new Set(modelosConsultorio.map((m) => m.medico_id)).size,
     // Resumen de identidad
     medicosOferta,
     medicosRegistrados: medMap.size,
