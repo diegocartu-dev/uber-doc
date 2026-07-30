@@ -130,7 +130,7 @@ export const CRONS_META: Record<string, CronMeta> = {
   },
   uptime: {
     nombre: "Monitor de disponibilidad del sitio",
-    queHace: "golpea docto.com.ar cada minuto como si fuera un paciente; si el sitio no responde dos veces seguidas manda el mail rojo, y el verde cuando vuelve",
+    queHace: "golpea docto.com.ar y la base de datos cada minuto; si algo no responde manda UN mail rojo (y silencia las alertas individuales), reinicia la base solo si está colgada, y manda el verde cuando vuelve",
     impacto: "sin esto, el sitio puede estar caído y nos enteramos solo si un usuario avisa (caso 504 del 27/07 que vio Diego)",
     cadencia: "cada minuto",
     autoRecupera: true,

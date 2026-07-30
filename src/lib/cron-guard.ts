@@ -75,11 +75,20 @@ const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;
 async function alertarCron(key: string, subject: string, text: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data } = await admin
+    const { data: filas, error } = await admin
       .from("cron_runs")
-      .select("last_alerted_at")
-      .eq("cron_key", key)
-      .maybeSingle();
+      .select("cron_key, last_alerted_at, last_status")
+      .in("cron_key", [key, "uptime-estado"]);
+
+    // Anti-tormenta (incidente 30/07: base caída → el throttle no se podía leer
+    // → un mail rojo POR CRON cada corrida). Si el estado no se puede leer, la
+    // causa es una caída general: el monitor de uptime es la ÚNICA voz (alerta
+    // sin depender de la base) y los crons individuales se callan.
+    if (error) return;
+    const general = filas?.find((f) => f.cron_key === "uptime-estado");
+    if (general?.last_status === "down") return;
+
+    const data = filas?.find((f) => f.cron_key === key);
     if (
       data?.last_alerted_at &&
       Date.now() - Date.parse(data.last_alerted_at) < ANTI_SPAM_MS
