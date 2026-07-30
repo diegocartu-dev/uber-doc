@@ -17,6 +17,7 @@ interface Correo {
   atendido: boolean;
   errorEnvio: string | null;
   adjuntos: string[];
+  responderDesde: "contacto" | "soporte";
 }
 
 interface Respuesta {
@@ -50,6 +51,7 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
         para: correo.de,
         asunto,
         cuerpo,
+        desde: correo.responderDesde,
         enRespuestaA: correo.id,
       });
       if (!r.ok) {
@@ -159,6 +161,7 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
             <div className="space-y-3">
               <p className="text-sm text-gray-500">
                 Para: <span className="font-medium text-gray-700">{correo.de}</span>
+                {" · "}desde <span className="font-medium text-gray-700">{correo.responderDesde}@docto.com.ar</span>
               </p>
               <input
                 type="text"
