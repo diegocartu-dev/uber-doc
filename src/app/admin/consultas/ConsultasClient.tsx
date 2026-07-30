@@ -10,12 +10,21 @@ import CancelacionesTab from "./CancelacionesTab";
 interface ConsultaItem {
   id: string;
   tipo: "CI" | "Turno";
+  canal?: "ci" | "clinica" | "consultorio";
   estado: string;
   medico: string;
   paciente: string;
   inicio: string;
   especialidad: string;
+  solicitada?: string;
+  citaPara?: string | null;
 }
+
+const fechaHoraAR = (iso: string) =>
+  new Date(iso).toLocaleString("es-AR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    hour12: false, timeZone: "America/Argentina/Buenos_Aires",
+  });
 
 type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 
@@ -23,6 +32,7 @@ export default function ConsultasClient() {
   const [tab, setTab] = useState<Tab>("esperando");
   const [items, setItems] = useState<ConsultaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dias, setDias] = useState<1 | 7 | 30>(1);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [forzando, setForzando] = useState<string | null>(null);
@@ -31,6 +41,7 @@ export default function ConsultasClient() {
   const fetchData = useCallback(async () => {
     if (tab === "esperando" || tab === "cancelaciones") { setLoading(false); return; }
     const params = new URLSearchParams({ tab });
+    if (tab === "hoy") params.set("dias", String(dias));
     if (tab === "historial") {
       if (desde) params.set("desde", desde);
       if (hasta) params.set("hasta", hasta);
@@ -41,7 +52,7 @@ export default function ConsultasClient() {
       setItems(data.items ?? []);
     } catch { /* ignore */ }
     setLoading(false);
-  }, [tab, desde, hasta]);
+  }, [tab, desde, hasta, dias]);
 
   useEffect(() => {
     setLoading(true);
@@ -78,9 +89,14 @@ export default function ConsultasClient() {
   }
 
   function exportCsv() {
-    const header = "ID,Tipo,Estado,Médico,Paciente,Inicio,Especialidad\n";
+    const header = tab === "hoy"
+      ? "ID,Tipo,Canal,Estado,Médico,Paciente,Solicitada,Turno para,Especialidad\n"
+      : "ID,Tipo,Estado,Médico,Paciente,Inicio,Especialidad\n";
     const rows = items.map((i) =>
-      [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.inicio), csvEscape(i.especialidad)].join(",")
+      (tab === "hoy"
+        ? [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.canal ?? ""), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.solicitada ?? ""), csvEscape(i.citaPara ?? ""), csvEscape(i.especialidad)]
+        : [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.inicio), csvEscape(i.especialidad)]
+      ).join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -118,7 +134,7 @@ export default function ConsultasClient() {
         {([
           { key: "esperando" as const, label: "Pacientes esperando" },
           { key: "en_curso" as const, label: "En curso ahora" },
-          { key: "hoy" as const, label: "Hoy" },
+          { key: "hoy" as const, label: "Actividad" },
           { key: "historial" as const, label: "Historial" },
           { key: "cancelaciones" as const, label: "Cancelaciones" },
         ]).map(({ key, label }) => (
@@ -146,6 +162,26 @@ export default function ConsultasClient() {
 
       {/* Cancelaciones tab */}
       {tab === "cancelaciones" && <CancelacionesTab />}
+
+      {/* Selector de período de Actividad */}
+      {tab === "hoy" && (
+        <div className="mt-4 flex items-center gap-2">
+          {([{ v: 1 as const, l: "Hoy" }, { v: 7 as const, l: "7 días" }, { v: 30 as const, l: "30 días" }]).map(({ v, l }) => (
+            <button
+              key={v}
+              onClick={() => setDias(v)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                dias === v ? "bg-[#378ADD] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {l}
+            </button>
+          ))}
+          <span className="ml-2 text-xs text-gray-400">
+            Consultas reales del período + turnos solicitados en el período (aunque la cita sea futura). Sin huecos de agenda.
+          </span>
+        </div>
+      )}
 
       {/* Historial filters */}
       {tab === "historial" && (
@@ -186,7 +222,14 @@ export default function ConsultasClient() {
                 <th className="px-4 py-3">Médico</th>
                 <th className="px-4 py-3">Paciente</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Estado</th>
-                <th className="px-4 py-3">{tab === "en_curso" ? "Tiempo" : "Inicio"}</th>
+                {tab === "hoy" ? (
+                  <>
+                    <th className="px-4 py-3">Solicitada</th>
+                    <th className="px-4 py-3">Turno para</th>
+                  </>
+                ) : (
+                  <th className="px-4 py-3">{tab === "en_curso" ? "Tiempo" : "Inicio"}</th>
+                )}
                 {tab === "en_curso" && <th className="px-4 py-3"></th>}
               </tr>
             </thead>
@@ -196,15 +239,29 @@ export default function ConsultasClient() {
                 return (
                   <tr key={`${item.tipo}-${item.id}`} className={`hover:bg-gray-50/50 ${esHuerfana ? "bg-red-50/30" : ""}`}>
                     <td className="px-4 py-3">
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        item.tipo === "CI" ? "bg-blue-50 text-[#378ADD]" : "bg-purple-50 text-purple-600"
+                      <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${
+                        item.tipo === "CI"
+                          ? "bg-blue-50 text-[#378ADD]"
+                          : item.canal === "consultorio"
+                            ? "bg-amber-50 text-[#BA7517]"
+                            : "bg-purple-50 text-purple-600"
                       }`}>
-                        {item.tipo}
+                        {item.tipo === "CI" ? "CI" : item.canal === "consultorio" ? "Turno consult." : "Turno clínica"}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">{item.medico}</td>
                     <td className="px-4 py-3 text-gray-600">{item.paciente}</td>
                     <td className="hidden px-4 py-3 lg:table-cell"><StatusBadge status={item.estado} /></td>
+                    {tab === "hoy" ? (
+                      <>
+                        <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                          {item.solicitada ? fechaHoraAR(item.solicitada) : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-gray-500">
+                          {item.citaPara ? fechaHoraAR(item.citaPara) : <span className="text-gray-300">—</span>}
+                        </td>
+                      </>
+                    ) : (
                     <td className="px-4 py-3 text-gray-500">
                       {tab === "en_curso" ? (
                         <span className={esHuerfana ? "font-medium text-[#E24B4A]" : ""}>
@@ -215,6 +272,7 @@ export default function ConsultasClient() {
                         new Date(item.inicio).toLocaleString("es-AR", { hour: "2-digit", minute: "2-digit" })
                       )}
                     </td>
+                    )}
                     {tab === "en_curso" && (
                       <td className="px-4 py-3">
                         {esHuerfana && forzando !== item.id && (
