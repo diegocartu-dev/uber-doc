@@ -31,6 +31,7 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const [tab, setTab] = useState<"entrada" | "salida">("entrada");
   const [redactar, setRedactar] = useState(false);
   const [para, setPara] = useState("");
+  const [desde, setDesde] = useState<"contacto" | "soporte">("contacto");
   const [asunto, setAsunto] = useState("");
   const [cuerpo, setCuerpo] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
     setError(null);
     setEnviado(false);
     startTransition(async () => {
-      const r = await enviarCorreo({ para, asunto, cuerpo });
+      const r = await enviarCorreo({ para, asunto, cuerpo, desde });
       if (!r.ok) {
         setError(r.error ?? "No se pudo enviar.");
         return;
@@ -91,6 +92,20 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
       {redactar && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Desde:</span>
+              {(["contacto", "soporte"] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDesde(d)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                    desde === d ? "bg-[#378ADD] text-white" : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {d}@docto.com.ar
+                </button>
+              ))}
+            </div>
             <input
               type="email"
               value={para}
@@ -113,7 +128,7 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#378ADD]"
             />
             <p className="text-xs text-gray-400">
-              Sale como Docto &lt;contacto@docto.com.ar&gt; con la firma sobria al pie.
+              Sale como Docto &lt;{desde}@docto.com.ar&gt; con la firma sobria al pie.
             </p>
             {error && <p className="text-sm font-medium text-[#E24B4A]">{error}</p>}
             {enviado && <p className="text-sm font-medium text-[#1D9E75]">Enviado ✓</p>}
@@ -148,6 +163,11 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
                         {c.direccion === "entrada" ? c.de : c.para}
                       </span>
                       {c.esRespuesta && <span className="text-[10px] text-gray-400">respuesta</span>}
+                      {c.direccion === "entrada" && (
+                        <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                          {(c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@"}
+                        </span>
+                      )}
                     </div>
                     <p className={`truncate text-sm ${!c.leido && c.direccion === "entrada" ? "font-semibold text-gray-800" : "text-gray-500"}`}>
                       {c.asunto}

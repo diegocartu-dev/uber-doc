@@ -7,7 +7,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // El aviso de correo entrante va al mail personal de Diego con link al panel.
 
 export const CORREO_CONTACTO = "contacto@docto.com.ar";
-const FROM_CONTACTO = `Docto <${CORREO_CONTACTO}>`;
+export const CORREO_SOPORTE = "soporte@docto.com.ar";
+export type DireccionPropia = "contacto" | "soporte";
+export const DIRECCIONES: Record<DireccionPropia, string> = {
+  contacto: CORREO_CONTACTO,
+  soporte: CORREO_SOPORTE,
+};
+
+/** A cuál de nuestras direcciones llegó un mail (para el chip y el responder-desde). */
+export function direccionPropiaDe(para: string | null): DireccionPropia {
+  return (para ?? "").toLowerCase().includes("soporte@") ? "soporte" : "contacto";
+}
 const AVISO_A = "diegocartu@gmail.com";
 const BASE_URL = "https://docto.com.ar";
 
@@ -37,19 +47,21 @@ export async function enviarDesdeBandeja(params: {
   para: string;
   asunto: string;
   cuerpo: string;
+  desde?: DireccionPropia;
   enRespuestaA?: string | null;
   enviadoPor?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
+  const direccionDe = DIRECCIONES[params.desde ?? "contacto"];
   const cuerpoFinal = params.cuerpo.trimEnd() + FIRMA;
 
   let resendId: string | null = null;
   let errorEnvio: string | null = null;
   try {
     const { data, error } = await resend().emails.send({
-      from: FROM_CONTACTO,
+      from: `Docto <${direccionDe}>`,
       to: [params.para],
-      replyTo: CORREO_CONTACTO,
+      replyTo: direccionDe,
       subject: params.asunto,
       text: cuerpoFinal,
       html: textoAHtml(cuerpoFinal),
@@ -62,7 +74,7 @@ export async function enviarDesdeBandeja(params: {
 
   await admin.from("correos").insert({
     direccion: "salida",
-    de: CORREO_CONTACTO,
+    de: direccionDe,
     para: params.para,
     asunto: params.asunto,
     cuerpo_texto: cuerpoFinal,
@@ -87,7 +99,7 @@ export async function avisarCorreoEntrante(correoId: string, de: string, asunto:
       to: [AVISO_A],
       subject: `📬 Correo nuevo de ${de}`,
       text: [
-        `Llegó un correo a ${CORREO_CONTACTO}:`,
+        `Llegó un correo a la Bandeja de Docto:`,
         "",
         `De: ${de}`,
         `Asunto: ${asunto || "(sin asunto)"}`,

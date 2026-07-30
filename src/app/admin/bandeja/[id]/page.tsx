@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DetalleCorreoClient from "./DetalleCorreoClient";
+import { direccionPropiaDe } from "@/lib/correo";
 
 // Detalle de un correo. Abrirlo lo marca leído. /admin/layout ya gatea isAdmin.
 // SEGURIDAD: el HTML recibido NUNCA se renderiza — texto plano o HTML desetiquetado.
@@ -59,6 +60,7 @@ export default async function DetalleCorreoPage({ params }: { params: Promise<{ 
         atendido: !!c.atendido,
         errorEnvio: (c.error_envio as string) ?? null,
         adjuntos,
+        responderDesde: direccionPropiaDe(c.para as string | null),
       }}
       respuestas={(respuestas ?? []).map((r) => ({
         id: r.id as string,

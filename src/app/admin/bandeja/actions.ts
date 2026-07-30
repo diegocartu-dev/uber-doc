@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
-import { enviarDesdeBandeja } from "@/lib/correo";
+import { enviarDesdeBandeja, type DireccionPropia } from "@/lib/correo";
 
 // Guard propio de cada action (defensa en profundidad además del layout).
 async function usuarioAdmin(): Promise<string | null> {
@@ -18,6 +18,7 @@ export async function enviarCorreo(params: {
   para: string;
   asunto: string;
   cuerpo: string;
+  desde?: DireccionPropia;
   enRespuestaA?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const uid = await usuarioAdmin();
@@ -32,6 +33,7 @@ export async function enviarCorreo(params: {
     para,
     asunto: params.asunto.trim(),
     cuerpo: params.cuerpo,
+    desde: params.desde === "soporte" ? "soporte" : "contacto",
     enRespuestaA: params.enRespuestaA ?? null,
     enviadoPor: uid,
   });
