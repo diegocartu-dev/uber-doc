@@ -123,12 +123,12 @@ export const GET = withCron("uptime", async () => {
   const admin = createAdminClient();
   // Leer estado previo puede fallar si la base está caída: en ese caso prev
   // queda null y el throttle pasa a ser sin-estado (minuto % 15).
-  let prev: { last_status: string | null; last_ok_at: string | null; last_alerted_at: string | null } | null = null;
+  let prev: { last_status: string | null; last_ok_at: string | null; last_alerted_at: string | null; last_run_at: string | null } | null = null;
   let dbEstadoLegible = false;
   try {
     const { data, error } = await admin
       .from("cron_runs")
-      .select("last_status, last_ok_at, last_alerted_at")
+      .select("last_status, last_ok_at, last_alerted_at, last_run_at")
       .eq("cron_key", KEY_ESTADO)
       .maybeSingle();
     if (!error) {
@@ -179,9 +179,17 @@ export const GET = withCron("uptime", async () => {
     return NextResponse.json({ ok: false, caido: true, db: db.ok, resultados });
   }
 
-  // Sitio y base OK: si veníamos de caída ALERTADA, cerrar el ciclo con el verde.
-  if (prev?.last_status === "down" && prev?.last_alerted_at) {
-    const minCaido = prev.last_ok_at
+  // Sitio y base OK → cerrar el ciclo con el verde. Dos disparadores:
+  //  a) veníamos de caída registrada (last_status=down con alerta), o
+  //  b) HUECO DE LATIDO: este cron corre cada minuto; si su último latido es de
+  //     hace >3 min, estuvo sin poder escribir → hubo caída. Sin esto, una caída
+  //     de la BASE no deja rastro ("down" nunca se pudo guardar) y el verde no
+  //     salía nunca: el 30/07 Diego recibió 20+ rojos y CERO verdes, y siguió
+  //     preocupado 18 h por algo ya resuelto.
+  const HUECO_MS = 3 * 60 * 1000;
+  const huboHueco = prev?.last_run_at ? Date.now() - Date.parse(prev.last_run_at) > HUECO_MS : false;
+  if ((prev?.last_status === "down" && prev?.last_alerted_at) || huboHueco) {
+    const minCaido = prev?.last_ok_at
       ? Math.max(1, Math.round((Date.now() - Date.parse(prev.last_ok_at)) / 60000))
       : null;
     await sendDoctoAlert(
