@@ -27,6 +27,39 @@ interface Respuesta {
   errorEnvio: string | null;
 }
 
+// Render seguro del cuerpo: texto plano SIEMPRE (el HTML del mail jamás se
+// renderiza), pero las URLs largas se muestran acortadas y clickeables — los
+// mails de marketing (LinkedIn etc.) traen links de tracking de 300+ caracteres
+// que convertían el cuerpo en sopa ilegible (reporte Diego 31/07).
+function CuerpoLegible({ texto }: { texto: string }) {
+  const partes = texto.split(/(https?:\/\/[^\s<>"')\]]+)/g);
+  return (
+    <>
+      {partes.map((parte, i) => {
+        if (!/^https?:\/\//.test(parte)) return <span key={i}>{parte}</span>;
+        let etiqueta = parte;
+        try {
+          const u = new URL(parte);
+          const ruta = u.pathname.length > 1 ? u.pathname : "";
+          etiqueta = u.hostname.replace(/^www\./, "") + (ruta.length > 24 ? ruta.slice(0, 24) + "…" : ruta);
+        } catch { /* URL rara: se muestra como vino */ }
+        return (
+          <a
+            key={i}
+            href={parte}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="break-all text-[#378ADD] underline decoration-[#378ADD]/40 hover:decoration-[#378ADD]"
+            title={parte}
+          >
+            {etiqueta}
+          </a>
+        );
+      })}
+    </>
+  );
+}
+
 function fechaLarga(iso: string): string {
   return new Date(iso).toLocaleString("es-AR", {
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -116,8 +149,8 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
           </p>
         )}
 
-        <div className="mt-4 whitespace-pre-wrap border-t border-gray-100 pt-4 text-[15px] leading-relaxed text-gray-800">
-          {correo.cuerpo}
+        <div className="mt-4 whitespace-pre-wrap break-words border-t border-gray-100 pt-4 text-[15px] leading-relaxed text-gray-800">
+          <CuerpoLegible texto={correo.cuerpo} />
         </div>
 
         {correo.adjuntos.length > 0 && (
