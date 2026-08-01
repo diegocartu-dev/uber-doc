@@ -37,6 +37,16 @@ const horaAR = (iso?: string | null) =>
 
 const minutoActual = () => Math.floor(Date.now() / 60_000);
 
+// Throttle del rojo cuando la base NO se puede leer: la propia caída impide el
+// registro durable, así que se recuerda en memoria del proceso. Vercel reutiliza
+// la instancia entre corridas del cron (cada minuto); si se recicla, se pierde y
+// se vuelve a alertar — FALLA HACIA AVISAR, que es lo correcto en una caída.
+// Antes esto era `minuto % 15`: una caída de 3-4 min casi nunca pegaba un
+// múltiplo → 3 caídas el 31/07-01/08 mandaron 3 verdes y CERO rojos (Diego:
+// "me llegó solo el verde").
+let ultimaAlertaSinEstadoMs = 0;
+const THROTTLE_SIN_ESTADO_MS = 10 * 60 * 1000;
+
 async function probe(url: string): Promise<{ url: string; ok: boolean; detalle: string }> {
   const inicio = Date.now();
   try {
@@ -145,7 +155,9 @@ export const GET = withCron("uptime", async () => {
 
     const debeAlertar = dbEstadoLegible
       ? !prev?.last_alerted_at || Date.now() - Date.parse(prev.last_alerted_at) >= THROTTLE_ROJO_MS
-      : minutoActual() % 15 === 0; // sin estado (base caída): máx. 4 mails/hora
+      // Sin estado (base caída): la PRIMERA corrida caída alerta siempre; si la
+      // caída persiste, como mucho un mail cada 10 min.
+      : Date.now() - ultimaAlertaSinEstadoMs >= THROTTLE_SIN_ESTADO_MS;
     if (debeAlertar || autoReinicio?.startsWith("🔁")) {
       await sendDoctoAlert(
         !db.ok ? "🔴 Docto caído — la BASE DE DATOS no responde" : "🔴 Docto NO responde — el sitio está caído",
@@ -166,6 +178,7 @@ export const GET = withCron("uptime", async () => {
           detalle,
         ].join("\n")
       );
+      if (!dbEstadoLegible) ultimaAlertaSinEstadoMs = Date.now();
     }
     if (dbEstadoLegible) {
       await admin.from("cron_runs").upsert({
