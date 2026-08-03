@@ -10,6 +10,7 @@ interface Correo {
   id: string;
   creadoEn: string;
   direccion: "entrada" | "salida";
+  sistema?: boolean;
   de: string;
   para: string;
   asunto: string;
@@ -29,6 +30,7 @@ function fechaCorta(iso: string): string {
 export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const router = useRouter();
   const [tab, setTab] = useState<"entrada" | "salida">("entrada");
+  const [verSistemas, setVerSistemas] = useState(false);
   const [redactar, setRedactar] = useState(false);
   const [para, setPara] = useState("");
   const [desde, setDesde] = useState<"contacto" | "soporte">("contacto");
@@ -38,9 +40,16 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const [enviado, setEnviado] = useState(false);
   const [pendiente, startTransition] = useTransition();
 
-  const recibidos = useMemo(() => correos.filter((c) => c.direccion === "entrada"), [correos]);
+  const entradas = useMemo(() => correos.filter((c) => c.direccion === "entrada"), [correos]);
+  // Notificaciones automáticas (LinkedIn etc.): guardadas pero fuera de la vista
+  // por defecto — ensuciaban la Bandeja (Diego 03/08).
+  const deSistema = useMemo(() => entradas.filter((c) => c.sistema), [entradas]);
+  const recibidos = useMemo(
+    () => (verSistemas ? entradas : entradas.filter((c) => !c.sistema)),
+    [entradas, verSistemas]
+  );
   const enviados = useMemo(() => correos.filter((c) => c.direccion === "salida"), [correos]);
-  const sinLeer = recibidos.filter((c) => !c.leido).length;
+  const sinLeer = entradas.filter((c) => !c.leido && !c.sistema).length;
   const visibles = tab === "entrada" ? recibidos : enviados;
 
   function enviar() {
@@ -81,6 +90,17 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
         >
           <Send size={15} /> Enviados
         </button>
+        {tab === "entrada" && deSistema.length > 0 && (
+          <button
+            onClick={() => setVerSistemas(!verSistemas)}
+            className={`rounded-lg px-3 py-2 text-xs font-medium ${
+              verSistemas ? "bg-gray-200 text-gray-700" : "text-gray-400 hover:text-gray-600"
+            }`}
+            title="Notificaciones automáticas de plataformas (LinkedIn, etc.). Guardadas pero fuera de la vista."
+          >
+            Sistemas ({deSistema.length})
+          </button>
+        )}
         <button
           onClick={() => setRedactar(!redactar)}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-2 text-sm font-medium text-[#378ADD] hover:bg-blue-50"

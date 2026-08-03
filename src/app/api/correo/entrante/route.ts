@@ -62,6 +62,14 @@ export async function POST(req: NextRequest) {
     console.error("[correo] no se pudo pedir el cuerpo completo:", err);
   }
 
+  // Correos "de sistema" (pedido Diego 03/08: LinkedIn ensuciaba la Bandeja):
+  // notificaciones automáticas de plataformas. Quedan guardados (sirven para
+  // códigos de verificación) pero archivados: sin chip SIN ATENDER y sin aviso
+  // por mail a Diego. Un remitente real jamás matchea estos patrones.
+  const esSistema =
+    /(^|[.-])(no-?reply|noreply|notifications?|updates?|newsletters?|marketing|mailer|bounce|do-?not-?reply)@/i.test(de) ||
+    /@(linkedin\.com|facebookmail\.com|instagram\.com|twitter\.com|x\.com|tiktok\.com|pinterest\.com|accounts\.google\.com|amazonses\.com)$/i.test(de.trim());
+
   const admin = createAdminClient();
   const { data: fila, error } = await admin
     .from("correos")
@@ -74,6 +82,8 @@ export async function POST(req: NextRequest) {
       cuerpo_html: cuerpoHtml,
       adjuntos,
       resend_id: emailId,
+      sistema: esSistema,
+      atendido: esSistema,
     })
     .select("id")
     .single();
@@ -85,6 +95,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  await avisarCorreoEntrante(fila.id, de, asunto);
-  return NextResponse.json({ ok: true, id: fila.id });
+  if (!esSistema) await avisarCorreoEntrante(fila.id, de, asunto);
+  return NextResponse.json({ ok: true, id: fila.id, sistema: esSistema });
 }
