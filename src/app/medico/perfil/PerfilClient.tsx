@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { comprimirImagen } from "@/lib/imagenes/comprimir";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ModalBaja from "./ModalBaja";
@@ -120,7 +121,9 @@ export default function PerfilClient({
       // Upload foto first if changed
       if (fotoFile) {
         const formData = new FormData();
-        formData.append("foto", fotoFile);
+        // Comprimir en el navegador: la plataforma corta los envíos de más de
+        // ~4,5 MB y una foto de celular los supera (mismo bug que el registro).
+        formData.append("foto", await comprimirImagen(fotoFile));
         const res = await fetch("/api/medico/foto", { method: "POST", body: formData });
         const data = await res.json();
         if (res.ok && data.foto_url) {

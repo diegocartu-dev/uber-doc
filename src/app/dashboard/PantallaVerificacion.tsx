@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { comprimirImagenesDeFormData } from "@/lib/imagenes/comprimir";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Clock, ShieldX, ShieldAlert, Stethoscope, Upload, CheckCircle2, AlertCircle } from "lucide-react";
@@ -70,6 +71,9 @@ export default function PantallaVerificacion({
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
+    // Mismo fix que el registro (01/08): las fotos de celular superan el límite
+    // de la plataforma y el envío moría con un error incomprensible.
+    await comprimirImagenesDeFormData(fd, ["foto_credencial", "credencial"]);
     const f = fd.get("credencial");
     if (!(f instanceof File) || f.size === 0) {
       setMsgCredencial({ ok: false, text: "Elegí la credencial de tu matrícula." });

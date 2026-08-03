@@ -5,6 +5,7 @@
 // ya existen — no reimplementa guardado. Gate de "disponible" = los 4 pasos.
 
 import { useEffect, useRef, useState } from "react";
+import { comprimirImagen } from "@/lib/imagenes/comprimir";
 import { useRouter } from "next/navigation";
 import FirmaManuscrita from "@/app/medico/perfil/FirmaManuscrita";
 import { createClient } from "@/lib/supabase/client";
@@ -459,7 +460,8 @@ function PasoFoto({ fotoUrl, onDone }: { fotoUrl: string | null; onDone: () => v
     setSubiendo(true);
     try {
       const fd = new FormData();
-      fd.append("foto", file);
+      // Comprimir en el navegador (mismo bug que el registro, 01/08).
+      fd.append("foto", await comprimirImagen(file));
       const res = await fetch("/api/medico/foto", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo subir la foto.");
