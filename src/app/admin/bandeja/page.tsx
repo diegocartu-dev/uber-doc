@@ -8,7 +8,7 @@ export default async function BandejaPage() {
   const admin = createAdminClient();
   const { data: correos } = await admin
     .from("correos")
-    .select("id, creado_en, direccion, de, para, asunto, leido, atendido, error_envio, en_respuesta_a")
+    .select("id, creado_en, direccion, de, para, asunto, leido, atendido, error_envio, en_respuesta_a, sistema")
     .order("creado_en", { ascending: false })
     .limit(200);
 
@@ -20,6 +20,7 @@ export default async function BandejaPage() {
     para: (c.para as string) ?? "",
     asunto: (c.asunto as string) ?? "(sin asunto)",
     leido: !!c.leido,
+    sistema: !!c.sistema,
     atendido: !!c.atendido,
     errorEnvio: (c.error_envio as string) ?? null,
     esRespuesta: !!c.en_respuesta_a,
