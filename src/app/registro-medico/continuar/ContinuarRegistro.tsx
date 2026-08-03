@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
 import FirmaCanvas, { type FirmaCanvasHandle } from "@/components/firma/FirmaCanvas";
@@ -217,6 +218,22 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         return;
       }
       formData.append("firma_manuscrita", firmaBlob, "firma.png");
+
+      // Achicar las fotos ACÁ, en el teléfono del médico: Vercel rechaza los
+      // envíos de más de ~4,5 MB con un error que el usuario no entiende, y era
+      // la causa de que ~la mitad de los registros murieran en este paso
+      // (hallazgo 01/08). Una credencial de 5 MB queda en ~600 KB legibles.
+      await comprimirImagenesDeFormData(formData, ["foto_credencial", "foto_perfil"]);
+
+      // Red de contención: si aun comprimido el envío sigue siendo enorme, se lo
+      // decimos en criollo en vez de dejar que la plataforma lo corte en silencio.
+      if (pesoTotal(formData) > 4 * 1024 * 1024) {
+        setError("Las fotos son demasiado pesadas. Probá sacarlas de nuevo con menos zoom o subir una imagen más liviana.");
+        setLoading(false);
+        window.scrollTo(0, 0);
+        return;
+      }
+
       const result = await completarRegistroMedico(formData);
       // Éxito = redirect server-side a /registro-medico/identidad (no vuelve).
       if (result?.error) {
