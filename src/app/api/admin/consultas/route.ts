@@ -204,7 +204,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient();
 
   if (tipo === "consulta") {
-    const { error } = await admin.from("consultas").update({ estado: "completada" }).eq("id", id);
+    const { error } = await admin.from("consultas").update({ estado: "completada", completada_at: new Date().toISOString(), cierre_origen: "admin_forzado" }).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else {
     const { error } = await admin.from("turnos").update({ estado: "completado" }).eq("id", id);

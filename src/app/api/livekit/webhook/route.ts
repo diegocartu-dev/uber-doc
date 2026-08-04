@@ -130,7 +130,7 @@ async function handleRoomFinished(event: { room?: { name?: string } }) {
   const estadoFinal = tipo === "turno" ? "completado" : "completada";
   const { error: errUpdate } = await supabase
     .from(tabla)
-    .update({ estado: estadoFinal, desconectado_at: null })
+    .update({ estado: estadoFinal, desconectado_at: null, completada_at: new Date().toISOString(), cierre_origen: "webhook_video" })
     .eq("id", recursoId);
 
   if (errUpdate) {

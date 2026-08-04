@@ -225,7 +225,7 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
         );
       }
 
-      await supabase.from("consultas").update({ estado: "completada", doc_borrador: null }).eq("id", consultaId);
+      await supabase.from("consultas").update({ estado: "completada", doc_borrador: null, completada_at: new Date().toISOString(), cierre_origen: "paciente" }).eq("id", consultaId);
       window.location.href = "/dashboard";
     } catch {
       setError("Error al finalizar. Intentá de nuevo.");
