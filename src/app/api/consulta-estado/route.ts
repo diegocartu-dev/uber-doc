@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient();
     const { data: cerrada } = await admin
       .from("consultas")
-      .update({ estado: "completada", desconectado_at: null })
+      .update({ estado: "completada", desconectado_at: null, completada_at: new Date().toISOString(), cierre_origen: "desconexion" })
       .eq("id", consultaId)
       .eq("estado", "en_curso")
       .select("id")

@@ -60,7 +60,7 @@ async function handler(req: NextRequest) {
 
     const { error: errUpdate } = await supabase
       .from(tabla)
-      .update({ estado: estadoFinal })
+      .update({ estado: estadoFinal, completada_at: new Date().toISOString(), cierre_origen: "cierre_automatico" })
       .in("id", ids);
 
     if (errUpdate) {

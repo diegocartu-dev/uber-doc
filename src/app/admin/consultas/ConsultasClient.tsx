@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Download, AlertTriangle } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -29,6 +30,7 @@ const fechaHoraAR = (iso: string) =>
 type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 
 export default function ConsultasClient() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("esperando");
   const [items, setItems] = useState<ConsultaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,7 +239,15 @@ export default function ConsultasClient() {
               {items.map((item) => {
                 const esHuerfana = tab === "en_curso" && (Date.now() - new Date(item.inicio).getTime()) > 2 * 60 * 60 * 1000;
                 return (
-                  <tr key={`${item.tipo}-${item.id}`} className={`hover:bg-gray-50/50 ${esHuerfana ? "bg-red-50/30" : ""}`}>
+                  <tr
+                    key={`${item.tipo}-${item.id}`}
+                    onClick={() => {
+                      if (tab === "hoy" || tab === "historial") {
+                        router.push(`/admin/consultas/${item.id}?tipo=${item.tipo === "Turno" ? "turno" : "ci"}`);
+                      }
+                    }}
+                    className={`${tab === "hoy" || tab === "historial" ? "cursor-pointer" : ""} hover:bg-gray-50/50 ${esHuerfana ? "bg-red-50/30" : ""}`}
+                  >
                     <td className="px-4 py-3">
                       <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${
                         item.tipo === "CI"
