@@ -201,7 +201,14 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     // todavía, el blob viaja en el MISMO FormData del registro y la action lo
     // sube con service role (insert atómico — patrón credencial).
     if (firmaRef.current?.isEmpty()) {
-      setError("Dibujá tu firma para continuar.");
+      // El mensaje habla del gesto que el médico está intentando: decirle
+      // "dibujá" a quien está subiendo una imagen era un callejón sin salida
+      // (caso Davide 03/08 — la foto >2MB se rechazaba y esto lo confundía más).
+      setError(
+        firmaRef.current.modo() === "subir"
+          ? "Subí la imagen de tu firma (o dibujala en el recuadro) para continuar."
+          : "Dibujá tu firma para continuar."
+      );
       window.scrollTo(0, 0); // el banner de error vive arriba del form
       return;
     }
@@ -212,7 +219,11 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       const formData = new FormData(e.currentTarget);
       const firmaBlob = await firmaRef.current?.getBlob();
       if (!firmaBlob) {
-        setError("Dibujá tu firma para continuar.");
+        setError(
+          firmaRef.current?.modo() === "subir"
+            ? "Subí la imagen de tu firma (o dibujala en el recuadro) para continuar."
+            : "Dibujá tu firma para continuar."
+        );
         setLoading(false);
         window.scrollTo(0, 0);
         return;

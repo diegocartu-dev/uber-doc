@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Trash2, Upload } from "lucide-react";
 import SignaturePad from "signature_pad";
+import { comprimirImagen } from "@/lib/imagenes/comprimir";
 
 // Captura de firma manuscrita SIN persistencia (spec Sofía 20/07, firma en el
 // registro). Extraído de FirmaManuscrita: durante la Fase B del registro la
@@ -24,6 +25,8 @@ export interface FirmaCanvasHandle {
   /** Blob PNG del canvas o el archivo subido; null si está vacío. */
   getBlob(): Promise<Blob | null>;
   isEmpty(): boolean;
+  /** Modo activo — para que el error del padre hable del gesto correcto. */
+  modo(): "dibujar" | "subir";
 }
 
 interface Props {
@@ -94,6 +97,9 @@ const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
   }, [activo, modo, initPad]);
 
   useImperativeHandle(ref, () => ({
+    modo() {
+      return modo;
+    },
     isEmpty() {
       if (modo === "subir") return !archivoSubido;
       return !padRef.current || padRef.current.isEmpty();
@@ -112,16 +118,24 @@ const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
     setTieneTrazos(false);
   }
 
-  function handleArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
     setErrorArchivo(null);
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!["image/png", "image/jpeg"].includes(file.type)) {
+    const input = e.target;
+    const original = input.files?.[0];
+    if (!original) return;
+    if (!["image/png", "image/jpeg"].includes(original.type)) {
       setErrorArchivo("Solo se permiten PNG o JPG");
+      input.value = "";
       return;
     }
+    // Comprimir ANTES de chequear el tope: una foto de la firma sacada con un
+    // celular pesa 3-5 MB y acá se rechazaba en seco → el médico quedaba
+    // trabado sin salida (caso Davide 03/08, "no me está registrando la firma").
+    // Mismo patrón que la credencial (fix 01/08). Comprimida queda en ~300 KB.
+    const file = await comprimirImagen(original);
     if (file.size > 2 * 1024 * 1024) {
       setErrorArchivo("La imagen no puede superar 2MB");
+      input.value = "";
       return;
     }
     setArchivoSubido(file);

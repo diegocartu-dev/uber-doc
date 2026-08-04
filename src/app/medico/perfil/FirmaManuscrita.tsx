@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Trash2, Upload, Loader2 } from "lucide-react";
 import SignaturePad from "signature_pad";
+import { comprimirImagen } from "@/lib/imagenes/comprimir";
 
 interface Props {
   firmaUrl: string | null; // path en storage, no URL pública
@@ -96,17 +97,24 @@ export default function FirmaManuscrita({ firmaUrl, onGuardada }: Props) {
     setTieneTrazos(false);
   }
 
-  function handleArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const input = e.target;
+    const original = input.files?.[0];
+    if (!original) return;
 
-    if (!["image/png", "image/jpeg"].includes(file.type)) {
+    if (!["image/png", "image/jpeg"].includes(original.type)) {
       setError("Solo se permiten PNG o JPG");
+      input.value = "";
       return;
     }
+    // Comprimir ANTES del tope: una foto de la firma sacada con celular pesa
+    // 3-5 MB y acá moría en seco (misma trampa que el registro, caso Davide
+    // 03/08). Comprimida queda en ~300 KB perfectamente legible.
+    const file = await comprimirImagen(original);
     if (file.size > 2 * 1024 * 1024) {
       setError("La imagen no puede superar 2MB");
+      input.value = "";
       return;
     }
 
