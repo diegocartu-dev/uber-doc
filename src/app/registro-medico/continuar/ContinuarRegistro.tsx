@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
+import { trackFunnel } from "@/lib/funnel-client";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
 import FirmaCanvas, { type FirmaCanvasHandle } from "@/components/firma/FirmaCanvas";
@@ -121,6 +122,19 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const firmaRef = useRef<FirmaCanvasHandle>(null);
 
+  // Instrumentación del form (decisión Diego 04/08): los 16 registros trabados
+  // de jul/ago murieron ACÁ adentro sin dejar rastro de en qué paso. Un evento
+  // por paso visto y uno por cada error mostrado — fire-and-forget, jamás
+  // bloquea al médico.
+  useEffect(() => {
+    trackFunnel("registro_medico_paso", { paso });
+  }, [paso]);
+
+  function reportarError(donde: string, msg: string) {
+    setError(msg);
+    trackFunnel("registro_medico_error", { donde, motivo: msg });
+  }
+
   // Paso 1 — "Completá tus datos": valida los 3 bloques. Teléfono profesional y
   // foto de perfil son OPCIONALES. La cuenta (email/password/nombre) ya existe.
   function validarPaso1(): boolean {
@@ -139,7 +153,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     for (const { name, label } of requeridos) {
       const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement;
       if (!el || !el.value.trim()) {
-        setError(`Completá el campo "${label}".`);
+        reportarError("paso1", `Completá el campo "${label}".`);
         el?.focus();
         return false;
       }
@@ -147,13 +161,13 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     if (tipoMatricula === "MP") {
       const prov = (form.elements.namedItem("provincia") as HTMLSelectElement)?.value;
       if (!prov) {
-        setError("Seleccioná la provincia de tu matrícula.");
+        reportarError("paso1", "Seleccioná la provincia de tu matrícula.");
         return false;
       }
     }
     const dni = (form.elements.namedItem("dni") as HTMLInputElement).value;
     if (!/^\d{7,8}$/.test(dni)) {
-      setError("El DNI debe tener 7 u 8 dígitos numéricos.");
+      reportarError("paso1", "El DNI debe tener 7 u 8 dígitos numéricos.");
       return false;
     }
     return true;
@@ -163,11 +177,11 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   // al paso de firma (spec Sofía 20/07: el submit real ocurre en el paso 3).
   function validarPaso2(): boolean {
     if (!fotoCredencial) {
-      setError("Subí la foto de tu credencial médica para continuar.");
+      reportarError("paso2", "Subí la foto de tu credencial médica para continuar.");
       return false;
     }
     if (!checkTerminos || !checkMatricula) {
-      setError("Aceptá los términos y la declaración de matrícula para continuar.");
+      reportarError("paso2", "Aceptá los términos y la declaración de matrícula para continuar.");
       return false;
     }
     return true;
@@ -204,7 +218,8 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       // El mensaje habla del gesto que el médico está intentando: decirle
       // "dibujá" a quien está subiendo una imagen era un callejón sin salida
       // (caso Davide 03/08 — la foto >2MB se rechazaba y esto lo confundía más).
-      setError(
+      reportarError(
+        "firma",
         firmaRef.current.modo() === "subir"
           ? "Subí la imagen de tu firma (o dibujala en el recuadro) para continuar."
           : "Dibujá tu firma para continuar."
@@ -219,7 +234,8 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       const formData = new FormData(e.currentTarget);
       const firmaBlob = await firmaRef.current?.getBlob();
       if (!firmaBlob) {
-        setError(
+        reportarError(
+          "firma",
           firmaRef.current?.modo() === "subir"
             ? "Subí la imagen de tu firma (o dibujala en el recuadro) para continuar."
             : "Dibujá tu firma para continuar."
@@ -239,7 +255,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       // Red de contención: si aun comprimido el envío sigue siendo enorme, se lo
       // decimos en criollo en vez de dejar que la plataforma lo corte en silencio.
       if (pesoTotal(formData) > 4 * 1024 * 1024) {
-        setError("Las fotos son demasiado pesadas. Probá sacarlas de nuevo con menos zoom o subir una imagen más liviana.");
+        reportarError("peso", "Las fotos son demasiado pesadas. Probá sacarlas de nuevo con menos zoom o subir una imagen más liviana.");
         setLoading(false);
         window.scrollTo(0, 0);
         return;
@@ -248,12 +264,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       const result = await completarRegistroMedico(formData);
       // Éxito = redirect server-side a /registro-medico/identidad (no vuelve).
       if (result?.error) {
-        setError(result.error);
+        reportarError("envio", result.error);
         setLoading(false);
         window.scrollTo(0, 0);
       }
     } catch {
-      setError("Error al enviar el registro. Recargá la página e intentá de nuevo.");
+      reportarError("envio", "Error al enviar el registro. Recargá la página e intentá de nuevo.");
       setLoading(false);
       window.scrollTo(0, 0);
     }
