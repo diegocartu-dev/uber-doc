@@ -162,8 +162,15 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (desde) query = query.gte("created_at", desde);
-    if (hasta) query = query.lte("created_at", hasta + "T23:59:59");
+    // Límites en día ARGENTINO (no UTC): el día AR arranca a las 03:00Z. Con el
+    // corte anterior ("2026-08-04" = 00:00Z) se colaban consultas de la noche
+    // anterior y se perdían las de 21-24hs AR (reclamo Diego 04/08).
+    if (desde) query = query.gte("created_at", medianocheARenUTC(desde));
+    if (hasta) {
+      const sig = new Date(`${hasta}T12:00:00Z`);
+      sig.setUTCDate(sig.getUTCDate() + 1);
+      query = query.lt("created_at", medianocheARenUTC(sig.toISOString().slice(0, 10)));
+    }
 
     const { data: consultas } = await query;
 
