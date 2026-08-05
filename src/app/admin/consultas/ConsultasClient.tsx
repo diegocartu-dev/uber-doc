@@ -27,6 +27,13 @@ const fechaHoraAR = (iso: string) =>
     hour12: false, timeZone: "America/Argentina/Buenos_Aires",
   });
 
+// Fecha de HOY (o con offset de días) en día argentino, formato YYYY-MM-DD
+// para los inputs type=date.
+const fechaAR = (offsetDias = 0) => {
+  const d = new Date(Date.now() - offsetDias * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(d);
+};
+
 type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 
 export default function ConsultasClient() {
@@ -35,8 +42,11 @@ export default function ConsultasClient() {
   const [items, setItems] = useState<ConsultaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState<1 | 7 | 30>(1);
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  // Default: últimos 7 días. Los inputs SIEMPRE reflejan el rango realmente
+  // aplicado — con el estado inicial vacío la pantalla mostraba "todo" mientras
+  // los inputs podían decir otra cosa (reclamo Diego 04/08: filtro que no filtra).
+  const [desde, setDesde] = useState(() => fechaAR(6));
+  const [hasta, setHasta] = useState(() => fechaAR(0));
   const [forzando, setForzando] = useState<string | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
 
@@ -279,7 +289,7 @@ export default function ConsultasClient() {
                           {esHuerfana && <AlertTriangle size={12} className="ml-1 inline text-[#E24B4A]" />}
                         </span>
                       ) : (
-                        new Date(item.inicio).toLocaleString("es-AR", { hour: "2-digit", minute: "2-digit" })
+                        fechaHoraAR(item.inicio)
                       )}
                     </td>
                     )}
