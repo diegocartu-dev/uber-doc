@@ -42,6 +42,72 @@ export default function EsperaVideo({
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
   const [minutosEspera, setMinutosEspera] = useState(0);
+  const [reintentando, setReintentando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
+  // Cronómetro de la pantalla "Procesando pago": arranca cuando ESTA vista se
+  // muestra (no desde created_at — un pago legítimo con webhook demorado unos
+  // segundos no debe ver "no se completó" por culpa de una consulta vieja).
+  const [procesandoDesde, setProcesandoDesde] = useState<number | null>(null);
+  const [ahora, setAhora] = useState(0);
+  const enProcesandoPago =
+    !salaUrl && estado !== "cancelada" && estado !== "en_curso" && estado !== "pagada";
+  useEffect(() => {
+    if (enProcesandoPago && procesandoDesde === null) {
+      setProcesandoDesde(Date.now());
+      setAhora(Date.now());
+    }
+  }, [enProcesandoPago, procesandoDesde]);
+  useEffect(() => {
+    if (!enProcesandoPago) return;
+    const i = setInterval(() => setAhora(Date.now()), 15000);
+    return () => clearInterval(i);
+  }, [enProcesandoPago]);
+
+  // Reintentar el pago de una consulta aceptada cuyo checkout quedó a medias
+  // (caso Lucas 04/08: "Procesando pago..." eterno sin ninguna salida).
+  async function reintentarPago() {
+    setReintentando(true);
+    setErrorAccion(null);
+    try {
+      const res = await fetch("/api/pago/crear-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tipo: "consulta", id: consultaId }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { init_point?: string };
+        if (data.init_point) {
+          window.location.href = data.init_point;
+          return;
+        }
+      }
+      setErrorAccion("No pudimos abrir el pago. Reintentá en unos segundos.");
+    } catch {
+      setErrorAccion("No pudimos abrir el pago. Revisá tu conexión y reintentá.");
+    }
+    setReintentando(false);
+  }
+
+  async function cancelarSolicitud() {
+    setCancelando(true);
+    setErrorAccion(null);
+    try {
+      const res = await fetch("/api/consultas/cancelar-solicitud", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ consultaId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { estado?: string; error?: string };
+      if (res.ok) setEstado(data.estado ?? "cancelada");
+      else setErrorAccion(data.error ?? "No se pudo cancelar. Probá de nuevo.");
+    } catch {
+      setErrorAccion("No se pudo cancelar. Revisá tu conexión y probá de nuevo.");
+    }
+    setCancelando(false);
+  }
 
   // Polling: 5s interval contra /api/consulta-estado
   const poll = useCallback(async () => {
@@ -86,7 +152,9 @@ export default function EsperaVideo({
           <span className="text-4xl" style={{ color: "#E24B4A" }}>X</span>
         </div>
         <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta cancelada</h1>
-        <p className="mt-2 text-gray-600">La consulta fue cancelada por el medico</p>
+        <p className="mt-2 text-gray-600">
+          Esta consulta no se concretó. Si habías pagado, el reintegro se procesa completo.
+        </p>
 
         <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta} />
 
@@ -204,33 +272,71 @@ export default function EsperaVideo({
   }
 
   // ---- ESTADO: aceptada (pre-pago / procesando) ----
+  // A los 3 minutos EN ESTA PANTALLA sin confirmación, el pago quedó a medias
+  // (checkout cerrado o rechazado): decirlo y dar salida en vez del spinner
+  // eterno (caso Lucas 04/08).
+  const pagoNoCompletado =
+    procesandoDesde !== null && ahora - procesandoDesde >= 3 * 60 * 1000;
+
   return (
     <div className="text-center">
       <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
         <span className="text-5xl">&#9203;</span>
       </div>
-      <h1 className="mt-6 text-2xl font-bold text-gray-900">Procesando pago...</h1>
-      <p className="mt-2 text-gray-600">Estamos verificando tu pago con Mercado Pago</p>
+      <h1 className="mt-6 text-2xl font-bold text-gray-900">
+        {pagoNoCompletado ? "Tu pago no se completó" : "Procesando pago..."}
+      </h1>
+      <p className="mt-2 text-gray-600">
+        {pagoNoCompletado
+          ? "El pago no llegó a confirmarse — no se te cobró nada. Podés reintentarlo o cancelar la solicitud."
+          : "Estamos verificando tu pago con Mercado Pago"}
+      </p>
 
       <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
         <div className="border-t border-gray-100 pt-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Estado</span>
-            <span className="font-medium" style={{ color: "#BA7517" }}>Pendiente</span>
+            <span className="font-medium" style={{ color: "#BA7517" }}>
+              {pagoNoCompletado ? "Sin pago" : "Pendiente"}
+            </span>
           </div>
         </div>
       </InfoCard>
 
-      {/* Spinner de espera */}
-      <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-4">
-        <div className="flex items-center justify-center gap-2">
-          <svg className="h-4 w-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-          <p className="text-sm text-gray-500">Esperando confirmacion de pago...</p>
+      {pagoNoCompletado ? (
+        <div className="mt-8 space-y-3">
+          <button
+            onClick={reintentarPago}
+            disabled={reintentando || cancelando}
+            className="w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
+          >
+            {reintentando ? "Abriendo el pago..." : "Reintentar pago"}
+          </button>
+          <button
+            onClick={cancelarSolicitud}
+            disabled={reintentando || cancelando}
+            className="w-full rounded-xl px-6 py-3 text-sm font-semibold disabled:opacity-50"
+            style={{ border: "1.5px solid #E24B4A", color: "#E24B4A", background: "transparent" }}
+          >
+            {cancelando ? "Cancelando..." : "Cancelar solicitud (sin cargo)"}
+          </button>
+          {errorAccion && (
+            <p className="text-sm font-medium" style={{ color: "#E24B4A" }}>
+              {errorAccion}
+            </p>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-4">
+          <div className="flex items-center justify-center gap-2">
+            <svg className="h-4 w-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            <p className="text-sm text-gray-500">Esperando confirmacion de pago...</p>
+          </div>
+        </div>
+      )}
 
       <VolverAlInicio />
     </div>

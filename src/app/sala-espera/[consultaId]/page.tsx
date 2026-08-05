@@ -109,6 +109,7 @@ export default async function SalaEsperaPage({
           especialidad={consulta.especialidad}
           posicion={posicion}
           tiempoEstimado={tiempoEstimado}
+          createdAt={consulta.created_at}
           isDev={process.env.NODE_ENV === "development"}
         />
       </main>
