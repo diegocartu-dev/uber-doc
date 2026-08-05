@@ -17,8 +17,13 @@ type Props = {
   especialidad: string;
   posicion: number;
   tiempoEstimado: number;
+  createdAt: string;
   isDev?: boolean;
 };
+
+// A los 10 minutos sin aceptación se le dice al paciente la verdad (caso Lucas
+// 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
+const MINUTOS_AVISO_DEMORA = 10;
 
 function formatPrecio(precio: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -37,6 +42,7 @@ export default function SalaEsperaCliente({
   especialidad,
   posicion: posicionInicial,
   tiempoEstimado: tiempoInicial,
+  createdAt,
   isDev = false,
 }: Props) {
   const [estado, setEstado] = useState(estadoInicial);
@@ -45,6 +51,10 @@ export default function SalaEsperaCliente({
   const [pagando, setPagando] = useState(false);
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
+  const [minutosEspera, setMinutosEspera] = useState(0);
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
 
@@ -100,7 +110,65 @@ export default function SalaEsperaCliente({
     return () => clearInterval(interval);
   }, [poll]);
 
+  // Minutos desde la solicitud — para avisar la demora sin aceptación.
+  useEffect(() => {
+    if (!createdAt) return;
+    const calcular = () =>
+      setMinutosEspera(Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000)));
+    calcular();
+    const interval = setInterval(calcular, 30000);
+    return () => clearInterval(interval);
+  }, [createdAt]);
+
+  async function cancelarSolicitud() {
+    setCancelando(true);
+    setErrorCancelar(null);
+    try {
+      const res = await fetch("/api/consultas/cancelar-solicitud", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ consultaId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEstado((data as { estado?: string }).estado ?? "cancelada");
+      } else {
+        setErrorCancelar((data as { error?: string }).error ?? "No se pudo cancelar. Probá de nuevo.");
+      }
+    } catch {
+      setErrorCancelar("No se pudo cancelar. Revisá tu conexión y probá de nuevo.");
+    }
+    setCancelando(false);
+    setConfirmandoCancelar(false);
+  }
+
   const aceptada = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
+
+  // La solicitud murió (la canceló el paciente, el sistema o el médico no la tomó):
+  // decirlo con todas las letras — antes esta pantalla seguía mostrando el spinner
+  // de "sala de espera" para siempre (caso Lucas 04/08, esperó más de una hora).
+  if ((estado === "cancelada" || estado === "rechazada") && !salaVideoUrl) {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
+          <span className="text-5xl">🕐</span>
+        </div>
+        <h1 className="mt-6 text-xl font-bold text-gray-900">
+          Esta consulta no pudo concretarse
+        </h1>
+        <p className="mt-2 text-sm text-gray-600">
+          El médico no llegó a tomar tu consulta esta vez. <strong>No se te cobró nada.</strong>
+        </p>
+        <a
+          href="/clinica"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Buscar otro médico
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="text-center">
@@ -280,6 +348,67 @@ export default function SalaEsperaCliente({
 
       {/* Estudios del paciente — solo después de que el médico acepte */}
       {aceptada && <EstudiosPaciente consultaId={consultaId} />}
+
+      {/* Aviso de demora: a los 10 min sin aceptación, decir la verdad y dar salida */}
+      {!aceptada && minutosEspera >= MINUTOS_AVISO_DEMORA && (
+        <div
+          className="mt-6 rounded-xl p-4 text-left text-sm"
+          style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
+        >
+          <p className="font-semibold">El médico todavía no aceptó tu consulta.</p>
+          <p className="mt-1">
+            Podés seguir esperando, cancelar sin cargo, o{" "}
+            <a href="/clinica" className="font-semibold underline">
+              buscar otro médico disponible
+            </a>
+            . No se te cobra nada hasta que el médico acepte y pagues.
+          </p>
+        </div>
+      )}
+
+      {/* Cancelar solicitud — disponible mientras no haya pago ni videollamada.
+          Confirmación inline (NUNCA window.confirm — Chrome lo suprime). */}
+      {!salaVideoUrl && estado !== "pagada" && estado !== "en_curso" && (
+        <div className="mt-5">
+          {confirmandoCancelar ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-sm font-medium text-gray-800">
+                ¿Cancelar la solicitud? No se te cobró nada.
+              </p>
+              <div className="mt-3 flex gap-3">
+                <button
+                  onClick={() => setConfirmandoCancelar(false)}
+                  disabled={cancelando}
+                  className="flex-1 rounded-xl bg-[#378ADD] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2e6fb5] disabled:opacity-50"
+                >
+                  Seguir esperando
+                </button>
+                <button
+                  onClick={cancelarSolicitud}
+                  disabled={cancelando}
+                  className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                  style={{ border: "1.5px solid #E24B4A", color: "#E24B4A", background: "transparent" }}
+                >
+                  {cancelando ? "Cancelando..." : "Sí, cancelar"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmandoCancelar(true)}
+              className="text-sm font-medium underline"
+              style={{ color: "#888780" }}
+            >
+              Cancelar solicitud
+            </button>
+          )}
+          {errorCancelar && (
+            <p className="mt-2 text-sm font-medium" style={{ color: "#E24B4A" }}>
+              {errorCancelar}
+            </p>
+          )}
+        </div>
+      )}
 
       <p className="mt-6 text-xs text-gray-400">
         No cierres esta pestaña
