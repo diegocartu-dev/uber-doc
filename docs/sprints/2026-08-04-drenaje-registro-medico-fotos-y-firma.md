@@ -60,6 +60,21 @@ se interceptó y abortó antes del server (jamás se creó ficha). Sondas:
 - `input.value` se limpia al rechazar (permite reelegir el mismo archivo).
 - Topes server-side (`actions.ts`, `api/medico/firma`) intactos como backstop.
 
+## Causa 3 — "Error al enviar el registro" con la ficha YA creada (fix 05/08)
+
+Cazada por la instrumentación **en su primer día**, durante la prueba de registro
+real de Diego (05/08): el evento `registro_medico_error` quedó grabado 2 segundos
+DESPUÉS de que la ficha ya existía en `medicos`. Causa: el `redirect()` del server
+action viaja como excepción de control (`NEXT_REDIRECT`) y el `try/catch` del form
+la atrapaba como si fuera un fallo → cartel rojo "Error al enviar el registro.
+Recargá la página" **sobre un envío exitoso**. Un médico real que ve eso cree que
+falló y abandona, con la ficha creada y sin saberlo.
+
+**Fix:** el catch deja pasar las excepciones con `digest` `NEXT_REDIRECT` (la
+navegación a identidad se completa) y solo reporta los errores reales. Barrido del
+patrón en el resto del código: era el único caller que envolvía una action con
+redirect en try/catch.
+
 ## Regla que queda
 
 **Todo formulario que reciba imágenes del usuario pasa por

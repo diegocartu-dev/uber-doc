@@ -268,7 +268,19 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         setLoading(false);
         window.scrollTo(0, 0);
       }
-    } catch {
+    } catch (err) {
+      // El redirect() del server action viaja como excepción (NEXT_REDIRECT).
+      // NO es un error: atraparlo mostraba "Error al enviar el registro" con la
+      // ficha YA creada y la navegación en curso — el médico creía que falló y
+      // abandonaba (cazado por la instrumentación en la prueba de Diego 05/08).
+      if (
+        err &&
+        typeof err === "object" &&
+        "digest" in err &&
+        String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
+      ) {
+        throw err; // Next completa la navegación a /registro-medico/identidad
+      }
       reportarError("envio", "Error al enviar el registro. Recargá la página e intentá de nuevo.");
       setLoading(false);
       window.scrollTo(0, 0);
