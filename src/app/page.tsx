@@ -41,6 +41,12 @@ export default async function Home({
 
     if (medico) redirect("/dashboard");
 
+    // Médico que dejó el registro por la mitad: de vuelta a SU formulario.
+    // Sin esto caía al flujo de paciente — se le creaba ficha de paciente y se
+    // le pedía DNI, sexo y obra social (hallazgo 06/08). Es lo que ve hoy
+    // cualquiera de los ~14 médicos trabados que escriba docto.com.ar.
+    if (user.user_metadata?.role === "medico") redirect("/registro-medico/continuar");
+
     const admin = createAdminClient();
     const { data: paciente } = await admin
       .from("pacientes")
