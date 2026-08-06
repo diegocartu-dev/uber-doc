@@ -8,13 +8,20 @@ import { getFlag } from "@/lib/feature-flags";
 import { transaccionEsDeTest } from "@/lib/pago-test";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 
+/**
+ * @deprecated No hace nada y NUNCA hizo nada: corre con el cliente RLS del
+ * paciente y la policy "Pacientes actualizan sus turnos" exige
+ * `paciente_id = paciente_id_for_current_user()` en el with_check, así que
+ * poner `paciente_id = null` (que es LO QUE ES liberar) siempre fue rechazado.
+ * El error nunca se miraba → falla silenciosa: 4 turnos quedaron bloqueados,
+ * el más viejo 3 semanas (hallazgo 06/08).
+ *
+ * La liberación real la hace ahora /api/cron/liberar-reservas cada 10 minutos
+ * con service role. Esta función queda como no-op para no romper el import del
+ * calendario; se borra cuando se limpie el componente.
+ */
 export async function limpiarReservasExpiradas() {
-  const supabase = await createClient();
-  await supabase
-    .from("turnos")
-    .update({ estado: "disponible", paciente_id: null, reservado_hasta: null })
-    .eq("estado", "reservado_pendiente")
-    .lt("reservado_hasta", new Date().toISOString());
+  return;
 }
 
 export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual") {
@@ -261,7 +268,13 @@ export async function expirarTurno(turnoId: string) {
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.paciente_id !== paciente.id) return { error: "Este turno no te pertenece." };
 
-  const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
+  // Service role: el RPC `expirar_turno` dejó de tener EXECUTE para
+  // `authenticated` con el REVOKE del 08/07 (migración 20260708), así que este
+  // camino venía devolviendo "permission denied" en silencio — y la pantalla de
+  // pago le decía igual al paciente "el turno volvió a estar disponible", que
+  // era mentira (hallazgo 06/08). La pertenencia del turno ya se validó arriba
+  // con la sesión del paciente, así que elevar acá es seguro y acotado.
+  const { error } = await createAdminClient().rpc("expirar_turno", { turno_id: turnoId });
   if (error) return { error: error.message };
   return { success: true };
 }

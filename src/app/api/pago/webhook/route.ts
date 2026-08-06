@@ -251,7 +251,13 @@ async function handlePayment(paymentId: string): Promise<void> {
   } else if (status === "charged_back") {
     await handleChargedBack(admin, tipo, id, paymentId, transactionAmount, logCtx);
   } else {
-    logInfo("[WEBHOOK]", "Estado pendiente, sin acción", logCtx);
+    // Estados en vuelo (pending = cupón Rapipago/Pago Fácil, in_process =
+    // revisión de MP, authorized = tarjeta autorizada sin capturar). Antes solo
+    // se logueaban, así que `mp_status` quedaba NULL y esa plata en camino era
+    // invisible para el resto del sistema — en particular para el cron que
+    // libera reservas vencidas, que veía el turno como abandonado (hallazgo
+    // 06/08). Persistirlos es lo que le permite NO tocar ese turno.
+    await handleStatusOnly(admin, tipo, id, paymentId, status, logCtx);
   }
 }
 
