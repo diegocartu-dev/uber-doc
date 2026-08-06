@@ -17,6 +17,30 @@ function hoyAR() {
 const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 const SLOTS = ["disponible", "bloqueado"];
 
+// ── Reservas ABANDONADAS (decisión Diego 06/08) ──────────────────────────────
+// Al reservar, el turno pasa a 'reservado_pendiente' con `reservado_hasta` =
+// ahora + ~15 min (retención para pagar). Si el paciente no paga, la retención
+// vence y el lugar se libera — pero la liberación es PEREZOSA: recién ocurre
+// cuando alguien abre el calendario de ese médico, así que la fila puede quedar
+// en 'reservado_pendiente' con `reservado_hasta` en el pasado por horas o días.
+// Eso NO es una solicitud: son las vueltas de un paciente indeciso (caso real:
+// tres filas para UNA sola reserva pagada). No se muestran en ningún reporte.
+// Nada se borra de la base: sólo se ocultan del panel.
+//
+// Notas del criterio:
+//  - `reservado_hasta` NULL con estado 'reservado_pendiente' es una anomalía
+//    (la reserva SIEMPRE setea la retención) → se trata como abandonada.
+//  - `mp_status = 'approved'` rescata el race real que ya alerta el webhook
+//    (el pago se aprobó después de que venciera la retención): ahí hay plata de
+//    verdad y la fila tiene que seguir viéndose.
+//  - Las reservas VIVAS (retención en el futuro) son un pago en curso legítimo:
+//    se siguen mostrando, etiquetadas "Reservando…" en el cliente.
+type FilaReserva = { estado: string; reservado_hasta?: string | null; mp_status?: string | null };
+const esReservaAbandonada = (t: FilaReserva, ahoraMs: number) =>
+  t.estado === "reservado_pendiente" &&
+  t.mp_status !== "approved" &&
+  (!t.reservado_hasta || new Date(t.reservado_hasta).getTime() < ahoraMs);
+
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -83,6 +107,7 @@ export async function GET(req: NextRequest) {
     const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "1", 10) || 1, 1), 30);
     const desdeFecha = fechaAR(dias - 1);
     const desdeUTC = medianocheARenUTC(desdeFecha);
+    const ahoraMs = Date.now();
 
     const [{ data: consultas }, { data: turnos }] = await Promise.all([
       admin
@@ -93,7 +118,7 @@ export async function GET(req: NextRequest) {
         .limit(300),
       admin
         .from("turnos")
-        .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, mp_payment_created_at, updated_at")
+        .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, mp_payment_created_at, updated_at, reservado_hasta, mp_status")
         .not("paciente_id", "is", null)
         .not("estado", "in", `(${SLOTS.join(",")})`)
         // cita en la ventana O solicitado/movido en la ventana (agendas futuras)
@@ -134,7 +159,12 @@ export async function GET(req: NextRequest) {
           inicio: c.created_at,
         })),
       ...(turnos ?? [])
-        .filter((t) => !medTest.has(t.medico_id) && !pacDe(t.paciente_id)?.es_cuenta_test)
+        // El descarte de reservas abandonadas va en JS y no en la query: el
+        // filtro de arriba ya es un `.or(...)` con `and(...)` adentro y sumarle
+        // un segundo `.or(...)` (más el NULL de `reservado_hasta`, que PostgREST
+        // excluye solo en los `gte`) lo vuelve ilegible y difícil de auditar.
+        // El volumen del período (limit 300) hace irrelevante la diferencia.
+        .filter((t) => !medTest.has(t.medico_id) && !pacDe(t.paciente_id)?.es_cuenta_test && !esReservaAbandonada(t, ahoraMs))
         .map((t) => ({
           id: t.id,
           tipo: "Turno" as const,
@@ -153,6 +183,9 @@ export async function GET(req: NextRequest) {
   }
 
   if (tab === "historial") {
+    // Historial lista SOLO consultas inmediatas (tabla `consultas`): no trae
+    // turnos, así que acá no hay reservas abandonadas que esconder. Si algún día
+    // se le suman turnos, filtrarlos con `esReservaAbandonada`.
     const desde = req.nextUrl.searchParams.get("desde");
     const hasta = req.nextUrl.searchParams.get("hasta");
 
