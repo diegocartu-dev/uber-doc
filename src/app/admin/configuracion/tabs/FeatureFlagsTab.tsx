@@ -83,6 +83,12 @@ export default function FeatureFlagsTab() {
         </p>
       )}
 
+      {/* Leyenda: qué significa "kill switch" (asustaba sin explicación) */}
+      <p className="text-xs text-gray-400">
+        «Kill switch» = interruptor de emergencia: apagarlo corta ese flujo al instante en producción.
+        Verde = funcionando normal.
+      </p>
+
       {/* Kill Switches */}
       <div>
         <div className="flex items-center gap-2 mb-3">
