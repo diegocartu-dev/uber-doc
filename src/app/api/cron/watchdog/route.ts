@@ -34,6 +34,7 @@ const ESPERADOS: Record<string, number> = {
   "reconciliar-identidad": 10,
   "aviso-agenda-vencida": 1440,
   "saldo-servicios": 1440,
+  "provisionar-claves": 1440,
   uptime: 1,
 };
 
