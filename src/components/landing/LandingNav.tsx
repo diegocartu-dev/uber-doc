@@ -67,9 +67,19 @@ export default function LandingNav() {
             <a href="#inmediata" className="landing-nav-mid" style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}>
               Consulta inmediata
             </a>
-            <a href="#medicos" className="landing-nav-mid" style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 }}>
-              Para médicos
-            </a>
+            {/* Acceso para médicos SIEMPRE visible. Se ocultaba a ≤900px y en el
+                celular el único botón era "Crear cuenta" → registro de PACIENTE:
+                dos médicos reales (29 y 30/07) se crearon primero una cuenta de
+                paciente y recién después una de médico, con otro mail
+                (auditoría 06/08). En mobile el texto se acorta a "Soy médico". */}
+            <Link
+              href="/medicos"
+              className="landing-nav-medicos"
+              style={{ fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500, whiteSpace: "nowrap" }}
+            >
+              <span className="landing-nav-medicos-largo">Para médicos</span>
+              <span className="landing-nav-medicos-corto">Soy médico</span>
+            </Link>
             <Link
               href="/auth/login"
               className="landing-nav-login"
@@ -97,6 +107,7 @@ export default function LandingNav() {
       </nav>
 
       <style>{`
+        .landing-nav-medicos-corto { display: none; }
         @media (max-width: 900px) {
           .landing-nav-mid { display: none !important; }
         }
@@ -104,6 +115,9 @@ export default function LandingNav() {
           .landing-nav-links { gap: 10px !important; }
           .landing-nav-login { font-size: 13px !important; }
           .landing-nav-register { font-size: 12px !important; padding: 8px 12px !important; }
+          .landing-nav-medicos { font-size: 13px !important; }
+          .landing-nav-medicos-largo { display: none; }
+          .landing-nav-medicos-corto { display: inline; }
         }
       `}</style>
     </>

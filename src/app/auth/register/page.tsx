@@ -228,6 +228,16 @@ export default function RegisterPage() {
             Iniciá sesión
           </Link>
         </p>
+        {/* Esta pantalla no mencionaba a los médicos ni una vez, y en el celular
+            es la única a la que se llega desde la nav: dos médicos reales se
+            crearon acá una cuenta de paciente y después tuvieron que quemar
+            otro mail para registrarse bien (auditoría 06/08). */}
+        <p className="mt-2 text-center text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+          ¿Sos médico?{" "}
+          <Link href="/auth/registro-medico" className="font-medium" style={{ color: "var(--color-text-link)" }}>
+            Registrate acá
+          </Link>
+        </p>
       </div>
     </div>
   );
