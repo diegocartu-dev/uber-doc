@@ -55,7 +55,14 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "suspendido", label: "Suspendidos" },
 ];
 
-export default function MedicosClient({ medicos: initial }: { medicos: Medico[] }) {
+export default function MedicosClient({
+  medicos: initial,
+  gateIdentidadActiva,
+}: {
+  medicos: Medico[];
+  // Estado REAL del flag identidad_gate_activa, leído en el server (page.tsx).
+  gateIdentidadActiva: boolean;
+}) {
   const [medicos, setMedicos] = useState(initial);
   const [tab, setTab] = useState<Tab>("pendiente_revision");
   const [search, setSearch] = useState("");
@@ -244,6 +251,7 @@ export default function MedicosClient({ medicos: initial }: { medicos: Medico[] 
               <PendienteCard
                 key={m.id}
                 medico={m}
+                gateIdentidadActiva={gateIdentidadActiva}
                 procesando={procesando === m.id}
                 confirmando={confirmando?.id === m.id ? confirmando.accion : null}
                 onAprobar={() => handleAccion(m.id, "aprobar")}
@@ -316,7 +324,7 @@ function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Rec
  * (reclamo Diego 18/07: "sigo sin ver si realizó o no la verificación").
  * Solo display: los campos ya viajan en el select del page.
  */
-function BloqueIdentidad({ medico: m }: { medico: Medico }) {
+function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva: boolean }) {
   if (m.identidad_validada) {
     return (
       <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
@@ -384,8 +392,14 @@ function BloqueIdentidad({ medico: m }: { medico: Medico }) {
         <ShieldAlert size={16} /> Identidad biométrica NO realizada
       </div>
       <p className="mt-1 text-xs text-amber-700">
-        Todavía no hizo la verificación de identidad (selfie + DNI). Se puede aprobar igual — el gate está
-        apagado — pero que sea una decisión consciente.
+        {/* El texto refleja el estado REAL del flag identidad_gate_activa — antes
+            afirmaba "el gate está apagado" hardcodeado, con el gate prendido en prod. */}
+        {/* Ojo: NO decir "no va a aparecer en la clínica" — por decisión de Diego
+            (22/06, ver src/app/clinica/page.tsx) los aprobados sin identidad SÍ
+            aparecen, grisados y no reservables. El candado real vive en la reserva. */}
+        {gateActiva
+          ? "Todavía no hizo la verificación de identidad (selfie + DNI). Podés aprobarla igual, pero con el gate PRENDIDO va a aparecer grisada en la clínica (no reservable) y no va a poder atender ni recibir reservas hasta completarla. Le llegan recordatorios automáticos."
+          : "Todavía no hizo la verificación de identidad (selfie + DNI). Con el gate apagado puede operar sin validarse — que aprobar sea una decisión consciente."}
       </p>
     </div>
   );
@@ -516,6 +530,7 @@ function BloqueRefeps({
 
 function PendienteCard({
   medico: m,
+  gateIdentidadActiva,
   procesando,
   confirmando,
   onAprobar,
@@ -526,6 +541,7 @@ function PendienteCard({
   onRefepsActualizado,
 }: {
   medico: Medico;
+  gateIdentidadActiva: boolean;
   procesando: boolean;
   confirmando: string | null;
   onAprobar: () => void;
@@ -556,7 +572,7 @@ function PendienteCard({
 
       <BloqueRefeps medico={m} onResultado={onRefepsActualizado} />
 
-      <BloqueIdentidad medico={m} />
+      <BloqueIdentidad medico={m} gateActiva={gateIdentidadActiva} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {m.foto_credencial_url && (
@@ -591,7 +607,15 @@ function PendienteCard({
               : estadoRefeps(m) === "no"
                 ? "REFEPS dice que la matrícula no figura o está inactiva. Al aprobar se re-verifica contra el registro; si sigue igual, la aprobación se bloquea."
                 : "REFEPS todavía sin resultado: se verifica en este paso y se bloquea si no figura."
-          } El medico podra atender pacientes en la plataforma.`}
+          } ${
+            // Mismo criterio que BloqueIdentidad: no afirmar "podrá atender"
+            // si el gate de identidad prendido lo va a frenar. Y NO decir "no va a
+            // aparecer en la clínica": los aprobados sin identidad SÍ aparecen,
+            // grisados y no reservables (decisión Diego 22/06, src/app/clinica/page.tsx).
+            gateIdentidadActiva && !m.identidad_validada && !m.biometria_exenta
+              ? "Queda aprobado, pero con el gate de identidad PRENDIDO va a aparecer grisado en la clínica (no reservable) y no podrá atender ni recibir reservas hasta completar la verificación (selfie + DNI)."
+              : "El medico podra atender pacientes en la plataforma."
+          }`}
           confirmLabel={
             m.didit_status === "Declined" && !m.identidad_validada && !m.biometria_exenta
               ? "Aprobar igual (identidad rechazada)"
