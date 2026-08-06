@@ -8,6 +8,7 @@ import { capitalizarNombre } from "@/lib/utils/texto";
 import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
 import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
+import { provisionarClaves } from "@/lib/firma/claves";
 
 // ─── Rediseño 14/07/2026 — registro en DOS fases ─────────────────────────────
 // FASE A `iniciarRegistroMedico`: crea la CUENTA con lo mínimo (nombre + email +
@@ -355,6 +356,17 @@ export async function completarRegistroMedico(formData: FormData) {
       waitUntil(
         validarYPersistirRefeps(creado.id).catch((e) =>
           console.error("[completarRegistro] REFEPS background falló:", e instanceof Error ? e.message : e)
+        )
+      );
+      // Claves de firma ELECTRÓNICA. Iban solo por el wizard de onboarding, así
+      // que el médico dibujaba su firma en el registro y después el sistema le
+      // decía que le faltaba "la firma" — con el toggle de disponibilidad
+      // bloqueado y sin explicación (auditoría 06/08: 4 médicos aprobados
+      // trabados hoy por esto, con firma manuscrita cargada y claves vacías).
+      // Son cosas distintas y el médico no tiene por qué saberlo.
+      waitUntil(
+        provisionarClaves(creado.id).catch((e) =>
+          console.error("[completarRegistro] provisionar claves falló:", e instanceof Error ? e.message : e)
         )
       );
     }
