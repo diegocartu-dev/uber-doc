@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
+import { sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 function fechaAR(offsetDias = 0) {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
         .limit(300),
       admin
         .from("turnos")
-        .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, mp_payment_created_at, updated_at")
+        .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, mp_payment_created_at, updated_at, reservado_hasta, mp_status")
         .not("paciente_id", "is", null)
         .not("estado", "in", `(${SLOTS.join(",")})`)
         // cita en la ventana O solicitado/movido en la ventana (agendas futuras)
@@ -101,8 +102,15 @@ export async function GET(req: NextRequest) {
         .limit(300),
     ]);
 
-    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...(turnos ?? []).map((t) => t.medico_id)])];
-    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...(turnos ?? []).map((t) => t.paciente_id)])].filter(Boolean);
+    // Reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): 'reservado_pendiente'
+    // con la retención de 15 min vencida y sin pago = el paciente se arrepintió y el
+    // lugar ya está libre. Era el caso del 06/08: un paciente que rebotó entre las
+    // 14:30, las 15:00 y las 15:30 dejaba TRES filas acá como si fueran tres
+    // solicitudes distintas. La reserva VIVA sí se lista (badge "Reservando…").
+    const turnosActividad = sinReservasAbandonadas(turnos ?? []);
+
+    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnosActividad.map((t) => t.medico_id)])];
+    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnosActividad.map((t) => t.paciente_id)])].filter(Boolean);
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
@@ -133,7 +141,7 @@ export async function GET(req: NextRequest) {
           citaPara: null as string | null,
           inicio: c.created_at,
         })),
-      ...(turnos ?? [])
+      ...turnosActividad
         .filter((t) => !medTest.has(t.medico_id) && !pacDe(t.paciente_id)?.es_cuenta_test)
         .map((t) => ({
           id: t.id,

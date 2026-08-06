@@ -4,7 +4,7 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { cobradoDe, comisionTotalDe } from "@/lib/insights/plata";
 import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
-import { sinReservasAbandonadas } from "@/lib/insights/reservas";
+import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reservas";
 
 // Estados de turno que NO son atenciones (slots de agenda). Se excluyen de todo conteo.
 const SLOT = new Set(["disponible", "bloqueado"]);
@@ -79,7 +79,10 @@ export async function GET(req: NextRequest) {
     const atendidasTurnoConsultorio = misTurnos.filter(t => t.estado === "completado" && t.canal_origen === "consultorio_privado").length;
     const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado_paciente" || t.estado === "cancelado_medico").length;
     const noShows = misTurnos.filter(t => t.estado === "ausente_medico").length;
-    const total = misConsultas.length + misTurnos.length; // todas las atenciones (sin slots)
+    // Todas las atenciones (sin slots) y sin reservas EN CURSO: el paciente que
+    // está pagando ahora mismo todavía no es una atención del médico. Su plata
+    // (si la hay) se sigue contando abajo: `filasPago` usa misTurnos completo.
+    const total = misConsultas.length + soloActividadReal(misTurnos).length;
     // Plata REAL (ver lib/insights/plata.ts): lo aprobado en MP y el fee que MP
     // registró — muere el GMV teórico (precio de lista × atendidas) y el
     // hardcode de $1.500 por consulta.

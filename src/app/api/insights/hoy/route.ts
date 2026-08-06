@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
-import { sinReservasAbandonadas } from "@/lib/insights/reservas";
+import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reservas";
 
 // ── Página "Hoy" v2 (rediseño Diego 23/07) ────────────────────────────────────
 // 1. PLATA REAL, no teórica: cobrado = suma de `monto` PAGADO (mp_status
@@ -80,7 +80,10 @@ export async function GET(req: NextRequest) {
   const completadasHoy = consultasHoy.filter(c => c.estado === "completada").length +
     turnosAtencionHoy.filter(t => t.estado === "completado").length;
   const ciHoy = consultasHoy.filter(c => c.canal_origen !== "turno").length;
-  const turnosHoyCount = turnosAtencionHoy.length;
+  // KPI "Turnos hoy" = actividad REAL: sin abandonadas y sin reservas en curso.
+  // Una reserva viva se sigue listando abajo en `actividad` (etiquetada), pero
+  // todavía no es un turno: el paciente está en el checkout de MP.
+  const turnosHoyCount = soloActividadReal(turnosAtencionHoy).length;
 
   const completadas7dAgo = (consultas7d ?? []).filter(c =>
     c.estado === "completada" && (!soloReales || !esTest(sets, c.medico_id, c.paciente_id))
