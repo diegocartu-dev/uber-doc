@@ -60,22 +60,36 @@ export const GET = withCron("recuperar-registros", async () => {
     if (data.users.length < PER_PAGE) break;
   }
 
+  // Preselección: usuarios con rol médico y email (el resto de los filtros vienen
+  // después). Acota las DOS queries siguientes con .in() — sin eso quedaban
+  // sujetas al tope default de PostgREST (1000 filas) y el truncado silencioso
+  // podía mailear a un médico que SÍ completó (hallazgo revisión 06/08).
+  const posibles = usuarios.filter(
+    (u) => u.user_metadata?.role === "medico" && (u.email ?? "").length > 0
+  );
+  const posiblesIds = posibles.map((u) => u.id);
+  const posiblesEmails = posibles.map((u) => (u.email as string).toLowerCase());
+
   // Fila en `medicos` = registro completado (se crea al cargar los datos
   // profesionales). Los que la tienen no son abandono.
   const { data: filasMedicos, error: errMedicos } = await admin
     .from("medicos")
-    .select("user_id");
+    .select("user_id")
+    .in("user_id", posiblesIds.length > 0 ? posiblesIds : ["00000000-0000-0000-0000-000000000000"]);
   if (errMedicos) throw new Error(`medicos: ${errMedicos.message}`);
   const completaron = new Set((filasMedicos ?? []).map((m) => m.user_id as string));
 
-  // Dedupe 1: ya hay un mail con este asunto en `correos` (cubre los recuperos
-  // manuales que mandó el CEO desde la Bandeja). Se ignoran los intentos
-  // fallidos (error_envio): un envío que nunca salió no cuenta como recibido.
+  // Dedupe 1: ya hay un mail de recupero para ese email en `correos` — con ILIKE
+  // para cubrir también las respuestas del hilo ("Re: Te falta un paso...", caso
+  // Davide: recibió el recupero manual FUERA de la Bandeja pero la respuesta que
+  // le mandamos por la Bandeja sí quedó registrada con el prefijo "Re:").
+  // Se ignoran los intentos fallidos (error_envio): nunca salió, no cuenta.
   const { data: yaEnviados, error: errCorreos } = await admin
     .from("correos")
     .select("para")
-    .eq("asunto", ASUNTO_RECUPERO)
-    .is("error_envio", null);
+    .ilike("asunto", `%${ASUNTO_RECUPERO}%`)
+    .is("error_envio", null)
+    .in("para", posiblesEmails.length > 0 ? posiblesEmails : ["nadie@nadie.invalido"]);
   if (errCorreos) throw new Error(`correos: ${errCorreos.message}`);
   const yaMaileados = new Set(
     (yaEnviados ?? []).map((c) => String(c.para ?? "").toLowerCase())
