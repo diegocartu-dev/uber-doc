@@ -75,12 +75,41 @@ navegación a identidad se completa) y solo reporta los errores reales. Barrido 
 patrón en el resto del código: era el único caller que envolvía una action con
 redirect en try/catch.
 
+## Causa 4 — el selector de credencial rechazaba por peso ANTES de comprimir (fix 06/08)
+
+**Tercera aparición del mismo patrón.** Diego: "siguen sin registrarse médicos".
+La instrumentación dio el rastro del único intento de 48h (Noelia, 05/08 23:41):
+paso 1 → paso 2 → 20 minutos → recarga de página → paso 2 → **silencio, sin evento
+de error**.
+
+El punto ciego: los dos guards de 5 MB de los `<input type="file">` (credencial y
+foto de perfil) eran los ÚNICOS `setError` sin instrumentar. Y el bug: ese guard
+corría **antes** de comprimir, así que una foto de celular de 6-8 MB se rechazaba
+en seco al elegirla — la compresión del submit nunca llegaba a correr porque el
+archivo ya había sido descartado. Sin salida desde un teléfono.
+
+**Fix (PR #337):** `prepararImagen()` comprime primero y chequea el tope después.
+Los PDF (no comprimibles) conservan el tope con mensaje accionable. Ambos caminos
+instrumentados (`donde: 'archivo'`).
+
+**Verificación empírica post-deploy:** credencial real de 11,6 MB → aceptada
+comprimida, avanza al paso 3, el envío no muere por peso (4/4 checks).
+
 ## Regla que queda
 
 **Todo formulario que reciba imágenes del usuario pasa por
 `src/lib/imagenes/comprimir.ts` ANTES de cualquier chequeo de peso o envío.**
 Un tope de peso sin compresión previa es un bug latente: las cámaras de los
 celulares producen fotos de 3-12 MB y el usuario no tiene forma de achicarlas.
+
+Corolario aprendido a los golpes (3 apariciones): **el barrido de esta regla
+tiene que cubrir los `onChange` de los `<input type="file">`, no solo el submit.**
+Rechazar al elegir el archivo es peor que rechazar al enviar: el usuario ni
+siquiera llega a intentarlo.
+
+**Y toda ruta que muestre un error al usuario se instrumenta.** Los dos únicos
+`setError` sin `reportarError` fueron exactamente donde murió el siguiente
+médico, y costaron un día de diagnóstico a ciegas.
 
 ## Pendiente
 
