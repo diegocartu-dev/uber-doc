@@ -36,7 +36,10 @@ function checkRateLimit(ip: string): boolean {
 }
 
 function validarDNI(dni: string): boolean {
-  return /^\d{7,8}$/.test(dni);
+  // Aceptar el DNI como lo escribe la gente ("25.086.458"): puntos, espacios y
+  // guiones fuera antes del regex. El cliente ya manda el valor limpio (el paso 1
+  // lo normaliza en el input); esto es la red para cualquier otro caller.
+  return /^\d{7,8}$/.test(dni.replace(/[.\s-]/g, ""));
 }
 
 /**
@@ -63,7 +66,8 @@ async function emailYaTieneCuenta(email: string): Promise<boolean> {
 }
 
 function validarCUIT(cuit: string): string | null {
-  const limpio = cuit.replace(/[-\s]/g, "");
+  // También sacamos puntos: "20-25.086.458-4" es un formato real de la gente.
+  const limpio = cuit.replace(/[.\s-]/g, "");
   if (!/^\d{11}$/.test(limpio)) return null;
   return limpio;
 }
