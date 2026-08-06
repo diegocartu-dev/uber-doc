@@ -135,6 +135,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada minuto",
     autoRecupera: true,
   },
+  "liberar-reservas": {
+    nombre: "Liberar turnos reservados sin pagar",
+    queHace: "cada 10 minutos devuelve a 'disponible' los turnos que un paciente reservó y no pagó dentro de los 15 minutos de retención",
+    impacto: "sin esto el turno queda bloqueado para siempre y ningún paciente puede tomarlo (4 turnos bloqueados al 06/08, dos de ellos del mismo día)",
+    cadencia: "cada 10 minutos",
+    autoRecupera: true,
+  },
   "provisionar-claves": {
     nombre: "Claves de firma electrónica",
     queHace: "revisa todos los días que cada médico aprobado tenga sus claves de firma electrónica y se las crea si le faltan",
