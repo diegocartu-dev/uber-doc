@@ -31,6 +31,18 @@ causa 3).
 
 ## Limpieza al terminar (orden importa)
 
+⚠️ **Desde el 06/08 el registro crea las claves de firma electrónica en
+background (`medico_claves`), y esa tabla tiene un trigger que PROHÍBE borrar**
+(`trg_no_delete_medico_claves`, protege el rastro de documentos firmados). Una
+sonda que completa el registro ya NO se puede borrar físicamente. **Limpieza
+estándar de sondas con ficha: marcar, no borrar** —
+`update medicos set es_cuenta_test = true, estado_registro = 'rechazado',
+notas_admin = 'Sonda E2E — no es un médico real' where email = ...` — con eso
+desaparece del panel y de todos los flujos. El usuario auth queda (la FK de la
+ficha lo retiene): es inofensivo y los filtros excluyen %pruebas-docto%.
+Verificar SIEMPRE el `error` de cada delete: los borrados fallan en silencio
+(así quedaron dos sondas visibles en el panel de Diego el 06/08).
+
 1. Storage: `credenciales-medicos/<user_id>/…` y `firmas-medicos/medicos/<user_id>/firma.*`
 2. Fila de `medicos`
 3. `eventos_funnel` where `metadata->>'user_id' = <user_id>`
