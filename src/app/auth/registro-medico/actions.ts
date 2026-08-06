@@ -213,7 +213,11 @@ export async function completarRegistroMedico(formData: FormData) {
         "Revisá el celular: tiene que ser un móvil argentino de 10 dígitos (código de área + número, ej: 11 4028 9141).",
     };
   }
-  const dni = (formData.get("dni") as string)?.trim();
+  // DNI normalizado UNA sola vez (sin puntos/espacios/guiones) y usado en la
+  // validación, el cruce con el CUIT y el INSERT — si validara con puntos pero
+  // cruzara/persistiera el crudo, un caller no-UI pasaría validarDNI y moriría
+  // siempre en el cruce con un mensaje engañoso (hallazgo revisión 06/08).
+  const dni = ((formData.get("dni") as string) ?? "").trim().replace(/[.\s-]/g, "");
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
 
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";

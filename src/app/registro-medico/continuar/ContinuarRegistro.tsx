@@ -107,6 +107,9 @@ const BORRADOR_MAX_MS = 7 * 24 * 60 * 60 * 1000; // 7 días y el borrador expira
 const BORRADOR_DEBOUNCE_MS = 800;
 
 type Borrador = {
+  /** Dueño del borrador: en una compu compartida (clínicas), el borrador del
+      médico A jamás debe restaurarse — ni mostrarse — al médico B. */
+  uid: string;
   guardadoEn: number;
   paso: number;
   campos: Record<string, string>;
@@ -154,7 +157,7 @@ function BloqueHeader({ titulo, subtitulo }: { titulo: string; subtitulo: string
 // (Fase A) y confirmó el mail → llega acá YA LOGUEADO. Completa datos + credencial
 // → se crea la ficha de `medicos` → biometría (/registro-medico/identidad).
 // La cuenta (nombre/email/password) ya existe: acá NO se pide de nuevo.
-export default function ContinuarRegistro({ nombre }: { nombre: string }) {
+export default function ContinuarRegistro({ nombre, userId }: { nombre: string; userId: string }) {
   const [paso, setPaso] = useState(1);
   const [tipoMatricula, setTipoMatricula] = useState(""); // nada prellenado
   const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
@@ -196,7 +199,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
     }
     const hayAlgo = Object.values(campos).some((v) => v.trim() !== "") || tieneMatriculaExtra;
     if (!hayAlgo) return; // no crear borradores vacíos con solo abrir la página
-    const borrador: Borrador = { guardadoEn: Date.now(), paso, campos, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
+    const borrador: Borrador = { uid: userId, guardadoEn: Date.now(), paso, campos, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
     try {
       localStorage.setItem(BORRADOR_KEY, JSON.stringify(borrador));
     } catch {
@@ -229,6 +232,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       if (!raw) return;
       const b = JSON.parse(raw) as Partial<Borrador> | null;
       if (!b || typeof b !== "object" || typeof b.guardadoEn !== "number" || Date.now() - b.guardadoEn > BORRADOR_MAX_MS) {
+        localStorage.removeItem(BORRADOR_KEY);
+        return;
+      }
+      if (b.uid !== userId) {
+        // Borrador de OTRO usuario (compu compartida): descartar sin restaurar —
+        // el DNI/CUIT/celular del médico A no se le muestran al médico B.
         localStorage.removeItem(BORRADOR_KEY);
         return;
       }
@@ -289,8 +298,16 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   }, []);
 
   // Guardado extra al cambiar de paso (además del debounce): el momento de mayor
-  // riesgo de pérdida es justo después de completar un paso entero.
+  // riesgo de pérdida es justo después de completar un paso entero. La PRIMERA
+  // corrida (montaje) se saltea: en ese instante los estados restaurados del
+  // borrador todavía no re-renderizaron y este guardado lo pisaría degradado
+  // (sin tipo/número de matrícula — hallazgo revisión 06/08).
+  const pasoMontajeRef = useRef(true);
   useEffect(() => {
+    if (pasoMontajeRef.current) {
+      pasoMontajeRef.current = false;
+      return;
+    }
     guardarBorrador();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paso]);
