@@ -26,5 +26,5 @@ export default async function ContinuarRegistroPage() {
 
   const nombre = (user.user_metadata?.full_name as string) || "";
 
-  return <ContinuarRegistro nombre={nombre} />;
+  return <ContinuarRegistro nombre={nombre} userId={user.id} />;
 }

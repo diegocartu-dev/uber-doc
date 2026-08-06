@@ -36,7 +36,10 @@ function checkRateLimit(ip: string): boolean {
 }
 
 function validarDNI(dni: string): boolean {
-  return /^\d{7,8}$/.test(dni);
+  // Aceptar el DNI como lo escribe la gente ("25.086.458"): puntos, espacios y
+  // guiones fuera antes del regex. El cliente ya manda el valor limpio (el paso 1
+  // lo normaliza en el input); esto es la red para cualquier otro caller.
+  return /^\d{7,8}$/.test(dni.replace(/[.\s-]/g, ""));
 }
 
 /**
@@ -63,7 +66,8 @@ async function emailYaTieneCuenta(email: string): Promise<boolean> {
 }
 
 function validarCUIT(cuit: string): string | null {
-  const limpio = cuit.replace(/[-\s]/g, "");
+  // También sacamos puntos: "20-25.086.458-4" es un formato real de la gente.
+  const limpio = cuit.replace(/[.\s-]/g, "");
   if (!/^\d{11}$/.test(limpio)) return null;
   return limpio;
 }
@@ -209,7 +213,11 @@ export async function completarRegistroMedico(formData: FormData) {
         "Revisá el celular: tiene que ser un móvil argentino de 10 dígitos (código de área + número, ej: 11 4028 9141).",
     };
   }
-  const dni = (formData.get("dni") as string)?.trim();
+  // DNI normalizado UNA sola vez (sin puntos/espacios/guiones) y usado en la
+  // validación, el cruce con el CUIT y el INSERT — si validara con puntos pero
+  // cruzara/persistiera el crudo, un caller no-UI pasaría validarDNI y moriría
+  // siempre en el cruce con un mensaje engañoso (hallazgo revisión 06/08).
+  const dni = ((formData.get("dni") as string) ?? "").trim().replace(/[.\s-]/g, "");
   const matricula_provincial = (formData.get("matricula_provincial") as string) || null;
 
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
