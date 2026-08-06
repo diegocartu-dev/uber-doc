@@ -268,7 +268,13 @@ export async function expirarTurno(turnoId: string) {
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.paciente_id !== paciente.id) return { error: "Este turno no te pertenece." };
 
-  const { error } = await supabase.rpc("expirar_turno", { turno_id: turnoId });
+  // Service role: el RPC `expirar_turno` dejó de tener EXECUTE para
+  // `authenticated` con el REVOKE del 08/07 (migración 20260708), así que este
+  // camino venía devolviendo "permission denied" en silencio — y la pantalla de
+  // pago le decía igual al paciente "el turno volvió a estar disponible", que
+  // era mentira (hallazgo 06/08). La pertenencia del turno ya se validó arriba
+  // con la sesión del paciente, así que elevar acá es seguro y acotado.
+  const { error } = await createAdminClient().rpc("expirar_turno", { turno_id: turnoId });
   if (error) return { error: error.message };
   return { success: true };
 }
