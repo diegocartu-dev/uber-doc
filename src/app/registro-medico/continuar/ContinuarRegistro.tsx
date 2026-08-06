@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
+import { comprimirImagen, comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
 import { trackFunnel } from "@/lib/funnel-client";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
@@ -133,6 +133,39 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   function reportarError(donde: string, msg: string) {
     setError(msg);
     trackFunnel("registro_medico_error", { donde, motivo: msg });
+  }
+
+  /**
+   * Prepara un archivo recién elegido: lo COMPRIME primero y recién después
+   * chequea el tope. Devuelve el archivo listo, o `undefined` si fue rechazado.
+   *
+   * El orden importa y ya nos costó caro dos veces (credencial 01/08, firma
+   * 04/08): una foto de celular pesa 4-8 MB, así que rechazar ANTES de
+   * comprimir deja al médico sin salida — no tiene cómo achicarla desde el
+   * teléfono. Comprimida, una credencial de 8 MB queda en ~600 KB legibles.
+   * Los PDF no se comprimen: ahí el tope se aplica con un mensaje que dice
+   * qué hacer.
+   */
+  async function prepararImagen(
+    input: HTMLInputElement,
+    etiqueta: string
+  ): Promise<File | null | undefined> {
+    const original = input.files?.[0] ?? null;
+    if (!original) return null;
+    setError(null);
+
+    const file = await comprimirImagen(original);
+    if (file.size > MAX_FILE_SIZE) {
+      reportarError(
+        "archivo",
+        file.type === "application/pdf"
+          ? `El PDF de la ${etiqueta} es muy pesado (más de 5 MB). Probá sacarle una foto en vez de subir el PDF.`
+          : `No pudimos achicar la ${etiqueta} lo suficiente. Probá sacar la foto de nuevo con menos zoom.`
+      );
+      input.value = "";
+      return undefined;
+    }
+    return file;
   }
 
   // Paso 1 — "Completá tus datos": valida los 3 bloques. Teléfono profesional y
@@ -476,15 +509,9 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    if (file && file.size > MAX_FILE_SIZE) {
-                      setError("La foto no puede superar 5 MB.");
-                      e.target.value = "";
-                      return;
-                    }
-                    setError(null);
-                    setFotoPerfil(file);
+                  onChange={async (e) => {
+                    const file = await prepararImagen(e.target, "foto de perfil");
+                    if (file !== undefined) setFotoPerfil(file);
                   }}
                 />
                 <p className={hintClass}>La ven los pacientes en tu bio. Distinta de la credencial (próximo paso).</p>
@@ -532,15 +559,9 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                 type="file"
                 accept="image/*,.pdf"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] ?? null;
-                  if (file && file.size > MAX_FILE_SIZE) {
-                    setError("El archivo no puede superar 5 MB.");
-                    e.target.value = "";
-                    return;
-                  }
-                  setError(null);
-                  setFotoCredencial(file);
+                onChange={async (e) => {
+                  const file = await prepararImagen(e.target, "credencial");
+                  if (file !== undefined) setFotoCredencial(file);
                 }}
               />
             </div>
