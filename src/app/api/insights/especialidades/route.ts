@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+import { sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 // ── Página "Especialidades" v2 (directivas Diego 28/07) ──────────────────────
 // 1. Solo las especialidades que TENEMOS (con médicos; una sin médicos solo
@@ -40,16 +41,20 @@ export async function GET(req: NextRequest) {
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, es_cuenta_test, jurisdicciones").eq("verificado", true),
     admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, monto, mp_status").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id, canal_origen").gte("fecha", desde),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id, canal_origen, reservado_hasta").gte("fecha", desde),
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
     setsDeTest(admin),
   ]);
 
   const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
   const consultas = (consultasRaw ?? []).filter((c) => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
-  const turnos = (turnosRaw ?? [])
-    .filter((t) => !SLOT.has(t.estado))
-    .filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
+  // + reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): retención de
+  // 15 min vencida sin pago. Sumaban demanda fantasma a la especialidad.
+  const turnos = sinReservasAbandonadas(
+    (turnosRaw ?? [])
+      .filter((t) => !SLOT.has(t.estado))
+      .filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id)),
+  );
 
   // Refunds ejecutados: el pago sigue "approved" pero la plata volvió al
   // paciente. En turnos reprogramados la plata vive en la fila ORIGINAL de la

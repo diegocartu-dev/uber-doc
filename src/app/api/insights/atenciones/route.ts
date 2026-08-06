@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+import { sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 // Panel "Atenciones": una fila por atención REAL (no por slot de agenda), para
 // saber qué pasó — médico, paciente, tipo, estado, duración, cobro y documentos.
@@ -20,6 +21,9 @@ const ESTADO_LABEL: Record<string, string> = {
   en_curso: "En curso",
   esperando: "Esperando",
   confirmado: "Agendada",
+  // Reserva VIVA: retención de 15 min corriendo, pago en curso. Las vencidas
+  // (abandonadas) ni siquiera llegan acá — se filtran antes.
+  reservado_pendiente: "Reservando…",
   cancelada: "Cancelada",
   cancelado_paciente: "Cancelada (paciente)",
   cancelado_medico: "Cancelada (médico)",
@@ -53,7 +57,7 @@ export async function GET(req: NextRequest) {
         .gte("created_at", medianocheARenUTC(desde)),
       admin
         .from("turnos")
-        .select("id, medico_id, paciente_id, estado, fecha, hora_inicio, en_curso_at, desconectado_at, monto, mp_status, canal_origen")
+        .select("id, medico_id, paciente_id, estado, fecha, hora_inicio, en_curso_at, desconectado_at, monto, mp_status, canal_origen, reservado_hasta")
         .not("estado", "in", "(disponible,bloqueado)")
         .gte("fecha", desde),
       admin.from("documentos").select("consulta_id, turno_id, tipo"),
@@ -65,7 +69,12 @@ export async function GET(req: NextRequest) {
   // Filtro test unificado (médico O paciente). Con "solo reales" (default) esta
   // pantalla deja de mostrar solo "Dr. Docto Test" y aparecen las atenciones reales.
   const consultas = (consultasRaw ?? []).filter((c) => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
-  const turnos = (turnosRaw ?? []).filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
+  // Reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): 'reservado_pendiente'
+  // con la retención de 15 min vencida y sin pago = el paciente se arrepintió.
+  // No son atenciones — antes cada rebote sumaba una fila más a esta tabla.
+  const turnos = sinReservasAbandonadas(
+    (turnosRaw ?? []).filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id)),
+  );
 
   const medMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
   // Doble join: consultas.paciente_id = pacientes.USER_ID, pero turnos.paciente_id

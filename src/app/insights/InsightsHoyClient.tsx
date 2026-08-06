@@ -70,7 +70,12 @@ export default function InsightsHoyClient() {
     );
   }
 
-  const pendientes = data.actividad.filter(a => ["confirmado", "en_espera", "reservado_pendiente", "esperando", "aceptada", "pagada", "en_curso"].includes(a.estado)).length;
+  // "Pendiente" = algo que va a pasar de verdad. Una reserva en curso
+  // ('reservado_pendiente') NO cuenta: es un paciente con la retención de 15 min
+  // corriendo, todavía sin pagar ni agendar. Se sigue listando etiquetada
+  // "reservando…" (ver EstadoBadge), pero no infla el contador. Las reservas
+  // abandonadas ni siquiera llegan: las filtra la API (lib/insights/reservas.ts).
+  const pendientes = data.actividad.filter(a => ["confirmado", "en_espera", "esperando", "aceptada", "pagada", "en_curso"].includes(a.estado)).length;
 
   return (
     <div className="space-y-6">
