@@ -38,6 +38,29 @@ function validarDNI(dni: string): boolean {
   return /^\d{7,8}$/.test(dni);
 }
 
+/**
+ * ¿Ese mail ya tiene cuenta en Docto? Consulta directa a la API admin de GoTrue
+ * (el cliente JS no expone búsqueda por email). Ante cualquier falla devuelve
+ * `false`: preferimos dejar seguir el registro antes que bloquear a un médico
+ * legítimo por un problema nuestro.
+ */
+async function emailYaTieneCuenta(email: string): Promise<boolean> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return false;
+  try {
+    const res = await fetch(
+      `${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&per_page=5`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" }
+    );
+    if (!res.ok) return false;
+    const data = (await res.json()) as { users?: { email?: string }[] };
+    return (data.users ?? []).some((u) => (u.email ?? "").toLowerCase() === email);
+  } catch {
+    return false;
+  }
+}
+
 function validarCUIT(cuit: string): string | null {
   const limpio = cuit.replace(/[-\s]/g, "");
   if (!/^\d{11}$/.test(limpio)) return null;
@@ -81,6 +104,19 @@ export async function iniciarRegistroMedico(formData: FormData) {
   }
   if (password.length < 8) {
     return { error: "La contraseña debe tener al menos 8 caracteres." };
+  }
+
+  // Cuenta ya existente: hay que detectarla ANTES del signUp. GoTrue, por
+  // anti-enumeración, devuelve ÉXITO para un mail ya confirmado y NO manda
+  // ningún mail → el médico quedaba mirando "Revisá tu email" para siempre
+  // (verificado en producción el 06/08). Es el callejón donde caía el médico
+  // que, tras fallar el formulario, intentaba registrarse de nuevo.
+  if (await emailYaTieneCuenta(email)) {
+    return {
+      error:
+        "Ya tenés una cuenta con este mail. Iniciá sesión para terminar tu registro; si no te acordás la contraseña, podés recuperarla.",
+      yaExiste: true,
+    };
   }
 
   const supabase = await createClient();

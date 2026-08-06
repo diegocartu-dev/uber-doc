@@ -13,6 +13,7 @@ import LoadingButton from "@/components/ui/LoadingButton";
 export default function RegistroMedicoPage() {
   const [enviadoA, setEnviadoA] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [yaExiste, setYaExiste] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mostrarPwd, setMostrarPwd] = useState(false);
   const [reenviando, setReenviando] = useState(false);
@@ -21,6 +22,7 @@ export default function RegistroMedicoPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setYaExiste(false);
     const fdCheck = new FormData(e.currentTarget);
     // Pedido de Diego (15/07): repetir la contraseña para salvar errores de tipeo.
     if (fdCheck.get("password") !== fdCheck.get("password_confirmar")) {
@@ -33,6 +35,7 @@ export default function RegistroMedicoPage() {
       const r = await iniciarRegistroMedico(fd);
       if (r?.error) {
         setError(r.error);
+        setYaExiste(Boolean((r as { yaExiste?: boolean }).yaExiste));
         setLoading(false);
         return;
       }
@@ -135,6 +138,26 @@ export default function RegistroMedicoPage() {
               {error && (
                 <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(226,75,74,0.08)", color: "#E24B4A" }}>
                   {error}
+                  {/* Si el mail ya tiene cuenta, el mensaje solo no alcanza:
+                      hay que darle los dos botones que lo sacan de acá. */}
+                  {yaExiste && (
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <Link
+                        href="/auth/login"
+                        className="rounded-lg px-3 py-2 text-[13px] font-semibold text-white"
+                        style={{ backgroundColor: "#378ADD" }}
+                      >
+                        Iniciar sesión
+                      </Link>
+                      <Link
+                        href="/auth/recuperar"
+                        className="rounded-lg px-3 py-2 text-[13px] font-semibold"
+                        style={{ border: "1.5px solid #378ADD", color: "#378ADD" }}
+                      >
+                        Recuperar contraseña
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
 
