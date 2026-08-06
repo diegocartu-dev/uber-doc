@@ -62,12 +62,25 @@ export async function getAllFlags(): Promise<
 
 async function refreshCache(): Promise<void> {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("feature_flags")
     .select("key, activo");
 
+  if (error || !data) {
+    // Fail-safe: si la query falla NO pisar el cache con un Map vacío — eso
+    // haría que getFlag devuelva false para todo y la UI afirme "gate apagado"
+    // mientras el gate real está prendido. Conservar el cache viejo (aunque
+    // esté vencido) renovando su timestamp para no martillar una DB caída.
+    console.error("[feature-flags] Error refrescando flags:", error);
+    cache = {
+      flags: cache ? cache.flags : new Map<string, boolean>(),
+      fetchedAt: Date.now(),
+    };
+    return;
+  }
+
   const flags = new Map<string, boolean>();
-  (data || []).forEach((row) => flags.set(row.key, row.activo));
+  data.forEach((row) => flags.set(row.key, row.activo));
 
   cache = { flags, fetchedAt: Date.now() };
 }

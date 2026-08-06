@@ -394,8 +394,11 @@ function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva
       <p className="mt-1 text-xs text-amber-700">
         {/* El texto refleja el estado REAL del flag identidad_gate_activa — antes
             afirmaba "el gate está apagado" hardcodeado, con el gate prendido en prod. */}
+        {/* Ojo: NO decir "no va a aparecer en la clínica" — por decisión de Diego
+            (22/06, ver src/app/clinica/page.tsx) los aprobados sin identidad SÍ
+            aparecen, grisados y no reservables. El candado real vive en la reserva. */}
         {gateActiva
-          ? "Todavía no hizo la verificación de identidad (selfie + DNI). Podés aprobarla igual, pero con el gate PRENDIDO no va a aparecer en la clínica ni va a poder atender hasta completarla. Le llegan recordatorios automáticos."
+          ? "Todavía no hizo la verificación de identidad (selfie + DNI). Podés aprobarla igual, pero con el gate PRENDIDO va a aparecer grisada en la clínica (no reservable) y no va a poder atender ni recibir reservas hasta completarla. Le llegan recordatorios automáticos."
           : "Todavía no hizo la verificación de identidad (selfie + DNI). Con el gate apagado puede operar sin validarse — que aprobar sea una decisión consciente."}
       </p>
     </div>
@@ -606,9 +609,11 @@ function PendienteCard({
                 : "REFEPS todavía sin resultado: se verifica en este paso y se bloquea si no figura."
           } ${
             // Mismo criterio que BloqueIdentidad: no afirmar "podrá atender"
-            // si el gate de identidad prendido lo va a frenar.
+            // si el gate de identidad prendido lo va a frenar. Y NO decir "no va a
+            // aparecer en la clínica": los aprobados sin identidad SÍ aparecen,
+            // grisados y no reservables (decisión Diego 22/06, src/app/clinica/page.tsx).
             gateIdentidadActiva && !m.identidad_validada && !m.biometria_exenta
-              ? "Queda aprobado, pero con el gate de identidad PRENDIDO no va a aparecer en la clínica ni podrá atender hasta completar la verificación (selfie + DNI)."
+              ? "Queda aprobado, pero con el gate de identidad PRENDIDO va a aparecer grisado en la clínica (no reservable) y no podrá atender ni recibir reservas hasta completar la verificación (selfie + DNI)."
               : "El medico podra atender pacientes en la plataforma."
           }`}
           confirmLabel={
