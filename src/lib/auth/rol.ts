@@ -39,5 +39,31 @@ export async function guardRutaPaciente(supabase: Supa, userId: string): Promise
   const rol = await resolverRol(supabase, userId);
   if (rol === "admin") redirect("/admin");
   if (rol === "medico") redirect("/dashboard");
+  // Sin fila en ninguna tabla: puede ser un paciente nuevo (pasa, hace su
+  // onboarding) o un MÉDICO que dejó el registro a mitad. A ese hay que
+  // devolverlo a su formulario, no pedirle obra social.
+  if (rol === null && (await esMedicoEnRegistro(supabase, userId))) {
+    redirect("/registro-medico/continuar");
+  }
   // "paciente" o null → permitido
+}
+
+/**
+ * Médico que creó la cuenta pero todavía NO tiene ficha en `medicos` (abandonó
+ * la Fase B del registro). Hoy son ~14 personas reales.
+ *
+ * Único caso donde manda `user_metadata.role`: sin ficha, las tablas no saben
+ * nada de él y el default lo trataba como paciente nuevo — le creaba una ficha
+ * de paciente y le pedía DNI, sexo y obra social. Un médico que vuelve y escribe
+ * docto.com.ar se encontraba con eso (hallazgo 06/08). El metadata lo escribe
+ * el propio signup del médico, así que para este caso es fuente confiable.
+ */
+export async function esMedicoEnRegistro(supabase: Supa, userId: string): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || user.id !== userId) return false;
+  if (user.user_metadata?.role !== "medico") return false;
+  const { data: med } = await supabase.from("medicos").select("id").eq("user_id", userId).maybeSingle();
+  return !med;
 }
