@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -63,6 +64,7 @@ export default function MedicosClient({
   // Estado REAL del flag identidad_gate_activa, leído en el server (page.tsx).
   gateIdentidadActiva: boolean;
 }) {
+  const router = useRouter();
   const [medicos, setMedicos] = useState(initial);
   const [tab, setTab] = useState<Tab>("pendiente_revision");
   const [search, setSearch] = useState("");
@@ -111,6 +113,12 @@ export default function MedicosClient({
           )
         );
         setMensaje({ texto: `${accion.charAt(0).toUpperCase() + accion.slice(1)} exitoso`, tipo: "ok" });
+        // El contador rojo del menú (Médicos • N) vive en el LAYOUT, que es un
+        // server component: la lista se actualizaba sola por estado local, pero
+        // el badge quedaba con el número viejo hasta recargar la página entera
+        // — Diego aprobó a la última pendiente y siguió viendo "1" (06/08).
+        // router.refresh() re-renderiza los server components, layout incluido.
+        router.refresh();
       } else {
         setMensaje({ texto: data.error || "Error", tipo: "error" });
       }
