@@ -142,6 +142,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 02:00",
     autoRecupera: true,
   },
+  "recuperar-registros": {
+    nombre: "Recupero de registros médicos abandonados",
+    queHace: "le escribe un único mail al médico que creó su cuenta y no completó el registro (invitándolo a retomarlo) y avisa si hay médicos esperando aprobación hace más de 24 horas",
+    impacto: "los médicos que abandonan el registro no reciben ningún recordatorio (14 perdidos en 20 días al 06/08) y la cola de aprobación puede estancarse sin que nadie se entere",
+    cadencia: "una vez por día a las 10:00",
+    autoRecupera: true,
+  },
   "saldo-servicios": {
     nombre: "Vigía de saldos de servicios",
     queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
