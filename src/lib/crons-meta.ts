@@ -135,6 +135,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada minuto",
     autoRecupera: true,
   },
+  "provisionar-claves": {
+    nombre: "Claves de firma electrónica",
+    queHace: "revisa todos los días que cada médico aprobado tenga sus claves de firma electrónica y se las crea si le faltan",
+    impacto: "sin claves el médico no puede ponerse disponible ni abrir agenda, y el cartel solo dice 'completá tu perfil' (15 médicos trabados al 06/08)",
+    cadencia: "una vez por día a las 02:00",
+    autoRecupera: true,
+  },
   "saldo-servicios": {
     nombre: "Vigía de saldos de servicios",
     queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
