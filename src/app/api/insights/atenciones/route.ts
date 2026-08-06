@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
-import { sinReservasAbandonadas } from "@/lib/insights/reservas";
+import { esReservaViva, sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 // Panel "Atenciones": una fila por atención REAL (no por slot de agenda), para
 // saber qué pasó — médico, paciente, tipo, estado, duración, cobro y documentos.
@@ -136,12 +136,19 @@ export async function GET(req: NextRequest) {
   }
   atenciones.sort((a, b) => b.cuandoSort - a.cuandoSort);
 
+  // Reservas VIVAS: se LISTAN (fila con badge "Reservando…", el paciente está en
+  // el checkout de MP) pero NO son atenciones — todavía no hay nada agendado ni
+  // cobrado. Por eso el KPI "Atenciones" las descuenta. Las abandonadas ni
+  // llegan: se filtraron arriba (ver lib/insights/reservas.ts).
+  const reservandoAhora = turnos.filter(esReservaViva).length;
+
   return NextResponse.json({
     dias,
     desde,
     atenciones,
     resumen: {
-      total: atenciones.length,
+      total: atenciones.length - reservandoAhora,
+      reservando: reservandoAhora,
       atendidas: atenciones.filter((a) => a.atendida).length,
       cobradas: atenciones.filter((a) => a.cobro?.pagado).length,
       conDoc: atenciones.filter((a) => a.docs.length > 0).length,
