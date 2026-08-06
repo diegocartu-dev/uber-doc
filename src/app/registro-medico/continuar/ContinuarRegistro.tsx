@@ -146,10 +146,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
    * Los PDF no se comprimen: ahí el tope se aplica con un mensaje que dice
    * qué hacer.
    */
-  async function prepararImagen(
-    input: HTMLInputElement,
-    etiqueta: string
-  ): Promise<File | null | undefined> {
+  async function prepararImagen(input: HTMLInputElement, etiqueta: string): Promise<File | null> {
     const original = input.files?.[0] ?? null;
     if (!original) return null;
     setError(null);
@@ -163,7 +160,12 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
           : `No pudimos achicar la ${etiqueta} lo suficiente. Probá sacar la foto de nuevo con menos zoom.`
       );
       input.value = "";
-      return undefined;
+      // Devuelve null (no undefined): el estado tiene que quedar VACÍO igual que
+      // el input. Si conservaba el archivo anterior, la pantalla mostraba el
+      // tilde verde con un input vacío → el envío fallaba con "Subí la foto de
+      // tu credencial" sobre una pantalla que decía que estaba subida, y el
+      // médico quedaba en un loop cerrado (auditoría 06/08).
+      return null;
     }
     return file;
   }
@@ -510,8 +512,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                   accept="image/*"
                   className="hidden"
                   onChange={async (e) => {
-                    const file = await prepararImagen(e.target, "foto de perfil");
-                    if (file !== undefined) setFotoPerfil(file);
+                    setFotoPerfil(await prepararImagen(e.target, "foto de perfil"));
                   }}
                 />
                 <p className={hintClass}>La ven los pacientes en tu bio. Distinta de la credencial (próximo paso).</p>
@@ -560,8 +561,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                 accept="image/*,.pdf"
                 className="hidden"
                 onChange={async (e) => {
-                  const file = await prepararImagen(e.target, "credencial");
-                  if (file !== undefined) setFotoCredencial(file);
+                  setFotoCredencial(await prepararImagen(e.target, "credencial"));
                 }}
               />
             </div>
@@ -618,7 +618,14 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               Aparece impresa en cada receta, certificado e indicación que
               emitas. Firmá en el recuadro como lo hacés en papel.
             </p>
-            <FirmaCanvas ref={firmaRef} activo={paso === 3} altura={200} />
+            <FirmaCanvas
+              ref={firmaRef}
+              activo={paso === 3}
+              altura={200}
+              onErrorArchivo={(motivo) =>
+                trackFunnel("registro_medico_error", { donde: "firma_archivo", motivo })
+              }
+            />
           </div>
 
           {/* Navegación */}

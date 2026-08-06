@@ -32,12 +32,14 @@ export interface FirmaCanvasHandle {
 interface Props {
   /** Inicializar el pad recién cuando el paso es visible (oculto, el canvas mide 0). */
   activo: boolean;
+  /** Avisa al padre para instrumentar: el paso 3 era el único punto ciego. */
+  onErrorArchivo?: (motivo: string) => void;
   /** Altura del área de firma (px). El paso dedicado permite más aire que el wizard. */
   altura?: number;
 }
 
 const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
-  { activo, altura = 200 },
+  { activo, altura = 200, onErrorArchivo },
   ref
 ) {
   const [modo, setModo] = useState<"dibujar" | "subir">("dibujar");
@@ -123,8 +125,13 @@ const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
     const input = e.target;
     const original = input.files?.[0];
     if (!original) return;
-    if (!["image/png", "image/jpeg"].includes(original.type)) {
-      setErrorArchivo("Solo se permiten PNG o JPG");
+    // Cualquier imagen sirve: comprimirImagen convierte a JPEG. El chequeo de
+    // tipo tiene que ir DESPUÉS de convertir — antes rebotaba las fotos HEIC
+    // del iPhone y las WEBP de Android con "Solo se permiten PNG o JPG",
+    // teniendo el pipeline capaz de convertirlas (auditoría 06/08).
+    if (!original.type.startsWith("image/")) {
+      setErrorArchivo("Elegí una imagen de tu firma (una foto sirve).");
+      onErrorArchivo?.("tipo");
       input.value = "";
       return;
     }
@@ -134,7 +141,8 @@ const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
     // Mismo patrón que la credencial (fix 01/08). Comprimida queda en ~300 KB.
     const file = await comprimirImagen(original);
     if (file.size > 2 * 1024 * 1024) {
-      setErrorArchivo("La imagen no puede superar 2MB");
+      setErrorArchivo("No pudimos achicar la imagen lo suficiente. Probá sacar la foto de nuevo.");
+      onErrorArchivo?.("peso");
       input.value = "";
       return;
     }
@@ -219,7 +227,7 @@ const FirmaCanvas = forwardRef<FirmaCanvasHandle, Props>(function FirmaCanvas(
           <input
             ref={fileRef}
             type="file"
-            accept="image/png,image/jpeg"
+            accept="image/*"
             className="hidden"
             onChange={handleArchivoSeleccionado}
           />
