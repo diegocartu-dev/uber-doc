@@ -70,6 +70,10 @@
     {
       "path": "/api/cron/provisionar-claves",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/recuperar-registros",
+      "schedule": "0 13 * * *"
     }
   ]
 }

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { comprimirImagen, comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
 import { trackFunnel } from "@/lib/funnel-client";
+import { normalizarTelefonoAR } from "@/lib/telefono";
 import { Stethoscope, X, Upload, CheckCircle, ChevronLeft, Camera, Lightbulb } from "lucide-react";
 import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
 import FirmaCanvas, { type FirmaCanvasHandle } from "@/components/firma/FirmaCanvas";
@@ -19,13 +20,17 @@ const ESPECIALIDADES = [
   "Cirugía pediátrica",
   "Cirugía plástica y reparadora",
   "Cirugía torácica",
+  "Cirugía vascular",
   "Clínica médica",
   "Coloproctología",
+  "Cuidados paliativos",
   "Dermatología",
   "Diagnóstico por imágenes",
+  "Emergentología",
   "Endocrinología",
   "Farmacología clínica",
   "Fisiatría",
+  "Flebología",
   "Gastroenterología",
   "Genética médica",
   "Geriatría",
@@ -38,6 +43,7 @@ const ESPECIALIDADES = [
   "Medicina del deporte",
   "Medicina del trabajo",
   "Medicina familiar",
+  "Medicina general y familiar",
   "Medicina legal",
   "Medicina nuclear",
   "Nefrología",
@@ -90,6 +96,51 @@ const PROVINCIAS = [
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+// ─── Autosave del borrador (auditoría 06/08) ─────────────────────────────────
+// El form pide 12 campos + credencial + firma, y cualquier recarga (sesión que
+// expira, salir de la app a buscar el CUIT, batería) borraba TODO — el médico
+// no volvía a empezar (~15 registros reales perdidos en 3 semanas). Guardamos un
+// borrador en localStorage con los campos de texto/select + el paso. Archivos,
+// firma y checkboxes legales NO se guardan: se re-adjuntan / re-aceptan al retomar.
+const BORRADOR_KEY = "docto_borrador_registro_medico";
+const BORRADOR_MAX_MS = 7 * 24 * 60 * 60 * 1000; // 7 días y el borrador expira
+const BORRADOR_DEBOUNCE_MS = 800;
+
+type Borrador = {
+  /** Dueño del borrador: en una compu compartida (clínicas), el borrador del
+      médico A jamás debe restaurarse — ni mostrarse — al médico B. */
+  uid: string;
+  guardadoEn: number;
+  paso: number;
+  campos: Record<string, string>;
+  tipoMatricula: string;
+  numeroMatricula: string;
+  tieneMatriculaExtra: boolean;
+};
+
+// Errores del server que en realidad pertenecen a un campo del PASO 1. Cuando
+// llegan, el médico está parado en el paso 3 (firma): sin este mapa, el banner
+// señalaba un campo que ni siquiera estaba en pantalla y el médico abandonaba.
+// El orden importa: "El DNI no coincide con ... el CUIT" debe enfocar el DNI, y
+// "la provincia de tu matrícula" la provincia (no el número de matrícula).
+const ERRORES_SERVER_PASO1: { patron: RegExp; campo: string }[] = [
+  { patron: /celular/i, campo: "celular_personal" },
+  { patron: /dni/i, campo: "dni" },
+  { patron: /cuit/i, campo: "cuit" },
+  { patron: /provincia/i, campo: "provincia" },
+  { patron: /matr[ií]cula/i, campo: "numero_matricula" },
+];
+
+function campoDelErrorServer(mensaje: string): string | null {
+  // "Debés aceptar los términos y la declaración de matrícula" menciona
+  // "matrícula" pero es del paso 2 — no hay que rebotar al médico al paso 1.
+  if (/t[eé]rminos|declaraci[oó]n/i.test(mensaje)) return null;
+  for (const { patron, campo } of ERRORES_SERVER_PASO1) {
+    if (patron.test(mensaje)) return campo;
+  }
+  return null;
+}
+
 // Encabezado de bloque — SIN número: los números quedan reservados para la barra
 // de progreso (pasos 1·2·3). Acento azul a la izquierda para jerarquía, sin badge
 // circular que el ojo confunda con un "paso".
@@ -106,7 +157,7 @@ function BloqueHeader({ titulo, subtitulo }: { titulo: string; subtitulo: string
 // (Fase A) y confirmó el mail → llega acá YA LOGUEADO. Completa datos + credencial
 // → se crea la ficha de `medicos` → biometría (/registro-medico/identidad).
 // La cuenta (nombre/email/password) ya existe: acá NO se pide de nuevo.
-export default function ContinuarRegistro({ nombre }: { nombre: string }) {
+export default function ContinuarRegistro({ nombre, userId }: { nombre: string; userId: string }) {
   const [paso, setPaso] = useState(1);
   const [tipoMatricula, setTipoMatricula] = useState(""); // nada prellenado
   const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
@@ -119,8 +170,147 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
   const [fotoPerfil, setFotoPerfil] = useState<File | null>(null);
   const [numeroMatricula, setNumeroMatricula] = useState("");
+  const [borradorRestaurado, setBorradorRestaurado] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const firmaRef = useRef<FirmaCanvasHandle>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Campos de texto/select del borrador que faltan aplicar al DOM (ver efecto).
+  const camposPendientesRef = useRef<Record<string, string> | null>(null);
+  // Espejo de los estados que el autosave lee desde un listener montado UNA vez
+  // (evita closures viejas sin tener que re-atar el listener en cada render).
+  const estadoRef = useRef({ paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra });
+  estadoRef.current = { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
+
+  // Junta los campos de texto/select del form (uncontrolled: la verdad vive en el
+  // DOM) + los estados controlados, y persiste el borrador. Archivos, firma y
+  // checkboxes legales quedan afuera a propósito. TODO acceso a localStorage va
+  // con try/catch: Safari en modo privado lanza al escribir.
+  function guardarBorrador() {
+    const form = formRef.current;
+    if (!form) return;
+    const { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra } = estadoRef.current;
+    const campos: Record<string, string> = {};
+    for (const el of Array.from(form.elements)) {
+      if (el instanceof HTMLInputElement && (el.type === "text" || el.type === "tel") && el.name) {
+        campos[el.name] = el.value;
+      } else if (el instanceof HTMLSelectElement && el.name) {
+        campos[el.name] = el.value;
+      }
+    }
+    const hayAlgo = Object.values(campos).some((v) => v.trim() !== "") || tieneMatriculaExtra;
+    if (!hayAlgo) return; // no crear borradores vacíos con solo abrir la página
+    const borrador: Borrador = { uid: userId, guardadoEn: Date.now(), paso, campos, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
+    try {
+      localStorage.setItem(BORRADOR_KEY, JSON.stringify(borrador));
+    } catch {
+      // Safari privado / cuota llena: seguimos sin autosave, jamás romper el form.
+    }
+  }
+
+  function limpiarBorrador() {
+    // Cancelar el debounce pendiente: si quedara vivo, re-escribiría el borrador
+    // DESPUÉS de borrado y el próximo médico vería "retomamos tu registro" fantasma.
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    try {
+      localStorage.removeItem(BORRADOR_KEY);
+    } catch {
+      // sin acceso a localStorage no hay borrador que limpiar
+    }
+  }
+
+  // Restaurar el borrador al montar (si existe y tiene menos de 7 días). Los
+  // campos uncontrolled se aplican en el efecto SIGUIENTE: los condicionales
+  // (provincia, matrícula provincial) recién existen en el render posterior a
+  // restaurar los estados controlados. El médico retoma en el paso 1: credencial
+  // y firma no se guardan, así que los pasos 2-3 hay que rehacerlos igual.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BORRADOR_KEY);
+      if (!raw) return;
+      const b = JSON.parse(raw) as Partial<Borrador> | null;
+      if (!b || typeof b !== "object" || typeof b.guardadoEn !== "number" || Date.now() - b.guardadoEn > BORRADOR_MAX_MS) {
+        localStorage.removeItem(BORRADOR_KEY);
+        return;
+      }
+      if (b.uid !== userId) {
+        // Borrador de OTRO usuario (compu compartida): descartar sin restaurar —
+        // el DNI/CUIT/celular del médico A no se le muestran al médico B.
+        localStorage.removeItem(BORRADOR_KEY);
+        return;
+      }
+      const campos = { ...(b.campos ?? {}) };
+      // Los controlados se restauran por estado, no por DOM (React los pisaría).
+      delete campos["tipo_matricula"];
+      delete campos["numero_matricula"];
+      camposPendientesRef.current = campos;
+      if (typeof b.tipoMatricula === "string") setTipoMatricula(b.tipoMatricula);
+      if (typeof b.numeroMatricula === "string") setNumeroMatricula(b.numeroMatricula);
+      if (b.tieneMatriculaExtra === true) setTieneMatriculaExtra(true);
+      setBorradorRestaurado(true); // banner discreto en el paso 1
+      trackFunnel("registro_medico_paso", { paso: 1, borrador_restaurado: true });
+    } catch {
+      // localStorage bloqueado (Safari privado) o JSON roto: registro desde cero.
+    }
+  }, []);
+
+  // Aplica al DOM los campos de texto/select del borrador. Corre al montar y cada
+  // vez que cambian los condicionales: "provincia" existe recién cuando
+  // tipoMatricula ya se restauró a "MP". Idempotente: cada campo se aplica una
+  // sola vez (se saca de pendientes) para no pisar ediciones posteriores.
+  useEffect(() => {
+    const pendientes = camposPendientesRef.current;
+    const form = formRef.current;
+    if (!pendientes || !form) return;
+    for (const [name, value] of Object.entries(pendientes)) {
+      const el = form.elements.namedItem(name);
+      if (
+        (el instanceof HTMLInputElement && (el.type === "text" || el.type === "tel")) ||
+        el instanceof HTMLSelectElement
+      ) {
+        el.value = value;
+        delete pendientes[name];
+      }
+    }
+    if (Object.keys(pendientes).length === 0) camposPendientesRef.current = null;
+  }, [borradorRestaurado, tipoMatricula, tieneMatriculaExtra]);
+
+  // Autosave con debounce (~800ms): un solo listener a nivel form — los eventos
+  // "input"/"change" de todos los campos burbujean hasta acá.
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const onEdicion = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(guardarBorrador, BORRADOR_DEBOUNCE_MS);
+    };
+    form.addEventListener("input", onEdicion);
+    form.addEventListener("change", onEdicion);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      form.removeEventListener("input", onEdicion);
+      form.removeEventListener("change", onEdicion);
+    };
+    // guardarBorrador lee todo de refs (formRef/estadoRef): seguro de capturar una vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guardado extra al cambiar de paso (además del debounce): el momento de mayor
+  // riesgo de pérdida es justo después de completar un paso entero. La PRIMERA
+  // corrida (montaje) se saltea: en ese instante los estados restaurados del
+  // borrador todavía no re-renderizaron y este guardado lo pisaría degradado
+  // (sin tipo/número de matrícula — hallazgo revisión 06/08).
+  const pasoMontajeRef = useRef(true);
+  useEffect(() => {
+    if (pasoMontajeRef.current) {
+      pasoMontajeRef.current = false;
+      return;
+    }
+    guardarBorrador();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paso]);
 
   // Instrumentación del form (decisión Diego 04/08): los 16 registros trabados
   // de jul/ago murieron ACÁ adentro sin dejar rastro de en qué paso. Un evento
@@ -133,6 +323,18 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
   function reportarError(donde: string, msg: string) {
     setError(msg);
     trackFunnel("registro_medico_error", { donde, motivo: msg });
+  }
+
+  // Error de un campo puntual del paso 1: banner + foco + scroll al campo. En un
+  // form de 12 campos, el banner solo no alcanza para encontrar cuál corregir.
+  function errorCampo(name: string, msg: string): false {
+    reportarError("paso1", msg);
+    const el = formRef.current?.elements.namedItem(name);
+    if (el instanceof HTMLElement) {
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    return false;
   }
 
   /**
@@ -200,10 +402,37 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         return false;
       }
     }
-    const dni = (form.elements.namedItem("dni") as HTMLInputElement).value;
+    // DNI: aceptar que el médico lo escriba con puntos ("25.086.458") — limpiar
+    // puntos/espacios/guiones ANTES de validar, y dejar el valor limpio en el
+    // input para que el server (que cruza DNI vs CUIT dígito a dígito y lo
+    // persiste) reciba solo números.
+    const dniInput = form.elements.namedItem("dni") as HTMLInputElement;
+    const dni = dniInput.value.replace(/[.\s-]/g, "");
     if (!/^\d{7,8}$/.test(dni)) {
-      reportarError("paso1", "El DNI debe tener 7 u 8 dígitos numéricos.");
-      return false;
+      return errorCampo("dni", "El DNI debe tener 7 u 8 dígitos numéricos.");
+    }
+    dniInput.value = dni;
+
+    // CUIT: 11 dígitos + cruce con el DNI (dígitos 3-10 del CUIT = DNI). Antes
+    // esto validaba recién en el server y el error aparecía en el paso 3, a dos
+    // pantallas del campo (auditoría 06/08 — así se perdían registros reales).
+    const cuitInput = form.elements.namedItem("cuit") as HTMLInputElement;
+    const cuitLimpio = cuitInput.value.replace(/[.\s-]/g, "");
+    if (!/^\d{11}$/.test(cuitLimpio)) {
+      return errorCampo("cuit", "El CUIT debe tener 11 dígitos (formato: XX-XXXXXXXX-X).");
+    }
+    if (cuitLimpio.substring(2, 10) !== dni.padStart(8, "0")) {
+      return errorCampo("cuit", "El DNI no coincide con los dígitos centrales del CUIT. Revisá los dos.");
+    }
+
+    // Celular: la MISMA regla que aplica el server al normalizar para WhatsApp
+    // (normalizarTelefonoAR) — si acá pasa, allá pasa.
+    const celularInput = form.elements.namedItem("celular_personal") as HTMLInputElement;
+    if (!normalizarTelefonoAR(celularInput.value)) {
+      return errorCampo(
+        "celular_personal",
+        "Revisá el celular: tiene que ser un móvil argentino de 10 dígitos (código de área + número, ej: 11 4028 9141)."
+      );
     }
     return true;
   }
@@ -301,7 +530,20 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
       if (result?.error) {
         reportarError("envio", result.error);
         setLoading(false);
+        // Si el error del server pertenece a un campo del paso 1 (celular, CUIT,
+        // DNI, matrícula), volver al paso 1 y enfocar ese campo: el médico está
+        // parado en el paso de firma y el banner solo no dice DÓNDE corregir.
+        const campo = campoDelErrorServer(result.error);
+        if (campo) setPaso(1);
         window.scrollTo(0, 0);
+        if (campo) {
+          // El foco recién puede aplicarse cuando React ya re-renderizó el paso 1
+          // (los pasos ocultos tienen display:none y focus() ahí es un no-op).
+          setTimeout(() => {
+            const el = formRef.current?.elements.namedItem(campo);
+            if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+          }, 50);
+        }
       }
     } catch (err) {
       // El redirect() del server action viaja como excepción (NEXT_REDIRECT).
@@ -314,6 +556,10 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         "digest" in err &&
         String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
       ) {
+        // Envío EXITOSO (navegando a la biometría): el borrador ya no sirve.
+        // Limpiarlo ANTES de relanzar — después del throw no corre nada más.
+        // Es el ÚNICO lugar donde se borra: un envío fallido debe conservarlo.
+        limpiarBorrador();
         throw err; // Next completa la navegación a /registro-medico/identidad
       }
       reportarError("envio", "Error al enviar el registro. Recargá la página e intentá de nuevo.");
@@ -368,10 +614,19 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
         </h2>
         <p className="mt-1 text-center text-sm text-gray-500">Paso {paso} de 4</p>
 
-        <form ref={formRef} onSubmit={handleSubmit} className="mt-6 space-y-4">
+        {/* noValidate: las burbujas nativas del navegador se disparaban ANTES del
+            onSubmit y esos rebotes no dejaban rastro en la instrumentación.
+            Nuestra validación (validarPaso1/2 + firma) ya cubre todo. */}
+        <form ref={formRef} onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
           {error && (
             <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(226,75,74,0.08)", color: "#E24B4A" }}>
               {error}
+            </div>
+          )}
+          {borradorRestaurado && paso === 1 && (
+            <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "rgba(55,138,221,0.08)", color: "#2d75c4" }}>
+              Retomamos tu registro donde lo dejaste — tus datos están guardados.
+              Volvé a adjuntar la credencial y la firma al avanzar.
             </div>
           )}
 
@@ -418,7 +673,7 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
                 </div>
                 <div className="flex-1">
                   <label htmlFor="numero_matricula" className={labelClass}>Número</label>
-                  <input id="numero_matricula" name="numero_matricula" type="text" required className={inputClass} placeholder="123456" value={numeroMatricula} onChange={(e) => setNumeroMatricula(e.target.value)} />
+                  <input id="numero_matricula" name="numero_matricula" type="text" required inputMode="numeric" className={inputClass} placeholder="123456" value={numeroMatricula} onChange={(e) => setNumeroMatricula(e.target.value)} />
                 </div>
               </div>
               {tipoMatricula === "MP" && (
@@ -465,11 +720,13 @@ export default function ContinuarRegistro({ nombre }: { nombre: string }) {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label htmlFor="dni" className={labelClass}>DNI</label>
-                  <input id="dni" name="dni" type="text" required inputMode="numeric" pattern="\d{7,8}" maxLength={8} className={inputClass} placeholder="25086458" />
+                  {/* maxLength 10: "25.086.458" ocupa 10 caracteres — con maxLength 8
+                      el navegador truncaba el pegado EN SILENCIO y el DNI quedaba mocho. */}
+                  <input id="dni" name="dni" type="text" required inputMode="numeric" maxLength={10} className={inputClass} placeholder="25086458" />
                 </div>
                 <div className="flex-1">
                   <label htmlFor="cuit" className={labelClass}>CUIT</label>
-                  <input id="cuit" name="cuit" type="text" required className={inputClass} placeholder="27-25086458-4" />
+                  <input id="cuit" name="cuit" type="text" required inputMode="numeric" className={inputClass} placeholder="27-25086458-4" />
                 </div>
               </div>
             </div>
