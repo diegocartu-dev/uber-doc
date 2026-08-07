@@ -96,6 +96,14 @@ export async function GET(
           verificada: doc.estado === "verificada",
           alterada: doc.estado === "alterada",
           firmado_at: doc.datos?.firmado_at,
+          // Fecha de EMISIÓN. Va siempre, no solo en el sellado diferido: la
+          // página muestra las dos fechas en todos los casos y en el normal
+          // coinciden, que es la mejor prueba de que acá no se toca ninguna.
+          emitido_at: doc.emitido_at ?? undefined,
+          // El sello se aplicó después de la emisión. La página lo explica en
+          // criollo; si por lo que sea ese bloque no se pudiera mostrar, la regla
+          // es no sellar (dictamen 07/08/2026, límite 4).
+          sellado_diferido: doc.sellado_diferido,
           algoritmo: doc.datos?.algoritmo,
           hash: doc.datos?.hash_original.slice(0, 16),
           // Firmante congelado en la firma cuando existe: si el médico se
@@ -116,6 +124,9 @@ export async function GET(
         };
       }
 
+      // Camino histórico `recetas`: no expone fecha de emisión, y nada del
+      // código inserta ahí desde hace tiempo. Sin `emitido_at` la página muestra
+      // solo la fila del sello, que es lo único que puede afirmar.
       return {
         estado: verificacion.alterada
           ? "alterada"
@@ -124,6 +135,7 @@ export async function GET(
             : "invalida",
         verificada: verificacion.valida,
         alterada: verificacion.alterada,
+        sellado_diferido: false,
         firmado_at: verificacion.datos.firmado_at,
         algoritmo: verificacion.datos.algoritmo,
         hash: verificacion.datos.hash_original.slice(0, 16),
@@ -143,7 +155,12 @@ type RespuestaVerificacion = {
   estado: EstadoVerificacion | "error";
   verificada: boolean;
   alterada?: boolean;
+  /** Instante REAL del sello criptográfico. Nunca una fecha anterior a la real. */
   firmado_at?: string;
+  /** Fecha de emisión del documento (el acto médico). */
+  emitido_at?: string;
+  /** El sello se aplicó después de la emisión (documentos históricos). */
+  sellado_diferido?: boolean;
   algoritmo?: string;
   hash?: string;
   motivo?: string;

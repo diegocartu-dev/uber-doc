@@ -616,9 +616,26 @@ async function generarQRCodePNG(url: string): Promise<Buffer> {
 }
 
 // ─── Sello visual de firma electrónica ──────────────────────────────────────
-// Rediseño RCTA-style: solo fecha de firma + QR code de verificación.
-// Sin título redundante, sin cita legal duplicada, sin hash, sin URL texto.
+// Rediseño RCTA-style: QR de verificación, sin título redundante, sin cita legal
+// duplicada, sin hash.
 // Se renderiza a la izquierda, a la misma altura que la firma manuscrita (derecha)
+//
+// POR QUÉ ACÁ NO VA LA FECHA DE FIRMA (dictamen 07/08/2026, segunda parte):
+// El papel no declara ninguna fecha de firma. Antes imprimía debajo del QR la
+// fecha y hora del sello; con el sellado diferido de los documentos históricos
+// eso dejaría dos huellas indeseables: o el documento viejo sale con la fecha de
+// hoy bajo el QR, o sale sin ella y esa ausencia lo marca como distinto. El pie
+// de un documento sellado tiene que ser IDÉNTICO en los dos casos.
+//
+// No decir una fecha de firma NO es mentir sobre ella: el pie afirma el mecanismo
+// (firma electrónica, art. 5) y el nombre del firmante, verdaderos desde la
+// emisión. Y el camino a la verdad completa está impreso a 3 cm: el QR lleva a
+// /verificar, donde se muestran SIEMPRE las dos fechas —emisión y sello— con la
+// explicación.
+//
+// Lo clínicamente relevante sigue en el papel: la FECHA DE EMISIÓN con hora, en
+// el encabezado (renderHeader). Es la que define la vigencia de una receta y el
+// rango de un reposo.
 
 async function renderSelloFirma(
   pdf: PDFKit.PDFDocument,
@@ -627,19 +644,9 @@ async function renderSelloFirma(
 ) {
   const qrSize = 55;
   const selloWidth = qrSize + 16; // QR + padding
-  const selloHeight = qrSize + 26; // QR + fecha + padding
+  const selloHeight = qrSize + 26; // QR + leyenda + padding
   const selloX = MARGIN.left;
   const selloY = footerTopY - selloHeight - 10;
-
-  // Fecha y hora de firma (DD/MM/YYYY HH:mm — per Carolina's recommendation)
-  const d = new Date(firma.firmado_at);
-  const fechaFirmaDD = d.toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "America/Argentina/Buenos_Aires",
-  });
-  const horaFirma = formatHora(firma.firmado_at);
 
   // QR code → /verificar/{documento_id}
   const verificarUrl = `${VERIFICAR_BASE_URL}/verificar/${firma.verificar_id}`;
@@ -651,19 +658,19 @@ async function renderSelloFirma(
 
     pdf.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
 
-    // Fecha debajo del QR
+    // Para qué sirve el QR, debajo del QR.
     pdf.font("Inter").fontSize(6).fillColor(COLORS.secondary);
     pdf.text(
-      `${fechaFirmaDD} ${horaFirma}`,
+      "Verificar autenticidad",
       selloX,
       qrY + qrSize + 3,
       { width: selloWidth, align: "center" }
     );
   } catch {
-    // Fallback sin QR: fecha + URL texto (Sofía: sin QR la fecha sola queda huérfana)
+    // Fallback sin QR: la URL de verificación en texto, que es lo que el QR haría.
     pdf.font("Inter").fontSize(7).fillColor(COLORS.secondary);
     pdf.text(
-      `Firmado: ${fechaFirmaDD} ${horaFirma}`,
+      "Verificá este documento en",
       selloX + 8,
       selloY + 10,
       { width: 180 }
@@ -734,10 +741,18 @@ function renderFooter(
   // deja ambiguo cuál de los dos regímenes aplica, y esa diferencia es
   // exactamente la presunción de los arts. 7-8 de la Ley 25.506. Es firma
   // ELECTRÓNICA, art. 5, y así se declara.
+  //
+  // UNA SOLA LEYENDA PARA TODO DOCUMENTO SELLADO (dictamen 07/08/2026, segunda
+  // parte). El pie no distingue —ni puede distinguir— un documento sellado al
+  // emitirse de uno sellado después: no declara NINGUNA fecha de firma, declara
+  // el mecanismo y el firmante, y ambas cosas son verdaderas desde la emisión.
+  // La verdad completa (las dos fechas, con explicación) está a un escaneo de
+  // distancia, y la segunda línea lo dice explícitamente.
   if (doc.firma) {
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
-      `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)} en los términos del art. 5 de la Ley 25.506.`,
+      `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)} en los términos del art. 5 de la Ley 25.506.\n` +
+        `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar.`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
