@@ -9,6 +9,7 @@ import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioLoginClient from "./ConsultorioLoginClient";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { identidadHabilitada } from "@/lib/perfil-medico";
+import { parsearAreasAtencion, textosAreas } from "@/lib/areas-atencion";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -54,6 +55,17 @@ export default async function ConsultorioPublicoPage({
   // funcionando con el canal apagado. false explícito = consultorio cerrado.
   // Los 17 médicos reales lo tienen en true (verificado contra prod).
   if (medico.visible_consultorio_particular === false) notFound();
+
+  // Áreas de atención declaradas (ej: "Atiende adolescentes (10 a 19 años)"). Query
+  // PROPIA a propósito: la columna es nueva y la de arriba es la que decide si esta
+  // página existe — si algo fallara con la columna, se cae solo el cartelito y no el
+  // perfil público del médico. Informativa: no condiciona nada.
+  const { data: areasRow } = await supabaseAdmin
+    .from("medicos")
+    .select("areas_atencion")
+    .eq("slug", slug)
+    .maybeSingle();
+  const areas = textosAreas(parsearAreasAtencion(areasRow?.areas_atencion));
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();
@@ -114,6 +126,21 @@ export default async function ConsultorioPublicoPage({
         >
           {medico.especialidad}
         </p>
+
+        {/* Área de atención declarada por el médico. Informativa. */}
+        {areas.length > 0 && (
+          <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+            {areas.map((texto) => (
+              <span
+                key={texto}
+                className="inline-block rounded-md px-2 py-0.5 text-xs font-medium leading-snug"
+                style={{ backgroundColor: "rgba(55,138,221,0.08)", color: "#378ADD" }}
+              >
+                {texto}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Descripción */}
         <p

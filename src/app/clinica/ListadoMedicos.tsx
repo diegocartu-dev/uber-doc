@@ -16,7 +16,9 @@ import {
   formatPrecio,
   normalizeTexto,
   ordenarMedicos,
+  coincideConBusqueda,
 } from "./disponibilidad";
+import { textosAreas } from "@/lib/areas-atencion";
 
 // Pantalla 2 del ruteo (diseño Sofía): listado PLANO de médicos habilitados para la
 // jurisdicción del paciente. Reemplaza la grilla de especialidades como landing. Reúsa la
@@ -71,11 +73,10 @@ export default function ListadoMedicos({
   }, [consultasEspera]);
   const medicosEnTurnoSet = useMemo(() => new Set(medicosEnTurno), [medicosEnTurno]);
 
-  // Búsqueda por especialidad o nombre. Luego orden macro por disponibilidad.
+  // Búsqueda por especialidad, nombre o área de atención declarada ("adolescencia").
+  // Luego orden macro por disponibilidad.
   const termino = normalizeTexto(busqueda.trim());
-  const filtrados = termino
-    ? medicos.filter((m) => normalizeTexto(m.especialidad).includes(termino) || normalizeTexto(m.nombre_completo).includes(termino))
-    : medicos;
+  const filtrados = termino ? medicos.filter((m) => coincideConBusqueda(m, busqueda.trim())) : medicos;
   const ordenados = ordenarMedicos(filtrados, esperasPorMedico, turnoMasCercano, medicosConTurnos);
 
   // Nadie del listado visible puede atender AHORA pero hay turnos → ofrecer el
@@ -219,7 +220,7 @@ export default function ListadoMedicos({
           type="text"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por especialidad"
+          placeholder="Buscar por especialidad o área"
           className="w-full rounded-lg bg-white py-3 pl-10 pr-4 text-[15px] shadow-sm focus:outline-none"
           style={{ border: "1px solid #d1d5db", color: "#111827" }}
           onFocus={(e) => { e.currentTarget.style.borderColor = "#378ADD"; e.currentTarget.style.boxShadow = "0 0 0 1px #378ADD"; }}
@@ -291,6 +292,17 @@ export default function ListadoMedicos({
                       <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
                     </div>
                     <p className="mt-0.5 truncate text-[13px] text-gray-500">{m.especialidad}</p>
+                    {/* Área de atención declarada por el médico (informativa: "Atiende
+                        adolescentes (10 a 19 años)"). No condiciona la reserva. */}
+                    {textosAreas(m.areasAtencion).map((texto) => (
+                      <p
+                        key={texto}
+                        className="mt-1 inline-block rounded-md px-2 py-0.5 text-[12px] font-medium leading-snug"
+                        style={{ backgroundColor: "rgba(55,138,221,0.08)", color: "#378ADD" }}
+                      >
+                        {texto}
+                      </p>
+                    ))}
                     <p className="mt-0.5 text-[13px] font-medium" style={{ color: disponibleAhora ? esperaInfo.color : m.ciBloqueadaPorTurno ? "#BA7517" : "#9ca3af" }}>
                       {disponibleAhora
                         ? esperaInfo.texto
