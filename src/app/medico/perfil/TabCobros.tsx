@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 
 interface MpAccount {
@@ -267,10 +268,13 @@ function EstadoE() {
       </div>
       <p className="mt-2 text-sm text-gray-600" style={{ lineHeight: 1.6 }}>
         Verificá que estés usando una cuenta de Mercado Pago real (no una cuenta
-        de prueba). Si el problema persiste, escribinos a{" "}
-        <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
-          soporte@docto.com.ar
-        </a>
+        de prueba). Si el problema persiste,{" "}
+        <Link
+          href="/ayuda?asunto=No%20puedo%20conectar%20mi%20cuenta%20de%20Mercado%20Pago"
+          className="text-[#378ADD] underline"
+        >
+          escribinos
+        </Link>
         .
       </p>
       <button
@@ -298,11 +302,13 @@ function EstadoD() {
       </div>
       <p className="mt-2 text-sm text-gray-600" style={{ lineHeight: 1.6 }}>
         Esta cuenta de Mercado Pago ya está vinculada a otro profesional en
-        Docto. Conectá con una cuenta MP diferente, o si creés que es un error,
-        escribinos a{" "}
-        <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
-          soporte@docto.com.ar
-        </a>
+        Docto. Conectá con una cuenta MP diferente, o si creés que es un error,{" "}
+        <Link
+          href="/ayuda?asunto=Mi%20cuenta%20de%20Mercado%20Pago%20figura%20ya%20vinculada"
+          className="text-[#378ADD] underline"
+        >
+          escribinos
+        </Link>
         .
       </p>
       <button

@@ -81,13 +81,14 @@ export default function AvatarDropdown({ initials, fullName, email, perfilComple
 
               <div className="border-t border-gray-100" />
 
-              <a
-                href="mailto:soporte@docto.com.ar?subject=Ayuda Docto"
-                onClick={() => setOpen(false)}
+              {/* Antes era un `mailto:`: en un celular sin cliente de correo
+                  configurado no hacía nada y el usuario quedaba sin canal. */}
+              <button
+                onClick={() => { setOpen(false); router.push("/ayuda"); }}
                 className="flex w-full items-center px-4 py-3.5 text-sm text-gray-700 transition hover:bg-gray-50 lg:py-2.5"
               >
                 Ayuda
-              </a>
+              </button>
 
               <div className="border-t border-gray-100" />
 
