@@ -26,6 +26,14 @@ import { TIPOS_FIRMABLES } from "@/lib/firma/documento";
 // un reintento no deberían disparar la alerta.
 const GRACIA_MS = 15 * 60 * 1000;
 const VENTANA_MS = 24 * 60 * 60 * 1000;
+
+// La firma recién existe en producción desde este deploy (PR #357, 07/08/2026
+// 19:09 UTC). Todo lo emitido antes salió sin sello POR DISEÑO — son los 114
+// documentos históricos que, por dictamen legal, no se firman retroactivamente
+// (sería antedatar). Sin este corte el vigilante los cuenta como falla y manda
+// un mail rojo por hora durante las primeras 24 horas: pasó apenas se desplegó,
+// y una alerta que grita por algo que nadie va a arreglar deja de leerse.
+const DESDE_QUE_SE_FIRMA = Date.parse("2026-08-07T19:09:00Z");
 const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;
 
 // Fila propia en `cron_runs` para el throttle: NO se usa la del cron
@@ -36,7 +44,8 @@ const CLAVE_ALERTA = "documentos-sin-sello-alerta";
 export const GET = withCron("documentos-sin-sello", async () => {
   const admin = createAdminClient();
   const ahora = Date.now();
-  const desde = new Date(ahora - VENTANA_MS).toISOString();
+  // Nunca mirar más atrás del momento en que la firma empezó a existir.
+  const desde = new Date(Math.max(ahora - VENTANA_MS, DESDE_QUE_SE_FIRMA)).toISOString();
   const hasta = new Date(ahora - GRACIA_MS).toISOString();
   const tipos = [...TIPOS_FIRMABLES];
 
@@ -97,8 +106,8 @@ export const GET = withCron("documentos-sin-sello", async () => {
       : `🟠 ${faltantes} documento${faltantes === 1 ? "" : "s"} sin sello electrónico`,
     [
       todos
-        ? `De los ${emitidos} documentos emitidos en las últimas 24 horas, NINGUNO quedó firmado electrónicamente.`
-        : `${faltantes} de ${emitidos} documentos emitidos en las últimas 24 horas quedaron sin sello electrónico (${detallePorTipo}).`,
+        ? `De los ${emitidos} documentos emitidos desde la última revisión, NINGUNO quedó firmado electrónicamente.`
+        : `${faltantes} de ${emitidos} documentos emitidos desde la última revisión quedaron sin sello electrónico (${detallePorTipo}).`,
       ``,
       `Qué significa: esos documentos se entregaron igual y el paciente los tiene, pero el PDF dice "Documento sin sello electrónico de verificación" y el QR lleva a una página que no puede confirmar el contenido. Una farmacia o un empleador pueden preguntar por eso.`,
       ``,
