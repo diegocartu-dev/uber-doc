@@ -14,8 +14,8 @@ causa 3).
 | Email | diegocartu+registroNNNN@gmail.com | cambiar NNNN por corrida; el mail de confirmación llega al Gmail de Diego |
 | Título / Especialidad | Dr. / Clínica médica | — |
 | Matrícula | **MN 909090** | número libre en Docto (verificar antes si se repite la prueba) |
-| DNI | **29362322** | DNI real de Pablo Cogliandro — **REFEPS valida POR DNI**, no por matrícula → da verde con sus jurisdicciones (Buenos Aires + CABA) |
-| CUIT | 20-29362322-3 | pasa el cruce DNI↔CUIT (solo chequea estructura y que embeba el DNI) |
+| DNI | *(ver abajo)* | **REFEPS valida POR DNI**, no por matrícula: hay que usar el DNI de un médico ya validado para que dé verde con jurisdicciones reales |
+| CUIT | *(derivado del DNI)* | el cruce solo chequea estructura y que el CUIT embeba el DNI: `20-<DNI>-<verificador>` |
 | Domicilio | Av. Prueba 123, CABA | — |
 | Celular | el real de Diego (11 4028-9141) | prueba también los avisos WhatsApp |
 | Credencial | `docs/pruebas/credencial-prueba-registro.jpg` | sintética, marcada PRUEBA |
@@ -25,7 +25,14 @@ causa 3).
 
 - La MN real de Pablo (138169) está OCUPADA por él → el anti-duplicados la
   rechaza (comportamiento correcto). Usar 909090 u otro número libre.
-- `medicos.dni` NO tiene unique → el DNI de Pablo puede convivir.
+- `medicos.dni` NO tiene unique → el DNI de un médico existente puede convivir con la sonda.
+
+⚠️ **El DNI de prueba NO se publica acá: este repositorio es público y un DNI es
+dato personal de una persona real.** Para obtenerlo en el momento de la prueba:
+consultar en la base el DNI de un médico con `refeps_validado = true`
+(`select dni from medicos where refeps_validado and not es_cuenta_test limit 1`)
+y usarlo solo durante la corrida. Nunca escribirlo en el repo, en un commit,
+en un PR ni en un issue.
 - El QR de Didit solo aparece en desktop (hand-off al teléfono); en el celular
   abre la cámara directo.
 

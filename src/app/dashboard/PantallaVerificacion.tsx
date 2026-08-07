@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { comprimirImagenesDeFormData } from "@/lib/imagenes/comprimir";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -142,13 +143,15 @@ export default function PantallaVerificacion({
         <h2 className="text-xl font-semibold text-gray-900">{estado.titulo}</h2>
         <p className="mt-3 text-sm leading-relaxed text-gray-500">{estado.desc}</p>
 
+        {/* Antes era un `mailto:`: en un celular sin cliente de correo
+            configurado no hacía nada y el médico quedaba sin canal. */}
         {estado.showContact && (
-          <a
-            href={`mailto:soporte@docto.com.ar?subject=${encodeURIComponent(`Registro ${estadoRegistro} — ${fullName}`)}`}
+          <Link
+            href={`/ayuda?asunto=${encodeURIComponent(`Registro ${estadoRegistro} — ${fullName}`)}`}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#378ADD] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#2d75c4] active:scale-[0.97]"
           >
             Contactar soporte
-          </a>
+          </Link>
         )}
 
         <div className="mt-8 rounded-xl bg-white p-5 text-left" style={{ border: "1px solid #e5e7eb" }}>
@@ -214,11 +217,16 @@ export default function PantallaVerificacion({
           )}
         </div>
 
+        {/* También era un `mailto:` (a hola@, una casilla sin uso real): en el
+            celular no hacía nada. Ahora lleva a la pantalla de ayuda. */}
         <p className="mt-6 text-sm text-gray-400">
-          ¿Preguntas? Escribinos a{" "}
-          <a href="mailto:hola@docto.com.ar" className="text-[#378ADD] hover:underline">
-            hola@docto.com.ar
-          </a>
+          ¿Preguntas?{" "}
+          <Link
+            href={`/ayuda?asunto=${encodeURIComponent(`Registro ${estadoRegistro} — ${fullName}`)}`}
+            className="text-[#378ADD] hover:underline"
+          >
+            Escribinos
+          </Link>
         </p>
       </div>
     </div>

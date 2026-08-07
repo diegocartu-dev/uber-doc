@@ -44,7 +44,8 @@ type Props = {
   userId: string;
   pasoInicialParam: string | null;
   mpResultado: string | null; // "ok" | "error" | null (al volver del OAuth)
-  mpError: string | null; // credentials_mismatch | mp_account_already_linked | ...
+  mpError: string | null; // credentials_mismatch | mp_account_already_linked | cuenta_no_argentina | ...
+  mpPais: string | null; // país de la cuenta MP rechazada por no ser argentina (ej: "Brasil")
 };
 
 // Estado del biométrico derivado del didit_status (espejo de mapEstado de
@@ -300,7 +301,7 @@ export default function OnboardingWizard(props: Props) {
 }
 
 // ════════ PASO 1 — MERCADO PAGO ════════
-function PasoMP({ hecho, mpError, onSkip, onDone }: { hecho: boolean; mpError: string | null; onSkip: () => void; onDone: () => void }) {
+function PasoMP({ hecho, mpError, mpPais, onSkip, onDone }: { hecho: boolean; mpError: string | null; mpPais: string | null; onSkip: () => void; onDone: () => void }) {
   const errores: Record<string, { titulo: string; texto: string }> = {
     credentials_mismatch: {
       titulo: "No pudimos conectar tu cuenta",
@@ -309,6 +310,12 @@ function PasoMP({ hecho, mpError, onSkip, onDone }: { hecho: boolean; mpError: s
     mp_account_already_linked: {
       titulo: "Esa cuenta ya está en uso",
       texto: "Esta cuenta de Mercado Pago ya está vinculada a otro profesional en Docto. Conectá con otra cuenta, o escribinos a soporte@docto.com.ar.",
+    },
+    // Cuenta de Mercado Pago de otro país (caso real 07/08/2026): cobraría en otra
+    // moneda y ningún paciente argentino podría pagarle.
+    cuenta_no_argentina: {
+      titulo: `Esa cuenta es de ${mpPais ?? "otro país"}`,
+      texto: `Esa cuenta de Mercado Pago es de ${mpPais ?? "otro país"} y las consultas se cobran en pesos a pacientes en Argentina. Conectá una cuenta de Mercado Pago de Argentina para poder cobrar.`,
     },
   };
   const err = mpError ? errores[mpError] ?? { titulo: "No pudimos conectar tu cuenta", texto: "Intentá de nuevo." } : null;

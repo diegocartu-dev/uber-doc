@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import PerfilClient from "./PerfilClient";
+import { parsearAreasAtencion } from "@/lib/areas-atencion";
 
 export default async function PerfilMedicoPage() {
   const supabase = await createClient();
@@ -41,6 +42,17 @@ export default async function PerfilMedicoPage() {
     celular_personal: contactoPrivado?.celular_personal ?? null,
     email_personal: contactoPrivado?.email_personal ?? null,
   };
+  // Áreas de atención adicionales (ej: Adolescencia 10-19). Query PROPIA a propósito:
+  // es una columna nueva, así que si algo fallara con ella se cae SOLO este dato y el
+  // perfil sigue abriendo (regla del repo: no sumar columnas nuevas a SELECTs que ya
+  // funcionan en producción). Con service role, filtrada por user_id.
+  const { data: areasRow } = await admin
+    .from("medicos")
+    .select("areas_atencion")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const areasAtencion = parsearAreasAtencion(areasRow?.areas_atencion);
+
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
     .select(
@@ -52,7 +64,12 @@ export default async function PerfilMedicoPage() {
   return (
     <div className="min-h-full bg-[#f8f9fa]">
       <Suspense fallback={<div className="mx-auto max-w-2xl px-6 py-8" />}>
-        <PerfilClient medico={medicoConPrivado} mpAccount={mpAccount} userEmail={user.email ?? ""} />
+        <PerfilClient
+          medico={medicoConPrivado}
+          mpAccount={mpAccount}
+          userEmail={user.email ?? ""}
+          areasAtencion={areasAtencion}
+        />
       </Suspense>
     </div>
   );

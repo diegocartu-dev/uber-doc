@@ -36,6 +36,24 @@ const fechaAR = (offsetDias = 0) => {
 
 type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 
+// Etiquetas propias de esta pantalla, sólo para los estados crudos que no se
+// entienden leyéndolos. Todo lo demás sigue con StatusBadge tal cual está.
+// 'reservado_pendiente' acá es SIEMPRE una reserva viva (la API ya descarta las
+// abandonadas): el paciente está pagando, todavía no es una consulta.
+const ETIQUETAS_ESTADO: Record<string, { label: string; bg: string; text: string }> = {
+  reservado_pendiente: { label: "Reservando…", bg: "bg-[#BA7517]/15", text: "text-[#BA7517]" },
+};
+
+function EstadoChip({ estado }: { estado: string }) {
+  const propio = ETIQUETAS_ESTADO[estado];
+  if (!propio) return <StatusBadge status={estado} />;
+  return (
+    <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${propio.bg} ${propio.text}`}>
+      {propio.label}
+    </span>
+  );
+}
+
 export default function ConsultasClient() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("esperando");
@@ -190,7 +208,7 @@ export default function ConsultasClient() {
             </button>
           ))}
           <span className="ml-2 text-xs text-gray-400">
-            Consultas reales del período + turnos solicitados en el período (aunque la cita sea futura). Sin huecos de agenda.
+            Consultas reales del período + turnos solicitados en el período (aunque la cita sea futura). Sin huecos de agenda ni reservas abandonadas.
           </span>
         </div>
       )}
@@ -271,7 +289,7 @@ export default function ConsultasClient() {
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">{item.medico}</td>
                     <td className="px-4 py-3 text-gray-600">{item.paciente}</td>
-                    <td className="hidden px-4 py-3 lg:table-cell"><StatusBadge status={item.estado} /></td>
+                    <td className="hidden px-4 py-3 lg:table-cell"><EstadoChip estado={item.estado} /></td>
                     {tab === "hoy" ? (
                       <>
                         <td className="whitespace-nowrap px-4 py-3 text-gray-700">
