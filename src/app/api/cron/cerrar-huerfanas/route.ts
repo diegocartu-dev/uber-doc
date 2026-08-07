@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { revisarAtencionesSinDocumentar } from "@/lib/atenciones-sin-documentar";
 
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -144,12 +145,29 @@ async function handler(req: NextRequest) {
     });
   }
 
+  // Este barrido es el que cerró la consulta de Hugo (d9293d23, 01/08) de
+  // madrugada, sin que nadie se enterara de que el paciente había pagado
+  // $50.000 y no tenía ni receta. Apenas termina de cerrar, revisamos si algo
+  // de lo cobrado quedó SIN documentación y alertamos.
+  //
+  // No altera nada del cierre: corre después de todo el trabajo, solo observa,
+  // y la función nunca lanza (devuelve `{ok:false, error}`). Su resultado NO
+  // cambia el status HTTP de este cron — si el vigía falla, el cron dedicado
+  // (/api/cron/atenciones-sin-documentar, cada 30 min) reintenta igual.
+  const sinDocumentar = await revisarAtencionesSinDocumentar();
+  if (!sinDocumentar.ok) {
+    logWarn("[CRON/HUERFANAS]", "Revisión de atenciones sin documentar falló (no bloquea el cierre)", {
+      error: sinDocumentar.error,
+    });
+  }
+
   const payload = {
     ok: !huboError,
     total_cerradas: totalCerradas,
     oauth_state_limpiados: oauthLimpiados,
     webhook_failed_limpiados: webhookLimpiados,
     pagadas_recuperadas: pagadasRecuperadas,
+    sin_documentar: sinDocumentar,
     detalle,
   };
 

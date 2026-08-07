@@ -156,6 +156,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 10:00",
     autoRecupera: true,
   },
+  "atenciones-sin-documentar": {
+    nombre: "Vigía de consultas cobradas sin documentación",
+    queHace:
+      "revisa cada media hora si alguna consulta o turno que ya se cobró se cerró sin un solo documento ni evolución, y te avisa con los datos del paciente y del médico",
+    impacto:
+      "un paciente puede pagar, quedarse sin receta y que nadie se entere (caso Hugo del 01/08: $50.000 cobrados y nos enteramos 5 días después, porque escribió enojado)",
+    cadencia: "cada 30 minutos",
+    autoRecupera: false,
+  },
   "saldo-servicios": {
     nombre: "Vigía de saldos de servicios",
     queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
