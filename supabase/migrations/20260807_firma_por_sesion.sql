@@ -1,4 +1,21 @@
 -- ─────────────────────────────────────────────────────────────────────────────
+-- ⚠️ ORDEN DE DESPLIEGUE: ESTA MIGRACIÓN VA **ANTES** DEL DEPLOY DEL CÓDIGO.
+--
+-- No es una preferencia de prolijidad. Si el código sale primero, el insert en
+-- `firma_logs` falla (columnas metodo_atribucion/firmante/contexto/log_hash
+-- inexistentes, y otp_id todavía NOT NULL), la firma se revierte por diseño y
+-- TODOS los documentos emitidos en esa ventana salen con la leyenda ámbar
+-- "Documento sin sello electrónico de verificación". Para la integridad de los
+-- datos es fail-safe; para el paciente que se lleva esa receta a la farmacia, no.
+--
+-- Es segura de aplicar sobre el código VIEJO (solo agrega columnas y relaja un
+-- NOT NULL: nada de lo que hoy corre se rompe), así que el orden correcto no
+-- tiene costo. Si por lo que sea el código saliera primero, el cron
+-- `documentos-sin-sello` avisa por mail dentro de la hora y los logs del
+-- servidor dicen "MIGRACIÓN FALTANTE".
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Firma electrónica por atribución de sesión + endurecimiento de firma_logs
 -- Dictamen legal 07/08/2026 (punto 3: "el log ES la defensa").
 --

@@ -37,6 +37,7 @@ const ESPERADOS: Record<string, number> = {
   "provisionar-claves": 1440,
   "liberar-reservas": 10,
   "recuperar-registros": 1440,
+  "documentos-sin-sello": 60,
   uptime: 1,
 };
 

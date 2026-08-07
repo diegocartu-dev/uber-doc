@@ -95,6 +95,50 @@ lista la vía de re-emisión y responder caso por caso.
 | 8 | Montar el OTP **solo** para certificados | ⏳ pendiente |
 | 9 | Firma digital real (AC licenciada) | ⏳ roadmap |
 
+### Corrección post-revisión: la firma cubre lo que el PDF imprime
+
+La primera versión del PR firmaba `{id, tipo, diagnóstico, tratamiento, días de
+reposo, contenido, paciente_id, medico_id, created_at}`: solo los **IDs** de
+paciente y médico. Pero el PDF no imprime IDs — imprime nombre del paciente,
+CUIL, sexo, fecha de nacimiento, obra social y nº de afiliado; nombre del médico,
+matrícula y domicilio. Todo eso se leía en vivo de `pacientes` y `medicos` al
+generar el PDF, y todo eso lo edita su dueño desde `/mis-datos` **después** de
+emitido. Como el PDF se regenera en cada request:
+
+1. El médico emite un certificado de reposo para "Juan Pérez" por 5 días. Firma OK.
+2. El paciente cambia su `nombre_completo` (o su obra social, o su nº de afiliado).
+3. Vuelve a abrir el PDF: sale con el dato nuevo, el mismo QR y el pie
+   *"Firmado electrónicamente por Dr. X…"*.
+4. El empleador escanea el QR y ve verde: *"su contenido no fue alterado"*.
+
+Era el mismo modo de falla que el dictamen quería eliminar —la página afirmando
+integridad sobre contenido que la firma no cubre—, y antes del PR no era
+alcanzable solo porque no había ningún documento firmado.
+
+**Solución:** al firmar se congela el juego exacto de campos que el PDF imprime
+(`src/lib/firma/identidad.ts`), entra al hash y queda dentro de
+`firma_digital.identidad`. El PDF de un documento sellado se renderiza **desde el
+snapshot**, no desde las tablas vivas, y la página pública muestra el firmante
+congelado. Tocar el snapshot sin la clave privada del médico rompe la
+verificación: el estado pasa a "alterado". Si el snapshot no se puede construir,
+**no se firma** (el documento queda sin sello, que es la verdad).
+
+*Límite registrado:* se congela el **path** de la firma manuscrita, no la imagen.
+Si el médico reemplaza el archivo en Storage, cambia el trazo impreso. Es su
+propia firma sobre su propio documento.
+
+### Qué NO puede hacer el endpoint de firma
+
+`POST /api/documentos/firmar` sella únicamente documentos **clínicos**
+(receta, indicaciones, certificado, orden — no las filas de tracking que otros
+caminos escriben en `documentos`), **del médico de la sesión**, **sin sello
+previo**, **emitidos dentro de los 30 minutos** y de un médico **aprobado y con
+REFEPS validado** (cuentas de test exentas, igual que el constraint de DB).
+
+La ventana de recencia existe por el punto 4 de este documento: sin ella, un POST
+con `documentoIds` podía sellar hoy cualquiera de los 114 históricos, sin que
+nadie los revisara — que es exactamente lo que se prohibió.
+
 ### Qué queda registrado en cada firma
 
 `firma_logs`, append-only (trigger anti-UPDATE y anti-DELETE, `REVOKE` a los
@@ -123,8 +167,40 @@ no podríamos acreditar.
 
 ---
 
-## 4. Pendientes
+## 4. Decisión pendiente de Diego: el T&C del médico no existe
 
+El checklist del dictamen (punto 3, identidad del firmante) pide el
+consentimiento documentado donde consta que **el click del médico constituye su
+firma electrónica**. Ese consentimiento **no existe hoy**, verificado contra
+producción el 07/08/2026:
+
+```sql
+select tipo, count(*) from aceptaciones_legales group by 1;
+-- datos_sensibles | 1108      ← único tipo. Ninguna fila 'tyc_medico'.
+```
+
+Ningún camino de la app inserta `tyc_medico` y `versiones_textos_legales` no
+tiene esa versión. El log lo registra con honestidad
+(`tyc_medico: null`, `tyc_medico_registrada: false`, más la lista de lo que el
+médico sí aceptó), pero la consecuencia es de negocio, no de código: **la
+atribución por sesión se apoya en un consentimiento que hoy falta**, y sin él la
+atribución es más débil si un médico desconoce una firma.
+
+Qué haría falta: texto de T&C para médicos con la cláusula de firma electrónica,
+versión sembrada en `versiones_textos_legales`, y punto de aceptación en el
+registro o en el primer login (con inserción en `aceptaciones_legales`). Es
+trabajo chico; la decisión de redacción y de momento es de Diego + laboralista.
+
+---
+
+## 5. Pendientes
+
+- **Aplicar `supabase/migrations/20260807_firma_por_sesion.sql` ANTES del deploy**
+  (no después). Si el código sale primero, el log de firma falla y todos los
+  documentos de esa ventana salen con la leyenda ámbar "sin sello": fail-safe
+  para los datos, pero una farmacia o un empleador pueden rechazar por eso un
+  documento recién emitido. La migración es segura de aplicar sobre el código
+  viejo, así que el orden correcto no cuesta nada.
 - **Constancia de integridad de los 114** (punto 3): calcular y guardar el hash
   del contenido actual en registro append-only, con fecha de hoy y **sin
   llamarlo firma**. Dos fechas verdaderas ("emitido el X / sello de integridad
@@ -140,8 +216,10 @@ no podríamos acreditar.
   recetas dicen "Inscripción en trámite" mientras CLAUDE.md afirma Plataforma
   0270. Confirmar contra prod, no contra `.env.local`.
 - **Documentos que quedan sin firmar** porque el médico cerró el navegador antes
-  de que saliera el pedido de firma: hoy quedan "sin sello". Evaluar un repaso
-  acotado, sin antedatar.
+  de que saliera el pedido de firma: hoy quedan "sin sello". El cron
+  `documentos-sin-sello` (cada hora) los cuenta y avisa por mail — no los firma:
+  sellar hoy un documento de ayer sería antedatar. Evaluar un repaso acotado.
+- **T&C del médico con cláusula de firma electrónica** (punto 4 de arriba).
 - **Gate de laboralista matriculado** sobre certificados de reposo (pendiente ya
   señalado en el dictamen del 27/06).
 

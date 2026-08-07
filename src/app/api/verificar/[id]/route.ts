@@ -98,7 +98,10 @@ export async function GET(
           firmado_at: doc.datos?.firmado_at,
           algoritmo: doc.datos?.algoritmo,
           hash: doc.datos?.hash_original.slice(0, 16),
-          medico: await datosMinimosMedico(doc.medico_id),
+          // Firmante congelado en la firma cuando existe: si el médico se
+          // cambió el nombre después, el papel y esta página tienen que decir
+          // lo mismo. Sin sello (históricos) se cae a la fila viva de `medicos`.
+          medico: doc.firmante ?? (await datosMinimosMedico(doc.medico_id)),
         };
       }
 

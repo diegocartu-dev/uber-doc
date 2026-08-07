@@ -13,16 +13,33 @@
 // REGLA DURA: este endpoint jamás bloquea ni revierte la entrega del documento.
 // Si la firma falla, el documento ya está guardado y visible para el paciente;
 // queda sin sello y el PDF lo dice explícitamente. Los fallos se loguean.
+//
+// LO QUE ESTE ENDPOINT NO ES: una máquina de sellar el pasado. Solo alcanza
+// documentos clínicos (`TIPOS_FIRMABLES`), del médico de la sesión, sin sello y
+// emitidos dentro de `VENTANA_FIRMA_MS`. Los 114 históricos quedan "sin sello"
+// a propósito: re-emitirlos exige que el médico revise y reafirme el contenido
+// (dictamen 07/08/2026, punto 4), no un POST.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { firmarDocumentoPorSesion } from "@/lib/firma/documento";
+import { firmarDocumentoPorSesion, TIPOS_FIRMABLES } from "@/lib/firma/documento";
 import { provisionarClaves, tieneClaves } from "@/lib/firma/claves";
 
 // Techo defensivo: una consulta emite como mucho 4 documentos (receta,
 // indicaciones, certificado, orden).
 const MAX_DOCUMENTOS = 10;
+
+/**
+ * Ventana de recencia. Este endpoint sella lo que el médico ACABA de emitir:
+ * los documentos se insertan y la firma sale segundos después, en el mismo
+ * cierre. Sin ventana, un POST con `documentoIds` sellaría hoy cualquier
+ * documento histórico del médico — exactamente lo que el dictamen prohíbe
+ * (punto 4: los certificados solo se re-emiten "por el mismo médico, que revise
+ * y reafirme el contenido"). 30 minutos cubre con holgura una pestaña lenta o
+ * un keepalive demorado, y deja fuera los 114 históricos.
+ */
+const VENTANA_FIRMA_MS = 30 * 60 * 1000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,6 +70,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "No es médico" }, { status: 403 });
   }
 
+  // Gate de estado del firmante. La firma se atribuye a la matrícula del médico:
+  // un médico rechazado o suspendido no puede seguir sellando documentos con
+  // ella. `refeps_validado` y `estado_registro` se leen con service role porque
+  // `medicos` no tiene GRANT de esas columnas para `authenticated` (CLAUDE.md).
+  // Cuentas de test quedan exentas de REFEPS, igual que el constraint de DB.
+  const admin = createAdminClient();
+  const { data: estadoMedico, error: errorEstado } = await admin
+    .from("medicos")
+    .select("estado_registro, refeps_validado, es_cuenta_test")
+    .eq("id", medico.id)
+    .maybeSingle();
+
+  const habilitadoParaFirmar =
+    !!estadoMedico &&
+    estadoMedico.estado_registro === "aprobado" &&
+    (estadoMedico.refeps_validado === true || estadoMedico.es_cuenta_test === true);
+
+  if (!habilitadoParaFirmar) {
+    // 200 a propósito: el documento ya está guardado y entregado. Este endpoint
+    // NUNCA escala un error al médico ni bloquea nada; queda "sin sello".
+    console.error(
+      `[firmar-docs] médico ${medico.id} no habilitado para firmar (estado=${estadoMedico?.estado_registro ?? "?"}, refeps=${estadoMedico?.refeps_validado ?? "?"}${errorEstado ? `, error=${errorEstado.message}` : ""})`
+    );
+    return NextResponse.json({ ok: false, error: "Médico no habilitado para firmar", firmados: 0 });
+  }
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -64,7 +107,19 @@ export async function POST(req: NextRequest) {
   const userAgent = req.headers.get("user-agent") || "no-informado";
 
   try {
-    const ids = await resolverDocumentos(medico.id, body);
+    const { ids, error: errorBusqueda } = await resolverDocumentos(medico.id, body);
+
+    if (errorBusqueda) {
+      // "No pude buscar" ≠ "no había nada que firmar". Antes las dos cosas
+      // devolvían {ok:true, firmados:0} y una regresión de query era invisible.
+      console.error("[firmar-docs] no se pudieron resolver los documentos:", errorBusqueda);
+      return NextResponse.json({
+        ok: false,
+        error: "No se pudieron resolver los documentos a firmar",
+        detalle: errorBusqueda,
+        firmados: 0,
+      });
+    }
 
     if (ids.length === 0) {
       return NextResponse.json({ ok: true, firmados: 0, resultados: [] });
@@ -105,40 +160,63 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Resuelve qué documentos hay que firmar, siempre acotado al médico de la sesión.
- * Acepta ids explícitos o el ancla (consulta/turno) recién cerrada.
+ * Resuelve qué documentos hay que firmar, siempre acotado a:
+ *   - el médico de la sesión (control de autorización),
+ *   - documentos clínicos revisados (`TIPOS_FIRMABLES`, ver más abajo),
+ *   - sin sello previo,
+ *   - emitidos dentro de la ventana de recencia (no se sella lo histórico).
+ *
+ * Devuelve el error de la query en vez de tragárselo: "no pude buscar" y "no
+ * había nada" no pueden ser la misma respuesta.
  */
-async function resolverDocumentos(medicoId: string, body: Body): Promise<string[]> {
+async function resolverDocumentos(
+  medicoId: string,
+  body: Body
+): Promise<{ ids: string[]; error?: string }> {
   const admin = createAdminClient();
+  const desde = new Date(Date.now() - VENTANA_FIRMA_MS).toISOString();
+
+  // Se firma SOLO lo que el médico redactó y tuvo a la vista. `documentos`
+  // también recibe filas de tracking de otros caminos (p. ej.
+  // /api/consulta/enviar-documento-medico inserta tipo 'documento_medico' con
+  // contenido "Documento enviado: archivo.pdf"): sellar eso haría que
+  // /verificar diga "Documento verificado" sobre un nombre de archivo.
+  const tipos = [...TIPOS_FIRMABLES];
 
   if (Array.isArray(body.documentoIds) && body.documentoIds.length > 0) {
     const pedidos = body.documentoIds.filter((id) => typeof id === "string" && UUID_RE.test(id)).slice(0, MAX_DOCUMENTOS);
-    if (pedidos.length === 0) return [];
+    if (pedidos.length === 0) return { ids: [] };
 
     // El filtro por medico_id es el control de autorización: nadie firma
     // documentos ajenos aunque mande el id.
-    const { data } = await admin
+    const { data, error } = await admin
       .from("documentos")
       .select("id")
       .in("id", pedidos)
       .eq("medico_id", medicoId)
-      .is("firma_digital", null);
+      .in("tipo", tipos)
+      .is("firma_digital", null)
+      .gte("created_at", desde);
 
-    return (data ?? []).map((d) => d.id);
+    if (error) return { ids: [], error: error.message };
+    return { ids: (data ?? []).map((d) => d.id) };
   }
 
   const anclaId = body.consultaId;
-  if (!anclaId || !UUID_RE.test(anclaId)) return [];
+  if (!anclaId || !UUID_RE.test(anclaId)) return { ids: [] };
 
   const columna = body.tipo === "turno" ? "turno_id" : "consulta_id";
-  const { data } = await admin
+  const { data, error } = await admin
     .from("documentos")
     .select("id")
     .eq(columna, anclaId)
     .eq("medico_id", medicoId)
+    .in("tipo", tipos)
     .is("firma_digital", null)
+    .gte("created_at", desde)
     .order("created_at", { ascending: true })
     .limit(MAX_DOCUMENTOS);
 
-  return (data ?? []).map((d) => d.id);
+  if (error) return { ids: [], error: error.message };
+  return { ids: (data ?? []).map((d) => d.id) };
 }
