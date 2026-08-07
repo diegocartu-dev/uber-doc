@@ -729,8 +729,11 @@ function MedicoRow({
             )}
             {/* Cuenta de cobros de otro país (caso 07/08/2026). Chip SOLO cuando hay
                 algo que hacer: si la cuenta es argentina o todavía no se verificó,
-                no se muestra nada acá (el detalle completo está en la ficha). */}
-            {m.mpSiteId && !esSiteArgentino(m.mpSiteId) && (
+                no se muestra nada acá (el detalle completo está en la ficha).
+                Gateado por `mpConectado`: el `site_id` describe la cuenta que
+                estaba conectada, así que sin cuenta activa el chip mentiría — la
+                fila diría "no puede cobrar" y la ficha "sin cuenta conectada". */}
+            {m.mpConectado && m.mpSiteId && !esSiteArgentino(m.mpSiteId) && (
               <span
                 title="La cuenta de Mercado Pago conectada no es argentina: los pagos salen en otra moneda y ningún paciente argentino puede pagarle."
                 className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"

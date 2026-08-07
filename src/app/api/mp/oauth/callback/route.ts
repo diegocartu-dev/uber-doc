@@ -6,8 +6,24 @@ import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { sendDoctoAlert, sendDoctoAlertThrottled } from "@/lib/alertas";
 import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
+import { guardarSiteMp } from "@/lib/mp-site-db";
 
 const PERFIL_BASE = "/medico/perfil?tab=cobros";
+
+// Este callback es la ÚNICA oportunidad de guardar la cuenta: Mercado Pago quema
+// el `code` al usarlo y el `state` ya se borró. Si la función muere por timeout,
+// el médico ve una pantalla de error de Vercel y no quedó nada guardado — tiene
+// que volver a empezar el OAuth. Presupuesto: token exchange (15 s) + users/me
+// (4 s) + queries, holgado dentro de 30 s.
+export const maxDuration = 30;
+/** Tope del token exchange. Sin esto, un MP lento colgaba la función hasta morir. */
+const TIMEOUT_TOKEN_MS = 15_000;
+/**
+ * Tope de `users/me` en el camino INTERACTIVO. Corto a propósito: acá hay un
+ * médico esperando frente a la pantalla y no verificar el país no rompe nada
+ * (el cron diario lo levanta). El cron sí puede darse los 8 s del default.
+ */
+const TIMEOUT_SITE_MS = 4_000;
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -85,6 +101,11 @@ export async function GET(req: NextRequest) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // Con timeout propio: sin él, un MP lento colgaba el fetch hasta que
+        // Vercel mataba la función (pantalla de error, `code` quemado, nada
+        // guardado). Cortando nosotros, el médico ve nuestro mensaje y puede
+        // reintentar. El catch de abajo ya trata el abort como error de red.
+        signal: AbortSignal.timeout(TIMEOUT_TOKEN_MS),
         // NOTE: test_token deliberately omitted.
         // With test_token:true, MP returns a token that acts as the APP OWNER
         // (user 28443305), not the authorizing seller. This breaks sandbox
@@ -199,7 +220,7 @@ export async function GET(req: NextRequest) {
   // Si Mercado Pago no responde, NO se rechaza: un timeout no es una cuenta
   // extranjera y dejar afuera a un médico legítimo por un hipo de la API es peor.
   // Esa cuenta queda sin `site_id` y la levanta el cron diario verificar-cuentas-mp.
-  const chequeoSite = await consultarSiteMp(tokenData.access_token);
+  const chequeoSite = await consultarSiteMp(tokenData.access_token, TIMEOUT_SITE_MS);
 
   if (chequeoSite.estado === "extranjera") {
     const pais = paisDeSite(chequeoSite.siteId);
@@ -282,15 +303,24 @@ export async function GET(req: NextRequest) {
   // statement ENTERO si se nombra una columna inexistente — meterla en el upsert
   // de arriba rompería la conexión de Mercado Pago para todos. Si el update falla,
   // la cuenta ya quedó bien guardada y el cron diario completa el dato.
-  if (chequeoSite.estado === "argentina") {
-    const { error: siteError } = await admin
-      .from("medicos_mp_accounts")
-      .update({ site_id: chequeoSite.siteId, site_verificado_at: new Date().toISOString() })
-      .eq("medico_id", medicoId);
-    if (siteError) {
-      logWarn("[OAUTH]", "No se pudo guardar el país de la cuenta MP", { medicoId, error: siteError.message });
-    }
-  }
+  //
+  // El caso `no_verificable` TAMBIÉN escribe, borrando: el upsert de arriba acaba
+  // de pisar `mp_user_id` con una cuenta NUEVA, así que el `site_id` guardado
+  // describe una cuenta que ya no está conectada. Sin este borrado, un médico
+  // marcado como extranjero que conecta una cuenta argentina justo cuando MP no
+  // responde queda con el cartel rojo "no puede cobrar" sobre una cuenta sana
+  // hasta la corrida del cron del día siguiente.
+  await guardarSiteMp(
+    medicoId,
+    chequeoSite.estado === "argentina"
+      ? {
+          site_id: chequeoSite.siteId,
+          site_verificado_at: new Date().toISOString(),
+          site_extranjera_desde: null,
+        }
+      : { site_id: null, site_verificado_at: null, site_extranjera_desde: null },
+    "[OAUTH]"
+  );
 
   await trackEvent({ evento: "mp_oauth_callback_success", medicoId, metadata: { mp_user_id: String(tokenData.user_id), scope: tokenData.scope, site_id: chequeoSite.estado === "argentina" ? chequeoSite.siteId : null } });
 
