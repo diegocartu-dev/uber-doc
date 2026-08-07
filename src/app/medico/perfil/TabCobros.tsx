@@ -30,22 +30,31 @@ function deriveEstadoInicial(mpAccount: MpAccount | null): string {
 export default function TabCobros({
   mpAccount,
   errorParam,
+  paisParam,
   medicoId,
 }: {
   mpAccount: MpAccount | null;
   errorParam: string | null;
+  /** País de la cuenta rechazada por no ser argentina (ej: "Brasil"). */
+  paisParam?: string | null;
   medicoId: string;
 }) {
   useEffect(() => {
     trackClient("mp_oauth_view_tab", {
       estado_inicial: errorParam === "mp_account_already_linked"
         ? "cuenta_vinculada"
+        : errorParam === "cuenta_no_argentina"
+        ? "cuenta_no_argentina"
         : deriveEstadoInicial(mpAccount),
     });
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (errorParam === "mp_account_already_linked") {
     return <EstadoD />;
+  }
+
+  if (errorParam === "cuenta_no_argentina") {
+    return <EstadoF pais={paisParam ?? null} />;
   }
 
   if (errorParam === "credentials_mismatch") {
@@ -63,7 +72,7 @@ export default function TabCobros({
   return <EstadoC />;
 }
 
-function handleStartClick(desdeEstado: "A" | "C" | "D" | "E") {
+function handleStartClick(desdeEstado: "A" | "C" | "D" | "E" | "F") {
   trackClient("mp_oauth_start_click", { desde_estado: desdeEstado });
   window.location.href = "/api/mp/oauth/start";
 }
@@ -283,6 +292,48 @@ function EstadoE() {
         style={{ backgroundColor: "#378ADD", minHeight: 44 }}
       >
         Intentar de nuevo
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Estado F — la cuenta que quiso conectar es de otro país (caso real 07/08/2026).
+ * Se explica el problema en criollo y con la única salida posible: una cuenta de
+ * Mercado Pago argentina. Ámbar (aviso accionable), no rojo: no se rompió nada,
+ * falta conectar la cuenta correcta.
+ */
+function EstadoF({ pais }: { pais: string | null }) {
+  const dePais = pais ? `de ${pais}` : "de otro país";
+  return (
+    <div
+      className="rounded-xl p-6"
+      style={{ backgroundColor: "#FEF6E8", border: "0.5px solid #E8C98A" }}
+    >
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={20} strokeWidth={1.75} color="#BA7517" />
+        <p className="text-base font-semibold text-gray-900">
+          Esa cuenta es {dePais}
+        </p>
+      </div>
+      <p className="mt-2 text-sm text-gray-600" style={{ lineHeight: 1.6 }}>
+        Esa cuenta de Mercado Pago es {dePais} y las consultas se cobran en pesos
+        a pacientes en Argentina. Conectá una cuenta de Mercado Pago de Argentina
+        para poder cobrar.
+      </p>
+      <p className="mt-2 text-sm text-gray-600" style={{ lineHeight: 1.6 }}>
+        Si tenés dudas, escribinos a{" "}
+        <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
+          soporte@docto.com.ar
+        </a>
+        .
+      </p>
+      <button
+        onClick={() => handleStartClick("F")}
+        className="mt-4 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
+        style={{ backgroundColor: "#378ADD", minHeight: 44 }}
+      >
+        Conectar una cuenta de Argentina
       </button>
     </div>
   );

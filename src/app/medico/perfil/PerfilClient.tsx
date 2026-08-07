@@ -56,6 +56,10 @@ export default function PerfilClient({
   const router = useRouter();
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "error" } | null>(null);
   const [stickyError, setStickyError] = useState<string | null>(null);
+  // País de la cuenta MP rechazada (llega como `pais` en la URL del callback).
+  // Sticky igual que el error: la URL se limpia enseguida y el cartel tiene que
+  // seguir nombrando el país.
+  const [stickyPais, setStickyPais] = useState<string | null>(null);
   const [showBaja, setShowBaja] = useState(false);
 
   // Form state
@@ -100,6 +104,9 @@ export default function PerfilClient({
       setStickyError("mp_account_already_linked");
     } else if (error === "credentials_mismatch") {
       setStickyError("credentials_mismatch");
+    } else if (error === "cuenta_no_argentina") {
+      setStickyError("cuenta_no_argentina");
+      setStickyPais(searchParams.get("pais"));
     } else if (error) {
       setToast({ msg: "Algo salió mal con la conexión a Mercado Pago.", type: "error" });
     }
@@ -108,6 +115,7 @@ export default function PerfilClient({
       const url = new URL(window.location.href);
       url.searchParams.delete("success");
       url.searchParams.delete("error");
+      url.searchParams.delete("pais");
       router.replace(url.pathname + url.search, { scroll: false });
     }
   }, [searchParams, router]);
@@ -223,6 +231,7 @@ export default function PerfilClient({
 
   const mpConectado = mpAccount?.estado === "active";
   const errorParam = stickyError || searchParams.get("error");
+  const paisParam = stickyPais || searchParams.get("pais");
   const displayFoto = fotoPreview || fotoUrl;
   const initials = medico.nombre_completo.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
@@ -446,6 +455,7 @@ export default function PerfilClient({
             <TabCobros
               mpAccount={mpAccount}
               errorParam={errorParam}
+              paisParam={paisParam}
               medicoId={medico.id}
             />
           </div>
