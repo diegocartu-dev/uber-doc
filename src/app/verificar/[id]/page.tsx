@@ -2,8 +2,9 @@ import { Metadata } from "next";
 import VerificarRecetaClient from "./VerificarRecetaClient";
 
 export const metadata: Metadata = {
-  title: "Verificar receta — Docto",
-  description: "Verificá la autenticidad de una receta médica electrónica emitida por Docto.",
+  title: "Verificar documento — Docto",
+  description:
+    "Verificá la autenticidad de un documento médico electrónico emitido por Docto.",
   robots: "noindex, nofollow",
 };
 
@@ -21,7 +22,7 @@ export default async function VerificarPage({
         <div className="mx-auto max-w-lg px-4">
           <div className="flex h-14 items-center">
             <span className="text-lg font-medium text-gray-900">Docto</span>
-            <span className="ml-2 text-sm text-gray-400">Verificación de receta</span>
+            <span className="ml-2 text-sm text-gray-400">Verificación de documento</span>
           </div>
         </div>
       </nav>
@@ -35,11 +36,13 @@ export default async function VerificarPage({
         <div className="mx-auto max-w-lg">
           <p className="text-[11px] leading-relaxed text-gray-400">
             Docto — Plataforma de telemedicina habilitada por Ley 27.553 y Decreto
-            63/2024. Firma electrónica con validez legal según Ley 25.506.
+            63/2024. Los documentos se firman electrónicamente en los términos del
+            art. 5 de la Ley 25.506.
           </p>
           <p className="mt-1 text-[11px] text-gray-400">
-            Esta página permite verificar la autenticidad de recetas emitidas
-            electrónicamente. No se muestra información médica del paciente.
+            Esta página permite verificar la autenticidad de los documentos
+            médicos emitidos electrónicamente. No se muestra información médica
+            del paciente.
           </p>
         </div>
       </footer>

@@ -3,6 +3,30 @@ import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import type { FirmaDigitalPDF, DocumentoPDF } from "@/lib/pdf/receta";
 
+/**
+ * Valida defensivamente el JSONB de firma antes de mostrarlo en el PDF.
+ * Si el objeto no tiene los tres campos mínimos, se trata como SIN firma:
+ * el PDF nunca debe afirmar que hay sello si no lo puede probar.
+ * `verificarId` es el id que va al QR de verificación pública.
+ */
+function firmaDesdeJSONB(valor: unknown, verificarId: string): FirmaDigitalPDF | null {
+  if (!valor || typeof valor !== "object") return null;
+  const fd = valor as Record<string, unknown>;
+  if (
+    typeof fd.hash === "string" && fd.hash &&
+    typeof fd.algoritmo === "string" && fd.algoritmo &&
+    typeof fd.firmado_at === "string" && fd.firmado_at
+  ) {
+    return {
+      hash: fd.hash,
+      algoritmo: fd.algoritmo,
+      firmado_at: fd.firmado_at,
+      verificar_id: verificarId,
+    };
+  }
+  return null;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -47,12 +71,28 @@ export async function GET(
     return NextResponse.json({ error: "Datos incompletos" }, { status: 500 });
   }
 
-  // Buscar firma electrónica si es receta
-  let firma: FirmaDigitalPDF | null = null;
-  if (doc.tipo === "receta" && (doc.consulta_id || doc.turno_id)) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminDb = createAdminClient();
+  // ─── Firma electrónica ──────────────────────────────────────────────────
+  // Camino principal: `documentos.firma_digital`, para CUALQUIER tipo de
+  // documento (receta, certificado, indicaciones, orden). Es donde firma el
+  // cierre de consulta.
+  // Se lee con service role en una query aparte: el gate de acceso ya lo hizo
+  // el SELECT con RLS de arriba, y así no tocamos ese SELECT (una columna sin
+  // grant rompería la query entera y el PDF dejaría de generarse).
+  //
+  // Camino histórico: la tabla `recetas`. Se mantiene por compatibilidad, pero
+  // hoy está vacía — nada del código inserta ahí.
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const adminDb = createAdminClient();
 
+  const { data: docFirma } = await adminDb
+    .from("documentos")
+    .select("firma_digital")
+    .eq("id", documentoId)
+    .maybeSingle();
+
+  let firma: FirmaDigitalPDF | null = firmaDesdeJSONB(docFirma?.firma_digital, doc.id);
+
+  if (!firma && doc.tipo === "receta" && (doc.consulta_id || doc.turno_id)) {
     // Buscar por consulta_id o turno_id
     let query = adminDb
       .from("recetas")
@@ -70,21 +110,8 @@ export async function GET(
       .limit(1);
 
     const receta = recetas?.[0];
-    if (receta?.firma_digital) {
-      const fd = receta.firma_digital as Record<string, unknown>;
-      // Validación defensiva del JSONB
-      if (
-        typeof fd.hash === "string" && fd.hash &&
-        typeof fd.algoritmo === "string" && fd.algoritmo &&
-        typeof fd.firmado_at === "string" && fd.firmado_at
-      ) {
-        firma = {
-          hash: fd.hash,
-          algoritmo: fd.algoritmo,
-          firmado_at: fd.firmado_at,
-          receta_id: receta.id,
-        };
-      }
+    if (receta) {
+      firma = firmaDesdeJSONB(receta.firma_digital, receta.id);
     }
   }
 
