@@ -44,6 +44,40 @@ const ESPERADOS: Record<string, number> = {
 
 const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * ¿El último deploy de PRODUCCIÓN falló? Consulta la API de Vercel.
+ *
+ * Un build fallido es invisible hoy: el sitio sigue respondiendo (con la
+ * versión vieja), el monitor de uptime lo ve sano y nadie se entera de que lo
+ * que se mergeó NO está en la calle. Pasó el 06/08: la caída de Supabase colgó
+ * la compilación, el deploy quedó en Error y producción sirvió durante 3 horas
+ * un build sin el cron de liberar reservas — descubierto de casualidad.
+ *
+ * Best-effort: si faltan credenciales o la API no responde, devuelve null y el
+ * watchdog sigue con lo suyo. Nunca rompe el cron.
+ */
+async function ultimoDeployProdFallido(): Promise<{ creado: string; url: string } | null> {
+  const token = process.env.VERCEL_TOKEN;
+  const projectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID;
+  if (!token || !projectId) return null;
+  try {
+    const qs = new URLSearchParams({ projectId, target: "production", limit: "3" });
+    if (teamId) qs.set("teamId", teamId);
+    const res = await fetch(`https://api.vercel.com/v6/deployments?${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { deployments?: { state?: string; url?: string; created?: number }[] };
+    const ultimo = (data.deployments ?? [])[0];
+    if (!ultimo || ultimo.state !== "ERROR") return null;
+    return { creado: new Date(ultimo.created ?? Date.now()).toISOString(), url: ultimo.url ?? "(sin url)" };
+  } catch {
+    return null;
+  }
+}
+
 export const GET = withCron("watchdog", async () => {
   const admin = createAdminClient();
   const { data: rows, error } = await admin.from("cron_runs").select("*");
@@ -89,6 +123,62 @@ export const GET = withCron("watchdog", async () => {
       .from("cron_runs")
       .update({ last_alerted_at: nowIso, updated_at: nowIso })
       .eq("cron_key", key);
+  }
+
+  // Dejar registrado QUÉ VERSIÓN está viva en producción. Sin esto, saber si lo
+  // que se mergeó está realmente en la calle exige revisar Vercel a mano — que
+  // fue justo lo que faltó el 06/08.
+  try {
+    await admin.from("cron_runs").upsert({
+      cron_key: "version-viva",
+      last_run_at: nowIso,
+      last_status: (process.env.VERCEL_GIT_COMMIT_SHA ?? "desconocido").slice(0, 12),
+      updated_at: nowIso,
+    });
+  } catch {
+    // informativo, jamás rompe el watchdog
+  }
+
+  // Deploy de producción fallido → avisar (con el mismo anti-spam de 6 h que
+  // usan los crons caídos, guardado bajo una key propia en cron_runs).
+  let deployFallido: { creado: string; url: string } | null = null;
+  try {
+    deployFallido = await ultimoDeployProdFallido();
+    if (deployFallido) {
+      const previo = porKey.get("deploy-prod");
+      const yaAvisado =
+        previo?.last_alerted_at && ahora - Date.parse(previo.last_alerted_at) < ANTI_SPAM_MS;
+      if (!yaAvisado) {
+        await admin.from("cron_runs").upsert({
+          cron_key: "deploy-prod",
+          last_run_at: nowIso,
+          last_status: "deploy_fallido",
+          last_alerted_at: nowIso,
+          updated_at: nowIso,
+        });
+        await sendDoctoAlert(
+          "🔴 El último deploy a producción FALLÓ",
+          [
+            "El último intento de publicar cambios en producción terminó en error.",
+            "",
+            "Qué significa: docto.com.ar SIGUE ANDANDO, pero con la versión anterior.",
+            "Todo lo que se aprobó después de ese deploy NO está en la calle, aunque",
+            "figure como terminado.",
+            "",
+            `Cuándo falló: ${deployFallido.creado}`,
+            `Deploy: https://${deployFallido.url}`,
+            "",
+            "¿Tenés que hacer algo? Sí: abrí Claude Code y decime",
+            '"el deploy de producción falló, revisalo y volvé a publicar".',
+            "",
+            "Causa más común: la compilación se cuelga si la base está caída en ese",
+            "momento. Suele resolverse republicando cuando la base volvió.",
+          ].join("\n")
+        );
+      }
+    }
+  } catch {
+    // El chequeo de deploy jamás debe voltear el watchdog.
   }
 
   if (caidos.length > 0) {
