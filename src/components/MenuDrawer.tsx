@@ -187,15 +187,16 @@ export default function MenuDrawer({ open, onClose, userName, userRole }: Props)
             />
           )}
 
-          <a
-            href="mailto:soporte@docto.com.ar?subject=Ayuda Docto"
-            onClick={onClose}
-            className="flex w-full items-center gap-3 px-5 transition-colors hover:bg-gray-50"
-            style={{ minHeight: 48, color: "var(--color-text-primary)" }}
-          >
-            <HelpCircle size={20} strokeWidth={1.75} />
-            <span className="text-sm font-medium">Ayuda</span>
-          </a>
+          {/* Antes era un `mailto:`: en un celular sin cliente de correo
+              configurado no hacía nada y el usuario quedaba sin canal. */}
+          <DrawerLink
+            href="/ayuda"
+            icon={<HelpCircle size={20} strokeWidth={1.75} />}
+            label="Ayuda"
+            loading={loadingHref === "/ayuda"}
+            disabled={!!loadingHref}
+            onClick={() => handleNavigate("/ayuda")}
+          />
         </div>
 
         {/* Admin link */}
