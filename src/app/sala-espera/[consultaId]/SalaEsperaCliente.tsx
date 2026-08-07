@@ -20,14 +20,23 @@ type Props = {
   posicion: number;
   tiempoEstimado: number;
   createdAt: string;
-  /** "error" | "pendiente" — lo devuelve Mercado Pago en back_urls cuando el checkout no salió bien. */
+  /**
+   * "error" | "pendiente" — lo devuelve Mercado Pago en back_urls.
+   * "error": el checkout falló y no se cobró nada.
+   * "pendiente": el pago existe pero no está acreditado (cupón, revisión).
+   */
   resultadoPago?: string | null;
   isDev?: boolean;
 };
 
-// A los 10 minutos sin aceptación se le dice al paciente la verdad (caso Lucas
-// 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
+// A los 10 minutos sin aceptación se le dice al paciente la verdad (caso de un
+// paciente 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
 const MINUTOS_AVISO_DEMORA = 10;
+
+// Cuánto le creemos al `?pago=pendiente` de Mercado Pago mientras el webhook no
+// escribe `mp_status`. Acotado a propósito: si MP no confirma nada en ese rato,
+// volvemos a ofrecer el pago en vez de dejar al paciente sin ninguna salida.
+const MS_CONFIANZA_PAGO_PENDIENTE = 3 * 60 * 1000;
 
 function formatPrecio(precio: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -64,6 +73,23 @@ export default function SalaEsperaCliente({
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
+
+  // `?pago=pendiente` lo devuelve Mercado Pago (back_url `redirectPending` de
+  // crear-v2) cuando el pago EXISTE pero todavía no está acreditado: cupón de
+  // Rapipago / Pago Fácil, pago en revisión, tarjeta autorizada sin capturar.
+  // Se recibía, se tipaba… y se tiraba: hasta que el webhook escribiera
+  // `mp_status` la pantalla clasificaba la consulta como "falta pagar" y le
+  // ofrecía el botón grande de pagar — o sea, riesgo de pago DOBLE, justo lo
+  // que esta pantalla vino a evitar. Es la única señal que tenemos antes del
+  // webhook, así que le creemos, pero por un rato acotado.
+  const [confiarEnPagoPendienteUrl, setConfiarEnPagoPendienteUrl] = useState(
+    resultadoPago === "pendiente"
+  );
+  useEffect(() => {
+    if (!confiarEnPagoPendienteUrl) return;
+    const t = setTimeout(() => setConfiarEnPagoPendienteUrl(false), MS_CONFIANZA_PAGO_PENDIENTE);
+    return () => clearTimeout(t);
+  }, [confiarEnPagoPendienteUrl]);
 
   // Desbloquear audio al primer gesto del usuario (iOS/Android requieren
   // interacción antes de reproducir sonido). Sin esto, soundConsultaAceptada
@@ -208,14 +234,22 @@ export default function SalaEsperaCliente({
   // pantalla le decía al paciente que esperara al médico cuando en realidad el
   // sistema lo estaba esperando a él (caso real 07/08: veinte minutos parado
   // ahí, con tres intentos de pago).
-  const pago = estadoPagoConsulta(estado, mpStatus);
+  const pagoSegunDb = estadoPagoConsulta(estado, mpStatus);
+  // Si la DB todavía no sabe NADA del pago (`mp_status` null) pero MP nos mandó
+  // de vuelta con `?pago=pendiente`, mandamos la señal de MP: esperar es lo
+  // correcto y volver a pedir el pago sería pedirle que pague dos veces. Se
+  // autocorrige solo: apenas el poll (5 s) trae un `mp_status`, manda la DB.
+  const pago =
+    pagoSegunDb === "falta_pagar" && mpStatus == null && confiarEnPagoPendienteUrl
+      ? "en_camino"
+      : pagoSegunDb;
   const faltaPagar = medicoAcepto && !salaVideoUrl && pago === "falta_pagar";
   const pagoEnCamino = medicoAcepto && !salaVideoUrl && pago === "en_camino";
   const pagoConfirmado = medicoAcepto && pago === "confirmado";
 
   // La solicitud murió (la canceló el paciente, el sistema o el médico no la tomó):
   // decirlo con todas las letras — antes esta pantalla seguía mostrando el spinner
-  // de "sala de espera" para siempre (caso Lucas 04/08, esperó más de una hora).
+  // de "sala de espera" para siempre (caso 04/08: un paciente esperó más de una hora).
   if ((estado === "cancelada" || estado === "rechazada") && !salaVideoUrl) {
     return (
       <div className="text-center">
@@ -233,6 +267,35 @@ export default function SalaEsperaCliente({
           className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
         >
           Buscar otro médico
+        </a>
+      </div>
+    );
+  }
+
+  // La consulta YA TERMINÓ. Sin esta rama, `completada` no matcheaba ninguna
+  // condición (`medicoAcepto` no la incluye) y esta pantalla mostraba spinner +
+  // "Esperando que el médico acepte tu consulta..." + posición en la cola +
+  // "No cierres esta pestaña" sobre una consulta cerrada. Se llega apretando
+  // "atrás" al terminar, o desde el historial del navegador.
+  if (estado === "completada") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/10">
+          <CheckCircle size={40} strokeWidth={1.75} style={{ color: "#1D9E75" }} />
+        </div>
+        <h1 className="mt-6 text-xl font-bold text-gray-900">Consulta finalizada</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Tu consulta con {formatNombreMedico(medicoNombre)} ya terminó.
+        </p>
+        {/* Sin prometer documentos: si la cerró el sistema puede no haber ninguno. */}
+        <p className="mt-3 text-xs text-gray-500">
+          Si el médico te dejó recetas u órdenes, las encontrás en Mis documentos.
+        </p>
+        <a
+          href="/documentos"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Ver mis documentos
         </a>
       </div>
     );
