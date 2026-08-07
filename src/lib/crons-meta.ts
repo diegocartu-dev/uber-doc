@@ -142,6 +142,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada 10 minutos",
     autoRecupera: true,
   },
+  "documentos-sin-sello": {
+    nombre: "Control de documentos sin firmar",
+    queHace:
+      "cada hora cuenta cuántas recetas, certificados, indicaciones y órdenes de las últimas 24 horas quedaron sin sello electrónico, y avisa si aparecen",
+    impacto:
+      "si la firma se rompe, los documentos salen igual pero con la leyenda 'sin sello' y el QR no puede confirmar el contenido — sin este control nadie se entera hasta que una farmacia o un empleador pregunta",
+    cadencia: "cada hora",
+    autoRecupera: true,
+  },
   "provisionar-claves": {
     nombre: "Claves de firma electrónica",
     queHace: "revisa todos los días que cada médico aprobado tenga sus claves de firma electrónica y se las crea si le faltan",

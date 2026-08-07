@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import type { FirmaDigitalPDF, DocumentoPDF } from "@/lib/pdf/receta";
+import { identidadDesdeJSONB } from "@/lib/firma/identidad";
+
+/**
+ * Valida defensivamente el JSONB de firma antes de mostrarlo en el PDF.
+ * Si el objeto no tiene los tres campos mínimos, se trata como SIN firma:
+ * el PDF nunca debe afirmar que hay sello si no lo puede probar.
+ * `verificarId` es el id que va al QR de verificación pública.
+ */
+function firmaDesdeJSONB(valor: unknown, verificarId: string): FirmaDigitalPDF | null {
+  if (!valor || typeof valor !== "object") return null;
+  const fd = valor as Record<string, unknown>;
+  if (
+    typeof fd.hash === "string" && fd.hash &&
+    typeof fd.algoritmo === "string" && fd.algoritmo &&
+    typeof fd.firmado_at === "string" && fd.firmado_at
+  ) {
+    return {
+      hash: fd.hash,
+      algoritmo: fd.algoritmo,
+      firmado_at: fd.firmado_at,
+      verificar_id: verificarId,
+    };
+  }
+  return null;
+}
 
 export async function GET(
   req: NextRequest,
@@ -47,12 +72,28 @@ export async function GET(
     return NextResponse.json({ error: "Datos incompletos" }, { status: 500 });
   }
 
-  // Buscar firma electrónica si es receta
-  let firma: FirmaDigitalPDF | null = null;
-  if (doc.tipo === "receta" && (doc.consulta_id || doc.turno_id)) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminDb = createAdminClient();
+  // ─── Firma electrónica ──────────────────────────────────────────────────
+  // Camino principal: `documentos.firma_digital`, para CUALQUIER tipo de
+  // documento (receta, certificado, indicaciones, orden). Es donde firma el
+  // cierre de consulta.
+  // Se lee con service role en una query aparte: el gate de acceso ya lo hizo
+  // el SELECT con RLS de arriba, y así no tocamos ese SELECT (una columna sin
+  // grant rompería la query entera y el PDF dejaría de generarse).
+  //
+  // Camino histórico: la tabla `recetas`. Se mantiene por compatibilidad, pero
+  // hoy está vacía — nada del código inserta ahí.
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const adminDb = createAdminClient();
 
+  const { data: docFirma } = await adminDb
+    .from("documentos")
+    .select("firma_digital")
+    .eq("id", documentoId)
+    .maybeSingle();
+
+  let firma: FirmaDigitalPDF | null = firmaDesdeJSONB(docFirma?.firma_digital, doc.id);
+
+  if (!firma && doc.tipo === "receta" && (doc.consulta_id || doc.turno_id)) {
     // Buscar por consulta_id o turno_id
     let query = adminDb
       .from("recetas")
@@ -70,21 +111,8 @@ export async function GET(
       .limit(1);
 
     const receta = recetas?.[0];
-    if (receta?.firma_digital) {
-      const fd = receta.firma_digital as Record<string, unknown>;
-      // Validación defensiva del JSONB
-      if (
-        typeof fd.hash === "string" && fd.hash &&
-        typeof fd.algoritmo === "string" && fd.algoritmo &&
-        typeof fd.firmado_at === "string" && fd.firmado_at
-      ) {
-        firma = {
-          hash: fd.hash,
-          algoritmo: fd.algoritmo,
-          firmado_at: fd.firmado_at,
-          receta_id: receta.id,
-        };
-      }
+    if (receta) {
+      firma = firmaDesdeJSONB(receta.firma_digital, receta.id);
     }
   }
 
@@ -101,6 +129,22 @@ export async function GET(
     obraSocialNombre = paciente.obra_social_otra;
   }
 
+  // ─── Identidad impresa ──────────────────────────────────────────────────
+  // Si el documento está SELLADO, todo lo que se imprime de `medicos` y
+  // `pacientes` sale del snapshot congelado dentro de la firma, no de las
+  // tablas vivas.
+  //
+  // Por qué (corrección post-revisión 07/08/2026): el nombre del paciente, el
+  // CUIL, la obra social, el nº de afiliado y hasta el nombre del médico son
+  // editables por sus dueños desde /mis-datos DESPUÉS de emitido, y el PDF se
+  // regenera en cada request. Un certificado de reposo emitido para "Juan Pérez"
+  // volvía a salir con otro nombre, el mismo QR y la página pública en verde
+  // diciendo "su contenido no fue alterado desde entonces".
+  //
+  // Documentos sin sello (los 114 históricos): siguen leyendo datos vivos —
+  // no hay snapshot que respetar y el PDF ya declara que no tiene sello.
+  const identidad = firma ? identidadDesdeJSONB((docFirma?.firma_digital as { identidad?: unknown } | null)?.identidad) : null;
+
   const documento = {
     id: doc.id,
     tipo: doc.tipo as DocumentoPDF["tipo"],
@@ -109,21 +153,33 @@ export async function GET(
     tratamiento: doc.tratamiento ?? null,
     dias_reposo: doc.dias_reposo ?? null,
     created_at: doc.created_at,
-    medico_nombre: medico.nombre_completo,
-    medico_especialidad: medico.especialidad ?? "",
-    medico_matricula: `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
-    medico_domicilio: medico.domicilio_consultorio || medico.domicilio || "",
-    paciente_nombre: paciente.nombre_completo,
-    paciente_dni: paciente.dni ?? "",
-    paciente_cuil: paciente.cuil ?? "",
-    paciente_sexo_dni: paciente.sexo_dni ?? null,
-    paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
-    paciente_tiene_cobertura: paciente.tiene_cobertura ?? false,
-    paciente_obra_social: obraSocialNombre,
-    paciente_nro_afiliado: paciente.nro_afiliado ?? null,
-    paciente_plan_obra_social: paciente.plan_obra_social ?? null,
+    medico_nombre: identidad ? identidad.medico_nombre : medico.nombre_completo,
+    medico_especialidad: identidad ? identidad.medico_especialidad : medico.especialidad ?? "",
+    medico_matricula: identidad
+      ? identidad.medico_matricula
+      : `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
+    medico_domicilio: identidad
+      ? identidad.medico_domicilio
+      : medico.domicilio_consultorio || medico.domicilio || "",
+    paciente_nombre: identidad ? identidad.paciente_nombre : paciente.nombre_completo,
+    paciente_dni: identidad ? identidad.paciente_dni : paciente.dni ?? "",
+    paciente_cuil: identidad ? identidad.paciente_cuil : paciente.cuil ?? "",
+    paciente_sexo_dni: identidad ? identidad.paciente_sexo_dni : paciente.sexo_dni ?? null,
+    paciente_fecha_nacimiento: identidad
+      ? identidad.paciente_fecha_nacimiento
+      : paciente.fecha_nacimiento ?? null,
+    paciente_tiene_cobertura: identidad
+      ? identidad.paciente_tiene_cobertura
+      : paciente.tiene_cobertura ?? false,
+    paciente_obra_social: identidad ? identidad.paciente_obra_social : obraSocialNombre,
+    paciente_nro_afiliado: identidad ? identidad.paciente_nro_afiliado : paciente.nro_afiliado ?? null,
+    paciente_plan_obra_social: identidad
+      ? identidad.paciente_plan_obra_social
+      : paciente.plan_obra_social ?? null,
     firma,
-    medico_firma_manuscrita_path: medico.firma_manuscrita_url ?? null,
+    medico_firma_manuscrita_path: identidad
+      ? identidad.medico_firma_manuscrita_path
+      : medico.firma_manuscrita_url ?? null,
   };
 
   try {
