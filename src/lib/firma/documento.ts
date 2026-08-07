@@ -545,7 +545,14 @@ type EvaluacionInterna =
       apto: true;
       doc: DocSellable;
       firmante: Record<string, unknown>;
-      habilitado: true;
+      /**
+       * ¿El profesional ya figuraba validado en NUESTROS registros cuando emitió?
+       * true = sí · false = la validación quedó registrada después · null = no
+       * computable. NO condiciona el sellado (para eso vale su estado de hoy:
+       * aprobado + REFEPS validado), pero se guarda tal cual en el log: la
+       * cronología real no se maquilla.
+       */
+      habilitado: boolean | null;
       tieneClaves: boolean;
     }
   | { apto: false; motivo: MotivoNoApto; detalle: string };
@@ -653,15 +660,32 @@ async function evaluarInterna(documentoId: string): Promise<EvaluacionInterna> {
     };
   }
 
+  // Habilitación del profesional.
+  //
+  // `habilitadoAlEmitir` compara la fecha de emisión contra la fecha en que
+  // NOSOTROS registramos la validación, y eso mide cuándo corrimos el chequeo,
+  // no desde cuándo la persona es médica. Caso real: un profesional fundador,
+  // aprobado y con matrícula activa en REFEPS, emitió documentos un día antes
+  // de que la validación automática se ejecutara sobre su ficha. Bloquearlos
+  // por eso sería castigar un documento legítimo por una demora nuestra —
+  // exactamente el problema que este trabajo vino a reparar.
+  //
+  // Criterio: alcanza con que el profesional esté HOY aprobado y validado
+  // contra REFEPS. Lo que NO se sella es el documento de alguien que nunca
+  // fue validado, o que está rechazado o suspendido. La cronología real
+  // (cuándo se validó vs. cuándo emitió) se registra igual en el log, sin
+  // maquillar: `habilitado_al_emitir` distingue true / false / desconocido.
   const habilitado = habilitadoAlEmitir(firmante, doc.created_at);
-  if (habilitado !== true) {
+  const validadoHoy =
+    firmante.refeps_validado === true && firmante.estado_registro === "aprobado";
+  if (!validadoHoy) {
     return {
       apto: false,
       motivo: "medico_no_validado_al_emitir",
       detalle:
-        habilitado === null
-          ? "No se puede computar la validación del profesional a la fecha de emisión"
-          : "La validación del profesional es posterior a la emisión",
+        firmante.refeps_validado === true
+          ? `El profesional no está aprobado hoy (estado: ${String(firmante.estado_registro ?? "desconocido")})`
+          : "El profesional no figura validado contra REFEPS",
     };
   }
 
@@ -868,7 +892,7 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, user_id, nombre_completo, especialidad, tipo_matricula, numero_matricula, jurisdicciones, refeps_validado, refeps_validado_at, identidad_validada, identidad_validada_at, didit_session_id, didit_status, es_cuenta_test"
+      "id, user_id, nombre_completo, especialidad, tipo_matricula, numero_matricula, jurisdicciones, refeps_validado, refeps_validado_at, identidad_validada, identidad_validada_at, didit_session_id, didit_status, es_cuenta_test, estado_registro"
     )
     .eq("id", medicoId)
     .single();
