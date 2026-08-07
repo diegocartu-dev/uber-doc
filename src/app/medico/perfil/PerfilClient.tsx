@@ -159,6 +159,10 @@ export default function PerfilClient({
 
       // Áreas de atención: endpoint propio (no toca la ruta de perfil que ya
       // funciona en producción). Se guarda solo si cambió.
+      // Si esto falla NO se corta el guardado: los demás campos del perfil
+      // (celular, domicilio, teléfono) se mandan igual. Cortar acá descartaba en
+      // silencio lo que el médico había cambiado en el mismo click.
+      let falloAreas: string | null = null;
       if (areasDirty) {
         const resAreas = await fetch("/api/medico/areas-atencion", {
           method: "POST",
@@ -167,13 +171,15 @@ export default function PerfilClient({
         });
         if (!resAreas.ok) {
           const data = await resAreas.json().catch(() => ({}));
-          const msg = data.error || "No pudimos guardar tus áreas de atención";
-          setErrorAreas(msg);
-          setToast({ msg, type: "error" });
-          setSaving(false);
-          return;
+          // Mensaje humano: el error crudo de la base no le dice nada al médico.
+          const crudo = typeof data.error === "string" ? data.error : "";
+          falloAreas = /column|relation|schema|permission/i.test(crudo)
+            ? "No pudimos guardar tus áreas de atención en este momento. El resto de tus datos sí se guardó — probá de nuevo en unos minutos."
+            : crudo || "No pudimos guardar tus áreas de atención.";
+          setErrorAreas(falloAreas);
+        } else {
+          setErrorAreas(null);
         }
-        setErrorAreas(null);
       }
 
       // Save other fields (solo si cambió alguno: si el médico únicamente tocó sus
@@ -201,7 +207,13 @@ export default function PerfilClient({
         }
       }
 
-      setToast({ msg: "Perfil actualizado", type: "ok" });
+      // Un fallo de áreas ya no descarta el resto: se avisa la verdad parcial en
+      // vez de un "guardado" que oculta que algo no entró.
+      setToast(
+        falloAreas
+          ? { msg: falloAreas, type: "error" }
+          : { msg: "Perfil actualizado", type: "ok" }
+      );
       router.refresh();
     } catch {
       setToast({ msg: "Error al guardar", type: "error" });

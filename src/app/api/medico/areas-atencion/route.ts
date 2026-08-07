@@ -26,8 +26,13 @@ function leerAreas(raw: unknown): { areas: AreaAtencion[] } | { error: string } 
     const area = typeof o.area === "string" ? o.area.trim() : "";
     const def = definicionArea(area);
     if (!def) return { error: "Esa área de atención no existe." };
-    const desde = typeof o.edad_desde === "number" ? o.edad_desde : Number(o.edad_desde);
-    const hasta = typeof o.edad_hasta === "number" ? o.edad_hasta : Number(o.edad_hasta);
+    // Sin coacción: `Number(null)` y `Number("")` dan 0, así que una edad vacía
+    // se guardaba en silencio como 0 y el paciente terminaba leyendo "de 0 a 19
+    // años". El servidor no adivina un rango — o viene un número, o se rechaza.
+    const numeroLimpio = (v: unknown): number =>
+      typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+    const desde = numeroLimpio(o.edad_desde);
+    const hasta = numeroLimpio(o.edad_hasta);
     if (!Number.isFinite(desde) || !Number.isFinite(hasta)) {
       return { error: `Completá las dos edades de ${def.etiqueta} (por ejemplo, 10 y 19).` };
     }
