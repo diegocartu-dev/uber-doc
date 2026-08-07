@@ -226,6 +226,21 @@ export default function CompletarConsulta({ consultaId, medicoId, consulta }: Pr
       }
 
       await supabase.from("consultas").update({ estado: "completada", doc_borrador: null, completada_at: new Date().toISOString(), cierre_origen: "paciente" }).eq("id", consultaId);
+
+      // Firma electrónica de lo recién emitido. Este camino (cierre desde la
+      // pantalla "Completar consulta", sin videollamada) también inserta en
+      // `documentos` y hasta ahora NUNCA firmaba: todo lo emitido acá quedaba
+      // permanentemente sin sello mientras el workspace sí sellaba.
+      // Fire-and-forget con keepalive, igual que en el workspace: si falla, el
+      // documento igual queda entregado. NUNCA bloquear el cierre por la firma.
+      fetch("/api/documentos/firmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        keepalive: true,
+        body: JSON.stringify({ consultaId, tipo: "consulta" }),
+      }).catch(() => {});
+
       window.location.href = "/dashboard";
     } catch {
       setError("Error al finalizar. Intentá de nuevo.");

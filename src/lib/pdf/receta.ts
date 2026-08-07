@@ -38,7 +38,8 @@ export type FirmaDigitalPDF = {
   hash: string;
   algoritmo: string;
   firmado_at: string;
-  receta_id: string;
+  /** Id que se publica en el QR → /verificar/{id}. Es el id del documento. */
+  verificar_id: string;
 };
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -50,7 +51,13 @@ const COLORS = {
   border: "#E0E0E0",
   bgBox: "#F5F5F5",
   footerText: "#666666",
+  pendiente: "#BA7517",
 } as const;
+
+// Dominio público de verificación. El QR del sello apunta acá.
+const VERIFICAR_BASE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://docto.com.ar"
+).replace(/\/+$/, "");
 
 const MARGIN = { top: 36, right: 50, bottom: 10, left: 50 };
 const PAGE_WIDTH = 595.28; // A4
@@ -634,8 +641,8 @@ async function renderSelloFirma(
   });
   const horaFirma = formatHora(firma.firmado_at);
 
-  // QR code → docto.com.ar/verificar/{receta_id}
-  const verificarUrl = `https://docto.com.ar/verificar/${firma.receta_id}`;
+  // QR code → /verificar/{documento_id}
+  const verificarUrl = `${VERIFICAR_BASE_URL}/verificar/${firma.verificar_id}`;
 
   try {
     const qrBuffer = await generarQRCodePNG(verificarUrl);
@@ -663,7 +670,7 @@ async function renderSelloFirma(
     );
     pdf.font("Inter").fontSize(6).fillColor(COLORS.accent);
     pdf.text(
-      `docto.com.ar/verificar/${firma.receta_id}`,
+      `${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
       selloX + 8,
       selloY + 22,
       { width: 180 }
@@ -718,32 +725,47 @@ function renderFooter(
     .stroke();
   y += 6;
 
-  pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
-  if (esReceta) {
-    // Receta: leyenda de firma + leyenda del Registro de Recetarios (ReNaPDiS)
+  // La leyenda de firma SOLO se imprime si la firma existe de verdad.
+  // Antes se imprimía siempre: todo documento afirmaba estar firmado
+  // electrónicamente aunque nunca se hubiera sellado. Un documento no puede
+  // mentir sobre su propio origen (dictamen 07/08/2026, punto 1).
+  //
+  // Tampoco se dice "electrónica o digitalmente según corresponda": ese hedge
+  // deja ambiguo cuál de los dos regímenes aplica, y esa diferencia es
+  // exactamente la presunción de los arts. 7-8 de la Ley 25.506. Es firma
+  // ELECTRÓNICA, art. 5, y así se declara.
+  if (doc.firma) {
+    pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
-      `Este documento ha sido firmado —electrónica o digitalmente según corresponda— por ${formatNombreMedico(doc.medico_nombre)}.`,
+      `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)} en los términos del art. 5 de la Ley 25.506.`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
-    y = pdf.y + 4;
+  } else {
+    // Falla de sellado: el documento se entrega igual, pero marcado.
+    pdf.font("Inter").fontSize(8).fillColor(COLORS.pendiente);
+    pdf.text(
+      "Documento sin sello electrónico de verificación. Su autenticidad puede confirmarse con el profesional que lo emitió.",
+      MARGIN.left, y,
+      { width: CONTENT_WIDTH, align: "center" }
+    );
+  }
+  y = pdf.y + 4;
 
+  pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
+  if (esReceta) {
+    // Receta: leyenda del Registro de Recetarios (ReNaPDiS). Es sobre el emisor
+    // inscripto, no sobre la firma — va con sello o sin sello.
     const renapdisRL = process.env.RENAPDIS_RL_NUMBER;
     const leyendaRenapdis = renapdisRL
       ? `Esta receta fue creada por un emisor inscripto y validado en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación - ${renapdisRL}`
       : `Esta receta fue creada por un emisor inscripto en el Registro de Recetarios Electrónicos del Ministerio de Salud de la Nación — Inscripción en trámite (EX-2026-41816871-APN-SSVEIYES#MS)`;
     pdf.text(leyendaRenapdis, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
     y = pdf.y + 4;
-  } else {
-    // Certificado / indicaciones / orden: leyenda de firma electrónica simple.
-    // (El Registro de Recetarios / ReNaPDiS es específico de recetas — no va acá.)
-    pdf.text(
-      `Este documento ha sido firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)}.`,
-      MARGIN.left, y,
-      { width: CONTENT_WIDTH, align: "center" }
-    );
-    y = pdf.y + 4;
   }
+  // Certificado / indicaciones / orden: nada extra acá. El Registro de
+  // Recetarios (ReNaPDiS) es específico de recetas y la leyenda de firma ya se
+  // resolvió arriba, condicionada al sello real.
 
   // Línea separadora inferior
   pdf
@@ -757,19 +779,24 @@ function renderFooter(
   // ─── Sección B — Marco regulatorio POR TIPO (letra chica) ───────────
   // Dictamen Carolina: cada documento cita SOLO la norma que lo habilita.
   // NUNCA AAIP/Ley 25.326 ni mezclar las leyendas de receta en otros tipos.
+  //
+  // Se quitó "Firma electrónica con validez legal según Ley 25.506" de los tres
+  // casos: era falsa mientras no había firma y sobreafirmada aun con firma. Un
+  // documento no declara su propia validez — declara el mecanismo (Sección A) y
+  // deja la validez donde corresponde, que es el derecho.
   pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
   let seccionB: string;
   if (doc.tipo === "receta") {
-    seccionB = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024. Firma electrónica con validez legal según Ley 25.506.";
+    seccionB = "Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley 27.553 y Decreto 63/2024.";
   } else if (doc.tipo === "certificado") {
     // Normas VERIFICADAS contra fuente oficial (20/06/2026): Ley 27.802 (BO
     // 06/03/2026) y Decreto 407/2026 (BO 01/06/2026, reglamenta el art. 210 LCT).
     // Cita validada por Carolina contra el texto oficial. Pendiente antes del
     // go-live público: revisión de un laboralista matriculado (doc de máxima
     // exposición) + cláusula art. 210 de control del empleador en los T&C.
-    seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, modificado por Ley 27.802) y su Decreto reglamentario 407/2026. Firma electrónica con validez legal según Ley 25.506.";
+    seccionB = "Documento emitido por Docto — Plataforma de telemedicina. Certificado médico de reposo laboral emitido conforme al art. 210 de la Ley de Contrato de Trabajo (Ley 20.744, modificado por Ley 27.802) y su Decreto reglamentario 407/2026.";
   } else {
-    seccionB = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553. Firma electrónica con validez legal según Ley 25.506.";
+    seccionB = "Documento emitido por Docto — Plataforma de telemedicina habilitada por Ley 27.553.";
   }
 
   pdf.text(seccionB, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
