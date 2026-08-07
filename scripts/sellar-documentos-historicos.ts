@@ -100,7 +100,8 @@ async function main() {
   const aplicar = args.has("aplicar");
   const hasta = args.get("hasta") ?? CORTE_SELLADO_AUTOMATICO;
   const tanda = Number(args.get("tanda") ?? 20);
-  const limite = args.get("limite") ? Number(args.get("limite")) : Infinity;
+  const limiteArg = args.get("limite");
+  const limite = limiteArg ? Number(limiteArg) : Infinity;
   const loteArg = args.get("lote") ?? null;
 
   if (!Number.isFinite(Date.parse(hasta))) {
@@ -108,6 +109,17 @@ async function main() {
   }
   if (!Number.isFinite(tanda) || tanda < 1) {
     salir(`--tanda tiene que ser un entero positivo: "${args.get("tanda")}"`);
+  }
+  // `--limite` NO puede fallar abierto. Sin este guard, `--limite 10` (con
+  // espacio en vez de `=`) o un `1O` con O mayúscula daban NaN, `Number.isFinite`
+  // devolvía false y el `slice(0, undefined)` de más abajo procesaba TODO — la
+  // opción cuyo único propósito es probar de a poco sobre documentos médicos
+  // reales hacía exactamente lo contrario ante un typo.
+  if (limiteArg && (!Number.isInteger(limite) || limite < 1)) {
+    salir(
+      `--limite tiene que ser un entero positivo: "${limiteArg}".\n` +
+        `  Se escribe pegado con "=", por ejemplo: --limite=10`
+    );
   }
 
   verificarEnv(aplicar);
@@ -161,15 +173,46 @@ async function main() {
     const grupo = aProcesar.slice(i, i + tanda);
 
     for (const doc of grupo) {
-      const r = await sellarDocumentoDiferido(doc.id, {
-        loteId,
-        loteTotal: candidatos.length,
-      });
+      // try/catch POR DOCUMENTO. El camino de sellado no solo devuelve
+      // `{ok:false}`: también LANZA — `desencriptarClavePrivada()` tira
+      // "Unsupported state or unable to authenticate data" si esa clave se
+      // encriptó con otra FIRMA_MASTER_KEY, y `firmar()` tira con un PEM
+      // corrupto. Sin esto, un solo profesional en ese estado abortaba la
+      // corrida entera; y como los candidatos se leen siempre ordenados por
+      // `created_at asc`, cada reintento moría en el mismo documento y la
+      // operación no podía completarse nunca sin intervención manual.
+      let r: Awaited<ReturnType<typeof sellarDocumentoDiferido>>;
+      try {
+        r = await sellarDocumentoDiferido(doc.id, {
+          loteId,
+          loteTotal: candidatos.length,
+        });
+      } catch (err) {
+        anotar(
+          salteados,
+          "error_sellado",
+          doc.id,
+          err instanceof Error ? err.message : String(err)
+        );
+        continue;
+      }
 
       if (r.ok) {
         sellados.push(doc.id);
-        medicosAlcanzados.add(r.medico_id);
         if (r.clave_creada) clavesCreadas.add(r.medico_id);
+
+        // El aviso se registra APENAS se sella, no al final del for de tandas.
+        // Si se escribía al cierre, una corrida cortada (Ctrl-C, timeout de la
+        // terminal, una excepción) dejaba documentos sellados y CERO filas de
+        // aviso: al relanzar, esos documentos ya no son candidatos —el filtro
+        // pide `firma_digital IS NULL`— así que sus profesionales no volvían a
+        // aparecer nunca y quedaban fuera del registro de notificación. El
+        // aviso es la mitigación del riesgo principal del dictamen: no puede
+        // depender de que la corrida llegue entera hasta el final.
+        if (!medicosAlcanzados.has(r.medico_id)) {
+          medicosAlcanzados.add(r.medico_id);
+          await registrarAviso(supabase, loteId, r.medico_id);
+        }
       } else {
         anotar(salteados, r.motivo, doc.id, r.detalle);
       }
@@ -180,38 +223,31 @@ async function main() {
         `(${sellados.length} sellados)`
     );
 
-    // Progreso persistido por tanda: si esto se corta, el lote dice hasta dónde llegó.
+    // Progreso persistido por tanda: si esto se corta, el lote dice hasta dónde
+    // llegó. Mismas claves que el cierre —`_ultima_corrida`— para que `detalle`
+    // no termine con dos juegos de números que dicen cosas distintas.
     await guardarAvance(supabase, loteId, {
-      sellados: sellados.length,
-      salteados: contar(salteados),
+      sellados_ultima_corrida: sellados.length,
+      salteados_ultima_corrida: contar(salteados),
       ultima_actualizacion: new Date().toISOString(),
       estado: "en_curso",
     });
   }
 
-  // ─── 4. Vía de objeción del profesional ────────────────────────────────────
-  // Una fila por profesional alcanzado. El mail lo manda una persona (firma
-  // Valentina); acá queda el registro de a quién hay que avisarle y dónde se
-  // anota su respuesta. `firma_logs` es append-only y no admite guardar nada
-  // posterior a la firma: por eso esta tabla existe.
-  if (medicosAlcanzados.size > 0) {
-    const filas = [...medicosAlcanzados].map((medico_id) => ({ lote_id: loteId, medico_id }));
-    const { error } = await supabase
-      .from("sellado_diferido_avisos")
-      .upsert(filas, { onConflict: "lote_id,medico_id", ignoreDuplicates: true });
-    if (error) {
-      console.log("");
-      console.log(`⚠️  No se pudieron registrar los avisos a profesionales: ${error.message}`);
-      console.log("    El sellado está hecho; falta la fila de aviso. Reintentá la corrida.");
-    }
-  }
-
+  // ─── 4. Cierre ─────────────────────────────────────────────────────────────
+  // Los avisos ya se registraron uno por uno durante el sellado (ver arriba).
+  // Acá solo se CUENTAN, y se cuentan desde la tabla: un lote se reanuda, así
+  // que el total de profesionales alcanzados es el acumulado del lote, no el de
+  // esta corrida. Reportar el de la corrida hacía que el operador que relanza
+  // viera "2 profesionales" cuando el lote lleva 11, y no tuviera forma de
+  // enterarse de la diferencia.
   const quedanPendientes = (await leerCandidatos(supabase, hasta)).length;
+  const medicosDelLote = await contarAvisosDelLote(supabase, loteId);
 
   await guardarAvance(supabase, loteId, {
-    sellados: sellados.length,
-    salteados: contar(salteados),
-    medicos_alcanzados: medicosAlcanzados.size,
+    sellados_ultima_corrida: sellados.length,
+    salteados_ultima_corrida: contar(salteados),
+    medicos_alcanzados: medicosDelLote ?? medicosAlcanzados.size,
     claves_creadas_para_el_sellado: clavesCreadas.size,
     pendientes_al_cerrar: quedanPendientes,
     ultima_actualizacion: new Date().toISOString(),
@@ -222,7 +258,8 @@ async function main() {
     sellados: sellados.length,
     salteados,
     clavesCreadas: clavesCreadas.size,
-    medicos: medicosAlcanzados.size,
+    medicosCorrida: medicosAlcanzados.size,
+    medicosLote: medicosDelLote,
     pendientes: quedanPendientes,
     loteId,
   });
@@ -237,7 +274,21 @@ async function simular(docs: { id: string; tipo: string }[], tanda: number) {
 
   for (let i = 0; i < docs.length; i += tanda) {
     for (const doc of docs.slice(i, i + tanda)) {
-      const e = await evaluarSelladoDiferido(doc.id);
+      // Mismo try/catch que el sellado real: la simulación no puede morirse
+      // donde la corrida de verdad sigue, o dejaría de ser un ensayo fiel.
+      let e: Awaited<ReturnType<typeof evaluarSelladoDiferido>>;
+      try {
+        e = await evaluarSelladoDiferido(doc.id);
+      } catch (err) {
+        anotar(
+          salteados,
+          "error_sellado",
+          doc.id,
+          err instanceof Error ? err.message : String(err)
+        );
+        continue;
+      }
+
       if (e.apto) {
         aptos++;
         if (!e.tiene_claves) sinClaves++;
@@ -271,14 +322,22 @@ function reporte(r: {
   sellados: number;
   salteados: Map<MotivoSalteo, { id: string; detalle: string }[]>;
   clavesCreadas: number;
-  medicos: number;
+  /** Profesionales que entraron en ESTA corrida. */
+  medicosCorrida: number;
+  /** Profesionales del lote entero (acumulado). `null` si no se pudo leer. */
+  medicosLote: number | null;
   pendientes: number;
   loteId: string;
 }) {
   titulo("RESULTADO");
-  console.log(`Sellados                       : ${r.sellados}`);
-  console.log(`Salteados                      : ${contar(r.salteados)}`);
-  console.log(`Profesionales alcanzados       : ${r.medicos}`);
+  console.log(`Sellados en esta corrida       : ${r.sellados}`);
+  console.log(`Salteados en esta corrida      : ${contar(r.salteados)}`);
+  console.log(`Profesionales de esta corrida  : ${r.medicosCorrida}`);
+  console.log(
+    `Profesionales del lote         : ${
+      r.medicosLote ?? "no se pudo leer — revisar `sellado_diferido_avisos`"
+    }  ← a estos hay que avisarles`
+  );
   console.log(`Claves generadas para el sello : ${r.clavesCreadas}`);
   console.log(`Sin sellar todavía             : ${r.pendientes}`);
   console.log(`Lote                           : ${r.loteId}`);
@@ -332,6 +391,44 @@ async function leerCandidatos(supabase: SupabaseAdmin, hasta: string): Promise<C
   }
 
   return todos;
+}
+
+/**
+ * Deja registrado que a este profesional hay que avisarle, en el mismo momento
+ * en que se le sella el primer documento del lote. El mail lo manda una persona
+ * (firma Valentina); acá queda a quién avisarle y dónde se anota su respuesta.
+ * `firma_logs` es append-only y no admite guardar nada posterior a la firma: por
+ * eso esta tabla existe.
+ *
+ * No aborta la corrida si falla: el sellado ya está hecho y es irreversible,
+ * cortar acá no lo deshace. Se avisa fuerte y el reporte final vuelve a contar
+ * desde la tabla, así la diferencia queda a la vista.
+ */
+async function registrarAviso(supabase: SupabaseAdmin, loteId: string, medicoId: string) {
+  const { error } = await supabase
+    .from("sellado_diferido_avisos")
+    .upsert(
+      [{ lote_id: loteId, medico_id: medicoId }],
+      { onConflict: "lote_id,medico_id", ignoreDuplicates: true }
+    );
+
+  if (error) {
+    console.log(`  ⚠️  No se pudo registrar el aviso de un profesional: ${error.message}`);
+    console.log("      El documento quedó sellado. Falta la fila de aviso.");
+  }
+}
+
+/** Profesionales alcanzados por el LOTE completo, no por esta corrida. */
+async function contarAvisosDelLote(
+  supabase: SupabaseAdmin,
+  loteId: string
+): Promise<number | null> {
+  const { count, error } = await supabase
+    .from("sellado_diferido_avisos")
+    .select("medico_id", { count: "exact", head: true })
+    .eq("lote_id", loteId);
+
+  return error ? null : (count ?? 0);
 }
 
 async function obtenerLote(

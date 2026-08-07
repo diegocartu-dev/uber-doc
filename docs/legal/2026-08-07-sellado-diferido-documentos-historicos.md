@@ -111,7 +111,18 @@ reposo.
 **Texto del pie (único, para todo documento sellado):**
 
 > Firmado electrónicamente por {profesional} en los términos del art. 5 de la Ley 25.506.
-> Verificá este documento escaneando el código QR o en docto.com.ar/verificar.
+> Verificá este documento escaneando el código QR o en docto.com.ar/verificar/{id}
+
+La dirección va **completa, con el id del documento** — la misma que codifica el QR.
+La primera versión imprimía `/verificar` a secas, y esa ruta **no existía: devolvía
+404**. Es la vía impresa alternativa al QR, y es sobre ella que se apoya la decisión
+de no imprimir la fecha del sello: el papel lleva impreso el camino a la verdad
+completa. Tenía que funcionar. El que no puede escanear —un empleador con el papel,
+una farmacia sin cámara— tipeaba y caía en un error, y el documento quedaba
+pareciendo *menos* verificable que antes. El id tampoco está impreso en ningún otro
+lado del documento, así que un buscador sin id no lo salvaba. `/verificar` a secas
+ahora **también existe**, con un buscador por id, para el que copia la dirección
+cortada.
 
 **Texto de la página pública**, bajo el título "SOBRE LAS FECHAS DE ESTE
 DOCUMENTO", con las filas "Emitido" y "Sello electrónico aplicado":
@@ -129,6 +140,20 @@ advertir. Las dos filas de fecha se muestran **siempre**, también en los docume
 firmados al emitirse — así el bloque no es un caso especial que salta a la vista, y
 que en el caso normal las dos fechas coincidan es la mejor prueba de que Docto no
 juega con las fechas.
+
+**El subtítulo verde no puede decir "desde entonces" en un sellado diferido.** La
+frase ata la integridad al instante que el lector tenga en la cabeza, y tres bloques
+más abajo esta misma página le muestra la fecha de **emisión**: afirmaría justo lo
+que el sello NO certifica (punto 2 de "qué NO certifica"). Con sello diferido dice
+"…no fue alterado **desde que se aplicó el sello**"; con sello al emitir, "desde
+entonces", que ahí es exacto.
+
+**El pie legal de la página tampoco puede contradecir a la tarjeta.** Decía que "los
+documentos anteriores a agosto de 2026 no llevan sello": corrido el backfill eso es
+falso, y se leía a 200px de una tarjeta verde que muestra un documento de junio con
+su sello. El pie ahora describe el mecanismo y nada más; el estado del documento
+concreto lo dice la tarjeta, con las dos fechas. Vive en un solo lugar
+(`src/app/verificar/PieLegal.tsx`) para que no vuelva a divergir.
 
 ---
 
@@ -164,7 +189,13 @@ pueden guardarse en la fila. Van en `sellado_diferido_lote` /
 Quedan fuera del lote, y van a revisión manual o a nada:
 
 - Tipos no clínicos (filas de tracking de la tabla `documentos`).
-- Documentos de cuentas de prueba.
+- Documentos de cuentas de prueba, **del profesional o del paciente**. El filtro es
+  bilateral, misma convención que `src/lib/insights/filtro-test.ts`: mirar solo la
+  bandera del médico dejaba pasar las pruebas hechas con una cuenta de paciente
+  interna contra médicos reales. Esos documentos se habrían sellado como actos
+  clínicos genuinos, habrían sumado al total del lote y le habrían disparado al
+  profesional el aviso de que "sus documentos ya se pueden verificar" por algo que
+  fue una prueba.
 - Documentos sin consulta ni turno asociado.
 - Documentos cuyo profesional **no estaba validado (REFEPS + identidad) al momento
   de emitir**, o cuya validación no es computable. **Estos no se sellan: se
@@ -236,6 +267,28 @@ verificación ya lo explica.
    Es reanudable e idempotente: si se corta, se vuelve a correr el mismo comando.
 4. Avisar a los profesionales alcanzados y registrar envíos y respuestas.
 5. Revisar a mano lo que quedó fuera por validación no computable.
+
+Tres garantías del backfill que sostienen el punto 4, y que valen aunque la corrida
+se corte a la mitad:
+
+- **La fila de aviso se escribe apenas se sella el primer documento de cada
+  profesional**, no al final. Si se escribía al cierre, un corte dejaba documentos
+  sellados y cero filas de aviso — y al relanzar esos documentos ya no son
+  candidatos (el filtro pide `firma_digital IS NULL`), así que sus profesionales no
+  volvían a aparecer nunca y quedaban fuera del registro de notificación.
+- **Un documento que falla no frena a los demás, ni siquiera cuando lanza.** El
+  sellado no solo devuelve error: puede tirar excepción (una clave privada
+  encriptada con otra `FIRMA_MASTER_KEY`, un PEM corrupto). Sin captura por
+  documento, un solo profesional en ese estado abortaba la corrida entera, y como
+  los candidatos se leen ordenados por fecha de emisión, cada reintento moría en el
+  mismo documento: la operación no se podía completar nunca.
+- **El reporte cuenta los profesionales del LOTE, no los de la corrida**, leyéndolos
+  de `sellado_diferido_avisos`. Un lote se reanuda; contar solo la corrida hacía que
+  el operador que relanza viera menos profesionales de los que hay que avisar, sin
+  forma de enterarse de la diferencia.
+
+`--limite` valida su argumento y **falla cerrado**: escrito con espacio en vez de
+`=`, o con un typo, aborta con un error en vez de procesar el lote completo.
 
 El estado `sin_sello` del PDF y de la página **se conserva**: sigue siendo la verdad
 para cualquier falla futura.

@@ -572,6 +572,37 @@ function habilitadoAlEmitir(
   return tRefeps <= emitido && tIdentidad <= emitido;
 }
 
+/**
+ * ¿El paciente del documento es una cuenta de prueba?
+ *
+ * `documentos.paciente_id` referencia `pacientes.id`, pero se consulta también
+ * por `user_id`: en otras tablas la columna homónima guarda el user_id, y una
+ * fila de prueba que se escape acá queda sellada y no se puede deshacer.
+ *
+ * Si la consulta falla, LANZA en vez de devolver `false`. Sellar es irreversible:
+ * ante la duda no se sella. El backfill lo anota como `error_sellado` con el
+ * detalle, así el operador ve qué pasó en vez de comerse un sellado silencioso.
+ */
+async function pacienteEsDePrueba(pacienteId: string | null): Promise<boolean> {
+  if (!pacienteId) return false;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("pacientes")
+    .select("id")
+    .eq("es_cuenta_test", true)
+    .or(`id.eq.${pacienteId},user_id.eq.${pacienteId}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `No se pudo determinar si el paciente es cuenta de prueba: ${error.message}`
+    );
+  }
+  return !!data;
+}
+
 async function evaluarInterna(documentoId: string): Promise<EvaluacionInterna> {
   const supabase = createAdminClient();
 
@@ -601,7 +632,25 @@ async function evaluarInterna(documentoId: string): Promise<EvaluacionInterna> {
   const firmante = await snapshotFirmante(doc.medico_id);
 
   if (firmante.es_cuenta_test === true) {
-    return { apto: false, motivo: "cuenta_test", detalle: "Documento de una cuenta de prueba" };
+    return {
+      apto: false,
+      motivo: "cuenta_test",
+      detalle: "Documento de una cuenta de prueba (profesional)",
+    };
+  }
+
+  // El filtro miraba SOLO la bandera del MÉDICO, y eso deja pasar el caso que
+  // más se dio: pruebas hechas con una cuenta de paciente interna contra
+  // médicos reales. Esos documentos no son actos clínicos —sellarlos los suma
+  // al lote y le manda al profesional el aviso de que "sus documentos ya se
+  // pueden verificar" por algo que fue una prueba— y el sello no se deshace.
+  // La convención del repo es filtrar bilateral: ver `src/lib/insights/filtro-test.ts`.
+  if (await pacienteEsDePrueba(doc.paciente_id)) {
+    return {
+      apto: false,
+      motivo: "cuenta_test",
+      detalle: "Documento de una cuenta de prueba (paciente)",
+    };
   }
 
   const habilitado = habilitadoAlEmitir(firmante, doc.created_at);
