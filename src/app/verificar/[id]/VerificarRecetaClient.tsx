@@ -266,9 +266,20 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
         <h2 className="text-lg font-semibold text-gray-900">
           Documento verificado
         </h2>
+        {/*
+          "desde entonces" ata la integridad al instante que el lector tenga en
+          la cabeza — y tres bloques más abajo esta misma página le muestra la
+          fecha de EMISIÓN. En un documento de sellado diferido eso afirmaría
+          algo que el sello no certifica: la integridad criptográfica entre la
+          emisión y el sellado. Esa ventana está sostenida por otra evidencia
+          (`documentos` es insert-only), que no es criptográfica y por lo tanto
+          no se declara acá. Con sello diferido se dice exactamente desde cuándo
+          rige; el bloque de las dos fechas explica el resto.
+        */}
         <p className="mt-1 text-sm text-gray-500">
-          Este documento fue firmado electrónicamente y su contenido no fue
-          alterado desde entonces.
+          {data?.sellado_diferido
+            ? "Este documento fue firmado electrónicamente y su contenido no fue alterado desde que se aplicó el sello."
+            : "Este documento fue firmado electrónicamente y su contenido no fue alterado desde entonces."}
         </p>
       </div>
 

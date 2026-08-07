@@ -748,11 +748,19 @@ function renderFooter(
   // el mecanismo y el firmante, y ambas cosas son verdaderas desde la emisión.
   // La verdad completa (las dos fechas, con explicación) está a un escaneo de
   // distancia, y la segunda línea lo dice explícitamente.
+  //
+  // La URL va COMPLETA, con el id del documento — la misma que codifica el QR.
+  // Antes se imprimía ".../verificar" a secas y esa ruta no existe: devuelve 404.
+  // El que no puede escanear (un empleador con el papel, una farmacia sin cámara)
+  // la tipeaba y caía en un error, o sea que el papel prometía una vía de
+  // verificación que no funcionaba. Y el id no está impreso en ningún otro lado
+  // del documento: sin él, un buscador tampoco lo salvaba. Medido: entra en una
+  // sola línea a 8pt aun con el host más largo, así que no consume alto de pie.
   if (doc.firma) {
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
       `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)} en los términos del art. 5 de la Ley 25.506.\n` +
-        `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar.`,
+        `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
