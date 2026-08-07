@@ -18,5 +18,28 @@ export default async function AdminMedicosPage() {
     getFlag("identidad_gate_activa"),
   ]);
 
-  return <MedicosClient medicos={medicos ?? []} gateIdentidadActiva={gateIdentidadActiva} />;
+  // Cuenta de cobros: país verificado contra Mercado Pago (caso 07/08/2026 — una
+  // cuenta de otro país cobra en otra moneda y ningún paciente argentino puede
+  // pagarle). Query APARTE del select de médicos, y con las columnas nuevas
+  // aisladas: `site_id` puede no estar migrada todavía y PostgREST falla la query
+  // ENTERA si se nombra una columna inexistente — mezclarla dejaría el panel sin
+  // médicos. Si falla, cae a "sin dato" y el panel se ve igual que hoy.
+  const { data: cuentasMp } = await admin
+    .from("medicos_mp_accounts")
+    .select("medico_id, estado, site_id, site_verificado_at");
+  const cuentaPorMedico = new Map(
+    (cuentasMp ?? []).map((c) => [c.medico_id as string, c])
+  );
+
+  const medicosConCobros = (medicos ?? []).map((m) => {
+    const cuenta = cuentaPorMedico.get(m.id);
+    return {
+      ...m,
+      mpConectado: cuenta?.estado === "activo",
+      mpSiteId: (cuenta?.site_id as string | null) ?? null,
+      mpSiteVerificadoAt: (cuenta?.site_verificado_at as string | null) ?? null,
+    };
+  });
+
+  return <MedicosClient medicos={medicosConCobros} gateIdentidadActiva={gateIdentidadActiva} />;
 }

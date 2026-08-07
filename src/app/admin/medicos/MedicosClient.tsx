@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock } from "lucide-react";
+import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock, CreditCard } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
+import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 
 interface Medico {
   id: string;
@@ -37,6 +38,12 @@ interface Medico {
   biometria_exenta: boolean | null;
   didit_status: string | null;
   identidad_revision_motivo: string | null;
+  // Cuenta de cobros (Mercado Pago). `mpSiteId` = país verificado contra MP:
+  // "MLA" = Argentina (lo único que permite cobrarle a un paciente argentino),
+  // otro código = cuenta de otro país, null = todavía sin verificar.
+  mpConectado?: boolean;
+  mpSiteId?: string | null;
+  mpSiteVerificadoAt?: string | null;
   // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
   faltantes?: string[];
   faltantesCount?: number;
@@ -720,6 +727,17 @@ function MedicoRow({
                 </span>
               )
             )}
+            {/* Cuenta de cobros de otro país (caso 07/08/2026). Chip SOLO cuando hay
+                algo que hacer: si la cuenta es argentina o todavía no se verificó,
+                no se muestra nada acá (el detalle completo está en la ficha). */}
+            {m.mpSiteId && !esSiteArgentino(m.mpSiteId) && (
+              <span
+                title="La cuenta de Mercado Pago conectada no es argentina: los pagos salen en otra moneda y ningún paciente argentino puede pagarle."
+                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
+              >
+                <CreditCard size={11} /> Cobros de {paisDeSite(m.mpSiteId)} — no puede cobrar
+              </span>
+            )}
             {/* Identidad biométrica (Didit) — aviso al admin en el panel, sin mails.
                 Verde=validada (estado OK), gris=exenta, rojo=rechazada por Didit,
                 ámbar=pendiente (aún no la completó). TAMBIÉN en Pendientes (Diego
@@ -952,6 +970,55 @@ function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImperso
           </button>
           {!m.dni && (
             <p className="mt-1 text-xs text-gray-400">El médico no tiene DNI cargado</p>
+          )}
+        </div>
+      </div>
+
+      {/* Cobros: ¿la cuenta de Mercado Pago sirve para cobrarle a un paciente
+          argentino? Tres estados posibles, sin ambigüedad — argentina, de otro
+          país, o todavía sin verificar (cuenta vieja que el cron aún no miró). */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cobros (Mercado Pago)</p>
+        <div className="mt-3">
+          {!m.mpConectado ? (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <CreditCard size={16} /> Sin cuenta conectada
+              </div>
+              <p className="mt-1 text-xs text-gray-600">No puede recibir pagos hasta que conecte su cuenta.</p>
+            </div>
+          ) : esSiteArgentino(m.mpSiteId) ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+                <CheckCircle size={16} /> Cuenta de Argentina
+              </div>
+              <p className="mt-1 text-xs text-green-700">
+                Cobra en pesos, como corresponde.
+                {m.mpSiteVerificadoAt
+                  ? ` Verificado el ${new Date(m.mpSiteVerificadoAt).toLocaleDateString("es-AR")}.`
+                  : ""}
+              </p>
+            </div>
+          ) : m.mpSiteId ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-800">
+                <ShieldAlert size={16} /> Cuenta de {paisDeSite(m.mpSiteId)} — no puede cobrar
+              </div>
+              <p className="mt-1 text-xs text-red-700">
+                La cuenta conectada es de {paisDeSite(m.mpSiteId)} (sitio {m.mpSiteId}): los pagos se generan
+                en esa moneda y ningún paciente argentino puede pagarle. Hay que pedirle que conecte una
+                cuenta de Mercado Pago de Argentina.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                <Clock size={16} /> País de la cuenta sin verificar
+              </div>
+              <p className="mt-1 text-xs text-amber-700">
+                Cuenta conectada antes del chequeo automático. El control diario la va a verificar sola.
+              </p>
+            </div>
           )}
         </div>
       </div>

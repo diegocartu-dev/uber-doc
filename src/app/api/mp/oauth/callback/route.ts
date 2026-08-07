@@ -4,7 +4,8 @@ import { encrypt } from "@/lib/mp-crypto";
 import { trackEvent } from "@/lib/funnel";
 import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
-import { sendDoctoAlert } from "@/lib/alertas";
+import { sendDoctoAlert, sendDoctoAlertThrottled } from "@/lib/alertas";
+import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
 
 const PERFIL_BASE = "/medico/perfil?tab=cobros";
 
@@ -16,8 +17,14 @@ export async function GET(req: NextRequest) {
   // → volvemos ahí. Para TODO el resto (state plano, el flujo de /medico/perfil de
   // hoy) el destino es el de siempre. Default = comportamiento actual, intacto.
   const esOnboarding = !!state && state.endsWith(".onb");
-  const urlError = (err: string) =>
-    esOnboarding ? `/medico/onboarding?mp=error&error=${err}` : `${PERFIL_BASE}&error=${err}`;
+  const urlError = (err: string, extra?: Record<string, string>) => {
+    const qs = Object.entries(extra ?? {})
+      .map(([k, v]) => `&${k}=${encodeURIComponent(v)}`)
+      .join("");
+    return esOnboarding
+      ? `/medico/onboarding?mp=error&error=${err}${qs}`
+      : `${PERFIL_BASE}&error=${err}${qs}`;
+  };
   const urlExito = () =>
     esOnboarding ? "/medico/onboarding?mp=ok" : `${PERFIL_BASE}&success=connected`;
 
@@ -173,6 +180,60 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ─── Gate de PAÍS de la cuenta (07/08/2026) ─────────────────────────────────
+  // Una cuenta de Mercado Pago de otro país genera las preferencias en la moneda
+  // y el checkout de ese país: ningún paciente argentino puede pagar, y hasta hoy
+  // eso no lo detectaba nadie (el médico seguía disponible, aceptando consultas
+  // incobrables). Se chequea ACÁ, antes de dar la cuenta por activa.
+  //
+  // Decisión de modelo: si la cuenta NO es argentina, NO se guarda nada. Es lo más
+  // simple y lo más seguro con el modelo de hoy — `medicos_mp_accounts.estado`
+  // tiene un CHECK cerrado ('activo','expirado','revocado','error') y una fila por
+  // médico (UNIQUE medico_id), así que "guardarla marcada como inválida" obligaría
+  // a migrar el CHECK y a revisar todos los consumidores de estado='activo' (cobro
+  // incluido) para que ninguno la tome. Rechazar antes del upsert reusa el camino
+  // ya probado del mismatch de live_mode, garantiza que una cuenta extranjera
+  // jamás quede activa, y deja intacta la cuenta anterior del médico si tenía una
+  // buena (el upsert es el que la pisaría).
+  //
+  // Si Mercado Pago no responde, NO se rechaza: un timeout no es una cuenta
+  // extranjera y dejar afuera a un médico legítimo por un hipo de la API es peor.
+  // Esa cuenta queda sin `site_id` y la levanta el cron diario verificar-cuentas-mp.
+  const chequeoSite = await consultarSiteMp(tokenData.access_token);
+
+  if (chequeoSite.estado === "extranjera") {
+    const pais = paisDeSite(chequeoSite.siteId);
+    logWarn("[OAUTH]", "Cuenta MP de otro país — OAuth rechazado", {
+      medicoId,
+      mp_user_id: String(tokenData.user_id),
+      site_id: chequeoSite.siteId,
+    });
+
+    await sendDoctoAlertThrottled(
+      `mp-pais-${medicoId}`,
+      6,
+      "🟠 Un médico intentó conectar una cuenta de Mercado Pago de otro país",
+      `Un médico quiso conectar su cuenta de cobros, pero la cuenta de Mercado Pago es de ${pais} (sitio ${chequeoSite.siteId}), no de Argentina.\n\nQué significa: una cuenta de otro país genera los pagos en la moneda y el checkout de ese país, así que ningún paciente argentino podría pagarle. Por eso la conexión se rechazó y NO quedó guardada — el médico ve en pantalla que tiene que conectar una cuenta de Mercado Pago de Argentina.\n\n¿Tenés que hacer algo? Solo si el médico te escribe sin entender: la solución es que use (o abra) una cuenta de Mercado Pago argentina.\n\n———\nDetalle técnico (para Claude): callback OAuth MP, GET /users/me devolvió site_id=${chequeoSite.siteId} (esperado ${MP_SITE_ARGENTINA}). Médico ID: ${medicoId}.`
+    );
+
+    await trackEvent({
+      evento: "mp_oauth_callback_error",
+      medicoId,
+      metadata: { sub_tipo: "cuenta_no_argentina", site_id: chequeoSite.siteId },
+    });
+
+    return NextResponse.redirect(
+      new URL(urlError("cuenta_no_argentina", { pais }), req.url)
+    );
+  }
+
+  if (chequeoSite.estado === "no_verificable") {
+    logWarn("[OAUTH]", "No se pudo verificar el país de la cuenta MP", {
+      medicoId,
+      motivo: chequeoSite.motivo,
+    });
+  }
+
   const { data: existing } = await admin
     .from("medicos_mp_accounts")
     .select("medico_id")
@@ -216,7 +277,22 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  await trackEvent({ evento: "mp_oauth_callback_success", medicoId, metadata: { mp_user_id: String(tokenData.user_id), scope: tokenData.scope } });
+  // Dejar registrado el país verificado. Va en un UPDATE aparte y a propósito:
+  // la columna `site_id` puede no estar migrada todavía y PostgREST falla el
+  // statement ENTERO si se nombra una columna inexistente — meterla en el upsert
+  // de arriba rompería la conexión de Mercado Pago para todos. Si el update falla,
+  // la cuenta ya quedó bien guardada y el cron diario completa el dato.
+  if (chequeoSite.estado === "argentina") {
+    const { error: siteError } = await admin
+      .from("medicos_mp_accounts")
+      .update({ site_id: chequeoSite.siteId, site_verificado_at: new Date().toISOString() })
+      .eq("medico_id", medicoId);
+    if (siteError) {
+      logWarn("[OAUTH]", "No se pudo guardar el país de la cuenta MP", { medicoId, error: siteError.message });
+    }
+  }
+
+  await trackEvent({ evento: "mp_oauth_callback_success", medicoId, metadata: { mp_user_id: String(tokenData.user_id), scope: tokenData.scope, site_id: chequeoSite.estado === "argentina" ? chequeoSite.siteId : null } });
 
   return NextResponse.redirect(
     new URL(urlExito(), req.url)

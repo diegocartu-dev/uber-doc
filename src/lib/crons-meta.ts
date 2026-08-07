@@ -156,6 +156,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 10:00",
     autoRecupera: true,
   },
+  "verificar-cuentas-mp": {
+    nombre: "Chequeo del país de las cuentas de cobro",
+    queHace:
+      "revisa todos los días que la cuenta de Mercado Pago de cada médico sea argentina (una cuenta de otro país cobra en otra moneda y ningún paciente argentino puede pagarle)",
+    impacto:
+      "un médico puede tener la cuenta de cobros de otro país sin que nadie se entere: figura disponible, acepta consultas y el pago falla siempre (caso 07/08)",
+    cadencia: "una vez por día a las 08:00",
+    autoRecupera: true,
+  },
   "saldo-servicios": {
     nombre: "Vigía de saldos de servicios",
     queHace: "chequea todos los días el saldo de Didit (verificación de identidad) y Twilio (WhatsApp) y avisa antes de que se agoten",
