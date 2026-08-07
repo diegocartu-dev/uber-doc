@@ -217,11 +217,16 @@ export default function PantallaVerificacion({
           )}
         </div>
 
+        {/* También era un `mailto:` (a hola@, una casilla sin uso real): en el
+            celular no hacía nada. Ahora lleva a la pantalla de ayuda. */}
         <p className="mt-6 text-sm text-gray-400">
-          ¿Preguntas? Escribinos a{" "}
-          <a href="mailto:hola@docto.com.ar" className="text-[#378ADD] hover:underline">
-            hola@docto.com.ar
-          </a>
+          ¿Preguntas?{" "}
+          <Link
+            href={`/ayuda?asunto=${encodeURIComponent(`Registro ${estadoRegistro} — ${fullName}`)}`}
+            className="text-[#378ADD] hover:underline"
+          >
+            Escribinos
+          </Link>
         </p>
       </div>
     </div>

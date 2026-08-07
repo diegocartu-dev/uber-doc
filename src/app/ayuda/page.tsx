@@ -15,7 +15,10 @@ export const metadata: Metadata = {
 export default async function AyudaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ asunto?: string }>;
+  // Next entrega `string | string[]`: con `/ayuda?asunto=a&asunto=b` llega un
+  // array. Sin este tipo real, el array se colaba hasta el `.trim()` del server
+  // action y el usuario veía "No pudimos enviar tu mensaje".
+  searchParams: Promise<{ asunto?: string | string[] }>;
 }) {
   let emailSesion: string | null = null;
   try {
@@ -30,11 +33,12 @@ export default async function AyudaPage({
   }
 
   const { asunto } = await searchParams;
+  const asuntoInicial = (Array.isArray(asunto) ? asunto[0] : asunto) ?? "";
 
   return (
     <FormularioAyuda
       emailSesion={emailSesion}
-      asuntoInicial={(asunto ?? "").slice(0, 120)}
+      asuntoInicial={asuntoInicial.slice(0, 120)}
     />
   );
 }
