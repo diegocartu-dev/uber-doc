@@ -7,6 +7,8 @@ import Link from "next/link";
 import ModalBaja from "./ModalBaja";
 import TabCobros from "./TabCobros";
 import FirmaManuscrita from "./FirmaManuscrita";
+import AreasAtencion from "./AreasAtencion";
+import { type AreaAtencion, serializarAreas, validarAreas } from "@/lib/areas-atencion";
 
 interface MpAccount {
   mp_user_id: string;
@@ -41,10 +43,14 @@ export default function PerfilClient({
   medico,
   mpAccount,
   userEmail,
+  areasAtencion = [],
 }: {
   medico: Medico;
   mpAccount: MpAccount | null;
   userEmail: string;
+  // Áreas de atención adicionales ya declaradas (ej: Adolescencia 10-19). Llega
+  // con default [] para que la pantalla nunca dependa de que el dato exista.
+  areasAtencion?: AreaAtencion[];
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -64,10 +70,12 @@ export default function PerfilClient({
   const [celularPersonal, setCelularPersonal] = useState(medico.celular_personal ?? "");
   const [emailPersonal, setEmailPersonal] = useState(medico.email_personal ?? "");
   const [saving, setSaving] = useState(false);
+  const [areas, setAreas] = useState<AreaAtencion[]>(areasAtencion);
+  const [errorAreas, setErrorAreas] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Dirty tracking
-  const isDirty =
+  const camposDirty =
     telefono !== (medico.telefono ?? "") ||
     domicilio !== (medico.domicilio_consultorio ?? "") ||
     tipoMatricula !== (medico.tipo_matricula ?? "") ||
@@ -76,6 +84,8 @@ export default function PerfilClient({
     celularPersonal !== (medico.celular_personal ?? "") ||
     emailPersonal !== (medico.email_personal ?? "") ||
     fotoFile !== null;
+  const areasDirty = serializarAreas(areas) !== serializarAreas(areasAtencion);
+  const isDirty = camposDirty || areasDirty;
 
   // Handle MP OAuth callback params
   useEffect(() => {
@@ -116,6 +126,16 @@ export default function PerfilClient({
   }
 
   async function handleSave() {
+    // Las áreas de atención se validan ANTES de tocar el servidor, para que el
+    // médico vea el problema al lado del campo y no un error genérico.
+    const problemaAreas = areasDirty ? validarAreas(areas) : null;
+    setErrorAreas(problemaAreas);
+    if (problemaAreas) {
+      setToast({ msg: problemaAreas, type: "error" });
+      document.getElementById("areas-atencion")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     setSaving(true);
     try {
       // Upload foto first if changed
@@ -137,28 +157,64 @@ export default function PerfilClient({
         }
       }
 
-      // Save other fields
-      const res = await fetch("/api/medico/perfil", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefono,
-          domicilio_consultorio: domicilio,
-          tipo_matricula: tipoMatricula,
-          numero_matricula: numeroMatricula,
-          provincia,
-          celular_personal: celularPersonal || null,
-          email_personal: emailPersonal || null,
-        }),
-      });
-
-      if (res.ok) {
-        setToast({ msg: "Perfil actualizado", type: "ok" });
-        router.refresh();
-      } else {
-        const data = await res.json();
-        setToast({ msg: data.error || "Error al guardar", type: "error" });
+      // Áreas de atención: endpoint propio (no toca la ruta de perfil que ya
+      // funciona en producción). Se guarda solo si cambió.
+      // Si esto falla NO se corta el guardado: los demás campos del perfil
+      // (celular, domicilio, teléfono) se mandan igual. Cortar acá descartaba en
+      // silencio lo que el médico había cambiado en el mismo click.
+      let falloAreas: string | null = null;
+      if (areasDirty) {
+        const resAreas = await fetch("/api/medico/areas-atencion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ areas_atencion: areas }),
+        });
+        if (!resAreas.ok) {
+          const data = await resAreas.json().catch(() => ({}));
+          // Mensaje humano: el error crudo de la base no le dice nada al médico.
+          const crudo = typeof data.error === "string" ? data.error : "";
+          falloAreas = /column|relation|schema|permission/i.test(crudo)
+            ? "No pudimos guardar tus áreas de atención en este momento. El resto de tus datos sí se guardó — probá de nuevo en unos minutos."
+            : crudo || "No pudimos guardar tus áreas de atención.";
+          setErrorAreas(falloAreas);
+        } else {
+          setErrorAreas(null);
+        }
       }
+
+      // Save other fields (solo si cambió alguno: si el médico únicamente tocó sus
+      // áreas, no tiene sentido reenviar el resto del perfil).
+      if (camposDirty) {
+        const res = await fetch("/api/medico/perfil", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telefono,
+            domicilio_consultorio: domicilio,
+            tipo_matricula: tipoMatricula,
+            numero_matricula: numeroMatricula,
+            provincia,
+            celular_personal: celularPersonal || null,
+            email_personal: emailPersonal || null,
+          }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          setToast({ msg: data.error || "Error al guardar", type: "error" });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Un fallo de áreas ya no descarta el resto: se avisa la verdad parcial en
+      // vez de un "guardado" que oculta que algo no entró.
+      setToast(
+        falloAreas
+          ? { msg: falloAreas, type: "error" }
+          : { msg: "Perfil actualizado", type: "ok" }
+      );
+      router.refresh();
     } catch {
       setToast({ msg: "Error al guardar", type: "error" });
     }
@@ -338,6 +394,16 @@ export default function PerfilClient({
             </div>
           </div>
         </div>
+
+        {/* Áreas de atención adicionales (Adolescencia, etc.) */}
+        <AreasAtencion
+          areas={areas}
+          onChange={(next) => {
+            setAreas(next);
+            if (errorAreas) setErrorAreas(null);
+          }}
+          error={errorAreas}
+        />
 
         {/* Contacto privado */}
         <div className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
