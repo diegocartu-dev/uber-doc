@@ -21,9 +21,12 @@ export async function GET(req: NextRequest) {
   // NOTA: `desconectado_at` lo agrega la migración 20260606_resolucion_consultas_fase1.sql.
   // El código que lo selecciona NO debe desplegarse antes de aplicar esa migración
   // (PostgREST falla el SELECT si la columna no existe). Ver regla en CLAUDE.md.
+  // `mp_status` (verificado en prod: existe y tiene GRANT SELECT para `authenticated`,
+  // así que no rompe el SELECT con cliente RLS) lo necesitan las pantallas del
+  // paciente para distinguir "aceptada SIN pagar" de "pago en camino / ya pagado".
   let query = supabase
     .from("consultas")
-    .select("estado, sala_video_url, desconectado_at")
+    .select("estado, sala_video_url, desconectado_at, mp_status")
     .eq("id", consultaId);
 
   if (medico) {
@@ -62,5 +65,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ estado, sala_video_url: data.sala_video_url, desconectado_at });
+  return NextResponse.json({
+    estado,
+    sala_video_url: data.sala_video_url,
+    desconectado_at,
+    mp_status: data.mp_status ?? null,
+  });
 }
