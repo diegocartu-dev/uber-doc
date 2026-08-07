@@ -10,10 +10,15 @@ import { pushAlMedico } from "@/lib/push";
 
 export default async function SalaEsperaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ consultaId: string }>;
+  searchParams: Promise<{ pago?: string }>;
 }) {
   const { consultaId } = await params;
+  // Mercado Pago vuelve acá con ?pago=error o ?pago=pendiente cuando el checkout
+  // no salió bien. Hasta ahora la pantalla lo ignoraba por completo.
+  const { pago: resultadoPago } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,7 +31,9 @@ export default async function SalaEsperaPage({
   // Traer la consulta con datos del médico
   const { data: consulta, error } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, created_at, medico_id, canal_origen")
+    // `mp_status` (verificado en prod: columna existente y con GRANT SELECT para
+    // `authenticated`) es lo que distingue "aceptada sin pagar" de "ya pagada".
+    .select("id, especialidad, estado, created_at, medico_id, canal_origen, mp_status")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -103,6 +110,7 @@ export default async function SalaEsperaPage({
         <SalaEsperaCliente
           consultaId={consulta.id}
           estado={consulta.estado}
+          mpStatus={consulta.mp_status}
           medicoNombre={capitalizarNombre(medico.nombre_completo)}
           precio={medico.precio_consulta}
           duracion={medico.duracion_consulta}
@@ -110,6 +118,7 @@ export default async function SalaEsperaPage({
           posicion={posicion}
           tiempoEstimado={tiempoEstimado}
           createdAt={consulta.created_at}
+          resultadoPago={resultadoPago ?? null}
           isDev={process.env.NODE_ENV === "development"}
         />
       </main>

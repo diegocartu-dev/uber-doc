@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import BotonPush from "@/components/BotonPush";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
 // Boton reutilizable "Volver"
 function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
@@ -23,6 +24,7 @@ export default function EsperaVideo({
   consultaId,
   salaVideoUrlInicial,
   estadoInicial,
+  mpStatusInicial = null,
   medicoNombre,
   especialidad,
   duracionConsulta,
@@ -32,6 +34,7 @@ export default function EsperaVideo({
   consultaId: string;
   salaVideoUrlInicial: string | null;
   estadoInicial?: string;
+  mpStatusInicial?: string | null;
   medicoNombre: string;
   especialidad: string;
   duracionConsulta: number;
@@ -41,6 +44,7 @@ export default function EsperaVideo({
   const returnUrlFinal = returnUrl ?? "/dashboard";
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
+  const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
   const [minutosEspera, setMinutosEspera] = useState(0);
   const [reintentando, setReintentando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -51,7 +55,12 @@ export default function EsperaVideo({
   const [procesandoDesde, setProcesandoDesde] = useState<number | null>(null);
   const [ahora, setAhora] = useState(0);
   const enProcesandoPago =
-    !salaUrl && estado !== "cancelada" && estado !== "en_curso" && estado !== "pagada";
+    !salaUrl &&
+    estado !== "cancelada" &&
+    estado !== "rechazada" &&
+    estado !== "completada" &&
+    estado !== "en_curso" &&
+    estado !== "pagada";
   useEffect(() => {
     if (enProcesandoPago && procesandoDesde === null) {
       setProcesandoDesde(Date.now());
@@ -65,7 +74,14 @@ export default function EsperaVideo({
   }, [enProcesandoPago]);
 
   // Reintentar el pago de una consulta aceptada cuyo checkout quedó a medias
-  // (caso Lucas 04/08: "Procesando pago..." eterno sin ninguna salida).
+  // (caso de un paciente 04/08: "Procesando pago..." eterno sin ninguna salida).
+  //
+  // Mismo camino que `pagarConsulta` de la sala de espera, fallback incluido:
+  // `crear-v2` devuelve 503 cuando el paciente o el médico es cuenta de test
+  // (guard `es_cuenta_test`) y ahí el pago se simula por `/api/pago/simular`.
+  // Sin ese fallback este botón fallaba SIEMPRE en cuentas de test —
+  // justamente las que se usan para probar esta pantalla— y quedaba en
+  // "No pudimos abrir el pago".
   async function reintentarPago() {
     setReintentando(true);
     setErrorAccion(null);
@@ -83,6 +99,20 @@ export default function EsperaVideo({
           return;
         }
       }
+
+      // Pago simulado (cuentas de test). El endpoint se defiende solo: con el
+      // cobro real ON responde 404 a cualquiera que no sea cuenta de test.
+      const sim = await fetch("/api/pago/simular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ consultaId }),
+      });
+      if (sim.ok) {
+        window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
+        return;
+      }
+
       setErrorAccion("No pudimos abrir el pago. Reintentá en unos segundos.");
     } catch {
       setErrorAccion("No pudimos abrir el pago. Revisá tu conexión y reintentá.");
@@ -116,9 +146,14 @@ export default function EsperaVideo({
         credentials: "include",
       });
       if (!res.ok) return;
-      const data = await res.json() as { estado: string; sala_video_url: string | null };
+      const data = await res.json() as {
+        estado: string;
+        sala_video_url: string | null;
+        mp_status?: string | null;
+      };
       if (data.estado) setEstado(data.estado);
       if (data.sala_video_url) setSalaUrl(data.sala_video_url);
+      setMpStatus(data.mp_status ?? null);
     } catch {
       // red error — próximo ciclo reintenta
     }
@@ -144,23 +179,126 @@ export default function EsperaVideo({
     return () => clearInterval(interval);
   }, [createdAt]);
 
-  // ---- ESTADO: cancelada ----
-  if (estado === "cancelada") {
+  // ---- ESTADO: cancelada / rechazada ----
+  // `rechazada` no tenía rama propia y caía al bloque de pago de abajo: a los
+  // 3 minutos le ofrecía "Pagar consulta" sobre una consulta que ya estaba
+  // muerta, y el botón devolvía 400 (`crear-v2` exige estado `aceptada`).
+  if (estado === "cancelada" || estado === "rechazada") {
     return (
       <div className="text-center">
         <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-red-50">
           <span className="text-4xl" style={{ color: "#E24B4A" }}>X</span>
         </div>
-        <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta cancelada</h1>
+        <h1 className="mt-6 text-2xl font-bold text-gray-900">
+          {estado === "rechazada" ? "Esta consulta no se concretó" : "Consulta cancelada"}
+        </h1>
         <p className="mt-2 text-gray-600">
-          Esta consulta no se concretó. Si habías pagado, el reintegro se procesa completo.
+          {estado === "rechazada"
+            ? "El médico no llegó a tomarla. Si habías pagado, el reintegro se procesa completo."
+            : "Esta consulta no se concretó. Si habías pagado, el reintegro se procesa completo."}
         </p>
 
         <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta} />
 
         <div className="mt-6 rounded-xl border px-6 py-4 text-center" style={{ borderColor: "#E24B4A", background: "rgba(226,75,74,0.06)" }}>
-          <span className="text-sm font-medium" style={{ color: "#E24B4A" }}>Cancelada</span>
+          <span className="text-sm font-medium" style={{ color: "#E24B4A" }}>
+            {estado === "rechazada" ? "No concretada" : "Cancelada"}
+          </span>
         </div>
+
+        <VolverAlInicio returnUrl={returnUrl} />
+      </div>
+    );
+  }
+
+  // ---- ESTADO: completada (la consulta ya terminó) ----
+  // NO tenía rama: una consulta CERRADA caía al bloque de pago de abajo y, con
+  // la sala nunca creada, terminaba mostrándole "Falta un paso: pagá tu
+  // consulta / todavía no se te cobró nada" a alguien que YA PAGÓ — encima con
+  // un botón que devolvía 400. Dos caminos reales llegan acá:
+  //  1. `/consulta/[id]/sala` redirige a esta pantalla con CUALQUIER estado
+  //     distinto de `en_curso`, o sea cada vez que el paciente vuelve a abrir
+  //     la sala después de que la llamada terminó.
+  //  2. El médico nunca abrió la videollamada y el cron `cerrar-huerfanas`
+  //     cerró la consulta a las 4 h sin que se creara la sala.
+  if (estado === "completada") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/10">
+          <span className="text-4xl font-bold" style={{ color: "#1D9E75" }}>&#10003;</span>
+        </div>
+
+        <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
+        <p className="mt-2 text-gray-600">
+          {medicoNombre
+            ? `Tu consulta con ${formatNombreMedico(medicoNombre)} ya terminó.`
+            : "Tu consulta ya terminó."}
+        </p>
+        {/* Sin promesas: si el cierre lo hizo el sistema puede no haber ningún
+            documento, y prometerlo sería otra mentira más de esta pantalla. */}
+        <p className="mt-3 text-sm text-gray-500">
+          Si el médico te dejó recetas u órdenes, las encontrás en Mis documentos.
+        </p>
+
+        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Estado</span>
+              <span className="font-medium" style={{ color: "#1D9E75" }}>Finalizada</span>
+            </div>
+          </div>
+        </InfoCard>
+
+        <a
+          href="/documentos"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-4 text-center text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100"
+          style={{ minHeight: 56 }}
+        >
+          Ver mis documentos
+        </a>
+
+        <VolverAlInicio returnUrl={returnUrl} />
+      </div>
+    );
+  }
+
+  // ---- ESTADO: esperando (ningún médico la tomó todavía) ----
+  // También caía al bloque de pago: a los 3 minutos le pedía pagar una consulta
+  // que nadie aceptó (400 asegurado). La pantalla de espera con cola, aviso de
+  // demora y cancelación es la sala de espera; acá lo único útil es volver.
+  if (estado === "esperando") {
+    return (
+      <div className="text-center">
+        <div
+          className="mx-auto flex h-24 w-24 items-center justify-center rounded-full"
+          style={{ backgroundColor: "rgba(186,117,23,0.10)" }}
+        >
+          <span className="text-5xl">⏳</span>
+        </div>
+
+        <h1 className="mt-6 text-2xl font-bold text-gray-900">
+          Tu consulta está esperando al médico
+        </h1>
+        <p className="mt-2 text-gray-600">
+          Todavía no la aceptó nadie. <strong>No se te cobró nada.</strong>
+        </p>
+
+        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Estado</span>
+              <span className="font-medium" style={{ color: "#BA7517" }}>Esperando</span>
+            </div>
+          </div>
+        </InfoCard>
+
+        <a
+          href={`/sala-espera/${consultaId}`}
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-4 text-center text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100"
+          style={{ minHeight: 56 }}
+        >
+          Ir a la sala de espera
+        </a>
 
         <VolverAlInicio returnUrl={returnUrl} />
       </div>
@@ -271,47 +409,106 @@ export default function EsperaVideo({
     );
   }
 
-  // ---- ESTADO: aceptada (pre-pago / procesando) ----
-  // A los 3 minutos EN ESTA PANTALLA sin confirmación, el pago quedó a medias
-  // (checkout cerrado o rechazado): decirlo y dar salida en vez del spinner
-  // eterno (caso Lucas 04/08).
-  const pagoNoCompletado =
+  // ---- ESTADO: aceptada (el médico aceptó, falta el pago) ----
+  // Mismo defecto que en la sala de espera (caso 07/08): esta pantalla mostraba
+  // "Procesando pago…" con spinner aunque no hubiera ningún pago en curso, o sea
+  // le pedía esperar a quien tenía que actuar.
+  //
+  // Tres situaciones distintas, tres pantallas distintas:
+  //  1. MP tiene el pago pero no lo acreditó (cupón / revisión / autorizado):
+  //     esperar es correcto y pedir otro pago sería cobrarle dos veces.
+  //  2. MP lo rechazó: lo sabemos ya, no hay nada que esperar.
+  //  3. Ni noticias: se mantiene la ventana de gracia de 3 min por si el webhook
+  //     está por llegar (protege contra el pago duplicado); pasada la gracia, la
+  //     pantalla pide el pago con todas las letras.
+  const situacionPago = estadoPagoConsulta(estado, mpStatus);
+  const pagoConfirmado = situacionPago === "confirmado";
+  const pagoEnCamino = situacionPago === "en_camino";
+  const pagoRechazado = !pagoConfirmado && (mpStatus === "rejected" || mpStatus === "cancelled");
+  const graciaVencida =
     procesandoDesde !== null && ahora - procesandoDesde >= 3 * 60 * 1000;
+  // Pedir el pago SOLO si de verdad falta pagar. Dos candados, los dos
+  // imprescindibles:
+  //  - `!pagoConfirmado`: el guard nuevo se calculaba y NO se usaba, así que a
+  //    una consulta con `mp_status='approved'` (pagada con plata real) esta
+  //    pantalla igual le decía "Falta un paso: pagá tu consulta / todavía no se
+  //    te cobró nada". Mentir sobre la plata es peor que el bug original.
+  //  - `estado === "aceptada"`: es el único estado que `crear-v2` acepta
+  //    (`obtenerConsulta` devuelve 400 en cualquier otro), así que ofrecer el
+  //    botón fuera de ahí es un callejón sin salida garantizado.
+  const faltaPagar =
+    !pagoConfirmado &&
+    !pagoEnCamino &&
+    estado === "aceptada" &&
+    (pagoRechazado || graciaVencida);
 
   return (
     <div className="text-center">
-      <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
-        <span className="text-5xl">&#9203;</span>
+      <div
+        className="mx-auto flex h-24 w-24 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: pagoConfirmado ? "rgba(29,158,117,0.10)" : "rgba(186,117,23,0.10)",
+        }}
+      >
+        {pagoConfirmado ? (
+          <span className="text-4xl font-bold" style={{ color: "#1D9E75" }}>&#10003;</span>
+        ) : (
+          <span className="text-5xl">{faltaPagar ? "💳" : "⏳"}</span>
+        )}
       </div>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">
-        {pagoNoCompletado ? "Tu pago no se completó" : "Procesando pago..."}
+        {faltaPagar
+          ? "Falta un paso: pagá tu consulta"
+          : pagoConfirmado
+            ? "Pago confirmado"
+            : pagoEnCamino
+              ? "Estamos confirmando tu pago"
+              : "Procesando pago..."}
       </h1>
       <p className="mt-2 text-gray-600">
-        {pagoNoCompletado
-          ? "El pago no llegó a confirmarse — no se te cobró nada. Podés reintentarlo o cancelar la solicitud."
-          : "Estamos verificando tu pago con Mercado Pago"}
+        {faltaPagar
+          ? `${medicoNombre ? formatNombreMedico(medicoNombre) : "El médico"} ya aceptó tu consulta y te atiende apenas se registre el pago. Todavía no se te cobró nada.`
+          : pagoConfirmado
+            ? `Tu pago está acreditado. ${medicoNombre ? formatNombreMedico(medicoNombre) : "El médico"} inicia la videollamada en un momento.`
+            : pagoEnCamino
+              ? "Mercado Pago todavía no acreditó el pago. No hace falta que pagues de nuevo — apenas se acredite, el médico te atiende."
+              : "Estamos verificando tu pago con Mercado Pago"}
       </p>
+
+      {/* Con el pago pendiente, el botón es lo primero y lo más grande. */}
+      {faltaPagar && (
+        <button
+          onClick={reintentarPago}
+          disabled={reintentando || cancelando}
+          className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-4 text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100 disabled:opacity-50"
+          style={{ minHeight: 56 }}
+        >
+          {reintentando ? "Abriendo el pago..." : "Pagar consulta"}
+        </button>
+      )}
 
       <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
         <div className="border-t border-gray-100 pt-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Estado</span>
-            <span className="font-medium" style={{ color: "#BA7517" }}>
-              {pagoNoCompletado ? "Sin pago" : "Pendiente"}
+            <span
+              className="font-medium"
+              style={{ color: pagoConfirmado ? "#1D9E75" : "#BA7517" }}
+            >
+              {faltaPagar
+                ? "Falta pagar"
+                : pagoConfirmado
+                  ? "Pagada"
+                  : pagoEnCamino
+                    ? "Pago en camino"
+                    : "Pendiente"}
             </span>
           </div>
         </div>
       </InfoCard>
 
-      {pagoNoCompletado ? (
-        <div className="mt-8 space-y-3">
-          <button
-            onClick={reintentarPago}
-            disabled={reintentando || cancelando}
-            className="w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
-          >
-            {reintentando ? "Abriendo el pago..." : "Reintentar pago"}
-          </button>
+      {faltaPagar ? (
+        <div className="mt-6 space-y-3">
           <button
             onClick={cancelarSolicitud}
             disabled={reintentando || cancelando}
@@ -333,12 +530,16 @@ export default function EsperaVideo({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
-            <p className="text-sm text-gray-500">Esperando confirmacion de pago...</p>
+            <p className="text-sm text-gray-500">
+              {pagoConfirmado
+                ? "Esperando que el médico inicie la videollamada..."
+                : "Esperando confirmación de pago..."}
+            </p>
           </div>
         </div>
       )}
 
-      <VolverAlInicio />
+      <VolverAlInicio returnUrl={returnUrl} />
     </div>
   );
 }

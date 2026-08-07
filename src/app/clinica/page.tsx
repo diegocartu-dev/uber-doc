@@ -6,6 +6,7 @@ import ClinicaFlow from "./ClinicaFlow";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { guardRutaPaciente } from "@/lib/auth/rol";
+import { type AreaAtencion, parsearAreasAtencion } from "@/lib/areas-atencion";
 
 export default async function ClinicaPage() {
   const supabase = await createClient();
@@ -133,6 +134,16 @@ export default async function ClinicaPage() {
   const { data: jurisRows } = await supabaseAdmin.from("medicos").select("id, jurisdicciones");
   const jurisMap = new Map<string, string[]>((jurisRows ?? []).map((j) => [j.id, (j.jurisdicciones ?? []) as string[]]));
 
+  // Áreas de atención declaradas por el médico (ej: "Atiende adolescentes (10 a 19 años)").
+  // Query PROPIA y con service role a propósito: la columna es nueva y el SELECT de arriba
+  // es el que LLENA la clínica — si algo fallara con esta columna, se pierde solo el
+  // cartelito informativo y NUNCA el listado de médicos (lección del outage 22/06).
+  // El dato es informativo: no filtra ni bloquea a nadie.
+  const { data: areasRows } = await supabaseAdmin.from("medicos").select("id, areas_atencion");
+  const areasMap = new Map<string, AreaAtencion[]>(
+    (areasRows ?? []).map((a) => [a.id, parsearAreasAtencion(a.areas_atencion)])
+  );
+
   // Provincia guardada del paciente (solo para pre-seleccionar; se valida igual cada vez).
   const { data: provinciaRow } = await supabaseAdmin
     .from("pacientes")
@@ -144,6 +155,7 @@ export default async function ClinicaPage() {
     ...m,
     ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
     jurisdicciones: jurisMap.get(m.id) ?? [],
+    areasAtencion: areasMap.get(m.id) ?? [],
   }));
 
   return (

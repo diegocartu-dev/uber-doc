@@ -3,6 +3,8 @@
 // duplicar. Toda la honestidad de disponibilidad (semáforo, cola, prioridad de turno R2,
 // orden FIFO) vive acá — es por-médico, así que se conserva igual al aplanar.
 
+import { type AreaAtencion, areasCoincidenBusqueda } from "@/lib/areas-atencion";
+
 export type Medico = {
   id: string;
   especialidad: string;
@@ -19,6 +21,10 @@ export type Medico = {
   ciBloqueadaPorTurno: boolean;
   // Jurisdicciones habilitadas del médico (para el ruteo). Vacío = sin resolver → fail-safe.
   jurisdicciones: string[];
+  // Áreas de atención adicionales declaradas por el médico (ej: Adolescencia 10-19).
+  // Informativas: se muestran y se pueden buscar, NO filtran ni bloquean nada.
+  // Opcional a propósito: un médico sin el dato sigue funcionando igual que siempre.
+  areasAtencion?: AreaAtencion[];
 };
 
 export type ConsultaEspera = { medico_id: string };
@@ -109,6 +115,19 @@ export function formatPrecio(precio: number | null): string {
 
 export function normalizeTexto(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Buscador del listado: nombre, especialidad y —desde 07/08/2026— las áreas de atención
+// declaradas ("adolescencia", "adolescentes"…). SUMA formas de encontrar al médico; no
+// saca a ninguno de los que ya aparecían con el término tipeado.
+export function coincideConBusqueda(medico: Medico, termino: string): boolean {
+  const t = normalizeTexto(termino).trim();
+  if (!t) return true;
+  return (
+    normalizeTexto(medico.especialidad).includes(t) ||
+    normalizeTexto(medico.nombre_completo).includes(t) ||
+    areasCoincidenBusqueda(medico.areasAtencion, termino)
+  );
 }
 
 // Orden macro del listado plano por disponibilidad (Sofía): reservables ahora → con espera

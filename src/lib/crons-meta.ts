@@ -142,6 +142,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada 10 minutos",
     autoRecupera: true,
   },
+  "documentos-sin-sello": {
+    nombre: "Control de documentos sin firmar",
+    queHace:
+      "cada hora cuenta cuántas recetas, certificados, indicaciones y órdenes de las últimas 24 horas quedaron sin sello electrónico, y avisa si aparecen",
+    impacto:
+      "si la firma se rompe, los documentos salen igual pero con la leyenda 'sin sello' y el QR no puede confirmar el contenido — sin este control nadie se entera hasta que una farmacia o un empleador pregunta",
+    cadencia: "cada hora",
+    autoRecupera: true,
+  },
   "provisionar-claves": {
     nombre: "Claves de firma electrónica",
     queHace: "revisa todos los días que cada médico aprobado tenga sus claves de firma electrónica y se las crea si le faltan",
@@ -154,6 +163,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     queHace: "le escribe un único mail al médico que creó su cuenta y no completó el registro (invitándolo a retomarlo) y avisa si hay médicos esperando aprobación hace más de 24 horas",
     impacto: "los médicos que abandonan el registro no reciben ningún recordatorio (14 perdidos en 20 días al 06/08) y la cola de aprobación puede estancarse sin que nadie se entere",
     cadencia: "una vez por día a las 10:00",
+    autoRecupera: true,
+  },
+  "verificar-cuentas-mp": {
+    nombre: "Chequeo del país de las cuentas de cobro",
+    queHace:
+      "revisa todos los días que la cuenta de Mercado Pago de cada médico sea argentina (una cuenta de otro país cobra en otra moneda y ningún paciente argentino puede pagarle)",
+    impacto:
+      "un médico puede tener la cuenta de cobros de otro país sin que nadie se entere: figura disponible, acepta consultas y el pago falla siempre (caso 07/08)",
+    cadencia: "una vez por día a las 08:00",
     autoRecupera: true,
   },
   "saldo-servicios": {

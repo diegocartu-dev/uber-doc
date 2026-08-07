@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ paso?: string; mp?: string; error?: string; qa?: string }>;
+  searchParams: Promise<{ paso?: string; mp?: string; error?: string; pais?: string; qa?: string }>;
 }) {
   const sp = await searchParams;
   // QA solo en previews (NUNCA en producción): ?qa=1 deja ver el wizard con
@@ -95,6 +95,7 @@ export default async function OnboardingPage({
       pasoInicialParam={sp.paso ?? null}
       mpResultado={sp.mp ?? null}
       mpError={sp.error ?? null}
+      mpPais={sp.pais ?? null}
     />
   );
 }

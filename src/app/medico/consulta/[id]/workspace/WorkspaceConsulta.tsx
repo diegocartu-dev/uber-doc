@@ -1256,7 +1256,7 @@ export default function WorkspaceConsulta({
           .from(tablaPrincipal)
           .update({
             estado: estadoCompletado,
-            // Hora y firma del cierre (caso Hugo 01/08): sin esto no hay
+            // Hora y firma del cierre (incidente 01/08): sin esto no hay
             // duración de consulta ni forma de distinguir quién cerró.
             completada_at: new Date().toISOString(),
             cierre_origen: "medico",
@@ -1268,6 +1268,21 @@ export default function WorkspaceConsulta({
             evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
           })
           .eq("id", consultaId);
+
+        // Firma electrónica de los documentos recién emitidos.
+        // El acto de voluntad es este cierre (el médico confirmó con el
+        // contenido a la vista); la firma se ejecuta server-side atribuida a su
+        // sesión porque acá ya está redirigido al dashboard.
+        // `keepalive` para que sobreviva si cierra la pestaña justo después.
+        // Si falla, los documentos igual quedan guardados y entregados: el PDF
+        // los muestra explícitamente como "sin sello". NUNCA bloquear por firma.
+        fetch("/api/documentos/firmar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          keepalive: true,
+          body: JSON.stringify({ consultaId, tipo }),
+        }).catch(() => {});
 
         // Borrar estudios temporales del paciente (route channel-aware)
         fetch("/api/consulta/borrar-estudios-temp", {

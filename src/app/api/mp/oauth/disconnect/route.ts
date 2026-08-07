@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/funnel";
+import { guardarSiteMp } from "@/lib/mp-site-db";
 
 export async function POST() {
   const supabase = await createClient();
@@ -39,6 +40,17 @@ export async function POST() {
     )
     .eq("medico_id", medico.id)
     .eq("estado", "activo");
+
+  // El país verificado describe una cuenta que ya no está conectada: si queda
+  // pegado, el panel muestra "Cobros de otro país — no puede cobrar" sobre un
+  // médico que simplemente se desconectó. Va en un update aparte y best-effort
+  // porque esas columnas pueden no estar migradas todavía, y la desconexión
+  // (que es lo que el médico pidió) no puede fallar por esto.
+  await guardarSiteMp(
+    medico.id,
+    { site_id: null, site_verificado_at: null, site_extranjera_desde: null },
+    "[MP/DISCONNECT]"
+  );
 
   await trackEvent({
     evento: "mp_oauth_disconnect",
