@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import BotonPush from "@/components/BotonPush";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
 // Boton reutilizable "Volver"
 function VolverAlInicio({ returnUrl = "/dashboard" }: { returnUrl?: string }) {
@@ -23,6 +24,7 @@ export default function EsperaVideo({
   consultaId,
   salaVideoUrlInicial,
   estadoInicial,
+  mpStatusInicial = null,
   medicoNombre,
   especialidad,
   duracionConsulta,
@@ -32,6 +34,7 @@ export default function EsperaVideo({
   consultaId: string;
   salaVideoUrlInicial: string | null;
   estadoInicial?: string;
+  mpStatusInicial?: string | null;
   medicoNombre: string;
   especialidad: string;
   duracionConsulta: number;
@@ -41,6 +44,7 @@ export default function EsperaVideo({
   const returnUrlFinal = returnUrl ?? "/dashboard";
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
+  const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
   const [minutosEspera, setMinutosEspera] = useState(0);
   const [reintentando, setReintentando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -116,9 +120,14 @@ export default function EsperaVideo({
         credentials: "include",
       });
       if (!res.ok) return;
-      const data = await res.json() as { estado: string; sala_video_url: string | null };
+      const data = await res.json() as {
+        estado: string;
+        sala_video_url: string | null;
+        mp_status?: string | null;
+      };
       if (data.estado) setEstado(data.estado);
       if (data.sala_video_url) setSalaUrl(data.sala_video_url);
+      setMpStatus(data.mp_status ?? null);
     } catch {
       // red error — próximo ciclo reintenta
     }
@@ -271,47 +280,73 @@ export default function EsperaVideo({
     );
   }
 
-  // ---- ESTADO: aceptada (pre-pago / procesando) ----
-  // A los 3 minutos EN ESTA PANTALLA sin confirmación, el pago quedó a medias
-  // (checkout cerrado o rechazado): decirlo y dar salida en vez del spinner
-  // eterno (caso Lucas 04/08).
-  const pagoNoCompletado =
+  // ---- ESTADO: aceptada (el médico aceptó, falta el pago) ----
+  // Mismo defecto que en la sala de espera (caso 07/08): esta pantalla mostraba
+  // "Procesando pago…" con spinner aunque no hubiera ningún pago en curso, o sea
+  // le pedía esperar a quien tenía que actuar.
+  //
+  // Tres situaciones distintas, tres pantallas distintas:
+  //  1. MP tiene el pago pero no lo acreditó (cupón / revisión / autorizado):
+  //     esperar es correcto y pedir otro pago sería cobrarle dos veces.
+  //  2. MP lo rechazó: lo sabemos ya, no hay nada que esperar.
+  //  3. Ni noticias: se mantiene la ventana de gracia de 3 min por si el webhook
+  //     está por llegar (protege contra el pago duplicado); pasada la gracia, la
+  //     pantalla pide el pago con todas las letras.
+  const situacionPago = estadoPagoConsulta(estado, mpStatus);
+  const pagoEnCamino = situacionPago === "en_camino";
+  const pagoRechazado = mpStatus === "rejected" || mpStatus === "cancelled";
+  const graciaVencida =
     procesandoDesde !== null && ahora - procesandoDesde >= 3 * 60 * 1000;
+  const faltaPagar = !pagoEnCamino && (pagoRechazado || graciaVencida);
 
   return (
     <div className="text-center">
-      <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
-        <span className="text-5xl">&#9203;</span>
+      <div
+        className="mx-auto flex h-24 w-24 items-center justify-center rounded-full"
+        style={{ backgroundColor: "rgba(186,117,23,0.10)" }}
+      >
+        <span className="text-5xl">{faltaPagar ? "💳" : "⏳"}</span>
       </div>
       <h1 className="mt-6 text-2xl font-bold text-gray-900">
-        {pagoNoCompletado ? "Tu pago no se completó" : "Procesando pago..."}
+        {faltaPagar
+          ? "Falta un paso: pagá tu consulta"
+          : pagoEnCamino
+            ? "Estamos confirmando tu pago"
+            : "Procesando pago..."}
       </h1>
       <p className="mt-2 text-gray-600">
-        {pagoNoCompletado
-          ? "El pago no llegó a confirmarse — no se te cobró nada. Podés reintentarlo o cancelar la solicitud."
-          : "Estamos verificando tu pago con Mercado Pago"}
+        {faltaPagar
+          ? `${formatNombreMedico(medicoNombre)} ya aceptó tu consulta y te atiende apenas se registre el pago. Todavía no se te cobró nada.`
+          : pagoEnCamino
+            ? "Mercado Pago todavía no acreditó el pago. No hace falta que pagues de nuevo — apenas se acredite, el médico te atiende."
+            : "Estamos verificando tu pago con Mercado Pago"}
       </p>
+
+      {/* Con el pago pendiente, el botón es lo primero y lo más grande. */}
+      {faltaPagar && (
+        <button
+          onClick={reintentarPago}
+          disabled={reintentando || cancelando}
+          className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-4 text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100 disabled:opacity-50"
+          style={{ minHeight: 56 }}
+        >
+          {reintentando ? "Abriendo el pago..." : "Pagar consulta"}
+        </button>
+      )}
 
       <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
         <div className="border-t border-gray-100 pt-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Estado</span>
             <span className="font-medium" style={{ color: "#BA7517" }}>
-              {pagoNoCompletado ? "Sin pago" : "Pendiente"}
+              {faltaPagar ? "Falta pagar" : pagoEnCamino ? "Pago en camino" : "Pendiente"}
             </span>
           </div>
         </div>
       </InfoCard>
 
-      {pagoNoCompletado ? (
-        <div className="mt-8 space-y-3">
-          <button
-            onClick={reintentarPago}
-            disabled={reintentando || cancelando}
-            className="w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
-          >
-            {reintentando ? "Abriendo el pago..." : "Reintentar pago"}
-          </button>
+      {faltaPagar ? (
+        <div className="mt-6 space-y-3">
           <button
             onClick={cancelarSolicitud}
             disabled={reintentando || cancelando}
