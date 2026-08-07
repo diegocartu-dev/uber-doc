@@ -21,6 +21,9 @@ const TIMEOUT_EXEMPT_PREFIXES = [
   "/api/",
   "/beta-access",
   "/verificar/",       // verificación pública de recetas — sin auth
+  "/ayuda",            // pedir ayuda NUNCA puede mandarte al login: el que tiene
+                       // la sesión vencida es justo el que más la necesita, y en
+                       // /auth/login no hay ningún acceso a Ayuda.
 ];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.

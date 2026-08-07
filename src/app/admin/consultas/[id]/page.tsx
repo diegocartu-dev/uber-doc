@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeft, Stethoscope, User, FileText, CircleDollarSign, Clock } from "lucide-react";
 
-// Ficha de detalle de una atención (pedido Diego 04/08, caso Hugo): toda la
+// Ficha de detalle de una atención (pedido Diego 04/08, tras un reclamo de un
+// paciente que no recibió su documentación): toda la
 // línea de tiempo, la plata, los documentos y los DATOS DE MÉDICO Y PACIENTE
 // en un solo lugar — sin bucear en la base. /admin/layout ya gatea isAdmin.
 

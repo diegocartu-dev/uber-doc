@@ -18,5 +18,45 @@ export default async function AdminMedicosPage() {
     getFlag("identidad_gate_activa"),
   ]);
 
-  return <MedicosClient medicos={medicos ?? []} gateIdentidadActiva={gateIdentidadActiva} />;
+  // Cuenta de cobros: país verificado contra Mercado Pago (caso 07/08/2026 — una
+  // cuenta de otro país cobra en otra moneda y ningún paciente argentino puede
+  // pagarle). Query APARTE del select de médicos: `site_id` puede no estar
+  // migrada todavía y PostgREST falla la query ENTERA si se nombra una columna
+  // inexistente — mezclarla dejaría el panel sin médicos.
+  //
+  // Y con el MISMO reintento sin columnas que hace el cron. Sin él, antes de la
+  // migración la query fallaba entera, `cuentasMp` quedaba vacío y TODOS los
+  // médicos con cuenta activa aparecían como "Sin cuenta conectada" — justo lo
+  // contrario de lo que la ficha tiene que contar cuando llega la alerta.
+  type CuentaMpFila = {
+    medico_id: string;
+    estado: string | null;
+    site_id?: string | null;
+    site_verificado_at?: string | null;
+  };
+  let cuentasMp: CuentaMpFila[] = [];
+  const conSite = await admin
+    .from("medicos_mp_accounts")
+    .select("medico_id, estado, site_id, site_verificado_at");
+  if (conSite.error) {
+    // Sin las columnas del país seguimos sabiendo QUIÉN tiene cuenta conectada
+    // (el dato que ya existe hoy); el país queda "sin verificar todavía".
+    const base = await admin.from("medicos_mp_accounts").select("medico_id, estado");
+    cuentasMp = (base.data ?? []) as CuentaMpFila[];
+  } else {
+    cuentasMp = (conSite.data ?? []) as CuentaMpFila[];
+  }
+  const cuentaPorMedico = new Map(cuentasMp.map((c) => [c.medico_id, c]));
+
+  const medicosConCobros = (medicos ?? []).map((m) => {
+    const cuenta = cuentaPorMedico.get(m.id);
+    return {
+      ...m,
+      mpConectado: cuenta?.estado === "activo",
+      mpSiteId: cuenta?.site_id ?? null,
+      mpSiteVerificadoAt: cuenta?.site_verificado_at ?? null,
+    };
+  });
+
+  return <MedicosClient medicos={medicosConCobros} gateIdentidadActiva={gateIdentidadActiva} />;
 }

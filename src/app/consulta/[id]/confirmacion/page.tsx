@@ -23,7 +23,9 @@ export default async function ConfirmacionPagoPage({
   // Verificar consulta del paciente
   const { data: consulta } = await supabase
     .from("consultas")
-    .select("id, especialidad, estado, medico_id, sala_video_url, created_at, canal_origen")
+    // `mp_status` distingue "aceptada sin pagar" de "pago en camino / ya pagado"
+    // (columna existente en prod y con GRANT SELECT para `authenticated`).
+    .select("id, especialidad, estado, medico_id, sala_video_url, created_at, canal_origen, mp_status")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -57,6 +59,7 @@ export default async function ConfirmacionPagoPage({
           consultaId={consultaId}
           salaVideoUrlInicial={consulta.sala_video_url}
           estadoInicial={consulta.estado}
+          mpStatusInicial={consulta.mp_status}
           medicoNombre={medico?.nombre_completo ?? ""}
           especialidad={consulta.especialidad}
           duracionConsulta={medico?.duracion_consulta ?? 20}

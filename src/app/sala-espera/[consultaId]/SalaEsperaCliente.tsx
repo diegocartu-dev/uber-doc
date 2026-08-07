@@ -2,15 +2,17 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
-import { Video, CheckCircle } from "lucide-react";
+import { Video, CheckCircle, CreditCard } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
 const POLL_INTERVAL = 5000;
 
 type Props = {
   consultaId: string;
   estado: string;
+  mpStatus?: string | null;
   medicoNombre: string;
   precio: number;
   duracion: number;
@@ -18,12 +20,23 @@ type Props = {
   posicion: number;
   tiempoEstimado: number;
   createdAt: string;
+  /**
+   * "error" | "pendiente" — lo devuelve Mercado Pago en back_urls.
+   * "error": el checkout falló y no se cobró nada.
+   * "pendiente": el pago existe pero no está acreditado (cupón, revisión).
+   */
+  resultadoPago?: string | null;
   isDev?: boolean;
 };
 
-// A los 10 minutos sin aceptación se le dice al paciente la verdad (caso Lucas
-// 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
+// A los 10 minutos sin aceptación se le dice al paciente la verdad (caso de un
+// paciente 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
 const MINUTOS_AVISO_DEMORA = 10;
+
+// Cuánto le creemos al `?pago=pendiente` de Mercado Pago mientras el webhook no
+// escribe `mp_status`. Acotado a propósito: si MP no confirma nada en ese rato,
+// volvemos a ofrecer el pago en vez de dejar al paciente sin ninguna salida.
+const MS_CONFIANZA_PAGO_PENDIENTE = 3 * 60 * 1000;
 
 function formatPrecio(precio: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -36,6 +49,7 @@ function formatPrecio(precio: number) {
 export default function SalaEsperaCliente({
   consultaId,
   estado: estadoInicial,
+  mpStatus: mpStatusInicial = null,
   medicoNombre,
   precio,
   duracion,
@@ -43,9 +57,11 @@ export default function SalaEsperaCliente({
   posicion: posicionInicial,
   tiempoEstimado: tiempoInicial,
   createdAt,
+  resultadoPago = null,
   isDev = false,
 }: Props) {
   const [estado, setEstado] = useState(estadoInicial);
+  const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [pagando, setPagando] = useState(false);
@@ -57,6 +73,23 @@ export default function SalaEsperaCliente({
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
+
+  // `?pago=pendiente` lo devuelve Mercado Pago (back_url `redirectPending` de
+  // crear-v2) cuando el pago EXISTE pero todavía no está acreditado: cupón de
+  // Rapipago / Pago Fácil, pago en revisión, tarjeta autorizada sin capturar.
+  // Se recibía, se tipaba… y se tiraba: hasta que el webhook escribiera
+  // `mp_status` la pantalla clasificaba la consulta como "falta pagar" y le
+  // ofrecía el botón grande de pagar — o sea, riesgo de pago DOBLE, justo lo
+  // que esta pantalla vino a evitar. Es la única señal que tenemos antes del
+  // webhook, así que le creemos, pero por un rato acotado.
+  const [confiarEnPagoPendienteUrl, setConfiarEnPagoPendienteUrl] = useState(
+    resultadoPago === "pendiente"
+  );
+  useEffect(() => {
+    if (!confiarEnPagoPendienteUrl) return;
+    const t = setTimeout(() => setConfiarEnPagoPendienteUrl(false), MS_CONFIANZA_PAGO_PENDIENTE);
+    return () => clearTimeout(t);
+  }, [confiarEnPagoPendienteUrl]);
 
   // Desbloquear audio al primer gesto del usuario (iOS/Android requieren
   // interacción antes de reproducir sonido). Sin esto, soundConsultaAceptada
@@ -80,7 +113,11 @@ export default function SalaEsperaCliente({
         credentials: "include",
       });
       if (!res.ok) return;
-      const data = await res.json() as { estado: string; sala_video_url: string | null };
+      const data = await res.json() as {
+        estado: string;
+        sala_video_url: string | null;
+        mp_status?: string | null;
+      };
 
       if (
         (data.estado === "aceptada" || data.estado === "pagada" || data.estado === "en_curso") &&
@@ -95,6 +132,7 @@ export default function SalaEsperaCliente({
       }
       prevEstadoRef.current = data.estado;
       setEstado(data.estado);
+      setMpStatus(data.mp_status ?? null);
       if (data.sala_video_url) {
         salaVideoUrlRef.current = data.sala_video_url;
         setSalaVideoUrl(data.sala_video_url);
@@ -143,11 +181,75 @@ export default function SalaEsperaCliente({
     setConfirmandoCancelar(false);
   }
 
-  const aceptada = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
+  // Pago real (crear-v2) con fallback a simulación para cuentas de test.
+  async function pagarConsulta() {
+    setPagando(true);
+    setErrorPago(null);
+    try {
+      // Intentar pago real con Mercado Pago
+      const mpRes = await fetch("/api/pago/crear-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tipo: "consulta", id: consultaId }),
+      });
+
+      if (mpRes.ok) {
+        const mpData = await mpRes.json();
+        if (mpData.init_point) {
+          // Redirigir al checkout de Mercado Pago
+          window.location.href = mpData.init_point;
+          return;
+        }
+      }
+
+      // Si pago marketplace no está habilitado (503) o falla, intentar simulación
+      const simRes = await fetch("/api/pago/simular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ consultaId }),
+      });
+      if (simRes.ok) {
+        window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
+        return;
+      }
+
+      // Ambos fallaron — avisar SIEMPRE (antes fallaba en silencio y el
+      // paciente no sabía si pagó o no)
+      setErrorPago("No pudimos procesar el pago. Reintentá en unos segundos — si sigue fallando, escribinos a soporte@docto.com.ar.");
+      setPagando(false);
+    } catch {
+      setErrorPago("No pudimos procesar el pago. Revisá tu conexión y reintentá.");
+      setPagando(false);
+    }
+  }
+
+  // El médico ya tomó la consulta (cualquiera sea la situación del pago): sirve
+  // para dejar de mostrar la cola y el aviso de demora.
+  const medicoAcepto = estado === "aceptada" || estado === "pagada" || estado === "en_curso";
+
+  // Situación del pago. ANTES esto no existía: una única variable `aceptada`
+  // mezclaba "aceptada sin pagar" con "pagada" y "en_curso", y por eso la
+  // pantalla le decía al paciente que esperara al médico cuando en realidad el
+  // sistema lo estaba esperando a él (caso real 07/08: veinte minutos parado
+  // ahí, con tres intentos de pago).
+  const pagoSegunDb = estadoPagoConsulta(estado, mpStatus);
+  // Si la DB todavía no sabe NADA del pago (`mp_status` null) pero MP nos mandó
+  // de vuelta con `?pago=pendiente`, mandamos la señal de MP: esperar es lo
+  // correcto y volver a pedir el pago sería pedirle que pague dos veces. Se
+  // autocorrige solo: apenas el poll (5 s) trae un `mp_status`, manda la DB.
+  const pago =
+    pagoSegunDb === "falta_pagar" && mpStatus == null && confiarEnPagoPendienteUrl
+      ? "en_camino"
+      : pagoSegunDb;
+  const faltaPagar = medicoAcepto && !salaVideoUrl && pago === "falta_pagar";
+  const pagoEnCamino = medicoAcepto && !salaVideoUrl && pago === "en_camino";
+  const pagoConfirmado = medicoAcepto && pago === "confirmado";
 
   // La solicitud murió (la canceló el paciente, el sistema o el médico no la tomó):
   // decirlo con todas las letras — antes esta pantalla seguía mostrando el spinner
-  // de "sala de espera" para siempre (caso Lucas 04/08, esperó más de una hora).
+  // de "sala de espera" para siempre (caso 04/08: un paciente esperó más de una hora).
   if ((estado === "cancelada" || estado === "rechazada") && !salaVideoUrl) {
     return (
       <div className="text-center">
@@ -170,16 +272,50 @@ export default function SalaEsperaCliente({
     );
   }
 
+  // La consulta YA TERMINÓ. Sin esta rama, `completada` no matcheaba ninguna
+  // condición (`medicoAcepto` no la incluye) y esta pantalla mostraba spinner +
+  // "Esperando que el médico acepte tu consulta..." + posición en la cola +
+  // "No cierres esta pestaña" sobre una consulta cerrada. Se llega apretando
+  // "atrás" al terminar, o desde el historial del navegador.
+  if (estado === "completada") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/10">
+          <CheckCircle size={40} strokeWidth={1.75} style={{ color: "#1D9E75" }} />
+        </div>
+        <h1 className="mt-6 text-xl font-bold text-gray-900">Consulta finalizada</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Tu consulta con {formatNombreMedico(medicoNombre)} ya terminó.
+        </p>
+        {/* Sin prometer documentos: si la cerró el sistema puede no haber ninguno. */}
+        <p className="mt-3 text-xs text-gray-500">
+          Si el médico te dejó recetas u órdenes, las encontrás en Mis documentos.
+        </p>
+        <a
+          href="/documentos"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Ver mis documentos
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="text-center">
-      {/* Animación de espera / check */}
+      {/* Ícono de estado. En "falta pagar" NO va spinner ni check verde: ambos
+          le dicen al paciente "quedate quieto", que es justo lo contrario. */}
       <div
         className="mx-auto flex h-24 w-24 items-center justify-center rounded-full"
-        style={{ backgroundColor: "var(--color-primary-soft)" }}
+        style={{
+          backgroundColor: faltaPagar ? "rgba(186,117,23,0.10)" : "var(--color-primary-soft)",
+        }}
       >
         {salaVideoUrl ? (
           <Video size={40} strokeWidth={1.75} style={{ color: "var(--color-info)" }} />
-        ) : aceptada ? (
+        ) : faltaPagar ? (
+          <CreditCard size={40} strokeWidth={1.75} style={{ color: "#BA7517" }} />
+        ) : pagoConfirmado ? (
           <CheckCircle size={40} strokeWidth={1.75} style={{ color: "var(--color-success)" }} />
         ) : (
           <svg
@@ -208,18 +344,58 @@ export default function SalaEsperaCliente({
       <h1 className="mt-6 text-xl font-bold text-gray-900">
         {salaVideoUrl
           ? "¡El médico inició la videollamada!"
-          : aceptada
-            ? "¡El médico aceptó tu consulta!"
-            : "Estás en la sala de espera"}
+          : faltaPagar
+            ? "Falta un paso: pagá tu consulta"
+            : pagoEnCamino
+              ? "Estamos confirmando tu pago"
+              : pagoConfirmado
+                ? "¡El médico aceptó tu consulta!"
+                : "Estás en la sala de espera"}
       </h1>
 
       <p className="mt-2 text-sm text-gray-600">
         {salaVideoUrl
           ? "Ya podés unirte a la consulta"
-          : aceptada
-            ? "Esperando que el médico inicie la videollamada..."
-            : `Esperando que el ${formatNombreMedico(medicoNombre)} acepte tu consulta...`}
+          : faltaPagar
+            ? `${formatNombreMedico(medicoNombre)} ya aceptó tu consulta y te atiende apenas se registre el pago.`
+            : pagoEnCamino
+              ? "Mercado Pago todavía no nos confirmó el pago. No hace falta que pagues de nuevo."
+              : pagoConfirmado
+                ? "Esperando que el médico inicie la videollamada..."
+                : `Esperando que el ${formatNombreMedico(medicoNombre)} acepte tu consulta...`}
       </p>
+
+      {/* EL botón de la pantalla cuando falta pagar: grande, arriba, azul.
+          Antes vivía al final, chiquito y debajo del texto que pedía esperar. */}
+      {faltaPagar && (
+        <>
+          {resultadoPago === "error" && (
+            <div
+              className="mt-6 rounded-xl p-4 text-left text-sm"
+              style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
+            >
+              <p className="font-semibold">El pago anterior no se completó.</p>
+              <p className="mt-1">No se te cobró nada. Podés intentarlo de nuevo acá abajo.</p>
+            </div>
+          )}
+          <button
+            disabled={pagando}
+            onClick={pagarConsulta}
+            className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-4 text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100 disabled:opacity-50"
+            style={{ minHeight: 56 }}
+          >
+            {pagando ? "Abriendo el pago..." : `Pagar consulta · ${formatPrecio(precio)}`}
+          </button>
+          {errorPago && (
+            <p className="mt-3 text-sm font-medium" style={{ color: "#E24B4A" }}>
+              {errorPago}
+            </p>
+          )}
+          <p className="mt-2 text-xs text-gray-500">
+            Pago seguro con Mercado Pago. Hasta que no pagues, la consulta no arranca.
+          </p>
+        </>
+      )}
 
       {/* Info card */}
       <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6 text-left shadow-sm">
@@ -246,21 +422,28 @@ export default function SalaEsperaCliente({
                 className={`font-medium ${
                   salaVideoUrl
                     ? "text-[#378ADD]"
-                    : aceptada
+                    : pagoConfirmado
                       ? "text-[#1D9E75]"
                       : "text-[#BA7517]"
                 }`}
               >
                 {salaVideoUrl
                   ? "Videollamada lista"
-                  : aceptada
-                    ? "Aceptada"
-                    : "Esperando"}
+                  : faltaPagar
+                    ? "Falta pagar"
+                    : pagoEnCamino
+                      ? "Pago en camino"
+                      : pagoConfirmado
+                        ? "Aceptada y pagada"
+                        : "Esperando"}
               </span>
             </div>
           </div>
 
-          {!aceptada && (
+          {/* La cola y el tiempo estimado solo tienen sentido mientras el médico
+              no aceptó. Con la consulta aceptada y sin pagar, lo único que
+              importa es el pago. */}
+          {!medicoAcepto && (
             <>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Posición en la cola</span>
@@ -288,69 +471,11 @@ export default function SalaEsperaCliente({
         </a>
       )}
 
-      {/* Botón de pago — intenta pago real (crear-v2), fallback a simulación */}
-      {aceptada && !salaVideoUrl && estado !== "pagada" && estado !== "en_curso" && (
-        <button
-          disabled={pagando}
-          onClick={async () => {
-            setPagando(true);
-            setErrorPago(null);
-            try {
-              // Intentar pago real con Mercado Pago
-              const mpRes = await fetch("/api/pago/crear-v2", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ tipo: "consulta", id: consultaId }),
-              });
-
-              if (mpRes.ok) {
-                const mpData = await mpRes.json();
-                if (mpData.init_point) {
-                  // Redirigir al checkout de Mercado Pago
-                  window.location.href = mpData.init_point;
-                  return;
-                }
-              }
-
-              // Si pago marketplace no está habilitado (503) o falla, intentar simulación
-              const simRes = await fetch("/api/pago/simular", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ consultaId }),
-              });
-              if (simRes.ok) {
-                window.location.href = `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/confirmacion`;
-                return;
-              }
-
-              // Ambos fallaron — avisar SIEMPRE (antes fallaba en silencio y el
-              // paciente no sabía si pagó o no)
-              setErrorPago("No pudimos procesar el pago. Reintentá en unos segundos — si sigue fallando, escribinos a soporte@docto.com.ar.");
-              setPagando(false);
-            } catch {
-              setErrorPago("No pudimos procesar el pago. Revisá tu conexión y reintentá.");
-              setPagando(false);
-            }
-          }}
-          className="mt-4 w-full rounded-xl bg-[#378ADD] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] disabled:opacity-50"
-        >
-          {pagando ? "Procesando..." : "Pagar consulta"}
-        </button>
-      )}
-
-      {errorPago && (
-        <p className="mt-2 text-sm font-medium" style={{ color: "#E24B4A" }}>
-          {errorPago}
-        </p>
-      )}
-
       {/* Estudios del paciente — solo después de que el médico acepte */}
-      {aceptada && <EstudiosPaciente consultaId={consultaId} />}
+      {medicoAcepto && <EstudiosPaciente consultaId={consultaId} />}
 
       {/* Aviso de demora: a los 10 min sin aceptación, decir la verdad y dar salida */}
-      {!aceptada && minutosEspera >= MINUTOS_AVISO_DEMORA && (
+      {!medicoAcepto && minutosEspera >= MINUTOS_AVISO_DEMORA && (
         <div
           className="mt-6 rounded-xl p-4 text-left text-sm"
           style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
@@ -410,9 +535,13 @@ export default function SalaEsperaCliente({
         </div>
       )}
 
-      <p className="mt-6 text-xs text-gray-400">
-        No cierres esta pestaña
-      </p>
+      {/* "No cierres esta pestaña" es un mensaje de espera: no va cuando lo que
+          hace falta es que el paciente actúe. */}
+      {!faltaPagar && (
+        <p className="mt-6 text-xs text-gray-400">
+          No cierres esta pestaña
+        </p>
+      )}
     </div>
   );
 }

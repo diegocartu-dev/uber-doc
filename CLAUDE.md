@@ -156,3 +156,20 @@ Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env va
 - Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
 - Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
 - **Camino al lanzamiento:** `docs/CAMINO_A_LANZAMIENTO_V1.md` — **COMPLETADO 10/06/2026**. Prueba real de pagos OK, registro abierto, cobro real general ON. Queda: prueba con 2 testers externos (`docs/PRUEBA_PRE_LANZAMIENTO.md`) y separación GREBA→SRL (las comisiones hoy caen en GREBA).
+
+## Repositorio PÚBLICO — nunca publicar datos de personas reales
+`github.com/diegocartu-dev/uber-doc` es **público**. En código, comentarios,
+mensajes de commit, PRs, comentarios de PR e issues **NUNCA** van: nombres de
+pacientes o médicos reales, emails, teléfonos, DNI/CUIT, IDs de consultas o
+turnos, montos cobrados, ni resultados de consultas a la base de producción
+(conteos de filas, estados de médicos, etc.).
+
+Los casos reales se describen en genérico: "una paciente", "un médico", "un
+reclamo del 01/08". El detalle con nombres vive en la conversación con Diego y
+en el panel admin, nunca en el repo.
+
+Vale también para los agentes: todo prompt de trabajo delegado debe incluir esta
+regla. Incidente que la motiva (07/08/2026): agentes publicaron en PRs el nombre
+de un paciente con el monto que pagó, y el DNI real de un médico quedó escrito
+en `docs/pruebas/`. Corregido, pero el historial de git conserva las versiones
+viejas: por eso lo importante es no escribirlo nunca.
