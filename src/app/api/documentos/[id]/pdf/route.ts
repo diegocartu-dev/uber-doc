@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import type { FirmaDigitalPDF, DocumentoPDF } from "@/lib/pdf/receta";
+import { identidadDesdeJSONB } from "@/lib/firma/identidad";
 
 /**
  * Valida defensivamente el JSONB de firma antes de mostrarlo en el PDF.
@@ -128,6 +129,22 @@ export async function GET(
     obraSocialNombre = paciente.obra_social_otra;
   }
 
+  // ─── Identidad impresa ──────────────────────────────────────────────────
+  // Si el documento está SELLADO, todo lo que se imprime de `medicos` y
+  // `pacientes` sale del snapshot congelado dentro de la firma, no de las
+  // tablas vivas.
+  //
+  // Por qué (corrección post-revisión 07/08/2026): el nombre del paciente, el
+  // CUIL, la obra social, el nº de afiliado y hasta el nombre del médico son
+  // editables por sus dueños desde /mis-datos DESPUÉS de emitido, y el PDF se
+  // regenera en cada request. Un certificado de reposo emitido para "Juan Pérez"
+  // volvía a salir con otro nombre, el mismo QR y la página pública en verde
+  // diciendo "su contenido no fue alterado desde entonces".
+  //
+  // Documentos sin sello (los 114 históricos): siguen leyendo datos vivos —
+  // no hay snapshot que respetar y el PDF ya declara que no tiene sello.
+  const identidad = firma ? identidadDesdeJSONB((docFirma?.firma_digital as { identidad?: unknown } | null)?.identidad) : null;
+
   const documento = {
     id: doc.id,
     tipo: doc.tipo as DocumentoPDF["tipo"],
@@ -136,21 +153,33 @@ export async function GET(
     tratamiento: doc.tratamiento ?? null,
     dias_reposo: doc.dias_reposo ?? null,
     created_at: doc.created_at,
-    medico_nombre: medico.nombre_completo,
-    medico_especialidad: medico.especialidad ?? "",
-    medico_matricula: `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
-    medico_domicilio: medico.domicilio_consultorio || medico.domicilio || "",
-    paciente_nombre: paciente.nombre_completo,
-    paciente_dni: paciente.dni ?? "",
-    paciente_cuil: paciente.cuil ?? "",
-    paciente_sexo_dni: paciente.sexo_dni ?? null,
-    paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
-    paciente_tiene_cobertura: paciente.tiene_cobertura ?? false,
-    paciente_obra_social: obraSocialNombre,
-    paciente_nro_afiliado: paciente.nro_afiliado ?? null,
-    paciente_plan_obra_social: paciente.plan_obra_social ?? null,
+    medico_nombre: identidad ? identidad.medico_nombre : medico.nombre_completo,
+    medico_especialidad: identidad ? identidad.medico_especialidad : medico.especialidad ?? "",
+    medico_matricula: identidad
+      ? identidad.medico_matricula
+      : `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
+    medico_domicilio: identidad
+      ? identidad.medico_domicilio
+      : medico.domicilio_consultorio || medico.domicilio || "",
+    paciente_nombre: identidad ? identidad.paciente_nombre : paciente.nombre_completo,
+    paciente_dni: identidad ? identidad.paciente_dni : paciente.dni ?? "",
+    paciente_cuil: identidad ? identidad.paciente_cuil : paciente.cuil ?? "",
+    paciente_sexo_dni: identidad ? identidad.paciente_sexo_dni : paciente.sexo_dni ?? null,
+    paciente_fecha_nacimiento: identidad
+      ? identidad.paciente_fecha_nacimiento
+      : paciente.fecha_nacimiento ?? null,
+    paciente_tiene_cobertura: identidad
+      ? identidad.paciente_tiene_cobertura
+      : paciente.tiene_cobertura ?? false,
+    paciente_obra_social: identidad ? identidad.paciente_obra_social : obraSocialNombre,
+    paciente_nro_afiliado: identidad ? identidad.paciente_nro_afiliado : paciente.nro_afiliado ?? null,
+    paciente_plan_obra_social: identidad
+      ? identidad.paciente_plan_obra_social
+      : paciente.plan_obra_social ?? null,
     firma,
-    medico_firma_manuscrita_path: medico.firma_manuscrita_url ?? null,
+    medico_firma_manuscrita_path: identidad
+      ? identidad.medico_firma_manuscrita_path
+      : medico.firma_manuscrita_url ?? null,
   };
 
   try {

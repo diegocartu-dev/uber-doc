@@ -17,18 +17,42 @@
 // `firma_logs` guarda el sustrato completo de identificación (identidad
 // biométrica, REFEPS, sesión, T&C, IP, user-agent) y va encadenado.
 //
+// El hash cubre el contenido clínico Y la identidad impresa (nombre del
+// paciente, CUIL, obra social, matrícula del médico…), congelada al firmar en
+// `firma_digital.identidad` — ver `./identidad.ts`. Sin eso, la firma afirmaba
+// integridad sobre datos que sus dueños pueden editar después de emitido.
+//
 // REGLA DURA: la firma NUNCA bloquea la entrega del documento. Si falla, el
 // documento queda guardado y entregado, sin sello y marcado como tal.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashSHA256, firmar, verificar, desencriptarClavePrivada } from "./crypto";
 import { canonicalJSON } from "./receta";
+import {
+  construirIdentidadDocumento,
+  identidadDesdeJSONB,
+  type IdentidadDocumento,
+} from "./identidad";
 
 // Consistente con el flujo de receta (OTP_EXPIRY_MS).
 const OTP_VENTANA_MS = 5 * 60 * 1000;
 
 const ALGORITMO = "RSA-SHA256";
 const REINTENTOS_CADENA = 4;
+
+/**
+ * Únicos tipos que se sellan: los documentos clínicos que el médico redactó y
+ * tuvo a la vista al cerrar. `documentos` también recibe filas de tracking que
+ * NO son documentos revisados (p. ej. `documento_medico`, que solo registra
+ * "Documento enviado: archivo.pdf" cuando el médico manda un adjunto por mail):
+ * firmarlas haría que /verificar diga "Documento verificado" sobre un nombre de
+ * archivo que nadie revisó como documento firmado.
+ */
+export const TIPOS_FIRMABLES = ["receta", "indicaciones", "certificado", "orden"] as const;
+
+export function esTipoFirmable(tipo: string | null | undefined): boolean {
+  return !!tipo && (TIPOS_FIRMABLES as readonly string[]).includes(tipo);
+}
 
 type DocFirmable = {
   id: string;
@@ -57,8 +81,15 @@ const COLUMNAS_FIRMABLES =
  * hash se podría correr la ventana de reposo sin romper la firma.
  * `id` entra al hash para que una firma no pueda transplantarse a otro
  * documento de contenido idéntico.
+ *
+ * `identidad` entra al hash (corrección post-revisión 07/08/2026): los IDs de
+ * paciente y médico no son lo que el PDF imprime. Imprime nombre, CUIL, obra
+ * social, matrícula — datos vivos y editables por sus dueños después de emitido.
+ * Sin el snapshot dentro del hash, cambiarle el nombre al paciente producía un
+ * PDF nuevo con el mismo QR y la página pública seguía en verde. Ver
+ * `./identidad.ts`.
  */
-function contenidoFirmable(doc: DocFirmable) {
+function contenidoFirmable(doc: DocFirmable, identidad: IdentidadDocumento | null) {
   return {
     id: doc.id,
     tipo: doc.tipo,
@@ -69,6 +100,7 @@ function contenidoFirmable(doc: DocFirmable) {
     paciente_id: doc.paciente_id,
     medico_id: doc.medico_id,
     created_at: doc.created_at,
+    identidad: identidad ?? null,
   };
 }
 
@@ -108,7 +140,7 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
   const supabase = createAdminClient();
 
   for (let intento = 0; intento < REINTENTOS_CADENA; intento++) {
-    const { data: ultimo } = await supabase
+    const { data: ultimo, error: errorPunta } = await supabase
       .from("firma_logs")
       .select("log_hash")
       .eq("medico_id", log.medico_id)
@@ -117,6 +149,16 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
       .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // "No pude leer la punta" NO es "no hay punta": si se confunden, se usa el
+    // hash génesis, que ya existe → unique_violation en los 4 reintentos y la
+    // firma se revierte sin que nadie sepa por qué. Se corta acá, con la causa.
+    if (errorPunta) {
+      return {
+        ok: false,
+        error: `${pistaMigracion(errorPunta)}No se pudo leer la cadena de firmas: ${errorPunta.message}`,
+      };
+    }
 
     const logAnteriorHash = ultimo?.log_hash ?? genesisCadena(log.medico_id);
     const logHash = hashSHA256(canonicalJSON({ ...log, log_anterior_hash: logAnteriorHash }));
@@ -132,10 +174,26 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
     // 23505 = unique_violation → otra firma se metió en la cadena. Reintentar.
     if (error.code === "23505") continue;
 
-    return { ok: false, error: error.message };
+    return { ok: false, error: `${pistaMigracion(error)}${error.message}` };
   }
 
   return { ok: false, error: "No se pudo encadenar el registro de firma (concurrencia)" };
+}
+
+/**
+ * Si el código sale a producción ANTES de la migración 20260807, el insert en
+ * `firma_logs` falla por columna inexistente (42703 / PGRST204) o por
+ * `otp_id NOT NULL` (23502) y TODOS los documentos nuevos salen "sin sello".
+ * El error crudo de PostgREST no lo dice; este prefijo sí, y el cron
+ * `documentos-sin-sello` avisa por mail dentro de la hora.
+ */
+function pistaMigracion(error: { code?: string; message?: string }): string {
+  const codigo = error.code ?? "";
+  const esColumnaFaltante = codigo === "42703" || codigo === "PGRST204";
+  const esOtpObligatorio = codigo === "23502" && (error.message ?? "").includes("otp_id");
+  return esColumnaFaltante || esOtpObligatorio
+    ? "MIGRACIÓN FALTANTE (aplicar supabase/migrations/20260807_firma_por_sesion.sql): "
+    : "";
 }
 
 /**
@@ -146,12 +204,13 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
  */
 async function sellarDocumento(
   doc: DocFirmable,
+  identidad: IdentidadDocumento,
   claves: { id: string; clave_privada_enc: string },
   log: Omit<LogFirma, "hash" | "firmado_at" | "algoritmo" | "clave_id" | "documento_id" | "receta_id" | "medico_id">
 ): Promise<FirmaResult> {
   const supabase = createAdminClient();
 
-  const hash = hashSHA256(canonicalJSON(contenidoFirmable(doc)));
+  const hash = hashSHA256(canonicalJSON(contenidoFirmable(doc, identidad)));
   const clavePrivada = desencriptarClavePrivada(claves.clave_privada_enc);
   const firma = firmar(hash, clavePrivada);
   // Reloj del SERVIDOR, UTC. Nunca del cliente.
@@ -166,6 +225,9 @@ async function sellarDocumento(
     metodo_atribucion: log.metodo_atribucion,
     otp_id: log.otp_id,
     clave_id: claves.id,
+    // Identidad impresa, congelada y cubierta por el hash. El PDF de un
+    // documento sellado se arma DESDE acá, no desde las tablas vivas.
+    identidad,
   };
 
   // Guard `is firma_digital null` → evita doble firma (TOCTOU).
@@ -195,17 +257,26 @@ async function sellarDocumento(
   if (!logResult.ok) {
     // Sin log no hay defensa: preferimos "sin sello" (verdadero) antes que una
     // firma que no podríamos acreditar. Revertimos solo si sigue siendo NUESTRA firma.
-    const { error: revertError } = await supabase
+    //
+    // `.select("id")`: sin él, un UPDATE que no matchea ninguna fila devuelve
+    // `error: null` y el invariante "documento firmado ⇔ fila en firma_logs" se
+    // rompía EN SILENCIO — justo el estado que requiere corrección manual.
+    const { data: revertidas, error: revertError } = await supabase
       .from("documentos")
       .update({ firma_digital: null })
       .eq("id", doc.id)
-      .eq("firma_digital->>hash", hash);
+      .eq("firma_digital->>hash", hash)
+      .select("id");
 
     console.error("[firma-doc] firma revertida: no se pudo escribir firma_logs:", logResult.error);
-    if (revertError) {
+
+    if (revertError || !revertidas || revertidas.length === 0) {
       // Estado a corregir a mano: documento sellado sin registro de no-repudio.
+      const causa = revertError
+        ? `revert falló: ${revertError.message}`
+        : "el UPDATE de revert no alcanzó ninguna fila";
       console.error(
-        `[firma-doc] ALERTA: documento ${doc.id} quedó con firma_digital SIN firma_logs (revert falló: ${revertError.message})`
+        `[firma-doc] ALERTA: documento ${doc.id} puede haber quedado con firma_digital SIN firma_logs (${causa})`
       );
     }
     return { ok: false, error: `No se pudo registrar la firma: ${logResult.error}` };
@@ -253,6 +324,9 @@ export async function firmarDocumento(
   if (!doc) return { ok: false, error: "Documento no encontrado" };
   if (doc.medico_id !== medicoId) return { ok: false, error: "No autorizado" };
   if (doc.firma_digital) return { ok: false, error: "Documento ya firmado" };
+  if (!esTipoFirmable(doc.tipo)) {
+    return { ok: false, error: `Tipo no firmable: ${doc.tipo}` };
+  }
   if (!doc.consulta_id && !doc.turno_id) {
     return { ok: false, error: "Documento sin consulta ni turno asociado" };
   }
@@ -275,14 +349,21 @@ export async function firmarDocumento(
 
   if (!claves) return { ok: false, error: "Médico sin claves de firma activas" };
 
+  // 5. Congelar la identidad que el PDF imprime. Sin snapshot NO se firma: un
+  //    sello sobre datos vivos afirmaría integridad que no cubre.
+  const identidad = await construirIdentidadDocumento(medicoId, doc.paciente_id);
+  if (!identidad) {
+    return { ok: false, error: "No se pudo congelar la identidad del documento" };
+  }
+
   const firmante = await snapshotFirmante(medicoId);
   const contexto = await contextoDocumento(doc, {
     consulta_id: doc.consulta_id,
     turno_id: doc.turno_id,
   });
 
-  // 5. Firmar + persistir + loguear.
-  const resultado = await sellarDocumento(doc, claves, {
+  // 6. Firmar + persistir + loguear.
+  const resultado = await sellarDocumento(doc, identidad, claves, {
     metodo_atribucion: "otp",
     otp_id: otpId,
     ip: meta.ip,
@@ -293,7 +374,7 @@ export async function firmarDocumento(
 
   if (!resultado.ok) return resultado;
 
-  // 6. Consumir OTP (one-time-use, atómico vía guards .is null).
+  // 7. Consumir OTP (one-time-use, atómico vía guards .is null).
   const { error: otpConsumoError } = await supabase
     .from("otp_firma")
     .update({ consumido_para_documento_id: documentoId })
@@ -342,6 +423,9 @@ export async function firmarDocumentoPorSesion(
   if (!doc) return { ok: false, error: "Documento no encontrado" };
   if (doc.medico_id !== medicoId) return { ok: false, error: "No autorizado" };
   if (doc.firma_digital) return { ok: false, error: "Documento ya firmado" };
+  if (!esTipoFirmable(doc.tipo)) {
+    return { ok: false, error: `Tipo no firmable: ${doc.tipo}` };
+  }
   if (!doc.consulta_id && !doc.turno_id) {
     return { ok: false, error: "Documento sin consulta ni turno asociado" };
   }
@@ -355,13 +439,19 @@ export async function firmarDocumentoPorSesion(
 
   if (!claves) return { ok: false, error: "Médico sin claves de firma activas" };
 
+  // Identidad impresa congelada antes de firmar (ver ./identidad.ts).
+  const identidad = await construirIdentidadDocumento(medicoId, doc.paciente_id);
+  if (!identidad) {
+    return { ok: false, error: "No se pudo congelar la identidad del documento" };
+  }
+
   const firmante = await snapshotFirmante(medicoId);
   const contexto = await contextoDocumento(doc, {
     consulta_id: doc.consulta_id,
     turno_id: doc.turno_id,
   });
 
-  return sellarDocumento(doc, claves, {
+  return sellarDocumento(doc, identidad, claves, {
     metodo_atribucion: "sesion_medico",
     otp_id: null,
     ip: atribucion.ip,
@@ -393,17 +483,33 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
   if (!medico) return { medico_id: medicoId, snapshot_incompleto: true };
 
   // Aceptación de T&C del médico: es donde consta que su click constituye su
-  // firma electrónica. Si no existe, se registra explícitamente que no existe.
+  // firma electrónica. HOY NO EXISTE — verificado en producción 07/08/2026:
+  // `aceptaciones_legales` solo tiene filas `datos_sensibles` (1.108), ningún
+  // camino de la app inserta `tyc_medico` y `versiones_textos_legales` no tiene
+  // esa versión. O sea: este bloque va a devolver `null` en el 100% de las
+  // firmas hasta que exista el texto y el punto de aceptación.
+  //
+  // Es una decisión de producto/legal pendiente de Diego, no un olvido: sin ese
+  // consentimiento documentado la atribución por sesión es más débil (dictamen
+  // 07/08/2026, punto 3). Mientras no exista, el log registra la constancia
+  // explícita de que no existe MÁS las aceptaciones que el médico sí firmó, para
+  // que la defensa no arranque de cero.
   let tycMedico: Record<string, unknown> | null = null;
+  let aceptacionesRegistradas: { tipo: string; aceptado_at: string }[] = [];
   if (medico.user_id) {
-    const { data: aceptacion } = await supabase
+    const { data: todas } = await supabase
       .from("aceptaciones_legales")
-      .select("id, version_id, created_at, ip_address, user_agent")
+      .select("id, tipo, version_id, created_at, ip_address, user_agent")
       .eq("user_id", medico.user_id)
-      .eq("tipo", "tyc_medico")
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(20);
+
+    aceptacionesRegistradas = (todas ?? []).map((a) => ({
+      tipo: a.tipo as string,
+      aceptado_at: a.created_at as string,
+    }));
+
+    const aceptacion = (todas ?? []).find((a) => a.tipo === "tyc_medico");
 
     if (aceptacion) {
       const { data: version } = await supabase
@@ -441,6 +547,8 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
     es_cuenta_test: medico.es_cuenta_test ?? false,
     tyc_medico: tycMedico,
     tyc_medico_registrada: tycMedico !== null,
+    // Qué SÍ aceptó el médico, aunque no exista todavía el T&C específico de firma.
+    aceptaciones_registradas: aceptacionesRegistradas,
   };
 }
 
@@ -500,6 +608,12 @@ export type VerificacionDocumento = {
     firmado_at: string;
     metodo_atribucion: string | null;
   } | null;
+  /**
+   * Firmante TAL COMO QUEDÓ CONGELADO en la firma. La página pública lo prefiere
+   * a la fila viva de `medicos`: si el médico se cambió el nombre después, el
+   * documento y la verificación tienen que seguir diciendo lo mismo.
+   */
+  firmante: { nombre: string; especialidad: string; matricula: string } | null;
 };
 
 /**
@@ -516,8 +630,12 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     .eq("id", documentoId)
     .maybeSingle<DocFirmable & { firma_digital: unknown }>();
 
-  if (!doc) return { estado: "no_encontrado", medico_id: null, datos: null };
-  if (!doc.firma_digital) return { estado: "sin_sello", medico_id: doc.medico_id, datos: null };
+  if (!doc) {
+    return { estado: "no_encontrado", medico_id: null, datos: null, firmante: null };
+  }
+  if (!doc.firma_digital) {
+    return { estado: "sin_sello", medico_id: doc.medico_id, datos: null, firmante: null };
+  }
 
   const fd = doc.firma_digital as {
     hash: string;
@@ -527,7 +645,19 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     medico_id: string;
     metodo_atribucion?: string;
     clave_id?: string;
+    identidad?: unknown;
   };
+
+  // Snapshot congelado: entra al hash, así que si alguien lo edita en la base
+  // el recálculo no reproduce la firma y el estado pasa a "alterada".
+  const identidad = identidadDesdeJSONB(fd.identidad);
+  const firmante = identidad
+    ? {
+        nombre: identidad.medico_nombre,
+        especialidad: identidad.medico_especialidad,
+        matricula: identidad.medico_matricula,
+      }
+    : null;
 
   // Clave que firmó: la del log (clave_id), con fallback a la registrada en la
   // propia firma y, por último, a la última clave conocida del médico.
@@ -560,7 +690,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     clavePublica = c?.clave_publica ?? null;
   }
 
-  const hashActual = hashSHA256(canonicalJSON(contenidoFirmable(doc)));
+  const hashActual = hashSHA256(canonicalJSON(contenidoFirmable(doc, identidad)));
   const alterada = hashActual !== fd.hash;
 
   const datos = {
@@ -573,10 +703,10 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
 
   if (!clavePublica) {
     // Hay sello pero no podemos recuperar la clave: no afirmamos validez.
-    return { estado: "invalida", medico_id: fd.medico_id, datos };
+    return { estado: "invalida", medico_id: fd.medico_id, datos, firmante };
   }
 
-  if (alterada) return { estado: "alterada", medico_id: fd.medico_id, datos };
+  if (alterada) return { estado: "alterada", medico_id: fd.medico_id, datos, firmante };
 
   let firmaValida = false;
   try {
@@ -589,6 +719,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     estado: firmaValida ? "verificada" : "invalida",
     medico_id: fd.medico_id,
     datos,
+    firmante,
   };
 }
 
