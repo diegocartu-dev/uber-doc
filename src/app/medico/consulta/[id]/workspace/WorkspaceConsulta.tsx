@@ -1256,7 +1256,7 @@ export default function WorkspaceConsulta({
           .from(tablaPrincipal)
           .update({
             estado: estadoCompletado,
-            // Hora y firma del cierre (caso Hugo 01/08): sin esto no hay
+            // Hora y firma del cierre (incidente 01/08): sin esto no hay
             // duración de consulta ni forma de distinguir quién cerró.
             completada_at: new Date().toISOString(),
             cierre_origen: "medico",

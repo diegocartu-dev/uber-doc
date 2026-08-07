@@ -319,15 +319,17 @@ export default function PantallaIdentidad({
           cargando={cargando}
           error={error}
         />
+        {/* Era un `mailto:`: en un celular sin cliente de correo configurado no
+            hace nada, y acá el médico ya está trabado. Va a /ayuda. */}
         <p className="mt-3 text-center text-xs text-gray-400">
-          ¿Seguís con problemas? Escribinos a{" "}
-          <a
-            href="mailto:soporte@docto.com.ar"
+          ¿Seguís con problemas?{" "}
+          <Link
+            href="/ayuda?asunto=No%20puedo%20verificar%20mi%20identidad"
             className="hover:underline"
             style={{ color: AZUL }}
           >
-            soporte@docto.com.ar
-          </a>
+            Escribinos
+          </Link>
         </p>
       </div>
     );
