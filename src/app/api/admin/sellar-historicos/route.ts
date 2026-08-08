@@ -97,24 +97,40 @@ export async function POST(req: NextRequest) {
 
   const sellados: string[] = [];
   const fallidos: { id: string; motivo: string; detalle?: string }[] = [];
+  const salteados: Record<string, number> = {};
+  let procesados = 0;
 
-  for (const d of docs.slice(0, TANDA)) {
+  // Recorre TODA la lista y corta al completar la tanda de SELLADOS, no de
+  // documentos vistos: los descartables (cuentas de prueba) nunca dejan la
+  // lista, así que una tanda por posición se quedaba clavada en los mismos
+  // diez primeros y no sellaba jamás. Los ya sellados sí salen de la lista,
+  // así que llamadas sucesivas avanzan solas.
+  for (const d of docs) {
+    if (sellados.length >= TANDA) break;
+    procesados++;
     try {
       const r = await sellarDocumentoDiferido(d.id, { loteId, loteTotal: docs.length });
-      if (r.ok) sellados.push(d.id);
-      else fallidos.push({ id: d.id, motivo: r.motivo, detalle: r.detalle });
+      if (r.ok) {
+        sellados.push(d.id);
+      } else if (r.motivo === "cuenta_test" || r.motivo === "ya_sellado" || r.motivo === "tipo_no_firmable") {
+        // Descartes esperados: no son fallas.
+        salteados[r.motivo] = (salteados[r.motivo] ?? 0) + 1;
+      } else {
+        fallidos.push({ id: d.id, motivo: r.motivo, detalle: r.detalle });
+      }
     } catch (e) {
       // Un documento que falla NUNCA frena a los demás.
       fallidos.push({ id: d.id, motivo: "excepcion", detalle: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  const restantes = Math.max(0, docs.length - TANDA);
+  const cortadoPorTanda = sellados.length >= TANDA;
   return NextResponse.json({
     loteId,
     sellados: sellados.length,
+    salteados,
     fallidos,
-    pendientes: restantes,
-    seguir: restantes > 0 ? "volvé a llamar con el mismo loteId" : "terminado",
+    procesados,
+    seguir: cortadoPorTanda ? "volvé a llamar con el mismo loteId" : "terminado: no queda nada por sellar",
   });
 }
