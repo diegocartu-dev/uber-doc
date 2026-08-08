@@ -165,6 +165,23 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
+  // Marca de intención ANTES de borrar la sala (08/08/2026).
+  //
+  // Borrar la sala dispara `room_finished` en LiveKit, y ese webhook cierra el
+  // encuentro si todavía figura `en_curso` — o sea, puede ganarle por milisegundos
+  // al guardado de documentos del médico, que corre en background. Desde que el
+  // cierre automático RESCATA el borrador, esa carrera podía terminar en
+  // documentos duplicados: los emitidos por el rescate más los del médico.
+  //
+  // Con esta marca el webhook sabe que el cierre lo inició el médico y se limita
+  // a cerrar, sin emitir nada: la emisión es del flujo del médico.
+  // Best-effort y condicionada a `en_curso`: si falla, no se frena el DELETE.
+  await supabase
+    .from(tabla)
+    .update({ cierre_origen: "medico" })
+    .eq("id", resourceId)
+    .eq("estado", "en_curso");
+
   try {
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
     await svc.deleteRoom(roomName);

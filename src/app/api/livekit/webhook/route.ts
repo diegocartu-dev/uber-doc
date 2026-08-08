@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver, RoomServiceClient } from "livekit-server-sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
+import { rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 
 const LIVEKIT_URL =
   process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
@@ -94,6 +95,11 @@ export async function POST(req: NextRequest) {
 // room_finished — comportamiento histórico (cerrar huérfana a completada).
 // Semántica intacta. Solo se añade limpiar desconectado_at por prolijidad: si
 // la consulta se cierra, no debe quedar un reloj de rejoin colgado.
+//
+// 08/08/2026: este cierre ahora pasa por el rescate del borrador. El UPDATE se
+// condiciona además por `estado = 'en_curso'` y devuelve la fila: eso lo vuelve
+// el mutex del rescate (webhook y polling pueden llegar casi juntos; solo el que
+// cierra emite documentos).
 // ---------------------------------------------------------------------------
 async function handleRoomFinished(event: { room?: { name?: string } }) {
   const parsed = parseRoom(event.room?.name);
@@ -105,7 +111,7 @@ async function handleRoomFinished(event: { room?: { name?: string } }) {
 
   const { data: registro, error: errSelect } = await supabase
     .from(tabla)
-    .select("id, estado")
+    .select("id, estado, cierre_origen")
     .eq("id", recursoId)
     .single();
 
@@ -127,11 +133,27 @@ async function handleRoomFinished(event: { room?: { name?: string } }) {
     });
   }
 
+  // ¿El médico tocó "Finalizar"? El DELETE de la sala lo deja marcado en
+  // `cierre_origen` ANTES de borrarla. Este webhook llega como consecuencia de
+  // ese borrado y puede ganarle al guardado de documentos del médico (que corre
+  // en background): si además rescatáramos el borrador, el paciente terminaría
+  // con los documentos duplicados. Cerramos igual que siempre — sin pisar la
+  // firma del cierre y sin emitir nada.
+  const finalizacionDelMedico = registro.cierre_origen === "medico";
+
   const estadoFinal = tipo === "turno" ? "completado" : "completada";
-  const { error: errUpdate } = await supabase
+  const { data: cerrada, error: errUpdate } = await supabase
     .from(tabla)
-    .update({ estado: estadoFinal, desconectado_at: null, completada_at: new Date().toISOString(), cierre_origen: "webhook_video" })
-    .eq("id", recursoId);
+    .update({
+      estado: estadoFinal,
+      desconectado_at: null,
+      completada_at: new Date().toISOString(),
+      cierre_origen: finalizacionDelMedico ? "medico" : "webhook_video",
+    })
+    .eq("id", recursoId)
+    .eq("estado", "en_curso")
+    .select("id")
+    .maybeSingle();
 
   if (errUpdate) {
     return NextResponse.json(
@@ -140,7 +162,38 @@ async function handleRoomFinished(event: { room?: { name?: string } }) {
     );
   }
 
-  return NextResponse.json({ ok: true, action: "cerrada", tipo, consultaId: recursoId });
+  // Otro camino (el polling del paciente) ganó la carrera entre el SELECT de
+  // arriba y este UPDATE: ya cerró y ya rescató. Nada que hacer.
+  if (!cerrada) {
+    return NextResponse.json({ ok: true, action: "none", reason: "ya cerrada por otro camino" });
+  }
+
+  if (finalizacionDelMedico) {
+    logInfo("[LK/WEBHOOK]", "room_finished tras una finalización del médico: cierre sin rescate", {
+      tabla,
+      recursoId,
+    });
+    return NextResponse.json({
+      ok: true,
+      action: "cerrada",
+      tipo,
+      consultaId: recursoId,
+      rescate: "no_corresponde_finalizacion_medico",
+    });
+  }
+
+  // Rescate del borrador: lo que el médico dejó escrito se emite y se firma.
+  // Nunca lanza; si falla, la consulta ya quedó cerrada igual.
+  const rescate = await rescatarBorradorAlCerrar({ tipo, id: recursoId, origen: "webhook_video" });
+
+  return NextResponse.json({
+    ok: true,
+    action: "cerrada",
+    tipo,
+    consultaId: recursoId,
+    rescate: rescate.resultado,
+    documentos_emitidos: rescate.documentos_emitidos,
+  });
 }
 
 // ---------------------------------------------------------------------------

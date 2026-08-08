@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 
 export async function GET(req: NextRequest) {
   const consultaId = req.nextUrl.searchParams.get("consultaId");
@@ -44,6 +45,11 @@ export async function GET(req: NextRequest) {
   // requiere Vercel Pro). El que espera en "Reconectando…" hace polling cada 5s →
   // dispara el cierre a tiempo. Backstop diario: /api/cron/rejoin-expirar.
   // Idempotente: el UPDATE va condicionado por estado='en_curso'.
+  //
+  // Ese UPDATE condicionado es además el MUTEX del rescate del borrador: solo el
+  // request que efectivamente cerró la consulta (el que recibió fila de vuelta)
+  // rescata lo que el médico había escrito. Si el webhook de video y este polling
+  // se disparan a la vez, uno solo cierra y uno solo emite documentos.
   let estado = data.estado;
   let desconectado_at = data.desconectado_at;
   if (
@@ -62,6 +68,17 @@ export async function GET(req: NextRequest) {
     if (cerrada) {
       estado = "completada";
       desconectado_at = null;
+
+      // Rescate del borrador. Se ESPERA a propósito: el paciente que está
+      // polleando va a ver "completada" con esta misma respuesta y en el próximo
+      // paso pide sus documentos — si el rescate corriera después, la pantalla de
+      // cierre le mostraría "sin documentos" durante unos segundos.
+      // Nunca lanza y nunca revierte el cierre (ver el módulo).
+      await rescatarBorradorAlCerrar({
+        tipo: "consulta",
+        id: consultaId,
+        origen: "desconexion",
+      });
     }
   }
 

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { rescatarBorradoresAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -16,6 +17,8 @@ async function handler(req: NextRequest) {
   const hace4h = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
 
   let totalCerradas = 0;
+  // Documentos que estaban escritos en el borrador y este cron llegó a entregar.
+  let totalDocumentosRescatados = 0;
   // Cualquier error de query hace que la ruta devuelva 500 al final: un cron que
   // falla EN SILENCIO devolviendo 200 es invisible (esta rama de `consultas` vivió
   // ~3 meses muerta filtrando por una columna inexistente sin que saltara nada).
@@ -58,10 +61,16 @@ async function handler(req: NextRequest) {
     const ids = huerfanas.map((h) => h.id);
     const estadoFinal = tabla === "consultas" ? "completada" : "completado";
 
-    const { error: errUpdate } = await supabase
+    // `.eq("estado","en_curso").select("id")`: el UPDATE condicionado devuelve
+    // SOLO las filas que este cron cerró de verdad. Sirve para dos cosas: no
+    // re-cerrar lo que se cerró entre el SELECT y el UPDATE, y saber a cuáles
+    // corresponde rescatarles el borrador (el que cierra es el que rescata).
+    const { data: cerradas, error: errUpdate } = await supabase
       .from(tabla)
       .update({ estado: estadoFinal, completada_at: new Date().toISOString(), cierre_origen: "cierre_automatico" })
-      .in("id", ids);
+      .in("id", ids)
+      .eq("estado", "en_curso")
+      .select("id");
 
     if (errUpdate) {
       huboError = true;
@@ -70,8 +79,20 @@ async function handler(req: NextRequest) {
       continue;
     }
 
-    totalCerradas += ids.length;
-    detalle.push({ tabla, cerradas: ids.length, ids });
+    const cerradasIds = (cerradas ?? []).map((c) => c.id);
+
+    // Rescate del borrador de cada una: lo que el médico escribió y nunca llegó a
+    // enviar se emite y se firma acá. Nunca lanza — un fallo del rescate no deja
+    // consultas abiertas ni rompe la corrida del cron.
+    const rescates = await rescatarBorradoresAlCerrar(
+      tabla === "consultas" ? "consulta" : "turno",
+      cerradasIds,
+      "cierre_automatico"
+    );
+    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+
+    totalCerradas += cerradasIds.length;
+    detalle.push({ tabla, cerradas: cerradasIds.length, ids: cerradasIds });
   }
 
   // Limpiar mp_oauth_state expirados (tokens de un solo uso, TTL 1 hora)
@@ -137,6 +158,7 @@ async function handler(req: NextRequest) {
   if (totalCerradas > 0 || oauthLimpiados > 0 || webhookLimpiados > 0 || pagadasRecuperadas > 0) {
     logInfo("[CRON/HUERFANAS]", "Ejecución con cambios", {
       totalCerradas,
+      totalDocumentosRescatados,
       oauthStateLimpiados: oauthLimpiados,
       webhookFailedLimpiados: webhookLimpiados,
       pagadasRecuperadas,
@@ -147,6 +169,7 @@ async function handler(req: NextRequest) {
   const payload = {
     ok: !huboError,
     total_cerradas: totalCerradas,
+    documentos_rescatados: totalDocumentosRescatados,
     oauth_state_limpiados: oauthLimpiados,
     webhook_failed_limpiados: webhookLimpiados,
     pagadas_recuperadas: pagadasRecuperadas,

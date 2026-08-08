@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
+import { rescatarBorradoresAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 
 // ---------------------------------------------------------------------------
 // GET /api/cron/rejoin-expirar  (BACKSTOP diario — ver vercel.json)
@@ -37,6 +38,8 @@ async function handler(req: NextRequest) {
   const hace2min = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
   let totalCerradas = 0;
+  // Documentos que estaban escritos en el borrador y este backstop llegó a entregar.
+  let totalDocumentosRescatados = 0;
   const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
 
   for (const tabla of ["consultas", "turnos"] as const) {
@@ -63,9 +66,18 @@ async function handler(req: NextRequest) {
     const estadoFinal = tabla === "consultas" ? "completada" : "completado";
 
     // UPDATE condicionado por estado previo (at-most-once + anti-reconexión-tardía).
+    // Es también el mutex del rescate: solo las filas que devuelve fueron cerradas
+    // por este cron, y solo a esas se les rescata el borrador.
+    // `completada_at` + `cierre_origen` (08/08/2026): este backstop los venía
+    // omitiendo, así que sus cierres quedaban sin hora ni firma de quién cerró.
     const { data: actualizadas, error: errUpdate } = await supabase
       .from(tabla)
-      .update({ estado: estadoFinal, desconectado_at: null })
+      .update({
+        estado: estadoFinal,
+        desconectado_at: null,
+        completada_at: new Date().toISOString(),
+        cierre_origen: "rejoin_expirado",
+      })
       .in("id", ids)
       .eq("estado", "en_curso")
       .select("id");
@@ -77,6 +89,15 @@ async function handler(req: NextRequest) {
     }
 
     const cerradasIds = (actualizadas ?? []).map((r) => r.id);
+
+    // Rescate del borrador: lo escrito y no entregado sale ahora. Nunca lanza.
+    const rescates = await rescatarBorradoresAlCerrar(
+      tabla === "consultas" ? "consulta" : "turno",
+      cerradasIds,
+      "rejoin_expirado"
+    );
+    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+
     totalCerradas += cerradasIds.length;
     detalle.push({ tabla, cerradas: cerradasIds.length, ids: cerradasIds });
   }
@@ -84,11 +105,17 @@ async function handler(req: NextRequest) {
   if (totalCerradas > 0) {
     logInfo("[CRON/REJOIN]", "Rejoin expirado: consultas cerradas por timeout de 2 min", {
       totalCerradas,
+      totalDocumentosRescatados,
       detalle,
     });
   }
 
-  return NextResponse.json({ ok: true, total_cerradas: totalCerradas, detalle });
+  return NextResponse.json({
+    ok: true,
+    total_cerradas: totalCerradas,
+    documentos_rescatados: totalDocumentosRescatados,
+    detalle,
+  });
 }
 
 export const GET = withCron("rejoin-expirar", handler);

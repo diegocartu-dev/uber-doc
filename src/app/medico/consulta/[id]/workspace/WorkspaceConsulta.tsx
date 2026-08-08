@@ -1198,7 +1198,26 @@ export default function WorkspaceConsulta({
           .single();
 
         if (!registroDb?.paciente_id) return;
-        if (registroDb.estado === estadoCompletado) return;
+
+        // La consulta ya figura cerrada. Antes esto era un `return` mudo y se
+        // DESCARTABA todo lo escrito: el médico veía el dashboard y se iba
+        // convencido de que había entregado (auditoría 08/08/2026). Pasa de
+        // verdad — el webhook de la sala de video cierra apenas se borra el room,
+        // y puede ganarle a este bloque por milisegundos.
+        //
+        // Ahora se sigue adelante y se guarda igual, salvo que YA existan
+        // documentos de este encuentro (ahí sí no hay nada que hacer y volver a
+        // insertar duplicaría recetas). El estado no se vuelve a tocar: la firma
+        // del cierre real se respeta.
+        const yaCerrada = registroDb.estado === estadoCompletado;
+        if (yaCerrada) {
+          const { data: docsPrevios } = await supabase
+            .from("documentos")
+            .select("id")
+            .eq(esTurno ? "turno_id" : "consulta_id", consultaId)
+            .limit(1);
+          if (docsPrevios && docsPrevios.length > 0) return;
+        }
 
         // pacientes.id para el insert de documentos (asimetría de schema por canal):
         // - consulta: paciente_id es auth.users.id → lookup por user_id
@@ -1238,7 +1257,7 @@ export default function WorkspaceConsulta({
         if (docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-        await supabase.from("documentos").insert(
+        const { error: errorDocs } = await supabase.from("documentos").insert(
           docs.map((d) => ({
             consulta_id: esTurno ? null : consultaId,
             turno_id: esTurno ? consultaId : null,
@@ -1252,15 +1271,31 @@ export default function WorkspaceConsulta({
           }))
         );
 
+        // Si el insert falló, el borrador NO se borra (auditoría 08/08/2026).
+        // Antes se borraba a renglón seguido sin mirar el error: los documentos
+        // no existían, lo escrito se perdía y no quedaba ni rastro. Conservarlo
+        // deja el contenido recuperable —a mano o con
+        // scripts/rescatar-borradores-perdidos.ts— en vez de evaporarse.
+        // El cierre se hace igual: dejar la consulta abierta trabaría al
+        // paciente en la pantalla de espera.
+        if (errorDocs) console.error("[finalizar] no se pudieron guardar los documentos:", errorDocs.message);
+
         await supabase
           .from(tablaPrincipal)
           .update({
-            estado: estadoCompletado,
-            // Hora y firma del cierre (incidente 01/08): sin esto no hay
-            // duración de consulta ni forma de distinguir quién cerró.
-            completada_at: new Date().toISOString(),
-            cierre_origen: "medico",
-            doc_borrador: null,
+            // Si ya estaba cerrada, el estado y la firma del cierre NO se pisan:
+            // ya quedaron registrados por quien cerró. Solo se completa lo que
+            // faltaba (evolución y limpieza del borrador).
+            ...(yaCerrada
+              ? {}
+              : {
+                  estado: estadoCompletado,
+                  // Hora y firma del cierre (incidente 01/08): sin esto no hay
+                  // duración de consulta ni forma de distinguir quién cerró.
+                  completada_at: new Date().toISOString(),
+                  cierre_origen: "medico",
+                }),
+            ...(errorDocs ? {} : { doc_borrador: null }),
             evolucion: evolucion.trim(),
             // Momento de generar; fallback al de finalizar si por algún borde no se
             // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
