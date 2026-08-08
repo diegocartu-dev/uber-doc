@@ -961,6 +961,10 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
     identidad_validada_at: medico.identidad_validada_at ?? null,
     didit_session_id: medico.didit_session_id ?? null,
     didit_status: medico.didit_status ?? null,
+    // Estado de la ficha AL MOMENTO DE SELLAR: es lo que habilita el sellado
+    // diferido (aprobado + REFEPS validado). Se consultaba pero no se devolvía,
+    // así que el gate lo leía como `undefined` y descartaba TODOS los documentos.
+    estado_registro: medico.estado_registro ?? null,
     es_cuenta_test: medico.es_cuenta_test ?? false,
     tyc_medico: tycMedico,
     tyc_medico_registrada: tycMedico !== null,
