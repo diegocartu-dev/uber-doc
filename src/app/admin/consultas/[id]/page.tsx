@@ -16,6 +16,7 @@ const CIERRE_LABEL: Record<string, string> = {
   webhook_video: "la sala de video quedó vacía (cierre automático)",
   desconexion: "desconexión sin retorno (cierre automático)",
   cierre_automatico: "cierre nocturno automático (quedó abierta)",
+  rejoin_expirado: "corte sin reconexión, cerrada por el repaso de respaldo",
   admin_forzado: "cerrada a mano desde el panel admin",
 };
 
