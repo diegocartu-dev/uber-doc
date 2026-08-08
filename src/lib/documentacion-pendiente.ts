@@ -33,9 +33,60 @@ export type DocumentacionPendiente = {
 const CLAVE = "docto_documentacion_pendiente";
 /** Techo defensivo: el aviso es para actuar hoy, no un historial. */
 const MAX_ITEMS = 3;
+/**
+ * Vencimiento de la marca local. Pasadas 72 h el cartel dejó de ser accionable y
+ * pasa a ser ruido en el dashboard: lo que queda es la notificación de la
+ * campanita (persistente, sin vencimiento) y el log del servidor. Sin esto, una
+ * marca que nadie resolvió se queda pegada para siempre.
+ */
+const VENCE_MS = 72 * 60 * 60 * 1000;
+
+/**
+ * El cartel del dashboard escucha este evento para releer la marca. Hace falta
+ * porque el fallo ocurre DESPUÉS del `router.push('/dashboard')`: cuando el
+ * cartel se monta todavía no hay nada escrito, y el evento `storage` del
+ * navegador NO se dispara en la misma pestaña que escribe. Sin esto el médico
+ * mira un dashboard limpio y no se entera hasta la próxima carga completa —
+ * o nunca, si cierra la pestaña.
+ */
+export const EVENTO_DOCUMENTACION_PENDIENTE = "docto:documentacion-pendiente";
+
+/**
+ * Mismo problema, otro canal: la campanita del médico también hace UN solo fetch
+ * al montar, así que la notificación persistente que se inserta medio segundo
+ * después tampoco se veía. Quien deja el aviso emite este evento y la campanita
+ * recarga.
+ */
+export const EVENTO_NOTIFICACION_MEDICO = "docto:notificacion-medico";
+
+/** Dispara el evento que hace recargar la campanita del dashboard. */
+export function avisarNotificacionNueva(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(EVENTO_NOTIFICACION_MEDICO));
+  } catch {
+    // Nunca romper el flujo de cierre por no poder avisar a la UI.
+  }
+}
 
 function disponible(): boolean {
   return typeof window !== "undefined" && !!window.localStorage;
+}
+
+/** Avisa a la pestaña actual que la marca cambió (alta o baja). */
+function notificarCambio(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(EVENTO_DOCUMENTACION_PENDIENTE));
+  } catch {
+    // Nunca romper el flujo de cierre por no poder avisar a la UI.
+  }
+}
+
+function vigente(p: DocumentacionPendiente): boolean {
+  const t = Date.parse(p.detectadoAt);
+  if (Number.isNaN(t)) return true; // marca vieja sin fecha válida: no la escondemos
+  return Date.now() - t < VENCE_MS;
 }
 
 export function leerDocumentacionPendiente(): DocumentacionPendiente[] {
@@ -45,10 +96,12 @@ export function leerDocumentacionPendiente(): DocumentacionPendiente[] {
     if (!crudo) return [];
     const parsed = JSON.parse(crudo);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (p): p is DocumentacionPendiente =>
-        !!p && typeof p.id === "string" && (p.tipo === "consulta" || p.tipo === "turno")
-    );
+    return parsed
+      .filter(
+        (p): p is DocumentacionPendiente =>
+          !!p && typeof p.id === "string" && (p.tipo === "consulta" || p.tipo === "turno")
+      )
+      .filter(vigente);
   } catch {
     return [];
   }
@@ -73,6 +126,7 @@ export function marcarDocumentacionPendiente(
     // localStorage lleno o bloqueado (modo privado): la campanita sigue siendo
     // el respaldo. Nunca romper por esto.
   }
+  notificarCambio();
 }
 
 /**
@@ -99,7 +153,15 @@ export function urlDeAtencion(item: Pick<DocumentacionPendiente, "id" | "tipo">)
     : `/medico/consulta/${item.id}/workspace`;
 }
 
-/** El médico resolvió (o descartó) el aviso de esa atención. */
+/**
+ * El aviso de esa atención dejó de aplicar. Se llama desde tres lugares y los
+ * tres importan:
+ *   - el botón «Ya lo resolví» del cartel;
+ *   - el cierre exitoso en el workspace (la entrega finalmente salió bien) —
+ *     sin esto el cartel quedaba pegado aunque el paciente ya tuviera todo;
+ *   - el chequeo contra el servidor del propio cartel, cuando la atención ya
+ *     figura con documentos entregados.
+ */
 export function descartarDocumentacionPendiente(id: string): void {
   if (!disponible()) return;
   try {
@@ -109,4 +171,5 @@ export function descartarDocumentacionPendiente(id: string): void {
   } catch {
     // idem
   }
+  notificarCambio();
 }

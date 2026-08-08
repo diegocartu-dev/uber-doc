@@ -1,7 +1,8 @@
 // POST /api/medico/documentos-pendientes
 //
 // Avisa al médico, de forma PERSISTENTE, que una atención suya se cerró sin que
-// la documentación llegara al paciente.
+// la documentación llegara al paciente. Y, con `accion: "estado"`, le dice al
+// cartel del dashboard si esa marca sigue vigente.
 //
 // POR QUÉ EXISTE
 // Al finalizar una consulta el médico es redirigido al dashboard y el guardado
@@ -19,15 +20,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TIPOS_FIRMABLES } from "@/lib/firma/documento";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Motivo = "documentos" | "cierre";
+type Canal = "consulta" | "turno";
 
 type Body = {
+  /** "aviso" (default, retrocompatible) deja la notificación; "estado" solo consulta. */
+  accion?: "aviso" | "estado";
   consultaId?: string;
-  tipo?: "consulta" | "turno";
+  tipo?: Canal;
   motivo?: Motivo;
+  /** Solo para `accion: "estado"`. */
+  items?: { id?: string; tipo?: Canal }[];
+};
+
+/** Techo para el chequeo de estado: el cartel local guarda como mucho 3 marcas. */
+const MAX_ITEMS_ESTADO = 5;
+
+/**
+ * Estados desde los que el médico TODAVÍA puede volver a entrar a la atención y
+ * tocar "Finalizar consulta". Espejan los guards de las pantallas:
+ *   - consulta: workspace/page.tsx admite 'pagada' y 'en_curso';
+ *   - turno: /turno/[turnoId]/video rechaza 'completado' y los cancelados.
+ * Si el estado no está acá, el CTA "Completar ahora" devolvería al médico al
+ * dashboard — un loop con un cartel que no puede resolver. Por eso se calcula
+ * server-side y el cartel cambia el texto en vez de mentirle.
+ */
+const REABRIBLES: Record<Canal, string[]> = {
+  consulta: ["pagada", "en_curso"],
+  turno: [
+    "reservado_pendiente",
+    "confirmado",
+    "en_espera",
+    "en_curso",
+  ],
 };
 
 /** Consulta inmediata: `en_curso_at`/`created_at` son timestamptz → hora argentina. */
@@ -53,6 +82,65 @@ function momentoTurno(fecha: string | null, horaInicio: string | null): string {
   return `${horaInicio.slice(0, 5)} del ${dia}/${mes}`;
 }
 
+type Atencion = { medicoId: string | null; estado: string | null; momento: string };
+
+async function leerAtencion(
+  admin: ReturnType<typeof createAdminClient>,
+  tipo: Canal,
+  id: string
+): Promise<Atencion> {
+  if (tipo === "turno") {
+    const { data } = await admin
+      .from("turnos")
+      .select("medico_id, estado, fecha, hora_inicio")
+      .eq("id", id)
+      .maybeSingle();
+    return {
+      medicoId: data?.medico_id ?? null,
+      estado: data?.estado ?? null,
+      momento: momentoTurno(data?.fecha ?? null, data?.hora_inicio ?? null),
+    };
+  }
+  const { data } = await admin
+    .from("consultas")
+    .select("medico_id, estado, en_curso_at, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  return {
+    medicoId: data?.medico_id ?? null,
+    estado: data?.estado ?? null,
+    momento: momentoConsulta(data?.en_curso_at ?? data?.created_at ?? null),
+  };
+}
+
+/** ¿La atención ya tiene documentos clínicos emitidos? (= la entrega salió bien) */
+async function tieneDocumentos(
+  admin: ReturnType<typeof createAdminClient>,
+  tipo: Canal,
+  id: string
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("documentos")
+    .select("id")
+    .eq(tipo === "turno" ? "turno_id" : "consulta_id", id)
+    .in("tipo", [...TIPOS_FIRMABLES])
+    .limit(1);
+  // Ante un error de lectura NO se dice "ya está entregado": eso borraría el
+  // aviso de algo que quizá sigue sin entregar. Fail-safe hacia el aviso.
+  if (error) return false;
+  return (data?.length ?? 0) > 0;
+}
+
+/** El médico de la sesión, o null si el usuario no es médico. */
+async function medicoDeLaSesion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<string | null> {
+  // Solo columnas con GRANT para authenticated (ver regla de grants en CLAUDE.md).
+  const { data } = await supabase.from("medicos").select("id").eq("user_id", userId).maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -68,60 +156,75 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Body inválido" }, { status: 400 });
   }
 
+  const medicoId = await medicoDeLaSesion(supabase, user.id);
+  if (!medicoId) return NextResponse.json({ ok: false, error: "No es médico" }, { status: 403 });
+
+  const admin = createAdminClient();
+
+  // -------------------------------------------------------------------------
+  // accion: "estado" — el cartel del dashboard pregunta si la marca sigue viva
+  // -------------------------------------------------------------------------
+  // Sin esto el cartel puede mentir de dos formas: seguir mostrando un aviso de
+  // algo que YA se entregó, y ofrecer un botón "Completar ahora" hacia una
+  // pantalla que rechaza la atención y devuelve al dashboard (loop).
+  if (body.accion === "estado") {
+    const items = (Array.isArray(body.items) ? body.items : []).slice(0, MAX_ITEMS_ESTADO);
+    const estados: { id: string; entregado: boolean; reabrible: boolean }[] = [];
+
+    for (const item of items) {
+      const id = item?.id;
+      const tipo: Canal = item?.tipo === "turno" ? "turno" : "consulta";
+      if (!id || !UUID_RE.test(id)) continue;
+
+      const atencion = await leerAtencion(admin, tipo, id);
+      // Atención ajena o inexistente: no se filtra nada de ella, se omite.
+      if (!atencion.medicoId || atencion.medicoId !== medicoId) continue;
+
+      estados.push({
+        id,
+        entregado: await tieneDocumentos(admin, tipo, id),
+        reabrible: REABRIBLES[tipo].includes(String(atencion.estado ?? "")),
+      });
+    }
+
+    return NextResponse.json({ ok: true, estados });
+  }
+
+  // -------------------------------------------------------------------------
+  // accion: "aviso" (default) — deja la notificación persistente
+  // -------------------------------------------------------------------------
   const id = body.consultaId;
-  const tipo = body.tipo === "turno" ? "turno" : "consulta";
+  const tipo: Canal = body.tipo === "turno" ? "turno" : "consulta";
   const motivo: Motivo = body.motivo === "cierre" ? "cierre" : "documentos";
 
   if (!id || !UUID_RE.test(id)) {
     return NextResponse.json({ ok: false, error: "Atención inválida" }, { status: 400 });
   }
 
-  // Solo columnas con GRANT para authenticated (ver regla de grants en CLAUDE.md).
-  const { data: medico } = await supabase
-    .from("medicos")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!medico) return NextResponse.json({ ok: false, error: "No es médico" }, { status: 403 });
-
   // La atención tiene que ser de este médico: nadie se avisa a sí mismo sobre
   // una consulta ajena.
-  const admin = createAdminClient();
-  let medicoDelRegistro: string | null = null;
-  let momento = "";
+  const atencion = await leerAtencion(admin, tipo, id);
 
-  if (tipo === "turno") {
-    const { data } = await admin
-      .from("turnos")
-      .select("medico_id, fecha, hora_inicio")
-      .eq("id", id)
-      .maybeSingle();
-    medicoDelRegistro = data?.medico_id ?? null;
-    momento = momentoTurno(data?.fecha ?? null, data?.hora_inicio ?? null);
-  } else {
-    const { data } = await admin
-      .from("consultas")
-      .select("medico_id, en_curso_at, created_at")
-      .eq("id", id)
-      .maybeSingle();
-    medicoDelRegistro = data?.medico_id ?? null;
-    momento = momentoConsulta(data?.en_curso_at ?? data?.created_at ?? null);
-  }
-
-  if (!medicoDelRegistro || medicoDelRegistro !== medico.id) {
+  if (!atencion.medicoId || atencion.medicoId !== medicoId) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 403 });
   }
 
-  const referencia = momento ? `de las ${momento}` : "reciente";
+  const referencia = atencion.momento ? `de las ${atencion.momento}` : "reciente";
+  const reabrible = REABRIBLES[tipo].includes(String(atencion.estado ?? ""));
   const dondeVolver =
     tipo === "turno" ? "Volvé a entrar a ese turno" : "Volvé a entrar a esa consulta";
+
+  // Qué hacer ahora. Depende de si el médico puede volver a entrar: mandarlo a
+  // una pantalla que lo rebota al dashboard es peor que no decirle nada.
+  const comoResolver = reabrible
+    ? `${dondeVolver} y tocá "Finalizar consulta" para enviarlos.`
+    : "La atención ya figura cerrada, así que no vas a poder volver a entrar. Escribinos a soporte@docto.com.ar mencionando el horario y los reenviamos nosotros.";
 
   const titulo = "Quedó documentación sin entregar";
   const mensaje =
     motivo === "cierre"
-      ? `Los documentos de tu consulta ${referencia} sí llegaron al paciente, pero no se pudo guardar la evolución.\n\nLo que escribiste está guardado. ${dondeVolver} y tocá "Finalizar consulta" para completarla.`
-      : `Tu consulta ${referencia} se cerró sin que los documentos llegaran al paciente.\n\nLo que escribiste NO se perdió: quedó guardado. ${dondeVolver} y tocá "Finalizar consulta" para enviarlos.`;
+      ? `Los documentos de tu consulta ${referencia} sí llegaron al paciente, pero no se pudo guardar la evolución.\n\nLo que escribiste está guardado. ${comoResolver}`
+      : `Tu consulta ${referencia} se cerró sin que los documentos llegaran al paciente.\n\nLo que escribiste NO se perdió: quedó guardado. ${comoResolver}`;
 
   // Anti-duplicado: un reintento no debe llenarle la campanita de carteles
   // iguales. El par (título, mensaje) ya incluye la hora de la atención, así que
@@ -129,7 +232,7 @@ export async function POST(req: NextRequest) {
   const { data: yaAvisado } = await admin
     .from("notificaciones_medico")
     .select("id")
-    .eq("medico_id", medico.id)
+    .eq("medico_id", medicoId)
     .eq("titulo", titulo)
     .eq("mensaje", mensaje)
     .eq("leida", false)
@@ -140,7 +243,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { error } = await admin.from("notificaciones_medico").insert({
-    medico_id: medico.id,
+    medico_id: medicoId,
     titulo,
     mensaje,
     // `enviada_por` queda null a propósito: no la mandó un admin, la generó el
@@ -155,7 +258,7 @@ export async function POST(req: NextRequest) {
   // Log de servidor para que la falla también sea visible desde operaciones y no
   // dependa de que el médico mire la campanita.
   console.error(
-    `[documentacion-pendiente] ${tipo} ${id} sin entregar (motivo=${motivo}) — médico avisado`
+    `[documentacion-pendiente] ${tipo} ${id} sin entregar (motivo=${motivo}, reabrible=${reabrible}) — médico avisado`
   );
 
   return NextResponse.json({ ok: true });
