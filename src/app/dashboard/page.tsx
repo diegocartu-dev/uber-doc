@@ -24,6 +24,7 @@ import BannerActivacion from "./BannerActivacion";
 import BannerMercadoPago from "./BannerMercadoPago";
 import BannerIdentidad from "./BannerIdentidad";
 import DocumentacionPendiente from "./DocumentacionPendiente";
+import AvisoDocumentacionPendiente from "./AvisoDocumentacionPendiente";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
@@ -602,6 +603,10 @@ export default async function DashboardPage({
           </nav>
 
           <div className="mx-auto max-w-7xl px-6 py-6">
+            {/* Documentación que no llegó al paciente. Va PRIMERO: es lo único
+                del dashboard que tiene a un paciente esperando del otro lado. */}
+            <AvisoDocumentacionPendiente />
+
             {/* Nova widget — solo si flag activo */}
             {flagNovaAi && (
               <NovaWidget

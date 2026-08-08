@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Bell, X } from "lucide-react";
+import { EVENTO_NOTIFICACION_MEDICO } from "@/lib/documentacion-pendiente";
 
 // Campanita de notificaciones del médico (canal unidireccional admin → médico).
 // Auto-fetch desde /api/medico/notificaciones. Se muestra SOLO si el médico recibió
@@ -41,6 +42,12 @@ export default function CampanaMedico({ flotante = false }: { flotante?: boolean
 
   useEffect(() => {
     cargar();
+    // Una notificación puede insertarse DESPUÉS de que la campanita montó: el
+    // cierre de una consulta redirige al dashboard y recién ahí, en segundo
+    // plano, detecta que la entrega falló y deja el aviso. Sin escuchar esto, el
+    // médico no lo ve hasta la próxima carga completa del dashboard.
+    window.addEventListener(EVENTO_NOTIFICACION_MEDICO, cargar);
+    return () => window.removeEventListener(EVENTO_NOTIFICACION_MEDICO, cargar);
   }, [cargar]);
 
   function toggle() {
