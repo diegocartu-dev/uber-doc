@@ -359,6 +359,76 @@ export async function enviarDocumentoMedico(params: {
   console.log("[email] documento médico enviado a:", pacienteEmail);
 }
 
+/**
+ * Documentación emitida DESPUÉS del cierre de la atención.
+ *
+ * Cuando el médico vuelve a una consulta ya terminada y emite lo que faltó, el
+ * paciente no está mirando la pantalla: la consulta terminó hace horas o días.
+ * El push puede no llegar (permiso denegado, teléfono apagado), así que el mail
+ * es el canal que garantiza el aviso. No lleva adjuntos: los documentos se ven y
+ * se descargan desde "Mis consultas", igual que los del cierre normal.
+ */
+export async function enviarEmailDocumentacionDisponible(params: {
+  pacienteId: string;
+  medicoId: string;
+  tipos: string[];
+}): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "documentacion_disponible"); return; }
+  try {
+    const supabase = createAdminClient();
+
+    const [{ data: paciente }, { data: medico }] = await Promise.all([
+      supabase.from("pacientes").select("nombre_completo, user_id").eq("id", params.pacienteId).maybeSingle(),
+      supabase.from("medicos").select("nombre_completo").eq("id", params.medicoId).maybeSingle(),
+    ]);
+
+    if (!paciente || !medico) return;
+
+    const { data: { user } } = await supabase.auth.admin.getUserById(paciente.user_id);
+    if (!user?.email) return;
+
+    const etiquetas: Record<string, string> = {
+      receta: "Receta",
+      indicaciones: "Indicaciones",
+      certificado: "Certificado",
+      orden: "Orden m&eacute;dica",
+    };
+    const lista = [...new Set(params.tipos)].map((t) => etiquetas[t] ?? t);
+    const listaHtml = lista.length > 0
+      ? `<ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;">${lista
+          .map((l) => `<li style="margin-bottom:6px;">${l}</li>`)
+          .join("")}</ul>`
+      : "";
+
+    const html = wrapHtml("Documentaci&oacute;n de tu consulta — Docto", `
+      <div style="margin-bottom:20px;">${chip("Documentaci&oacute;n disponible", AZUL)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Ya ten&eacute;s la documentaci&oacute;n de tu consulta</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
+        Hola ${paciente.nombre_completo}, el ${formatNombreMedico(medico.nombre_completo)} complet&oacute; la documentaci&oacute;n de tu consulta y ya la pod&eacute;s ver y descargar.
+      </p>
+      ${listaHtml}
+      ${boton("Ver mis documentos", `${BASE_URL}/mis-consultas`, AZUL)}
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
+        Si ten&eacute;s alguna duda sobre lo que recibiste, escribinos a soporte@docto.com.ar.
+      </p>
+    `);
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: user.email!,
+        subject: "Ya está disponible la documentación de tu consulta",
+        html,
+      }),
+      `documentacion_disponible:${params.pacienteId}`
+    );
+
+    console.log("[email] documentación disponible enviada a paciente:", params.pacienteId);
+  } catch (err) {
+    console.error("[email] enviarEmailDocumentacionDisponible falló:", err);
+  }
+}
+
 export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void> {
   if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "recordatorio_24h"); return; }
   try {

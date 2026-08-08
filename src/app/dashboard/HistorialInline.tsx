@@ -11,6 +11,10 @@ type Item = {
   url: string;
   canal_origen?: string;
   created_at_raw?: string;
+  /** La atención cerró sin entregarle NINGÚN documento al paciente. */
+  sin_documentacion?: boolean;
+  /** Pantalla para emitir la documentación que faltó y enviársela ahora. */
+  completar_url?: string;
 };
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
@@ -139,6 +143,27 @@ export default function HistorialInline({
                         Ver documentos
                       </a>
                     </div>
+
+                    {/* Cerró sin entregarle nada al paciente. Ámbar (pendiente) y
+                        con la salida al lado: encontrar el problema sin poder
+                        arreglarlo desde ahí mismo no sirve de nada. */}
+                    {item.sin_documentacion && (
+                      <div
+                        className="mt-2 flex flex-col gap-2 rounded-lg px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                        style={{ background: "#BA75170d", border: "0.5px solid #BA751733" }}
+                      >
+                        <p className="text-xs font-medium" style={{ color: "#BA7517" }}>
+                          El paciente no recibió documentación
+                        </p>
+                        <a
+                          href={item.completar_url ?? "#"}
+                          className="shrink-0 rounded-lg px-3 py-2 text-center text-xs font-medium text-white active:scale-95 transition-all"
+                          style={{ backgroundColor: "#378ADD", minHeight: "36px", lineHeight: "20px" }}
+                        >
+                          Completar y enviar
+                        </a>
+                      </div>
+                    )}
                     {dentro48h && (
                       <div className="mt-2">
                         <button
