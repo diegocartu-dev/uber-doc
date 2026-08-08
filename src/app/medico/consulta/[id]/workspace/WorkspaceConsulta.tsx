@@ -44,6 +44,16 @@ type ModoWorkspace = "video" | "escritura" | "estudios" | "hc";
 const HORAS_REPOSO_RAPIDAS: number[] = [24, 48, 72];
 const DIAS_REPOSO_RAPIDOS: number[] = [4, 5, 6];
 
+// Nombre humano de cada tipo de documento. Se usa en el modo "completar
+// documentación" para decirle al médico qué ya recibió el paciente y qué acaba
+// de emitir, sin jerga de base de datos.
+const ETIQUETA_DOC: Record<string, string> = {
+  receta: "Receta",
+  indicaciones: "Indicaciones",
+  certificado: "Certificado",
+  orden: "Orden médica",
+};
+
 // ---------------------------------------------------------------------------
 // AccordionSection — secciones colapsables del panel de documentación
 // ---------------------------------------------------------------------------
@@ -391,6 +401,18 @@ type DocBorrador = {
   receta_texto_libre?: string;
 } | null;
 
+// Info del cierre — solo llega en modo "completar documentación".
+export type CierreAtencion = {
+  /** Instante real en que la atención quedó cerrada. */
+  cerradaAt: string | null;
+  /** Quién la cerró: 'medico' | 'desconexion' | 'webhook_video' | 'cierre_automatico' | ... */
+  cierreOrigen: string | null;
+  /** Evolución ya guardada en la atención (si el cierre alcanzó a registrarla). */
+  evolucionRegistrada: string | null;
+  /** Documentos que el paciente YA recibió. Inmutables: no se reemplazan. */
+  documentosEmitidos: { tipo: string; createdAt: string }[];
+};
+
 type Props = {
   consultaId: string;
   medicoId: string;
@@ -405,6 +427,11 @@ type Props = {
   // MISMO paciente, EXCLUYENDO el encuentro actual), ordenadas nueva→vieja.
   // Alimentan el Panel HC. Default [] para no romper si la página no las pasa.
   evolucionesPrevias?: EntradaEvolucion[];
+  // Modo "completar documentación" (08/08/2026): la atención YA está cerrada y el
+  // médico entra solo a emitir lo que faltó. Sin video, sin cambiar el estado, sin
+  // tocar lo ya emitido. Es el camino de reparación del agujero del borrador.
+  modoCompletar?: boolean;
+  cierre?: CierreAtencion | null;
   consulta: {
     especialidad: string;
     motivo_consulta: string | null;
@@ -764,9 +791,19 @@ export default function WorkspaceConsulta({
   videoError: videoErrorProp,
   horaInicio,
   evolucionesPrevias = [],
+  modoCompletar = false,
+  cierre = null,
   consulta,
 }: Props) {
   const router = useRouter();
+
+  // Tipos de documento que el paciente YA recibió. Un documento firmado es
+  // inmutable: en modo completar no se muestra su campo ni se puede reemplazar.
+  const tiposEmitidos = new Set((cierre?.documentosEmitidos ?? []).map((d) => d.tipo));
+  const yaEmitido = (t: string) => modoCompletar && tiposEmitidos.has(t);
+  // Los cuatro tipos ya salieron: no queda nada que emitir por este camino.
+  const todoEmitido =
+    modoCompletar && ["receta", "indicaciones", "certificado", "orden"].every((t) => tiposEmitidos.has(t));
 
   // --- Canal: tabla, estado de cierre y helper de lookup del pacientes.id ---
   // turnos.paciente_id YA ES pacientes.id (FK directo, verificado en prod).
@@ -796,6 +833,11 @@ export default function WorkspaceConsulta({
 
   // --- Estado campos clinicos ---
   const borrador = consulta.doc_borrador;
+  // En modo completar, la evolución puede venir del borrador (lo que el médico
+  // escribió y nunca se entregó) o de la atención (si el cierre alcanzó a
+  // registrarla). Lo que ya está registrado en la atención NO se pisa: el
+  // servidor solo completa la evolución si estaba vacía.
+  const evolucionInicial = (borrador?.evolucion ?? cierre?.evolucionRegistrada ?? "").trim();
   const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
   const parsedMeds = parsearMedicamentosBorrador(borrador);
   const [medicamentos, setMedicamentos] = useState<MedicamentoReceta[]>(parsedMeds.meds);
@@ -818,23 +860,26 @@ export default function WorkspaceConsulta({
   const diasReposoEsChip =
     [...HORAS_REPOSO_RAPIDAS.map((h) => h / 24), ...DIAS_REPOSO_RAPIDOS].includes(diasReposoNum);
   // ¿El médico está emitiendo un certificado de reposo? (texto o días cargados)
-  const emitiendoCertificado = certificado.trim().length > 0 || diasReposo.trim().length > 0;
+  // En modo completar, un certificado YA entregado no cuenta: su campo está
+  // oculto, así que exigirle los días mandaría al médico a un callejón sin salida.
+  const emitiendoCertificado =
+    !yaEmitido("certificado") && (certificado.trim().length > 0 || diasReposo.trim().length > 0);
   // Orden médica (RX, laboratorio, derivaciones). Es texto plano y se persiste
   // como documento tipo "orden". NO entra en la evolución ni en la HC.
   const [orden, setOrden] = useState(borrador?.orden ?? "");
   // --- Evolución: generación MANUAL y obligatoria (no auto-pre-llenado) ---
   // El médico aprieta "Generar evolución" → componemos con el estado ACTUAL de
   // todos los campos. Generar ES la validación humana; no hay paso aparte.
-  const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
+  const [evolucion, setEvolucion] = useState(evolucionInicial);
   // evolucionGenerada (boolean): ¿se generó ya? Es el gate. Se restaura como true
   // si venía evolución del borrador (el médico ya generó en una sesión anterior).
   const [evolucionGenerada, setEvolucionGenerada] = useState<boolean>(
-    (borrador?.evolucion ?? "").trim().length > 0
+    evolucionInicial.length > 0
   );
   // evolucionBase = texto exacto del último componer(). Sirve para detectar si el
   // médico editó el texto a mano (evolucion_editada). Al restaurar del borrador no
   // conocemos el base original; usamos el texto guardado (editada arranca en false).
-  const [evolucionBase, setEvolucionBase] = useState<string>(borrador?.evolucion ?? "");
+  const [evolucionBase, setEvolucionBase] = useState<string>(evolucionInicial);
   // Momento de la generación (revisión humana). Se persiste como evolucion_validada_at.
   const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
 
@@ -864,8 +909,17 @@ export default function WorkspaceConsulta({
   const [showModalCobertura, setShowModalCobertura] = useState<"completar" | "editar" | null>(null);
   const [coberturaLocal, setCoberturaLocal] = useState<DatosCobertura>(consulta.paciente_cobertura);
 
-  // Mobile: tres modos explícitos.
-  const [modo, setModo] = useState<ModoWorkspace>("video");
+  // Resultado de la emisión post-cierre (modo completar). Cuando existe, la
+  // pantalla pasa a la confirmación: qué se emitió y qué se le avisó al paciente.
+  const [resultadoEmision, setResultadoEmision] = useState<{
+    emitidos: string[];
+    omitidos: string[];
+    avisos: string[];
+  } | null>(null);
+
+  // Mobile: tres modos explícitos. En modo completar no hay video: se arranca
+  // directo en la pantalla de escritura.
+  const [modo, setModo] = useState<ModoWorkspace>(modoCompletar ? "escritura" : "video");
   const modoEscritura = modo !== "video";
   // Desktop: colapsar panel documentación
   const [panelColapsado, setPanelColapsado] = useState(() => {
@@ -1120,8 +1174,9 @@ export default function WorkspaceConsulta({
   function iniciarFinalizacion() {
     if (!validarCamposObligatorios()) return;
 
-    // Si hay receta y cobertura incompleta → modal automático
-    if (receta.trim() && !datosCoberturaCompletos(coberturaLocal)) {
+    // Si hay receta y cobertura incompleta → modal automático.
+    // Una receta ya entregada no se vuelve a emitir: no pedimos cobertura por ella.
+    if (receta.trim() && !yaEmitido("receta") && !datosCoberturaCompletos(coberturaLocal)) {
       setShowConfirmDialog(false);
       setShowModalCobertura("completar");
       return;
@@ -1129,7 +1184,8 @@ export default function WorkspaceConsulta({
 
     // Cobertura OK o no hay receta → finalizar directo
     setShowConfirmDialog(false);
-    finalizarConsulta();
+    if (modoCompletar) emitirDocumentacion();
+    else finalizarConsulta();
   }
 
   // --- Callback del modal de cobertura ---
@@ -1154,7 +1210,63 @@ export default function WorkspaceConsulta({
         .then(() => {});
     }
 
-    finalizarConsulta();
+    if (modoCompletar) emitirDocumentacion();
+    else finalizarConsulta();
+  }
+
+  // --- Emitir la documentación que faltó (modo completar) ---
+  //
+  // La atención ya está cerrada: acá NO hay video que cortar, ni estado que
+  // cambiar, ni redirect optimista. Al revés que el cierre normal, esta llamada
+  // es BLOQUEANTE y se espera la respuesta: el médico vino justamente porque la
+  // vez anterior algo se perdió en silencio, así que tiene que ver si salió o no.
+  //
+  // El servidor emite, firma por el mismo camino que el cierre normal y avisa al
+  // paciente. Ver /api/consulta/[id]/completar-documentacion.
+  async function emitirDocumentacion() {
+    if (!validarCamposObligatorios()) return;
+
+    setFinalizando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/completar-documentacion`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        // Lo ya entregado se manda vacío: su campo está oculto y el contenido
+        // que quedó en el borrador ya viajó. El servidor igual lo deduplica —
+        // esto solo evita pedirle al médico que confirme algo que no va a pasar.
+        body: JSON.stringify({
+          tipo,
+          diagnostico,
+          receta: yaEmitido("receta") ? "" : receta,
+          indicaciones: yaEmitido("indicaciones") ? "" : indicaciones,
+          certificado: yaEmitido("certificado") ? "" : certificado,
+          dias_reposo: !yaEmitido("certificado") && diasReposoValido ? diasReposoNum : null,
+          orden: yaEmitido("orden") ? "" : orden,
+          evolucion,
+          evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.ok) {
+        setError(data?.error || "No se pudo emitir la documentación. Probá de nuevo.");
+        setFinalizando(false);
+        return;
+      }
+
+      setResultadoEmision({
+        emitidos: Array.isArray(data.emitidos) ? data.emitidos : [],
+        omitidos: Array.isArray(data.omitidos) ? data.omitidos : [],
+        avisos: Array.isArray(data.avisos) ? data.avisos : [],
+      });
+      setFinalizando(false);
+    } catch {
+      setError("Error de conexión. La documentación no se envió: probá de nuevo.");
+      setFinalizando(false);
+    }
   }
 
   // --- Finalizar consulta ---
@@ -1403,10 +1515,47 @@ export default function WorkspaceConsulta({
 
   // --- Render ---
   return (
-    <div className="flex h-[100dvh] flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
+    <div
+      className={`flex h-[100dvh] overflow-hidden bg-[#f8f9fa] ${
+        modoCompletar ? "flex-col" : "flex-col md:flex-row"
+      }`}
+    >
+      {/* ================================================================ */}
+      {/* MODO COMPLETAR — barra superior en lugar de la columna de video   */}
+      {/* La consulta terminó: no hay llamada, no hay timer, no hay mic.    */}
+      {/* ================================================================ */}
+      {modoCompletar && (
+        <div
+          className="flex w-full shrink-0 items-center justify-between gap-3 bg-gray-900 px-4 py-3"
+          style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">{consulta.paciente_nombre}</p>
+            <p className="mt-0.5 text-xs text-white/50">
+              {cierre?.cerradaAt
+                ? `Consulta finalizada el ${new Date(cierre.cerradaAt).toLocaleDateString("es-AR", {
+                    day: "numeric",
+                    month: "long",
+                    timeZone: "America/Argentina/Buenos_Aires",
+                  })}`
+                : "Consulta finalizada"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/10 hover:text-white"
+            style={{ minHeight: "44px", minWidth: "44px" }}
+          >
+            Salir
+          </button>
+        </div>
+      )}
+
       {/* ================================================================ */}
       {/* COLUMNA IZQUIERDA / ARRIBA — Video                               */}
       {/* ================================================================ */}
+      {!modoCompletar && (
       <div
         className={`relative flex w-full flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
           modoEscritura
@@ -1629,21 +1778,26 @@ export default function WorkspaceConsulta({
           </div>
         )}
       </div>
+      )}
 
       {/* ================================================================ */}
       {/* COLUMNA DERECHA / ABAJO — Documentacion                          */}
       {/* En mobile: solo visible en modo escritura                        */}
       {/* En desktop: siempre visible (split 60/40)                        */}
+      {/* En modo completar: ocupa toda la pantalla (no hay video)         */}
       {/* ================================================================ */}
       <div
         className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out ${
-          panelColapsado ? "md:hidden" : "md:w-[40%] md:flex-none"
-        } ${modoEscritura ? "" : "hidden md:block"}`}
-        style={{ borderLeft: "0.5px solid #e5e7eb" }}
+          modoCompletar
+            ? ""
+            : `${panelColapsado ? "md:hidden" : "md:w-[40%] md:flex-none"} ${modoEscritura ? "" : "hidden md:block"}`
+        }`}
+        style={modoCompletar ? undefined : { borderLeft: "0.5px solid #e5e7eb" }}
       >
-        {/* Desktop: Barra de modos — Documentación / Estudios / HC */}
+        {/* Desktop: Barra de modos — Documentación / Estudios / HC.
+            En modo completar no va: la pantalla tiene un solo trabajo. */}
         <div
-          className="hidden md:flex items-center gap-1 px-4 py-2"
+          className={`${modoCompletar ? "hidden" : "hidden md:flex"} items-center gap-1 px-4 py-2`}
           style={{ borderBottom: "0.5px solid #e5e7eb" }}
         >
           <button
@@ -1696,7 +1850,52 @@ export default function WorkspaceConsulta({
         ) : modo === "hc" ? (
           <PanelHistoriaClinica entradas={evolucionesPrevias} />
         ) : (
-        <div className="p-5">
+        <div className={`p-5 ${modoCompletar ? "mx-auto w-full max-w-2xl" : ""}`}>
+          {/* ─── Modo completar: qué es esta pantalla, en una frase ───────── */}
+          {modoCompletar && (
+            <div
+              className="mb-4 rounded-xl p-4"
+              style={{ background: "#BA75170d", border: "0.5px solid #BA751740", borderLeft: "4px solid #BA7517" }}
+            >
+              <p className="text-[15px] font-semibold" style={{ color: "#BA7517" }}>
+                Esta consulta ya terminó
+              </p>
+              <p className="mt-1.5 text-[14px] leading-snug text-gray-700">
+                Estás completando la documentación que faltó. Lo que emitas se le envía al
+                paciente ahora y le avisamos por mail y por notificación.
+              </p>
+              <p className="mt-2 text-[13px] leading-snug text-gray-500">
+                Los documentos llevan la fecha de hoy, que es cuando los firmás. No se
+                modifica nada de lo ya entregado.
+              </p>
+            </div>
+          )}
+
+          {/* Lo que el paciente YA recibió. Firmado = inmutable: se muestra para
+              que el médico sepa qué falta, y por eso mismo no hay campo para
+              reemplazarlo. */}
+          {modoCompletar && (cierre?.documentosEmitidos.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
+              <p className="text-xs font-medium tracking-wide text-gray-400">
+                YA ENTREGADO AL PACIENTE
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(cierre?.documentosEmitidos ?? []).map((d) => (
+                  <span
+                    key={`${d.tipo}-${d.createdAt}`}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium"
+                    style={{ backgroundColor: "rgba(29,158,117,0.12)", color: "#1D9E75" }}
+                  >
+                    {ETIQUETA_DOC[d.tipo] ?? d.tipo} ✓
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[12px] text-gray-500">
+                Estos documentos están firmados y no se pueden modificar.
+              </p>
+            </div>
+          )}
+
           {/* Info paciente (solo desktop) */}
           <div className="hidden md:block">
             <div className="flex items-center justify-between">
@@ -1824,7 +2023,10 @@ export default function WorkspaceConsulta({
               }`}
             >
               {estadoBorrador === "saving" && "Guardando borrador..."}
-              {estadoBorrador === "saved" && "Borrador guardado"}
+              {/* En modo completar el médico vino porque un "guardado" no llegó a
+                  ser un "entregado". El texto no puede volver a sugerir lo mismo. */}
+              {estadoBorrador === "saved" &&
+                (modoCompletar ? "Borrador guardado — todavía no se envió" : "Borrador guardado")}
               {estadoBorrador === "error" && "Error al guardar borrador"}
             </p>
           )}
@@ -1895,7 +2097,10 @@ export default function WorkspaceConsulta({
             soportado={dictadoSoportado}
           />
 
-          {/* Acordeón: INDICACIONES */}
+          {/* Acordeón: INDICACIONES.
+              En modo completar, los tipos ya entregados no tienen campo: lo
+              firmado es inmutable y ofrecer un textarea sería mentir. */}
+          {!yaEmitido("indicaciones") && (
           <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
             <CampoDictado
               label=""
@@ -1909,8 +2114,10 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: RECETA */}
+          {!yaEmitido("receta") && (
           <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
             <MedicamentoAutocomplete
               medicamentos={medicamentos}
@@ -1922,10 +2129,12 @@ export default function WorkspaceConsulta({
               onDetenerDictado={detenerDictado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: CERTIFICADO DE REPOSO (art. 210 LCT) — días estructurados +
               tratamiento (prefill opcional desde indicaciones). El reposo arranca el
               día de emisión; el inicio no es editable. */}
+          {!yaEmitido("certificado") && (
           <AccordionSection
             title="CERTIFICADO DE REPOSO"
             hasContent={emitiendoCertificado}
@@ -2023,9 +2232,11 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: ORDEN MÉDICA — texto plano, persiste como documento tipo
               "orden". NO entra en la evolución ni en la HC. */}
+          {!yaEmitido("orden") && (
           <AccordionSection title="ORDEN MÉDICA" hasContent={orden.trim().length > 0}>
             <CampoDictado
               label=""
@@ -2039,6 +2250,7 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Evolución — TarjetaEvolucion, plana y ÚLTIMA. El ref + scrollIntoView
               de resaltarGenerarEvolucion() siguen funcionando con la tarjeta acá. */}
@@ -2059,6 +2271,30 @@ export default function WorkspaceConsulta({
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
+            {/* Modo completar: un solo botón, el único trabajo de la pantalla.
+                Mismo tamaño en mobile y desktop — el médico puede tener 70 años. */}
+            {modoCompletar && todoEmitido ? (
+              <p className="py-2 text-center text-sm text-gray-500">
+                Esta consulta ya tiene toda su documentación entregada y firmada. No hay
+                nada más para emitir.
+              </p>
+            ) : modoCompletar ? (
+              <div className="flex flex-col gap-2">
+                <LoadingButton
+                  type="button"
+                  isLoading={finalizando}
+                  onClick={intentarFinalizar}
+                  className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
+                >
+                  Emitir y enviar al paciente
+                </LoadingButton>
+                <p className="text-center text-xs text-gray-500">
+                  Se envía ahora. No se modifica nada de lo ya entregado.
+                </p>
+              </div>
+            ) : (
+            <>
             {/* Mobile modo escritura: Volver a la llamada (auto-save cubre guardado) */}
             <div className="md:hidden flex flex-col gap-2">
               <button
@@ -2081,6 +2317,8 @@ export default function WorkspaceConsulta({
                 Cancelar consulta
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
         )}
@@ -2198,7 +2436,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              Finalizar consulta
+              {modoCompletar ? "Enviar al paciente" : "Finalizar consulta"}
             </h3>
             <p
               style={{
@@ -2207,7 +2445,9 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              Se van a enviar los documentos al paciente. ¿Confirmás?
+              {modoCompletar
+                ? "Se emiten los documentos con la fecha de hoy y se le avisa al paciente. ¿Confirmás?"
+                : "Se van a enviar los documentos al paciente. ¿Confirmás?"}
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
               <button
@@ -2240,9 +2480,88 @@ export default function WorkspaceConsulta({
                   cursor: "pointer",
                 }}
               >
-                Finalizar
+                {modoCompletar ? "Emitir y enviar" : "Finalizar"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación de la emisión post-cierre. Pantalla completa y explícita:
+          el médico vino porque la vez anterior algo se perdió sin avisar, así que
+          acá le decimos exactamente qué salió y qué se le avisó al paciente. */}
+      {resultadoEmision && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div style={{ background: "white", borderRadius: "16px", padding: "24px", maxWidth: "380px", width: "100%" }}>
+            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "#111", marginBottom: "8px" }}>
+              Documentación enviada
+            </h3>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "16px" }}>
+              El paciente ya la puede ver y descargar desde &ldquo;Mis consultas&rdquo;. Le
+              avisamos por mail y por notificación.
+            </p>
+
+            {resultadoEmision.emitidos.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
+                {resultadoEmision.emitidos.map((t, i) => (
+                  <span
+                    key={`${t}-${i}`}
+                    style={{
+                      backgroundColor: "rgba(29,158,117,0.12)",
+                      color: "#1D9E75",
+                      borderRadius: "9999px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {ETIQUETA_DOC[t] ?? t} ✓
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {resultadoEmision.avisos.map((a, i) => (
+              <p key={i} style={{ fontSize: "13px", color: "#BA7517", marginBottom: "10px" }}>
+                {a}
+              </p>
+            ))}
+
+            {resultadoEmision.omitidos.length > 0 && (
+              <p style={{ fontSize: "13px", color: "#888780", marginBottom: "10px" }}>
+                No se volvió a emitir lo que el paciente ya tenía:{" "}
+                {resultadoEmision.omitidos.map((t) => ETIQUETA_DOC[t] ?? t).join(", ")}.
+              </p>
+            )}
+
+            <button
+              onClick={() => router.push("/dashboard")}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "none",
+                background: "#378ADD",
+                color: "white",
+                fontSize: "15px",
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: "48px",
+              }}
+            >
+              Volver al inicio
+            </button>
           </div>
         </div>
       )}
@@ -2342,7 +2661,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              Antes de finalizar
+              {modoCompletar ? "Antes de enviar" : "Antes de finalizar"}
             </h3>
             <p
               style={{

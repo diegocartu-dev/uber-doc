@@ -23,6 +23,7 @@ import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
 import BannerMercadoPago from "./BannerMercadoPago";
 import BannerIdentidad from "./BannerIdentidad";
+import DocumentacionPendiente from "./DocumentacionPendiente";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
@@ -613,6 +614,11 @@ export default async function DashboardPage({
             <div className="mt-4">
               <BotonPush rol="medico" />
             </div>
+
+            {/* Consultas cerradas sin documentación entregada. Va arriba de todo:
+                es plata cobrada por una atención que el paciente no puede probar.
+                Se autooculta si no hay nada pendiente. */}
+            <DocumentacionPendiente />
 
             {/* Identidad: rechazada → invitación a repetir SIEMPRE (prioridad);
                 pendiente (gate activo) → banner, nunca muro. */}

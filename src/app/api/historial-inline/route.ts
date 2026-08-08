@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { idsSinDocumentacion } from "@/lib/atenciones-sin-documentar";
 
 export async function GET(req: NextRequest) {
   const medicoId = req.nextUrl.searchParams.get("medicoId");
@@ -35,6 +36,11 @@ export async function GET(req: NextRequest) {
       pacMap = new Map((pacs ?? []).map((p) => [p.user_id, { id: p.id, nombre: p.nombre_completo }]));
     }
 
+    // Cuáles de estas consultas cerraron SIN entregarle un solo documento al
+    // paciente. El historial es donde el médico busca una consulta vieja: si el
+    // agujero no se marca acá, no se ve en ningún lado (auditoría 08/08/2026).
+    const sinDocs = await idsSinDocumentacion(data.map((c) => c.id), "consulta");
+
     return NextResponse.json(data.map((c) => {
       const pac = pacMap.get(c.paciente_id);
       return {
@@ -47,6 +53,8 @@ export async function GET(req: NextRequest) {
         url: pac?.id ? `/medico/paciente/${pac.id}` : "#",
         canal_origen: c.canal_origen ?? null,
         created_at_raw: c.created_at,
+        sin_documentacion: sinDocs.has(c.id),
+        completar_url: `/medico/consulta/${c.id}/workspace`,
       };
     }));
   }
@@ -71,6 +79,8 @@ export async function GET(req: NextRequest) {
       nombres = new Map((pacs ?? []).map((p) => [p.id, p.nombre_completo]));
     }
 
+    const sinDocs = await idsSinDocumentacion(data.map((t) => t.id), "turno");
+
     return NextResponse.json(data.map((t) => ({
       id: t.id,
       paciente_nombre: nombres.get(t.paciente_id) ?? "Paciente",
@@ -80,6 +90,8 @@ export async function GET(req: NextRequest) {
       })} · ${t.hora_inicio.slice(0, 5)}`,
       url: t.paciente_id ? `/medico/paciente/${t.paciente_id}` : "#",
       canal_origen: (t as { canal_origen?: string }).canal_origen ?? null,
+      sin_documentacion: sinDocs.has(t.id),
+      completar_url: `/turno/${t.id}/video`,
     })));
   }
 
