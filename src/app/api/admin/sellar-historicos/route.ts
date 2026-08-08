@@ -29,6 +29,8 @@ export const maxDuration = 300;
 
 const CORTE_SELLADO_AUTOMATICO = "2026-08-07T19:09:00Z";
 const MOTIVO_LOTE = "remediacion_falla_de_sellado_automatico";
+const DICTAMEN_REF = "docs/legal/2026-08-07-sellado-diferido-documentos-historicos.md";
+const AUTORIZADO_POR = "Diego González (CEO) — decisión operativa 07/08/2026";
 const TANDA = 10;
 
 function autorizado(req: NextRequest): boolean {
@@ -76,11 +78,19 @@ export async function POST(req: NextRequest) {
   // Lote: uno solo para toda la remediación, reutilizable entre tandas.
   let loteId = body.loteId ?? null;
   if (!loteId) {
-    const { data: lote } = await admin
+    const { data: lote, error: errLote } = await admin
       .from("sellado_diferido_lote")
-      .insert({ motivo: MOTIVO_LOTE, total: docs.length })
+      .insert({
+        motivo: MOTIVO_LOTE,
+        dictamen_ref: DICTAMEN_REF,
+        autorizado_por: AUTORIZADO_POR,
+        documentos_total: docs.length,
+      })
       .select("id")
       .single();
+    if (errLote) {
+      return NextResponse.json({ error: `No se pudo crear el lote: ${errLote.message}` }, { status: 500 });
+    }
     loteId = lote?.id ?? null;
   }
   if (!loteId) return NextResponse.json({ error: "No se pudo crear el lote" }, { status: 500 });
