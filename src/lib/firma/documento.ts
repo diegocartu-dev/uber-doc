@@ -3,8 +3,8 @@
 // Firma electrónica de documentos médicos (receta / certificado / indicaciones /
 // orden) sobre la tabla `documentos`.
 //
-// Tres caminos de atribución, mismo motor criptográfico (hash canónico SHA-256 +
-// RSA-SHA256 con la clave del médico) y mismo registro de no-repudio:
+// Cuatro caminos de atribución, mismo motor criptográfico (hash canónico SHA-256
+// + RSA-SHA256 con la clave del médico) y mismo registro de no-repudio:
 //
 //   1. `firmarDocumento(...)`      — segundo factor OTP (art. 5 Ley 25.506 + 2FA).
 //   2. `firmarDocumentoPorSesion(...)` — atribución por sesión autenticada del
@@ -15,6 +15,11 @@
 //      una firma nueva: la firma electrónica ocurrió al emitirse (art. 5); esto
 //      consolida su evidencia criptográfica. `firmado_at` es el instante REAL
 //      del sellado, nunca la fecha de emisión. Ver el bloque del camino 3.
+//   4. `firmarDocumentoPorRescate(...)` — el profesional redactó el contenido
+//      desde su sesión (autoguardado del borrador) pero la consulta se cerró
+//      sola, sin que tocara "Finalizar". La plataforma emite lo escrito y lo
+//      sella; el log deja constancia expresa de que él NO confirmó al cerrar.
+//      Ver el bloque del camino 4.
 //
 // Ninguna norma (25.506, 27.553, Dto. 98/2023, Dto. 407/2026) exige OTP por
 // documento. Lo que el art. 5 in fine SÍ impone es que, si la firma se
@@ -53,7 +58,18 @@ const REINTENTOS_CADENA = 4;
  */
 export const METODO_SELLADO_DIFERIDO = "sellado_diferido_plataforma";
 
-type MetodoAtribucion = "otp" | "sesion_medico" | typeof METODO_SELLADO_DIFERIDO;
+/**
+ * La plataforma emitió y selló, en el mismo instante, el contenido clínico que
+ * el profesional había dejado escrito en el borrador de una consulta que se
+ * cerró sola. Ver el camino 4 más abajo.
+ */
+export const METODO_RESCATE_BORRADOR = "rescate_borrador";
+
+type MetodoAtribucion =
+  | "otp"
+  | "sesion_medico"
+  | typeof METODO_SELLADO_DIFERIDO
+  | typeof METODO_RESCATE_BORRADOR;
 
 /**
  * Únicos tipos que se sellan: los documentos clínicos que el médico redactó y
@@ -196,16 +212,24 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
 }
 
 /**
- * Si el código sale a producción ANTES de la migración 20260807, el insert en
- * `firma_logs` falla por columna inexistente (42703 / PGRST204) o por
- * `otp_id NOT NULL` (23502) y TODOS los documentos nuevos salen "sin sello".
+ * Si el código sale a producción ANTES de su migración, el insert en
+ * `firma_logs` falla por columna inexistente (42703 / PGRST204), por
+ * `otp_id NOT NULL` (23502) o porque el CHECK del método de atribución todavía
+ * no conoce el valor nuevo (23514) — y los documentos salen "sin sello".
  * El error crudo de PostgREST no lo dice; este prefijo sí, y el cron
  * `documentos-sin-sello` avisa por mail dentro de la hora.
  */
 function pistaMigracion(error: { code?: string; message?: string }): string {
   const codigo = error.code ?? "";
+  const mensaje = error.message ?? "";
   const esColumnaFaltante = codigo === "42703" || codigo === "PGRST204";
-  const esOtpObligatorio = codigo === "23502" && (error.message ?? "").includes("otp_id");
+  const esOtpObligatorio = codigo === "23502" && mensaje.includes("otp_id");
+  // 23514 = check_violation. El CHECK de metodo_atribucion se ensancha en cada
+  // migración que agrega un camino de firma nuevo.
+  const esMetodoDesconocido = codigo === "23514" && mensaje.includes("metodo_atribucion");
+  if (esMetodoDesconocido) {
+    return "MIGRACIÓN FALTANTE (el CHECK de firma_logs.metodo_atribucion no conoce este método — aplicar la migración del camino de firma correspondiente, p. ej. supabase/migrations/20260808_rescate_borrador.sql): ";
+  }
   return esColumnaFaltante || esOtpObligatorio
     ? "MIGRACIÓN FALTANTE (aplicar supabase/migrations/20260807_firma_por_sesion.sql): "
     : "";
@@ -876,6 +900,118 @@ export async function sellarDocumentoDiferido(
     medico_id: doc.medico_id,
     clave_creada: claves.creada,
   };
+}
+
+// ─── Camino 4 — firma de lo rescatado del borrador ───────────────────────────
+//
+// QUÉ PASÓ CUANDO SE USA ESTE CAMINO: el profesional escribió el contenido
+// clínico durante la consulta y Docto lo autoguardó en el borrador (cada PATCH
+// del autoguardado verificó su sesión autenticada). Después la consulta se cerró
+// SIN que tocara "Finalizar": se cortó internet, se cerró la sala de video, o la
+// cerró un cron. Antes de esto, lo escrito moría en el borrador y el paciente no
+// recibía nada.
+//
+// QUÉ CERTIFICA: que el contenido emitido es exactamente el que el profesional
+// dejó escrito, que desde el sellado no cambió, y la atribución al profesional
+// —sostenida en la redacción desde su sesión, no en un acto de cierre.
+//
+// QUÉ NO CERTIFICA, y el log lo dice con todas las letras
+// (`confirmado_por_el_profesional_al_cerrar: false`): que el profesional haya
+// revisado y confirmado el contenido antes de emitirse. No lo hizo — por eso el
+// rescate SIEMPRE le avisa para que revise.
+//
+// Mismo motor, mismo log, misma identidad congelada que los otros caminos: lo
+// único distinto es el nombre honesto de la atribución.
+
+export type ContextoRescate = {
+  /** Por qué camino se cerró el encuentro (cierre_origen del registro). */
+  cierreOrigen: string;
+  /** `updated_at` del borrador rescatado: cuándo escribió el profesional. */
+  borradorActualizadoAt: string | null;
+  /** Instante en que el sistema cerró el encuentro. */
+  cerradoAt: string;
+};
+
+/**
+ * Firma un documento emitido por el rescate automático del borrador.
+ * El caller DEBE haber verificado que el documento corresponde a `medicoId`.
+ */
+export async function firmarDocumentoPorRescate(
+  documentoId: string,
+  medicoId: string,
+  rescate: ContextoRescate
+): Promise<FirmaResult> {
+  const supabase = createAdminClient();
+
+  const { data: doc } = await supabase
+    .from("documentos")
+    .select(COLUMNAS_FIRMABLES)
+    .eq("id", documentoId)
+    .single<DocFirmable & { firma_digital: unknown; consulta_id: string | null; turno_id: string | null }>();
+
+  if (!doc) return { ok: false, error: "Documento no encontrado" };
+  if (doc.medico_id !== medicoId) return { ok: false, error: "No autorizado" };
+  if (doc.firma_digital) return { ok: false, error: "Documento ya firmado" };
+  if (!esTipoFirmable(doc.tipo)) return { ok: false, error: `Tipo no firmable: ${doc.tipo}` };
+  if (!doc.consulta_id && !doc.turno_id) {
+    return { ok: false, error: "Documento sin consulta ni turno asociado" };
+  }
+
+  const firmante = await snapshotFirmante(medicoId);
+
+  // Mismo gate de estado del firmante que el camino por sesión: la firma se
+  // atribuye a la matrícula, y un profesional rechazado o suspendido no sigue
+  // sellando con ella. Cuentas de test exentas de REFEPS (igual que el
+  // constraint de DB).
+  const habilitado =
+    firmante.estado_registro === "aprobado" &&
+    (firmante.refeps_validado === true || firmante.es_cuenta_test === true);
+  if (!habilitado) {
+    return { ok: false, error: "Profesional no habilitado para firmar" };
+  }
+
+  const { data: claves } = await supabase
+    .from("medico_claves")
+    .select("id, clave_privada_enc")
+    .eq("medico_id", medicoId)
+    .eq("activa", true)
+    .maybeSingle();
+
+  if (!claves) return { ok: false, error: "Médico sin claves de firma activas" };
+
+  const identidad = await construirIdentidadDocumento(medicoId, doc.paciente_id);
+  if (!identidad) {
+    return { ok: false, error: "No se pudo congelar la identidad del documento" };
+  }
+
+  const contextoBase = await contextoDocumento(doc, {
+    consulta_id: doc.consulta_id,
+    turno_id: doc.turno_id,
+  });
+
+  return sellarDocumento(doc, identidad, claves, {
+    metodo_atribucion: METODO_RESCATE_BORRADOR,
+    otp_id: null,
+    // No hubo request del profesional: no se inventa IP ni user-agent.
+    ip: null,
+    user_agent: null,
+    firmante,
+    contexto: {
+      ...contextoBase,
+      // Los dos campos que exige el CHECK de la migración 20260808.
+      rescate_automatico: true,
+      cierre_origen: rescate.cierreOrigen,
+      // La constancia expresa de lo que NO pasó.
+      confirmado_por_el_profesional_al_cerrar: false,
+      acto_de_voluntad_original: {
+        tipo: "redaccion_autoguardada_desde_sesion_autenticada",
+        borrador_actualizado_at: rescate.borradorActualizadoAt,
+      },
+      cerrado_automaticamente_at: rescate.cerradoAt,
+      motivo: "rescate_de_borrador_en_cierre_automatico",
+      revision_del_profesional: "pendiente_notificada",
+    },
+  });
 }
 
 // ─── Snapshot del firmante y del contexto (checklist del dictamen) ────────────
