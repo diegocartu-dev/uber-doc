@@ -5,7 +5,8 @@
  * QUÉ HACE
  * Busca consultas y turnos que:
  *   - ya están CERRADOS,
- *   - el paciente PAGÓ,
+ *   - el paciente PAGÓ (`mp_status = 'approved'`; con --incluir-test entran
+ *     además los pagos simulados de cuentas de prueba),
  *   - NO tienen ningún documento clínico emitido, y
  *   - SÍ tienen un borrador con contenido clínico guardado.
  * Es decir: encuentros donde el profesional escribió, el sistema lo guardó, y el
@@ -76,6 +77,8 @@ type Candidato = {
   cerradoAt: string | null;
   cierreOrigen: string | null;
   campos: string[];
+  /** Cómo se cobró el encuentro. Se muestra en el reporte antes de aplicar. */
+  cobro: string;
 };
 
 async function main() {
@@ -91,7 +94,9 @@ async function main() {
 
   if (!Number.isFinite(Date.parse(hasta))) salir(`--hasta no es una fecha válida: "${hasta}"`);
   if (desde && !Number.isFinite(Date.parse(desde))) salir(`--desde no es una fecha válida: "${desde}"`);
-  if (limiteArg && (!Number.isFinite(limite) || limite < 1)) salir(`--limite tiene que ser un entero positivo`);
+  if (limiteArg && (!Number.isInteger(limite) || limite < 1)) {
+    salir(`--limite tiene que ser un entero positivo: "${limiteArg}". Se escribe pegado con "=": --limite=5`);
+  }
   if (tipoArg && tipoArg !== "consulta" && tipoArg !== "turno") salir(`--tipo solo acepta "consulta" o "turno"`);
 
   verificarEnv(aplicar);
@@ -130,6 +135,7 @@ async function main() {
     const fecha = c.cerradoAt ? c.cerradoAt.slice(0, 10) : "sin fecha de cierre";
     console.log(`· ${c.tipo} ${c.id}`);
     console.log(`    cerrado: ${fecha}${c.cierreOrigen ? ` (${c.cierreOrigen})` : ""}`);
+    console.log(`    cobro:   ${c.cobro}`);
     console.log(`    escrito sin entregar: ${c.campos.join(", ")}`);
   }
   console.log("");
@@ -176,14 +182,16 @@ async function main() {
 // ─── Búsqueda de candidatos ──────────────────────────────────────────────────
 
 /**
- * Cerrado + pagado + sin documentos + con borrador con contenido.
+ * Cerrado + COBRADO + sin documentos clínicos + con borrador con contenido.
  *
- * El filtro de "pagado" se hace por canal:
- *   - consultas: `mp_status = 'approved'` (o pago simulado de cuenta de prueba).
- *   - turnos:    el turno existe porque se reservó y se cobró; se exige `pagado`
- *                si la columna está poblada, y si no se toma el estado cerrado
- *                como prueba de que ocurrió.
- * Ante la duda se INCLUYE en la lista y se marca: es un repaso manual, no un cron.
+ * EL FILTRO DE COBRO ES REAL, no una promesa del comentario: se exige
+ * `mp_status = 'approved'` en las dos tablas. Sin él, `--aplicar` podía emitir y
+ * FIRMAR documentación clínica sobre encuentros que nunca se cobraron o que
+ * terminaron en reembolso.
+ *
+ * Las cuentas de prueba no tienen `mp_status` (el pago se simula: `estado` pasa a
+ * "pagada" y `mp_status` queda en NULL). Por eso con `--incluir-test` el filtro
+ * de cobro se relaja: si no, la opción no serviría para nada.
  */
 async function buscarCandidatos(
   tipo: CanalRescate,
@@ -195,9 +203,13 @@ async function buscarCandidatos(
 
   let query = admin
     .from(tabla)
-    .select("id, estado, paciente_id, medico_id, doc_borrador, completada_at, cierre_origen")
+    .select("id, estado, paciente_id, medico_id, doc_borrador, completada_at, cierre_origen, mp_status")
     .in("estado", ESTADOS_CERRADOS)
     .not("doc_borrador", "is", null);
+
+  // Cobrado de verdad. Con --incluir-test entran también los pagos simulados
+  // (mp_status NULL), que es la única forma de probar el script de punta a punta.
+  if (!filtros.incluirTest) query = query.eq("mp_status", "approved");
 
   // `completada_at` puede ser NULL en cierres viejos (anteriores al 04/08): esos
   // no se pueden acotar por fecha, así que entran igual y se filtran a ojo.
@@ -224,7 +236,11 @@ async function buscarCandidatos(
     if (errDocs) salir(`No se pudieron contar documentos de ${tabla} ${fila.id}: ${errDocs.message}`);
     if ((count ?? 0) > 0) continue;
 
-    if (!filtros.incluirTest && (await esDePrueba(tipo, fila.paciente_id, fila.medico_id))) continue;
+    const esTest = await esDePrueba(tipo, fila.paciente_id, fila.medico_id);
+    if (!filtros.incluirTest && esTest) continue;
+    // Red del filtro de cobro para el modo --incluir-test: un encuentro REAL sin
+    // pago aprobado no se toca ni siquiera ahí.
+    if (fila.mp_status !== "approved" && !esTest) continue;
 
     salida.push({
       tipo,
@@ -232,6 +248,7 @@ async function buscarCandidatos(
       cerradoAt: fila.completada_at ?? null,
       cierreOrigen: fila.cierre_origen ?? null,
       campos,
+      cobro: fila.mp_status === "approved" ? "cobrado" : "pago simulado (cuenta de prueba)",
     });
   }
 
@@ -281,6 +298,22 @@ async function esDePrueba(
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 
+/**
+ * Opciones tipo `--clave=valor`. Los flags sin valor (`--aplicar`) quedan como
+ * cadena vacía y se leen con `.has()`.
+ *
+ * `OPCIONES_CON_VALOR` existe por un bug que ya nos mordió una vez (ver el mismo
+ * guard en scripts/sellar-documentos-historicos.ts): escrito con espacio en vez
+ * de `=`, `--limite 5` se parsea como el flag `limite` sin valor + el token
+ * suelto `5`. Entonces `limite` queda en Infinity, el guard `if (limiteArg && …)`
+ * no salta porque `''` es falsy, y el `slice(0, undefined)` procesa TODOS los
+ * candidatos: la opción cuyo único propósito es probar de a poco sobre historias
+ * clínicas reales hace exactamente lo contrario. Lo mismo, en silencio, con
+ * `--tipo consulta` (procesa los dos canales) y `--desde 2026-07-01` (ignora el
+ * piso de fecha). Acá se rechaza de entrada: falla ruidoso, nunca abierto.
+ */
+const OPCIONES_CON_VALOR = ["limite", "desde", "hasta", "tipo"];
+
 function parsearArgs(argv: string[]): Map<string, string> {
   const mapa = new Map<string, string>();
   for (const a of argv) {
@@ -290,6 +323,17 @@ function parsearArgs(argv: string[]): Map<string, string> {
     if (corte === -1) mapa.set(limpio, "");
     else mapa.set(limpio.slice(0, corte), limpio.slice(corte + 1));
   }
+
+  for (const opcion of OPCIONES_CON_VALOR) {
+    if (mapa.has(opcion) && mapa.get(opcion) === "") {
+      salir(
+        `--${opcion} necesita un valor y se escribe pegado con "=".\n` +
+          `  Así NO: --${opcion} <valor>\n` +
+          `  Así SÍ: --${opcion}=<valor>`
+      );
+    }
+  }
+
   return mapa;
 }
 

@@ -28,6 +28,14 @@ import { rescatarBorradoresAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 // Si dos ticks se solapan, el segundo ya no encuentra en_curso → no re-resuelve.
 // ---------------------------------------------------------------------------
 
+// Cerrar es barato; rescatar el borrador no (emite, firma y manda mails/pushes).
+// Con el default de 15 s de Vercel, una tanda de 4-5 encuentros mata la función.
+export const maxDuration = 300;
+
+// Techo de rescates por corrida. Lo que sobra no se pierde: lo levanta el repaso
+// de "cerrado sin entregar" del cron cerrar-huerfanas (sigue sin documentos).
+const MAX_RESCATES_POR_CORRIDA = 15;
+
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -41,6 +49,10 @@ async function handler(req: NextRequest) {
   // Documentos que estaban escritos en el borrador y este backstop llegó a entregar.
   let totalDocumentosRescatados = 0;
   const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
+  // Encuentros cerrados por este cron cuyo borrador hay que rescatar. Se juntan
+  // acá y se procesan DESPUÉS de cerrar todo: cerrar es lo urgente (destraba al
+  // paciente en la pantalla de espera), rescatar es lo lento.
+  const porRescatar: { tipo: "consulta" | "turno"; ids: string[] }[] = [];
 
   for (const tabla of ["consultas", "turnos"] as const) {
     // Candidatos: en_curso con corte pendiente que ya superó la ventana de 2 min.
@@ -89,17 +101,25 @@ async function handler(req: NextRequest) {
     }
 
     const cerradasIds = (actualizadas ?? []).map((r) => r.id);
-
-    // Rescate del borrador: lo escrito y no entregado sale ahora. Nunca lanza.
-    const rescates = await rescatarBorradoresAlCerrar(
-      tabla === "consultas" ? "consulta" : "turno",
-      cerradasIds,
-      "rejoin_expirado"
-    );
-    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+    porRescatar.push({ tipo: tabla === "consultas" ? "consulta" : "turno", ids: cerradasIds });
 
     totalCerradas += cerradasIds.length;
     detalle.push({ tabla, cerradas: cerradasIds.length, ids: cerradasIds });
+  }
+
+  // Rescate del borrador: lo escrito y no entregado sale ahora. Nunca lanza.
+  // Como estos encuentros llevan al menos un día abiertos (este cron es diario),
+  // la marca `cierre_origen='medico'` que pudiera haber quedado ya no significa
+  // nada: el guardado en background del profesional murió hace rato. Se rescata
+  // igual; contra duplicados está el chequeo de documentos del propio rescate.
+  let rescatesHechos = 0;
+  for (const grupo of porRescatar) {
+    const cupo = MAX_RESCATES_POR_CORRIDA - rescatesHechos;
+    if (cupo <= 0) break;
+    const ids = grupo.ids.slice(0, cupo);
+    rescatesHechos += ids.length;
+    const rescates = await rescatarBorradoresAlCerrar(grupo.tipo, ids, "rejoin_expirado");
+    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
   }
 
   if (totalCerradas > 0) {

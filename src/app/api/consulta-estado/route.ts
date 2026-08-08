@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
+import { elMedicoYaEstabaFinalizando, rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
+
+// El request que gana la carrera del cierre se lleva además el rescate del
+// borrador: emitir + firmar + avisar es HTTP externo (Resend, web-push) y no
+// entra en los 15 s por defecto de Vercel. El resto de los polls sigue
+// respondiendo en milisegundos — esto es un techo, no una espera.
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const consultaId = req.nextUrl.searchParams.get("consultaId");
@@ -58,9 +64,22 @@ export async function GET(req: NextRequest) {
     new Date(desconectado_at).getTime() < Date.now() - 2 * 60 * 1000
   ) {
     const admin = createAdminClient();
+
+    // ¿El médico ya había apretado "Finalizar"? El overlay de corte le ofrece el
+    // botón justo mientras corre este reloj de 2 minutos, así que las dos cosas
+    // pueden pasar en el mismo segundo. Si él lo inició, la emisión es de SU
+    // flujo: acá se cierra sin rescatar y sin pisar la firma del cierre. Mismo
+    // criterio que el webhook de video.
+    const finalizacionDelMedico = await elMedicoYaEstabaFinalizando("consulta", consultaId);
+
     const { data: cerrada } = await admin
       .from("consultas")
-      .update({ estado: "completada", desconectado_at: null, completada_at: new Date().toISOString(), cierre_origen: "desconexion" })
+      .update({
+        estado: "completada",
+        desconectado_at: null,
+        completada_at: new Date().toISOString(),
+        cierre_origen: finalizacionDelMedico ? "medico" : "desconexion",
+      })
       .eq("id", consultaId)
       .eq("estado", "en_curso")
       .select("id")
@@ -74,11 +93,13 @@ export async function GET(req: NextRequest) {
       // paso pide sus documentos — si el rescate corriera después, la pantalla de
       // cierre le mostraría "sin documentos" durante unos segundos.
       // Nunca lanza y nunca revierte el cierre (ver el módulo).
-      await rescatarBorradorAlCerrar({
-        tipo: "consulta",
-        id: consultaId,
-        origen: "desconexion",
-      });
+      if (!finalizacionDelMedico) {
+        await rescatarBorradorAlCerrar({
+          tipo: "consulta",
+          id: consultaId,
+          origen: "desconexion",
+        });
+      }
     }
   }
 

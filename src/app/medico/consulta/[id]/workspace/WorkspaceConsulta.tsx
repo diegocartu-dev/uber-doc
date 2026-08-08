@@ -1191,6 +1191,11 @@ export default function WorkspaceConsulta({
       try {
         const supabase = createClient();
 
+        // OJO: este SELECT NO agrega columnas nuevas. En PostgREST, una sola
+        // columna sin GRANT tumba la query ENTERA y devuelve null en silencio
+        // (ver CLAUDE.md) — y acá eso significaría no guardar NADA de lo que el
+        // médico escribió. `cierre_origen` se lee aparte, más abajo y solo
+        // cuando hace falta.
         const { data: registroDb } = await supabase
           .from(tablaPrincipal)
           .select("estado, paciente_id, medico_id")
@@ -1205,18 +1210,57 @@ export default function WorkspaceConsulta({
         // verdad — el webhook de la sala de video cierra apenas se borra el room,
         // y puede ganarle a este bloque por milisegundos.
         //
-        // Ahora se sigue adelante y se guarda igual, salvo que YA existan
-        // documentos de este encuentro (ahí sí no hay nada que hacer y volver a
-        // insertar duplicaría recetas). El estado no se vuelve a tocar: la firma
-        // del cierre real se respeta.
+        // Ahora se sigue adelante y se guarda igual, con dos frenos. El estado no
+        // se vuelve a tocar: la firma del cierre real se respeta.
         const yaCerrada = registroDb.estado === estadoCompletado;
+
+        // FRENO 1 — ¿la cerró un camino AUTOMÁTICO? Entonces ese camino ya
+        // rescató el borrador y emitió los documentos (ver
+        // src/lib/consultas/cerrar-con-rescate.ts). Insertar acá sería mandarle
+        // al paciente dos recetas firmadas del mismo encuentro. El borrador NO se
+        // borra: es la evidencia de qué había.
+        //
+        // Al revés (este bloque gana y el cierre automático llega después) el
+        // freno es del otro lado: el DELETE de la sala deja `cierre_origen =
+        // 'medico'` ANTES de borrarla, y los cierres en vivo que ven esa marca
+        // cierran sin rescatar. Entre las dos guardas, exactamente uno de los dos
+        // caminos emite.
+        const CERRADA_POR_UN_CAMINO_QUE_RESCATA = [
+          "desconexion",
+          "webhook_video",
+          "cierre_automatico",
+          "rejoin_expirado",
+        ];
+        let laCerroElSistema = false;
         if (yaCerrada) {
-          const { data: docsPrevios } = await supabase
+          const { data: cierre } = await supabase
+            .from(tablaPrincipal)
+            .select("cierre_origen")
+            .eq("id", consultaId)
+            .maybeSingle();
+          laCerroElSistema =
+            typeof cierre?.cierre_origen === "string" &&
+            CERRADA_POR_UN_CAMINO_QUE_RESCATA.includes(cierre.cierre_origen);
+        }
+
+        // FRENO 2 — ¿ya hay documentos clínicos de este encuentro?
+        // Solo cuentan los TIPOS CLÍNICOS. `documentos` también guarda filas de
+        // tracking tipo 'documento_medico', que se insertan cada vez que el médico
+        // le manda un adjunto por mail al paciente DURANTE la consulta: contarlas
+        // hacía que un adjunto del minuto 10 descartara todo lo escrito, que es
+        // justo el bug que este bloque viene a arreglar.
+        let emitirDocumentos = !laCerroElSistema;
+        if (emitirDocumentos && yaCerrada) {
+          const { data: docsPrevios, error: errorDocsPrevios } = await supabase
             .from("documentos")
             .select("id")
             .eq(esTurno ? "turno_id" : "consulta_id", consultaId)
+            .in("tipo", ["receta", "indicaciones", "certificado", "orden"])
             .limit(1);
-          if (docsPrevios && docsPrevios.length > 0) return;
+          // Si no se pudo chequear, no se emite: ante la duda, duplicar recetas
+          // firmadas es peor que no emitir (el borrador queda y el repaso nocturno
+          // del cron cerrar-huerfanas lo levanta).
+          if (errorDocsPrevios || (docsPrevios && docsPrevios.length > 0)) emitirDocumentos = false;
         }
 
         // pacientes.id para el insert de documentos (asimetría de schema por canal):
@@ -1257,28 +1301,35 @@ export default function WorkspaceConsulta({
         if (docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-        const { error: errorDocs } = await supabase.from("documentos").insert(
-          docs.map((d) => ({
-            consulta_id: esTurno ? null : consultaId,
-            turno_id: esTurno ? consultaId : null,
-            paciente_id: pacienteId,
-            medico_id: medico.id,
-            tipo: d.tipo,
-            diagnostico: diagnostico.trim(),
-            contenido: d.contenido,
-            tratamiento: d.tratamiento ?? null,
-            dias_reposo: d.dias_reposo ?? null,
-          }))
-        );
+        let errorDocs: { message: string } | null = null;
+        if (emitirDocumentos) {
+          const { error } = await supabase.from("documentos").insert(
+            docs.map((d) => ({
+              consulta_id: esTurno ? null : consultaId,
+              turno_id: esTurno ? consultaId : null,
+              paciente_id: pacienteId,
+              medico_id: medico.id,
+              tipo: d.tipo,
+              diagnostico: diagnostico.trim(),
+              contenido: d.contenido,
+              tratamiento: d.tratamiento ?? null,
+              dias_reposo: d.dias_reposo ?? null,
+            }))
+          );
+          errorDocs = error;
+        }
 
-        // Si el insert falló, el borrador NO se borra (auditoría 08/08/2026).
-        // Antes se borraba a renglón seguido sin mirar el error: los documentos
-        // no existían, lo escrito se perdía y no quedaba ni rastro. Conservarlo
-        // deja el contenido recuperable —a mano o con
-        // scripts/rescatar-borradores-perdidos.ts— en vez de evaporarse.
+        // Si el insert falló —o si no se emitió porque los documentos ya salieron
+        // por el cierre automático— el borrador NO se borra (auditoría
+        // 08/08/2026). Antes se borraba a renglón seguido sin mirar el error: los
+        // documentos no existían, lo escrito se perdía y no quedaba ni rastro.
+        // Conservarlo deja el contenido recuperable — a mano, con el repaso
+        // nocturno del cron cerrar-huerfanas, o con
+        // scripts/rescatar-borradores-perdidos.ts.
         // El cierre se hace igual: dejar la consulta abierta trabaría al
         // paciente en la pantalla de espera.
         if (errorDocs) console.error("[finalizar] no se pudieron guardar los documentos:", errorDocs.message);
+        const borradorEntregado = emitirDocumentos && !errorDocs;
 
         await supabase
           .from(tablaPrincipal)
@@ -1295,7 +1346,11 @@ export default function WorkspaceConsulta({
                   completada_at: new Date().toISOString(),
                   cierre_origen: "medico",
                 }),
-            ...(errorDocs ? {} : { doc_borrador: null }),
+            ...(borradorEntregado ? { doc_borrador: null } : {}),
+            // La evolución SIEMPRE se guarda, aunque los documentos los haya
+            // emitido el cierre automático: esta es la versión que el profesional
+            // revisó y confirmó en pantalla, y pisa a la que el rescate haya
+            // guardado sin validar.
             evolucion: evolucion.trim(),
             // Momento de generar; fallback al de finalizar si por algún borde no se
             // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
@@ -1311,13 +1366,15 @@ export default function WorkspaceConsulta({
         // `keepalive` para que sobreviva si cierra la pestaña justo después.
         // Si falla, los documentos igual quedan guardados y entregados: el PDF
         // los muestra explícitamente como "sin sello". NUNCA bloquear por firma.
-        fetch("/api/documentos/firmar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          keepalive: true,
-          body: JSON.stringify({ consultaId, tipo }),
-        }).catch(() => {});
+        if (emitirDocumentos && !errorDocs) {
+          fetch("/api/documentos/firmar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            keepalive: true,
+            body: JSON.stringify({ consultaId, tipo }),
+          }).catch(() => {});
+        }
 
         // Borrar estudios temporales del paciente (route channel-aware)
         fetch("/api/consulta/borrar-estudios-temp", {
@@ -1327,12 +1384,16 @@ export default function WorkspaceConsulta({
           body: JSON.stringify({ consultaId, tipo }),
         }).catch(() => {});
 
-        fetch("/api/push/notificar-documentos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ pacienteId, consultaId, tipo }),
-        }).catch(() => {});
+        // Aviso al paciente de que tiene documentos. Si los emitió el cierre
+        // automático, ya se lo avisó el rescate: no se le manda dos veces.
+        if (emitirDocumentos && !errorDocs) {
+          fetch("/api/push/notificar-documentos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ pacienteId, consultaId, tipo }),
+          }).catch(() => {});
+        }
       } catch {
         // Background: no hay UI para mostrar error, falla silenciosamente
       }

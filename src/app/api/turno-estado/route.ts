@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
+import { elMedicoYaEstabaFinalizando, rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
+
+// Ver /api/consulta-estado: el request que cierra se lleva el rescate del
+// borrador (emitir + firmar + avisar, con HTTP externo) y no entra en los 15 s
+// por defecto de Vercel.
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const turnoId = req.nextUrl.searchParams.get("turnoId");
@@ -48,6 +53,12 @@ export async function GET(req: NextRequest) {
     new Date(desconectado_at).getTime() < Date.now() - 2 * 60 * 1000
   ) {
     const admin = createAdminClient();
+
+    // Igual que en /api/consulta-estado: si el médico ya había apretado
+    // "Finalizar" (el DELETE de la sala deja la marca), la emisión es de su
+    // flujo y acá NO se rescata — rescatar sería duplicar documentos firmados.
+    const finalizacionDelMedico = await elMedicoYaEstabaFinalizando("turno", turnoId);
+
     // `completada_at` + `cierre_origen` igual que en /api/consulta-estado: sin
     // ellos no hay duración del encuentro ni forma de saber quién lo cerró (el
     // camino de turnos los venía omitiendo).
@@ -57,7 +68,7 @@ export async function GET(req: NextRequest) {
         estado: "completado",
         desconectado_at: null,
         completada_at: new Date().toISOString(),
-        cierre_origen: "desconexion",
+        cierre_origen: finalizacionDelMedico ? "medico" : "desconexion",
       })
       .eq("id", turnoId)
       .eq("estado", "en_curso")
@@ -69,7 +80,9 @@ export async function GET(req: NextRequest) {
 
       // El UPDATE condicionado de arriba es el mutex: solo el request que cerró
       // el turno rescata el borrador. Se espera a propósito (ver consulta-estado).
-      await rescatarBorradorAlCerrar({ tipo: "turno", id: turnoId, origen: "desconexion" });
+      if (!finalizacionDelMedico) {
+        await rescatarBorradorAlCerrar({ tipo: "turno", id: turnoId, origen: "desconexion" });
+      }
     }
   }
 

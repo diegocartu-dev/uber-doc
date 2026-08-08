@@ -3,7 +3,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
-import { rescatarBorradoresAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
+import {
+  rescatarBorradoresAlCerrar,
+  rescatarLoEscritoQueNuncaSeEntrego,
+} from "@/lib/consultas/cerrar-con-rescate";
+
+// Este cron emite documentos, los firma (≈10 queries por documento) y manda
+// mails + pushes. Con el default de Vercel (15 s) una tanda de 4-5 encuentros
+// mata la función. El resto de los crons del repo también lo declara.
+export const maxDuration = 300;
+
+// Techo de rescates por corrida. Lo que sobra no se pierde: al día siguiente el
+// repaso de "cerrado sin entregar" lo vuelve a levantar (sigue sin documentos).
+const MAX_RESCATES_POR_CORRIDA = 15;
 
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -24,6 +36,9 @@ async function handler(req: NextRequest) {
   // ~3 meses muerta filtrando por una columna inexistente sin que saltara nada).
   let huboError = false;
   const detalle: { tabla: string; cerradas: number; ids: string[] }[] = [];
+  // Encuentros que este cron cerró y a los que hay que rescatarles el borrador.
+  // Se acumulan y se procesan AL FINAL (ver el comentario en el loop).
+  const porRescatar: { tipo: "consulta" | "turno"; ids: string[] }[] = [];
 
   for (const tabla of ["consultas", "turnos"] as const) {
     // `consultas` NO tiene `updated_at` (usa `en_curso_at`); `turnos` sí. Antes este
@@ -81,15 +96,12 @@ async function handler(req: NextRequest) {
 
     const cerradasIds = (cerradas ?? []).map((c) => c.id);
 
-    // Rescate del borrador de cada una: lo que el médico escribió y nunca llegó a
-    // enviar se emite y se firma acá. Nunca lanza — un fallo del rescate no deja
-    // consultas abiertas ni rompe la corrida del cron.
-    const rescates = await rescatarBorradoresAlCerrar(
-      tabla === "consultas" ? "consulta" : "turno",
-      cerradasIds,
-      "cierre_automatico"
-    );
-    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+    // El rescate de estos encuentros NO corre acá: se junta y se ejecuta al final
+    // de la corrida. Es trabajo lento (emitir + firmar + mails + pushes) y si se
+    // come el tiempo de la función acá arriba, se lleva puestas las limpiezas y
+    // —peor— la recuperación de consultas PAGADAS que quedaron colgadas, que es
+    // lo único de este cron que un paciente está esperando en vivo.
+    porRescatar.push({ tipo: tabla === "consultas" ? "consulta" : "turno", ids: cerradasIds });
 
     totalCerradas += cerradasIds.length;
     detalle.push({ tabla, cerradas: cerradasIds.length, ids: cerradasIds });
@@ -155,10 +167,43 @@ async function handler(req: NextRequest) {
     }
   }
 
-  if (totalCerradas > 0 || oauthLimpiados > 0 || webhookLimpiados > 0 || pagadasRecuperadas > 0) {
+  // ── Rescate del borrador de lo que se cerró recién ──────────────────────────
+  // Último de la corrida a propósito: es lo más lento y lo único que puede
+  // quedarse sin tiempo. Nunca lanza. Acotado por MAX_RESCATES_POR_CORRIDA; lo
+  // que no entre lo levanta el repaso de abajo en la próxima corrida.
+  //
+  // A diferencia de los cierres EN VIVO, acá NO se mira la marca `cierre_origen
+  // = 'medico'`: estos encuentros llevan horas abiertos, así que el guardado en
+  // background del profesional hace rato que murió. Saltearlos por una marca
+  // vieja dejaría al paciente sin nada. La red contra duplicados es el chequeo
+  // de documentos ya emitidos que hace el propio rescate.
+  let rescatesHechos = 0;
+  for (const grupo of porRescatar) {
+    const cupo = MAX_RESCATES_POR_CORRIDA - rescatesHechos;
+    if (cupo <= 0) break;
+    const ids = grupo.ids.slice(0, cupo);
+    rescatesHechos += ids.length;
+    const rescates = await rescatarBorradoresAlCerrar(grupo.tipo, ids, "cierre_automatico");
+    totalDocumentosRescatados += rescates.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+  }
+
+  // ── Repaso: encuentros ya cerrados a los que nunca se les entregó nada ──────
+  // Cubre el agujero del camino feliz: el profesional apretó "Finalizar" pero el
+  // guardado en background nunca terminó (pestaña cerrada, navegador móvil que
+  // congela la página de fondo, insert fallido). El encuentro figura cerrado por
+  // el médico, el borrador está entero y el paciente no tiene un solo documento.
+  // Ningún cierre automático lo ve, porque ya está cerrado.
+  const repaso = await rescatarLoEscritoQueNuncaSeEntrego({
+    limite: Math.max(0, MAX_RESCATES_POR_CORRIDA - rescatesHechos),
+  });
+  const documentosDelRepaso = repaso.reduce((acc, r) => acc + r.documentos_emitidos, 0);
+  totalDocumentosRescatados += documentosDelRepaso;
+
+  if (totalCerradas > 0 || oauthLimpiados > 0 || webhookLimpiados > 0 || pagadasRecuperadas > 0 || repaso.length > 0) {
     logInfo("[CRON/HUERFANAS]", "Ejecución con cambios", {
       totalCerradas,
       totalDocumentosRescatados,
+      repasoSinEntrega: repaso.length,
       oauthStateLimpiados: oauthLimpiados,
       webhookFailedLimpiados: webhookLimpiados,
       pagadasRecuperadas,
@@ -170,6 +215,8 @@ async function handler(req: NextRequest) {
     ok: !huboError,
     total_cerradas: totalCerradas,
     documentos_rescatados: totalDocumentosRescatados,
+    repaso_sin_entrega: repaso.length,
+    documentos_del_repaso: documentosDelRepaso,
     oauth_state_limpiados: oauthLimpiados,
     webhook_failed_limpiados: webhookLimpiados,
     pagadas_recuperadas: pagadasRecuperadas,

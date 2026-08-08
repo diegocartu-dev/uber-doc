@@ -43,8 +43,18 @@ cerrado automáticamente**:
    certificado, orden o días de reposo — strings vacíos no cuentan), emite los
    documentos con **el mismo criterio que el cierre normal del médico**: mismos
    tipos, mismos campos, mismo fallback (si no hay ningún documento pero sí
-   diagnóstico, se emite como indicaciones), misma omisión de la receta cuando el
-   paciente no tiene CUIL.
+   diagnóstico, se emite como indicaciones), y las mismas **dos omisiones**:
+   - **receta sin CUIL del paciente** — no se puede emitir;
+   - **certificado sin días de reposo** — los días son un dato jurídico
+     obligatorio (art. 210 LCT) y el cierre normal los exige. El autoguardado
+     persiste `dias_reposo: null` mientras el profesional todavía no eligió el
+     chip, así que el caso es frecuente: escribe el cuerpo, sigue hablando más de
+     5 s, se corta la llamada. Emitirlo igual habría mandado —y sellado con la
+     matrícula del profesional— un certificado que dice "0 días de reposo
+     laboral", texto que nadie escribió.
+
+   Las dos omisiones se marcan en el resultado y se dicen en el aviso al médico y
+   en el mail del equipo, con el dato que falta y qué hacer.
 3. Los sella por el mismo motor de firma (`sellarDocumento` → hash canónico
    SHA-256 + RSA-SHA256 + log encadenado en `firma_logs`).
 4. Guarda la evolución si el borrador la tiene y el encuentro no tenía.
@@ -72,6 +82,39 @@ mutex: solo el que efectivamente cerró el encuentro rescata. Si el webhook de
 video y el polling del paciente se disparan casi a la vez, uno solo cierra y uno
 solo emite. Como cinturón adicional, el helper vuelve a chequear que no existan
 documentos clínicos del encuentro antes de emitir.
+
+Ese mutex serializa a los **cerradores entre sí**, pero no cubre al médico
+emitiendo por el camino normal: el overlay de corte le ofrece "Finalizar
+consulta" justo mientras corre el reloj de 2 minutos, así que las dos cosas
+pueden pasar en el mismo segundo. Eso se resuelve con dos guardas
+complementarias, una por cada orden posible de la carrera:
+
+| Quién llega primero | Quién emite | Guarda |
+|---|---|---|
+| El médico (el DELETE de la sala deja `cierre_origen = 'medico'`) | El flujo del médico | Los cierres **en vivo** (webhook, `consulta-estado`, `turno-estado`) ven la marca y cierran **sin rescatar** |
+| El cierre automático (deja `cierre_origen` = `desconexion` / `webhook_video` / …) | El rescate | `WorkspaceConsulta` ve que la cerró un camino automático y **no inserta**: el borrador queda intacto |
+
+Entre las dos, exactamente uno de los dos caminos emite. Los **crons** son la
+excepción deliberada: cierran horas después, cuando el guardado en background del
+profesional ya murió, así que ignoran la marca y rescatan igual (ahí la red es el
+chequeo de documentos ya emitidos).
+
+### 3.b. El repaso de "cerrado y nunca entregado"
+
+El espejo del problema original: el profesional **sí** apretó "Finalizar", pero
+el guardado de documentos —que corre en background, después del redirect al
+dashboard— nunca terminó (cerró la pestaña, el navegador del celular congeló la
+página de fondo, el insert falló). El encuentro queda cerrado *por el médico*,
+con el borrador entero adentro y el paciente sin nada. Ningún cierre automático
+lo ve, porque ya está cerrado.
+
+`rescatarLoEscritoQueNuncaSeEntrego()` lo barre desde el cron nocturno
+`cerrar-huerfanas`: encuentros cerrados, **cobrados** (`mp_status = 'approved'`),
+con contenido clínico escrito y sin un solo documento clínico emitido. Con una
+hora de gracia (para no pisar un guardado en background que todavía corre),
+ventana de 7 días y tope por corrida. Es además el reintento de cualquier rescate
+en vivo que se haya caído: mientras el encuentro siga sin documentos, sigue
+siendo candidato.
 
 ### 4. El rescate nunca frena el cierre
 
@@ -124,8 +167,45 @@ Todas son consecuencia técnica del ticket, pero se reportan igual:
    - el webhook, si ve esa marca, cierra como siempre pero **no rescata** (la
      emisión es del flujo del médico) y no pisa la firma del cierre.
    - `WorkspaceConsulta`, si encuentra el encuentro ya cerrado, **ya no descarta
-     todo con un `return` mudo**: guarda igual, salvo que ya existan documentos
-     de ese encuentro. El estado y la firma del cierre no se re-escriben.
+     todo con un `return` mudo**: guarda igual, salvo que lo haya cerrado un
+     camino automático (que ya rescató) o que ya existan documentos **clínicos**
+     de ese encuentro. El estado y la firma del cierre no se re-escriben, y la
+     evolución se guarda siempre — es la versión que el profesional revisó y
+     confirmó, y pisa a la que el rescate haya guardado sin validar.
+
+## Correcciones de la revisión adversarial
+
+Sobre el primer envío de esta rama:
+
+1. **Certificado de reposo sin días — se emitía con "0 días".** Bloqueante: el
+   rescate mandaba y sellaba un certificado laboral con un texto que el
+   profesional nunca escribió. Ahora se omite y se avisa (ver punto 1 arriba).
+2. **Duplicación de documentos en la carrera "Finalizar" vs. cierre por
+   desconexión.** Bloqueante: el mutex serializaba a los cerradores entre sí pero
+   no al médico. Resuelto con las dos guardas complementarias del punto 3.
+3. **El guard de `WorkspaceConsulta` contaba filas de tracking.** `documentos`
+   también guarda filas `documento_medico` (adjuntos que el médico manda por mail
+   durante la consulta): un adjunto del minuto 10 hacía descartar todo lo
+   escrito. Ahora filtra por tipos clínicos, y un error al consultar significa
+   "no emitir" (el borrador queda, el repaso nocturno lo levanta).
+4. **La marca `cierre_origen = 'medico'` fallaba en silencio y creaba un punto
+   ciego.** Ahora el UPDATE chequea resultado y filas afectadas, y el caso "cerró
+   como médico pero nunca emitió" lo levanta el repaso de 3.b.
+5. **Trabajo no acotado sin `maxDuration`.** Los cuatro caminos que ahora emiten,
+   firman y mandan mails/pushes lo declaran (`consulta-estado`, `turno-estado`,
+   webhook de LiveKit: 60 s; los dos crons: 300 s). En los crons el rescate pasó
+   al **final** de la corrida, para que un timeout no se lleve puesta la
+   recuperación de consultas pagadas colgadas, y quedó con tope por corrida.
+6. **Spam de alertas.** El mail de "se cerró sin documentación" —el caso
+   frecuente del paciente que no apareció— pasó a `sendDoctoAlertThrottled` (6 h).
+   Y al profesional ese caso le llega como aviso `info` sin push, en vez de una
+   alerta `alta` que lo interpelaba por un no-show.
+7. **`--limite 5` (con espacio) en el script procesaba TODO.** Mismo bug que ya
+   había mordido en `sellar-documentos-historicos.ts`. Ahora toda opción con
+   valor vacío corta la corrida.
+8. **El filtro de "pagado" del script estaba documentado pero no implementado.**
+   Ahora exige `mp_status = 'approved'` de verdad, y el reporte muestra el cobro
+   de cada candidato.
 
 ## Migración
 

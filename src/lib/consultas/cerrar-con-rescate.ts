@@ -21,6 +21,13 @@
 //   4. backstop diario de rejoin      → /api/cron/rejoin-expirar
 // Ninguno miraba el borrador ni avisaba a nadie. Ahora los cuatro pasan por acá.
 //
+// Y hay un QUINTO caso que no es un cierre automático sino su espejo: el
+// profesional SÍ apretó "Finalizar", pero el guardado de documentos —que corre
+// en background, después del redirect al dashboard— nunca terminó. El encuentro
+// queda cerrado "por el médico", con el borrador entero adentro y el paciente
+// sin nada. Para eso está `rescatarLoEscritoQueNuncaSeEntrego()`, el repaso
+// nocturno que barre encuentros ya cerrados sin un solo documento emitido.
+//
 // LAS TRES REGLAS DE ESTE MÓDULO
 //
 //   1. NUNCA FRENAR EL CIERRE. El rescate corre DESPUÉS de que el estado ya
@@ -49,7 +56,7 @@
 // el rescate lo conserva: es la evidencia de qué se rescató y de qué había.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendDoctoAlert } from "@/lib/alertas";
+import { sendDoctoAlert, sendDoctoAlertThrottled } from "@/lib/alertas";
 import { logError, logInfo, logWarn } from "@/lib/logger";
 import { firmarDocumentoPorRescate, TIPOS_FIRMABLES } from "@/lib/firma/documento";
 import { pushAlMedico, pushAlPaciente } from "@/lib/push";
@@ -64,6 +71,14 @@ export type OrigenCierreAutomatico =
   | "webhook_video"
   | "cierre_automatico"
   | "rejoin_expirado"
+  /**
+   * Repaso nocturno de encuentros YA cerrados a los que nunca se les entregó
+   * nada (`rescatarLoEscritoQueNuncaSeEntrego`). Es la red de último recurso:
+   * cubre el cierre marcado como "medico" cuyo guardado en background nunca
+   * terminó —pestaña cerrada, móvil que congela la pestaña de fondo, insert
+   * fallido— y también cualquier rescate en vivo que se haya caído.
+   */
+  | "repaso_sin_entrega"
   /** Repaso posterior de encuentros ya cerrados (scripts/rescatar-borradores-perdidos.ts). */
   | "rescate_historico";
 
@@ -99,6 +114,12 @@ export type RescateInfo = {
   evolucion_guardada: boolean;
   /** Había receta escrita pero el paciente no tiene CUIL: no se puede emitir. */
   receta_omitida_sin_cuil: boolean;
+  /**
+   * Había un certificado de reposo escrito pero SIN los días cargados. No se
+   * emite: los días son un dato jurídico obligatorio (art. 210 LCT) y el cierre
+   * normal del profesional también lo bloquea. Ver `armarDocumentos`.
+   */
+  certificado_omitido_sin_dias: boolean;
   detalle?: string;
   rescatado_at: string;
 };
@@ -109,6 +130,7 @@ const ORIGEN_EN_CRIOLLO: Record<OrigenCierreAutomatico, string> = {
   webhook_video: "la sala de video quedó vacía y se cerró sola",
   cierre_automatico: "quedó abierta más de 4 horas y la cerró el repaso nocturno",
   rejoin_expirado: "quedó con un corte pendiente y la cerró el repaso de respaldo",
+  repaso_sin_entrega: "se cerró y lo escrito nunca llegó a enviarse; lo encontró el repaso nocturno",
   rescate_historico: "se cerró en su momento sin entregar lo escrito, y lo detectamos después",
 };
 
@@ -175,6 +197,7 @@ export async function rescatarBorradorAlCerrar(args: {
     documentos_firmados: 0,
     evolucion_guardada: false,
     receta_omitida_sin_cuil: false,
+    certificado_omitido_sin_dias: false,
     rescatado_at: new Date().toISOString(),
   };
 
@@ -208,6 +231,142 @@ export async function rescatarBorradoresAlCerrar(
   const salida: RescateInfo[] = [];
   for (const id of ids) {
     salida.push(await rescatarBorradorAlCerrar({ tipo, id, origen }));
+  }
+  return salida;
+}
+
+/**
+ * ¿El profesional ya había apretado "Finalizar" cuando este camino llegó a
+ * cerrar el encuentro?
+ *
+ * El DELETE de la sala (`/api/livekit/crear-sala`) deja `cierre_origen='medico'`
+ * ANTES de borrarla, justo porque borrarla dispara el cierre automático. Si esa
+ * marca está puesta, la emisión de documentos es del flujo del profesional y
+ * este camino NO debe rescatar: rescatar sería duplicar recetas firmadas.
+ *
+ * SOLO para los cierres EN VIVO (polling de desconexión, webhook de video). Los
+ * crons cierran horas después: ahí la marca ya es historia —el guardado en
+ * background del profesional murió hace rato— y saltear el rescate por ella
+ * dejaría al paciente sin nada. Los crons rescatan igual; su red es el chequeo
+ * de documentos ya existentes.
+ *
+ * Ante un error de lectura devuelve `false` (o sea: rescatar). No duplica igual,
+ * porque el otro lado de la carrera —el guardado del profesional en
+ * `WorkspaceConsulta`— se abstiene cuando ve que el encuentro lo cerró un camino
+ * automático.
+ */
+export async function elMedicoYaEstabaFinalizando(
+  tipo: CanalRescate,
+  id: string
+): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from(tipo === "turno" ? "turnos" : "consultas")
+      .select("cierre_origen")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) {
+      logWarn("[RESCATE]", "No se pudo leer cierre_origen antes de cerrar", { tipo, id, error: error.message });
+      return false;
+    }
+    return data?.cierre_origen === "medico";
+  } catch {
+    return false;
+  }
+}
+
+// ─── Repaso nocturno: lo que se cerró y nunca se entregó ─────────────────────
+
+/**
+ * Red de último recurso, pensada para el agujero que deja el camino feliz.
+ *
+ * Cuando el profesional aprieta "Finalizar", la emisión de documentos corre en
+ * background DESPUÉS del redirect al dashboard. Si ese bloque no termina —cierra
+ * la pestaña, el navegador del celular congela la página al mandarla al fondo, o
+ * el insert falla— el encuentro queda cerrado, con el borrador intacto y sin un
+ * solo documento para el paciente. Nadie se entera: es exactamente el caso que
+ * originó esta auditoría, y los cierres automáticos no lo ven porque el
+ * encuentro ya figura cerrado.
+ *
+ * Este repaso lo busca y lo resuelve: encuentros cerrados, cobrados, con
+ * contenido clínico escrito y sin ningún documento clínico emitido.
+ *
+ * PRUDENCIA DELIBERADA
+ *  - `minutosDeGracia`: no toca cierres recientes; el guardado en background del
+ *    profesional puede estar corriendo todavía.
+ *  - `mp_status='approved'`: solo encuentros efectivamente cobrados. No emite
+ *    documentación clínica firmada sobre algo que no se pagó.
+ *  - `limite`: la corrida está acotada. Lo que sobra queda para la próxima (el
+ *    candidato sigue siéndolo mientras no tenga documentos).
+ */
+export async function rescatarLoEscritoQueNuncaSeEntrego(opts?: {
+  limite?: number;
+  minutosDeGracia?: number;
+  diasHaciaAtras?: number;
+}): Promise<RescateInfo[]> {
+  const limite = opts?.limite ?? 15;
+  const minutosDeGracia = opts?.minutosDeGracia ?? 60;
+  const diasHaciaAtras = opts?.diasHaciaAtras ?? 7;
+
+  const admin = createAdminClient();
+  const hasta = new Date(Date.now() - minutosDeGracia * 60 * 1000).toISOString();
+  const desde = new Date(Date.now() - diasHaciaAtras * 24 * 60 * 60 * 1000).toISOString();
+
+  const candidatos: { tipo: CanalRescate; id: string }[] = [];
+
+  for (const tipo of ["consulta", "turno"] as const) {
+    if (candidatos.length >= limite) break;
+    const tabla = tipo === "turno" ? "turnos" : "consultas";
+    const columnaAncla = tipo === "turno" ? "turno_id" : "consulta_id";
+    const estadoCerrado = tipo === "turno" ? "completado" : "completada";
+
+    const { data, error } = await admin
+      .from(tabla)
+      .select("id, doc_borrador")
+      .eq("estado", estadoCerrado)
+      .eq("mp_status", "approved")
+      .not("doc_borrador", "is", null)
+      .gte("completada_at", desde)
+      .lte("completada_at", hasta)
+      .order("completada_at", { ascending: false })
+      .limit(limite * 3);
+
+    if (error) {
+      logError("[RESCATE]", "No se pudo buscar encuentros cerrados sin entregar", {
+        tabla,
+        error: error.message,
+      });
+      continue;
+    }
+
+    for (const fila of data ?? []) {
+      if (candidatos.length >= limite) break;
+      if (!hayContenidoClinico((fila.doc_borrador ?? {}) as BorradorClinico)) continue;
+
+      const { data: docs, error: errDocs } = await admin
+        .from("documentos")
+        .select("id")
+        .eq(columnaAncla, fila.id)
+        .in("tipo", [...TIPOS_FIRMABLES])
+        .limit(1);
+
+      // Ante la duda no se emite: duplicar recetas es peor que reintentar mañana.
+      if (errDocs || (docs ?? []).length > 0) continue;
+
+      candidatos.push({ tipo, id: fila.id });
+    }
+  }
+
+  if (candidatos.length === 0) return [];
+
+  logWarn("[RESCATE]", "Encuentros cerrados con lo escrito sin entregar: los rescata el repaso", {
+    cantidad: candidatos.length,
+  });
+
+  const salida: RescateInfo[] = [];
+  for (const c of candidatos) {
+    salida.push(await rescatarBorradorAlCerrar({ ...c, origen: "repaso_sin_entrega" }));
   }
   return salida;
 }
@@ -320,16 +479,26 @@ async function ejecutarRescate(
     return { ...base, resultado: "error", detalle, evolucion_guardada: evolucionGuardada };
   }
 
-  const { filas, recetaOmitidaSinCuil } = armarDocumentos(borrador, contexto.pacienteTieneCuil);
+  const { filas, recetaOmitidaSinCuil, certificadoOmitidoSinDias } = armarDocumentos(
+    borrador,
+    contexto.pacienteTieneCuil
+  );
 
   if (filas.length === 0) {
-    // Solo pasa si lo único escrito era una receta y el paciente no tiene CUIL.
+    // Se llega acá cuando lo ÚNICO escrito era algo que no se puede emitir: una
+    // receta sin CUIL del paciente, o un certificado sin los días de reposo.
+    const motivos: string[] = [];
+    if (recetaOmitidaSinCuil) motivos.push("había receta escrita pero el paciente no tiene CUIL cargado");
+    if (certificadoOmitidoSinDias)
+      motivos.push("había un certificado escrito pero sin los días de reposo cargados");
+
     const info: RescateInfo = {
       ...base,
       resultado: "sin_contenido",
       evolucion_guardada: evolucionGuardada,
       receta_omitida_sin_cuil: recetaOmitidaSinCuil,
-      detalle: "había receta escrita pero el paciente no tiene CUIL cargado",
+      certificado_omitido_sin_dias: certificadoOmitidoSinDias,
+      detalle: motivos.join("; ") || undefined,
     };
     await registrarRescate(admin, tabla, args.id, info, borrador);
     if (avisarATodos) await avisarAlMedico(info, contexto);
@@ -363,7 +532,14 @@ async function ejecutarRescate(
       id: args.id,
       error: detalle,
     });
-    const info: RescateInfo = { ...base, resultado: "error", detalle, evolucion_guardada: evolucionGuardada };
+    const info: RescateInfo = {
+      ...base,
+      resultado: "error",
+      detalle,
+      evolucion_guardada: evolucionGuardada,
+      receta_omitida_sin_cuil: recetaOmitidaSinCuil,
+      certificado_omitido_sin_dias: certificadoOmitidoSinDias,
+    };
     await registrarRescate(admin, tabla, args.id, info, borrador);
     await avisarAlEquipo(info, contexto);
     return info;
@@ -396,6 +572,7 @@ async function ejecutarRescate(
     documentos_firmados: firmados,
     evolucion_guardada: evolucionGuardada,
     receta_omitida_sin_cuil: recetaOmitidaSinCuil,
+    certificado_omitido_sin_dias: certificadoOmitidoSinDias,
   };
 
   logInfo("[RESCATE]", "Borrador rescatado: documentos emitidos en un cierre automático", {
@@ -430,13 +607,30 @@ type FilaDocumento = {
  * propósito: el paciente tiene que recibir lo mismo que habría recibido si el
  * profesional hubiese llegado a tocar "Finalizar".
  *
- * La receta se omite si el paciente no tiene CUIL, igual que en el cierre normal
- * (una receta sin CUIL no se puede emitir). Cuando pasa, el aviso lo dice.
+ * DOS OMISIONES, las dos deliberadas y las dos avisadas:
+ *
+ *   1. RECETA SIN CUIL. Igual que en el cierre normal: una receta sin CUIL del
+ *      paciente no se puede emitir.
+ *
+ *   2. CERTIFICADO SIN DÍAS DE REPOSO. Los días son un dato jurídico obligatorio
+ *      (art. 210 LCT) y el cierre normal los EXIGE: `validarCamposObligatorios()`
+ *      en `WorkspaceConsulta` no deja finalizar si el profesional escribió el
+ *      certificado y no eligió las horas o los días. Acá pasa seguido: el
+ *      autoguardado corre cada 5 s y persiste `dias_reposo: null` mientras el
+ *      profesional todavía no tocó el chip. Si emitiéramos igual, el PDF
+ *      (`src/lib/pdf/receta.ts`) renderiza `doc.dias_reposo ?? 0` → "0 días de
+ *      reposo laboral" y un rango de un solo día: un certificado laboral que el
+ *      profesional NUNCA escribió, sellado con su firma y su matrícula. El
+ *      rescate no inventa contenido clínico: lo omite y lo avisa.
+ *
+ * Con los días cargados el certificado sale idéntico al del cierre normal
+ * (`contenido` puede venir vacío si el profesional solo eligió los días: el PDF
+ * cae a `tratamiento`, y ahí las indicaciones son el fallback de siempre).
  */
 function armarDocumentos(
   b: BorradorClinico,
   pacienteTieneCuil: boolean
-): { filas: FilaDocumento[]; recetaOmitidaSinCuil: boolean } {
+): { filas: FilaDocumento[]; recetaOmitidaSinCuil: boolean; certificadoOmitidoSinDias: boolean } {
   const diagnostico = texto(b.diagnostico);
   const receta = texto(b.receta);
   const indicaciones = texto(b.indicaciones);
@@ -446,10 +640,11 @@ function armarDocumentos(
 
   const filas: FilaDocumento[] = [];
   const recetaOmitidaSinCuil = !!receta && !pacienteTieneCuil;
+  const certificadoOmitidoSinDias = !!certificado && dias === null;
 
   if (receta && pacienteTieneCuil) filas.push({ tipo: "receta", contenido: receta });
   if (indicaciones) filas.push({ tipo: "indicaciones", contenido: indicaciones });
-  if (certificado || dias !== null) {
+  if (dias !== null) {
     filas.push({
       tipo: "certificado",
       contenido: certificado,
@@ -465,7 +660,7 @@ function armarDocumentos(
     filas.push({ tipo: "indicaciones", contenido: diagnostico });
   }
 
-  return { filas, recetaOmitidaSinCuil };
+  return { filas, recetaOmitidaSinCuil, certificadoOmitidoSinDias };
 }
 
 // ─── Evolución ───────────────────────────────────────────────────────────────
@@ -626,31 +821,61 @@ async function avisarAlMedico(info: RescateInfo, contexto: ContextoEncuentro): P
   const fichaPaciente = contexto.pacienteId ? `/medico/paciente/${contexto.pacienteId}` : "/medico/historial";
   const hola = contexto.medicoPrimerNombre ? `Hola ${contexto.medicoPrimerNombre}. ` : "";
 
+  // Lo que NO se pudo emitir, en criollo y con qué hacer. Los dos casos tienen la
+  // misma forma: el profesional lo escribió, falta un dato y sin ese dato el
+  // documento no se puede emitir.
+  const faltantes: string[] = [];
+  if (info.receta_omitida_sin_cuil) {
+    faltantes.push(
+      `· La RECETA no se envió: el paciente todavía no tiene el CUIL cargado y sin CUIL no se puede emitir.`
+    );
+  }
+  if (info.certificado_omitido_sin_dias) {
+    faltantes.push(
+      `· El CERTIFICADO de reposo no se envió: te faltó elegir las horas o los días de reposo. ` +
+        `Sin ese dato el certificado no tiene validez laboral, así que preferimos no mandarlo antes que mandarlo mal.`
+    );
+  }
+  const bloqueFaltantes = faltantes.length
+    ? `\n\nOJO, esto quedó sin enviar:\n${faltantes.join("\n")}\n\nEscribinos y lo emitimos bien.`
+    : "";
+
   let titulo: string;
   let cuerpo: string;
+  // 'alta' solo cuando hay algo concreto para revisar o corregir. Un cierre sin
+  // nada escrito suele ser un paciente que no apareció: eso no amerita una
+  // alerta roja en la bandeja del profesional.
+  let severidad: "info" | "media" | "alta";
 
   if (info.resultado === "emitido") {
     titulo = "Cerramos tu consulta y le enviamos lo que habías escrito";
+    severidad = "alta";
     cuerpo =
       `${hola}Tu consulta con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.\n\n` +
       `Para que el paciente no se quedara sin nada, le enviamos ${info.documentos_emitidos === 1 ? "el documento" : `los ${info.documentos_emitidos} documentos`} que ya habías escrito, tal cual quedaron guardados.\n\n` +
       `Te pedimos que los revises en la ficha del paciente. Si falta algo o querés corregirlo, escribinos y lo resolvemos.` +
-      (info.receta_omitida_sin_cuil
-        ? `\n\nUna aclaración importante: la receta NO se envió porque el paciente todavía no tiene el CUIL cargado, y sin CUIL no se puede emitir. Avisanos para resolverlo.`
-        : "");
+      bloqueFaltantes;
+  } else if (faltantes.length > 0) {
+    // Escribió algo, pero nada de lo escrito se podía emitir tal como estaba.
+    titulo = "Tu consulta se cerró sola y quedó algo sin enviar";
+    severidad = "alta";
+    cuerpo =
+      `${hola}Tu consulta con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.` +
+      bloqueFaltantes;
   } else {
-    titulo = "Tu consulta se cerró sola y quedó sin documentación";
+    titulo = "Tu consulta se cerró sola";
+    severidad = "info";
     cuerpo =
       `${hola}Tu consulta con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.\n\n` +
-      `No encontramos nada escrito, así que el paciente quedó sin ningún documento.\n\n` +
-      `Si llegaste a atenderlo, avisanos y lo resolvemos juntos.`;
+      `No había nada escrito, así que no le enviamos ningún documento al paciente.\n\n` +
+      `Si el paciente no apareció, no tenés que hacer nada. Si llegaste a atenderlo y querés mandarle algo, escribinos y lo resolvemos juntos.`;
   }
 
   const { error } = await admin.from("mensajes_internos_medicos").insert({
     medico_id: contexto.medicoId,
     titulo,
     cuerpo,
-    severidad: "alta",
+    severidad,
   });
 
   if (error) {
@@ -660,13 +885,17 @@ async function avisarAlMedico(info: RescateInfo, contexto: ContextoEncuentro): P
     });
   }
 
+  // Push solo cuando hay algo que hacer. Un cierre sin nada escrito ya quedó en
+  // la bandeja como aviso 'info'; no hace falta vibrarle el teléfono por eso.
+  if (severidad === "info") return;
+
   try {
     await pushAlMedico(contexto.medicoId, {
       title: "Docto — revisá una consulta",
       body:
         info.resultado === "emitido"
           ? "Tu consulta se cerró sola. Enviamos al paciente lo que habías escrito: revisalo."
-          : "Tu consulta se cerró sola y quedó sin documentos para el paciente.",
+          : "Tu consulta se cerró sola y quedó algo escrito sin enviar: revisalo.",
       url: fichaPaciente,
       tag: `rescate-${info.tipo}-${info.id}`,
     });
@@ -681,6 +910,15 @@ async function avisarAlEquipo(info: RescateInfo, contexto: ContextoEncuentro): P
   const canal = info.tipo === "turno" ? "Un turno" : "Una consulta inmediata";
   const quien = `Profesional: ${contexto.medicoNombre}\nPaciente: ${contexto.pacienteNombre}\n${info.tipo === "turno" ? "Turno" : "Consulta"}: ${info.id}`;
 
+  // Lo escrito que NO se pudo emitir, para el mail del equipo.
+  const noEmitido =
+    (info.receta_omitida_sin_cuil
+      ? `\n⚠️ HABÍA UNA RECETA Y NO SE PUDO EMITIR: el paciente no tiene CUIL cargado. Sin CUIL no se puede emitir receta. Hay que pedirle el dato y reemitirla.\n`
+      : "") +
+    (info.certificado_omitido_sin_dias
+      ? `\n⚠️ HABÍA UN CERTIFICADO DE REPOSO Y NO SE PUDO EMITIR: el profesional escribió el cuerpo pero no llegó a elegir los días. Los días son obligatorios (art. 210 LCT) y el cierre normal también los exige; emitirlo igual habría mandado un certificado de "0 días" que nadie escribió. Hay que pedirle los días y reemitirlo.\n`
+      : "");
+
   if (info.resultado === "emitido") {
     const sinSello = info.documentos_emitidos - info.documentos_firmados;
     const asunto = `📄 Rescatamos ${info.documentos_emitidos} documento${info.documentos_emitidos === 1 ? "" : "s"} de una consulta que se cerró sola`;
@@ -691,23 +929,38 @@ async function avisarAlEquipo(info: RescateInfo, contexto: ContextoEncuentro): P
       `Documentos enviados: ${info.documentos_emitidos}\n` +
       `Sellados electrónicamente: ${info.documentos_firmados}${sinSello > 0 ? ` (⚠️ ${sinSello} quedó/quedaron SIN sello — revisar si falta aplicar la migración 20260808_rescate_borrador.sql)` : ""}\n` +
       `Evolución guardada: ${info.evolucion_guardada ? "sí" : "no hacía falta o no había"}\n` +
-      (info.receta_omitida_sin_cuil
-        ? `\n⚠️ HABÍA UNA RECETA Y NO SE PUDO EMITIR: el paciente no tiene CUIL cargado. Sin CUIL no se puede emitir receta. Hay que pedirle el dato y reemitirla.\n`
-        : "") +
+      noEmitido +
       `\nQUÉ HACER: al profesional ya le avisamos para que revise lo enviado. Conviene confirmar con él que lo que salió es lo que quería mandar, sobre todo si es una receta o un certificado.`;
     await sendDoctoAlert(asunto, cuerpo);
     return;
   }
 
   if (info.resultado === "sin_contenido") {
+    // Escribió algo que no se podía emitir tal cual → mail directo, hay una
+    // acción concreta (pedir el CUIL, pedir los días) y es raro.
+    if (noEmitido) {
+      await sendDoctoAlert(
+        "⚠️ Una consulta se cerró sola y quedó contenido escrito sin poder emitirse",
+        `${canal} se cerró sin que el profesional tocara "Finalizar": ${porque}.\n\n${quien}\n` +
+          noEmitido +
+          `\nQUÉ HACER: conseguir el dato que falta y reemitir. Al profesional ya le avisamos.`
+      );
+      return;
+    }
+
+    // Sin nada escrito. Esto NO es raro: es el caso típico del paciente que no
+    // apareció y la sala se cerró sola. Un mail por encuentro convierte una
+    // corrida de cron con 20 huérfanas en 20 mails y termina en ruido que nadie
+    // lee. Throttle durable de 6 h (mismo mecanismo que las alertas de servicio).
     const asunto = "⚠️ Una consulta se cerró sola y el paciente quedó sin documentos";
     const cuerpo =
       `${canal} se cerró sin que el profesional tocara "Finalizar": ${porque}.\n\n` +
       `En el borrador no había contenido clínico, así que no se emitió nada: el paciente quedó SIN documentos.\n\n` +
       `${quien}\n` +
       (info.detalle ? `\nDetalle: ${info.detalle}\n` : "") +
-      `\nQUÉ HACER: mirar si la consulta llegó a ocurrir. Si el paciente pagó y no lo atendieron, corresponde reembolso. Si lo atendieron y el profesional no llegó a escribir, hay que pedirle que documente. Al profesional ya le avisamos.`;
-    await sendDoctoAlert(asunto, cuerpo);
+      `\nQUÉ HACER: mirar si la consulta llegó a ocurrir. Si el paciente pagó y no lo atendieron, corresponde reembolso. Si el paciente no apareció, no hay nada que hacer.\n` +
+      `\nNOTA: este aviso se manda como mucho una vez cada 6 horas. Si hubo varios cierres sin documentación en ese lapso, solo ves el primero — el listado completo sale del panel admin (cierres automáticos) y del log del cron.`;
+    await sendDoctoAlertThrottled(`rescate-sin-contenido-${info.tipo}`, 6, asunto, cuerpo);
     return;
   }
 

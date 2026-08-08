@@ -9,6 +9,12 @@ const LIVEKIT_URL =
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
 
+// `room_finished` cierra el encuentro y, si no lo cerró el médico, rescata el
+// borrador: emitir + firmar + avisar hace HTTP externo (Resend, web-push) y no
+// entra en los 15 s por defecto de Vercel. LiveKit reintenta el webhook, pero un
+// reintento NO rehace el rescate (el mutex del cierre ya se consumió).
+export const maxDuration = 60;
+
 // ---------------------------------------------------------------------------
 // POST /api/livekit/webhook
 //

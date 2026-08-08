@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { enviarPush, pushAlPaciente } from "@/lib/push";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { logError, logInfo } from "@/lib/logger";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -173,14 +174,37 @@ export async function DELETE(req: NextRequest) {
   // cierre automático RESCATA el borrador, esa carrera podía terminar en
   // documentos duplicados: los emitidos por el rescate más los del médico.
   //
-  // Con esta marca el webhook sabe que el cierre lo inició el médico y se limita
-  // a cerrar, sin emitir nada: la emisión es del flujo del médico.
-  // Best-effort y condicionada a `en_curso`: si falla, no se frena el DELETE.
-  await supabase
+  // Con esta marca el webhook (y el cierre por desconexión) saben que el cierre
+  // lo inició el médico y se limitan a cerrar, sin emitir nada: la emisión es
+  // del flujo del médico.
+  //
+  // NO frena el DELETE si falla, pero tampoco falla en silencio: sin la marca,
+  // el cierre automático rescata el borrador y podría competir con el guardado
+  // del médico. Que quede escrito en el log es lo que permite entender después
+  // un caso raro de documentos duplicados. `.select("id")` para saber si el
+  // UPDATE tocó algo de verdad (0 filas ≠ error).
+  const { data: marcado, error: errMarca } = await supabase
     .from(tabla)
     .update({ cierre_origen: "medico" })
     .eq("id", resourceId)
-    .eq("estado", "en_curso");
+    .eq("estado", "en_curso")
+    .select("id");
+
+  if (errMarca) {
+    logError("[LK/SALA]", "No se pudo marcar el cierre como del médico antes de borrar la sala", {
+      tabla,
+      recursoId: resourceId,
+      error: errMarca.message,
+    });
+  } else if ((marcado ?? []).length === 0) {
+    // Normal si el encuentro ya estaba cerrado (el médico llegó tarde a la
+    // carrera, o finaliza desde el overlay de corte). Se loguea igual: es la
+    // pista de por qué ese encuentro lo cerró (y rescató) otro camino.
+    logInfo("[LK/SALA]", "El encuentro ya no estaba en_curso al finalizar: lo cerró otro camino", {
+      tabla,
+      recursoId: resourceId,
+    });
+  }
 
   try {
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
