@@ -21,6 +21,12 @@ import {
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+import {
+  avisarNotificacionNueva,
+  descartarDocumentacionPendiente,
+  marcarDocumentacionPendiente,
+  type MotivoPendiente,
+} from "@/lib/documentacion-pendiente";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
 import ModalDatosPaciente from "@/components/ModalDatosPaciente";
@@ -43,6 +49,34 @@ type ModoWorkspace = "video" | "escritura" | "estudios" | "hc";
 // la unidad sin ambigüedad: dias_reposo ≤ 3 se muestra en horas, ≥ 4 en días.
 const HORAS_REPOSO_RAPIDAS: number[] = [24, 48, 72];
 const DIAS_REPOSO_RAPIDOS: number[] = [4, 5, 6];
+
+// Documentos clínicos que emite una atención. Se usa para saber si esta consulta
+// YA tiene documentos entregados y no duplicarlos al reintentar. Se declara acá
+// y no se importa de lib/firma (código de servidor) para no arrastrar el módulo
+// de firma al bundle del navegador. Espeja TIPOS_FIRMABLES: son las mismas
+// cuatro piezas que el médico redacta y firma.
+const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden"];
+
+// Estados en los que la atención quedó ANULADA: cancelada, con ausencia
+// registrada (que dispara reembolso), rechazada, reprogramada o bloqueada. Si
+// una atención figura así, finalizar NO debe emitir documentos ni pisar el
+// estado: la ausencia y la cancelación son evidencia de lo que pasó, y
+// sobrescribirlas con "completada" haría que una atención ya reembolsada
+// vuelva a contar como atendida y cobrada en el tablero.
+// Cubre los dos canales: `consultas` ('cancelada','rechazada') y `turnos`
+// (CHECK de la migración 20260512_mp_fase2).
+const ESTADOS_ANULADOS = new Set([
+  "cancelada",
+  "rechazada",
+  "cancelado_paciente",
+  "cancelado_medico",
+  "ausente_paciente",
+  "ausente_medico",
+  "reprogramado",
+  "bloqueado",
+  "bloqueado_sin_cobro",
+  "disponible",
+]);
 
 // ---------------------------------------------------------------------------
 // AccordionSection — secciones colapsables del panel de documentación
@@ -1157,8 +1191,102 @@ export default function WorkspaceConsulta({
     finalizarConsulta();
   }
 
+  // --- Persistir el borrador AHORA (sin esperar el debounce del autosave) ---
+  // El autosave espera 5 segundos desde la última tecla. Lo último que el médico
+  // escribió puede no estar guardado todavía. Esta función fuerza el guardado y
+  // dice si funcionó; es la red que hace que, si la entrega falla, el texto siga
+  // existiendo en la consulta para reintentar.
+  async function persistirBorrador(): Promise<boolean> {
+    // Techo de 10 s con abort. No es para acelerar nada — nadie espera este
+    // fetch en pantalla — sino para que un PATCH colgado no quede dando vueltas
+    // y aterrice DESPUÉS de que el cierre puso `doc_borrador = null`,
+    // resucitando el borrador de una consulta ya completada.
+    const control = new AbortController();
+    const corte = setTimeout(() => control.abort(), 10000);
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/borrador`, {
+        method: "PATCH",
+        credentials: "include",
+        keepalive: true,
+        signal: control.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo,
+          borrador: {
+            diagnostico,
+            receta,
+            indicaciones,
+            certificado,
+            dias_reposo: diasReposoValido ? diasReposoNum : null,
+            orden,
+            evolucion,
+            evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+            medicamentos_structured: medicamentos,
+            receta_texto_libre: recetaTextoLibre,
+            updated_at: new Date().toISOString(),
+          },
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(corte);
+    }
+  }
+
+  // --- Qué documentos clínicos tiene YA emitidos esta atención ---
+  // Devuelve el conjunto de tipos guardados, o `null` cuando NO se pudo
+  // averiguar. `null` NO es "no hay ninguno": el cliente de Supabase no lanza
+  // excepciones, devuelve { error }, y confundir ese error con "está vacío" es
+  // exactamente cómo se termina mandando una receta duplicada — y sellada, que
+  // /api/documentos/firmar firma todo lo que encuentra sin firma.
+  async function tiposDocumentosEmitidos(
+    supabase: ReturnType<typeof createClient>
+  ): Promise<Set<string> | null> {
+    const { data, error } = await supabase
+      .from("documentos")
+      .select("tipo")
+      .eq(esTurno ? "turno_id" : "consulta_id", consultaId)
+      .in("tipo", TIPOS_CLINICOS);
+    if (error) {
+      console.error("[finalizar] no se pudo leer lo ya emitido:", error.message);
+      return null;
+    }
+    return new Set((data ?? []).map((d) => String(d.tipo)));
+  }
+
+  // --- Avisar que quedó documentación sin entregar ---
+  // Se usa SOLO cuando la entrega falló. Dos canales a propósito:
+  //   1. marca local en el navegador → cartel en el dashboard, funciona sin red
+  //      (la causa más común de que falle la entrega es justamente la red);
+  //   2. notificación persistente en la campanita → sobrevive al cambio de
+  //      equipo y deja rastro consultable para el equipo.
+  // Los dos canales avisan a la UI del dashboard apenas quedan escritos: para
+  // cuando esto corre el médico YA está en el dashboard, y tanto el cartel como
+  // la campanita leen una sola vez al montar. Sin el aviso, el médico se queda
+  // mirando una pantalla limpia y no se entera de nada.
+  function avisarDocumentacionPendiente(motivo: MotivoPendiente) {
+    marcarDocumentacionPendiente({ id: consultaId, tipo, hora: horaInicio, motivo });
+    fetch("/api/medico/documentos-pendientes", {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consultaId, tipo, motivo }),
+    })
+      .then((r) => {
+        if (r.ok) avisarNotificacionNueva();
+      })
+      .catch(() => {});
+  }
+
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
+    // Un solo cierre por sesión. Dos toques rápidos en "Finalizar" (el dialog
+    // tarda un instante en desmontarse) no pueden emitir los documentos dos
+    // veces: una receta duplicada es un problema real, no un detalle.
+    if (finalizandoRef.current) return;
     if (!validarCamposObligatorios()) return;
 
     const sinCuil = receta.trim() && !consulta.paciente_cuil;
@@ -1171,6 +1299,20 @@ export default function WorkspaceConsulta({
 
     // 1. Ocultar video inmediatamente
     setIframeVisible(false);
+
+    // 1.bis. Disparar el guardado del borrador. El autosave tiene 5 s de
+    // debounce: lo último que el médico tipeó puede no estar persistido todavía,
+    // y si más abajo la emisión falla, esto es lo que garantiza que el texto
+    // siga guardado en la consulta para reintentar.
+    //
+    // NO se espera acá: el redirect del médico nunca se bloquea (regla de
+    // CLAUDE.md) y el paciente no tiene por qué quedar segundos de más colgado
+    // en la llamada. La espera va DENTRO del bloque de background, antes de
+    // emitir — que es el único punto donde el orden importa. Esperar acá con un
+    // techo corto era peor que no esperar: si el PATCH tardaba más que el techo,
+    // aterrizaba después del cierre y resucitaba el borrador de una consulta ya
+    // completada.
+    const flushBorrador = persistirBorrador();
 
     // 2. Eliminar sala LiveKit → desconecta al paciente
     if (roomName) {
@@ -1189,29 +1331,81 @@ export default function WorkspaceConsulta({
     //    Mismo flujo para ambos canales; solo cambian tabla, estado y FK del paciente.
     (async () => {
       try {
+        // El flush del borrador tiene que aterrizar ANTES de emitir y, sobre
+        // todo, antes de que el cierre ponga `doc_borrador = null`. Acá esperarlo
+        // no le cuesta nada a nadie: el médico ya está en el dashboard.
+        await flushBorrador;
+
         const supabase = createClient();
 
-        const { data: registroDb } = await supabase
+        const { data: registroDb, error: errorRegistro } = await supabase
           .from(tablaPrincipal)
           .select("estado, paciente_id, medico_id")
           .eq("id", consultaId)
           .single();
 
-        if (!registroDb?.paciente_id) return;
-        if (registroDb.estado === estadoCompletado) return;
+        // Únicos abortos legítimos: la atención no existe / no se puede leer, o
+        // no es de este médico. NADA MÁS.
+        //
+        // Acá vivía un `return` mudo cuando la atención ya figuraba cerrada, y
+        // era el agujero más caro del producto: si el reloj del sistema la
+        // cerraba antes (desconexión, sala de video vacía, cron nocturno), todo
+        // lo que el profesional había escrito se descartaba en silencio y el
+        // paciente no recibía nada. Que el sistema haya cerrado primero no
+        // cambia el hecho clínico: mismo profesional, misma atención, mismo
+        // acto. Se emite igual.
+        if (errorRegistro || !registroDb?.paciente_id) {
+          console.error(
+            "[finalizar] no se pudo leer la atención para emitir:",
+            errorRegistro?.message ?? "sin datos"
+          );
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
+        if (registroDb.medico_id !== medicoId) return;
+
+        // Atención anulada (cancelada, ausencia registrada, rechazada): no se
+        // emiten documentos ni se la marca como completada. El borrador NO se
+        // borra. Pisar el estado acá borraría la evidencia de qué pasó de
+        // verdad — y haría que una atención ya reembolsada volviera a contar
+        // como atendida y cobrada en el tablero.
+        const estadoActual = String(registroDb.estado ?? "");
+        if (ESTADOS_ANULADOS.has(estadoActual) || estadoActual.startsWith("cancelad")) {
+          console.error("[finalizar] la atención figura anulada: no se emite nada");
+          return;
+        }
+
+        // ¿La cerró el sistema antes de que el médico tocara Finalizar?
+        const yaCerrada = registroDb.estado === estadoCompletado;
 
         // pacientes.id para el insert de documentos (asimetría de schema por canal):
         // - consulta: paciente_id es auth.users.id → lookup por user_id
         // - turno: paciente_id YA es pacientes.id → directo
         const pacienteId = await resolverPacienteId(supabase, registroDb.paciente_id);
 
-        const { data: medico } = await supabase
-          .from("medicos")
-          .select("id")
-          .eq("id", registroDb.medico_id)
-          .single();
+        if (!pacienteId) {
+          console.error("[finalizar] no se pudo resolver el paciente de la atención");
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
 
-        if (!pacienteId || !medico) return;
+        // Idempotencia POR TIPO de documento. Reemplaza al viejo guard por
+        // estado, que frenaba los duplicados al precio de tirar el trabajo del
+        // médico. Se dedupea por tipo y no por "¿hay algún documento?" porque
+        // todo-o-nada pierde datos en un caso concreto: si algo ya emitió la
+        // receta (un reintento a medias, o el cierre automático emitiendo desde
+        // el borrador) y el médico además escribió un certificado, el
+        // certificado no llegaría nunca y nadie se enteraría.
+        //
+        // Si la query falla NO se emite a ciegas: sin saber qué hay guardado, un
+        // insert es una receta duplicada — y firmada, porque /api/documentos/
+        // firmar sella todo lo que encuentra sin sello. Se avisa y se deja el
+        // borrador intacto para reintentar.
+        const emitidosPrevios = await tiposDocumentosEmitidos(supabase);
+        if (emitidosPrevios === null) {
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
 
         const docs: {
           tipo: string;
@@ -1238,36 +1432,109 @@ export default function WorkspaceConsulta({
         if (docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-        await supabase.from("documentos").insert(
-          docs.map((d) => ({
-            consulta_id: esTurno ? null : consultaId,
-            turno_id: esTurno ? consultaId : null,
-            paciente_id: pacienteId,
-            medico_id: medico.id,
-            tipo: d.tipo,
-            diagnostico: diagnostico.trim(),
-            contenido: d.contenido,
-            tratamiento: d.tratamiento ?? null,
-            dias_reposo: d.dias_reposo ?? null,
-          }))
-        );
+        // Insert de los documentos. El cliente de Supabase NO lanza excepciones:
+        // devuelve { error }. Antes ese error no se miraba y a renglón seguido se
+        // borraba el borrador — o sea, se perdía todo sin dejar rastro.
+        const filasDocumentos = docs.map((d) => ({
+          consulta_id: esTurno ? null : consultaId,
+          turno_id: esTurno ? consultaId : null,
+          paciente_id: pacienteId,
+          medico_id: registroDb.medico_id,
+          tipo: d.tipo,
+          diagnostico: diagnostico.trim(),
+          contenido: d.contenido,
+          tratamiento: d.tratamiento ?? null,
+          dias_reposo: d.dias_reposo ?? null,
+        }));
 
-        await supabase
+        // Solo lo que falta. Lo que ya está emitido no se vuelve a insertar.
+        const filasFaltantes = filasDocumentos.filter((f) => !emitidosPrevios.has(f.tipo));
+
+        let documentosOk = true;
+        if (filasFaltantes.length > 0) {
+          const { error: errorInsert } = await supabase.from("documentos").insert(filasFaltantes);
+          if (errorInsert) {
+            // Reintento, PERO NO A CIEGAS. El escenario que justifica reintentar
+            // —red móvil inestable— es el mismo que hace peligroso reinsertar:
+            // el POST puede haber COMMITEADO en el servidor y haberse perdido
+            // solo la respuesta. Como el cliente de Supabase no lanza
+            // excepciones sino que devuelve { error }, desde acá las dos cosas
+            // se ven idénticas. Reinsertar sin preguntar = dos recetas
+            // idénticas, ambas selladas, en la historia del paciente.
+            // Por eso primero se vuelve a preguntar qué quedó realmente guardado.
+            const emitidosTrasError = await tiposDocumentosEmitidos(supabase);
+            if (emitidosTrasError === null) {
+              // No se pudo verificar: no se reintenta. Mejor un aviso al médico
+              // con el borrador intacto que un documento duplicado.
+              documentosOk = false;
+              console.error(
+                "[finalizar] insert fallido y sin poder verificar qué quedó guardado:",
+                errorInsert.message
+              );
+            } else {
+              const pendientes = filasFaltantes.filter((f) => !emitidosTrasError.has(f.tipo));
+              if (pendientes.length === 0) {
+                // El insert sí había llegado; lo que se perdió fue la respuesta.
+                documentosOk = true;
+              } else {
+                const { error: errorReintento } = await supabase
+                  .from("documentos")
+                  .insert(pendientes);
+                documentosOk = !errorReintento;
+                if (!documentosOk) {
+                  console.error(
+                    "[finalizar] no se pudieron guardar los documentos:",
+                    errorReintento?.message ?? errorInsert.message
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        if (!documentosOk) {
+          // NO se toca el borrador ni el estado: lo escrito queda íntegro en la
+          // atención para poder reintentar. El médico se entera por el aviso.
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
+
+        // Cierre + evolución. Si el sistema ya la había cerrado, NO se pisan
+        // `completada_at` ni `cierre_origen`: quién cerró de verdad es evidencia
+        // y no se reescribe. Los documentos guardan su propio `created_at`, que
+        // es lo que muestra cuándo se documentó realmente.
+        const cierre: Record<string, unknown> = {
+          doc_borrador: null,
+          evolucion: evolucion.trim(),
+          // Momento de generar; fallback al de finalizar si por algún borde no se
+          // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
+          evolucion_validada_at: evolucionValidadaAt ?? new Date().toISOString(),
+          evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+        };
+        if (!yaCerrada) {
+          cierre.estado = estadoCompletado;
+          // Hora y firma del cierre (incidente 01/08): sin esto no hay
+          // duración de consulta ni forma de distinguir quién cerró.
+          cierre.completada_at = new Date().toISOString();
+          cierre.cierre_origen = "medico";
+        }
+
+        const { error: errorCierre } = await supabase
           .from(tablaPrincipal)
-          .update({
-            estado: estadoCompletado,
-            // Hora y firma del cierre (incidente 01/08): sin esto no hay
-            // duración de consulta ni forma de distinguir quién cerró.
-            completada_at: new Date().toISOString(),
-            cierre_origen: "medico",
-            doc_borrador: null,
-            evolucion: evolucion.trim(),
-            // Momento de generar; fallback al de finalizar si por algún borde no se
-            // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
-            evolucion_validada_at: evolucionValidadaAt ?? new Date().toISOString(),
-            evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
-          })
+          .update(cierre)
           .eq("id", consultaId);
+
+        if (errorCierre) {
+          // Los documentos SÍ llegaron al paciente; lo que no se pudo guardar es
+          // la evolución. El borrador queda intacto para reintentar.
+          console.error("[finalizar] no se pudo cerrar la atención:", errorCierre.message);
+          avisarDocumentacionPendiente("cierre");
+        } else {
+          // Salió todo. Si esta atención había dejado un aviso pendiente de un
+          // intento anterior, se limpia: sin esto el cartel ámbar quedaba en el
+          // dashboard para siempre, avisando de algo que el paciente ya recibió.
+          descartarDocumentacionPendiente(consultaId);
+        }
 
         // Firma electrónica de los documentos recién emitidos.
         // El acto de voluntad es este cierre (el médico confirmó con el
@@ -1298,8 +1565,12 @@ export default function WorkspaceConsulta({
           credentials: "include",
           body: JSON.stringify({ pacienteId, consultaId, tipo }),
         }).catch(() => {});
-      } catch {
-        // Background: no hay UI para mostrar error, falla silenciosamente
+      } catch (err) {
+        // Background: acá no hay pantalla donde mostrar el error porque el
+        // médico ya está en el dashboard. Por eso el aviso viaja al dashboard
+        // (cartel local + campanita) en vez de morir en la consola.
+        console.error("[finalizar] fallo inesperado al emitir la documentación:", err);
+        avisarDocumentacionPendiente("documentos");
       }
     })();
   }
@@ -1367,38 +1638,14 @@ export default function WorkspaceConsulta({
   // --- Guardar documentos manual ---
   async function guardarDocumentos() {
     setGuardadoManual('saving');
-    try {
-      const res = await fetch(`/api/consulta/${consultaId}/borrador`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo,
-          borrador: {
-            diagnostico,
-            receta,
-            indicaciones,
-            certificado,
-            dias_reposo: diasReposoValido ? diasReposoNum : null,
-            orden,
-            evolucion,
-            medicamentos_structured: medicamentos,
-            receta_texto_libre: recetaTextoLibre,
-            updated_at: new Date().toISOString(),
-          },
-        }),
-      });
-      if (!res.ok) {
-        setGuardadoManual('idle');
-        setError("Error al guardar documentos.");
-        return;
-      }
-      setGuardadoManual('saved');
-      setTimeout(() => setGuardadoManual('idle'), 2000);
-    } catch {
+    const ok = await persistirBorrador();
+    if (!ok) {
       setGuardadoManual('idle');
-      setError("Error de conexion al guardar.");
+      setError("Error al guardar documentos.");
+      return;
     }
+    setGuardadoManual('saved');
+    setTimeout(() => setGuardadoManual('idle'), 2000);
   }
 
   // --- Render ---
