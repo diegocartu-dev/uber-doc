@@ -18,8 +18,12 @@ import { TIPOS_FIRMABLES } from "@/lib/firma/documento";
  * Regla del repo contra fallas silenciosas (auditoría 13/07/2026): todo camino
  * crítico que puede fallar sin ruido necesita quién lo cuente.
  *
- * NO firma nada: solo mira y avisa. Sellar hoy un documento de ayer sería
- * antedatar (dictamen 07/08/2026).
+ * NO firma nada: solo mira y avisa. El sellado de los documentos anteriores al
+ * arreglo es una operación aparte, deliberada y con constancia de lote
+ * (`scripts/sellar-documentos-historicos.ts`, dictamen 07/08/2026 segunda parte).
+ * Un cron horario no es el lugar para eso: si el camino de firma se rompe otra
+ * vez, lo que hace falta es que alguien se entere, no que la plataforma tape el
+ * agujero sellando por su cuenta.
  */
 
 // Gracia: la firma sale segundos después del insert, pero un keepalive lento o
@@ -28,11 +32,12 @@ const GRACIA_MS = 15 * 60 * 1000;
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 
 // La firma recién existe en producción desde este deploy (PR #357, 07/08/2026
-// 19:09 UTC). Todo lo emitido antes salió sin sello POR DISEÑO — son los 114
-// documentos históricos que, por dictamen legal, no se firman retroactivamente
-// (sería antedatar). Sin este corte el vigilante los cuenta como falla y manda
-// un mail rojo por hora durante las primeras 24 horas: pasó apenas se desplegó,
-// y una alerta que grita por algo que nadie va a arreglar deja de leerse.
+// 19:09 UTC). Todo lo emitido antes salió sin sello, y se resuelve por el camino
+// del sellado de integridad diferido, que corre una sola vez y con constancia de
+// lote — no por este vigilante. Sin este corte, el cron cuenta esos documentos
+// como falla y manda un mail rojo por hora durante las primeras 24 horas: pasó
+// apenas se desplegó, y una alerta que grita por algo que ya tiene dueño deja de
+// leerse.
 const DESDE_QUE_SE_FIRMA = Date.parse("2026-08-07T19:09:00Z");
 const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;
 
