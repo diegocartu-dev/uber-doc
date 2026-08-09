@@ -44,37 +44,91 @@ const ESPERADOS: Record<string, number> = {
 
 const ANTI_SPAM_MS = 6 * 60 * 60 * 1000;
 
+// Los deploys de producción se leen de GitHub, NO de la API de Vercel.
+//
+// Vercel publica en GitHub el estado de cada deploy, y el repo es público: eso
+// se consulta SIN credencial. La versión anterior de esta función pedía un
+// VERCEL_TOKEN que nunca se creó, así que la alerta jamás se disparó — una
+// alerta que necesita un secreto que nadie seteó es una alerta apagada.
+// Además, un token de Vercel da acceso a toda la cuenta; para leer si un build
+// salió bien no hace falta nada de eso.
+//
+// Sin credencial GitHub da 60 pedidos/hora POR IP, y la IP de salida de Vercel
+// es compartida: el cupo puede agotarse por motivos ajenos a Docto. Este chequeo
+// gasta 2 pedidos cada 10 minutos (12/hora), así que en condiciones normales
+// sobra — pero cuando NO se puede verificar hay que decirlo, no callarse.
+// Un vigía que deja de vigilar en silencio es peor que no tener vigía: da
+// tranquilidad falsa. Por eso hay un estado explícito 'sin_verificar' que queda
+// escrito en cron_runs y se ve en la respuesta del watchdog.
+const REPO_GITHUB = "diegocartu-dev/uber-doc";
+
+type EstadoDeploy =
+  | { estado: "ok" }
+  | { estado: "fallo"; creado: string; url: string }
+  | { estado: "sin_verificar"; motivo: string };
+
 /**
- * ¿El último deploy de PRODUCCIÓN falló? Consulta la API de Vercel.
+ * ¿El último deploy de PRODUCCIÓN falló?
  *
- * Un build fallido es invisible hoy: el sitio sigue respondiendo (con la
- * versión vieja), el monitor de uptime lo ve sano y nadie se entera de que lo
- * que se mergeó NO está en la calle. Pasó el 06/08: la caída de Supabase colgó
- * la compilación, el deploy quedó en Error y producción sirvió durante 3 horas
- * un build sin el cron de liberar reservas — descubierto de casualidad.
+ * Un build fallido es invisible: el sitio sigue respondiendo (con la versión
+ * vieja), el monitor de uptime lo ve sano y nadie se entera de que lo que se
+ * mergeó NO está en la calle. Pasó el 06/08: la caída de Supabase colgó la
+ * compilación, el deploy quedó en Error y producción sirvió durante 3 horas un
+ * build sin el cron de liberar reservas — descubierto de casualidad.
  *
- * Best-effort: si faltan credenciales o la API no responde, devuelve null y el
- * watchdog sigue con lo suyo. Nunca rompe el cron.
+ * Nunca lanza: cualquier problema se devuelve como 'sin_verificar' y el
+ * watchdog sigue con lo suyo.
  */
-async function ultimoDeployProdFallido(): Promise<{ creado: string; url: string } | null> {
-  const token = process.env.VERCEL_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
-  const teamId = process.env.VERCEL_TEAM_ID;
-  if (!token || !projectId) return null;
+async function estadoUltimoDeployProd(): Promise<EstadoDeploy> {
+  const cabeceras = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "docto-watchdog",
+  };
   try {
-    const qs = new URLSearchParams({ projectId, target: "production", limit: "3" });
-    if (teamId) qs.set("teamId", teamId);
-    const res = await fetch(`https://api.vercel.com/v6/deployments?${qs}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const lista = await fetch(
+      `https://api.github.com/repos/${REPO_GITHUB}/deployments?environment=Production&per_page=1`,
+      { headers: cabeceras, cache: "no-store" }
+    );
+    if (!lista.ok) {
+      return { estado: "sin_verificar", motivo: `github respondió ${lista.status} al listar deploys` };
+    }
+    const deployments = (await lista.json()) as { statuses_url?: string; sha?: string }[];
+    const ultimo = deployments?.[0];
+    if (!ultimo?.statuses_url) {
+      return { estado: "sin_verificar", motivo: "github no devolvió ningún deploy de producción" };
+    }
+
+    const estados = await fetch(`${ultimo.statuses_url}?per_page=1`, {
+      headers: cabeceras,
       cache: "no-store",
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { deployments?: { state?: string; url?: string; created?: number }[] };
-    const ultimo = (data.deployments ?? [])[0];
-    if (!ultimo || ultimo.state !== "ERROR") return null;
-    return { creado: new Date(ultimo.created ?? Date.now()).toISOString(), url: ultimo.url ?? "(sin url)" };
-  } catch {
-    return null;
+    if (!estados.ok) {
+      return { estado: "sin_verificar", motivo: `github respondió ${estados.status} al leer el estado` };
+    }
+    const [estado] = (await estados.json()) as {
+      state?: string;
+      created_at?: string;
+      target_url?: string;
+    }[];
+    if (!estado?.state) {
+      return { estado: "sin_verificar", motivo: "el deploy todavía no tiene estado publicado" };
+    }
+
+    // 'failure' = el build se cayó. 'error' = Vercel no pudo ni arrancarlo.
+    // 'pending'/'in_progress'/'queued' NO son falla: el deploy sigue corriendo y
+    // avisar acá sería una falsa alarma cada vez que se publica algo.
+    if (estado.state !== "failure" && estado.state !== "error") return { estado: "ok" };
+
+    return {
+      estado: "fallo",
+      creado: estado.created_at ?? new Date().toISOString(),
+      url: estado.target_url ?? `https://github.com/${REPO_GITHUB}/commit/${ultimo.sha ?? ""}`,
+    };
+  } catch (e) {
+    return {
+      estado: "sin_verificar",
+      motivo: e instanceof Error ? e.message : "error desconocido consultando github",
+    };
   }
 }
 
@@ -141,21 +195,33 @@ export const GET = withCron("watchdog", async () => {
 
   // Deploy de producción fallido → avisar (con el mismo anti-spam de 6 h que
   // usan los crons caídos, guardado bajo una key propia en cron_runs).
-  let deployFallido: { creado: string; url: string } | null = null;
+  //
+  // Los tres desenlaces quedan escritos en cron_runs, incluido "no lo pude
+  // verificar": si el chequeo se queda ciego, eso tiene que verse en la tabla,
+  // no desaparecer.
+  let deploy: EstadoDeploy = { estado: "sin_verificar", motivo: "no se llegó a chequear" };
   try {
-    deployFallido = await ultimoDeployProdFallido();
-    if (deployFallido) {
+    deploy = await estadoUltimoDeployProd();
+
+    if (deploy.estado !== "fallo") {
+      await admin.from("cron_runs").upsert({
+        cron_key: "deploy-prod",
+        last_run_at: nowIso,
+        last_status: deploy.estado === "ok" ? "ok" : `sin_verificar: ${deploy.motivo}`,
+        updated_at: nowIso,
+      });
+    } else {
       const previo = porKey.get("deploy-prod");
       const yaAvisado =
         previo?.last_alerted_at && ahora - Date.parse(previo.last_alerted_at) < ANTI_SPAM_MS;
+      await admin.from("cron_runs").upsert({
+        cron_key: "deploy-prod",
+        last_run_at: nowIso,
+        last_status: "deploy_fallido",
+        ...(yaAvisado ? {} : { last_alerted_at: nowIso }),
+        updated_at: nowIso,
+      });
       if (!yaAvisado) {
-        await admin.from("cron_runs").upsert({
-          cron_key: "deploy-prod",
-          last_run_at: nowIso,
-          last_status: "deploy_fallido",
-          last_alerted_at: nowIso,
-          updated_at: nowIso,
-        });
         await sendDoctoAlert(
           "🔴 El último deploy a producción FALLÓ",
           [
@@ -165,8 +231,8 @@ export const GET = withCron("watchdog", async () => {
             "Todo lo que se aprobó después de ese deploy NO está en la calle, aunque",
             "figure como terminado.",
             "",
-            `Cuándo falló: ${deployFallido.creado}`,
-            `Deploy: https://${deployFallido.url}`,
+            `Cuándo falló: ${deploy.creado}`,
+            `Deploy: ${deploy.url}`,
             "",
             "¿Tenés que hacer algo? Sí: abrí Claude Code y decime",
             '"el deploy de producción falló, revisalo y volvé a publicar".',
@@ -220,5 +286,7 @@ export const GET = withCron("watchdog", async () => {
     );
   }
 
-  return NextResponse.json({ ok: true, caidos, sembrados });
+  // `deploy` sale en la respuesta a propósito: llamar al watchdog a mano tiene
+  // que contestar si el último deploy salió bien, falló, o no se pudo verificar.
+  return NextResponse.json({ ok: true, caidos, sembrados, deploy });
 });
