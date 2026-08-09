@@ -41,8 +41,46 @@ export default async function WorkspacePage({
 
   if (!consulta || consulta.medico_id !== medico.id) redirect("/dashboard");
 
-  const estadosPermitidos = ["pagada", "en_curso"];
-  if (!estadosPermitidos.includes(consulta.estado)) redirect("/dashboard");
+  // ── Modo "completar documentación" (08/08/2026) ──────────────────────────
+  // Hasta hoy esta pantalla solo abría con la consulta viva. Si la consulta se
+  // cerraba sola (se cortó internet, la cerró un cron), lo que el médico había
+  // escrito quedaba encerrado en el borrador y no había NINGUNA forma de
+  // entregárselo al paciente: la puerta estaba cerrada con llave desde adentro.
+  //
+  // Ahora una consulta cerrada también abre, pero en un modo acotado: sin video,
+  // sin cambiar el estado de la consulta, y solo para emitir lo que faltó. Todo
+  // documento ya emitido y firmado es de solo lectura.
+  const estadosAbiertos = ["pagada", "en_curso"];
+  const modoCompletar = consulta.estado === "completada";
+  if (!estadosAbiertos.includes(consulta.estado) && !modoCompletar) redirect("/dashboard");
+
+  // Datos del cierre. SELECT separado per CLAUDE.md: no se toca el SELECT
+  // principal, que funciona en producción.
+  const cierreConsulta = modoCompletar
+    ? (
+        await supabase
+          .from("consultas")
+          .select("completada_at, cierre_origen, evolucion, reintegro_estado")
+          .eq("id", consultaId)
+          .maybeSingle()
+      ).data ?? null
+    : null;
+
+  // Reembolsada: el paciente ya recuperó la plata. No se emite documentación.
+  if (modoCompletar && cierreConsulta?.reintegro_estado === "reembolsado") redirect("/dashboard");
+
+  // Documentos ya entregados. Se muestran como entregados y NO se pueden
+  // reemplazar: lo firmado es inmutable.
+  const documentosEmitidos = modoCompletar
+    ? (
+        await supabase
+          .from("documentos")
+          .select("id, tipo, created_at")
+          .eq("consulta_id", consultaId)
+          .in("tipo", ["receta", "indicaciones", "certificado", "orden"])
+          .order("created_at", { ascending: true })
+      ).data ?? []
+    : [];
 
   const { data: paciente } = await supabase
     .from("pacientes")
@@ -81,7 +119,10 @@ export default async function WorkspacePage({
   let roomName: string | null = null;
   let videoError: string | null = null;
 
-  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+  // En modo completar NO se toca el video: la consulta terminó y no se reabre.
+  if (modoCompletar) {
+    // sin sala, sin token, sin update de estado — deliberado.
+  } else if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
     videoError = "LiveKit no esta configurado en el servidor.";
   } else {
     try {
@@ -131,6 +172,20 @@ export default async function WorkspacePage({
       videoError={videoError}
       horaInicio={horaInicio}
       evolucionesPrevias={evolucionesPrevias}
+      modoCompletar={modoCompletar}
+      cierre={
+        modoCompletar
+          ? {
+              cerradaAt: cierreConsulta?.completada_at ?? null,
+              cierreOrigen: cierreConsulta?.cierre_origen ?? null,
+              evolucionRegistrada: cierreConsulta?.evolucion ?? null,
+              documentosEmitidos: documentosEmitidos.map((d) => ({
+                tipo: d.tipo,
+                createdAt: d.created_at,
+              })),
+            }
+          : null
+      }
       consulta={{
         especialidad: consulta.especialidad,
         motivo_consulta: consulta.motivo_consulta,

@@ -7,7 +7,12 @@ type VerificacionResponse = {
   estado?: string;
   verificada: boolean;
   alterada?: boolean;
+  /** Instante real del sello criptográfico. */
   firmado_at?: string;
+  /** Fecha de emisión del documento (el acto médico). */
+  emitido_at?: string;
+  /** El sello se aplicó después de la emisión. */
+  sellado_diferido?: boolean;
   algoritmo?: string;
   hash?: string;
   motivo?: string;
@@ -26,6 +31,26 @@ type Estado =
   | "alterada"
   | "no_encontrada"
   | "error";
+
+function formatFechaLarga(iso?: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function formatHoraAR(iso?: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
 
 export default function VerificarRecetaClient({ recetaId }: { recetaId: string }) {
   const [estado, setEstado] = useState<Estado>("cargando");
@@ -190,15 +215,15 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
             <p className="text-xs text-gray-400">Firmante original</p>
             <p className="mt-1 text-sm font-medium text-gray-900">{data.medico.nombre}</p>
             <p className="text-xs text-gray-500">{data.medico.especialidad} — {data.medico.matricula}</p>
+            {data.emitido_at && (
+              <p className="mt-1 text-xs text-gray-500">
+                Emitido: {formatFechaLarga(data.emitido_at)} — {formatHoraAR(data.emitido_at)} hs
+              </p>
+            )}
             {data.firmado_at && (
               <p className="mt-1 text-xs text-gray-500">
-                Firmado: {new Date(data.firmado_at).toLocaleDateString("es-AR", {
-                  day: "2-digit", month: "long", year: "numeric",
-                  timeZone: "America/Argentina/Buenos_Aires",
-                })} — {new Date(data.firmado_at).toLocaleTimeString("es-AR", {
-                  hour: "2-digit", minute: "2-digit", hour12: false,
-                  timeZone: "America/Argentina/Buenos_Aires",
-                })} hs
+                Sello electrónico aplicado: {formatFechaLarga(data.firmado_at)} —{" "}
+                {formatHoraAR(data.firmado_at)} hs
               </p>
             )}
           </div>
@@ -226,22 +251,10 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   }
 
   // ─── Verificada ────────────────────────────────────────────────────
-  const fechaFirma = data?.firmado_at
-    ? new Date(data.firmado_at).toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-    : "";
-  const horaFirma = data?.firmado_at
-    ? new Date(data.firmado_at).toLocaleTimeString("es-AR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-    : "";
+  const fechaFirma = formatFechaLarga(data?.firmado_at);
+  const horaFirma = formatHoraAR(data?.firmado_at);
+  const fechaEmision = formatFechaLarga(data?.emitido_at);
+  const horaEmision = formatHoraAR(data?.emitido_at);
 
   return (
     <div className="rounded-2xl bg-white p-8 shadow-sm" style={{ border: "1px solid #1D9E75" }}>
@@ -253,9 +266,20 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
         <h2 className="text-lg font-semibold text-gray-900">
           Documento verificado
         </h2>
+        {/*
+          "desde entonces" ata la integridad al instante que el lector tenga en
+          la cabeza — y tres bloques más abajo esta misma página le muestra la
+          fecha de EMISIÓN. En un documento de sellado diferido eso afirmaría
+          algo que el sello no certifica: la integridad criptográfica entre la
+          emisión y el sellado. Esa ventana está sostenida por otra evidencia
+          (`documentos` es insert-only), que no es criptográfica y por lo tanto
+          no se declara acá. Con sello diferido se dice exactamente desde cuándo
+          rige; el bloque de las dos fechas explica el resto.
+        */}
         <p className="mt-1 text-sm text-gray-500">
-          Este documento fue firmado electrónicamente y su contenido no fue
-          alterado desde entonces.
+          {data?.sellado_diferido
+            ? "Este documento fue firmado electrónicamente y su contenido no fue alterado desde que se aplicó el sello."
+            : "Este documento fue firmado electrónicamente y su contenido no fue alterado desde entonces."}
         </p>
       </div>
 
@@ -277,19 +301,14 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
         </div>
       )}
 
-      {/* Datos técnicos de la firma */}
+      {/* Datos técnicos de la firma.
+          La fecha salió de acá y pasó al bloque de fechas de abajo, donde se
+          muestra junto a la de emisión y con su etiqueta correcta ("sello
+          electrónico aplicado"). No se oculta nada: se dice mejor. */}
       <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
         <p className="text-xs font-medium tracking-wide text-gray-400">
           DATOS DE LA FIRMA
         </p>
-        {fechaFirma && (
-          <div className="flex justify-between">
-            <span className="text-xs text-gray-500">Fecha</span>
-            <span className="text-xs font-medium text-gray-700">
-              {fechaFirma} — {horaFirma} hs
-            </span>
-          </div>
-        )}
         {data?.algoritmo && (
           <div className="flex justify-between">
             <span className="text-xs text-gray-500">Algoritmo</span>
@@ -307,6 +326,56 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
           </div>
         )}
       </div>
+
+      {/* ─── Las dos fechas del documento ──────────────────────────────────
+          Se muestra SIEMPRE, no solo cuando el sello es posterior. Dos razones:
+          el bloque no es un caso especial que salte a la vista en los
+          documentos históricos, y en el caso normal las dos fechas coinciden —
+          que es la mejor prueba visual de que Docto no juega con las fechas.
+
+          Acá está la verdad completa: es donde un tercero (una farmacia, un
+          empleador) viene a verificar de verdad, y no se le oculta nada.
+          Sigue en verde: no hay nada anómalo que advertir. */}
+      {fechaFirma && (
+        <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
+          <p className="text-xs font-medium tracking-wide text-gray-400">
+            SOBRE LAS FECHAS DE ESTE DOCUMENTO
+          </p>
+
+          {data?.sellado_diferido && (
+            <p className="text-xs leading-relaxed text-gray-600">
+              El contenido es el original. Lo que se agregó después fue el sello
+              que permite verificarlo.
+            </p>
+          )}
+
+          {fechaEmision && (
+            <div className="flex flex-wrap justify-between gap-x-3">
+              <span className="text-xs text-gray-500">Emitido</span>
+              <span className="text-xs font-medium text-gray-700">
+                {fechaEmision} — {horaEmision} hs
+              </span>
+            </div>
+          )}
+          <div className="flex flex-wrap justify-between gap-x-3">
+            <span className="text-xs text-gray-500">Sello electrónico aplicado</span>
+            <span className="text-xs font-medium text-gray-700">
+              {fechaFirma} — {horaFirma} hs
+            </span>
+          </div>
+
+          {data?.sellado_diferido && (
+            <p className="pt-1 text-xs leading-relaxed text-gray-600">
+              Este documento se emitió antes de que Docto aplicara el sello
+              electrónico en forma automática. El sello se agregó después, sobre
+              el mismo contenido que el profesional emitió y entregó ese día: por
+              eso las dos fechas son distintas. La primera es la del acto médico;
+              la segunda, la del sello que permite verificarlo en esta página. El
+              documento no fue modificado.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Legal */}
       <p className="mt-4 text-center text-[11px] leading-relaxed text-gray-400">

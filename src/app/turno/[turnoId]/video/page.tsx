@@ -28,9 +28,10 @@ export default async function VideoTurnoPage({
     .single();
 
   if (!turno) redirect("/dashboard");
-  if (turno.estado === "completado" || turno.estado === "cancelado_paciente" || turno.estado === "cancelado_medico") redirect("/dashboard");
+  if (turno.estado === "cancelado_paciente" || turno.estado === "cancelado_medico") redirect("/dashboard");
 
-  // Verificar participante
+  // Verificar participante — ANTES del chequeo de estado, porque un turno ya
+  // cerrado solo lo puede abrir el médico que lo atendió.
   const { data: medicoData } = await supabase
     .from("medicos").select("id, nombre_completo, especialidad").eq("user_id", user.id).maybeSingle();
 
@@ -38,8 +39,39 @@ export default async function VideoTurnoPage({
 
   if (!esMedico) redirect("/dashboard");
 
-  // Transicionar a en_curso
-  if (turno.estado !== "en_curso") {
+  // ── Modo "completar documentación" (08/08/2026) ──────────────────────────
+  // Un turno cerrado ya no rebota al dashboard: el médico puede volver a emitir
+  // la documentación que faltó. Sin video, sin cambiar el estado del turno, y
+  // sin poder tocar nada de lo ya emitido y firmado.
+  const modoCompletar = turno.estado === "completado";
+
+  // Datos del cierre (SELECT separado per CLAUDE.md).
+  const cierreTurno = modoCompletar
+    ? (
+        await supabase
+          .from("turnos")
+          .select("completada_at, cierre_origen, evolucion, reintegro_estado")
+          .eq("id", turnoId)
+          .maybeSingle()
+      ).data ?? null
+    : null;
+
+  // Reembolsado: el paciente ya recuperó la plata. No se emite documentación.
+  if (modoCompletar && cierreTurno?.reintegro_estado === "reembolsado") redirect("/dashboard");
+
+  const documentosEmitidos = modoCompletar
+    ? (
+        await supabase
+          .from("documentos")
+          .select("id, tipo, created_at")
+          .eq("turno_id", turnoId)
+          .in("tipo", ["receta", "indicaciones", "certificado", "orden"])
+          .order("created_at", { ascending: true })
+      ).data ?? []
+    : [];
+
+  // Transicionar a en_curso (nunca en modo completar: el turno queda cerrado)
+  if (!modoCompletar && turno.estado !== "en_curso") {
     await supabase.from("turnos").update({ estado: "en_curso", iniciado_en: new Date().toISOString() }).eq("id", turnoId);
     cerrarEntradaSala({ turnoId, motivo: "atendido" }).catch(() => {});
     pushAlPaciente(turno.paciente_id, {
@@ -81,7 +113,10 @@ export default async function VideoTurnoPage({
   let roomName: string | null = null;
   let videoError: string | null = null;
 
-  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+  // En modo completar NO se toca el video: el turno terminó y no se reabre.
+  if (modoCompletar) {
+    // sin sala, sin token — deliberado.
+  } else if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
     videoError = "LiveKit no esta configurado en el servidor.";
   } else {
     try {
@@ -118,6 +153,20 @@ export default async function VideoTurnoPage({
       videoError={videoError}
       horaInicio={turno.hora_inicio || new Date().toISOString()}
       evolucionesPrevias={evolucionesPrevias}
+      modoCompletar={modoCompletar}
+      cierre={
+        modoCompletar
+          ? {
+              cerradaAt: cierreTurno?.completada_at ?? null,
+              cierreOrigen: cierreTurno?.cierre_origen ?? null,
+              evolucionRegistrada: cierreTurno?.evolucion ?? null,
+              documentosEmitidos: documentosEmitidos.map((d) => ({
+                tipo: d.tipo,
+                createdAt: d.created_at,
+              })),
+            }
+          : null
+      }
       consulta={{
         especialidad: medicoData?.especialidad ?? "",
         motivo_consulta: null,

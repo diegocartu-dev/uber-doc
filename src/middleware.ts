@@ -20,7 +20,11 @@ const TIMEOUT_EXEMPT_PREFIXES = [
   "/auth/",
   "/api/",
   "/beta-access",
-  "/verificar/",       // verificación pública de recetas — sin auth
+  "/verificar",        // verificación pública de documentos — sin auth.
+                       // SIN barra final: cubre también `/verificar` a secas
+                       // (el buscador por id), que si no quedaba sujeto al
+                       // timeout de inactividad y podía desloguear al que solo
+                       // viene a comprobar un papel.
   "/ayuda",            // pedir ayuda NUNCA puede mandarte al login: el que tiene
                        // la sesión vencida es justo el que más la necesita, y en
                        // /auth/login no hay ningún acceso a Ayuda.
@@ -126,7 +130,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 5. Header noindex para rutas privadas/públicas que no deben indexarse
-  if (pathname.startsWith("/dr/") || pathname.startsWith("/verificar/")) {
+  if (pathname.startsWith("/dr/") || pathname.startsWith("/verificar")) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
 

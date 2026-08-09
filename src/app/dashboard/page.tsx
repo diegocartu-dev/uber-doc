@@ -23,6 +23,8 @@ import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
 import BannerMercadoPago from "./BannerMercadoPago";
 import BannerIdentidad from "./BannerIdentidad";
+import DocumentacionPendiente from "./DocumentacionPendiente";
+import AvisoDocumentacionPendiente from "./AvisoDocumentacionPendiente";
 import AvatarDropdown from "./AvatarDropdown";
 import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
@@ -601,6 +603,10 @@ export default async function DashboardPage({
           </nav>
 
           <div className="mx-auto max-w-7xl px-6 py-6">
+            {/* Documentación que no llegó al paciente. Va PRIMERO: es lo único
+                del dashboard que tiene a un paciente esperando del otro lado. */}
+            <AvisoDocumentacionPendiente />
+
             {/* Nova widget — solo si flag activo */}
             {flagNovaAi && (
               <NovaWidget
@@ -613,6 +619,11 @@ export default async function DashboardPage({
             <div className="mt-4">
               <BotonPush rol="medico" />
             </div>
+
+            {/* Consultas cerradas sin documentación entregada. Va arriba de todo:
+                es plata cobrada por una atención que el paciente no puede probar.
+                Se autooculta si no hay nada pendiente. */}
+            <DocumentacionPendiente />
 
             {/* Identidad: rechazada → invitación a repetir SIEMPRE (prioridad);
                 pendiente (gate activo) → banner, nunca muro. */}

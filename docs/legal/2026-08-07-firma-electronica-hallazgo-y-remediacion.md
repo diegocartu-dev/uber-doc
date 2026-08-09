@@ -4,6 +4,15 @@
 **Base:** dictamen legal del 07/08/2026 + lectura directa del código.
 **Estado:** remediación en curso. Este documento se escribe el mismo día del hallazgo.
 
+> **Actualización del 07/08/2026 (tarde).** El criterio de este documento sobre
+> los documentos históricos —no sellarlos, porque sería antedatar— fue
+> **sustituido** por decisión del CEO y un segundo dictamen. Se aplica sobre ellos
+> un **sello de integridad diferido**: la firma electrónica (art. 5) ocurrió al
+> emitirse; lo que se consolida ahora es su evidencia criptográfica, con
+> `firmado_at` real y las dos fechas visibles en la verificación pública. El
+> encuadre completo, los límites y lo que NO se sella están en
+> [`2026-08-07-sellado-diferido-documentos-historicos.md`](./2026-08-07-sellado-diferido-documentos-historicos.md).
+
 Este registro existe porque, si esto alguna vez se discute, la diferencia entre
 "lo sabían y lo ocultaron" y "lo detectaron, lo registraron y lo remediaron en X
 días" es todo el partido.
@@ -201,14 +210,14 @@ trabajo chico; la decisión de redacción y de momento es de Diego + laboralista
   para los datos, pero una farmacia o un empleador pueden rechazar por eso un
   documento recién emitido. La migración es segura de aplicar sobre el código
   viejo, así que el orden correcto no cuesta nada.
-- **Constancia de integridad de los 114** (punto 3): calcular y guardar el hash
-  del contenido actual en registro append-only, con fecha de hoy y **sin
-  llamarlo firma**. Dos fechas verdaderas ("emitido el X / sello de integridad
-  aplicado el Y") no son antedatado.
-- **Re-emisión a pedido de certificados (36)**: por el mismo médico, que revise
-  y reafirme el contenido. Que el sistema los auto-firme sin que el médico los
-  mire sería cometer de nuevo el mismo pecado. Recetas (32): solo si una
-  farmacia rechaza una vigente. Indicaciones (43) y órdenes (3): sin acción.
+- ~~**Constancia de integridad de los 114**~~ → **RESUELTO por el sellado de
+  integridad diferido** (ver el aviso del encabezado y
+  `2026-08-07-sellado-diferido-documentos-historicos.md`). Las dos fechas
+  verdaderas —"emitido el X / sello aplicado el Y"— se muestran en la página
+  pública de verificación.
+- **Re-emisión a pedido de certificados**: por el mismo médico, si el contenido
+  tiene un error. Sigue vigente como vía de corrección; ya no como sustituto del
+  sello. El aviso al profesional abre la ventana para pedirla.
 - **OTP para certificados de reposo**: el modal (`ModalOTPFirma`) y los
   endpoints `/api/2fa/*` ya existen y funcionan; falta montarlo. Es el documento
   de máxima exposición (el empleador es un tercero adversarial).
@@ -216,9 +225,10 @@ trabajo chico; la decisión de redacción y de momento es de Diego + laboralista
   recetas dicen "Inscripción en trámite" mientras CLAUDE.md afirma Plataforma
   0270. Confirmar contra prod, no contra `.env.local`.
 - **Documentos que quedan sin firmar** porque el médico cerró el navegador antes
-  de que saliera el pedido de firma: hoy quedan "sin sello". El cron
-  `documentos-sin-sello` (cada hora) los cuenta y avisa por mail — no los firma:
-  sellar hoy un documento de ayer sería antedatar. Evaluar un repaso acotado.
+  de que saliera el pedido de firma: quedan "sin sello". El cron
+  `documentos-sin-sello` (cada hora) los cuenta y avisa por mail — no los firma.
+  Un cron no es el lugar para sellar: el sellado diferido es una operación
+  deliberada, con lote, autorización y aviso al profesional.
 - **T&C del médico con cláusula de firma electrónica** (punto 4 de arriba).
 - **Gate de laboralista matriculado** sobre certificados de reposo (pendiente ya
   señalado en el dictamen del 27/06).

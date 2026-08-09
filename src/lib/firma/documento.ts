@@ -3,13 +3,23 @@
 // Firma electrónica de documentos médicos (receta / certificado / indicaciones /
 // orden) sobre la tabla `documentos`.
 //
-// Dos caminos de atribución, mismo motor criptográfico (hash canónico SHA-256 +
-// RSA-SHA256 con la clave del médico) y mismo registro de no-repudio:
+// Cuatro caminos de atribución, mismo motor criptográfico (hash canónico SHA-256
+// + RSA-SHA256 con la clave del médico) y mismo registro de no-repudio:
 //
 //   1. `firmarDocumento(...)`      — segundo factor OTP (art. 5 Ley 25.506 + 2FA).
 //   2. `firmarDocumentoPorSesion(...)` — atribución por sesión autenticada del
 //      médico en el instante en que toca "Finalizar consulta" con el contenido
 //      a la vista. Es el acto de voluntad; la firma se ejecuta server-side.
+//   3. `sellarDocumentoDiferido(...)` — sello de integridad DIFERIDO sobre
+//      documentos emitidos antes de que el sellado automático existiera. NO es
+//      una firma nueva: la firma electrónica ocurrió al emitirse (art. 5); esto
+//      consolida su evidencia criptográfica. `firmado_at` es el instante REAL
+//      del sellado, nunca la fecha de emisión. Ver el bloque del camino 3.
+//   4. `firmarDocumentoPorRescate(...)` — el profesional redactó el contenido
+//      desde su sesión (autoguardado del borrador) pero la consulta se cerró
+//      sola, sin que tocara "Finalizar". La plataforma emite lo escrito y lo
+//      sella; el log deja constancia expresa de que él NO confirmó al cerrar.
+//      Ver el bloque del camino 4.
 //
 // Ninguna norma (25.506, 27.553, Dto. 98/2023, Dto. 407/2026) exige OTP por
 // documento. Lo que el art. 5 in fine SÍ impone es que, si la firma se
@@ -28,6 +38,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashSHA256, firmar, verificar, desencriptarClavePrivada } from "./crypto";
 import { canonicalJSON } from "./receta";
+import { provisionarClaves } from "./claves";
 import {
   construirIdentidadDocumento,
   identidadDesdeJSONB,
@@ -39,6 +50,26 @@ const OTP_VENTANA_MS = 5 * 60 * 1000;
 
 const ALGORITMO = "RSA-SHA256";
 const REINTENTOS_CADENA = 4;
+
+/**
+ * Sello criptográfico aplicado por la plataforma DESPUÉS de la emisión, sobre una
+ * firma electrónica preexistente (art. 5 Ley 25.506). El valor dice las dos cosas
+ * que importan: que fue posterior y que lo aplicó la plataforma, no el profesional.
+ */
+export const METODO_SELLADO_DIFERIDO = "sellado_diferido_plataforma";
+
+/**
+ * La plataforma emitió y selló, en el mismo instante, el contenido clínico que
+ * el profesional había dejado escrito en el borrador de una consulta que se
+ * cerró sola. Ver el camino 4 más abajo.
+ */
+export const METODO_RESCATE_BORRADOR = "rescate_borrador";
+
+type MetodoAtribucion =
+  | "otp"
+  | "sesion_medico"
+  | typeof METODO_SELLADO_DIFERIDO
+  | typeof METODO_RESCATE_BORRADOR;
 
 /**
  * Únicos tipos que se sellan: los documentos clínicos que el médico redactó y
@@ -117,7 +148,7 @@ type LogFirma = {
   hash: string;
   algoritmo: string;
   firmado_at: string;
-  metodo_atribucion: "otp" | "sesion_medico";
+  metodo_atribucion: MetodoAtribucion;
   otp_id: string | null;
   clave_id: string | null;
   ip: string | null;
@@ -181,16 +212,24 @@ async function insertarFirmaLog(log: LogFirma): Promise<{ ok: boolean; error?: s
 }
 
 /**
- * Si el código sale a producción ANTES de la migración 20260807, el insert en
- * `firma_logs` falla por columna inexistente (42703 / PGRST204) o por
- * `otp_id NOT NULL` (23502) y TODOS los documentos nuevos salen "sin sello".
+ * Si el código sale a producción ANTES de su migración, el insert en
+ * `firma_logs` falla por columna inexistente (42703 / PGRST204), por
+ * `otp_id NOT NULL` (23502) o porque el CHECK del método de atribución todavía
+ * no conoce el valor nuevo (23514) — y los documentos salen "sin sello".
  * El error crudo de PostgREST no lo dice; este prefijo sí, y el cron
  * `documentos-sin-sello` avisa por mail dentro de la hora.
  */
 function pistaMigracion(error: { code?: string; message?: string }): string {
   const codigo = error.code ?? "";
+  const mensaje = error.message ?? "";
   const esColumnaFaltante = codigo === "42703" || codigo === "PGRST204";
-  const esOtpObligatorio = codigo === "23502" && (error.message ?? "").includes("otp_id");
+  const esOtpObligatorio = codigo === "23502" && mensaje.includes("otp_id");
+  // 23514 = check_violation. El CHECK de metodo_atribucion se ensancha en cada
+  // migración que agrega un camino de firma nuevo.
+  const esMetodoDesconocido = codigo === "23514" && mensaje.includes("metodo_atribucion");
+  if (esMetodoDesconocido) {
+    return "MIGRACIÓN FALTANTE (el CHECK de firma_logs.metodo_atribucion no conoce este método — aplicar la migración del camino de firma correspondiente, p. ej. supabase/migrations/20260808_rescate_borrador.sql): ";
+  }
   return esColumnaFaltante || esOtpObligatorio
     ? "MIGRACIÓN FALTANTE (aplicar supabase/migrations/20260807_firma_por_sesion.sql): "
     : "";
@@ -206,7 +245,14 @@ async function sellarDocumento(
   doc: DocFirmable,
   identidad: IdentidadDocumento,
   claves: { id: string; clave_privada_enc: string },
-  log: Omit<LogFirma, "hash" | "firmado_at" | "algoritmo" | "clave_id" | "documento_id" | "receta_id" | "medico_id">
+  log: Omit<LogFirma, "hash" | "firmado_at" | "algoritmo" | "clave_id" | "documento_id" | "receta_id" | "medico_id">,
+  /**
+   * Campos extra para `documentos.firma_digital`. Hoy solo los usa el sellado
+   * diferido (`sellado_diferido: true` + `emitido_at`), para que la página de
+   * verificación pueda mostrar las DOS fechas sin ir a buscar el log.
+   * NO entra al hash: el hash cubre el contenido y la identidad impresa.
+   */
+  extraFirmaDigital?: Record<string, unknown>
 ): Promise<FirmaResult> {
   const supabase = createAdminClient();
 
@@ -228,6 +274,7 @@ async function sellarDocumento(
     // Identidad impresa, congelada y cubierta por el hash. El PDF de un
     // documento sellado se arma DESDE acá, no desde las tablas vivas.
     identidad,
+    ...(extraFirmaDigital ?? {}),
   };
 
   // Guard `is firma_digital null` → evita doble firma (TOCTOU).
@@ -461,6 +508,512 @@ export async function firmarDocumentoPorSesion(
   });
 }
 
+// ─── Camino 3 — sello de integridad DIFERIDO (documentos históricos) ─────────
+//
+// QUÉ ES Y QUÉ NO ES (dictamen legal 07/08/2026, segunda parte):
+// Los documentos emitidos antes de que el sellado automático existiera ya están
+// firmados electrónicamente: el profesional, con identidad validada y matrícula
+// verificada, los emitió desde su sesión autenticada, en una consulta que ocurrió
+// y que el paciente pagó. El art. 5 de la Ley 25.506 es tecnológicamente neutro
+// y no exige criptografía: ESE acto fue la firma.
+//
+// Lo que se aplica acá es el SELLO CRIPTOGRÁFICO — evidencia de esa firma, no la
+// firma misma. No es "firma retroactiva", ni "regularización", ni "refirmado":
+// esos términos no describen lo que pasa y no se usan.
+//
+// QUÉ CERTIFICA: que el contenido y la identidad impresa que hoy se registran
+// corresponden a ese documento y a ese profesional según los registros de Docto;
+// que desde el instante del sellado el contenido no cambió; y la atribución al
+// profesional, sostenida en el acto de emisión.
+//
+// QUÉ NO CERTIFICA, y en ningún lado se afirma: que el profesional haya ejecutado
+// un acto de firma en el instante del sellado (no lo hizo — queda constancia
+// expresa en el log), ni integridad criptográfica entre la emisión y el sellado,
+// ni fecha cierta de la firma en la fecha de emisión, ni firma digital de los
+// arts. 7 y 8 (las presunciones de autoría e integridad NO se invocan).
+//
+// LÍMITE DURO: `firmado_at` es SIEMPRE el instante real del sellado. Ningún campo
+// —acá, en el PDF, en la verificación pública o en un export— puede contener una
+// fecha de firma anterior a la real. La fecha de emisión viaja aparte, en
+// `contexto.emitido_at` y en `firma_digital.emitido_at`, y la página pública
+// muestra las dos.
+
+/** Por qué un documento NO entra al lote. Cada valor va al reporte del backfill. */
+export type MotivoNoApto =
+  | "no_encontrado"
+  /** Ya tiene sello. Es el caso normal al reanudar: idempotencia, no error. */
+  | "ya_sellado"
+  /** Fila de tracking o tipo no clínico: no se firma (ver TIPOS_FIRMABLES). */
+  | "tipo_no_firmable"
+  /** Sin consulta ni turno: no hay acto médico al que atribuir la emisión. */
+  | "sin_evento_clinico"
+  | "cuenta_test"
+  /**
+   * El profesional no estaba validado (REFEPS/identidad) al momento de emitir, o
+   * no es computable. Va a REVISIÓN MANUAL, no al lote.
+   */
+  | "medico_no_validado_al_emitir";
+
+export type EvaluacionSellado =
+  | { apto: true; medico_id: string; emitido_at: string; tipo: string; tiene_claves: boolean }
+  | { apto: false; motivo: MotivoNoApto; detalle: string };
+
+type DocSellable = DocFirmable & {
+  firma_digital: unknown;
+  consulta_id: string | null;
+  turno_id: string | null;
+};
+
+type EvaluacionInterna =
+  | {
+      apto: true;
+      doc: DocSellable;
+      firmante: Record<string, unknown>;
+      /**
+       * ¿El profesional ya figuraba validado en NUESTROS registros cuando emitió?
+       * true = sí · false = la validación quedó registrada después · null = no
+       * computable. NO condiciona el sellado (para eso vale su estado de hoy:
+       * aprobado + REFEPS validado), pero se guarda tal cual en el log: la
+       * cronología real no se maquilla.
+       */
+      habilitado: boolean | null;
+      tieneClaves: boolean;
+    }
+  | { apto: false; motivo: MotivoNoApto; detalle: string };
+
+/**
+ * ¿El profesional estaba validado cuando emitió el documento?
+ * `null` cuando no es computable (falta alguna de las dos fechas de validación):
+ * se declara el límite, no se simula un `true`.
+ */
+function habilitadoAlEmitir(
+  firmante: Record<string, unknown>,
+  emitidoAt: string
+): boolean | null {
+  const refeps = firmante.refeps_validado_at;
+  const identidad = firmante.identidad_validada_at;
+  if (typeof refeps !== "string" || typeof identidad !== "string") return null;
+
+  const emitido = Date.parse(emitidoAt);
+  const tRefeps = Date.parse(refeps);
+  const tIdentidad = Date.parse(identidad);
+  if (!Number.isFinite(emitido) || !Number.isFinite(tRefeps) || !Number.isFinite(tIdentidad)) {
+    return null;
+  }
+  return tRefeps <= emitido && tIdentidad <= emitido;
+}
+
+/**
+ * ¿El paciente del documento es una cuenta de prueba?
+ *
+ * `documentos.paciente_id` referencia `pacientes.id`, pero se consulta también
+ * por `user_id`: en otras tablas la columna homónima guarda el user_id, y una
+ * fila de prueba que se escape acá queda sellada y no se puede deshacer.
+ *
+ * Si la consulta falla, LANZA en vez de devolver `false`. Sellar es irreversible:
+ * ante la duda no se sella. El backfill lo anota como `error_sellado` con el
+ * detalle, así el operador ve qué pasó en vez de comerse un sellado silencioso.
+ */
+async function pacienteEsDePrueba(pacienteId: string | null): Promise<boolean> {
+  if (!pacienteId) return false;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("pacientes")
+    .select("id")
+    .eq("es_cuenta_test", true)
+    .or(`id.eq.${pacienteId},user_id.eq.${pacienteId}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `No se pudo determinar si el paciente es cuenta de prueba: ${error.message}`
+    );
+  }
+  return !!data;
+}
+
+async function evaluarInterna(documentoId: string): Promise<EvaluacionInterna> {
+  const supabase = createAdminClient();
+
+  const { data: doc } = await supabase
+    .from("documentos")
+    .select(COLUMNAS_FIRMABLES)
+    .eq("id", documentoId)
+    .maybeSingle<DocSellable>();
+
+  if (!doc) return { apto: false, motivo: "no_encontrado", detalle: "No existe el documento" };
+
+  // Idempotencia: un documento sellado NO se vuelve a sellar nunca.
+  if (doc.firma_digital) {
+    return { apto: false, motivo: "ya_sellado", detalle: "Ya tiene sello electrónico" };
+  }
+  if (!esTipoFirmable(doc.tipo)) {
+    return { apto: false, motivo: "tipo_no_firmable", detalle: `Tipo "${doc.tipo}"` };
+  }
+  if (!doc.consulta_id && !doc.turno_id) {
+    return {
+      apto: false,
+      motivo: "sin_evento_clinico",
+      detalle: "Sin consulta ni turno asociado",
+    };
+  }
+
+  const firmante = await snapshotFirmante(doc.medico_id);
+
+  if (firmante.es_cuenta_test === true) {
+    return {
+      apto: false,
+      motivo: "cuenta_test",
+      detalle: "Documento de una cuenta de prueba (profesional)",
+    };
+  }
+
+  // El filtro miraba SOLO la bandera del MÉDICO, y eso deja pasar el caso que
+  // más se dio: pruebas hechas con una cuenta de paciente interna contra
+  // médicos reales. Esos documentos no son actos clínicos —sellarlos los suma
+  // al lote y le manda al profesional el aviso de que "sus documentos ya se
+  // pueden verificar" por algo que fue una prueba— y el sello no se deshace.
+  // La convención del repo es filtrar bilateral: ver `src/lib/insights/filtro-test.ts`.
+  if (await pacienteEsDePrueba(doc.paciente_id)) {
+    return {
+      apto: false,
+      motivo: "cuenta_test",
+      detalle: "Documento de una cuenta de prueba (paciente)",
+    };
+  }
+
+  // Habilitación del profesional.
+  //
+  // `habilitadoAlEmitir` compara la fecha de emisión contra la fecha en que
+  // NOSOTROS registramos la validación, y eso mide cuándo corrimos el chequeo,
+  // no desde cuándo la persona es médica. Caso real: un profesional fundador,
+  // aprobado y con matrícula activa en REFEPS, emitió documentos un día antes
+  // de que la validación automática se ejecutara sobre su ficha. Bloquearlos
+  // por eso sería castigar un documento legítimo por una demora nuestra —
+  // exactamente el problema que este trabajo vino a reparar.
+  //
+  // Criterio: alcanza con que el profesional esté HOY aprobado y validado
+  // contra REFEPS. Lo que NO se sella es el documento de alguien que nunca
+  // fue validado, o que está rechazado o suspendido. La cronología real
+  // (cuándo se validó vs. cuándo emitió) se registra igual en el log, sin
+  // maquillar: `habilitado_al_emitir` distingue true / false / desconocido.
+  const habilitado = habilitadoAlEmitir(firmante, doc.created_at);
+  const validadoHoy =
+    firmante.refeps_validado === true && firmante.estado_registro === "aprobado";
+  if (!validadoHoy) {
+    return {
+      apto: false,
+      motivo: "medico_no_validado_al_emitir",
+      detalle:
+        firmante.refeps_validado === true
+          ? `El profesional no está aprobado hoy (estado: ${String(firmante.estado_registro ?? "desconocido")})`
+          : "El profesional no figura validado contra REFEPS",
+    };
+  }
+
+  const { data: claves } = await supabase
+    .from("medico_claves")
+    .select("id")
+    .eq("medico_id", doc.medico_id)
+    .eq("activa", true)
+    .maybeSingle();
+
+  return { apto: true, doc, firmante, habilitado, tieneClaves: !!claves };
+}
+
+/**
+ * Evalúa si un documento entra al lote, SIN tocar nada. Es lo que corre el
+ * `--dry-run` del backfill: exactamente los mismos guards que el sellado real,
+ * para que la simulación no mienta.
+ */
+export async function evaluarSelladoDiferido(documentoId: string): Promise<EvaluacionSellado> {
+  const e = await evaluarInterna(documentoId);
+  if (!e.apto) return { apto: false, motivo: e.motivo, detalle: e.detalle };
+  return {
+    apto: true,
+    medico_id: e.doc.medico_id,
+    emitido_at: e.doc.created_at,
+    tipo: e.doc.tipo,
+    tiene_claves: e.tieneClaves,
+  };
+}
+
+export type OpcionesSelladoDiferido = {
+  /** Lote al que pertenece este sellado (tabla `sellado_diferido_lote`). */
+  loteId: string;
+  /** Total de documentos alcanzados por el lote. */
+  loteTotal: number;
+};
+
+export type ResultadoSelladoDiferido =
+  | {
+      ok: true;
+      hash: string;
+      firmado_at: string;
+      medico_id: string;
+      /** El par de claves se generó recién para este sellado (queda en el log). */
+      clave_creada: boolean;
+    }
+  | { ok: false; motivo: MotivoNoApto | "sin_claves" | "sin_identidad" | "error_sellado"; detalle: string };
+
+/**
+ * Autorización de la operación. Va dentro del `contexto` de CADA firma del lote:
+ * quién la decidió, cuándo, y contra qué dictamen. Sin esto, el log dice que la
+ * plataforma firmó por el profesional y no dice bajo qué autoridad.
+ */
+const AUTORIZACION_SELLADO_DIFERIDO = {
+  tipo: "decision_operativa",
+  responsable: "Diego González (CEO)",
+  fecha: "2026-08-07",
+  dictamen: "docs/legal/2026-08-07-firma-electronica-hallazgo-y-remediacion.md",
+  registro: "docs/legal/2026-08-07-sellado-diferido-documentos-historicos.md",
+} as const;
+
+/**
+ * Devuelve la clave activa del profesional; si no tiene, la provisiona.
+ * Que la clave se haya creado recién NO se oculta: viaja al log como
+ * `clave_creada_para_sellado_diferido`.
+ */
+async function asegurarClavesActivas(medicoId: string): Promise<
+  | { ok: true; claves: { id: string; clave_privada_enc: string }; creada: boolean }
+  | { ok: false; error: string }
+> {
+  const supabase = createAdminClient();
+
+  const leer = () =>
+    supabase
+      .from("medico_claves")
+      .select("id, clave_privada_enc")
+      .eq("medico_id", medicoId)
+      .eq("activa", true)
+      .maybeSingle();
+
+  const { data: existente } = await leer();
+  if (existente) return { ok: true, claves: existente, creada: false };
+
+  try {
+    await provisionarClaves(medicoId);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "error provisionando claves" };
+  }
+
+  const { data: nueva } = await leer();
+  if (!nueva) return { ok: false, error: "La clave se provisionó pero no se pudo leer" };
+  return { ok: true, claves: nueva, creada: true };
+}
+
+/**
+ * Aplica el sello de integridad diferido sobre UN documento histórico.
+ * Idempotente por construcción: el guard `.is("firma_digital", null)` de
+ * `sellarDocumento` impide re-sellar, y la evaluación previa saltea lo ya sellado.
+ */
+export async function sellarDocumentoDiferido(
+  documentoId: string,
+  opciones: OpcionesSelladoDiferido
+): Promise<ResultadoSelladoDiferido> {
+  const evaluacion = await evaluarInterna(documentoId);
+  if (!evaluacion.apto) {
+    return { ok: false, motivo: evaluacion.motivo, detalle: evaluacion.detalle };
+  }
+
+  const { doc, firmante } = evaluacion;
+
+  const claves = await asegurarClavesActivas(doc.medico_id);
+  if (!claves.ok) return { ok: false, motivo: "sin_claves", detalle: claves.error };
+
+  // Identidad impresa congelada. LÍMITE DECLARADO, no simulado: se lee de las
+  // tablas VIVAS de médicos y pacientes, que no tienen `updated_at`. No hay forma
+  // de probar que el nombre o la obra social de hoy son los del día de la
+  // emisión, así que el log lo dice (`identidad_verificada_contra_emision: false`)
+  // en vez de aparentar lo contrario.
+  const identidad = await construirIdentidadDocumento(doc.medico_id, doc.paciente_id);
+  if (!identidad) {
+    return {
+      ok: false,
+      motivo: "sin_identidad",
+      detalle: "No se pudo congelar la identidad del documento",
+    };
+  }
+
+  const contextoBase = await contextoDocumento(doc, {
+    consulta_id: doc.consulta_id,
+    turno_id: doc.turno_id,
+  });
+
+  const emitidoAt = doc.created_at;
+  const diasEntre = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(emitidoAt)) / (24 * 60 * 60 * 1000))
+  );
+
+  const resultado = await sellarDocumento(
+    doc,
+    identidad,
+    claves.claves,
+    {
+      metodo_atribucion: METODO_SELLADO_DIFERIDO,
+      otp_id: null,
+      // NO se inventa una IP: no hubo request del profesional. Quién ejecutó el
+      // sello consta en `contexto.aplicado_por`.
+      ip: null,
+      user_agent: null,
+      firmante: {
+        ...firmante,
+        habilitado_al_emitir: true,
+        clave_creada_para_sellado_diferido: claves.creada,
+      },
+      contexto: {
+        ...contextoBase,
+        sellado_diferido: true,
+        emitido_at: emitidoAt,
+        dias_entre_emision_y_sellado: diasEntre,
+        aplicado_por: "plataforma",
+        // La constancia expresa. El profesional NO ejecutó un acto de firma en
+        // este instante, y el registro lo dice con todas las letras.
+        firmado_por_el_profesional_en_este_instante: false,
+        acto_de_voluntad_original: {
+          tipo: "emision_desde_sesion_autenticada",
+          consulta_id: doc.consulta_id,
+          turno_id: doc.turno_id,
+          completada_at: contextoBase.completada_at ?? null,
+        },
+        motivo: "remediacion_falla_de_sellado_automatico",
+        autorizacion: AUTORIZACION_SELLADO_DIFERIDO,
+        lote_id: opciones.loteId,
+        lote_total: opciones.loteTotal,
+        identidad_origen: "datos_vigentes_al_sellado",
+        identidad_verificada_contra_emision: false,
+      },
+    },
+    // En `firma_digital` para que /verificar muestre las dos fechas sin leer el log.
+    { sellado_diferido: true, emitido_at: emitidoAt }
+  );
+
+  if (!resultado.ok) return { ok: false, motivo: "error_sellado", detalle: resultado.error };
+
+  return {
+    ok: true,
+    hash: resultado.hash,
+    firmado_at: resultado.firmado_at,
+    medico_id: doc.medico_id,
+    clave_creada: claves.creada,
+  };
+}
+
+// ─── Camino 4 — firma de lo rescatado del borrador ───────────────────────────
+//
+// QUÉ PASÓ CUANDO SE USA ESTE CAMINO: el profesional escribió el contenido
+// clínico durante la consulta y Docto lo autoguardó en el borrador (cada PATCH
+// del autoguardado verificó su sesión autenticada). Después la consulta se cerró
+// SIN que tocara "Finalizar": se cortó internet, se cerró la sala de video, o la
+// cerró un cron. Antes de esto, lo escrito moría en el borrador y el paciente no
+// recibía nada.
+//
+// QUÉ CERTIFICA: que el contenido emitido es exactamente el que el profesional
+// dejó escrito, que desde el sellado no cambió, y la atribución al profesional
+// —sostenida en la redacción desde su sesión, no en un acto de cierre.
+//
+// QUÉ NO CERTIFICA, y el log lo dice con todas las letras
+// (`confirmado_por_el_profesional_al_cerrar: false`): que el profesional haya
+// revisado y confirmado el contenido antes de emitirse. No lo hizo — por eso el
+// rescate SIEMPRE le avisa para que revise.
+//
+// Mismo motor, mismo log, misma identidad congelada que los otros caminos: lo
+// único distinto es el nombre honesto de la atribución.
+
+export type ContextoRescate = {
+  /** Por qué camino se cerró el encuentro (cierre_origen del registro). */
+  cierreOrigen: string;
+  /** `updated_at` del borrador rescatado: cuándo escribió el profesional. */
+  borradorActualizadoAt: string | null;
+  /** Instante en que el sistema cerró el encuentro. */
+  cerradoAt: string;
+};
+
+/**
+ * Firma un documento emitido por el rescate automático del borrador.
+ * El caller DEBE haber verificado que el documento corresponde a `medicoId`.
+ */
+export async function firmarDocumentoPorRescate(
+  documentoId: string,
+  medicoId: string,
+  rescate: ContextoRescate
+): Promise<FirmaResult> {
+  const supabase = createAdminClient();
+
+  const { data: doc } = await supabase
+    .from("documentos")
+    .select(COLUMNAS_FIRMABLES)
+    .eq("id", documentoId)
+    .single<DocFirmable & { firma_digital: unknown; consulta_id: string | null; turno_id: string | null }>();
+
+  if (!doc) return { ok: false, error: "Documento no encontrado" };
+  if (doc.medico_id !== medicoId) return { ok: false, error: "No autorizado" };
+  if (doc.firma_digital) return { ok: false, error: "Documento ya firmado" };
+  if (!esTipoFirmable(doc.tipo)) return { ok: false, error: `Tipo no firmable: ${doc.tipo}` };
+  if (!doc.consulta_id && !doc.turno_id) {
+    return { ok: false, error: "Documento sin consulta ni turno asociado" };
+  }
+
+  const firmante = await snapshotFirmante(medicoId);
+
+  // Mismo gate de estado del firmante que el camino por sesión: la firma se
+  // atribuye a la matrícula, y un profesional rechazado o suspendido no sigue
+  // sellando con ella. Cuentas de test exentas de REFEPS (igual que el
+  // constraint de DB).
+  const habilitado =
+    firmante.estado_registro === "aprobado" &&
+    (firmante.refeps_validado === true || firmante.es_cuenta_test === true);
+  if (!habilitado) {
+    return { ok: false, error: "Profesional no habilitado para firmar" };
+  }
+
+  const { data: claves } = await supabase
+    .from("medico_claves")
+    .select("id, clave_privada_enc")
+    .eq("medico_id", medicoId)
+    .eq("activa", true)
+    .maybeSingle();
+
+  if (!claves) return { ok: false, error: "Médico sin claves de firma activas" };
+
+  const identidad = await construirIdentidadDocumento(medicoId, doc.paciente_id);
+  if (!identidad) {
+    return { ok: false, error: "No se pudo congelar la identidad del documento" };
+  }
+
+  const contextoBase = await contextoDocumento(doc, {
+    consulta_id: doc.consulta_id,
+    turno_id: doc.turno_id,
+  });
+
+  return sellarDocumento(doc, identidad, claves, {
+    metodo_atribucion: METODO_RESCATE_BORRADOR,
+    otp_id: null,
+    // No hubo request del profesional: no se inventa IP ni user-agent.
+    ip: null,
+    user_agent: null,
+    firmante,
+    contexto: {
+      ...contextoBase,
+      // Los dos campos que exige el CHECK de la migración 20260808.
+      rescate_automatico: true,
+      cierre_origen: rescate.cierreOrigen,
+      // La constancia expresa de lo que NO pasó.
+      confirmado_por_el_profesional_al_cerrar: false,
+      acto_de_voluntad_original: {
+        tipo: "redaccion_autoguardada_desde_sesion_autenticada",
+        borrador_actualizado_at: rescate.borradorActualizadoAt,
+      },
+      cerrado_automaticamente_at: rescate.cerradoAt,
+      motivo: "rescate_de_borrador_en_cierre_automatico",
+      revision_del_profesional: "pendiente_notificada",
+    },
+  });
+}
+
 // ─── Snapshot del firmante y del contexto (checklist del dictamen) ────────────
 
 /**
@@ -475,7 +1028,7 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, user_id, nombre_completo, especialidad, tipo_matricula, numero_matricula, jurisdicciones, refeps_validado, refeps_validado_at, identidad_validada, identidad_validada_at, didit_session_id, didit_status, es_cuenta_test"
+      "id, user_id, nombre_completo, especialidad, tipo_matricula, numero_matricula, jurisdicciones, refeps_validado, refeps_validado_at, identidad_validada, identidad_validada_at, didit_session_id, didit_status, es_cuenta_test, estado_registro"
     )
     .eq("id", medicoId)
     .single();
@@ -544,6 +1097,10 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
     identidad_validada_at: medico.identidad_validada_at ?? null,
     didit_session_id: medico.didit_session_id ?? null,
     didit_status: medico.didit_status ?? null,
+    // Estado de la ficha AL MOMENTO DE SELLAR: es lo que habilita el sellado
+    // diferido (aprobado + REFEPS validado). Se consultaba pero no se devolvía,
+    // así que el gate lo leía como `undefined` y descartaba TODOS los documentos.
+    estado_registro: medico.estado_registro ?? null,
     es_cuenta_test: medico.es_cuenta_test ?? false,
     tyc_medico: tycMedico,
     tyc_medico_registrada: tycMedico !== null,
@@ -601,6 +1158,16 @@ export type EstadoVerificacion =
 export type VerificacionDocumento = {
   estado: EstadoVerificacion;
   medico_id: string | null;
+  /**
+   * Fecha de EMISIÓN del documento (`documentos.created_at`). La página pública
+   * muestra siempre las dos fechas —emisión y sello— también cuando coinciden:
+   * así el sellado diferido no es un caso especial que salta a la vista, y que
+   * en el caso normal coincidan es la mejor prueba de que Docto no juega con las
+   * fechas.
+   */
+  emitido_at: string | null;
+  /** El sello se aplicó DESPUÉS de la emisión (ver camino 3). */
+  sellado_diferido: boolean;
   datos: {
     hash_original: string;
     hash_actual: string;
@@ -631,10 +1198,24 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     .maybeSingle<DocFirmable & { firma_digital: unknown }>();
 
   if (!doc) {
-    return { estado: "no_encontrado", medico_id: null, datos: null, firmante: null };
+    return {
+      estado: "no_encontrado",
+      medico_id: null,
+      emitido_at: null,
+      sellado_diferido: false,
+      datos: null,
+      firmante: null,
+    };
   }
   if (!doc.firma_digital) {
-    return { estado: "sin_sello", medico_id: doc.medico_id, datos: null, firmante: null };
+    return {
+      estado: "sin_sello",
+      medico_id: doc.medico_id,
+      emitido_at: doc.created_at,
+      sellado_diferido: false,
+      datos: null,
+      firmante: null,
+    };
   }
 
   const fd = doc.firma_digital as {
@@ -701,12 +1282,22 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     metodo_atribucion: fd.metodo_atribucion ?? null,
   };
 
+  // La emisión sale de la fila, no de la firma: es un dato del documento, y así
+  // no depende de que el jsonb lo repita.
+  const comun = {
+    medico_id: fd.medico_id,
+    emitido_at: doc.created_at,
+    sellado_diferido: fd.metodo_atribucion === METODO_SELLADO_DIFERIDO,
+    datos,
+    firmante,
+  };
+
   if (!clavePublica) {
     // Hay sello pero no podemos recuperar la clave: no afirmamos validez.
-    return { estado: "invalida", medico_id: fd.medico_id, datos, firmante };
+    return { estado: "invalida", ...comun };
   }
 
-  if (alterada) return { estado: "alterada", medico_id: fd.medico_id, datos, firmante };
+  if (alterada) return { estado: "alterada", ...comun };
 
   let firmaValida = false;
   try {
@@ -715,12 +1306,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     firmaValida = false;
   }
 
-  return {
-    estado: firmaValida ? "verificada" : "invalida",
-    medico_id: fd.medico_id,
-    datos,
-    firmante,
-  };
+  return { estado: firmaValida ? "verificada" : "invalida", ...comun };
 }
 
 type VerificacionResult = {

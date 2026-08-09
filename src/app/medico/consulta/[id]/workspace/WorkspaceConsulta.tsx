@@ -21,6 +21,12 @@ import {
 import { Track } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoSaveBorrador } from "@/hooks/useAutoSaveBorrador";
+import {
+  avisarNotificacionNueva,
+  descartarDocumentacionPendiente,
+  marcarDocumentacionPendiente,
+  type MotivoPendiente,
+} from "@/lib/documentacion-pendiente";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
 import ModalDatosPaciente from "@/components/ModalDatosPaciente";
@@ -43,6 +49,44 @@ type ModoWorkspace = "video" | "escritura" | "estudios" | "hc";
 // la unidad sin ambigüedad: dias_reposo ≤ 3 se muestra en horas, ≥ 4 en días.
 const HORAS_REPOSO_RAPIDAS: number[] = [24, 48, 72];
 const DIAS_REPOSO_RAPIDOS: number[] = [4, 5, 6];
+
+// Nombre humano de cada tipo de documento. Se usa en el modo "completar
+// documentación" para decirle al médico qué ya recibió el paciente y qué acaba
+// de emitir, sin jerga de base de datos.
+const ETIQUETA_DOC: Record<string, string> = {
+  receta: "Receta",
+  indicaciones: "Indicaciones",
+  certificado: "Certificado",
+  orden: "Orden médica",
+};
+
+// Documentos clínicos que emite una atención. Se usa para saber si esta consulta
+// YA tiene documentos entregados y no duplicarlos al reintentar. Se declara acá
+// y no se importa de lib/firma (código de servidor) para no arrastrar el módulo
+// de firma al bundle del navegador. Espeja TIPOS_FIRMABLES: son las mismas
+// cuatro piezas que el médico redacta y firma.
+const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden"];
+
+// Estados en los que la atención quedó ANULADA: cancelada, con ausencia
+// registrada (que dispara reembolso), rechazada, reprogramada o bloqueada. Si
+// una atención figura así, finalizar NO debe emitir documentos ni pisar el
+// estado: la ausencia y la cancelación son evidencia de lo que pasó, y
+// sobrescribirlas con "completada" haría que una atención ya reembolsada
+// vuelva a contar como atendida y cobrada en el tablero.
+// Cubre los dos canales: `consultas` ('cancelada','rechazada') y `turnos`
+// (CHECK de la migración 20260512_mp_fase2).
+const ESTADOS_ANULADOS = new Set([
+  "cancelada",
+  "rechazada",
+  "cancelado_paciente",
+  "cancelado_medico",
+  "ausente_paciente",
+  "ausente_medico",
+  "reprogramado",
+  "bloqueado",
+  "bloqueado_sin_cobro",
+  "disponible",
+]);
 
 // ---------------------------------------------------------------------------
 // AccordionSection — secciones colapsables del panel de documentación
@@ -391,6 +435,18 @@ type DocBorrador = {
   receta_texto_libre?: string;
 } | null;
 
+// Info del cierre — solo llega en modo "completar documentación".
+export type CierreAtencion = {
+  /** Instante real en que la atención quedó cerrada. */
+  cerradaAt: string | null;
+  /** Quién la cerró: 'medico' | 'desconexion' | 'webhook_video' | 'cierre_automatico' | ... */
+  cierreOrigen: string | null;
+  /** Evolución ya guardada en la atención (si el cierre alcanzó a registrarla). */
+  evolucionRegistrada: string | null;
+  /** Documentos que el paciente YA recibió. Inmutables: no se reemplazan. */
+  documentosEmitidos: { tipo: string; createdAt: string }[];
+};
+
 type Props = {
   consultaId: string;
   medicoId: string;
@@ -405,6 +461,11 @@ type Props = {
   // MISMO paciente, EXCLUYENDO el encuentro actual), ordenadas nueva→vieja.
   // Alimentan el Panel HC. Default [] para no romper si la página no las pasa.
   evolucionesPrevias?: EntradaEvolucion[];
+  // Modo "completar documentación" (08/08/2026): la atención YA está cerrada y el
+  // médico entra solo a emitir lo que faltó. Sin video, sin cambiar el estado, sin
+  // tocar lo ya emitido. Es el camino de reparación del agujero del borrador.
+  modoCompletar?: boolean;
+  cierre?: CierreAtencion | null;
   consulta: {
     especialidad: string;
     motivo_consulta: string | null;
@@ -764,9 +825,19 @@ export default function WorkspaceConsulta({
   videoError: videoErrorProp,
   horaInicio,
   evolucionesPrevias = [],
+  modoCompletar = false,
+  cierre = null,
   consulta,
 }: Props) {
   const router = useRouter();
+
+  // Tipos de documento que el paciente YA recibió. Un documento firmado es
+  // inmutable: en modo completar no se muestra su campo ni se puede reemplazar.
+  const tiposEmitidos = new Set((cierre?.documentosEmitidos ?? []).map((d) => d.tipo));
+  const yaEmitido = (t: string) => modoCompletar && tiposEmitidos.has(t);
+  // Los cuatro tipos ya salieron: no queda nada que emitir por este camino.
+  const todoEmitido =
+    modoCompletar && ["receta", "indicaciones", "certificado", "orden"].every((t) => tiposEmitidos.has(t));
 
   // --- Canal: tabla, estado de cierre y helper de lookup del pacientes.id ---
   // turnos.paciente_id YA ES pacientes.id (FK directo, verificado en prod).
@@ -796,6 +867,11 @@ export default function WorkspaceConsulta({
 
   // --- Estado campos clinicos ---
   const borrador = consulta.doc_borrador;
+  // En modo completar, la evolución puede venir del borrador (lo que el médico
+  // escribió y nunca se entregó) o de la atención (si el cierre alcanzó a
+  // registrarla). Lo que ya está registrado en la atención NO se pisa: el
+  // servidor solo completa la evolución si estaba vacía.
+  const evolucionInicial = (borrador?.evolucion ?? cierre?.evolucionRegistrada ?? "").trim();
   const [diagnostico, setDiagnostico] = useState(borrador?.diagnostico ?? "");
   const parsedMeds = parsearMedicamentosBorrador(borrador);
   const [medicamentos, setMedicamentos] = useState<MedicamentoReceta[]>(parsedMeds.meds);
@@ -818,23 +894,26 @@ export default function WorkspaceConsulta({
   const diasReposoEsChip =
     [...HORAS_REPOSO_RAPIDAS.map((h) => h / 24), ...DIAS_REPOSO_RAPIDOS].includes(diasReposoNum);
   // ¿El médico está emitiendo un certificado de reposo? (texto o días cargados)
-  const emitiendoCertificado = certificado.trim().length > 0 || diasReposo.trim().length > 0;
+  // En modo completar, un certificado YA entregado no cuenta: su campo está
+  // oculto, así que exigirle los días mandaría al médico a un callejón sin salida.
+  const emitiendoCertificado =
+    !yaEmitido("certificado") && (certificado.trim().length > 0 || diasReposo.trim().length > 0);
   // Orden médica (RX, laboratorio, derivaciones). Es texto plano y se persiste
   // como documento tipo "orden". NO entra en la evolución ni en la HC.
   const [orden, setOrden] = useState(borrador?.orden ?? "");
   // --- Evolución: generación MANUAL y obligatoria (no auto-pre-llenado) ---
   // El médico aprieta "Generar evolución" → componemos con el estado ACTUAL de
   // todos los campos. Generar ES la validación humana; no hay paso aparte.
-  const [evolucion, setEvolucion] = useState(borrador?.evolucion ?? "");
+  const [evolucion, setEvolucion] = useState(evolucionInicial);
   // evolucionGenerada (boolean): ¿se generó ya? Es el gate. Se restaura como true
   // si venía evolución del borrador (el médico ya generó en una sesión anterior).
   const [evolucionGenerada, setEvolucionGenerada] = useState<boolean>(
-    (borrador?.evolucion ?? "").trim().length > 0
+    evolucionInicial.length > 0
   );
   // evolucionBase = texto exacto del último componer(). Sirve para detectar si el
   // médico editó el texto a mano (evolucion_editada). Al restaurar del borrador no
   // conocemos el base original; usamos el texto guardado (editada arranca en false).
-  const [evolucionBase, setEvolucionBase] = useState<string>(borrador?.evolucion ?? "");
+  const [evolucionBase, setEvolucionBase] = useState<string>(evolucionInicial);
   // Momento de la generación (revisión humana). Se persiste como evolucion_validada_at.
   const [evolucionValidadaAt, setEvolucionValidadaAt] = useState<string | null>(null);
 
@@ -864,8 +943,17 @@ export default function WorkspaceConsulta({
   const [showModalCobertura, setShowModalCobertura] = useState<"completar" | "editar" | null>(null);
   const [coberturaLocal, setCoberturaLocal] = useState<DatosCobertura>(consulta.paciente_cobertura);
 
-  // Mobile: tres modos explícitos.
-  const [modo, setModo] = useState<ModoWorkspace>("video");
+  // Resultado de la emisión post-cierre (modo completar). Cuando existe, la
+  // pantalla pasa a la confirmación: qué se emitió y qué se le avisó al paciente.
+  const [resultadoEmision, setResultadoEmision] = useState<{
+    emitidos: string[];
+    omitidos: string[];
+    avisos: string[];
+  } | null>(null);
+
+  // Mobile: tres modos explícitos. En modo completar no hay video: se arranca
+  // directo en la pantalla de escritura.
+  const [modo, setModo] = useState<ModoWorkspace>(modoCompletar ? "escritura" : "video");
   const modoEscritura = modo !== "video";
   // Desktop: colapsar panel documentación
   const [panelColapsado, setPanelColapsado] = useState(() => {
@@ -1120,8 +1208,9 @@ export default function WorkspaceConsulta({
   function iniciarFinalizacion() {
     if (!validarCamposObligatorios()) return;
 
-    // Si hay receta y cobertura incompleta → modal automático
-    if (receta.trim() && !datosCoberturaCompletos(coberturaLocal)) {
+    // Si hay receta y cobertura incompleta → modal automático.
+    // Una receta ya entregada no se vuelve a emitir: no pedimos cobertura por ella.
+    if (receta.trim() && !yaEmitido("receta") && !datosCoberturaCompletos(coberturaLocal)) {
       setShowConfirmDialog(false);
       setShowModalCobertura("completar");
       return;
@@ -1129,7 +1218,8 @@ export default function WorkspaceConsulta({
 
     // Cobertura OK o no hay receta → finalizar directo
     setShowConfirmDialog(false);
-    finalizarConsulta();
+    if (modoCompletar) emitirDocumentacion();
+    else finalizarConsulta();
   }
 
   // --- Callback del modal de cobertura ---
@@ -1154,11 +1244,161 @@ export default function WorkspaceConsulta({
         .then(() => {});
     }
 
-    finalizarConsulta();
+    if (modoCompletar) emitirDocumentacion();
+    else finalizarConsulta();
+  }
+
+  // --- Emitir la documentación que faltó (modo completar) ---
+  //
+  // La atención ya está cerrada: acá NO hay video que cortar, ni estado que
+  // cambiar, ni redirect optimista. Al revés que el cierre normal, esta llamada
+  // es BLOQUEANTE y se espera la respuesta: el médico vino justamente porque la
+  // vez anterior algo se perdió en silencio, así que tiene que ver si salió o no.
+  //
+  // El servidor emite, firma por el mismo camino que el cierre normal y avisa al
+  // paciente. Ver /api/consulta/[id]/completar-documentacion.
+  async function emitirDocumentacion() {
+    if (!validarCamposObligatorios()) return;
+
+    setFinalizando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/completar-documentacion`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        // Lo ya entregado se manda vacío: su campo está oculto y el contenido
+        // que quedó en el borrador ya viajó. El servidor igual lo deduplica —
+        // esto solo evita pedirle al médico que confirme algo que no va a pasar.
+        body: JSON.stringify({
+          tipo,
+          diagnostico,
+          receta: yaEmitido("receta") ? "" : receta,
+          indicaciones: yaEmitido("indicaciones") ? "" : indicaciones,
+          certificado: yaEmitido("certificado") ? "" : certificado,
+          dias_reposo: !yaEmitido("certificado") && diasReposoValido ? diasReposoNum : null,
+          orden: yaEmitido("orden") ? "" : orden,
+          evolucion,
+          evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.ok) {
+        setError(data?.error || "No se pudo emitir la documentación. Probá de nuevo.");
+        setFinalizando(false);
+        return;
+      }
+
+      setResultadoEmision({
+        emitidos: Array.isArray(data.emitidos) ? data.emitidos : [],
+        omitidos: Array.isArray(data.omitidos) ? data.omitidos : [],
+        avisos: Array.isArray(data.avisos) ? data.avisos : [],
+      });
+      setFinalizando(false);
+    } catch {
+      setError("Error de conexión. La documentación no se envió: probá de nuevo.");
+      setFinalizando(false);
+    }
+  }
+
+  // --- Persistir el borrador AHORA (sin esperar el debounce del autosave) ---
+  // El autosave espera 5 segundos desde la última tecla. Lo último que el médico
+  // escribió puede no estar guardado todavía. Esta función fuerza el guardado y
+  // dice si funcionó; es la red que hace que, si la entrega falla, el texto siga
+  // existiendo en la consulta para reintentar.
+  async function persistirBorrador(): Promise<boolean> {
+    // Techo de 10 s con abort. No es para acelerar nada — nadie espera este
+    // fetch en pantalla — sino para que un PATCH colgado no quede dando vueltas
+    // y aterrice DESPUÉS de que el cierre puso `doc_borrador = null`,
+    // resucitando el borrador de una consulta ya completada.
+    const control = new AbortController();
+    const corte = setTimeout(() => control.abort(), 10000);
+    try {
+      const res = await fetch(`/api/consulta/${consultaId}/borrador`, {
+        method: "PATCH",
+        credentials: "include",
+        keepalive: true,
+        signal: control.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo,
+          borrador: {
+            diagnostico,
+            receta,
+            indicaciones,
+            certificado,
+            dias_reposo: diasReposoValido ? diasReposoNum : null,
+            orden,
+            evolucion,
+            evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+            medicamentos_structured: medicamentos,
+            receta_texto_libre: recetaTextoLibre,
+            updated_at: new Date().toISOString(),
+          },
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(corte);
+    }
+  }
+
+  // --- Qué documentos clínicos tiene YA emitidos esta atención ---
+  // Devuelve el conjunto de tipos guardados, o `null` cuando NO se pudo
+  // averiguar. `null` NO es "no hay ninguno": el cliente de Supabase no lanza
+  // excepciones, devuelve { error }, y confundir ese error con "está vacío" es
+  // exactamente cómo se termina mandando una receta duplicada — y sellada, que
+  // /api/documentos/firmar firma todo lo que encuentra sin firma.
+  async function tiposDocumentosEmitidos(
+    supabase: ReturnType<typeof createClient>
+  ): Promise<Set<string> | null> {
+    const { data, error } = await supabase
+      .from("documentos")
+      .select("tipo")
+      .eq(esTurno ? "turno_id" : "consulta_id", consultaId)
+      .in("tipo", TIPOS_CLINICOS);
+    if (error) {
+      console.error("[finalizar] no se pudo leer lo ya emitido:", error.message);
+      return null;
+    }
+    return new Set((data ?? []).map((d) => String(d.tipo)));
+  }
+
+  // --- Avisar que quedó documentación sin entregar ---
+  // Se usa SOLO cuando la entrega falló. Dos canales a propósito:
+  //   1. marca local en el navegador → cartel en el dashboard, funciona sin red
+  //      (la causa más común de que falle la entrega es justamente la red);
+  //   2. notificación persistente en la campanita → sobrevive al cambio de
+  //      equipo y deja rastro consultable para el equipo.
+  // Los dos canales avisan a la UI del dashboard apenas quedan escritos: para
+  // cuando esto corre el médico YA está en el dashboard, y tanto el cartel como
+  // la campanita leen una sola vez al montar. Sin el aviso, el médico se queda
+  // mirando una pantalla limpia y no se entera de nada.
+  function avisarDocumentacionPendiente(motivo: MotivoPendiente) {
+    marcarDocumentacionPendiente({ id: consultaId, tipo, hora: horaInicio, motivo });
+    fetch("/api/medico/documentos-pendientes", {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consultaId, tipo, motivo }),
+    })
+      .then((r) => {
+        if (r.ok) avisarNotificacionNueva();
+      })
+      .catch(() => {});
   }
 
   // --- Finalizar consulta ---
   async function finalizarConsulta() {
+    // Un solo cierre por sesión. Dos toques rápidos en "Finalizar" (el dialog
+    // tarda un instante en desmontarse) no pueden emitir los documentos dos
+    // veces: una receta duplicada es un problema real, no un detalle.
+    if (finalizandoRef.current) return;
     if (!validarCamposObligatorios()) return;
 
     const sinCuil = receta.trim() && !consulta.paciente_cuil;
@@ -1171,6 +1411,20 @@ export default function WorkspaceConsulta({
 
     // 1. Ocultar video inmediatamente
     setIframeVisible(false);
+
+    // 1.bis. Disparar el guardado del borrador. El autosave tiene 5 s de
+    // debounce: lo último que el médico tipeó puede no estar persistido todavía,
+    // y si más abajo la emisión falla, esto es lo que garantiza que el texto
+    // siga guardado en la consulta para reintentar.
+    //
+    // NO se espera acá: el redirect del médico nunca se bloquea (regla de
+    // CLAUDE.md) y el paciente no tiene por qué quedar segundos de más colgado
+    // en la llamada. La espera va DENTRO del bloque de background, antes de
+    // emitir — que es el único punto donde el orden importa. Esperar acá con un
+    // techo corto era peor que no esperar: si el PATCH tardaba más que el techo,
+    // aterrizaba después del cierre y resucitaba el borrador de una consulta ya
+    // completada.
+    const flushBorrador = persistirBorrador();
 
     // 2. Eliminar sala LiveKit → desconecta al paciente
     if (roomName) {
@@ -1189,29 +1443,81 @@ export default function WorkspaceConsulta({
     //    Mismo flujo para ambos canales; solo cambian tabla, estado y FK del paciente.
     (async () => {
       try {
+        // El flush del borrador tiene que aterrizar ANTES de emitir y, sobre
+        // todo, antes de que el cierre ponga `doc_borrador = null`. Acá esperarlo
+        // no le cuesta nada a nadie: el médico ya está en el dashboard.
+        await flushBorrador;
+
         const supabase = createClient();
 
-        const { data: registroDb } = await supabase
+        const { data: registroDb, error: errorRegistro } = await supabase
           .from(tablaPrincipal)
           .select("estado, paciente_id, medico_id")
           .eq("id", consultaId)
           .single();
 
-        if (!registroDb?.paciente_id) return;
-        if (registroDb.estado === estadoCompletado) return;
+        // Únicos abortos legítimos: la atención no existe / no se puede leer, o
+        // no es de este médico. NADA MÁS.
+        //
+        // Acá vivía un `return` mudo cuando la atención ya figuraba cerrada, y
+        // era el agujero más caro del producto: si el reloj del sistema la
+        // cerraba antes (desconexión, sala de video vacía, cron nocturno), todo
+        // lo que el profesional había escrito se descartaba en silencio y el
+        // paciente no recibía nada. Que el sistema haya cerrado primero no
+        // cambia el hecho clínico: mismo profesional, misma atención, mismo
+        // acto. Se emite igual.
+        if (errorRegistro || !registroDb?.paciente_id) {
+          console.error(
+            "[finalizar] no se pudo leer la atención para emitir:",
+            errorRegistro?.message ?? "sin datos"
+          );
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
+        if (registroDb.medico_id !== medicoId) return;
+
+        // Atención anulada (cancelada, ausencia registrada, rechazada): no se
+        // emiten documentos ni se la marca como completada. El borrador NO se
+        // borra. Pisar el estado acá borraría la evidencia de qué pasó de
+        // verdad — y haría que una atención ya reembolsada volviera a contar
+        // como atendida y cobrada en el tablero.
+        const estadoActual = String(registroDb.estado ?? "");
+        if (ESTADOS_ANULADOS.has(estadoActual) || estadoActual.startsWith("cancelad")) {
+          console.error("[finalizar] la atención figura anulada: no se emite nada");
+          return;
+        }
+
+        // ¿La cerró el sistema antes de que el médico tocara Finalizar?
+        const yaCerrada = registroDb.estado === estadoCompletado;
 
         // pacientes.id para el insert de documentos (asimetría de schema por canal):
         // - consulta: paciente_id es auth.users.id → lookup por user_id
         // - turno: paciente_id YA es pacientes.id → directo
         const pacienteId = await resolverPacienteId(supabase, registroDb.paciente_id);
 
-        const { data: medico } = await supabase
-          .from("medicos")
-          .select("id")
-          .eq("id", registroDb.medico_id)
-          .single();
+        if (!pacienteId) {
+          console.error("[finalizar] no se pudo resolver el paciente de la atención");
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
 
-        if (!pacienteId || !medico) return;
+        // Idempotencia POR TIPO de documento. Reemplaza al viejo guard por
+        // estado, que frenaba los duplicados al precio de tirar el trabajo del
+        // médico. Se dedupea por tipo y no por "¿hay algún documento?" porque
+        // todo-o-nada pierde datos en un caso concreto: si algo ya emitió la
+        // receta (un reintento a medias, o el cierre automático emitiendo desde
+        // el borrador) y el médico además escribió un certificado, el
+        // certificado no llegaría nunca y nadie se enteraría.
+        //
+        // Si la query falla NO se emite a ciegas: sin saber qué hay guardado, un
+        // insert es una receta duplicada — y firmada, porque /api/documentos/
+        // firmar sella todo lo que encuentra sin sello. Se avisa y se deja el
+        // borrador intacto para reintentar.
+        const emitidosPrevios = await tiposDocumentosEmitidos(supabase);
+        if (emitidosPrevios === null) {
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
 
         const docs: {
           tipo: string;
@@ -1238,36 +1544,109 @@ export default function WorkspaceConsulta({
         if (docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
-        await supabase.from("documentos").insert(
-          docs.map((d) => ({
-            consulta_id: esTurno ? null : consultaId,
-            turno_id: esTurno ? consultaId : null,
-            paciente_id: pacienteId,
-            medico_id: medico.id,
-            tipo: d.tipo,
-            diagnostico: diagnostico.trim(),
-            contenido: d.contenido,
-            tratamiento: d.tratamiento ?? null,
-            dias_reposo: d.dias_reposo ?? null,
-          }))
-        );
+        // Insert de los documentos. El cliente de Supabase NO lanza excepciones:
+        // devuelve { error }. Antes ese error no se miraba y a renglón seguido se
+        // borraba el borrador — o sea, se perdía todo sin dejar rastro.
+        const filasDocumentos = docs.map((d) => ({
+          consulta_id: esTurno ? null : consultaId,
+          turno_id: esTurno ? consultaId : null,
+          paciente_id: pacienteId,
+          medico_id: registroDb.medico_id,
+          tipo: d.tipo,
+          diagnostico: diagnostico.trim(),
+          contenido: d.contenido,
+          tratamiento: d.tratamiento ?? null,
+          dias_reposo: d.dias_reposo ?? null,
+        }));
 
-        await supabase
+        // Solo lo que falta. Lo que ya está emitido no se vuelve a insertar.
+        const filasFaltantes = filasDocumentos.filter((f) => !emitidosPrevios.has(f.tipo));
+
+        let documentosOk = true;
+        if (filasFaltantes.length > 0) {
+          const { error: errorInsert } = await supabase.from("documentos").insert(filasFaltantes);
+          if (errorInsert) {
+            // Reintento, PERO NO A CIEGAS. El escenario que justifica reintentar
+            // —red móvil inestable— es el mismo que hace peligroso reinsertar:
+            // el POST puede haber COMMITEADO en el servidor y haberse perdido
+            // solo la respuesta. Como el cliente de Supabase no lanza
+            // excepciones sino que devuelve { error }, desde acá las dos cosas
+            // se ven idénticas. Reinsertar sin preguntar = dos recetas
+            // idénticas, ambas selladas, en la historia del paciente.
+            // Por eso primero se vuelve a preguntar qué quedó realmente guardado.
+            const emitidosTrasError = await tiposDocumentosEmitidos(supabase);
+            if (emitidosTrasError === null) {
+              // No se pudo verificar: no se reintenta. Mejor un aviso al médico
+              // con el borrador intacto que un documento duplicado.
+              documentosOk = false;
+              console.error(
+                "[finalizar] insert fallido y sin poder verificar qué quedó guardado:",
+                errorInsert.message
+              );
+            } else {
+              const pendientes = filasFaltantes.filter((f) => !emitidosTrasError.has(f.tipo));
+              if (pendientes.length === 0) {
+                // El insert sí había llegado; lo que se perdió fue la respuesta.
+                documentosOk = true;
+              } else {
+                const { error: errorReintento } = await supabase
+                  .from("documentos")
+                  .insert(pendientes);
+                documentosOk = !errorReintento;
+                if (!documentosOk) {
+                  console.error(
+                    "[finalizar] no se pudieron guardar los documentos:",
+                    errorReintento?.message ?? errorInsert.message
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        if (!documentosOk) {
+          // NO se toca el borrador ni el estado: lo escrito queda íntegro en la
+          // atención para poder reintentar. El médico se entera por el aviso.
+          avisarDocumentacionPendiente("documentos");
+          return;
+        }
+
+        // Cierre + evolución. Si el sistema ya la había cerrado, NO se pisan
+        // `completada_at` ni `cierre_origen`: quién cerró de verdad es evidencia
+        // y no se reescribe. Los documentos guardan su propio `created_at`, que
+        // es lo que muestra cuándo se documentó realmente.
+        const cierre: Record<string, unknown> = {
+          doc_borrador: null,
+          evolucion: evolucion.trim(),
+          // Momento de generar; fallback al de finalizar si por algún borde no se
+          // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
+          evolucion_validada_at: evolucionValidadaAt ?? new Date().toISOString(),
+          evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
+        };
+        if (!yaCerrada) {
+          cierre.estado = estadoCompletado;
+          // Hora y firma del cierre (incidente 01/08): sin esto no hay
+          // duración de consulta ni forma de distinguir quién cerró.
+          cierre.completada_at = new Date().toISOString();
+          cierre.cierre_origen = "medico";
+        }
+
+        const { error: errorCierre } = await supabase
           .from(tablaPrincipal)
-          .update({
-            estado: estadoCompletado,
-            // Hora y firma del cierre (incidente 01/08): sin esto no hay
-            // duración de consulta ni forma de distinguir quién cerró.
-            completada_at: new Date().toISOString(),
-            cierre_origen: "medico",
-            doc_borrador: null,
-            evolucion: evolucion.trim(),
-            // Momento de generar; fallback al de finalizar si por algún borde no se
-            // capturó (evolución restaurada del borrador sin regenerar en esta sesión).
-            evolucion_validada_at: evolucionValidadaAt ?? new Date().toISOString(),
-            evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
-          })
+          .update(cierre)
           .eq("id", consultaId);
+
+        if (errorCierre) {
+          // Los documentos SÍ llegaron al paciente; lo que no se pudo guardar es
+          // la evolución. El borrador queda intacto para reintentar.
+          console.error("[finalizar] no se pudo cerrar la atención:", errorCierre.message);
+          avisarDocumentacionPendiente("cierre");
+        } else {
+          // Salió todo. Si esta atención había dejado un aviso pendiente de un
+          // intento anterior, se limpia: sin esto el cartel ámbar quedaba en el
+          // dashboard para siempre, avisando de algo que el paciente ya recibió.
+          descartarDocumentacionPendiente(consultaId);
+        }
 
         // Firma electrónica de los documentos recién emitidos.
         // El acto de voluntad es este cierre (el médico confirmó con el
@@ -1298,8 +1677,12 @@ export default function WorkspaceConsulta({
           credentials: "include",
           body: JSON.stringify({ pacienteId, consultaId, tipo }),
         }).catch(() => {});
-      } catch {
-        // Background: no hay UI para mostrar error, falla silenciosamente
+      } catch (err) {
+        // Background: acá no hay pantalla donde mostrar el error porque el
+        // médico ya está en el dashboard. Por eso el aviso viaja al dashboard
+        // (cartel local + campanita) en vez de morir en la consola.
+        console.error("[finalizar] fallo inesperado al emitir la documentación:", err);
+        avisarDocumentacionPendiente("documentos");
       }
     })();
   }
@@ -1367,46 +1750,59 @@ export default function WorkspaceConsulta({
   // --- Guardar documentos manual ---
   async function guardarDocumentos() {
     setGuardadoManual('saving');
-    try {
-      const res = await fetch(`/api/consulta/${consultaId}/borrador`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo,
-          borrador: {
-            diagnostico,
-            receta,
-            indicaciones,
-            certificado,
-            dias_reposo: diasReposoValido ? diasReposoNum : null,
-            orden,
-            evolucion,
-            medicamentos_structured: medicamentos,
-            receta_texto_libre: recetaTextoLibre,
-            updated_at: new Date().toISOString(),
-          },
-        }),
-      });
-      if (!res.ok) {
-        setGuardadoManual('idle');
-        setError("Error al guardar documentos.");
-        return;
-      }
-      setGuardadoManual('saved');
-      setTimeout(() => setGuardadoManual('idle'), 2000);
-    } catch {
+    const ok = await persistirBorrador();
+    if (!ok) {
       setGuardadoManual('idle');
-      setError("Error de conexion al guardar.");
+      setError("Error al guardar documentos.");
+      return;
     }
+    setGuardadoManual('saved');
+    setTimeout(() => setGuardadoManual('idle'), 2000);
   }
 
   // --- Render ---
   return (
-    <div className="flex h-[100dvh] flex-col md:flex-row overflow-hidden bg-[#f8f9fa]">
+    <div
+      className={`flex h-[100dvh] overflow-hidden bg-[#f8f9fa] ${
+        modoCompletar ? "flex-col" : "flex-col md:flex-row"
+      }`}
+    >
+      {/* ================================================================ */}
+      {/* MODO COMPLETAR — barra superior en lugar de la columna de video   */}
+      {/* La consulta terminó: no hay llamada, no hay timer, no hay mic.    */}
+      {/* ================================================================ */}
+      {modoCompletar && (
+        <div
+          className="flex w-full shrink-0 items-center justify-between gap-3 bg-gray-900 px-4 py-3"
+          style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">{consulta.paciente_nombre}</p>
+            <p className="mt-0.5 text-xs text-white/50">
+              {cierre?.cerradaAt
+                ? `Consulta finalizada el ${new Date(cierre.cerradaAt).toLocaleDateString("es-AR", {
+                    day: "numeric",
+                    month: "long",
+                    timeZone: "America/Argentina/Buenos_Aires",
+                  })}`
+                : "Consulta finalizada"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/10 hover:text-white"
+            style={{ minHeight: "44px", minWidth: "44px" }}
+          >
+            Salir
+          </button>
+        </div>
+      )}
+
       {/* ================================================================ */}
       {/* COLUMNA IZQUIERDA / ARRIBA — Video                               */}
       {/* ================================================================ */}
+      {!modoCompletar && (
       <div
         className={`relative flex w-full flex-col bg-gray-900 transition-all duration-300 ease-in-out ${
           modoEscritura
@@ -1629,21 +2025,26 @@ export default function WorkspaceConsulta({
           </div>
         )}
       </div>
+      )}
 
       {/* ================================================================ */}
       {/* COLUMNA DERECHA / ABAJO — Documentacion                          */}
       {/* En mobile: solo visible en modo escritura                        */}
       {/* En desktop: siempre visible (split 60/40)                        */}
+      {/* En modo completar: ocupa toda la pantalla (no hay video)         */}
       {/* ================================================================ */}
       <div
         className={`flex-1 overflow-y-auto transition-all duration-300 ease-in-out ${
-          panelColapsado ? "md:hidden" : "md:w-[40%] md:flex-none"
-        } ${modoEscritura ? "" : "hidden md:block"}`}
-        style={{ borderLeft: "0.5px solid #e5e7eb" }}
+          modoCompletar
+            ? ""
+            : `${panelColapsado ? "md:hidden" : "md:w-[40%] md:flex-none"} ${modoEscritura ? "" : "hidden md:block"}`
+        }`}
+        style={modoCompletar ? undefined : { borderLeft: "0.5px solid #e5e7eb" }}
       >
-        {/* Desktop: Barra de modos — Documentación / Estudios / HC */}
+        {/* Desktop: Barra de modos — Documentación / Estudios / HC.
+            En modo completar no va: la pantalla tiene un solo trabajo. */}
         <div
-          className="hidden md:flex items-center gap-1 px-4 py-2"
+          className={`${modoCompletar ? "hidden" : "hidden md:flex"} items-center gap-1 px-4 py-2`}
           style={{ borderBottom: "0.5px solid #e5e7eb" }}
         >
           <button
@@ -1696,7 +2097,52 @@ export default function WorkspaceConsulta({
         ) : modo === "hc" ? (
           <PanelHistoriaClinica entradas={evolucionesPrevias} />
         ) : (
-        <div className="p-5">
+        <div className={`p-5 ${modoCompletar ? "mx-auto w-full max-w-2xl" : ""}`}>
+          {/* ─── Modo completar: qué es esta pantalla, en una frase ───────── */}
+          {modoCompletar && (
+            <div
+              className="mb-4 rounded-xl p-4"
+              style={{ background: "#BA75170d", border: "0.5px solid #BA751740", borderLeft: "4px solid #BA7517" }}
+            >
+              <p className="text-[15px] font-semibold" style={{ color: "#BA7517" }}>
+                Esta consulta ya terminó
+              </p>
+              <p className="mt-1.5 text-[14px] leading-snug text-gray-700">
+                Estás completando la documentación que faltó. Lo que emitas se le envía al
+                paciente ahora y le avisamos por mail y por notificación.
+              </p>
+              <p className="mt-2 text-[13px] leading-snug text-gray-500">
+                Los documentos llevan la fecha de hoy, que es cuando los firmás. No se
+                modifica nada de lo ya entregado.
+              </p>
+            </div>
+          )}
+
+          {/* Lo que el paciente YA recibió. Firmado = inmutable: se muestra para
+              que el médico sepa qué falta, y por eso mismo no hay campo para
+              reemplazarlo. */}
+          {modoCompletar && (cierre?.documentosEmitidos.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
+              <p className="text-xs font-medium tracking-wide text-gray-400">
+                YA ENTREGADO AL PACIENTE
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(cierre?.documentosEmitidos ?? []).map((d) => (
+                  <span
+                    key={`${d.tipo}-${d.createdAt}`}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium"
+                    style={{ backgroundColor: "rgba(29,158,117,0.12)", color: "#1D9E75" }}
+                  >
+                    {ETIQUETA_DOC[d.tipo] ?? d.tipo} ✓
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[12px] text-gray-500">
+                Estos documentos están firmados y no se pueden modificar.
+              </p>
+            </div>
+          )}
+
           {/* Info paciente (solo desktop) */}
           <div className="hidden md:block">
             <div className="flex items-center justify-between">
@@ -1824,7 +2270,10 @@ export default function WorkspaceConsulta({
               }`}
             >
               {estadoBorrador === "saving" && "Guardando borrador..."}
-              {estadoBorrador === "saved" && "Borrador guardado"}
+              {/* En modo completar el médico vino porque un "guardado" no llegó a
+                  ser un "entregado". El texto no puede volver a sugerir lo mismo. */}
+              {estadoBorrador === "saved" &&
+                (modoCompletar ? "Borrador guardado — todavía no se envió" : "Borrador guardado")}
               {estadoBorrador === "error" && "Error al guardar borrador"}
             </p>
           )}
@@ -1895,7 +2344,10 @@ export default function WorkspaceConsulta({
             soportado={dictadoSoportado}
           />
 
-          {/* Acordeón: INDICACIONES */}
+          {/* Acordeón: INDICACIONES.
+              En modo completar, los tipos ya entregados no tienen campo: lo
+              firmado es inmutable y ofrecer un textarea sería mentir. */}
+          {!yaEmitido("indicaciones") && (
           <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
             <CampoDictado
               label=""
@@ -1909,8 +2361,10 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: RECETA */}
+          {!yaEmitido("receta") && (
           <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
             <MedicamentoAutocomplete
               medicamentos={medicamentos}
@@ -1922,10 +2376,12 @@ export default function WorkspaceConsulta({
               onDetenerDictado={detenerDictado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: CERTIFICADO DE REPOSO (art. 210 LCT) — días estructurados +
               tratamiento (prefill opcional desde indicaciones). El reposo arranca el
               día de emisión; el inicio no es editable. */}
+          {!yaEmitido("certificado") && (
           <AccordionSection
             title="CERTIFICADO DE REPOSO"
             hasContent={emitiendoCertificado}
@@ -2023,9 +2479,11 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Acordeón: ORDEN MÉDICA — texto plano, persiste como documento tipo
               "orden". NO entra en la evolución ni en la HC. */}
+          {!yaEmitido("orden") && (
           <AccordionSection title="ORDEN MÉDICA" hasContent={orden.trim().length > 0}>
             <CampoDictado
               label=""
@@ -2039,6 +2497,7 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
 
           {/* Evolución — TarjetaEvolucion, plana y ÚLTIMA. El ref + scrollIntoView
               de resaltarGenerarEvolucion() siguen funcionando con la tarjeta acá. */}
@@ -2059,6 +2518,30 @@ export default function WorkspaceConsulta({
             className="sticky bottom-0 mt-6 bg-[#f8f9fa] pb-5 pt-3"
             style={{ borderTop: "0.5px solid #e5e7eb" }}
           >
+            {/* Modo completar: un solo botón, el único trabajo de la pantalla.
+                Mismo tamaño en mobile y desktop — el médico puede tener 70 años. */}
+            {modoCompletar && todoEmitido ? (
+              <p className="py-2 text-center text-sm text-gray-500">
+                Esta consulta ya tiene toda su documentación entregada y firmada. No hay
+                nada más para emitir.
+              </p>
+            ) : modoCompletar ? (
+              <div className="flex flex-col gap-2">
+                <LoadingButton
+                  type="button"
+                  isLoading={finalizando}
+                  onClick={intentarFinalizar}
+                  className="w-full rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-100 active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: "#378ADD", minHeight: "48px" }}
+                >
+                  Emitir y enviar al paciente
+                </LoadingButton>
+                <p className="text-center text-xs text-gray-500">
+                  Se envía ahora. No se modifica nada de lo ya entregado.
+                </p>
+              </div>
+            ) : (
+            <>
             {/* Mobile modo escritura: Volver a la llamada (auto-save cubre guardado) */}
             <div className="md:hidden flex flex-col gap-2">
               <button
@@ -2081,6 +2564,8 @@ export default function WorkspaceConsulta({
                 Cancelar consulta
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
         )}
@@ -2198,7 +2683,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              Finalizar consulta
+              {modoCompletar ? "Enviar al paciente" : "Finalizar consulta"}
             </h3>
             <p
               style={{
@@ -2207,7 +2692,9 @@ export default function WorkspaceConsulta({
                 marginBottom: "24px",
               }}
             >
-              Se van a enviar los documentos al paciente. ¿Confirmás?
+              {modoCompletar
+                ? "Se emiten los documentos con la fecha de hoy y se le avisa al paciente. ¿Confirmás?"
+                : "Se van a enviar los documentos al paciente. ¿Confirmás?"}
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
               <button
@@ -2240,9 +2727,88 @@ export default function WorkspaceConsulta({
                   cursor: "pointer",
                 }}
               >
-                Finalizar
+                {modoCompletar ? "Emitir y enviar" : "Finalizar"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación de la emisión post-cierre. Pantalla completa y explícita:
+          el médico vino porque la vez anterior algo se perdió sin avisar, así que
+          acá le decimos exactamente qué salió y qué se le avisó al paciente. */}
+      {resultadoEmision && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+        >
+          <div style={{ background: "white", borderRadius: "16px", padding: "24px", maxWidth: "380px", width: "100%" }}>
+            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "#111", marginBottom: "8px" }}>
+              Documentación enviada
+            </h3>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "16px" }}>
+              El paciente ya la puede ver y descargar desde &ldquo;Mis consultas&rdquo;. Le
+              avisamos por mail y por notificación.
+            </p>
+
+            {resultadoEmision.emitidos.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
+                {resultadoEmision.emitidos.map((t, i) => (
+                  <span
+                    key={`${t}-${i}`}
+                    style={{
+                      backgroundColor: "rgba(29,158,117,0.12)",
+                      color: "#1D9E75",
+                      borderRadius: "9999px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {ETIQUETA_DOC[t] ?? t} ✓
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {resultadoEmision.avisos.map((a, i) => (
+              <p key={i} style={{ fontSize: "13px", color: "#BA7517", marginBottom: "10px" }}>
+                {a}
+              </p>
+            ))}
+
+            {resultadoEmision.omitidos.length > 0 && (
+              <p style={{ fontSize: "13px", color: "#888780", marginBottom: "10px" }}>
+                No se volvió a emitir lo que el paciente ya tenía:{" "}
+                {resultadoEmision.omitidos.map((t) => ETIQUETA_DOC[t] ?? t).join(", ")}.
+              </p>
+            )}
+
+            <button
+              onClick={() => router.push("/dashboard")}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "none",
+                background: "#378ADD",
+                color: "white",
+                fontSize: "15px",
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: "48px",
+              }}
+            >
+              Volver al inicio
+            </button>
           </div>
         </div>
       )}
@@ -2342,7 +2908,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              Antes de finalizar
+              {modoCompletar ? "Antes de enviar" : "Antes de finalizar"}
             </h3>
             <p
               style={{
