@@ -112,8 +112,6 @@ export type RescateInfo = {
   documentos_emitidos: number;
   documentos_firmados: number;
   evolucion_guardada: boolean;
-  /** Había receta escrita pero el paciente no tiene CUIL: no se puede emitir. */
-  receta_omitida_sin_cuil: boolean;
   /**
    * Había un certificado de reposo escrito pero SIN los días cargados. No se
    * emite: los días son un dato jurídico obligatorio (art. 210 LCT) y el cierre
@@ -196,7 +194,6 @@ export async function rescatarBorradorAlCerrar(args: {
     documentos_emitidos: 0,
     documentos_firmados: 0,
     evolucion_guardada: false,
-    receta_omitida_sin_cuil: false,
     certificado_omitido_sin_dias: false,
     rescatado_at: new Date().toISOString(),
   };
@@ -479,16 +476,12 @@ async function ejecutarRescate(
     return { ...base, resultado: "error", detalle, evolucion_guardada: evolucionGuardada };
   }
 
-  const { filas, recetaOmitidaSinCuil, certificadoOmitidoSinDias } = armarDocumentos(
-    borrador,
-    contexto.pacienteTieneCuil
-  );
+  const { filas, certificadoOmitidoSinDias } = armarDocumentos(borrador);
 
   if (filas.length === 0) {
-    // Se llega acá cuando lo ÚNICO escrito era algo que no se puede emitir: una
-    // receta sin CUIL del paciente, o un certificado sin los días de reposo.
+    // Se llega acá cuando lo ÚNICO escrito era algo que no se puede emitir:
+    // hoy, un certificado sin los días de reposo.
     const motivos: string[] = [];
-    if (recetaOmitidaSinCuil) motivos.push("había receta escrita pero el paciente no tiene CUIL cargado");
     if (certificadoOmitidoSinDias)
       motivos.push("había un certificado escrito pero sin los días de reposo cargados");
 
@@ -496,7 +489,6 @@ async function ejecutarRescate(
       ...base,
       resultado: "sin_contenido",
       evolucion_guardada: evolucionGuardada,
-      receta_omitida_sin_cuil: recetaOmitidaSinCuil,
       certificado_omitido_sin_dias: certificadoOmitidoSinDias,
       detalle: motivos.join("; ") || undefined,
     };
@@ -537,7 +529,6 @@ async function ejecutarRescate(
       resultado: "error",
       detalle,
       evolucion_guardada: evolucionGuardada,
-      receta_omitida_sin_cuil: recetaOmitidaSinCuil,
       certificado_omitido_sin_dias: certificadoOmitidoSinDias,
     };
     await registrarRescate(admin, tabla, args.id, info, borrador);
@@ -571,7 +562,6 @@ async function ejecutarRescate(
     documentos_emitidos: insertados.length,
     documentos_firmados: firmados,
     evolucion_guardada: evolucionGuardada,
-    receta_omitida_sin_cuil: recetaOmitidaSinCuil,
     certificado_omitido_sin_dias: certificadoOmitidoSinDias,
   };
 
@@ -607,12 +597,9 @@ type FilaDocumento = {
  * propósito: el paciente tiene que recibir lo mismo que habría recibido si el
  * profesional hubiese llegado a tocar "Finalizar".
  *
- * DOS OMISIONES, las dos deliberadas y las dos avisadas:
+ * UNA SOLA OMISIÓN, deliberada y avisada:
  *
- *   1. RECETA SIN CUIL. Igual que en el cierre normal: una receta sin CUIL del
- *      paciente no se puede emitir.
- *
- *   2. CERTIFICADO SIN DÍAS DE REPOSO. Los días son un dato jurídico obligatorio
+ *   CERTIFICADO SIN DÍAS DE REPOSO. Los días son un dato jurídico obligatorio
  *      (art. 210 LCT) y el cierre normal los EXIGE: `validarCamposObligatorios()`
  *      en `WorkspaceConsulta` no deja finalizar si el profesional escribió el
  *      certificado y no eligió las horas o los días. Acá pasa seguido: el
@@ -626,11 +613,16 @@ type FilaDocumento = {
  * Con los días cargados el certificado sale idéntico al del cierre normal
  * (`contenido` puede venir vacío si el profesional solo eligió los días: el PDF
  * cae a `tratamiento`, y ahí las indicaciones son el fallback de siempre).
+ *
+ * LA RECETA YA NO SE OMITE. Acá había una segunda omisión —"receta sin CUIL del
+ * paciente"— espejo de la del cierre normal, y era la peor de las dos: en el
+ * rescate el profesional NI SIQUIERA está en pantalla para enterarse. El CUIL
+ * nunca hizo falta para emitir (el PDF imprime el bloque del paciente con
+ * nombre + DNI) y además se deriva de DNI + sexo al armar el snapshot.
  */
 function armarDocumentos(
-  b: BorradorClinico,
-  pacienteTieneCuil: boolean
-): { filas: FilaDocumento[]; recetaOmitidaSinCuil: boolean; certificadoOmitidoSinDias: boolean } {
+  b: BorradorClinico
+): { filas: FilaDocumento[]; certificadoOmitidoSinDias: boolean } {
   const diagnostico = texto(b.diagnostico);
   const receta = texto(b.receta);
   const indicaciones = texto(b.indicaciones);
@@ -639,10 +631,9 @@ function armarDocumentos(
   const dias = diasReposoValidos(b.dias_reposo);
 
   const filas: FilaDocumento[] = [];
-  const recetaOmitidaSinCuil = !!receta && !pacienteTieneCuil;
   const certificadoOmitidoSinDias = !!certificado && dias === null;
 
-  if (receta && pacienteTieneCuil) filas.push({ tipo: "receta", contenido: receta });
+  if (receta) filas.push({ tipo: "receta", contenido: receta });
   if (indicaciones) filas.push({ tipo: "indicaciones", contenido: indicaciones });
   if (dias !== null) {
     filas.push({
@@ -660,7 +651,7 @@ function armarDocumentos(
     filas.push({ tipo: "indicaciones", contenido: diagnostico });
   }
 
-  return { filas, recetaOmitidaSinCuil, certificadoOmitidoSinDias };
+  return { filas, certificadoOmitidoSinDias };
 }
 
 // ─── Evolución ───────────────────────────────────────────────────────────────
@@ -747,7 +738,6 @@ async function registrarRescate(
 type ContextoEncuentro = {
   pacienteId: string | null;
   pacienteNombre: string;
-  pacienteTieneCuil: boolean;
   medicoId: string;
   medicoNombre: string;
   medicoPrimerNombre: string;
@@ -767,7 +757,7 @@ async function datosDelEncuentro(
   const columna = tipo === "turno" ? "id" : "user_id";
   const { data: paciente } = await admin
     .from("pacientes")
-    .select("id, nombre_completo, cuil")
+    .select("id, nombre_completo")
     .eq(columna, pacienteIdRegistro)
     .maybeSingle();
 
@@ -782,7 +772,6 @@ async function datosDelEncuentro(
   return {
     pacienteId: paciente?.id ?? null,
     pacienteNombre: paciente?.nombre_completo ?? "el paciente",
-    pacienteTieneCuil: !!texto(paciente?.cuil),
     medicoId,
     medicoNombre,
     medicoPrimerNombre: medicoNombre.split(" ")[0] ?? "",
@@ -821,15 +810,9 @@ async function avisarAlMedico(info: RescateInfo, contexto: ContextoEncuentro): P
   const fichaPaciente = contexto.pacienteId ? `/medico/paciente/${contexto.pacienteId}` : "/medico/historial";
   const hola = contexto.medicoPrimerNombre ? `Hola ${contexto.medicoPrimerNombre}. ` : "";
 
-  // Lo que NO se pudo emitir, en criollo y con qué hacer. Los dos casos tienen la
-  // misma forma: el profesional lo escribió, falta un dato y sin ese dato el
-  // documento no se puede emitir.
+  // Lo que NO se pudo emitir, en criollo y con qué hacer: el profesional lo
+  // escribió, falta un dato y sin ese dato el documento no se puede emitir.
   const faltantes: string[] = [];
-  if (info.receta_omitida_sin_cuil) {
-    faltantes.push(
-      `· La RECETA no se envió: el paciente todavía no tiene el CUIL cargado y sin CUIL no se puede emitir.`
-    );
-  }
   if (info.certificado_omitido_sin_dias) {
     faltantes.push(
       `· El CERTIFICADO de reposo no se envió: te faltó elegir las horas o los días de reposo. ` +
@@ -912,9 +895,6 @@ async function avisarAlEquipo(info: RescateInfo, contexto: ContextoEncuentro): P
 
   // Lo escrito que NO se pudo emitir, para el mail del equipo.
   const noEmitido =
-    (info.receta_omitida_sin_cuil
-      ? `\n⚠️ HABÍA UNA RECETA Y NO SE PUDO EMITIR: el paciente no tiene CUIL cargado. Sin CUIL no se puede emitir receta. Hay que pedirle el dato y reemitirla.\n`
-      : "") +
     (info.certificado_omitido_sin_dias
       ? `\n⚠️ HABÍA UN CERTIFICADO DE REPOSO Y NO SE PUDO EMITIR: el profesional escribió el cuerpo pero no llegó a elegir los días. Los días son obligatorios (art. 210 LCT) y el cierre normal también los exige; emitirlo igual habría mandado un certificado de "0 días" que nadie escribió. Hay que pedirle los días y reemitirlo.\n`
       : "");

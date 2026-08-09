@@ -48,8 +48,21 @@ export default async function MisDatosPage() {
     pacienteRaw?.obra_social ??
     null;
 
+  // Sexo registral en query aparte, para derivar el CUIL cuando no está cargado.
+  // No se suma al SELECT principal a propósito (misma precaución que en
+  // /documentos): ese SELECT funciona en producción y no se toca.
+  let sexoDni: string | null = null;
+  if (pacienteRaw) {
+    const { data: perfil } = await supabase
+      .from("pacientes")
+      .select("sexo_dni")
+      .eq("id", pacienteRaw.id)
+      .maybeSingle();
+    sexoDni = perfil?.sexo_dni ?? null;
+  }
+
   const paciente = pacienteRaw
-    ? { ...pacienteRaw, obra_social_resuelta: obraSocialResuelta }
+    ? { ...pacienteRaw, obra_social_resuelta: obraSocialResuelta, sexo_dni: sexoDni }
     : null;
 
   if (medico) role = "medico";

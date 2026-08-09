@@ -7,6 +7,7 @@ import OrigenBadge from "@/components/OrigenBadge";
 import AppNavbar from "@/components/AppNavbar";
 import PatologiaCronica from "./PatologiaCronica";
 import EvolucionesTimeline, { type EntradaEvolucion } from "./EvolucionesTimeline";
+import { cuilDePaciente } from "@/lib/cuil";
 
 // Color del borde por canal — coherente con OrigenBadge
 function canalInfo(canalOrigen: string | null): { label: string; color: string } {
@@ -201,7 +202,11 @@ export default async function FichaPacientePage({
     medico_domicilio: medico.domicilio ?? "",
     paciente_nombre: paciente.nombre_completo,
     paciente_dni: paciente.dni ?? "",
-    paciente_cuil: paciente.cuil ?? "",
+    paciente_cuil: cuilDePaciente({
+      cuil: paciente.cuil,
+      dni: paciente.dni,
+      sexo_dni: perfilMedico?.sexo_dni,
+    }),
     paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
     paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
     paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,
@@ -238,7 +243,11 @@ export default async function FichaPacientePage({
     medico_domicilio: medico.domicilio ?? "",
     paciente_nombre: paciente.nombre_completo,
     paciente_dni: paciente.dni ?? "",
-    paciente_cuil: paciente.cuil ?? "",
+    paciente_cuil: cuilDePaciente({
+      cuil: paciente.cuil,
+      dni: paciente.dni,
+      sexo_dni: perfilMedico?.sexo_dni,
+    }),
     paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
     paciente_fecha_nacimiento: paciente.fecha_nacimiento ?? null,
     paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,

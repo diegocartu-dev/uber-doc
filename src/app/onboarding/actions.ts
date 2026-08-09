@@ -3,33 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { capitalizarNombre } from "@/lib/utils/texto";
-
-function calcularCuil(dni: string, sexo: "masculino" | "femenino"): string | null {
-  const dniClean = dni.replace(/\D/g, "");
-  if (dniClean.length < 7 || dniClean.length > 8) return null;
-  const dniPadded = dniClean.padStart(8, "0");
-  const prefijo = sexo === "masculino" ? "20" : "27";
-  const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-  const digitos = (prefijo + dniPadded).split("").map(Number);
-  const suma = digitos.reduce((acc, d, i) => acc + d * pesos[i], 0);
-  const resto = suma % 11;
-  let verificador: number;
-  if (resto === 0) {
-    verificador = 0;
-  } else if (resto === 1) {
-    if (sexo === "masculino") {
-      const digitos23 = ("23" + dniPadded).split("").map(Number);
-      const suma23 = digitos23.reduce((acc, d, i) => acc + d * pesos[i], 0);
-      verificador = 11 - (suma23 % 11);
-      return `23-${dniPadded}-${verificador}`;
-    }
-    verificador = 4;
-    return `27-${dniPadded}-${verificador}`;
-  } else {
-    verificador = 11 - resto;
-  }
-  return `${prefijo}-${dniPadded}-${verificador}`;
-}
+import { calcularCuilFormateado } from "@/lib/cuil";
 
 export async function completarPerfil(formData: FormData) {
   const supabase = await createClient();
@@ -81,7 +55,7 @@ export async function completarPerfil(formData: FormData) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
-  const cuil = calcularCuil(dni, sexo_dni);
+  const cuil = calcularCuilFormateado(dni, sexo_dni);
 
   const { error } = await supabase
     .from("pacientes")

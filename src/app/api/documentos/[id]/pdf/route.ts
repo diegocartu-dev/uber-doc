@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import type { FirmaDigitalPDF, DocumentoPDF } from "@/lib/pdf/receta";
 import { identidadDesdeJSONB } from "@/lib/firma/identidad";
+import { cuilDePaciente } from "@/lib/cuil";
 
 /**
  * Valida defensivamente el JSONB de firma antes de mostrarlo en el PDF.
@@ -168,7 +169,9 @@ export async function GET(
       : medico.domicilio_consultorio || medico.domicilio || "",
     paciente_nombre: identidad ? identidad.paciente_nombre : paciente.nombre_completo,
     paciente_dni: identidad ? identidad.paciente_dni : paciente.dni ?? "",
-    paciente_cuil: identidad ? identidad.paciente_cuil : paciente.cuil ?? "",
+    paciente_cuil: identidad
+      ? identidad.paciente_cuil
+      : cuilDePaciente(paciente),
     paciente_sexo_dni: identidad ? identidad.paciente_sexo_dni : paciente.sexo_dni ?? null,
     paciente_fecha_nacimiento: identidad
       ? identidad.paciente_fecha_nacimiento

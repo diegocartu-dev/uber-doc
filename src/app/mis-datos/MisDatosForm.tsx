@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LoadingButton from "@/components/ui/LoadingButton";
+import { cuilDePaciente } from "@/lib/cuil";
 
 type PacienteData = {
   id: string;
   nombre_completo: string;
   dni: string | null;
   cuil: string | null;
+  sexo_dni: string | null;
   fecha_nacimiento: string | null;
   telefono: string | null;
   tiene_cobertura: boolean | null;
@@ -83,7 +85,13 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
   const [nroAfiliado, setNroAfiliado] = useState(paciente?.nro_afiliado ?? "");
   const [planObraSocial, setPlanObraSocial] = useState(paciente?.plan_obra_social ?? "");
   const [fechaNac, setFechaNac] = useState(paciente?.fecha_nacimiento ?? "");
-  const [cuil, setCuil] = useState(paciente?.cuil ?? "");
+  // El CUIL es DERIVABLE de DNI + sexo: si no está guardado, se calcula y se
+  // prefilea en vez de pedírselo escrito a mano a alguien que ya nos dio los dos
+  // datos con los que se saca. Sigue siendo editable a propósito — hay CUILes
+  // que no se derivan del sexo registral (prefijo 23, entre otros) y el dato
+  // cargado a mano por la persona siempre le gana al calculado.
+  const cuilDerivado = paciente ? cuilDePaciente(paciente) : "";
+  const [cuil, setCuil] = useState(cuilDerivado);
 
   // Medico fields
   const [domicilio, setDomicilio] = useState(medico?.domicilio ?? "");
@@ -106,7 +114,9 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
         .update({
           nombre_completo: nombre,
           telefono,
-          cuil: cuil || null,
+          // Nunca dejarlo en null si lo podemos derivar: guardar vacío acá era
+          // una forma de perder un dato que ya teníamos.
+          cuil: cuil.trim() || cuilDerivado || null,
           fecha_nacimiento: fechaNac || null,
           tiene_cobertura: tieneOS,
           obra_social: tieneOS ? obraSocial.trim() : null,
