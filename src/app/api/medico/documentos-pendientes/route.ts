@@ -42,21 +42,41 @@ const MAX_ITEMS_ESTADO = 5;
 
 /**
  * Estados desde los que el médico TODAVÍA puede volver a entrar a la atención y
- * tocar "Finalizar consulta". Espejan los guards de las pantallas:
- *   - consulta: workspace/page.tsx admite 'pagada' y 'en_curso';
- *   - turno: /turno/[turnoId]/video rechaza 'completado' y los cancelados.
+ * emitir lo que falta. Espejan los guards de las pantallas:
+ *   - consulta: workspace/page.tsx admite 'pagada', 'en_curso' y —desde el
+ *     08/08— 'completada', donde entra en modo "completar documentación";
+ *   - turno: /turno/[turnoId]/video, ídem con 'completado'.
  * Si el estado no está acá, el CTA "Completar ahora" devolvería al médico al
  * dashboard — un loop con un cartel que no puede resolver. Por eso se calcula
  * server-side y el cartel cambia el texto en vez de mentirle.
+ *
+ * 'completada'/'completado' entraron acá el 08/08 junto con el camino de volver
+ * a una atención cerrada. Antes el cartel le decía al médico "ya figura cerrada,
+ * escribinos a soporte@" — un consejo que hoy es falso y lo manda a abrir un
+ * ticket por algo que resuelve solo en treinta segundos. Cuando cambie el guard
+ * de esas pantallas, este mapa tiene que cambiar con él.
  */
 const REABRIBLES: Record<Canal, string[]> = {
-  consulta: ["pagada", "en_curso"],
+  consulta: ["pagada", "en_curso", "completada"],
   turno: [
     "reservado_pendiente",
     "confirmado",
     "en_espera",
     "en_curso",
+    "completado",
   ],
+};
+
+/**
+ * Atención ya cerrada: de estas se encarga la tarjeta "Documentación pendiente"
+ * del inicio, que las lista leyendo la base (src/lib/atenciones-sin-documentar.ts).
+ * El cartel local del navegador cubre el otro caso —la atención que quedó
+ * ABIERTA, que esa tarjeta no puede ver— y para las cerradas se calla. Sin este
+ * reparto el médico veía dos avisos ámbar apilados sobre la misma consulta.
+ */
+const CERRADAS: Record<Canal, string[]> = {
+  consulta: ["completada"],
+  turno: ["completado"],
 };
 
 /** Consulta inmediata: `en_curso_at`/`created_at` son timestamptz → hora argentina. */
@@ -169,7 +189,12 @@ export async function POST(req: NextRequest) {
   // pantalla que rechaza la atención y devuelve al dashboard (loop).
   if (body.accion === "estado") {
     const items = (Array.isArray(body.items) ? body.items : []).slice(0, MAX_ITEMS_ESTADO);
-    const estados: { id: string; entregado: boolean; reabrible: boolean }[] = [];
+    const estados: {
+      id: string;
+      entregado: boolean;
+      reabrible: boolean;
+      cerrada: boolean;
+    }[] = [];
 
     for (const item of items) {
       const id = item?.id;
@@ -184,6 +209,11 @@ export async function POST(req: NextRequest) {
         id,
         entregado: await tieneDocumentos(admin, tipo, id),
         reabrible: REABRIBLES[tipo].includes(String(atencion.estado ?? "")),
+        // Ya cerrada → de esta atención se encarga la tarjeta del servidor
+        // ("Documentación pendiente"), que la lista con su propio botón. El
+        // cartel local se calla para no dejar dos avisos ámbar apilados
+        // diciendo lo mismo sobre la misma consulta.
+        cerrada: CERRADAS[tipo].includes(String(atencion.estado ?? "")),
       });
     }
 
@@ -217,8 +247,8 @@ export async function POST(req: NextRequest) {
   // Qué hacer ahora. Depende de si el médico puede volver a entrar: mandarlo a
   // una pantalla que lo rebota al dashboard es peor que no decirle nada.
   const comoResolver = reabrible
-    ? `${dondeVolver} y tocá "Finalizar consulta" para enviarlos.`
-    : "La atención ya figura cerrada, así que no vas a poder volver a entrar. Escribinos a soporte@docto.com.ar mencionando el horario y los reenviamos nosotros.";
+    ? `${dondeVolver} y completala para que le lleguen al paciente.`
+    : "Esta atención quedó anulada, así que no se puede completar desde el consultorio. Escribinos a soporte@docto.com.ar mencionando el horario y la resolvemos nosotros.";
 
   const titulo = "Quedó documentación sin entregar";
   const mensaje =
