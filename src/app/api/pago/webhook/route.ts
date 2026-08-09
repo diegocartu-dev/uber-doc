@@ -392,6 +392,68 @@ async function handleApproved(
   }
 }
 
+/**
+ * Estados que SÍ pueden llegar después de un pago aprobado: son las únicas
+ * cosas que le pasan a una plata ya cobrada. Cualquier otro estado sobre una
+ * atención aprobada es un webhook viejo llegando tarde.
+ */
+const POSTERIORES_AL_COBRO = new Set(["refunded", "partially_refunded", "charged_back"]);
+
+/**
+ * ¿Este webhook puede tocar el pago de la atención, o llega tarde?
+ *
+ * Mercado Pago manda DOS webhooks por pago (created + updated) y no garantiza el
+ * orden. Estos handlers actualizaban a ciegas (`.eq("id", id)` y nada más), así
+ * que había dos formas de arruinar una atención ya cobrada:
+ *
+ *  1. OTRO pago. El paciente paga en dos intentos: el primero sale rechazado, el
+ *     segundo se aprueba. Si el webhook del intento rechazado llega después,
+ *     dejaba la consulta apuntando a un pago que no existe, marcada "rechazada",
+ *     sobre plata que sí entró.
+ *
+ *  2. EL MISMO pago, en un estado anterior. Si el webhook "pending" del pago
+ *     bueno llega después del "approved", degradaba la consulta a pendiente:
+ *     el paciente veía "falta pagar" habiendo pagado.
+ *
+ * Regla única que cubre las dos: si la atención ya figura cobrada, solo pasan
+ * los webhooks del MISMO pago y en un estado posterior al cobro (devolución o
+ * contracargo). Todo lo demás se registra y se descarta.
+ *
+ * `handleApproved` no necesita esto: ya se protege exigiendo el estado previo
+ * en el propio UPDATE.
+ */
+async function puedePisarElPago(
+  admin: ReturnType<typeof createAdminClient>,
+  table: "consultas" | "turnos",
+  id: string,
+  paymentId: string,
+  nuevoStatus: string,
+  logCtx: Record<string, unknown>
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from(table)
+    .select("pago_id, mp_status")
+    .eq("id", id)
+    .maybeSingle();
+
+  // Si no se pudo leer, se deja pasar: perder el registro de un rechazo real es
+  // peor que el riesgo de pisar, y esto solo se juega cuando hubo dos intentos.
+  if (error || !data) return true;
+  if (data.mp_status !== "approved") return true;
+
+  const esElMismoPago = String(data.pago_id ?? "") === String(paymentId);
+  if (esElMismoPago && POSTERIORES_AL_COBRO.has(nuevoStatus)) return true;
+
+  logInfo("[WEBHOOK]", "Webhook tardío sobre una atención ya cobrada: se descarta", {
+    ...logCtx,
+    pago_vigente: data.pago_id,
+    pago_del_webhook: paymentId,
+    status_del_webhook: nuevoStatus,
+    mismo_pago: esElMismoPago,
+  });
+  return false;
+}
+
 async function handleRejected(
   admin: ReturnType<typeof createAdminClient>,
   tipo: "consulta" | "turno",
@@ -400,6 +462,8 @@ async function handleRejected(
   logCtx: Record<string, unknown>
 ): Promise<void> {
   const table = tipo === "consulta" ? "consultas" : "turnos";
+  if (!(await puedePisarElPago(admin, table, id, paymentId, "rejected", logCtx))) return;
+
   await admin
     .from(table)
     .update({ pago_id: paymentId, mp_status: "rejected" })
@@ -418,6 +482,11 @@ async function handleStatusOnly(
   logCtx: Record<string, unknown>
 ): Promise<void> {
   const table = tipo === "consulta" ? "consultas" : "turnos";
+  // Mismo cuidado que en el rechazo: un `pending` tardío del intento fallido no
+  // puede degradar una atención que ya se cobró. Los refunds y contracargos del
+  // pago vigente sí pasan, porque hablan de ESE pago.
+  if (!(await puedePisarElPago(admin, table, id, paymentId, mpStatus, logCtx))) return;
+
   await admin
     .from(table)
     .update({ pago_id: paymentId, mp_status: mpStatus })
@@ -438,10 +507,16 @@ async function handleChargedBack(
   logCtx: Record<string, unknown>
 ): Promise<void> {
   const table = tipo === "consulta" ? "consultas" : "turnos";
-  await admin
-    .from(table)
-    .update({ pago_id: paymentId, mp_status: "charged_back" })
-    .eq("id", id);
+  // El guard cubre solo el UPDATE, nunca la alerta: un contracargo sobre un pago
+  // que NO es el vigente es todavía más raro que uno normal, y de eso hay que
+  // enterarse igual. Lo que no corresponde es dejar la atención apuntando a un
+  // pago que no es el que se cobró.
+  if (await puedePisarElPago(admin, table, id, paymentId, "charged_back", logCtx)) {
+    await admin
+      .from(table)
+      .update({ pago_id: paymentId, mp_status: "charged_back" })
+      .eq("id", id);
+  }
 
   logError("[WEBHOOK]", "ALERTA CHARGEBACK", { ...logCtx, amount });
 
