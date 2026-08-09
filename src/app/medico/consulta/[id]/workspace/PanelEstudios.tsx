@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
+import { MAX_BYTES_ENVIO } from "@/lib/imagenes/comprimir";
 
 type Archivo = {
   name: string;
@@ -92,8 +93,13 @@ export default function PanelEstudios({ consultaId, estadoConsulta, createdAt }:
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setEnvioMsg("El archivo excede el límite de 10 MB.");
+    // El tope real es el de la plataforma (~4,5 MB) y corta ANTES de llegar al
+    // servidor: el 413 vuelve como HTML, `res.json()` explota, y el médico leía
+    // "Error de conexión" en el medio de la consulta. Se frena acá, con un
+    // mensaje que dice qué hacer.
+    if (file.size > MAX_BYTES_ENVIO) {
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      setEnvioMsg(`El PDF pesa ${mb} MB y el máximo es 4 MB. Mandá las páginas que importan en un archivo más liviano.`);
       return;
     }
 

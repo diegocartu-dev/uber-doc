@@ -17,6 +17,21 @@ const LADO_MAX = 1600; // suficiente para leer una credencial o un DNI
 const CALIDAD = 0.82; // JPEG: buen texto legible sin peso de más
 
 /**
+ * Techo REAL de la plataforma para un envío, medido contra producción
+ * (5 MB → 413 con `x-vercel-error: FUNCTION_PAYLOAD_TOO_LARGE`; 3 MB → llega).
+ *
+ * Es un tope DURO de Vercel: el 413 corta ANTES de que la petición entre a la
+ * app, así que ningún guard del servidor puede atraparlo ni devolver un mensaje.
+ * Por eso hay que frenar en el navegador, antes de mandar. Se deja margen porque
+ * el multipart suma sus propios bytes además del archivo.
+ *
+ * La compresión resuelve las imágenes; lo que NO se puede comprimir (un PDF, por
+ * ejemplo, que es lo que suele mandar el colegio médico) tiene que chocar contra
+ * este número y recibir una explicación, no un botón colgado.
+ */
+export const MAX_BYTES_ENVIO = 4 * 1024 * 1024; // 4 MB
+
+/**
  * Devuelve una versión comprimida del archivo (JPEG). Si el archivo no es una
  * imagen, o si algo falla, devuelve el original: la compresión NUNCA debe
  * impedir que el médico avance.

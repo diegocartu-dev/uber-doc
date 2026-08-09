@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarDocumentoMedico } from "@/lib/email";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+// Respaldo del servidor. El tope que manda es el de la plataforma (~4,5 MB),
+// que corta antes de llegar acá; el freno real está en el navegador.
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_DOCS_PER_CONSULTA = 3;
 const HOURS_48 = 48 * 60 * 60 * 1000;
 
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "El archivo excede el límite de 10 MB" },
+        { error: "El archivo es muy pesado. Mandá las páginas que importan en un archivo más liviano." },
         { status: 400 }
       );
     }
