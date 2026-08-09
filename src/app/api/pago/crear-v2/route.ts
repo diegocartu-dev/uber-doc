@@ -154,6 +154,22 @@ export async function POST(req: NextRequest) {
         },
       ],
       marketplace_fee: marketplaceFee,
+      // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
+      //
+      // El checkout los ofrecía y no tienen forma de funcionar acá: el paciente
+      // elegía "efectivo", el pago quedaba pendiente y la atención se congelaba
+      // —el médico esperando, el paciente sin poder entrar a la sala—. Dos o tres
+      // días después el paciente pagaba el cupón, la plata entraba de verdad, y
+      // recién ahí llegaba el webhook: para una consulta inmediata eso no existe,
+      // y para un turno el lugar ya se soltó hace rato (la reserva se retiene
+      // ~15 minutos). O sea que el paciente pagaba algo que ya no podía usar.
+      //
+      // 'ticket' = cupón para pagar en efectivo; 'atm' = pago por cajero. Los dos
+      // se acreditan con demora. Todo lo instantáneo (tarjetas, dinero en cuenta,
+      // transferencia) sigue disponible.
+      payment_methods: {
+        excluded_payment_types: [{ id: "ticket" }, { id: "atm" }],
+      },
       back_urls: {
         success: `${baseUrl}${redirectSuccess}`,
         failure: `${baseUrl}${redirectFailure}`,
