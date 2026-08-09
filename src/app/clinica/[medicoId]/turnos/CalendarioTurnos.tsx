@@ -7,7 +7,9 @@ import LoadingButton from "@/components/ui/LoadingButton";
 import { formatNombreMedico } from "@/lib/utils/texto";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
-type Medico = { id: string; nombre: string; especialidad: string; duracion: number; precio: number };
+// `titulo` viaja desde el perfil del médico ("Dr."/"Dra."). Es opcional: si no llega,
+// formatNombreMedico muestra el nombre pelado en vez de inventar un tratamiento.
+type Medico = { id: string; nombre: string; titulo?: string | null; especialidad: string; duracion: number; precio: number };
 
 const DIAS_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -107,7 +109,7 @@ export default function CalendarioTurnos({
         <p className="mt-2 text-sm text-gray-500">
           {formatFechaLarga(turnoSeleccionado!.fecha)} a las {turnoSeleccionado!.hora_inicio.slice(0, 5)}
         </p>
-        <p className="mt-1 text-sm text-gray-500">{formatNombreMedico(medico.nombre)} · {medico.especialidad}</p>
+        <p className="mt-1 text-sm text-gray-500">{formatNombreMedico(medico.nombre, medico.titulo)} · {medico.especialidad}</p>
         <a href="/dashboard" className="mt-6 inline-flex items-center justify-center rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white min-h-[48px]">
           Volver al inicio
         </a>
@@ -221,7 +223,7 @@ export default function CalendarioTurnos({
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre)}</span>
+              <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre, medico.titulo)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>
@@ -336,7 +338,7 @@ export default function CalendarioTurnos({
 
             <div className="mt-4 space-y-1.5 text-sm">
               <p className="text-gray-700">{formatFechaLarga(turnoSeleccionado.fecha)} · {turnoSeleccionado.hora_inicio.slice(0, 5)} hs</p>
-              <p className="text-gray-700">{formatNombreMedico(medico.nombre)}</p>
+              <p className="text-gray-700">{formatNombreMedico(medico.nombre, medico.titulo)}</p>
               <p className="font-medium text-gray-900">${(turnoSeleccionado.monto ?? medico.precio).toLocaleString("es-AR")}</p>
             </div>
 

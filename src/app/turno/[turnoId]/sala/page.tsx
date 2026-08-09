@@ -38,10 +38,15 @@ export default async function SalaTurnoPage({
     redirect(`/turno/${turnoId}/espera`);
   }
 
-  // Fetch nombre del médico
+  // Nombre, título y especialidad del médico. `titulo` ("Dr."/"Dra.") lo eligió el
+  // médico en su registro y es lo único que evita tratar de "Dr." a una médica en
+  // la pantalla que el paciente mira toda la consulta. Sumamos ESA columna y
+  // ninguna más: en `medicos` hay columnas sin GRANT para `authenticated` y una
+  // sola de ellas hace fallar la query entera en PostgREST, devolviendo null en
+  // silencio.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad")
+    .select("nombre_completo, titulo, especialidad")
     .eq("id", turno.medico_id)
     .single();
 
@@ -49,7 +54,12 @@ export default async function SalaTurnoPage({
     <SalaConsultaPaciente
       consultaId={turnoId}
       roomName={turno.sala_video_url}
-      medicoNombre={medico?.nombre_completo ?? "tu médico"}
+      // Sin texto de respaldo: `formatNombreMedico` capitaliza lo que reciba, así
+      // que el viejo fallback "tu médico" llegaba al paciente como «Tu Médico»
+      // ("Consulta con Tu Médico"). Mejor el nombre vacío —el componente lo
+      // tolera— que un placeholder que se lee como el nombre del profesional.
+      medicoNombre={medico?.nombre_completo ?? ""}
+      medicoTitulo={medico?.titulo ?? null}
       especialidad={medico?.especialidad ?? ""}
       tipo="turno"
     />

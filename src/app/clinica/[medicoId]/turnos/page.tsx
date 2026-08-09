@@ -41,7 +41,10 @@ export default async function TurnosPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
+    // `titulo` ("Dr."/"Dra.") lo elige el médico en su registro: sin él, el paciente
+    // ve el nombre pelado (o peor, el "Dr." que se inventaba antes). Tiene GRANT para
+    // authenticated, así que suma sin riesgo de tirar la query entera.
+    .select("id, nombre_completo, titulo, especialidad, precio_consulta, duracion_consulta, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
     .eq("id", medicoId)
     .single();
 
@@ -94,7 +97,7 @@ export default async function TurnosPage({
           <p className="text-xs font-medium tracking-wide text-gray-400">
             AGENDAR TURNO
           </p>
-          <p className="mt-2 text-lg font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo)}</p>
+          <p className="mt-2 text-lg font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo, medico.titulo)}</p>
           {/* Modelo B: duración/precio del PERFIL pueden ser NULL (viven por agenda;
               cada slot muestra su monto real en el calendario). Solo se muestran si existen. */}
           <p className="mt-0.5 text-sm text-gray-500">
@@ -109,6 +112,7 @@ export default async function TurnosPage({
           medico={{
             id: medico.id,
             nombre: capitalizarNombre(medico.nombre_completo),
+            titulo: medico.titulo,
             especialidad: medico.especialidad,
             duracion: medico.duracion_consulta,
             precio: medico.precio_consulta,

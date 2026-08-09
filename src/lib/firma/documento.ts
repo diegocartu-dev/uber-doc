@@ -44,6 +44,7 @@ import {
   identidadDesdeJSONB,
   type IdentidadDocumento,
 } from "./identidad";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // Consistente con el flujo de receta (OTP_EXPIRY_MS).
 const OTP_VENTANA_MS = 5 * 60 * 1000;
@@ -893,6 +894,38 @@ export async function sellarDocumentoDiferido(
 
   if (!resultado.ok) return { ok: false, motivo: "error_sellado", detalle: resultado.error };
 
+  // Fila de aviso: la deuda con el profesional queda anotada EN EL MISMO
+  // instante en que se le sella el primer documento.
+  //
+  // El dictamen que autoriza esta operación obliga a avisarle a cada profesional
+  // —con vía de objeción y plazo— y el registro de ese aviso vive acá, porque
+  // `firma_logs` es append-only y no admite escribir nada posterior a la firma.
+  //
+  // La primera corrida (08/08/2026) no escribió ni una fila y por poco la deuda
+  // desaparece: al relanzar, esos documentos ya no son candidatos, así que sus
+  // profesionales no volvían a aparecer NUNCA. El propio dictamen había previsto
+  // este modo de falla. Por eso se escribe acá y no al final del lote: un corte
+  // en el medio deja la deuda anotada igual.
+  //
+  // `enviado_at` queda en NULL a propósito: la fila dice "hay que avisarle",
+  // no "ya se le avisó". El envío lo marca después quien manda el mail.
+  //
+  // Best-effort deliberado: si esto falla, el documento YA quedó sellado y
+  // revertir el sello sería peor. El error se registra y el repaso del lote lo
+  // levanta. El índice único (lote_id, medico_id) hace que reintentar no duplique.
+  const { error: errorAviso } = await createAdminClient()
+    .from("sellado_diferido_avisos")
+    .upsert(
+      { lote_id: opciones.loteId, medico_id: doc.medico_id },
+      { onConflict: "lote_id,medico_id", ignoreDuplicates: true }
+    );
+  if (errorAviso) {
+    console.error(
+      "[firma-doc] sello aplicado pero no se pudo anotar el aviso al profesional:",
+      { lote_id: opciones.loteId, documento_id: documentoId, error: errorAviso.message }
+    );
+  }
+
   return {
     ok: true,
     hash: resultado.hash,
@@ -1232,9 +1265,14 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
   // Snapshot congelado: entra al hash, así que si alguien lo edita en la base
   // el recálculo no reproduce la firma y el estado pasa a "alterada".
   const identidad = identidadDesdeJSONB(fd.identidad);
+  // El nombre sale ya con el tratamiento que el profesional eligió, igual que en
+  // el PDF: la página pública de verificación y el papel tienen que decir lo
+  // MISMO, y hasta hoy la página mostraba el nombre pelado. El título sale del
+  // snapshot congelado (solo v:2); un documento v:1 no lo tiene guardado y se
+  // muestra sin él — no se inventa un tratamiento sobre algo ya firmado.
   const firmante = identidad
     ? {
-        nombre: identidad.medico_nombre,
+        nombre: formatNombreMedico(identidad.medico_nombre, identidad.medico_titulo ?? null),
         especialidad: identidad.medico_especialidad,
         matricula: identidad.medico_matricula,
       }

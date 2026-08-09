@@ -44,10 +44,14 @@ export default async function SalaEsperaPage({
 
   const returnUrl = await getReturnUrl(consulta.medico_id, consulta.canal_origen);
 
-  // Traer datos del médico
+  // Traer datos del médico.
+  // `titulo` ("Dr."/"Dra.") es lo que usa SalaEsperaCliente para el tratamiento y el
+  // artículo del copy; sin él la pantalla queda sin tratamiento. Tiene GRANT SELECT
+  // para `authenticated` (verificado en prod). NO sumar otras columnas de `medicos`:
+  // una sola sin grant hace fallar el SELECT entero y devuelve null en silencio.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, precio_consulta, duracion_consulta")
+    .select("id, nombre_completo, titulo, precio_consulta, duracion_consulta")
     .eq("id", consulta.medico_id)
     .single();
 
@@ -112,6 +116,7 @@ export default async function SalaEsperaPage({
           estado={consulta.estado}
           mpStatus={consulta.mp_status}
           medicoNombre={capitalizarNombre(medico.nombre_completo)}
+          medicoTitulo={medico.titulo ?? null}
           precio={medico.precio_consulta}
           duracion={medico.duracion_consulta}
           especialidad={consulta.especialidad}

@@ -35,7 +35,9 @@ export default async function ConfirmacionTurnoPage({
 
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, duracion_consulta")
+    // `titulo` ("Dr."/"Dra.") viene del registro del médico: sin él la confirmación
+    // mostraba un tratamiento inventado. Columna con GRANT para authenticated.
+    .select("nombre_completo, titulo, especialidad, duracion_consulta")
     .eq("id", turno.medico_id)
     .single();
 
@@ -63,7 +65,7 @@ export default async function ConfirmacionTurnoPage({
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">{formatNombreMedico(medico?.nombre_completo ?? "Médico")}</span>
+              <span className="font-medium text-gray-900">{formatNombreMedico(medico?.nombre_completo ?? "Médico", medico?.titulo)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>

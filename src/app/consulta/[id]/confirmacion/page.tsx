@@ -36,10 +36,13 @@ export default async function ConfirmacionPagoPage({
 
   const returnUrl = await getReturnUrl(consulta.medico_id, consulta.canal_origen, "/dashboard");
 
-  // Traer datos del médico
+  // Traer datos del médico.
+  // `titulo` ("Dr."/"Dra.") viaja hasta EsperaVideo: sin él la pantalla no muestra
+  // ningún tratamiento. Tiene GRANT SELECT para `authenticated` (verificado en prod).
+  // NO sumar otras columnas de `medicos` acá: una sola sin grant tira abajo el SELECT entero.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, duracion_consulta, precio_consulta")
+    .select("nombre_completo, titulo, especialidad, duracion_consulta, precio_consulta")
     .eq("id", consulta.medico_id)
     .single();
 
@@ -61,6 +64,7 @@ export default async function ConfirmacionPagoPage({
           estadoInicial={consulta.estado}
           mpStatusInicial={consulta.mp_status}
           medicoNombre={medico?.nombre_completo ?? ""}
+          medicoTitulo={medico?.titulo ?? null}
           especialidad={consulta.especialidad}
           duracionConsulta={medico?.duracion_consulta ?? 20}
           createdAt={consulta.created_at}

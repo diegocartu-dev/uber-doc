@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
+import { sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 function fechaAR(offsetDias = 0) {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -17,30 +18,10 @@ function hoyAR() {
 const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 const SLOTS = ["disponible", "bloqueado"];
 
-// ── Reservas ABANDONADAS (decisión Diego 06/08) ──────────────────────────────
-// Al reservar, el turno pasa a 'reservado_pendiente' con `reservado_hasta` =
-// ahora + ~15 min (retención para pagar). Si el paciente no paga, la retención
-// vence y el lugar se libera — pero la liberación es PEREZOSA: recién ocurre
-// cuando alguien abre el calendario de ese médico, así que la fila puede quedar
-// en 'reservado_pendiente' con `reservado_hasta` en el pasado por horas o días.
-// Eso NO es una solicitud: son las vueltas de un paciente indeciso (caso real:
-// tres filas para UNA sola reserva pagada). No se muestran en ningún reporte.
-// Nada se borra de la base: sólo se ocultan del panel.
-//
-// Notas del criterio:
-//  - `reservado_hasta` NULL con estado 'reservado_pendiente' es una anomalía
-//    (la reserva SIEMPRE setea la retención) → se trata como abandonada.
-//  - `mp_status = 'approved'` rescata el race real que ya alerta el webhook
-//    (el pago se aprobó después de que venciera la retención): ahí hay plata de
-//    verdad y la fila tiene que seguir viéndose.
-//  - Las reservas VIVAS (retención en el futuro) son un pago en curso legítimo:
-//    se siguen mostrando, etiquetadas "Reservando…" en el cliente.
-type FilaReserva = { estado: string; reservado_hasta?: string | null; mp_status?: string | null };
-const esReservaAbandonada = (t: FilaReserva, ahoraMs: number) =>
-  t.estado === "reservado_pendiente" &&
-  t.mp_status !== "approved" &&
-  (!t.reservado_hasta || new Date(t.reservado_hasta).getTime() < ahoraMs);
-
+// Las reservas ABANDONADAS (decisión Diego 06/08) no se muestran en ningún
+// reporte: el criterio, el mecanismo que las genera y por qué no se borran de la
+// base viven en un solo lugar, `src/lib/insights/reservas.ts`. Acá se aplican
+// con `sinReservasAbandonadas()`, igual que en el tablero.
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -107,7 +88,6 @@ export async function GET(req: NextRequest) {
     const dias = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get("dias") ?? "1", 10) || 1, 1), 30);
     const desdeFecha = fechaAR(dias - 1);
     const desdeUTC = medianocheARenUTC(desdeFecha);
-    const ahoraMs = Date.now();
 
     const [{ data: consultas }, { data: turnos }] = await Promise.all([
       admin
@@ -126,8 +106,15 @@ export async function GET(req: NextRequest) {
         .limit(300),
     ]);
 
-    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...(turnos ?? []).map((t) => t.medico_id)])];
-    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...(turnos ?? []).map((t) => t.paciente_id)])].filter(Boolean);
+    // Reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): 'reservado_pendiente'
+    // con la retención de 15 min vencida y sin pago = el paciente se arrepintió y el
+    // lugar ya está libre. Era el caso del 06/08: un paciente que rebotó entre las
+    // 14:30, las 15:00 y las 15:30 dejaba TRES filas acá como si fueran tres
+    // solicitudes distintas. La reserva VIVA sí se lista (badge "Reservando…").
+    const turnosActividad = sinReservasAbandonadas(turnos ?? []);
+
+    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnosActividad.map((t) => t.medico_id)])];
+    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnosActividad.map((t) => t.paciente_id)])].filter(Boolean);
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
@@ -158,13 +145,8 @@ export async function GET(req: NextRequest) {
           citaPara: null as string | null,
           inicio: c.created_at,
         })),
-      ...(turnos ?? [])
-        // El descarte de reservas abandonadas va en JS y no en la query: el
-        // filtro de arriba ya es un `.or(...)` con `and(...)` adentro y sumarle
-        // un segundo `.or(...)` (más el NULL de `reservado_hasta`, que PostgREST
-        // excluye solo en los `gte`) lo vuelve ilegible y difícil de auditar.
-        // El volumen del período (limit 300) hace irrelevante la diferencia.
-        .filter((t) => !medTest.has(t.medico_id) && !pacDe(t.paciente_id)?.es_cuenta_test && !esReservaAbandonada(t, ahoraMs))
+      ...turnosActividad
+        .filter((t) => !medTest.has(t.medico_id) && !pacDe(t.paciente_id)?.es_cuenta_test)
         .map((t) => ({
           id: t.id,
           tipo: "Turno" as const,
@@ -185,7 +167,7 @@ export async function GET(req: NextRequest) {
   if (tab === "historial") {
     // Historial lista SOLO consultas inmediatas (tabla `consultas`): no trae
     // turnos, así que acá no hay reservas abandonadas que esconder. Si algún día
-    // se le suman turnos, filtrarlos con `esReservaAbandonada`.
+    // se le suman turnos, filtrarlos con `sinReservasAbandonadas`.
     const desde = req.nextUrl.searchParams.get("desde");
     const hasta = req.nextUrl.searchParams.get("hasta");
 

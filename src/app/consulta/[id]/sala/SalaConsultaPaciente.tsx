@@ -23,12 +23,25 @@ type Props = {
   consultaId: string;
   roomName: string | null;
   medicoNombre: string;
+  /**
+   * Título profesional elegido por el médico en su registro (`medicos.titulo`:
+   * "Dr." o "Dra."). Viaja como prop porque este es un componente cliente y el
+   * dato vive en la fila de `medicos` que trae la page. Si no llega, el nombre
+   * se muestra pelado: preferimos eso antes que suponer el género.
+   */
+  medicoTitulo?: string | null;
   especialidad: string;
   tipo?: "consulta" | "turno";
   horaInicio?: string | null;
 };
 
-function VideoArea() {
+// `nombreMedico` ya viene formateado con el título del médico. Lo necesitamos acá
+// porque cuando la cámara del otro lado está apagada, el placeholder mostraba el
+// `name` del participante de LiveKit — que es el `nombre_completo` crudo, sin
+// título y tal cual está cargado en la DB. En una consulta 1-a-1 el participante
+// remoto ES el médico, así que preferimos nuestro nombre formateado y dejamos el
+// de LiveKit solo como red de seguridad.
+function VideoArea({ nombreMedico }: { nombreMedico: string }) {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -61,7 +74,7 @@ function VideoArea() {
                 </span>
               </div>
               <span className="text-xs text-white/50">
-                {remoteTrack.participant.name || "Participante"}
+                {nombreMedico || remoteTrack.participant.name || "Participante"}
               </span>
             </div>
           )
@@ -70,7 +83,9 @@ function VideoArea() {
             <div className="h-20 w-20 rounded-full bg-gray-600 flex items-center justify-center">
               <span className="text-2xl text-gray-300">?</span>
             </div>
-            <span className="text-xs text-white/50">Esperando medico...</span>
+            {/* Sin el nombre a mano acá dentro, el copy va en neutro: nada de
+                "esperando al médico" cuando 30 de cada 36 son médicas. */}
+            <span className="text-xs text-white/50">Esperando la conexión...</span>
           </div>
         )}
       </div>
@@ -141,7 +156,13 @@ function CamIcon({ on }: { on: boolean }) {
 // Banner de dictado — escucha Data Messages del médico. Debe estar DENTRO de <LiveKitRoom>
 const decoder = new TextDecoder();
 
-function DictadoBanner({ medicoNombre }: { medicoNombre: string }) {
+function DictadoBanner({
+  medicoNombre,
+  medicoTitulo,
+}: {
+  medicoNombre: string;
+  medicoTitulo?: string | null;
+}) {
   const [visible, setVisible] = useState(false);
 
   useDataChannel("dictado", (msg) => {
@@ -162,7 +183,7 @@ function DictadoBanner({ medicoNombre }: { medicoNombre: string }) {
     >
       <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: "#D85A30" }} />
       <span className="text-xs font-medium text-white">
-        {formatNombreMedico(medicoNombre)} está grabando tus indicaciones
+        {formatNombreMedico(medicoNombre, medicoTitulo)} está grabando tus indicaciones
       </span>
     </div>
   );
@@ -313,10 +334,21 @@ export default function SalaConsultaPaciente({
   consultaId,
   roomName,
   medicoNombre,
+  medicoTitulo,
   especialidad,
   tipo = "consulta",
   horaInicio,
 }: Props) {
+  // Nombre ya formateado con el título que eligió el médico. Una sola vez acá:
+  // esta pantalla lo repite en cinco estados distintos.
+  //
+  // El respaldo importa: la página lee la ficha del médico con el cliente RLS, y
+  // si ese médico quedó suspendido u oculto DESPUÉS de que el paciente entró, la
+  // fila no vuelve y el nombre llega vacío. Sin este respaldo las frases quedaban
+  // sin sujeto (« te está esperando»). "El profesional" es neutro y no inventa ni
+  // nombre ni género. No se pone un texto tipo "tu médico" porque el formateador
+  // lo capitaliza como si fuera un nombre propio y sale «Tu Médico».
+  const nombreMedico = formatNombreMedico(medicoNombre, medicoTitulo) || "El profesional";
   // Estado completado difiere entre consultas ("completada") y turnos ("completado")
   const estadoCompletado = tipo === "turno" ? "completado" : "completada";
   const router = useRouter();
@@ -652,7 +684,7 @@ export default function SalaConsultaPaciente({
                 Consulta finalizada
               </h1>
               <p className="mt-2 text-gray-600">
-                Tu consulta con {formatNombreMedico(medicoNombre)} ha finalizado
+                Tu consulta con {nombreMedico} ha finalizado
               </p>
               <p className="mt-3 text-sm text-gray-500">
                 Tus recetas y documentos quedaron guardados en Mis documentos.
@@ -779,7 +811,7 @@ export default function SalaConsultaPaciente({
               Consulta cancelada
             </h1>
             <p className="mt-2 text-gray-600">
-              La consulta con {formatNombreMedico(medicoNombre)} fue cancelada
+              La consulta con {nombreMedico} fue cancelada
             </p>
             <a
               href="/mis-consultas"
@@ -832,7 +864,7 @@ export default function SalaConsultaPaciente({
             </div>
             <h1 className="mt-6 text-2xl font-bold text-gray-900">Reconectando…</h1>
             <p className="mt-2 text-gray-600">
-              Se cortó la conexión con {formatNombreMedico(medicoNombre)}. Estamos volviendo a la videollamada.
+              Se cortó la conexión con {nombreMedico}. Estamos volviendo a la videollamada.
             </p>
             {/* Línea de estado SIEMPRE presente (misma posición, solo cambia el texto). */}
             <p className="mt-3 text-sm text-gray-500">
@@ -880,7 +912,7 @@ export default function SalaConsultaPaciente({
           </div>
           <div className="hidden sm:block h-4 w-px bg-white/20" />
           <p className="text-sm text-white/80 truncate">
-            Consulta con {formatNombreMedico(medicoNombre)}
+            Consulta con {nombreMedico}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -905,7 +937,7 @@ export default function SalaConsultaPaciente({
               </svg>
             </div>
             <h2 className="mt-6 text-xl font-bold text-white">
-              {formatNombreMedico(medicoNombre)} te está esperando
+              {nombreMedico} te está esperando
             </h2>
             <p className="mt-2 text-sm text-white/70">
               Para entrar a la consulta, primero activá tu cámara y micrófono.
@@ -959,11 +991,11 @@ export default function SalaConsultaPaciente({
             style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
           >
             <RoomAudioRenderer />
-            <DictadoBanner medicoNombre={medicoNombre} />
+            <DictadoBanner medicoNombre={medicoNombre} medicoTitulo={medicoTitulo} />
 
             {/* Video area */}
             <div className="flex-1 min-h-0">
-              <VideoArea />
+              <VideoArea nombreMedico={nombreMedico} />
             </div>
 
             {/* Footer: mic + cam + info + salir */}
@@ -1009,8 +1041,10 @@ export default function SalaConsultaPaciente({
                     >
                       <CamIcon on={camOn} />
                     </button>
+                    {/* En neutro: acá no hay lugar para el nombre completo y
+                        "tu médico" le erra el género a la mayoría. */}
                     <p className="text-xs text-white/40 hidden sm:block">
-                      Tu médico te está atendiendo · {especialidad}
+                      Estás en consulta · {especialidad}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1103,7 +1137,7 @@ export default function SalaConsultaPaciente({
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-bold text-gray-900">¿Salir de la consulta?</h2>
             <p className="mt-2 text-sm text-gray-600">
-              Si salís ahora, vas a abandonar la videollamada con tu médico. Esta acción no se puede deshacer.
+              Si salís ahora, vas a abandonar la videollamada. Esta acción no se puede deshacer.
             </p>
             <div className="mt-6 flex gap-3">
               <button

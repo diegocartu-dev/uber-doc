@@ -103,7 +103,7 @@ export default async function DocumentosPage() {
   // Traer médicos
   const medicoIds = [...new Set((documentos ?? []).map((d) => d.medico_id))];
   const { data: medicos } = medicoIds.length > 0
-    ? await supabase.from("medicos").select("id, nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio").in("id", medicoIds)
+    ? await supabase.from("medicos").select("id, nombre_completo, titulo, especialidad, numero_matricula, tipo_matricula, domicilio").in("id", medicoIds)
     : { data: [] };
 
   const medicosMap = new Map(
@@ -116,6 +116,9 @@ export default async function DocumentosPage() {
     return {
       ...d,
       medico_nombre: med?.nombre_completo ?? "Médico",
+      // Título elegido por el profesional ("Dr." / "Dra."). Sin esto la lista de
+      // documentos le decía "Dr." a todas las médicas que firmaron la receta.
+      medico_titulo: med?.titulo ?? null,
       medico_especialidad: med?.especialidad ?? "",
       medico_matricula: `${med?.tipo_matricula ?? ""} ${med?.numero_matricula ?? ""}`.trim(),
       medico_domicilio: med?.domicilio ?? "",
@@ -227,7 +230,7 @@ export default async function DocumentosPage() {
                                 {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
                               </p>
                               <p className="mt-0.5 text-xs text-gray-500">
-                                {formatNombreMedico(doc.medico_nombre)}
+                                {formatNombreMedico(doc.medico_nombre, doc.medico_titulo)}
                               </p>
                             </div>
                           </div>

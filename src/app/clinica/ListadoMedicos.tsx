@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin } from "lucide-react";
-import { capitalizarNombre } from "@/lib/utils/texto";
+import { formatNombreMedico } from "@/lib/utils/texto";
 import { trackFunnel } from "@/lib/funnel-client";
 import {
   type Medico,
@@ -241,7 +241,9 @@ export default function ListadoMedicos({
             <p className="mt-2.5 text-[14px] leading-relaxed text-gray-700">
               El próximo turno de <span className="font-medium">{mejorTurno.medico.especialidad}</span> es{" "}
               <span className="font-medium text-gray-900">{formatFechaTurnoCorta(mejorTurno.turno.fecha, mejorTurno.turno.hora_inicio)} h</span>
-              <br />con {capitalizarNombre(mejorTurno.medico.nombre_completo)}
+              {/* Con su tratamiento: el atajo propone reservar con una persona
+                  concreta, así que la nombra como ella eligió llamarse. */}
+              <br />con {formatNombreMedico(mejorTurno.medico.nombre_completo, mejorTurno.medico.titulo)}
             </p>
             <button
               onClick={reservarAtajo}
@@ -288,7 +290,10 @@ export default function ListadoMedicos({
                   )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-[15px] font-medium text-gray-900">{capitalizarNombre(m.nombre_completo)}</p>
+                      {/* `formatNombreMedico` capitaliza igual que antes y además
+                          antepone el tratamiento elegido por el médico. Sin título
+                          devuelve el nombre pelado: nunca inventa un "Dr.". */}
+                      <p className="truncate text-[15px] font-medium text-gray-900">{formatNombreMedico(m.nombre_completo, m.titulo)}</p>
                       <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
                     </div>
                     <p className="mt-0.5 truncate text-[13px] text-gray-500">{m.especialidad}</p>

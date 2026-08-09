@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardAdminClient from "./DashboardAdminClient";
 import MobileControlCenter from "./MobileControlCenter";
 import { setsDeTest, esTest } from "@/lib/insights/filtro-test";
+import { soloActividadReal } from "@/lib/insights/reservas";
 
 function isMobileUA(ua: string): boolean {
   return /Mobile|Android|iPhone|iPad/i.test(ua);
@@ -70,7 +71,7 @@ export default async function AdminDashboardPage({
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false),
     admin.from("pacientes").select("id", { count: "exact", head: true }).eq("es_cuenta_test", false),
     admin.from("consultas").select("id, estado, medico_id, paciente_id").gte("created_at", hoy),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("fecha", hoy),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, reservado_hasta, mp_status").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, medico_id, paciente_id").in("estado", ["aceptada", "pagada", "en_curso"]),
     admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("estado", "en_curso"),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
@@ -78,7 +79,7 @@ export default async function AdminDashboardPage({
     admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", desde7).limit(5000),
     // Chart: excluir slots vacíos (no son "consultas") → alinea el chart con "Consultas
     // hoy" y baja el volumen para que el .limit() no trunque en silencio (Roberto #224).
-    admin.from("turnos").select("fecha, estado, medico_id, paciente_id").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
+    admin.from("turnos").select("fecha, estado, medico_id, paciente_id, reservado_hasta, mp_status").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
@@ -93,20 +94,28 @@ export default async function AdminDashboardPage({
   const SLOT = new Set(["disponible", "bloqueado", "bloqueado_sin_cobro"]);
   const real = (r: { medico_id?: string | null; paciente_id?: string | null }) =>
     !esTest(sets, r.medico_id, r.paciente_id);
+  // Reservas que NO son actividad real (ver lib/insights/reservas.ts): las
+  // ABANDONADAS ('reservado_pendiente' con la retención de 15 min vencida y sin
+  // pago — el paciente se arrepintió, el lugar ya está libre) y las VIVAS (está
+  // pagando ahora mismo: todavía no hay nada agendado ni cobrado). El 06/08 un
+  // solo paciente que rebotó entre tres horarios marcaba "Consultas hoy: 3"
+  // cuando hubo UNA. Mismo criterio que /insights → las dos pantallas coinciden.
+  const turnosAtencion = <T extends { estado: string; reservado_hasta?: string | null; mp_status?: string | null }>(filas: T[]) =>
+    soloActividadReal(filas.filter((t) => !SLOT.has(t.estado)));
   // "Consultas hoy" = CI reales creadas hoy + turnos reales de hoy que NO son slots vacíos.
   const consultasHoyTotal =
     (consHoyRows ?? []).filter(real).length +
-    (turnosHoyRows ?? []).filter((t) => real(t) && !SLOT.has(t.estado)).length;
+    turnosAtencion((turnosHoyRows ?? []).filter(real)).length;
   const enCursoTotal =
     (consEnCursoRows ?? []).filter(real).length +
     (turnosEnCursoRows ?? []).filter(real).length;
   const consultasSemana = (consultasSemanaRaw ?? []).filter(real);
-  const turnosSemana = (turnosSemanaRaw ?? []).filter(real);
+  const turnosSemana = turnosAtencion((turnosSemanaRaw ?? []).filter(real));
   // Cuántas atenciones de prueba se ocultaron hoy (para no confundir "día vacío" con
   // "día sin actividad real pero con test"). Mismo criterio que "Consultas hoy".
   const testOcultasHoy =
     (consHoyRows ?? []).filter((r) => !real(r)).length +
-    (turnosHoyRows ?? []).filter((t) => !real(t) && !SLOT.has(t.estado)).length;
+    turnosAtencion((turnosHoyRows ?? []).filter((t) => !real(t))).length;
 
   // Turnos disponibles agrupados por especialidad (especialidad vive en medicos)
   const medicoIdsConSlots = [...new Set((turnosDisponiblesData ?? []).map((t) => t.medico_id).filter(Boolean))];

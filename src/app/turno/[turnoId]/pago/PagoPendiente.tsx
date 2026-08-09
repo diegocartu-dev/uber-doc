@@ -9,7 +9,9 @@ type Props = {
   turnoId: string;
   reservadoHasta: string | null;
   returnUrl?: string;
-  medico: { nombre: string; especialidad: string; duracion: number };
+  // `titulo` = "Dr."/"Dra." elegido por el médico en su registro. Opcional: sin él,
+  // formatNombreMedico muestra el nombre pelado en vez de inventar un tratamiento.
+  medico: { nombre: string; titulo?: string | null; especialidad: string; duracion: number };
   turno: { fecha: string; horaInicio: string; horaFin: string; monto: number };
 };
 
@@ -129,7 +131,7 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Médico</span>
-            <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre)}</span>
+            <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre, medico.titulo)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Especialidad</span>

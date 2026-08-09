@@ -44,9 +44,12 @@ export default async function EsperaTurnoPage({
     }).catch((e) => console.error("[turno-espera] Error registrando entrada:", e));
   }
 
+  // `titulo` ("Dr."/"Dra.") lo elige el médico en su registro. Sin él la sala de espera
+  // no puede armar frases con género ("La Dra. X canceló el turno") y muestra el nombre
+  // pelado. Tiene GRANT SELECT para authenticated, así que es seguro pedirlo con RLS.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad")
+    .select("nombre_completo, especialidad, titulo")
     .eq("id", turno.medico_id)
     .single();
 
@@ -65,6 +68,7 @@ export default async function EsperaTurnoPage({
         <EsperaTurno
           turnoId={turnoId}
           medicoNombre={medico?.nombre_completo ?? "Médico"}
+          medicoTitulo={medico?.titulo ?? null}
           medicoEspecialidad={medico?.especialidad ?? ""}
           horaInicio={turno.hora_inicio}
           returnUrl={returnUrl}

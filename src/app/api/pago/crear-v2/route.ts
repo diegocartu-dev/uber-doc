@@ -154,6 +154,22 @@ export async function POST(req: NextRequest) {
         },
       ],
       marketplace_fee: marketplaceFee,
+      // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
+      //
+      // El checkout los ofrecía y no tienen forma de funcionar acá: el paciente
+      // elegía "efectivo", el pago quedaba pendiente y la atención se congelaba
+      // —el médico esperando, el paciente sin poder entrar a la sala—. Dos o tres
+      // días después el paciente pagaba el cupón, la plata entraba de verdad, y
+      // recién ahí llegaba el webhook: para una consulta inmediata eso no existe,
+      // y para un turno el lugar ya se soltó hace rato (la reserva se retiene
+      // ~15 minutos). O sea que el paciente pagaba algo que ya no podía usar.
+      //
+      // 'ticket' = cupón para pagar en efectivo; 'atm' = pago por cajero. Los dos
+      // se acreditan con demora. Todo lo instantáneo (tarjetas, dinero en cuenta,
+      // transferencia) sigue disponible.
+      payment_methods: {
+        excluded_payment_types: [{ id: "ticket" }, { id: "atm" }],
+      },
       back_urls: {
         success: `${baseUrl}${redirectSuccess}`,
         failure: `${baseUrl}${redirectFailure}`,
@@ -295,9 +311,13 @@ async function obtenerConsulta(
     return { error: "La consulta no está lista para pagar.", status: 400 };
   }
 
+  // `titulo` viene del registro del médico ("Dr." / "Dra.") y va al título del
+  // ítem de Mercado Pago: es el texto que el paciente ve en el checkout y después
+  // en el resumen de su tarjeta. Equivocarlo ahí es especialmente caro porque
+  // queda impreso en un comprobante.
   const { data: medico } = await admin
     .from("medicos")
-    .select("nombre_completo, precio_consulta, duracion_consulta")
+    .select("nombre_completo, titulo, precio_consulta, duracion_consulta")
     .eq("id", consulta.medico_id)
     .single();
 
@@ -308,7 +328,7 @@ async function obtenerConsulta(
   return {
     medicoId: consulta.medico_id,
     monto: medico.precio_consulta,
-    titulo: `Consulta de ${consulta.especialidad} — ${formatNombreMedico(medico.nombre_completo)}`,
+    titulo: `Consulta de ${consulta.especialidad} — ${formatNombreMedico(medico.nombre_completo, medico.titulo)}`,
     descripcion: `Consulta virtual de ${medico.duracion_consulta} minutos`,
     redirectSuccess: `/consulta/${consultaId}/info-medica?redirect=/consulta/${consultaId}/consentimiento`,
     redirectFailure: `/sala-espera/${consultaId}?pago=error`,
@@ -349,19 +369,24 @@ async function obtenerTurno(
     return { error: "El turno no tiene precio asignado.", status: 422 };
   }
 
+  // Igual que en la consulta inmediata: el `titulo` del médico viaja al ítem de
+  // Mercado Pago, que es lo que el paciente lee en el checkout y en el resumen
+  // de la tarjeta.
   const { data: medico } = await admin
     .from("medicos")
-    .select("nombre_completo, duracion_consulta")
+    .select("nombre_completo, titulo, duracion_consulta")
     .eq("id", turno.medico_id)
     .single();
 
-  const medicoNombre = medico?.nombre_completo ?? "Médico";
+  const medicoNombre = formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo);
   const duracion = medico?.duracion_consulta ?? 20;
 
   return {
     medicoId: turno.medico_id,
     monto: turno.monto,
-    titulo: `Turno programado — ${formatNombreMedico(medicoNombre)}`,
+    // Si no pudimos leer al médico, el ítem queda sin nombre en vez de decir
+    // "Médico" a secas: el paciente ya sabe con quién sacó el turno.
+    titulo: medicoNombre ? `Turno programado — ${medicoNombre}` : "Turno programado",
     descripcion: `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
     redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/consentimiento`,
     redirectFailure: `/clinica/${turno.medico_id}/turnos?pago=error`,

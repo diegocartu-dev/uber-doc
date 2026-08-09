@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarDocumentoMedico } from "@/lib/email";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+// Respaldo del servidor. El tope que manda es el de la plataforma (~4,5 MB),
+// que corta antes de llegar acá; el freno real está en el navegador.
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_DOCS_PER_CONSULTA = 3;
 const HOURS_48 = 48 * 60 * 60 * 1000;
 
@@ -16,9 +18,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is a doctor
+    // Se suma `titulo` ("Dr." / "Dra.") porque el mail al paciente nombra al
+    // médico como sujeto de la frase ("La Dra. Ana García te compartió…"): sin el
+    // título el mail salía con el nombre pelado. Es columna con GRANT para
+    // `authenticated`. SOLO `titulo`: una columna sin GRANT haría fallar la query
+    // ENTERA en PostgREST y el médico pasaría a leerse como "no es médico".
     const { data: medico } = await supabase
       .from("medicos")
-      .select("id, nombre_completo")
+      .select("id, nombre_completo, titulo")
       .eq("user_id", user.id)
       .single();
 
@@ -43,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "El archivo excede el límite de 10 MB" },
+        { error: "El archivo es muy pesado. Mandá las páginas que importan en un archivo más liviano." },
         { status: 400 }
       );
     }
@@ -115,6 +122,7 @@ export async function POST(request: NextRequest) {
       pacienteEmail: pacienteUser.email,
       pacienteNombre: paciente?.nombre_completo ?? "Paciente",
       medicoNombre: medico.nombre_completo,
+      medicoTitulo: medico.titulo ?? null,
       fecha: new Date(consulta.created_at).toLocaleDateString("es-AR"),
       archivo: {
         filename: file.name,

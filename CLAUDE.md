@@ -62,6 +62,18 @@ Reglas concretas:
 
 Un sprint o tarea NO se considera cerrado hasta que la documentación esté actualizada. "Hecho" sin doc = no hecho a efectos del registro.
 
+## Reportes — las reservas abandonadas NO se muestran (decisión Diego, 06/08/2026)
+Cuando un paciente toma un turno, el slot queda en `reservado_pendiente` con `reservado_hasta` = ahora + ~15 min (retención para pagar). Si paga, el webhook de MP lo pasa a `confirmado` con `mp_status='approved'`. Si no paga, la retención vence y el lugar se libera — pero la liberación es **perezosa**: la hace `limpiarReservasExpiradas` (`src/app/clinica/[medicoId]/turnos/actions.ts`), que solo corre cuando alguien abre el calendario de ese médico (`CalendarioTurnos.tsx`). Hasta entonces la fila queda `reservado_pendiente` con la retención vencida por horas o días.
+
+**Decisión de Diego:** *"si la reserva fue por ese motivo perezoso y está liberado el turno, yo NO debo ver eso en los reportes. Guardalo en la base si querés, pero no es algo que nadie necesite ver: las vueltas que da un paciente indeciso."* Caso que la motivó: un paciente reservó las 14:30, se arrepintió, reservó las 15:00, y finalmente reservó las 15:30 y pagó — el panel mostraba TRES solicitudes cuando hubo UNA.
+
+Reglas:
+- **Reserva abandonada** = `reservado_pendiente` + retención vencida + sin pago (ni acreditado ni en vuelo). **No se muestra ni se cuenta en NINGÚN reporte** (`/insights` y `/admin`). **No se borra de la base.**
+- **Reserva viva** = retención vigente y todavía sin pago acreditado. Se puede **listar** con etiqueta clara ("Reservando…"), pero **no cuenta como actividad real** en KPIs ni totales.
+- Fuente de verdad única: **`src/lib/insights/reservas.ts`** (`esReservaAbandonada` / `esReservaViva` / `sinReservasAbandonadas` para listados / `soloActividadReal` para KPIs). Todo reporte nuevo que toque `turnos` usa estos helpers, y su `SELECT` debe traer `reservado_hasta` y `mp_status`.
+- **La plata nunca se filtra:** ninguna de las dos exclusiones puede sacar una fila con `mp_status='approved'`, y todas las métricas de dinero filtran por `approved`. Delta de importes: cero.
+- **Deuda conocida:** el badge "N pendientes" de la agenda del médico (`src/app/medico/agenda/PanelDerecho.tsx`) sigue contando reservas muertas. No se tocó porque su query usa el cliente RLS y sumarle columnas tiene el riesgo de grants documentado arriba.
+
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
 - Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.

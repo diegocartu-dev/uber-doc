@@ -9,7 +9,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const TIPOS_OK = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+// Respaldo del servidor. El tope que manda de verdad es el de la plataforma
+// (~4,5 MB), que corta ANTES de llegar acá: por eso el freno real está en el
+// navegador (ver MAX_BYTES_ENVIO en lib/imagenes/comprimir.ts). Este número se
+// deja apenas por encima para cubrir el peso del multipart, y solo actúa si
+// alguien llama a la acción por fuera del formulario.
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ESTADOS_PERMITIDOS = new Set(["pendiente_revision", "rechazado", "suspendido"]);
 
 export async function resubirCredencial(
@@ -26,7 +31,7 @@ export async function resubirCredencial(
     return { ok: false, error: "Elegí un archivo." };
   }
   if (file.size > MAX_BYTES) {
-    return { ok: false, error: "El archivo es muy grande (máximo 10 MB)." };
+    return { ok: false, error: "El archivo es muy grande. Sacale una foto a la credencial con el celular y subí esa: la achicamos solas." };
   }
   if (!TIPOS_OK.includes(file.type)) {
     return { ok: false, error: "Formato no válido. Subí una imagen (JPG/PNG) o un PDF." };

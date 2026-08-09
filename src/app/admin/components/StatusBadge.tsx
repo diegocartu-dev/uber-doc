@@ -23,6 +23,10 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   ausente_paciente: { bg: "bg-orange-100", text: "text-[#D85A30]", label: "Ausente (pac.)" },
   ausente_medico: { bg: "bg-orange-100", text: "text-[#D85A30]", label: "Ausente (med.)" },
   aceptada: { bg: "bg-blue-100", text: "text-[#378ADD]", label: "Aceptada" },
+  // Reserva VIVA: retención de 15 min corriendo, el paciente está pagando. Las
+  // abandonadas (retención vencida sin pago) ni llegan a la pantalla: las filtra
+  // la API (lib/insights/reservas.ts). Antes esto mostraba el enum crudo.
+  reservado_pendiente: { bg: "bg-[#BA7517]/15", text: "text-[#BA7517]", label: "Reservando…" },
 };
 
 export default function StatusBadge({ status, label }: { status: string; label?: string }) {

@@ -66,9 +66,12 @@ async function handler() {
   }
   const conCobertura = new Set((futuras ?? []).map((f) => f.medico_id));
 
+  // `titulo` ("Dr." / "Dra.") entra al SELECT porque el mail saluda al médico por
+  // su nombre: sin él, el saludo iba con el nombre pelado. Va por service role,
+  // así que los GRANT de columna no aplican, pero igual se suma SOLO esa columna.
   const { data: medicos, error: errMedicos } = await admin
     .from("medicos")
-    .select("id, nombre_completo, email, es_cuenta_test")
+    .select("id, nombre_completo, email, titulo, es_cuenta_test")
     .in("id", medicoIds);
   if (errMedicos) {
     console.error("[cron/aviso-agenda-vencida] Error leyendo medicos:", errMedicos.message);
@@ -95,7 +98,7 @@ async function handler() {
     }
 
     try {
-      await enviarAvisoAgendaVencida(medico.email, medico.nombre_completo);
+      await enviarAvisoAgendaVencida(medico.email, medico.nombre_completo, medico.titulo ?? null);
       avisos++;
       procesadas.push(...filas.map((f) => f.id));
     } catch (e) {

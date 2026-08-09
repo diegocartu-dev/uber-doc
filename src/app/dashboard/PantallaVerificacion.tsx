@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { comprimirImagenesDeFormData } from "@/lib/imagenes/comprimir";
+import { comprimirImagenesDeFormData, MAX_BYTES_ENVIO } from "@/lib/imagenes/comprimir";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Clock, ShieldX, ShieldAlert, Stethoscope, Upload, CheckCircle2, AlertCircle } from "lucide-react";
@@ -66,7 +66,11 @@ export default function PantallaVerificacion({
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
   const [msgCredencial, setMsgCredencial] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — mismo límite que valida el servidor.
+  // El tope NO es el del servidor (10 MB): es el de la plataforma, ~4,5 MB, y
+  // corta ANTES de que la petición llegue a la app. Con el límite viejo un PDF de
+  // 6 MB pasaba este chequeo, moría en un 413 que el código no puede atrapar, y
+  // el botón quedaba en "Subiendo…" para siempre. El colegio médico manda PDFs
+  // pesados, así que este es el camino normal, no un borde.
 
   async function handleResubir(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -80,26 +84,42 @@ export default function PantallaVerificacion({
       setMsgCredencial({ ok: false, text: "Elegí la credencial de tu matrícula." });
       return;
     }
-    if (f.size > MAX_BYTES) {
-      setMsgCredencial({ ok: false, text: "El archivo es muy grande (máximo 10 MB)." });
+    // Ya comprimido si era imagen. Lo que sigue pesando es un PDF o un archivo
+    // raro, y ahí hay que decirle QUÉ hacer, no solo que no se puede.
+    if (f.size > MAX_BYTES_ENVIO) {
+      const mb = (f.size / 1024 / 1024).toFixed(1);
+      setMsgCredencial({
+        ok: false,
+        text: `El archivo pesa ${mb} MB y el máximo es 4 MB. Si es un PDF, la forma más rápida es sacarle una foto con el celular a la credencial y subir esa foto: la achicamos solas.`,
+      });
       return;
     }
     setSubiendo(true);
     setMsgCredencial(null);
-    const res = await resubirCredencial(fd);
-    setSubiendo(false);
-    if (res.ok) {
-      setMsgCredencial({
-        ok: true,
-        text: "¡Listo! Recibimos tu credencial. La revisamos y te avisamos por email cuando tu cuenta esté activa.",
-      });
-      form.reset();
-      setNombreArchivo(null);
-    } else {
+    // try/finally: sin esto, cualquier corte de red dejaba el botón en
+    // "Subiendo…" para siempre y el médico sin saber si había pasado algo.
+    try {
+      const res = await resubirCredencial(fd);
+      if (res.ok) {
+        setMsgCredencial({
+          ok: true,
+          text: "¡Listo! Recibimos tu credencial. La revisamos y te avisamos por email cuando tu cuenta esté activa.",
+        });
+        form.reset();
+        setNombreArchivo(null);
+      } else {
+        setMsgCredencial({
+          ok: false,
+          text: res.error ?? "No pudimos subir el archivo. Probá de nuevo o escribinos a hola@docto.com.ar",
+        });
+      }
+    } catch {
       setMsgCredencial({
         ok: false,
-        text: res.error ?? "No pudimos subir el archivo. Probá de nuevo o escribinos a hola@docto.com.ar",
+        text: "Se cortó la subida. Revisá la conexión y probá de nuevo; si el archivo es pesado, sacale una foto a la credencial y subí esa.",
       });
+    } finally {
+      setSubiendo(false);
     }
   }
 

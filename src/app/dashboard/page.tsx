@@ -31,8 +31,42 @@ import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
 import { isAdmin } from "@/lib/admin-auth";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
 import { perfilMedicoCompleto, camposFaltantesMedico, identidadHabilitada } from "@/lib/perfil-medico";
+
+/**
+ * Nombre del médico listo para meter en una frase que lleva artículo
+ * ("tu consulta con **la Dra.** García").
+ *
+ * El título lo elige el médico en su registro (`medicos.titulo`) y hay que
+ * traerlo en el SELECT: sin él no se inventa nada, y la frase queda "tu consulta
+ * con Ana García" — correcta, en vez de arriesgar un "el" equivocado.
+ */
+function conArticulo(nombre: string, titulo?: string | null): string {
+  const articulo = articuloMedico(titulo);
+  const formateado = formatNombreMedico(nombre, titulo);
+  return articulo ? `${articulo} ${formateado}` : formateado;
+}
+
+/**
+ * Relleno para cuando la fila del médico no se pudo leer. Pasa de verdad: la
+ * policy RLS de `medicos` solo deja ver la fila propia o la de un médico
+ * verificado + aprobado + no oculto. Si el médico del turno quedó oculto o
+ * suspendido DESPUÉS de que el paciente sacó el turno, el paciente no lee ni
+ * nombre ni título y caemos acá.
+ */
+const MEDICO_SIN_DATO = "Médico";
+
+/**
+ * "Dra. García te atendera en breve". Si no hay nombre legible (ver
+ * MEDICO_SIN_DATO) devuelve una frase neutra: "Médico te atendera en breve"
+ * quedaría escrito como un robot, y "tu médico" vuelve a meter un género que
+ * no siempre es el correcto.
+ */
+function fraseEspera(nombre: string, titulo?: string | null): string {
+  if (!nombre || nombre === MEDICO_SIN_DATO) return "Te van a atender en breve";
+  return `${formatNombreMedico(nombre, titulo)} te atendera en breve`;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -87,7 +121,7 @@ export default async function DashboardPage({
     oculto_clinica: boolean; visible_consultorio_particular: boolean; verificado: boolean; estado_registro: string;
     especialidad: string; tipo_matricula: string; numero_matricula: string;
     foto_credencial_url: string | null; slug: string | null;
-    nombre_completo: string; telefono: string | null; celular_personal: string | null; foto_url: string | null;
+    nombre_completo: string; titulo: string | null; telefono: string | null; celular_personal: string | null; foto_url: string | null;
     domicilio_consultorio: string | null; perfil_completo: boolean;
     identidad_validada: boolean; biometria_exenta: boolean; didit_status: string | null;
   } | null = null;
@@ -116,18 +150,21 @@ export default async function DashboardPage({
   let modelosActivosList: { id: string; nombre: string }[] = [];
 
   // ─── PACIENTE DATA ───
+  // `medico_titulo` viaja al lado del nombre en todo el bloque del paciente: es el
+  // título que el médico eligió en su registro y lo que evita tratar de "Dr." a una
+  // médica en la tarjeta donde el paciente la ve.
   let consultaActiva: {
     id: string; especialidad: string; estado: string;
-    sala_video_url: string | null; medico_nombre: string;
+    sala_video_url: string | null; medico_nombre: string; medico_titulo: string | null;
   } | null = null;
 
   let turnosPaciente: {
     id: string; fecha: string; hora_inicio: string; estado: string;
-    especialidad: string; medico_nombre: string;
+    especialidad: string; medico_nombre: string; medico_titulo: string | null;
   }[] = [];
 
   let turnoEnCursoPaciente: {
-    id: string; medico_nombre: string; hora_inicio: string;
+    id: string; medico_nombre: string; medico_titulo: string | null; hora_inicio: string;
   } | null = null;
 
   if (role === "paciente") {
@@ -147,14 +184,15 @@ export default async function DashboardPage({
       if (turnosData && turnosData.length > 0) {
         const medIds = [...new Set(turnosData.map((t) => t.medico_id))];
         const { data: meds } = await supabase
-          .from("medicos").select("id, nombre_completo, especialidad").in("id", medIds);
+          .from("medicos").select("id, nombre_completo, titulo, especialidad").in("id", medIds);
         const medMap = new Map((meds ?? []).map((m) => [m.id, m]));
 
         turnosPaciente = turnosData.map((t) => {
           const med = medMap.get(t.medico_id);
           return {
             id: t.id, fecha: t.fecha, hora_inicio: t.hora_inicio, estado: t.estado,
-            especialidad: med?.especialidad ?? "", medico_nombre: med?.nombre_completo ?? "Médico",
+            especialidad: med?.especialidad ?? "", medico_nombre: med?.nombre_completo ?? MEDICO_SIN_DATO,
+            medico_titulo: med?.titulo ?? null,
           };
         });
       }
@@ -167,10 +205,11 @@ export default async function DashboardPage({
 
       if (turnoECPac) {
         const { data: medEC } = await supabase
-          .from("medicos").select("nombre_completo").eq("id", turnoECPac.medico_id).maybeSingle();
+          .from("medicos").select("nombre_completo, titulo").eq("id", turnoECPac.medico_id).maybeSingle();
         turnoEnCursoPaciente = {
           id: turnoECPac.id, hora_inicio: turnoECPac.hora_inicio,
-          medico_nombre: medEC?.nombre_completo ?? "Médico",
+          medico_nombre: medEC?.nombre_completo ?? MEDICO_SIN_DATO,
+          medico_titulo: medEC?.titulo ?? null,
         };
       }
     }
@@ -186,10 +225,11 @@ export default async function DashboardPage({
 
     if (activa) {
       const { data: med } = await supabase
-        .from("medicos").select("nombre_completo").eq("id", activa.medico_id).single();
+        .from("medicos").select("nombre_completo, titulo").eq("id", activa.medico_id).single();
       consultaActiva = {
         id: activa.id, especialidad: activa.especialidad, estado: activa.estado,
-        sala_video_url: activa.sala_video_url, medico_nombre: med?.nombre_completo ?? "Médico",
+        sala_video_url: activa.sala_video_url, medico_nombre: med?.nombre_completo ?? MEDICO_SIN_DATO,
+        medico_titulo: med?.titulo ?? null,
       };
     }
   }
@@ -204,7 +244,7 @@ export default async function DashboardPage({
     const adminDb = createAdminClient();
     const { data, error: medicoError } = await adminDb
       .from("medicos")
-      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, telefono, celular_personal, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, biometria_exenta, didit_status, es_cuenta_test")
+      .select("id, disponible, disponible_desde, disponible_hasta, duracion_consulta, precio_consulta, oculto_clinica, visible_consultorio_particular, verificado, estado_registro, especialidad, tipo_matricula, numero_matricula, foto_credencial_url, slug, nombre_completo, titulo, telefono, celular_personal, foto_url, domicilio_consultorio, firma_manuscrita_url, perfil_completo, identidad_validada, biometria_exenta, didit_status, es_cuenta_test")
       .eq("user_id", user.id)
       .single();
     medico = data;
@@ -611,6 +651,7 @@ export default async function DashboardPage({
             {flagNovaAi && (
               <NovaWidget
                 nombreMedico={fullName}
+                tituloMedico={medico.titulo}
                 turnosHoy={turnosHoy.length}
               />
             )}
@@ -735,7 +776,7 @@ export default async function DashboardPage({
               <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-info)" }}>CONSULTA EN CURSO</span>
             </div>
             <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
-              Tu consulta con {formatNombreMedico(turnoEnCursoPaciente.medico_nombre)} esta en curso
+              Tu consulta con {conArticulo(turnoEnCursoPaciente.medico_nombre, turnoEnCursoPaciente.medico_titulo)} esta en curso
             </p>
             <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Turno de las {turnoEnCursoPaciente.hora_inicio.slice(0, 5)} hs</p>
             <Link
@@ -767,11 +808,13 @@ export default async function DashboardPage({
               </span>
             </div>
             <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
+              {/* Se nombra al médico en lugar de "tu medico te atendera": la frase
+                  vieja obligaba a un género que no siempre era el correcto. */}
               {consultaActiva.estado === "en_curso"
-                ? `Tu consulta con ${formatNombreMedico(consultaActiva.medico_nombre)} esta en curso`
-                : "Tu medico te atendera en breve"}
+                ? `Tu consulta con ${conArticulo(consultaActiva.medico_nombre, consultaActiva.medico_titulo)} esta en curso`
+                : fraseEspera(consultaActiva.medico_nombre, consultaActiva.medico_titulo)}
             </p>
-            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad} - {formatNombreMedico(consultaActiva.medico_nombre)}</p>
+            <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{consultaActiva.especialidad}</p>
             <Link
               href={consultaActiva.estado === "en_curso" ? `/consulta/${consultaActiva.id}/sala` : `/sala-espera/${consultaActiva.id}`}
               className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
@@ -792,8 +835,11 @@ export default async function DashboardPage({
                 <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full" style={{ backgroundColor: "var(--color-success)" }} />
                 <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-success)" }}>EN SALA DE ESPERA</span>
               </div>
-              <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>Tu medico te atendera en breve</p>
-              <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>{formatNombreMedico(enEspera.medico_nombre)} - {enEspera.hora_inicio.slice(0, 5)} hs</p>
+              {/* Idem: se nombra al médico con su título en vez de "tu medico". */}
+              <p className="mt-3 text-[15px] font-medium" style={{ color: "var(--color-text-primary)" }}>
+                {fraseEspera(enEspera.medico_nombre, enEspera.medico_titulo)}
+              </p>
+              <p className="mt-0.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Turno de las {enEspera.hora_inicio.slice(0, 5)} hs</p>
               <Link
                 href={`/turno/${enEspera.id}/info-medica?redirect=/turno/${enEspera.id}/espera`}
                 className="mt-4 block w-full rounded-[var(--radius-md)] py-2.5 text-center text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
@@ -825,7 +871,7 @@ export default async function DashboardPage({
             <div className="mb-5 rounded-[var(--radius-lg)] bg-white p-5" style={{ border: "1px solid var(--color-border-default)" }}>
               <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>TU PROXIMO TURNO</p>
               <p className="mt-2 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con {formatNombreMedico(proximoHoy.medico_nombre)}
+                Hoy a las {proximoHoy.hora_inicio.slice(0, 5)} hs con {conArticulo(proximoHoy.medico_nombre, proximoHoy.medico_titulo)}
               </p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>{proximoHoy.especialidad}</p>
               {mostrarSala && (

@@ -4,6 +4,7 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { cobradoDe, comisionTotalDe } from "@/lib/insights/plata";
 import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
+import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reservas";
 
 // Estados de turno que NO son atenciones (slots de agenda). Se excluyen de todo conteo.
 const SLOT = new Set(["disponible", "bloqueado"]);
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones, precio_consulta").eq("verificado", true),
     admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id, canal_origen").gte("fecha", desde),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id, canal_origen, reservado_hasta").gte("fecha", desde),
     // Refunds ejecutados: esos pagos siguen "approved" en consultas/turnos pero la
     // plata VOLVIÓ al paciente (caso turno de Alexandra 24/07) — se excluyen del cobrado.
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
@@ -59,9 +60,14 @@ export async function GET(req: NextRequest) {
   // Filtro test unificado (médico O paciente) + sacar slots de agenda (no son atenciones).
   const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
   const consultas = (consultasRaw ?? []).filter((c) => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
-  const turnos = (turnosRaw ?? [])
-    .filter((t) => !SLOT.has(t.estado))
-    .filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
+  // + reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): retención de
+  // 15 min vencida sin pago = el paciente se arrepintió y el slot ya está libre.
+  // Inflaban el "total" de atenciones del médico sin ser nada.
+  const turnos = sinReservasAbandonadas(
+    (turnosRaw ?? [])
+      .filter((t) => !SLOT.has(t.estado))
+      .filter((t) => !soloReales || !esTest(sets, t.medico_id, t.paciente_id)),
+  );
 
   const stats = medicos.map(m => {
     const misConsultas = consultas.filter(c => c.medico_id === m.id);
@@ -73,7 +79,10 @@ export async function GET(req: NextRequest) {
     const atendidasTurnoConsultorio = misTurnos.filter(t => t.estado === "completado" && t.canal_origen === "consultorio_privado").length;
     const canceladas = misConsultas.filter(c => c.estado === "cancelada").length + misTurnos.filter(t => t.estado === "cancelado_paciente" || t.estado === "cancelado_medico").length;
     const noShows = misTurnos.filter(t => t.estado === "ausente_medico").length;
-    const total = misConsultas.length + misTurnos.length; // todas las atenciones (sin slots)
+    // Todas las atenciones (sin slots) y sin reservas EN CURSO: el paciente que
+    // está pagando ahora mismo todavía no es una atención del médico. Su plata
+    // (si la hay) se sigue contando abajo: `filasPago` usa misTurnos completo.
+    const total = misConsultas.length + soloActividadReal(misTurnos).length;
     // Plata REAL (ver lib/insights/plata.ts): lo aprobado en MP y el fee que MP
     // registró — muere el GMV teórico (precio de lista × atendidas) y el
     // hardcode de $1.500 por consulta.
