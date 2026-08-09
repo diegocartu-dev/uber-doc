@@ -39,7 +39,7 @@ import {
 // Ámbar #BA7517: es un pendiente que el médico puede resolver, no un error roto.
 
 /** `reabrible` en null = todavía no se verificó (o el chequeo no respondió). */
-type EstadoServidor = { entregado: boolean; reabrible: boolean };
+type EstadoServidor = { entregado: boolean; reabrible: boolean; cerrada: boolean };
 
 export default function AvisoDocumentacionPendiente() {
   const [pendientes, setPendientes] = useState<DocumentacionPendiente[]>([]);
@@ -87,11 +87,11 @@ export default function AvisoDocumentacionPendiente() {
       }),
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { estados?: { id: string; entregado: boolean; reabrible: boolean }[] } | null) => {
+      .then((d: { estados?: { id: string; entregado: boolean; reabrible: boolean; cerrada?: boolean }[] } | null) => {
         if (cancelado || !d?.estados) return;
         const mapa: Record<string, EstadoServidor> = {};
         for (const e of d.estados) {
-          mapa[e.id] = { entregado: !!e.entregado, reabrible: !!e.reabrible };
+          mapa[e.id] = { entregado: !!e.entregado, reabrible: !!e.reabrible, cerrada: !!e.cerrada };
         }
         setEstados(mapa);
         // Auto-curación: lo que el servidor dice que ya está entregado deja de
@@ -116,7 +116,16 @@ export default function AvisoDocumentacionPendiente() {
     setPendientes((prev) => prev.filter((p) => p.id !== id));
   }
 
-  const visibles = pendientes.filter((p) => !estados[p.id]?.entregado);
+  // Se ocultan dos cosas: lo que el servidor dice que ya se entregó, y las
+  // atenciones YA CERRADAS — de esas se encarga la tarjeta "Documentación
+  // pendiente", que las lista leyendo la base y ofrece su propio botón. Este
+  // cartel cubre el caso que esa tarjeta no puede ver: la atención que quedó
+  // abierta. Sin este reparto el médico veía dos avisos ámbar apilados sobre la
+  // misma consulta, uno diciéndole que entrara y el otro que escribiera a
+  // soporte.
+  const visibles = pendientes.filter(
+    (p) => !estados[p.id]?.entregado && !estados[p.id]?.cerrada
+  );
   if (visibles.length === 0) return null;
 
   return (
@@ -145,8 +154,8 @@ export default function AvisoDocumentacionPendiente() {
                     : "El paciente NO recibió los documentos."}{" "}
                   Lo que escribiste no se perdi&oacute;: qued&oacute; guardado.{" "}
                   {puedeVolver
-                    ? "Entrá y tocá «Finalizar consulta» para completarla."
-                    : "La consulta ya figura cerrada y no vas a poder volver a entrar: escribinos y la reenviamos nosotros."}
+                    ? "Entrá y completá la consulta para que le lleguen."
+                    : "Esta consulta quedó anulada, así que no se puede completar desde acá: escribinos y la resolvemos nosotros."}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <a
