@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<!-- Variante para IG: chat de Nova con valores en $50.000 (dato ficticio). -->
+<style>
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Regular.ttf');font-weight:400;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Medium.ttf');font-weight:500;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-SemiBold.ttf');font-weight:600;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Bold.ttf');font-weight:700;}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  #frame { width: 330px; background: #f8f9fa; border-radius: 24px; overflow: hidden; border: 1px solid #e5e7eb; }
+  .header { height: 52px; background: #fff; border-bottom: 0.5px solid #e5e7eb; display: flex; align-items: center; padding: 0 16px; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #1D9E75; }
+  .header .nombre { font-size: 17px; font-weight: 500; color: #1a1a1a; }
+  .chat { padding: 14px 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .fila { display: flex; }
+  .fila.user { justify-content: flex-end; }
+  .fila.nova { justify-content: flex-start; }
+  .bubble-user { max-width: 86%; background: #1D9E75; color: #fff; padding: 10px 14px; border-radius: 16px 16px 4px 16px; font-size: 15px; line-height: 1.45; }
+  .bubble-nova { max-width: 92%; background: #fff; border: 0.5px solid #e5e7eb; color: #1a1a1a; padding: 10px 14px; border-radius: 16px 16px 16px 4px; font-size: 15px; line-height: 1.45; }
+  .chips { display: flex; gap: 8px; margin-top: 8px; margin-bottom: 10px; }
+  .chip { font-size: 12px; font-weight: 500; border-radius: 9999px; padding: 4px 12px; background: #f3f4f6; color: #6b7280; }
+  .acciones { display: flex; gap: 10px; margin-top: 8px; }
+  .btn-confirmar { flex: 1; min-height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #378ADD; color: #fff; font-size: 13px; font-weight: 500; border: none; }
+  .btn-cancelar { flex: 1; min-height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: transparent; color: #6b7280; font-size: 13px; font-weight: 500; border: 0.5px solid #e5e7eb; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div class="header">
+    <span class="dot"></span>
+    <span class="nombre">Nova</span>
+  </div>
+  <div class="chat">
+    <div class="fila user">
+      <div class="bubble-user">Abrime agenda martes y jueves de 18 a 20, turnos de 30 min a $50.000</div>
+    </div>
+    <div class="fila nova">
+      <div class="bubble-nova">
+        Voy a crear turnos los martes y jueves de julio, de 18:00 a 20:00, cada 30 min a $50.000. ¿Confirmás?
+        <div class="chips">
+          <span class="chip">Clínica Virtual</span>
+          <span class="chip">30 min</span>
+        </div>
+        <div class="acciones">
+          <button class="btn-confirmar">Confirmar</button>
+          <button class="btn-cancelar">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

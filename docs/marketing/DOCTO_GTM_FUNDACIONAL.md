@@ -4,8 +4,9 @@
 > **Qué es:** todo lo que necesitás saber para entender Docto a fondo — el producto,
 > la filosofía, por qué existimos y por qué somos distintos. No es un brief de campaña:
 > es el documento madre del que salen todos los briefs.
-> **Estado:** v1.1 — fundacional, escrito al momento del lanzamiento público (junio
+> **Estado:** v1.2 — fundacional, escrito al momento del lanzamiento público (junio
 > 2026), auditado por marketing (Lucía) y por médico clínico (Dr. Martín).
+> Rev. 13/06/2026: regla de campaña founder (no comunicar comisión/cupo — ver §5.2 y Anexo 1).
 > **Fuente de verdad:** lo que dice acá está respaldado por el producto real en
 > producción (docto.com.ar). Si un claim no está acá, preguntá antes de usarlo.
 
@@ -217,12 +218,17 @@ un colegio médico profesional sin sonrojarse. Nada de estética gig economy
 médicos (los códigos de ética lo sancionan). Convocamos profesionales, no
 repartidores.
 
-**Momento founder (definición Diego, 12/06/2026):** la categoría founder la asigna
-el admin, uno por uno. En el arranque, todos los médicos que entran son founders
-(comisión 5%) — el programa contempla **~15 médicos founders** y después se evalúa
-cómo fluye. Regla para campaña: se comunica "comisión founder del 5%" y la
-escasez real ("los primeros 15"), pero **NO se promete plazo** ("de por vida",
-"para siempre" = prohibido hasta que Diego lo defina formalmente).
+**Momento founder (definición Diego, 12/06/2026; regla de campaña revisada
+13/06/2026):** la categoría founder la asigna el admin, uno por uno. En el arranque,
+todos los médicos que entran son founders (comisión 5%) — el programa contempla
+**~15 médicos founders** y después se evalúa cómo fluye. **Regla para campaña
+(revisada): NO comunicar la comisión ni el cupo en las piezas.** Decir "comisión del
+5% para los primeros 15" resultó anti-venta: genera fricción (el médico no sabe si
+entra en el cupo —"¿soy el 14 o el 17?"— ni cuánto paga si no es founder). En su
+lugar, comunicar el diferenciador sin números: **"tus honorarios sin intermediarios"**,
+"la plata va directo a tu Mercado Pago", "sin abono ni contrato". "Médico fundador"
+sí, como invitación aspiracional, **sin número ni plazo** ("de por vida", "para
+siempre" = prohibido hasta que Diego lo defina formalmente).
 
 ---
 
@@ -400,8 +406,11 @@ Ante la duda regulatoria, la revisión legal es gate previo a publicar.
 
 1. ✅ **Términos founder:** asignación manual por admin; en el arranque todos
    entran como founders; programa de ~15 médicos founders, después se evalúa.
-   En campaña: comunicar el 5% y la escasez ("los primeros 15"), sin prometer
-   plazos.
+   **En campaña (revisado 13/06/2026): NO comunicar la comisión 5% ni el cupo
+   "primeros 15" — es anti-venta (fricción por cupo incierto + comisión
+   condicional sin decir cuánto paga el resto).** Usar el diferenciador "honorarios
+   sin intermediarios / directo a tu MP / sin abono ni contrato". "Fundador" como
+   invitación aspiracional, sin número ni plazo.
 2. ✅ **Números internos:** no hay todavía — el primer tramo del GTM es
    exactamente construirlos, empezando por la captación de médicos (ver 10).
 3. ✅ **Presupuesto:** la agencia es Code (proyecto interno); estrategia y
@@ -416,7 +425,7 @@ Ante la duda regulatoria, la revisión legal es gate previo a publicar.
 
 ---
 
-*Documento fundacional v1.1 — junio 2026. Redactado por el equipo técnico con
+*Documento fundacional v1.2 — junio 2026. Redactado por el equipo técnico con
 auditoría de marketing (Lucía: posicionamiento, sociología del consumidor argentino)
 y médica (Dr. Martín: audiencia médica, ética profesional, líneas rojas). Vive en
 el repo de Docto (`docs/marketing/DOCTO_GTM_FUNDACIONAL.md`) y se copia al proyecto

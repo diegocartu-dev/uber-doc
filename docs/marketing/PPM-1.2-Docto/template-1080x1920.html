@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<!--
+  TEMPLATE PPM 1.2 Docto (pieza para médicos · ángulo SIMPLICIDAD) — 1080×1920 WhatsApp.
+  Misma temática y manual de marca que PPM 1.1 (Inter, azul #378ADD, wordmark docto).
+  Concepto (Diego, 13/06/2026): "Nova tu secretaria IA, Docto hace que atender sea
+  simple, para que tu energía esté en hacer lo que te gusta."
+
+  CERRADO por Diego:
+    - URL de destino: docto.com.ar/medicos
+  COPY borrador (propuesto por Code según DOCTO_GTM_FUNDACIONAL.md):
+    - Gancho, subtítulo, 3 ítems, bloques Nova/avisos y CTA. Sustituible.
+  Fidelidad de producto (verificado en código):
+    - Nova = solo agenda (chat). Avisos "paciente listo" = NotificacionPacienteListo.tsx.
+    - Evolución clínica = auto-compuesta (componerEvolucion); el médico la genera.
+  Render: node render.mjs (regenera capturas + "PPM 1.2 Docto.png").
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1080px; height: 1920px;
+    background: #ffffff;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    padding: 44px 56px 28px;
+  }
+
+  /* ── Header ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo .wordmark { font-size: 44px; font-weight: 700; color: #111827; letter-spacing: -0.02em; }
+  .badge-medicos {
+    background: #EBF3FC; color: #2461A8;
+    font-size: 22px; font-weight: 600;
+    padding: 10px 24px; border-radius: 9999px;
+  }
+
+  /* ── Gancho ── */
+  .gancho { margin-top: 34px; }
+  .gancho h1 {
+    font-size: 78px; font-weight: 800; color: #111827;
+    letter-spacing: -0.03em; line-height: 1.04;
+  }
+  .gancho h1 .punto { color: #378ADD; }
+  .subtitulo {
+    margin-top: 20px;
+    font-size: 30px; font-weight: 500; color: #4b5563;
+    line-height: 1.34; max-width: 900px;
+  }
+
+  /* ── 3 ítems (lo que hace Docto por vos) ── */
+  .items { margin-top: 30px; display: flex; flex-direction: column; gap: 14px; }
+  .item {
+    display: flex; gap: 20px; align-items: flex-start;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 18px;
+    padding: 18px 24px;
+  }
+  .item .ico {
+    width: 48px; height: 48px; flex-shrink: 0;
+    border-radius: 50%; background: #378ADD;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item .txt h3 { font-size: 28px; font-weight: 700; color: #111827; }
+  .item .txt p { margin-top: 3px; font-size: 22px; color: #4b5563; line-height: 1.38; }
+
+  /* ── Bloques con captura ── */
+  .bloque {
+    margin-top: 20px;
+    border-radius: 22px;
+    padding: 22px 26px;
+    display: flex; gap: 26px; align-items: center;
+  }
+  .bloque-nova { background: #EBF3FC; }
+  .bloque-avisos { background: #F8F9FA; border: 1px solid #e5e7eb; }
+  .bloque .texto { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .bloque .captura { flex-shrink: 0; }
+  .bloque .captura img {
+    display: block;
+    border-radius: 18px;
+  }
+  .bloque-nova .captura img { width: 300px; }
+  .bloque-avisos .captura img { width: 250px; }
+  .eyebrow {
+    font-size: 19px; font-weight: 700; color: #378ADD;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .bloque-titulo {
+    font-size: 35px; font-weight: 800; color: #111827;
+    line-height: 1.1; letter-spacing: -0.02em;
+  }
+  .bloque-linea { font-size: 23px; font-weight: 400; color: #4b5563; line-height: 1.4; }
+
+  /* ── CTA ── */
+  .cta { margin-top: 22px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .pre-cta { font-size: 30px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
+  .cta .boton {
+    background: #378ADD; color: #fff;
+    font-size: 38px; font-weight: 700; letter-spacing: -0.01em;
+    padding: 22px 58px; border-radius: 9999px;
+    text-decoration: none; display: inline-block;
+  }
+  .microcopy { font-size: 22px; font-weight: 400; color: #6b7280; }
+  .spacer { flex: 1; }
+
+  /* ── Footer ── */
+  .footer { display: flex; justify-content: center; opacity: 0.4; }
+</style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="topbar">
+    <div class="logo">
+      <svg width="56" height="56" viewBox="0 0 40 40" fill="none">
+        <path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#3F7A52" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+        <line x1="20" y1="25" x2="20" y2="30" stroke="#3F7A52" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="13" cy="7" r="2.6" fill="#378ADD"/>
+        <circle cx="27" cy="7" r="2.6" fill="#378ADD"/>
+        <circle cx="20" cy="33" r="3.2" fill="#E88B6A"/>
+      </svg>
+      <span class="wordmark">docto</span>
+    </div>
+    <div class="badge-medicos">Para médicos</div>
+  </div>
+
+  <!-- Gancho -->
+  <div class="gancho">
+    <h1>Vos atendé<span class="punto">.</span><br>De lo demás se<br>encarga Docto<span class="punto">.</span></h1>
+    <p class="subtitulo">Nova, tu secretaria con IA, te ordena la agenda y Docto se encarga de la gestión. Tu energía, en lo que te gusta: tus pacientes.</p>
+  </div>
+
+  <!-- 3 ítems -->
+  <div class="items">
+    <div class="item">
+      <div class="ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <div class="txt">
+        <h3>Tu agenda</h3>
+        <p>Le hablás a Nova y arma los turnos por vos.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <div class="txt">
+        <h3>Los avisos</h3>
+        <p>Docto te avisa cuando el paciente está listo. Vos solo tocás Iniciar.</p>
+      </div>
+    </div>
+    <div class="item">
+      <div class="ico">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <div class="txt">
+        <h3>La historia clínica</h3>
+        <p>La evolución se arma sola y queda guardada en la ficha del paciente.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bloque Nova -->
+  <div class="bloque bloque-nova">
+    <div class="texto">
+      <span class="eyebrow">Nova · tu secretaria con IA</span>
+      <h2 class="bloque-titulo">Tu agenda, en una frase</h2>
+      <p class="bloque-linea">Le decís cuándo y a cuánto querés atender. Nova crea los turnos.</p>
+    </div>
+    <div class="captura">
+      <img src="capturas/captura-nova-agenda.png" alt="Nova armando la agenda del médico">
+    </div>
+  </div>
+
+  <!-- Bloque avisos -->
+  <div class="bloque bloque-avisos">
+    <div class="captura">
+      <img src="capturas/captura-paciente-listo.png" alt="Aviso de paciente listo para la consulta">
+    </div>
+    <div class="texto">
+      <span class="eyebrow">Sin estar pendiente</span>
+      <h2 class="bloque-titulo">Te avisamos cuando el paciente está listo</h2>
+      <p class="bloque-linea">Suena, aparece el aviso y entrás a la consulta de un toque.</p>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta">
+    <p class="pre-cta">Sumate como médico fundador.</p>
+    <a class="boton" href="https://docto.com.ar/medicos?utm_source=whatsapp&utm_medium=pdf&utm_campaign=medicos-founders-v1&utm_content=ppm-1.2-simplicidad">docto.com.ar/medicos</a>
+    <p class="microcopy">Sin abono, sin contrato. Te registrás en minutos.</p>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <svg width="34" height="34" viewBox="0 0 40 40" fill="none">
+      <path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#9ca3af" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+      <line x1="20" y1="25" x2="20" y2="30" stroke="#9ca3af" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="13" cy="7" r="2.6" fill="#9ca3af"/>
+      <circle cx="27" cy="7" r="2.6" fill="#9ca3af"/>
+      <circle cx="20" cy="33" r="3.2" fill="#9ca3af"/>
+    </svg>
+  </div>
+
+</body>
+</html>

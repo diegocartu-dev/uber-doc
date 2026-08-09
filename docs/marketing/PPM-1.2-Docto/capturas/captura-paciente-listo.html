@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<!--
+  CAPTURA FICTICIA — réplica fiel del popup real "paciente listo" que recibe el
+  médico (src/components/NotificacionPacienteListo.tsx): check verde, "{Nombre}
+  pagó / llegó", "Listo para la consulta", botón "Iniciar consulta" + "Ahora no".
+  Paciente 100% inventado (Laura Giménez). NO es screenshot de producción.
+  El fondo simula el dashboard atenuado (overlay rgba(0,0,0,0.45), igual que el real).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  #frame {
+    width: 330px;
+    height: 420px;
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+    background: #f1f3f5;
+    border: 1px solid #e5e7eb;
+  }
+  /* Esqueleto de dashboard atenuado detrás del popup */
+  .skeleton { position: absolute; inset: 0; padding: 16px; }
+  .sk-bar { height: 10px; border-radius: 6px; background: #e2e6ea; }
+  .sk-card { margin-top: 14px; height: 64px; border-radius: 12px; background: #e8ebee; }
+  .overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 18px;
+    width: 100%;
+    padding: 26px 22px 18px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.22), 0 8px 20px rgba(0,0,0,0.10);
+    text-align: center;
+  }
+  .check {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: rgba(29,158,117,0.09);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+  }
+  .titulo { font-size: 21px; font-weight: 700; color: #1a1a1a; line-height: 1.25; }
+  .sub { font-size: 14px; color: #888780; margin-top: 6px; }
+  .btn-iniciar {
+    margin-top: 22px; width: 100%; min-height: 52px;
+    background: #378ADD; color: #fff; border: 0; border-radius: 12px;
+    font-size: 16px; font-weight: 600; font-family: 'Inter', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn-ahora { margin-top: 10px; width: 100%; min-height: 40px;
+    background: transparent; border: 0; color: #888780; font-size: 14px;
+    font-family: 'Inter', sans-serif; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div class="skeleton">
+    <div class="sk-bar" style="width: 45%;"></div>
+    <div class="sk-card"></div>
+    <div class="sk-card"></div>
+  </div>
+  <div class="overlay">
+    <div class="card">
+      <div class="check">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      </div>
+      <p class="titulo">Laura Giménez pagó</p>
+      <p class="sub">Listo para la consulta</p>
+      <button class="btn-iniciar">Iniciar consulta</button>
+      <button class="btn-ahora">Ahora no</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

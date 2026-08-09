@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<!-- Variante para IG: notificación MP con monto $50.000 (dato ficticio ilustrativo). -->
+<style>
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Regular.ttf');font-weight:400;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Medium.ttf');font-weight:500;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-SemiBold.ttf');font-weight:600;}
+  @font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Bold.ttf');font-weight:700;}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  #frame {
+    width: 330px; height: 332px; border-radius: 24px; overflow: hidden; position: relative;
+    background: linear-gradient(168deg, #1e3a5f 0%, #16263d 55%, #101a2b 100%);
+    border: 1px solid #e5e7eb;
+  }
+  .reloj { margin-top: 36px; text-align: center; color: #fff; }
+  .reloj .hora { font-size: 56px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .reloj .fecha { margin-top: 8px; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.82); }
+  .notif { margin: 30px 12px 0; background: rgba(248, 250, 252, 0.96); border-radius: 20px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; box-shadow: 0 8px 28px rgba(0,0,0,0.35); }
+  .notif .icono { width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; background: #009EE3; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+  .notif .cuerpo { flex: 1; min-width: 0; }
+  .notif .linea1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .notif .app { font-size: 14px; font-weight: 600; color: #111827; }
+  .notif .cuando { font-size: 12px; color: #6b7280; flex-shrink: 0; }
+  .notif .titulo { margin-top: 3px; font-size: 15px; font-weight: 600; color: #111827; }
+  .notif .detalle { margin-top: 2px; font-size: 14px; color: #374151; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div class="reloj">
+    <div class="hora">19:34</div>
+    <div class="fecha">jueves 12 de junio</div>
+  </div>
+  <div class="notif">
+    <div class="icono">MP</div>
+    <div class="cuerpo">
+      <div class="linea1">
+        <span class="app">Mercado Pago</span>
+        <span class="cuando">ahora</span>
+      </div>
+      <div class="titulo">¡Recibiste un pago!</div>
+      <div class="detalle">Se acreditaron <strong>$50.000</strong> en tu cuenta por Consulta médica · Docto.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

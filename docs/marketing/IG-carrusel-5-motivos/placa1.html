@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Regular.ttf');font-weight:400;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Medium.ttf');font-weight:500;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-SemiBold.ttf');font-weight:600;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Bold.ttf');font-weight:700;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+body{background:#555;}
+.slide{width:1080px;height:1350px;position:relative;overflow:hidden;background:#fff;padding:90px 90px 70px;display:flex;flex-direction:column;}
+.wm{position:absolute;top:84px;left:90px;font-size:30px;font-weight:700;color:#111827;letter-spacing:-0.6px;}
+.num{position:absolute;top:88px;right:90px;font-size:26px;font-weight:600;color:#9CA3AF;}
+.gancho{margin-top:78px;font-size:50px;line-height:1.15;font-weight:600;color:#378ADD;letter-spacing:-0.8px;max-width:880px;}
+.capwrap{flex:1;display:flex;align-items:center;justify-content:center;margin:12px 0;}
+/* --- consultorio mock --- */
+.screen{width:606px;background:#F8F9FA;border:1px solid #E5E7EB;border-radius:30px;box-shadow:0 24px 60px rgba(17,24,39,0.12);padding:26px 24px;}
+.snav{font-size:23px;font-weight:700;color:#111827;letter-spacing:-0.5px;margin-bottom:18px;}
+.urlpill{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E9ECEF;border-radius:13px;height:54px;padding:0 18px;font-size:22px;font-weight:500;color:#9CA3AF;letter-spacing:-0.3px;}
+.urlpill .slug{color:#378ADD;font-weight:600;}
+.card{background:#fff;border:1px solid #E5E7EB;border-radius:18px;padding:22px 22px 24px;margin-top:16px;}
+.docrow{display:flex;align-items:center;gap:16px;}
+.avatar{width:66px;height:66px;border-radius:50%;flex-shrink:0;overflow:hidden;background:#E3EBF3;}
+.dname{font-size:25px;font-weight:600;color:#111827;letter-spacing:-0.4px;}
+.dspec{font-size:19px;color:#4B5563;margin-top:2px;}
+.status{display:flex;align-items:center;gap:9px;margin-top:6px;}
+.sdot{width:11px;height:11px;border-radius:50%;background:#1D9E75;}
+.stxt{font-size:19px;font-weight:500;color:#1D9E75;}
+.pricebox{display:flex;justify-content:space-between;align-items:center;background:#F1F3F5;border-radius:13px;padding:15px 18px;margin-top:18px;}
+.plabel{font-size:15px;color:#9CA3AF;}
+.pval{font-size:27px;font-weight:600;color:#111827;margin-top:2px;letter-spacing:-0.5px;}
+.btnp{margin-top:16px;background:#378ADD;color:#fff;text-align:center;border-radius:13px;padding:16px;font-size:22px;font-weight:600;}
+.btns{margin-top:11px;background:#fff;border:1px solid #D1D5DB;color:#4B5563;text-align:center;border-radius:13px;padding:15px;font-size:21px;font-weight:500;}
+/* --- respuesta --- */
+.rtitle{font-size:60px;font-weight:700;color:#111827;line-height:1.05;letter-spacing:-2px;}
+.rdet{font-size:31px;line-height:1.36;color:#4B5563;margin-top:22px;font-weight:400;max-width:900px;}
+</style></head>
+<body>
+
+<div class="slide" id="s1">
+  <span class="wm">docto</span><span class="num">01 / 05</span>
+  <div class="gancho">¿Que te elijan a vos, no a un logo?</div>
+
+  <div class="capwrap">
+    <div class="screen">
+      <div class="snav">docto</div>
+      <div class="urlpill"><svg width="17" height="20" viewBox="0 0 17 20" fill="none"><rect x="1.5" y="8.5" width="14" height="10" rx="2.5" stroke="#9CA3AF" stroke-width="1.6"/><path d="M4.5 8.5V6a4 4 0 0 1 8 0v2.5" stroke="#9CA3AF" stroke-width="1.6"/></svg><span>docto.com.ar/dr/<span class="slug">raul-scacchi</span></span></div>
+
+      <div class="card">
+        <div class="docrow">
+          <div class="avatar"><svg viewBox="0 0 66 66" width="66" height="66"><rect width="66" height="66" fill="#E3EBF3"/><circle cx="33" cy="26" r="12" fill="#A9BED5"/><path d="M11 60c0-11.6 9.85-20 22-20s22 8.4 22 20z" fill="#A9BED5"/></svg></div>
+          <div>
+            <div class="dname">Dr. Raúl Scacchi</div>
+            <div class="dspec">Clínica Médica · MN 128.456</div>
+            <div class="status"><span class="sdot"></span><span class="stxt">Disponible ahora</span></div>
+          </div>
+        </div>
+        <div class="pricebox">
+          <div class="plabel">Consulta</div>
+          <div class="pval">$50.000</div>
+        </div>
+        <div class="btnp">Consulta ahora</div>
+        <div class="btns">Agendar turno</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="rtitle">Consultorio Particular Virtual.</div>
+    <div class="rdet">Tu link personal, consultorio exclusivo, tus pacientes. Docto es tu herramienta, sin intermediarios.</div>
+  </div>
+</div>
+
+</body></html>
