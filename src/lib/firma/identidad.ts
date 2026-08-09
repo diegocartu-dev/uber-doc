@@ -35,9 +35,28 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * nuevo de `medicos` o `pacientes`, tiene que sumarse acá o queda fuera del hash.
  */
 export type IdentidadDocumento = {
-  /** Versión del snapshot. Si cambia el juego de campos, sube. */
-  v: 1;
+  /**
+   * Versión del snapshot. Si cambia el juego de campos, sube.
+   *
+   * v:2 (09/08/2026) sumó `medico_titulo`, porque la receta pasó a imprimir el
+   * tratamiento del profesional y todo lo que se imprime tiene que entrar al hash.
+   *
+   * REGLA DE ORO AL VERSIONAR: el hash se recalcula normalizando el snapshot
+   * guardado, así que un documento v:1 tiene que volver a producir EXACTAMENTE el
+   * mismo objeto que produjo cuando se firmó. `canonicalJSON` ordena las claves
+   * pero incluye las que existen aunque valgan `undefined` (serializa `null`), o
+   * sea que agregar la clave a un v:1 le cambiaría el hash y los documentos ya
+   * firmados pasarían a figurar como ALTERADOS. Por eso `medico_titulo` es
+   * opcional y en v:1 la clave NO se setea nunca.
+   */
+  v: 1 | 2;
   medico_nombre: string;
+  /**
+   * Tratamiento elegido por el profesional ("Dr." / "Dra."). Solo en v:2: en los
+   * snapshots v:1 esta clave no existe, y el PDF de esos documentos se imprime
+   * sin tratamiento — que es la verdad, porque al firmarlos no se registró.
+   */
+  medico_titulo?: string;
   medico_especialidad: string;
   medico_matricula: string;
   medico_domicilio: string;
@@ -80,7 +99,7 @@ export async function construirIdentidadDocumento(
     supabase
       .from("medicos")
       .select(
-        "nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio, firma_manuscrita_url"
+        "nombre_completo, titulo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio, firma_manuscrita_url"
       )
       .eq("id", medicoId)
       .maybeSingle(),
@@ -109,8 +128,9 @@ export async function construirIdentidadDocumento(
   }
 
   return {
-    v: 1,
+    v: 2,
     medico_nombre: texto(medico.nombre_completo),
+    medico_titulo: texto(medico.titulo),
     medico_especialidad: texto(medico.especialidad),
     medico_matricula: `${texto(medico.tipo_matricula)} ${texto(medico.numero_matricula)}`.trim(),
     medico_domicilio: texto(medico.domicilio_consultorio) || texto(medico.domicilio),
@@ -140,11 +160,15 @@ export async function construirIdentidadDocumento(
 export function identidadDesdeJSONB(valor: unknown): IdentidadDocumento | null {
   if (!valor || typeof valor !== "object" || Array.isArray(valor)) return null;
   const i = valor as Record<string, unknown>;
-  if (i.v !== 1) return null;
+  // La versión se CONSERVA tal como se guardó; nunca se normaliza a la última.
+  // Devolver v:2 sobre un snapshot v:1 le cambiaría el hash y marcaría como
+  // alterado un documento intacto.
+  const version = i.v === 1 || i.v === 2 ? i.v : null;
+  if (version === null) return null;
   if (typeof i.medico_nombre !== "string" || typeof i.paciente_nombre !== "string") return null;
 
-  return {
-    v: 1,
+  const identidad: IdentidadDocumento = {
+    v: version,
     medico_nombre: texto(i.medico_nombre),
     medico_especialidad: texto(i.medico_especialidad),
     medico_matricula: texto(i.medico_matricula),
@@ -160,4 +184,10 @@ export function identidadDesdeJSONB(valor: unknown): IdentidadDocumento | null {
     paciente_nro_afiliado: textoONull(i.paciente_nro_afiliado),
     paciente_plan_obra_social: textoONull(i.paciente_plan_obra_social),
   };
+
+  // Solo v:2 lleva la clave. En v:1 NO se setea ni siquiera en `undefined`:
+  // `canonicalJSON` la incluiría igual (como null) y rompería el hash.
+  if (version === 2) identidad.medico_titulo = texto(i.medico_titulo);
+
+  return identidad;
 }

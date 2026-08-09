@@ -36,7 +36,11 @@ export default async function OnboardingPage({
   const { data: medico } = await adminDb
     .from("medicos")
     .select(
-      "id, nombre_completo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test, celular_personal, identidad_validada, didit_status, biometria_exenta"
+      // `titulo` ("Dr."/"Dra.") lo eligió el médico en su registro: el wizard lo
+      // saluda por su apellido y hasta hoy le decía "Dr." a todo el mundo, en la
+      // PRIMERA pantalla después de aprobarlo. Este cliente es service role, así
+      // que el grant de columna no aplica; igual se suma solo esa columna.
+      "id, nombre_completo, titulo, verificado, estado_registro, foto_url, firma_manuscrita_url, domicilio_consultorio, provincia, es_cuenta_test, celular_personal, identidad_validada, didit_status, biometria_exenta"
     )
     .eq("user_id", user.id)
     .maybeSingle();
@@ -84,6 +88,7 @@ export default async function OnboardingPage({
   return (
     <OnboardingWizard
       nombre={medico.nombre_completo ?? ""}
+      titulo={medico.titulo ?? null}
       pasos={pasos}
       fotoUrl={medico.foto_url ?? null}
       firmaUrl={medico.firma_manuscrita_url ?? null}

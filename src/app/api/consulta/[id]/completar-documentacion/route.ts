@@ -24,6 +24,7 @@ import { provisionarClaves, tieneClaves } from "@/lib/firma/claves";
 import { esControlado } from "@/data/controlados";
 import { pushAlPaciente } from "@/lib/push";
 import { enviarEmailDocumentacionDisponible } from "@/lib/email";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 
 type Body = {
   tipo?: "consulta" | "turno";
@@ -59,9 +60,13 @@ export async function POST(
   if (!user) return NextResponse.json({ ok: false, error: "No autenticado" }, { status: 401 });
 
   // Solo columnas con GRANT para authenticated (regla de grants en CLAUDE.md).
+  // `nombre_completo` y `titulo` entran para nombrar al profesional en el push
+  // al paciente: el mail hermano que sale unas líneas más abajo ya decía "La
+  // Dra. García completó la documentación" mientras el push decía "Tu médico",
+  // en masculino, sobre la misma persona y por el mismo hecho.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id")
+    .select("id, nombre_completo, titulo")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) return NextResponse.json({ ok: false, error: "No es médico" }, { status: 403 });
@@ -343,9 +348,18 @@ export async function POST(
   // ── Aviso al paciente: los canales que ya funcionan ──────────────────────
   // Push (el mismo de "tus documentos ya están disponibles") + mail. Fire-and-forget:
   // un problema de notificación no puede tirar abajo una emisión que ya ocurrió.
+  // Sujeto con su artículo: "La Dra. García agregó…" / "El Dr. López agregó…".
+  // Sin título conocido arranca por el nombre pelado (correcto, sin artículo);
+  // sin nombre cae al genérico de siempre.
+  const nombreConTitulo = formatNombreMedico(medico.nombre_completo ?? "", medico.titulo);
+  const articulo = articuloMedico(medico.titulo);
+  const sujetoMedico = nombreConTitulo
+    ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreConTitulo}`
+    : "Tu médico";
+
   pushAlPaciente(pacienteId, {
     title: "📄 Docto",
-    body: "Tu médico agregó documentación de tu consulta. Ya la podés ver.",
+    body: `${sujetoMedico} agregó documentación de tu consulta. Ya la podés ver.`,
     url: "/mis-consultas",
     tag: `docs-${id}`,
   }).catch(() => {});

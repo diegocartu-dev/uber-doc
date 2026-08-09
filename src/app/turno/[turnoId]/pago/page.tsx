@@ -25,9 +25,12 @@ export default async function PagoTurnoPage({
   if (turno.estado === "confirmado") redirect(`/turno/${turnoId}/confirmacion`);
   if (turno.estado !== "reservado_pendiente") redirect("/clinica");
 
+  // `titulo` ("Dr."/"Dra.") lo elige el médico en su registro. Sin él, el detalle del
+  // turno muestra el nombre sin tratamiento. Tiene GRANT SELECT para authenticated,
+  // así que sumarlo a este SELECT con cliente RLS es seguro.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, duracion_consulta")
+    .select("nombre_completo, especialidad, duracion_consulta, titulo")
     .eq("id", turno.medico_id)
     .single();
 
@@ -46,6 +49,7 @@ export default async function PagoTurnoPage({
           returnUrl={returnUrl}
           medico={{
             nombre: medico?.nombre_completo ?? "Médico",
+            titulo: medico?.titulo ?? null,
             especialidad: medico?.especialidad ?? "",
             duracion: medico?.duracion_consulta ?? 20,
           }}

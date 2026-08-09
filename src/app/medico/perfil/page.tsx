@@ -19,7 +19,12 @@ export default async function PerfilMedicoPage() {
   const { data: medico } = await supabase
     .from("medicos")
     .select(
-      "id, nombre_completo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa, telefono, domicilio_consultorio, foto_url, perfil_completo, firma_manuscrita_url"
+      // `titulo` ("Dr."/"Dra.") es el que el médico eligió en su registro: su
+      // propio perfil mostraba el nombre pelado bajo la foto. Se suma SOLO esa
+      // columna — este SELECT usa el cliente RLS y `medicos` tiene columnas sin
+      // GRANT que harían fallar la query entera en silencio (CLAUDE.md). `titulo`
+      // tiene GRANT para `authenticated`, verificado contra producción.
+      "id, nombre_completo, titulo, especialidad, numero_matricula, tipo_matricula, email, provincia, precio_consulta, duracion_consulta, modalidad_atencion, nova_evolucion_activa, telefono, domicilio_consultorio, foto_url, perfil_completo, firma_manuscrita_url"
     )
     .eq("user_id", user.id)
     .single();

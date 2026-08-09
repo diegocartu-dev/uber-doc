@@ -42,9 +42,13 @@ export async function POST(req: NextRequest) {
   if (!consulta) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
   // Verificar que el usuario es el medico
+  // `titulo` ("Dr." / "Dra.") se lee acá porque el nombre del médico sale dos veces
+  // hacia el paciente: como nombre del participante en la sala de LiveKit y en el
+  // push de "ya podés entrar". Es columna con GRANT para `authenticated`, así que
+  // no rompe este SELECT con cliente RLS.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo")
+    .select("id, nombre_completo, titulo")
     .eq("user_id", user.id)
     .single();
 
@@ -83,6 +87,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Nombre con el que el médico aparece en la sala y en el aviso al paciente.
+  const nombreMedico = formatNombreMedico(medico.nombre_completo, medico.titulo);
+
   try {
     // Crear sala en LiveKit (si ya existe, createRoom es idempotente)
     const svc = new RoomServiceClient(getHttpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
@@ -91,7 +98,7 @@ export async function POST(req: NextRequest) {
     // Generar token para el medico
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity: `medico-${medico.id}`,
-      name: medico.nombre_completo || "Medico",
+      name: nombreMedico || "Profesional",
       ttl: "2h",
     });
     at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
@@ -114,9 +121,15 @@ export async function POST(req: NextRequest) {
 
     if (transicionaEnCurso) {
       const pacienteId = (consulta as { paciente_id: string }).paciente_id;
+      // La frase arranca por el nombre a propósito: así no necesita artículo
+      // ("El Dra. ..." era el bug) ni adjetivo con género ("está listo/lista").
+      // "ya está en la sala" sirve igual para Dr. y para Dra., y si el nombre no
+      // llegara, el aviso sigue teniendo sentido sin nombrar a nadie.
       const pushPayload = {
         title: "🟢 Docto",
-        body: `El ${formatNombreMedico(medico.nombre_completo)} está listo. Ingresá ahora a tu consulta.`,
+        body: nombreMedico
+          ? `${nombreMedico} ya está en la sala. Ingresá ahora a tu consulta.`
+          : "Ya podés ingresar a tu consulta.",
         url: tipo === "turno" ? `/turno/${consultaId}/espera` : `/consulta/${consultaId}/sala`,
         tag: `inicio-${consultaId}`,
       };

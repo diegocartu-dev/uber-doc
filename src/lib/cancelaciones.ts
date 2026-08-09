@@ -7,6 +7,7 @@ import { decrypt } from "@/lib/mp-crypto";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -312,9 +313,12 @@ export async function cancelarTurnoPorMedico(
   enviarEmailTurnoCancelado(turnoId, "medico").catch(console.error);
 
   if (turno.paciente_id) {
+    // `titulo` ("Dr."/"Dra.") entra al SELECT porque este mensaje NOMBRA al
+    // médico frente al paciente, y decía "El Dr/a. Nombre" — una barra que no
+    // dice nada, cuando el dato real existe desde el registro. Solo esa columna.
     const { data: medico } = await supabase
       .from("medicos")
-      .select("nombre_completo, slug")
+      .select("nombre_completo, titulo, slug")
       .eq("id", medicoId)
       .single();
 
@@ -325,11 +329,20 @@ export async function cancelarTurnoPorMedico(
         ? " Tu reembolso está en proceso."
         : "";
 
+    // Sujeto de la frase con su artículo: "La Dra. García canceló…" / "El Dr.
+    // López canceló…". Sin título conocido arranca por el nombre pelado y sin
+    // artículo, que es correcto; si tampoco hay nombre, cae al genérico neutro.
+    const nombreConTitulo = formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo);
+    const articulo = articuloMedico(medico?.titulo);
+    const sujetoMedico = nombreConTitulo
+      ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreConTitulo}`
+      : "El profesional";
+
     await insertarMensajeSistema(
       turnoId,
       turno.paciente_id,
       medicoId,
-      `El Dr/a. ${medico?.nombre_completo ?? "médico"} canceló el turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg} Podés reprogramar desde docto.com.ar/dr/${slug}`
+      `${sujetoMedico} canceló el turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg} Podés reprogramar desde docto.com.ar/dr/${slug}`
     );
 
     pushAlPaciente(turno.paciente_id, {

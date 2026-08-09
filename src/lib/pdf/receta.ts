@@ -16,6 +16,17 @@ export type DocumentoPDF = {
   contenido: string;
   created_at: string;
   medico_nombre: string;
+  /**
+   * Título profesional elegido por el médico en su registro (`medicos.titulo`:
+   * "Dr." / "Dra."). Va a los TRES lugares donde el papel nombra al firmante:
+   * la caja PROFESIONAL, el pie de firma y la leyenda de firma electrónica.
+   *
+   * Es opcional a propósito: si el caller no lo pasa, el nombre sale pelado
+   * ("Ana García") en vez de con un título adivinado. Un documento que la médica
+   * FIRMA y que tiene validez legal no puede llamarla "Dr." — sin dato, mejor sin
+   * título.
+   */
+  medico_titulo?: string | null;
   medico_especialidad: string;
   medico_matricula: string;
   medico_domicilio: string;
@@ -141,7 +152,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
         margins: MARGIN,
         info: {
           Title: `${tipoLabel[doc.tipo] ?? "Documento"} - ${doc.paciente_nombre}`,
-          Author: `${formatNombreMedico(doc.medico_nombre)}`,
+          Author: `${formatNombreMedico(doc.medico_nombre, doc.medico_titulo)}`,
           Creator: "Docto - Telemedicina",
         },
       });
@@ -369,7 +380,7 @@ async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) 
   const barcodeSpacing = 4;
 
   const rows: string[] = [];
-  rows.push(formatNombreMedico(doc.medico_nombre));
+  rows.push(formatNombreMedico(doc.medico_nombre, doc.medico_titulo));
   rows.push(`${doc.medico_especialidad} — ${doc.medico_matricula}`);
   if (doc.medico_domicilio) {
     rows.push(doc.medico_domicilio);
@@ -569,9 +580,9 @@ async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTop
     .lineWidth(0.5)
     .stroke();
 
-  // Nombre del médico
+  // Nombre del médico — con su título, que es como firma
   pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
-  pdf.text(formatNombreMedico(doc.medico_nombre), lineX, lineY + 5, {
+  pdf.text(formatNombreMedico(doc.medico_nombre, doc.medico_titulo), lineX, lineY + 5, {
     width: firmaWidth,
     align: "center",
   });
@@ -759,16 +770,18 @@ function renderFooter(
   if (doc.firma) {
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
-      `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre)} en los términos del art. 5 de la Ley 25.506.\n` +
+      `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre, doc.medico_titulo)} en los términos del art. 5 de la Ley 25.506.\n` +
         `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
   } else {
     // Falla de sellado: el documento se entrega igual, pero marcado.
+    // "quien lo emitió" y no "el profesional que lo emitió": la mayoría de las
+    // matriculadas de Docto son médicas y el papel no tiene por qué asumir género.
     pdf.font("Inter").fontSize(8).fillColor(COLORS.pendiente);
     pdf.text(
-      "Documento sin sello electrónico de verificación. Su autenticidad puede confirmarse con el profesional que lo emitió.",
+      "Documento sin sello electrónico de verificación. Su autenticidad puede confirmarse con quien lo emitió.",
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );

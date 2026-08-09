@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
 
 async function emailsActivos(): Promise<boolean> {
   try {
@@ -49,6 +49,26 @@ async function conRetry<T>(
   throw new Error("unreachable");
 }
 
+/**
+ * Nombre del médico con su artículo, para el copy que lo pide
+ * ("tu turno con **la Dra. García**").
+ *
+ * Sin título conocido no inventa ninguno ni pone artículo: devuelve "Ana García",
+ * y la frase queda "tu turno con Ana García" — correcta, en vez de un "el"
+ * equivocado. Hasta el 09/08/2026 estos mails decían "Dr/a." a mano, y el resto
+ * del copy asumía masculino aunque la mayoría de quienes atienden son médicas.
+ */
+function medicoConArticulo(nombre: string, titulo?: string | null): string {
+  const art = articuloMedico(titulo);
+  const conTitulo = formatNombreMedico(nombre, titulo);
+  return art ? `${art} ${conTitulo}` : conTitulo;
+}
+
+/** Para cuando `medicoConArticulo` arranca una oración: "La Dra. García te…". */
+function capitalizarInicio(frase: string): string {
+  return frase ? frase.charAt(0).toUpperCase() + frase.slice(1) : "";
+}
+
 function formatearFecha(fechaStr: string): string {
   const d = new Date(fechaStr + "T12:00:00");
   return d.toLocaleDateString("es-AR", {
@@ -78,6 +98,8 @@ type DatosTurno = {
   pacienteNombre: string;
   pacienteEmail: string;
   medicoNombre: string;
+  /** `medicos.titulo` — "Dr." / "Dra.", elegido por el médico en su registro. */
+  medicoTitulo: string | null;
   medicoEspecialidad: string;
   medicoSlug: string | null;
 };
@@ -95,7 +117,9 @@ async function obtenerDatosTurno(turnoId: string): Promise<DatosTurno | null> {
 
   const [{ data: paciente }, { data: medico }] = await Promise.all([
     supabase.from("pacientes").select("nombre_completo, user_id").eq("id", turno.paciente_id).single(),
-    supabase.from("medicos").select("nombre_completo, especialidad, slug").eq("id", turno.medico_id).single(),
+    // Solo se suma `titulo` a este SELECT. Nada más: una columna sin GRANT tira
+    // abajo la query ENTERA en PostgREST y el mail se perdería en silencio.
+    supabase.from("medicos").select("nombre_completo, titulo, especialidad, slug").eq("id", turno.medico_id).single(),
   ]);
 
   if (!paciente || !medico) return null;
@@ -111,6 +135,7 @@ async function obtenerDatosTurno(turnoId: string): Promise<DatosTurno | null> {
     pacienteNombre: paciente.nombre_completo,
     pacienteEmail: user.email,
     medicoNombre: medico.nombre_completo,
+    medicoTitulo: medico.titulo ?? null,
     medicoEspecialidad: medico.especialidad ?? "",
     medicoSlug: medico.slug ?? null,
   };
@@ -130,7 +155,9 @@ function generarICS(datos: DatosTurno, method: "REQUEST" | "CANCEL"): string {
   const now = formatICalDate(new Date().toISOString());
   const start = formatICalDate(fechaHoraToISO(datos.fecha, datos.hora_inicio));
   const end = formatICalDate(fechaHoraToISO(datos.fecha, datos.hora_fin));
-  const summary = escapeICalText(`Consulta con Dr/a. ${datos.medicoNombre} - Docto`);
+  const summary = escapeICalText(
+    `Consulta con ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} - Docto`
+  );
   const url = `${BASE_URL}/turno/${datos.id}/espera`;
 
   const lines = [
@@ -215,7 +242,7 @@ function detalleTurno(datos: DatosTurno): string {
     </td></tr>
     <tr><td style="padding:16px 20px;">
       <table cellpadding="0" cellspacing="0" width="100%">
-        ${fila("M&eacute;dico", `Dr/a. ${datos.medicoNombre}`)}
+        ${fila("M&eacute;dico", formatNombreMedico(datos.medicoNombre, datos.medicoTitulo))}
         ${fila("Especialidad", datos.medicoEspecialidad)}
         ${fila("Fecha", formatearFecha(datos.fecha))}
         ${fila("Hora", formatearHora(datos.hora_inicio))}
@@ -256,7 +283,7 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
       () => resend().emails.send({
         from: FROM,
         to: datos.pacienteEmail,
-        subject: `Turno confirmado con Dr/a. ${datos.medicoNombre} — ${formatearFecha(datos.fecha)}`,
+        subject: `Turno confirmado con ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} — ${formatearFecha(datos.fecha)}`,
         html,
         headers: { "Idempotency-Key": idempotencyKey },
         attachments: [{ filename: "turno-docto.ics", content: Buffer.from(ics).toString("base64") }],
@@ -282,13 +309,17 @@ export async function enviarEmailTurnoCancelado(
     const porMedico = canceladoPor === "medico";
     const urlReprogramar = datos.medicoSlug ? `${BASE_URL}/dr/${datos.medicoSlug}` : BASE_URL;
 
+    // Ni el chip ni el cuerpo dicen "el médico": quien canceló puede ser una
+    // médica. El chip queda neutro y el cuerpo la nombra con su propio título.
+    const medicoConArt = medicoConArticulo(datos.medicoNombre, datos.medicoTitulo);
+
     const html = wrapHtml("Turno cancelado — Docto", `
-      <div style="margin-bottom:20px;">${chip(porMedico ? "Cancelado por el m\u00e9dico" : "Turno cancelado", NARANJA)}</div>
+      <div style="margin-bottom:20px;">${chip(porMedico ? "Cancelado por el consultorio" : "Turno cancelado", NARANJA)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Turno cancelado</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
         Hola ${datos.pacienteNombre}. ${porMedico
-          ? `Lamentamos informarte que el turno con Dr/a. ${datos.medicoNombre} del ${formatearFecha(datos.fecha)} a las ${formatearHora(datos.hora_inicio)} fue cancelado por el m&eacute;dico.`
-          : `Tu turno con Dr/a. ${datos.medicoNombre} del ${formatearFecha(datos.fecha)} a las ${formatearHora(datos.hora_inicio)} fue cancelado.`
+          ? `Lamentamos informarte que ${medicoConArt} cancel&oacute; tu turno del ${formatearFecha(datos.fecha)} a las ${formatearHora(datos.hora_inicio)}.`
+          : `Tu turno con ${medicoConArt} del ${formatearFecha(datos.fecha)} a las ${formatearHora(datos.hora_inicio)} fue cancelado.`
         }
       </p>
       ${detalleTurno(datos)}
@@ -301,7 +332,7 @@ export async function enviarEmailTurnoCancelado(
 
     const ics = generarICS(datos, "CANCEL");
     const asunto = porMedico
-      ? `Turno cancelado — Dr/a. ${datos.medicoNombre} (${formatearFecha(datos.fecha)})`
+      ? `Turno cancelado — ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} (${formatearFecha(datos.fecha)})`
       : `Confirmaci\u00f3n de cancelaci\u00f3n — turno del ${formatearFecha(datos.fecha)}`;
 
     const idempotencyKey = `${turnoId}-cancelado`;
@@ -328,11 +359,18 @@ export async function enviarDocumentoMedico(params: {
   pacienteEmail: string;
   pacienteNombre: string;
   medicoNombre: string;
+  /** `medicos.titulo` ("Dr." / "Dra."). Sin él, el mail nombra al médico sin
+   *  título ni artículo en vez de asumir "El Dr." — que era lo que hacía. */
+  medicoTitulo?: string | null;
   fecha: string;
   archivo: { filename: string; content: string };
 }): Promise<void> {
   if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "documento_medico"); return; }
-  const { pacienteEmail, pacienteNombre, medicoNombre, fecha, archivo } = params;
+  const { pacienteEmail, pacienteNombre, medicoNombre, medicoTitulo, fecha, archivo } = params;
+
+  // "La Dra. Ana García te compartió…" / "El Dr. … te compartió…" / sin título
+  // conocido, "Ana García te compartió…", que también es una oración correcta.
+  const sujetoMedico = capitalizarInicio(medicoConArticulo(medicoNombre, medicoTitulo));
 
   const html = wrapHtml("Documento de tu consulta — Docto", `
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Documento de tu consulta</h1>
@@ -340,7 +378,7 @@ export async function enviarDocumentoMedico(params: {
       Hola ${pacienteNombre},
     </p>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-      El ${formatNombreMedico(medicoNombre)} te comparti&oacute; un documento de tu consulta del ${fecha}.
+      ${sujetoMedico} te comparti&oacute; un documento de tu consulta del ${fecha}.
     </p>
     <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
       Encontr&aacute;s el archivo adjunto a este email.
@@ -351,7 +389,7 @@ export async function enviarDocumentoMedico(params: {
   await resend().emails.send({
     from: FROM,
     to: pacienteEmail,
-    subject: `El ${formatNombreMedico(medicoNombre)} te envió un documento de tu consulta`,
+    subject: `${sujetoMedico} te envió un documento de tu consulta`,
     html,
     attachments: [{ filename: archivo.filename, content: archivo.content }],
   });
@@ -379,7 +417,8 @@ export async function enviarEmailDocumentacionDisponible(params: {
 
     const [{ data: paciente }, { data: medico }] = await Promise.all([
       supabase.from("pacientes").select("nombre_completo, user_id").eq("id", params.pacienteId).maybeSingle(),
-      supabase.from("medicos").select("nombre_completo").eq("id", params.medicoId).maybeSingle(),
+      // `titulo` y nada más — ver la nota del SELECT de obtenerDatosTurno.
+      supabase.from("medicos").select("nombre_completo, titulo").eq("id", params.medicoId).maybeSingle(),
     ]);
 
     if (!paciente || !medico) return;
@@ -404,7 +443,7 @@ export async function enviarEmailDocumentacionDisponible(params: {
       <div style="margin-bottom:20px;">${chip("Documentaci&oacute;n disponible", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Ya ten&eacute;s la documentaci&oacute;n de tu consulta</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
-        Hola ${paciente.nombre_completo}, el ${formatNombreMedico(medico.nombre_completo)} complet&oacute; la documentaci&oacute;n de tu consulta y ya la pod&eacute;s ver y descargar.
+        Hola ${paciente.nombre_completo}, ${medicoConArticulo(medico.nombre_completo, medico.titulo)} complet&oacute; la documentaci&oacute;n de tu consulta y ya la pod&eacute;s ver y descargar.
       </p>
       ${listaHtml}
       ${boton("Ver mis documentos", `${BASE_URL}/mis-consultas`, AZUL)}
@@ -440,7 +479,7 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
       <div style="margin-bottom:20px;">${chip("Recordatorio 24 hs", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Recordatorio: consulta ma&ntilde;ana</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-        Hola ${datos.pacienteNombre}. Ma&ntilde;ana a las ${formatearHora(datos.hora_inicio)} ten&eacute;s turno con Dr/a. ${datos.medicoNombre}. Asegurate de tener buena conexi&oacute;n y un lugar tranquilo.
+        Hola ${datos.pacienteNombre}. Ma&ntilde;ana a las ${formatearHora(datos.hora_inicio)} ten&eacute;s turno con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}. Asegurate de tener buena conexi&oacute;n y un lugar tranquilo.
       </p>
       ${detalleTurno(datos)}
       ${boton("Ver mi turno", urlSala, AZUL)}
@@ -449,7 +488,7 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
     await resend().emails.send({
       from: FROM,
       to: datos.pacienteEmail,
-      subject: `Recordatorio: consulta mañana con Dr/a. ${datos.medicoNombre}`,
+      subject: `Recordatorio: consulta mañana con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}`,
       html,
     });
 
@@ -465,7 +504,8 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     const supabase = createAdminClient();
     const { data: medico } = await supabase
       .from("medicos")
-      .select("nombre_completo, slug, email, user_id, jurisdicciones")
+      // `titulo` y nada más — ver la nota del SELECT de obtenerDatosTurno.
+      .select("nombre_completo, titulo, slug, email, user_id, jurisdicciones")
       .eq("id", medicoId)
       .single();
     if (!medico) return;
@@ -491,7 +531,7 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     const bloqueJurisdicciones = juris.length
       ? `
       <div style="margin:0 0 24px;padding:14px 16px;border:1px solid #d3e5f7;border-radius:10px;background:#f4f9fe;">
-        <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:${GRIS};">D&oacute;nde est&aacute;s habilitado a atender</p>
+        <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:${GRIS};">D&oacute;nde pod&eacute;s atender</p>
         <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.55;">
           Tu matr&iacute;cula te habilita a atender en: <strong style="color:${GRIS};">${listaJuris}</strong>.
           Cualquier persona que se encuentre en ${juris.length > 1 ? "esas jurisdicciones" : listaJuris} puede atenderse con vos por Docto &mdash; tu consultorio digital llega a todo ese territorio, sin l&iacute;mite de distancia.
@@ -499,9 +539,12 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       </div>`
       : "";
 
-    const html = wrapHtml("¡Bienvenido a Docto! — tu cuenta está activa", `
+    // Este mail va DIRIGIDO a la médica: cada "bienvenido"/"habilitado" en
+    // masculino era un error en la primera impresión de la plataforma. Se
+    // reescribieron en neutro en vez de duplicar terminaciones ("bienvenido/a").
+    const html = wrapHtml("Te damos la bienvenida a Docto — tu cuenta está activa", `
       <div style="margin-bottom:20px;">${chip("Cuenta verificada", AZUL)}</div>
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">&iexcl;Hola ${formatNombreMedico(medico.nombre_completo)}! 🎉</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">&iexcl;Hola ${formatNombreMedico(medico.nombre_completo, medico.titulo)}! 🎉</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
         Tu cuenta ya est&aacute; <strong>aprobada y verificada</strong>. De ac&aacute; en m&aacute;s, Docto es tu consultorio digital: vos atend&eacute;s, del resto nos encargamos nosotros.
       </p>
@@ -521,7 +564,7 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
         Vas a ver que Docto es <strong>muy intuitivo</strong> &mdash; en un par de consultas ya va a ser tu plataforma de trabajo preferida. Cualquier cosa, estamos.
       </p>
-      <p style="margin:0 0 4px;font-size:15px;color:#6b7280;">&iexcl;Bienvenido/a al equipo!</p>
+      <p style="margin:0 0 4px;font-size:15px;color:#6b7280;">&iexcl;Gracias por sumarte al equipo!</p>
       <p style="margin:0;font-size:15px;color:#6b7280;">&mdash; El equipo de Docto</p>
       ${boton("Ir a mi panel", `${BASE_URL}/dashboard`, AZUL)}
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Adjuntamos una gu&iacute;a r&aacute;pida de Docto en PDF para que empieces con todo.</p>
@@ -531,7 +574,7 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       () => resend().emails.send({
         from: FROM,
         to: destinatario,
-        subject: "¡Bienvenido a Docto! Tu cuenta ya está activa",
+        subject: "¡Te damos la bienvenida a Docto! Tu cuenta ya está activa",
         html,
         attachments: [{ filename: "Bienvenida a Docto.pdf", path: `${BASE_URL}/guia-docto.pdf` }],
       }),
@@ -646,12 +689,19 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
 // agendas activas a futuro recibe UNA invitación a renovarla — la contracara
 // sana del límite de 60 días (sin esto, la agenda muere en silencio y el médico
 // desaparece de Docto sin saberlo). Texto aprobado por Diego (17/07).
-export async function enviarAvisoAgendaVencida(email: string, nombre: string): Promise<void> {
+// `titulo` es opcional para no romper al cron que ya llama con dos argumentos:
+// si no llega, el saludo va con el nombre pelado ("Hola Ana García") en vez de
+// con un título adivinado.
+export async function enviarAvisoAgendaVencida(
+  email: string,
+  nombre: string,
+  titulo?: string | null
+): Promise<void> {
   if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "aviso_agenda_vencida"); return; }
 
   const html = wrapHtml("Tu agenda en Docto vence hoy", `
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu agenda vence hoy</h1>
-    <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">Hola ${nombre},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">Hola ${formatNombreMedico(nombre, titulo)},</p>
     <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
       Tu agenda de turnos termina hoy. Cuando vence, tus horarios dejan de ofrecerse
       y los pacientes ya no pueden reservarte.

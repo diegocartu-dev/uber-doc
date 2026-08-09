@@ -10,6 +10,10 @@ export type Medico = {
   especialidad: string;
   modalidad_atencion: string;
   nombre_completo: string;
+  // Tratamiento que el médico eligió en su registro ("Dr." / "Dra."). Opcional
+  // porque el listado nunca debe romperse por falta de este dato: sin él se
+  // muestra el nombre pelado, que es mejor que inventar el tratamiento.
+  titulo?: string | null;
   disponible: boolean;
   disponible_desde: string | null;
   disponible_hasta: string | null;

@@ -44,6 +44,7 @@ import {
   identidadDesdeJSONB,
   type IdentidadDocumento,
 } from "./identidad";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // Consistente con el flujo de receta (OTP_EXPIRY_MS).
 const OTP_VENTANA_MS = 5 * 60 * 1000;
@@ -1232,9 +1233,14 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
   // Snapshot congelado: entra al hash, así que si alguien lo edita en la base
   // el recálculo no reproduce la firma y el estado pasa a "alterada".
   const identidad = identidadDesdeJSONB(fd.identidad);
+  // El nombre sale ya con el tratamiento que el profesional eligió, igual que en
+  // el PDF: la página pública de verificación y el papel tienen que decir lo
+  // MISMO, y hasta hoy la página mostraba el nombre pelado. El título sale del
+  // snapshot congelado (solo v:2); un documento v:1 no lo tiene guardado y se
+  // muestra sin él — no se inventa un tratamiento sobre algo ya firmado.
   const firmante = identidad
     ? {
-        nombre: identidad.medico_nombre,
+        nombre: formatNombreMedico(identidad.medico_nombre, identidad.medico_titulo ?? null),
         especialidad: identidad.medico_especialidad,
         matricula: identidad.medico_matricula,
       }

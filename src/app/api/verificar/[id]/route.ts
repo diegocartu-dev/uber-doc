@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificarFirma } from "@/lib/firma/receta";
 import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documento";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
 // Fix 2.1: Limitar consultas para evitar enumeración de recetas
@@ -175,15 +176,21 @@ type RespuestaVerificacion = {
 async function datosMinimosMedico(medicoId: string | null) {
   if (!medicoId) return null;
   const supabase = createAdminClient();
+  // `titulo` ("Dr."/"Dra.") entra al SELECT porque esta página es la que ve
+  // quien recibe la receta —una farmacia, un empleador— y nombraba al firmante
+  // sin su tratamiento. Es la ÚNICA columna que se suma: acá el cliente es
+  // service role, pero la regla vale igual (no aprovechar el viaje).
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, numero_matricula, tipo_matricula")
+    .select("nombre_completo, titulo, especialidad, numero_matricula, tipo_matricula")
     .eq("id", medicoId)
     .maybeSingle();
 
   if (!medico) return null;
   return {
-    nombre: medico.nombre_completo,
+    // Este es el camino de los documentos SIN snapshot congelado (históricos):
+    // ahí no hay título guardado, así que se lee el vivo de la ficha.
+    nombre: formatNombreMedico(medico.nombre_completo, medico.titulo),
     especialidad: medico.especialidad,
     matricula: `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
   };

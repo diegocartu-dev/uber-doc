@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { Video, CheckCircle, CreditCard } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
 const POLL_INTERVAL = 5000;
@@ -14,6 +14,12 @@ type Props = {
   estado: string;
   mpStatus?: string | null;
   medicoNombre: string;
+  /**
+   * Título profesional elegido por el médico en su registro (`medicos.titulo`:
+   * "Dr." o "Dra."). Componente cliente → tiene que viajar como prop. Si no
+   * llega, el nombre va pelado en vez de arriesgar el género equivocado.
+   */
+  medicoTitulo?: string | null;
   precio: number;
   duracion: number;
   especialidad: string;
@@ -51,6 +57,7 @@ export default function SalaEsperaCliente({
   estado: estadoInicial,
   mpStatus: mpStatusInicial = null,
   medicoNombre,
+  medicoTitulo,
   precio,
   duracion,
   especialidad,
@@ -60,6 +67,12 @@ export default function SalaEsperaCliente({
   resultadoPago = null,
   isDev = false,
 }: Props) {
+  // Nombre con el título que eligió el médico, calculado una sola vez: esta
+  // pantalla lo nombra en seis estados distintos.
+  const nombreMedico = formatNombreMedico(medicoNombre, medicoTitulo);
+  // "" si no sabemos el título → la frase se arma sin artículo.
+  const articulo = articuloMedico(medicoTitulo);
+
   const [estado, setEstado] = useState(estadoInicial);
   const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
   const [posicion, setPosicion] = useState(posicionInicial);
@@ -260,7 +273,8 @@ export default function SalaEsperaCliente({
           Esta consulta no pudo concretarse
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          El médico no llegó a tomar tu consulta esta vez. <strong>No se te cobró nada.</strong>
+          {nombreMedico ? `${nombreMedico} no llegó` : "No llegaron"} a tomar tu consulta esta vez.{" "}
+          <strong>No se te cobró nada.</strong>
         </p>
         <a
           href="/clinica"
@@ -285,11 +299,11 @@ export default function SalaEsperaCliente({
         </div>
         <h1 className="mt-6 text-xl font-bold text-gray-900">Consulta finalizada</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Tu consulta con {formatNombreMedico(medicoNombre)} ya terminó.
+          Tu consulta con {nombreMedico} ya terminó.
         </p>
         {/* Sin prometer documentos: si la cerró el sistema puede no haber ninguno. */}
         <p className="mt-3 text-xs text-gray-500">
-          Si el médico te dejó recetas u órdenes, las encontrás en Mis documentos.
+          Si {nombreMedico} te dejó recetas u órdenes, las encontrás en Mis documentos.
         </p>
         <a
           href="/documentos"
@@ -343,13 +357,13 @@ export default function SalaEsperaCliente({
 
       <h1 className="mt-6 text-xl font-bold text-gray-900">
         {salaVideoUrl
-          ? "¡El médico inició la videollamada!"
+          ? "¡Ya empezó la videollamada!"
           : faltaPagar
             ? "Falta un paso: pagá tu consulta"
             : pagoEnCamino
               ? "Estamos confirmando tu pago"
               : pagoConfirmado
-                ? "¡El médico aceptó tu consulta!"
+                ? `¡${nombreMedico} aceptó tu consulta!`
                 : "Estás en la sala de espera"}
       </h1>
 
@@ -357,12 +371,15 @@ export default function SalaEsperaCliente({
         {salaVideoUrl
           ? "Ya podés unirte a la consulta"
           : faltaPagar
-            ? `${formatNombreMedico(medicoNombre)} ya aceptó tu consulta y te atiende apenas se registre el pago.`
+            ? `${nombreMedico} ya aceptó tu consulta y te atiende apenas se registre el pago.`
             : pagoEnCamino
               ? "Mercado Pago todavía no nos confirmó el pago. No hace falta que pagues de nuevo."
               : pagoConfirmado
-                ? "Esperando que el médico inicie la videollamada..."
-                : `Esperando que el ${formatNombreMedico(medicoNombre)} acepte tu consulta...`}
+                // `articulo` sale vacío si no sabemos el título: queda "Esperando
+                // que Ana García inicie…", correcto y sin género inventado. Antes
+                // acá había un "el" fijo delante del nombre.
+                ? `Esperando que ${articulo ? `${articulo} ` : ""}${nombreMedico} inicie la videollamada...`
+                : `Esperando que ${articulo ? `${articulo} ` : ""}${nombreMedico} acepte tu consulta...`}
       </p>
 
       {/* EL botón de la pantalla cuando falta pagar: grande, arriba, azul.
@@ -402,7 +419,7 @@ export default function SalaEsperaCliente({
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Médico</span>
-            <span className="font-medium text-gray-900">{medicoNombre}</span>
+            <span className="font-medium text-gray-900">{nombreMedico}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Precio</span>
@@ -480,13 +497,13 @@ export default function SalaEsperaCliente({
           className="mt-6 rounded-xl p-4 text-left text-sm"
           style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
         >
-          <p className="font-semibold">El médico todavía no aceptó tu consulta.</p>
+          <p className="font-semibold">{nombreMedico} todavía no aceptó tu consulta.</p>
           <p className="mt-1">
             Podés seguir esperando, cancelar sin cargo, o{" "}
             <a href="/clinica" className="font-semibold underline">
               buscar otro médico disponible
             </a>
-            . No se te cobra nada hasta que el médico acepte y pagues.
+            . No se te cobra nada hasta que acepten tu consulta y pagues.
           </p>
         </div>
       )}

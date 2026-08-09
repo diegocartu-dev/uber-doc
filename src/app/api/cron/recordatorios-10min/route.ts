@@ -32,17 +32,26 @@ async function handler(req: NextRequest) {
   }
 
   const medicoIds = [...new Set(turnos.map((t) => t.medico_id))];
+  // Se trae `titulo` ("Dr." / "Dra.", elegido por el médico en su registro) junto
+  // con el nombre: el recordatorio lo nombra y sin el título le decíamos "Dr." a
+  // casi todas las médicas.
   const { data: medicos } = await supabase
-    .from("medicos").select("id, nombre_completo").in("id", medicoIds);
-  const medicoMap = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
+    .from("medicos").select("id, nombre_completo, titulo").in("id", medicoIds);
+  const medicoMap = new Map(
+    (medicos ?? []).map((m) => [m.id, formatNombreMedico(m.nombre_completo, m.titulo)])
+  );
 
   let enviados = 0;
   for (const turno of turnos) {
     if (!turno.paciente_id) continue;
-    const nombreMedico = medicoMap.get(turno.medico_id) ?? "tu médico";
+    const nombreMedico = medicoMap.get(turno.medico_id);
     const sent = await pushAlPaciente(turno.paciente_id, {
       title: "🟡 Docto",
-      body: `Tu consulta con ${formatNombreMedico(nombreMedico)} empieza en 10 minutos.`,
+      // Sin nombre a mano el aviso no inventa uno: antes caía en "tu médico" y
+      // el capitalizador lo dejaba como "Tu Médico" en medio de la frase.
+      body: nombreMedico
+        ? `Tu consulta con ${nombreMedico} empieza en 10 minutos.`
+        : "Tu consulta empieza en 10 minutos.",
       url: `/turno/${turno.id}/espera`,
       tag: `recordatorio-${turno.id}`,
     });

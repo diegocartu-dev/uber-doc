@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioPrivadoClient from "./ConsultorioPrivadoClient";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 
 export default async function ConsultorioPrivadoPage({
@@ -54,7 +54,7 @@ export default async function ConsultorioPrivadoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("id, nombre_completo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, ci_en_consultorio, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
+    .select("id, nombre_completo, titulo, especialidad, disponible, disponible_desde, disponible_hasta, precio_consulta, duracion_consulta, ci_en_consultorio, slug, tipo_matricula, numero_matricula, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, visible_consultorio_particular")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -124,6 +124,13 @@ export default async function ConsultorioPrivadoPage({
   const enEspera = consultasEspera?.length ?? 0;
   const tiempoEstimado = enEspera * medico.duracion_consulta;
 
+  // La bienvenida lleva contracción ("del Dr." / "de la Dra."), así que el
+  // género no se puede adivinar: sale del título que eligió el médico. Si por
+  // algún motivo no hubiera título, la frase queda "de Nombre Apellido" —
+  // correcta y neutra, en vez de arriesgar un "del" equivocado.
+  const articulo = articuloMedico(medico.titulo);
+  const preposicion = articulo === "el" ? "del" : articulo === "la" ? "de la" : "de";
+
   const initials = medico.nombre_completo
     .split(" ")
     .map((w: string) => w[0])
@@ -143,7 +150,7 @@ export default async function ConsultorioPrivadoPage({
             className="text-lg font-medium"
             style={{ color: "var(--color-text-primary)" }}
           >
-            Bienvenido al consultorio virtual del {formatNombreMedico(medico.nombre_completo)}
+            Bienvenido al consultorio virtual {preposicion} {formatNombreMedico(medico.nombre_completo, medico.titulo)}
           </h1>
           <p
             className="mt-1 text-sm"
@@ -174,7 +181,7 @@ export default async function ConsultorioPrivadoPage({
                 className="text-lg font-semibold"
                 style={{ color: "var(--color-text-primary)" }}
               >
-                {formatNombreMedico(medico.nombre_completo)}
+                {formatNombreMedico(medico.nombre_completo, medico.titulo)}
               </h1>
               <p
                 className="text-sm"

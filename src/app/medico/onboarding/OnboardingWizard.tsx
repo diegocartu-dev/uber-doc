@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import FirmaManuscrita from "@/app/medico/perfil/FirmaManuscrita";
 import { createClient } from "@/lib/supabase/client";
 import { CONSENTIMIENTO_IDENTIDAD_TEXTO } from "@/lib/didit/consentimiento";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const C = {
   azul: "#378ADD",
@@ -34,6 +35,13 @@ const TOTAL = ORDEN.length;
 
 type Props = {
   nombre: string;
+  /**
+   * Tratamiento elegido por el médico en su registro ("Dr." / "Dra."). Opcional:
+   * sin él el wizard saluda por el apellido pelado ("Bienvenida, García"), que
+   * es preferible a llamar "Dr." a una médica — que es lo que hacía hasta hoy,
+   * hardcodeado, en las tres pantallas que la saludan por su nombre.
+   */
+  titulo?: string | null;
   pasos: Pasos;
   fotoUrl: string | null;
   firmaUrl: string | null;
@@ -70,6 +78,10 @@ const CIERRE = TOTAL + 1; // paso 7 con 6 pasos
 
 export default function OnboardingWizard(props: Props) {
   const router = useRouter();
+
+  // Cómo lo nombra el wizard: "Dra. García" / "Dr. García", o "García" pelado si
+  // no hay título cargado. `formatNombreMedico` nunca inventa el tratamiento.
+  const tratamiento = formatNombreMedico(apellido(props.nombre), props.titulo);
   const [hechos, setHechos] = useState<Pasos>(props.pasos);
 
   // Estado del biométrico, vivo: arranca del didit_status y se actualiza por
@@ -206,8 +218,12 @@ export default function OnboardingWizard(props: Props) {
           >
             ✓ Matrícula validada
           </span>
+          {/* Neutro a propósito, igual que el mail de bienvenida: "Bienvenido"
+              en masculino sobre la mayoría de médicas era un error en la primera
+              pantalla que ven. Se reescribió en neutro en vez de duplicar
+              terminaciones ("bienvenido/a"). */}
           <h1 className="text-2xl font-semibold text-gray-900">
-            Bienvenido a Docto, Dr. {apellido(props.nombre)}
+            Te damos la bienvenida a Docto, {tratamiento}
           </h1>
           <p className="mt-2 text-gray-600">
             Te quedan 6 pasos para empezar a atender. Son unos minutos.
@@ -257,14 +273,14 @@ export default function OnboardingWizard(props: Props) {
           {bioListo ? (
             <>
               <h1 className="mt-5 text-2xl font-semibold text-gray-900">
-                ¡Listo, Dr. {apellido(props.nombre)}!
+                ¡Listo, {tratamiento}!
               </h1>
               <p className="mt-2 text-gray-600">Ya podés empezar a atender en Docto.</p>
             </>
           ) : (
             <>
               <h1 className="mt-5 text-2xl font-semibold text-gray-900">
-                ¡Casi listo, Dr. {apellido(props.nombre)}!
+                ¡Casi listo, {tratamiento}!
               </h1>
               <p className="mt-2 text-gray-600">
                 Completaste tu perfil. Estamos terminando de verificar tu identidad — te

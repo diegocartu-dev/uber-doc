@@ -16,9 +16,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is a doctor
+    // Se suma `titulo` ("Dr." / "Dra.") porque el mail al paciente nombra al
+    // médico como sujeto de la frase ("La Dra. Ana García te compartió…"): sin el
+    // título el mail salía con el nombre pelado. Es columna con GRANT para
+    // `authenticated`. SOLO `titulo`: una columna sin GRANT haría fallar la query
+    // ENTERA en PostgREST y el médico pasaría a leerse como "no es médico".
     const { data: medico } = await supabase
       .from("medicos")
-      .select("id, nombre_completo")
+      .select("id, nombre_completo, titulo")
       .eq("user_id", user.id)
       .single();
 
@@ -115,6 +120,7 @@ export async function POST(request: NextRequest) {
       pacienteEmail: pacienteUser.email,
       pacienteNombre: paciente?.nombre_completo ?? "Paciente",
       medicoNombre: medico.nombre_completo,
+      medicoTitulo: medico.titulo ?? null,
       fecha: new Date(consulta.created_at).toLocaleDateString("es-AR"),
       archivo: {
         filename: file.name,

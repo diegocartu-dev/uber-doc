@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -406,9 +407,27 @@ export async function POST(req: NextRequest) {
     const slotsDisponibles = slotsResult.data;
     const proximosTurnos = proximosResult.data;
 
-    const tituloDr = medicoRow.titulo ?? "Dr.";
-    const nombreMedico = medicoRow.nombre_completo ?? "Doctor/a";
-    const apellidoMedico = nombreMedico.trim().split(/\s+/).slice(-1)[0];
+    // Cómo Nova nombra a quien tiene enfrente. El tratamiento sale SIEMPRE de
+    // `medicos.titulo` (lo eligió el médico en su registro): el default fijo
+    // "Dr." que había acá le hacía decir "Dr." a una médica en cada respuesta,
+    // durante toda la conversación. Sin título, Nova la trata por el apellido
+    // pelado — mejor que arriesgar el género equivocado.
+    const nombreMedico = medicoRow.nombre_completo ?? "";
+    const apellidoMedico = nombreMedico.trim().split(/\s+/).slice(-1)[0] ?? "";
+    const tratamientoCompleto = formatNombreMedico(nombreMedico, medicoRow.titulo);
+    const tratamientoCorto = formatNombreMedico(apellidoMedico, medicoRow.titulo);
+    const articulo = articuloMedico(medicoRow.titulo);
+    // "Atendés al Dr. López" / "Atendés a la Dra. García" / "Atendés a Ana García".
+    const fraseAtiende = articulo === "el"
+      ? `Atendés al ${tratamientoCompleto}`
+      : articulo === "la"
+        ? `Atendés a la ${tratamientoCompleto}`
+        : `Atendés a ${tratamientoCompleto}`;
+    const fraseTrato = articulo === "la"
+      ? `Dirigite a ella como "${tratamientoCorto}".`
+      : articulo === "el"
+        ? `Dirigite a él como "${tratamientoCorto}".`
+        : `No tenemos registrado su tratamiento: llamalo por el apellido, "${tratamientoCorto}", sin anteponerle ningún título.`;
 
     const agendaResumen =
       agendaHoy && agendaHoy.length > 0
@@ -547,7 +566,7 @@ Los datos concretos del médico y de hoy están en el bloque de contexto que sig
     // Bloque DINÁMICO (NO cacheable): cambia por médico y por día, va después del
     // bloque cacheado para no romper el cache-hit del prefijo estático.
     const systemDynamic = `DATOS DEL MÉDICO Y CONTEXTO DE HOY
-Atendés al ${tituloDr} ${nombreMedico}. Dirigite a él como "${tituloDr} ${apellidoMedico}".
+${fraseAtiende}. ${fraseTrato}
 Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}

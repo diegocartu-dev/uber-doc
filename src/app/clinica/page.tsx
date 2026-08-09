@@ -52,9 +52,15 @@ export default async function ClinicaPage() {
   // que el paciente perciba la oferta y el médico tenga incentivo a validarse. El candado
   // real ya vive en la RESERVA (crearConsulta + reservarTurno bloquean server-side a un
   // no-validado, incluso por deep-link), así que mostrarlos en el listado no abre agujero.
+  // `titulo` ("Dr."/"Dra.") lo elige el médico en su registro. Esta es la pantalla
+  // donde el paciente ELIGE con quién atenderse: sin el título, la fila decía el
+  // nombre pelado. Es la única columna que se suma, y a propósito: `medicos` tiene
+  // columnas sin GRANT para `authenticated` y con el cliente RLS basta que UNA
+  // entre al SELECT para que PostgREST falle la query ENTERA y devuelva null en
+  // silencio (outage del dashboard médico, junio). `titulo` sí tiene GRANT.
   const { data: medicosRaw } = await supabase
     .from("medicos")
-    .select("id, especialidad, modalidad_atencion, nombre_completo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test")
+    .select("id, especialidad, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("oculto_clinica", false)
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")

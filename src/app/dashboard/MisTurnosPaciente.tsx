@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { cancelarTurnoPaciente } from "./actions";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 
 type Turno = {
   id: string;
@@ -12,6 +12,9 @@ type Turno = {
   estado: string;
   especialidad: string;
   medico_nombre: string;
+  // "Dr." / "Dra." elegido por el médico en su registro. Opcional: si el dashboard
+  // no lo manda, el turno muestra el nombre pelado en vez de un tratamiento inventado.
+  medico_titulo?: string | null;
   monto?: number | null;
 };
 
@@ -86,7 +89,7 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                   timeZone: "America/Argentina/Buenos_Aires",
                 })} · ${t.hora_inicio.slice(0, 5)}`}
           </p>
-          <p className="mt-0.5 text-sm text-gray-500">{formatNombreMedico(t.medico_nombre)} · {t.especialidad}</p>
+          <p className="mt-0.5 text-sm text-gray-500">{formatNombreMedico(t.medico_nombre, t.medico_titulo)} · {t.especialidad}</p>
         </div>
         <div className="flex items-center gap-2">
           {mostrarSala ? (
@@ -120,6 +123,19 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
   if (turnos.length === 0) return null;
 
   const conReembolso = dialogTurno ? esMasDe48h(dialogTurno.fecha, dialogTurno.hora_inicio) : false;
+
+  // "con el Dr." / "con la Dra." según el título que eligió el médico. Antes el
+  // artículo estaba clavado en "el" y le hablaba en masculino a la mayoría de las
+  // profesionales; sin título la frase queda "con Ana García", que es correcta.
+  const articuloDialog = dialogTurno ? articuloMedico(dialogTurno.medico_titulo) : "";
+  // Nombre neutro a propósito: que la variable no se llame "conElMedico" evita que
+  // alguien vuelva a clavar el "el" acá adentro.
+  const conMedico = dialogTurno
+    ? `con ${articuloDialog ? `${articuloDialog} ` : ""}${formatNombreMedico(dialogTurno.medico_nombre, dialogTurno.medico_titulo)}`
+    : "";
+  const fechaDialog = dialogTurno
+    ? new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })
+    : "";
 
   return (
     <>
@@ -178,8 +194,8 @@ export default function MisTurnosPaciente({ turnos: turnosIniciales }: { turnos:
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                   {conReembolso
-                    ? `Cancelás tu turno con el ${formatNombreMedico(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Te enviaremos un email con las opciones disponibles.`
-                    : `Cancelás tu turno con el ${formatNombreMedico(dialogTurno.medico_nombre)} del ${new Date(dialogTurno.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" })}. Por nuestra política, no aplica reembolso en cancelaciones con menos de 48hs de anticipación.`}
+                    ? `Cancelás tu turno ${conMedico} del ${fechaDialog}. Te enviaremos un email con las opciones disponibles.`
+                    : `Cancelás tu turno ${conMedico} del ${fechaDialog}. Por nuestra política, no aplica reembolso en cancelaciones con menos de 48hs de anticipación.`}
                 </p>
 
                 <textarea
