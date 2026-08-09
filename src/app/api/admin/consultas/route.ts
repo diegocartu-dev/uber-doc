@@ -18,6 +18,10 @@ function hoyAR() {
 const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 const SLOTS = ["disponible", "bloqueado"];
 
+// Las reservas ABANDONADAS (decisión Diego 06/08) no se muestran en ningún
+// reporte: el criterio, el mecanismo que las genera y por qué no se borran de la
+// base viven en un solo lugar, `src/lib/insights/reservas.ts`. Acá se aplican
+// con `sinReservasAbandonadas()`, igual que en el tablero.
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -161,6 +165,9 @@ export async function GET(req: NextRequest) {
   }
 
   if (tab === "historial") {
+    // Historial lista SOLO consultas inmediatas (tabla `consultas`): no trae
+    // turnos, así que acá no hay reservas abandonadas que esconder. Si algún día
+    // se le suman turnos, filtrarlos con `sinReservasAbandonadas`.
     const desde = req.nextUrl.searchParams.get("desde");
     const hasta = req.nextUrl.searchParams.get("hasta");
 

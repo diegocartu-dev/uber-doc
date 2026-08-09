@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificarFirma } from "@/lib/firma/receta";
+import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documento";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
@@ -76,53 +77,114 @@ export async function GET(
   if (!uuidRegex.test(id)) {
     await new Promise((resolve) => setTimeout(resolve, CONSTANT_DELAY_MS));
     return NextResponse.json(
-      { verificada: false, motivo: "Receta no encontrada" },
+      { estado: "no_encontrado", verificada: false, motivo: "Documento no encontrado" },
       { status: 404 }
     );
   }
 
   // Try/catch dentro de withConstantTime para mantener timing constante
-  // incluso si verificarFirma() o la query de médico lanzan excepciones
-  const resultado = await withConstantTime(async () => {
+  // incluso si la verificación o la query de médico lanzan excepciones
+  const resultado = await withConstantTime(async (): Promise<RespuestaVerificacion> => {
     try {
+      // 1. Camino principal: tabla `documentos` (receta, certificado,
+      //    indicaciones, orden). Es donde vive todo lo que se emite hoy.
+      const doc = await verificarDocumento(id);
+
+      if (doc.estado !== "no_encontrado") {
+        return {
+          estado: doc.estado,
+          verificada: doc.estado === "verificada",
+          alterada: doc.estado === "alterada",
+          firmado_at: doc.datos?.firmado_at,
+          // Fecha de EMISIÓN. Va siempre, no solo en el sellado diferido: la
+          // página muestra las dos fechas en todos los casos y en el normal
+          // coinciden, que es la mejor prueba de que acá no se toca ninguna.
+          emitido_at: doc.emitido_at ?? undefined,
+          // El sello se aplicó después de la emisión. La página lo explica en
+          // criollo; si por lo que sea ese bloque no se pudiera mostrar, la regla
+          // es no sellar (dictamen 07/08/2026, límite 4).
+          sellado_diferido: doc.sellado_diferido,
+          algoritmo: doc.datos?.algoritmo,
+          hash: doc.datos?.hash_original.slice(0, 16),
+          // Firmante congelado en la firma cuando existe: si el médico se
+          // cambió el nombre después, el papel y esta página tienen que decir
+          // lo mismo. Sin sello (históricos) se cae a la fila viva de `medicos`.
+          medico: doc.firmante ?? (await datosMinimosMedico(doc.medico_id)),
+        };
+      }
+
+      // 2. Camino histórico: tabla `recetas`.
       const verificacion = await verificarFirma(id);
 
       if (!verificacion.datos) {
         return {
+          estado: "no_encontrado",
           verificada: false,
-          motivo: "Receta no encontrada",
+          motivo: "Documento no encontrado",
         };
       }
 
-      // Obtener datos mínimos del médico (solo nombre + matrícula, NO contenido médico)
-      // Regla Carolina: la página pública NO muestra datos del paciente ni prescripción
-      const supabase = createAdminClient();
-      const { data: medico } = await supabase
-        .from("medicos")
-        .select("nombre_completo, especialidad, numero_matricula, tipo_matricula")
-        .eq("id", verificacion.datos.medico_id)
-        .single();
-
+      // Camino histórico `recetas`: no expone fecha de emisión, y nada del
+      // código inserta ahí desde hace tiempo. Sin `emitido_at` la página muestra
+      // solo la fila del sello, que es lo único que puede afirmar.
       return {
+        estado: verificacion.alterada
+          ? "alterada"
+          : verificacion.valida
+            ? "verificada"
+            : "invalida",
         verificada: verificacion.valida,
         alterada: verificacion.alterada,
+        sellado_diferido: false,
         firmado_at: verificacion.datos.firmado_at,
         algoritmo: verificacion.datos.algoritmo,
         hash: verificacion.datos.hash_original.slice(0, 16),
-        medico: medico
-          ? {
-              nombre: medico.nombre_completo,
-              especialidad: medico.especialidad,
-              matricula: `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
-            }
-          : null,
+        medico: await datosMinimosMedico(verificacion.datos.medico_id),
       };
     } catch (err) {
       console.error("[verificar] error:", err instanceof Error ? err.message : "unknown");
-      return { verificada: false, motivo: "Error de verificación" };
+      return { estado: "error", verificada: false, motivo: "Error de verificación" };
     }
   });
 
-  const status = resultado.verificada ? 200 : resultado.motivo ? 404 : 200;
+  const status = resultado.estado === "no_encontrado" ? 404 : 200;
   return NextResponse.json(resultado, { status });
+}
+
+type RespuestaVerificacion = {
+  estado: EstadoVerificacion | "error";
+  verificada: boolean;
+  alterada?: boolean;
+  /** Instante REAL del sello criptográfico. Nunca una fecha anterior a la real. */
+  firmado_at?: string;
+  /** Fecha de emisión del documento (el acto médico). */
+  emitido_at?: string;
+  /** El sello se aplicó después de la emisión (documentos históricos). */
+  sellado_diferido?: boolean;
+  algoritmo?: string;
+  hash?: string;
+  motivo?: string;
+  medico?: { nombre: string; especialidad: string; matricula: string } | null;
+};
+
+/**
+ * Datos mínimos del firmante: nombre + especialidad + matrícula.
+ * Regla Carolina: la página pública NO muestra datos del paciente ni contenido
+ * clínico, ni siquiera cuando la verificación es exitosa.
+ */
+async function datosMinimosMedico(medicoId: string | null) {
+  if (!medicoId) return null;
+  const supabase = createAdminClient();
+  const { data: medico } = await supabase
+    .from("medicos")
+    .select("nombre_completo, especialidad, numero_matricula, tipo_matricula")
+    .eq("id", medicoId)
+    .maybeSingle();
+
+  if (!medico) return null;
+  return {
+    nombre: medico.nombre_completo,
+    especialidad: medico.especialidad,
+    matricula: `${medico.tipo_matricula ?? ""} ${medico.numero_matricula ?? ""}`.trim(),
+  };
 }
