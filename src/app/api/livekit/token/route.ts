@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AccessToken } from "livekit-server-sdk";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
@@ -79,16 +80,23 @@ export async function POST(req: NextRequest) {
   }
 
   // Medico
+  // `titulo` ("Dr." / "Dra.") se lee acá porque este es el OTRO camino por el que
+  // el médico entra a la sala: cuando se le corta y toca "Retomar llamada", el
+  // token sale de acá y no de crear-sala. Sin el título, el paciente veía el
+  // nombre pelado justo después de la reconexión — distinto del que tenía cinco
+  // segundos antes. Es columna con GRANT para `authenticated`, así que no rompe
+  // este SELECT con cliente RLS. Solo `titulo`: una sola columna sin GRANT tira
+  // abajo la query ENTERA y devuelve null en silencio.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo")
+    .select("id, nombre_completo, titulo")
     .eq("user_id", user.id)
     .maybeSingle();
 
   if (medico?.id === consulta.medico_id) {
     esMedico = true;
     identity = `medico-${medico!.id}`;
-    displayName = medico!.nombre_completo || "Medico";
+    displayName = formatNombreMedico(medico!.nombre_completo, medico!.titulo) || "Medico";
   }
 
   if (!esPaciente && !esMedico) {

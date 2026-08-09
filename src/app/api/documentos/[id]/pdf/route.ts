@@ -57,7 +57,7 @@ export async function GET(
   // Datos del médico
   const { data: medico } = await supabase
     .from("medicos")
-    .select("nombre_completo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio, firma_manuscrita_url")
+    .select("nombre_completo, titulo, especialidad, numero_matricula, tipo_matricula, domicilio, domicilio_consultorio, firma_manuscrita_url")
     .eq("id", doc.medico_id)
     .single();
 
@@ -154,6 +154,11 @@ export async function GET(
     dias_reposo: doc.dias_reposo ?? null,
     created_at: doc.created_at,
     medico_nombre: identidad ? identidad.medico_nombre : medico.nombre_completo,
+    // Igual que el resto: si el documento está sellado, el tratamiento sale del
+    // snapshot congelado y no de la tabla viva. Un documento v:1 (firmado antes
+    // del 09/08/2026) no lo tiene guardado y se imprime sin él: al firmarlo no
+    // se registró, y no se inventa a posteriori sobre algo ya firmado.
+    medico_titulo: identidad ? identidad.medico_titulo ?? null : medico.titulo ?? null,
     medico_especialidad: identidad ? identidad.medico_especialidad : medico.especialidad ?? "",
     medico_matricula: identidad
       ? identidad.medico_matricula

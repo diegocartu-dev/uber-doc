@@ -4,7 +4,7 @@ import WorkspaceConsulta from "@/app/medico/consulta/[id]/workspace/WorkspaceCon
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { pushAlPaciente } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { cargarEvolucionesPrevias } from "@/lib/evolucion/historia-clinica";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
@@ -33,7 +33,9 @@ export default async function VideoTurnoPage({
   // Verificar participante — ANTES del chequeo de estado, porque un turno ya
   // cerrado solo lo puede abrir el médico que lo atendió.
   const { data: medicoData } = await supabase
-    .from("medicos").select("id, nombre_completo, especialidad").eq("user_id", user.id).maybeSingle();
+    // `titulo` ("Dr."/"Dra.") entra acá para el push que le llega al paciente:
+    // el aviso decía "El Dr." aunque atendiera una médica.
+    .from("medicos").select("id, nombre_completo, titulo, especialidad").eq("user_id", user.id).maybeSingle();
 
   const esMedico = medicoData?.id === turno.medico_id;
 
@@ -74,9 +76,17 @@ export default async function VideoTurnoPage({
   if (!modoCompletar && turno.estado !== "en_curso") {
     await supabase.from("turnos").update({ estado: "en_curso", iniciado_en: new Date().toISOString() }).eq("id", turnoId);
     cerrarEntradaSala({ turnoId, motivo: "atendido" }).catch(() => {});
+    // El aviso lleva artículo ("el Dr." / "la Dra."): sale del título que eligió
+    // el médico. Sin título no se arriesga ninguno y la frase se arma sin él;
+    // "te está esperando" evita además el adjetivo con género de "está listo/a".
+    const nombreMedico = formatNombreMedico(medicoData?.nombre_completo ?? "", medicoData?.titulo);
+    const articulo = articuloMedico(medicoData?.titulo);
+    const sujeto = nombreMedico
+      ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreMedico}`
+      : "Tu médico";
     pushAlPaciente(turno.paciente_id, {
       title: "🟢 Docto",
-      body: `El ${formatNombreMedico(medicoData?.nombre_completo ?? "tu médico")} está listo. Ingresá ahora a tu consulta.`,
+      body: `${sujeto} ya te está esperando. Ingresá ahora a tu consulta.`,
       url: `/turno/${turnoId}/espera`,
       tag: `inicio-${turnoId}`,
     }).catch(() => {});
@@ -128,7 +138,10 @@ export default async function VideoTurnoPage({
 
       const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
         identity: `medico-${medicoData!.id}`,
-        name: medicoData!.nombre_completo || "Medico",
+        // Nombre visible para el paciente sobre el video: con el tratamiento que
+        // el médico eligió (el `titulo` ya viene en el SELECT de arriba, que lo
+        // usa para el push). "Profesional" solo si falta el nombre.
+        name: formatNombreMedico(medicoData!.nombre_completo, medicoData!.titulo) || "Profesional",
         ttl: "2h",
       });
       at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });

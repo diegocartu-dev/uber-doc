@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test")
+    .select("nombre_completo, titulo, especialidad, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -24,8 +24,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const flagIdentidadGate = await getFlag("identidad_gate_activa");
   if (!medico || !medico.verificado || medico.estado_registro !== "aprobado" || (flagIdentidadGate && !identidadHabilitada(medico))) return { title: "Médico no encontrado — Docto" };
 
+  // El título del médico va también acá: es lo que se ve en la pestaña del
+  // navegador y en la previsualización cuando comparte el link por WhatsApp.
   return {
-    title: `${formatNombreMedico(medico.nombre_completo)} — ${medico.especialidad} — Docto`,
+    title: `${formatNombreMedico(medico.nombre_completo, medico.titulo)} — ${medico.especialidad} — Docto`,
     robots: { index: false, follow: false },
   };
 }
@@ -45,7 +47,7 @@ export default async function ConsultorioPublicoPage({
   const supabaseAdmin = createAdminClient();
   const { data: medico } = await supabaseAdmin
     .from("medicos")
-    .select("nombre_completo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, foto_url, visible_consultorio_particular")
+    .select("nombre_completo, titulo, especialidad, slug, verificado, estado_registro, identidad_validada, biometria_exenta, es_cuenta_test, foto_url, visible_consultorio_particular")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -118,7 +120,7 @@ export default async function ConsultorioPublicoPage({
           className="mt-5 text-xl font-semibold"
           style={{ color: "var(--color-text-primary)" }}
         >
-          {formatNombreMedico(medico.nombre_completo)}
+          {formatNombreMedico(medico.nombre_completo, medico.titulo)}
         </h1>
         <p
           className="mt-1 text-sm"

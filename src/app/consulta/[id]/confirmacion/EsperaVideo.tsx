@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import BotonPush from "@/components/BotonPush";
-import { formatNombreMedico } from "@/lib/utils/texto";
+import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
 // Boton reutilizable "Volver"
@@ -26,6 +26,7 @@ export default function EsperaVideo({
   estadoInicial,
   mpStatusInicial = null,
   medicoNombre,
+  medicoTitulo,
   especialidad,
   duracionConsulta,
   createdAt,
@@ -36,12 +37,24 @@ export default function EsperaVideo({
   estadoInicial?: string;
   mpStatusInicial?: string | null;
   medicoNombre: string;
+  /**
+   * Título profesional elegido por el médico en su registro (`medicos.titulo`:
+   * "Dr." o "Dra."). Sin él el nombre se muestra pelado — mejor eso que decirle
+   * "Dr." a una médica, que es lo que pasaba en casi toda la plataforma.
+   */
+  medicoTitulo?: string | null;
   especialidad: string;
   duracionConsulta: number;
   createdAt: string;
   returnUrl?: string;
 }) {
   const returnUrlFinal = returnUrl ?? "/dashboard";
+  // `null` cuando la page no pudo traer al médico: el copy de abajo se arma
+  // distinto en ese caso, sin inventar "el médico".
+  const nombreMedico = medicoNombre ? formatNombreMedico(medicoNombre, medicoTitulo) : null;
+  // "" si no sabemos el título → la frase se arma sin artículo en vez de arriesgar
+  // un "el" equivocado.
+  const articulo = articuloMedico(medicoTitulo);
   const [salaUrl, setSalaUrl] = useState(salaVideoUrlInicial);
   const [estado, setEstado] = useState<string>(estadoInicial ?? "aceptada");
   const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
@@ -194,11 +207,13 @@ export default function EsperaVideo({
         </h1>
         <p className="mt-2 text-gray-600">
           {estado === "rechazada"
-            ? "El médico no llegó a tomarla. Si habías pagado, el reintegro se procesa completo."
+            ? nombreMedico
+              ? `${nombreMedico} no llegó a tomarla. Si habías pagado, el reintegro se procesa completo.`
+              : "Nadie llegó a tomarla. Si habías pagado, el reintegro se procesa completo."
             : "Esta consulta no se concretó. Si habías pagado, el reintegro se procesa completo."}
         </p>
 
-        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta} />
+        <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta} />
 
         <div className="mt-6 rounded-xl border px-6 py-4 text-center" style={{ borderColor: "#E24B4A", background: "rgba(226,75,74,0.06)" }}>
           <span className="text-sm font-medium" style={{ color: "#E24B4A" }}>
@@ -230,17 +245,19 @@ export default function EsperaVideo({
 
         <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
         <p className="mt-2 text-gray-600">
-          {medicoNombre
-            ? `Tu consulta con ${formatNombreMedico(medicoNombre)} ya terminó.`
+          {nombreMedico
+            ? `Tu consulta con ${nombreMedico} ya terminó.`
             : "Tu consulta ya terminó."}
         </p>
         {/* Sin promesas: si el cierre lo hizo el sistema puede no haber ningún
             documento, y prometerlo sería otra mentira más de esta pantalla. */}
         <p className="mt-3 text-sm text-gray-500">
-          Si el médico te dejó recetas u órdenes, las encontrás en Mis documentos.
+          {nombreMedico
+            ? `Si ${nombreMedico} te dejó recetas u órdenes, las encontrás en Mis documentos.`
+            : "Si te dejaron recetas u órdenes, las encontrás en Mis documentos."}
         </p>
 
-        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+        <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
           <div className="border-t border-gray-100 pt-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Estado</span>
@@ -277,13 +294,13 @@ export default function EsperaVideo({
         </div>
 
         <h1 className="mt-6 text-2xl font-bold text-gray-900">
-          Tu consulta está esperando al médico
+          Tu consulta está esperando
         </h1>
         <p className="mt-2 text-gray-600">
           Todavía no la aceptó nadie. <strong>No se te cobró nada.</strong>
         </p>
 
-        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+        <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
           <div className="border-t border-gray-100 pt-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Estado</span>
@@ -315,13 +332,13 @@ export default function EsperaVideo({
         </div>
 
         <h1 className="mt-6 text-2xl font-bold text-gray-900">
-          El medico te esta esperando!
+          {nombreMedico ? `¡${nombreMedico} te está esperando!` : "¡Te están esperando!"}
         </h1>
         <p className="mt-2 text-gray-600">
-          Tu consulta con {formatNombreMedico(medicoNombre)} esta lista
+          Tu videollamada ya está lista
         </p>
 
-        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+        <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
           <div className="border-t border-gray-100 pt-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Estado</span>
@@ -361,10 +378,12 @@ export default function EsperaVideo({
 
         <h1 className="mt-6 text-2xl font-bold text-gray-900">Pago confirmado!</h1>
         <p className="mt-2 text-gray-600">
-          Estas en la sala de espera. El medico te va a llamar en breve.
+          {nombreMedico
+            ? `Estás en la sala de espera. ${nombreMedico} te llama en breve.`
+            : "Estás en la sala de espera. La videollamada empieza en breve."}
         </p>
 
-        <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+        <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
           <div className="border-t border-gray-100 pt-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Estado</span>
@@ -395,7 +414,7 @@ export default function EsperaVideo({
           className="mt-6 rounded-xl border border-[#378ADD]/30 bg-[#378ADD]/5 px-5 py-4 text-left"
         >
           <p className="text-sm font-medium text-gray-900">
-            ¿Tenés estudios para mostrarle a tu médico?
+            ¿Tenés estudios para mostrar en la consulta?
           </p>
           <p className="mt-1 text-xs text-gray-500">
             Podés subirlos cuando estés en la sala de espera antes de tu consulta.
@@ -467,11 +486,15 @@ export default function EsperaVideo({
       </h1>
       <p className="mt-2 text-gray-600">
         {faltaPagar
-          ? `${medicoNombre ? formatNombreMedico(medicoNombre) : "El médico"} ya aceptó tu consulta y te atiende apenas se registre el pago. Todavía no se te cobró nada.`
+          ? nombreMedico
+            ? `${nombreMedico} ya aceptó tu consulta y te atiende apenas se registre el pago. Todavía no se te cobró nada.`
+            : "Tu consulta ya fue aceptada: te atienden apenas se registre el pago. Todavía no se te cobró nada."
           : pagoConfirmado
-            ? `Tu pago está acreditado. ${medicoNombre ? formatNombreMedico(medicoNombre) : "El médico"} inicia la videollamada en un momento.`
+            ? nombreMedico
+              ? `Tu pago está acreditado. ${nombreMedico} inicia la videollamada en un momento.`
+              : "Tu pago está acreditado. La videollamada empieza en un momento."
             : pagoEnCamino
-              ? "Mercado Pago todavía no acreditó el pago. No hace falta que pagues de nuevo — apenas se acredite, el médico te atiende."
+              ? `Mercado Pago todavía no acreditó el pago. No hace falta que pagues de nuevo — apenas se acredite, ${nombreMedico ? `${nombreMedico} te atiende` : "te atienden"}.`
               : "Estamos verificando tu pago con Mercado Pago"}
       </p>
 
@@ -487,7 +510,7 @@ export default function EsperaVideo({
         </button>
       )}
 
-      <InfoCard medicoNombre={medicoNombre} especialidad={especialidad} duracionConsulta={duracionConsulta}>
+      <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
         <div className="border-t border-gray-100 pt-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Estado</span>
@@ -532,7 +555,11 @@ export default function EsperaVideo({
             </svg>
             <p className="text-sm text-gray-500">
               {pagoConfirmado
-                ? "Esperando que el médico inicie la videollamada..."
+                ? nombreMedico
+                  // `articulo` sale vacío si no sabemos el título: la frase queda
+                  // "Esperando que Ana García inicie…", correcta y sin género inventado.
+                  ? `Esperando que ${articulo ? `${articulo} ` : ""}${nombreMedico} inicie la videollamada...`
+                  : "Esperando el inicio de la videollamada..."
                 : "Esperando confirmación de pago..."}
             </p>
           </div>
@@ -554,7 +581,8 @@ function InfoCard({
   duracionConsulta,
   children,
 }: {
-  medicoNombre: string;
+  /** Ya viene formateado con el título del médico (o `null` si no lo trajimos). */
+  medicoNombre: string | null;
   especialidad: string;
   duracionConsulta: number;
   children?: React.ReactNode;

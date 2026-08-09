@@ -50,8 +50,12 @@ export default async function MisConsultasPage() {
     ].filter(Boolean)),
   ];
 
+  // `titulo` ("Dr."/"Dra.") viaja hasta MisConsultasList para no tratar de "Dr." a una
+  // médica. Tiene GRANT SELECT para `authenticated` (verificado en prod). NO sumar otras
+  // columnas de `medicos`: una sola sin grant hace fallar el SELECT entero (PostgREST
+  // devuelve null en silencio) y el historial se quedaría sin nombres.
   const { data: medicos } = medicoIds.length > 0
-    ? await supabase.from("medicos").select("id, nombre_completo, especialidad").in("id", medicoIds)
+    ? await supabase.from("medicos").select("id, nombre_completo, titulo, especialidad").in("id", medicoIds)
     : { data: [] };
 
   const medicosMap = new Map((medicos ?? []).map((m) => [m.id, m]));
@@ -70,6 +74,8 @@ export default async function MisConsultasPage() {
     date: string;
     estado: string;
     medicoNombre: string;
+    // Opcional a propósito: si el médico no está en el mapa no inventamos tratamiento.
+    medicoTitulo: string | null;
     especialidad: string;
     canalOrigen: string | null;
     documentos: { id: string; tipo: string; diagnostico: string | null; contenido: string }[];
@@ -86,6 +92,7 @@ export default async function MisConsultasPage() {
       date: c.created_at,
       estado: c.estado,
       medicoNombre: med?.nombre_completo ?? "Medico",
+      medicoTitulo: med?.titulo ?? null,
       especialidad: c.especialidad ?? med?.especialidad ?? "",
       canalOrigen: (c as { canal_origen?: string }).canal_origen ?? null,
       documentos: docs.map((d) => ({ id: d.id, tipo: d.tipo, diagnostico: d.diagnostico, contenido: d.contenido })),
@@ -101,6 +108,7 @@ export default async function MisConsultasPage() {
       date: t.fecha + "T" + t.hora_inicio,
       estado: t.estado,
       medicoNombre: med?.nombre_completo ?? "Medico",
+      medicoTitulo: med?.titulo ?? null,
       especialidad: med?.especialidad ?? "",
       canalOrigen: (t as { canal_origen?: string }).canal_origen ?? null,
       documentos: docs.map((d) => ({ id: d.id, tipo: d.tipo, diagnostico: d.diagnostico, contenido: d.contenido })),

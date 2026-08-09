@@ -18,6 +18,13 @@ type ConsultaItem = {
   date: string;
   estado: string;
   medicoNombre: string;
+  /**
+   * Título profesional elegido por el médico en su registro (`medicos.titulo`:
+   * "Dr." o "Dra."). Lo arma la page al cruzar cada consulta/turno con su
+   * médico. Si falta, el historial muestra el nombre pelado — mejor eso que un
+   * "Dr." puesto por default sobre una médica.
+   */
+  medicoTitulo?: string | null;
   especialidad: string;
   canalOrigen: string | null;
   documentos: DocItem[];
@@ -138,7 +145,7 @@ export default function MisConsultasList({ items }: Props) {
                         className="text-sm font-medium truncate"
                         style={{ color: "var(--color-text-primary)" }}
                       >
-                        {formatNombreMedico(item.medicoNombre)}
+                        {formatNombreMedico(item.medicoNombre, item.medicoTitulo)}
                       </p>
                       <div className="flex items-center gap-1.5">
                         <p

@@ -9,6 +9,7 @@ import TabCobros from "./TabCobros";
 import FirmaManuscrita from "./FirmaManuscrita";
 import AreasAtencion from "./AreasAtencion";
 import { type AreaAtencion, serializarAreas, validarAreas } from "@/lib/areas-atencion";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 interface MpAccount {
   mp_user_id: string;
@@ -21,6 +22,9 @@ interface MpAccount {
 interface Medico {
   id: string;
   nombre_completo: string;
+  // "Dr." / "Dra." elegido por el médico en su registro. Opcional: sin él el
+  // perfil muestra el nombre pelado en vez de inventar un tratamiento.
+  titulo?: string | null;
   especialidad: string;
   numero_matricula: string;
   tipo_matricula: string;
@@ -298,7 +302,9 @@ export default function PerfilClient({
               initials
             )}
           </div>
-          <p className="mt-2 text-base font-medium text-gray-900">{medico.nombre_completo}</p>
+          {/* Con su tratamiento: es cómo el médico se ve nombrado en su propia
+              ficha y cómo lo va a ver el paciente en la clínica. */}
+          <p className="mt-2 text-base font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo, medico.titulo)}</p>
           <button
             onClick={() => fileRef.current?.click()}
             className="mt-1 text-sm font-medium text-[#378ADD]"

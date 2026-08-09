@@ -17,9 +17,14 @@ function getSaludo(): string {
 
 export default function NovaWidget({
   nombreMedico,
+  tituloMedico,
   turnosHoy,
 }: {
   nombreMedico: string;
+  /** Título que la médica eligió en su registro (`medicos.titulo`). Sin esto el
+   *  saludo del propio dashboard la trataba de "Dr." — el primer texto que ve
+   *  al entrar. */
+  tituloMedico?: string | null;
   turnosHoy: number;
 }) {
   const router = useRouter();
@@ -36,7 +41,7 @@ export default function NovaWidget({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-base font-medium text-[#1a1a1a] lg:text-lg">
-            {saludo}, {formatNombreMedico(nombreMedico)}
+            {saludo}, {formatNombreMedico(nombreMedico, tituloMedico)}
           </p>
           <p className="mt-1 text-sm text-[#6b7280]">
             Hoy tenes{" "}

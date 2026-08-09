@@ -4,6 +4,7 @@ import WorkspaceConsulta from "./WorkspaceConsulta";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { cargarEvolucionesPrevias } from "@/lib/evolucion/historia-clinica";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
@@ -22,10 +23,17 @@ export default async function WorkspacePage({
 
   if (!user) redirect("/auth/login");
 
-  // Solo medicos
+  // Solo medicos.
+  // `titulo` ("Dr."/"Dra.") entra al SELECT porque el nombre de este médico se
+  // publica como nombre de participante en la sala de LiveKit y es lo que el
+  // PACIENTE lee sobre el video. Los otros dos caminos que abren la misma sala
+  // (api/livekit/crear-sala y api/livekit/token) ya lo emiten con tratamiento;
+  // sin esto, el mismo médico aparecía con dos nombres distintos según el camino.
+  // Solo esa columna: en `medicos` hay columnas sin GRANT y con cliente RLS una
+  // sola de ellas hace fallar el SELECT ENTERO en silencio (CLAUDE.md).
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo")
+    .select("id, nombre_completo, titulo")
     .eq("user_id", user.id)
     .single();
 
@@ -136,7 +144,10 @@ export default async function WorkspacePage({
       // Generar token para el medico
       const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
         identity: `medico-${medico.id}`,
-        name: medico.nombre_completo || "Medico",
+        // Nombre visible para el paciente en la videollamada: con el tratamiento
+        // que el médico eligió. "Profesional" solo si no hay nombre — nunca un
+        // título inventado.
+        name: formatNombreMedico(medico.nombre_completo, medico.titulo) || "Profesional",
         ttl: "2h",
       });
       at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });
