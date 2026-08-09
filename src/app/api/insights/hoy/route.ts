@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reservas";
 
 // ── Página "Hoy" v2 (rediseño Diego 23/07) ────────────────────────────────────
 // 1. PLATA REAL, no teórica: cobrado = suma de `monto` PAGADO (mp_status
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
     { data: medicosDispRaw },
   ] = await Promise.all([
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(hoy)),
-    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct, canal_origen").eq("fecha", hoy),
+    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct, canal_origen, reservado_hasta").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hace7)).lt("created_at", medianocheARenUTC(hace6)),
     admin.from("turnos").select("id, estado, fecha, medico_id, paciente_id").eq("fecha", hace7),
     admin.from("consultas").select("id", { count: "exact", head: true }).eq("estado", "esperando"),
@@ -70,13 +71,19 @@ export async function GET(req: NextRequest) {
   // detectar "turnos habilitados hoy"; para atenciones se excluyen.
   const consultasHoy = (consultasHoyRaw ?? []).filter(c => !soloReales || !esTest(sets, c.medico_id, c.paciente_id));
   const turnosHoy = (turnosHoyRaw ?? []).filter(t => !soloReales || !esTest(sets, t.medico_id, t.paciente_id));
-  const turnosAtencionHoy = turnosHoy.filter(t => !SLOT.has(t.estado));
+  // Reservas ABANDONADAS afuera (ver lib/insights/reservas.ts): retención de 15
+  // min vencida sin pago = el paciente se arrepintió y el lugar ya está libre.
+  // No son atenciones ni "pendientes": son las vueltas de un paciente indeciso.
+  const turnosAtencionHoy = sinReservasAbandonadas(turnosHoy.filter(t => !SLOT.has(t.estado)));
   const medicosDisp = medicosDispRaw ?? [];
 
   const completadasHoy = consultasHoy.filter(c => c.estado === "completada").length +
     turnosAtencionHoy.filter(t => t.estado === "completado").length;
   const ciHoy = consultasHoy.filter(c => c.canal_origen !== "turno").length;
-  const turnosHoyCount = turnosAtencionHoy.length;
+  // KPI "Turnos hoy" = actividad REAL: sin abandonadas y sin reservas en curso.
+  // Una reserva viva se sigue listando abajo en `actividad` (etiquetada), pero
+  // todavía no es un turno: el paciente está en el checkout de MP.
+  const turnosHoyCount = soloActividadReal(turnosAtencionHoy).length;
 
   const completadas7dAgo = (consultas7d ?? []).filter(c =>
     c.estado === "completada" && (!soloReales || !esTest(sets, c.medico_id, c.paciente_id))
