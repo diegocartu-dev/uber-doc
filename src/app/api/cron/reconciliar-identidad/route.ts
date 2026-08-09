@@ -4,6 +4,7 @@ import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconcil
 import { getFlag } from "@/lib/feature-flags";
 import { enviarEmailRecordatorioIdentidad } from "@/lib/email";
 import { withCron } from "@/lib/cron-guard";
+import { sendDoctoAlert } from "@/lib/alertas";
 
 /**
  * Cron cada 10 min: BACKSTOP de la validación de identidad biométrica (Didit).
@@ -171,7 +172,101 @@ async function handler(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, procesados: candidatos.length, validados, recordatorios, resumen });
+  // ── Los que ya nadie está empujando ────────────────────────────────────────
+  //
+  // El mail automático tiene dos frenos deliberados: no se le manda a un
+  // "Declined" (ese rechazo lo mira un humano antes de invitar a reintentar) y
+  // se deja de insistir a los 30 días de la aprobación. Los dos son correctos.
+  //
+  // El problema es lo que pasa DESPUÉS de esos frenos: el profesional queda
+  // aprobado, sin poder recibir un solo paciente, y el único rastro es un badge
+  // en un panel que hay que acordarse de mirar. Medido el 09/08/2026: 13
+  // profesionales así, uno rechazado hacía 38 días sin que nadie lo tocara.
+  //
+  // Un badge que nadie mira no es un aviso. Esto va POR MAIL A DOCTO —no al
+  // profesional, que sigue con sus dos frenos intactos— una vez por semana,
+  // mientras haya alguien trabado. Es oferta médica apagada: cada uno de estos
+  // es un profesional aprobado que el paciente no puede elegir.
+  const ANTI_SPAM_MS = 7 * 24 * 60 * 60 * 1000;
+  let trabadosSinEmpuje = 0;
+  try {
+    const { data: sinAtender } = await admin
+      .from("medicos")
+      .select("didit_status, verificado_at, identidad_recordatorio_at")
+      .eq("estado_registro", "aprobado")
+      .eq("es_cuenta_test", false)
+      .neq("identidad_validada", true)
+      .neq("biometria_exenta", true);
+
+    const hace30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const abandonados = (sinAtender ?? []).filter(
+      (m) =>
+        m.didit_status === "Declined" ||
+        (m.verificado_at ? Date.parse(m.verificado_at) < hace30d : false)
+    );
+    trabadosSinEmpuje = abandonados.length;
+
+    if (trabadosSinEmpuje > 0) {
+      const { data: previo } = await admin
+        .from("cron_runs")
+        .select("last_alerted_at")
+        .eq("cron_key", "identidad-trabados")
+        .maybeSingle();
+      const yaAvisado =
+        previo?.last_alerted_at && Date.now() - Date.parse(previo.last_alerted_at) < ANTI_SPAM_MS;
+
+      if (!yaAvisado) {
+        const rechazados = abandonados.filter((m) => m.didit_status === "Declined").length;
+        const nunca = abandonados.filter((m) => !m.didit_status).length;
+        const ahora = new Date().toISOString();
+        await admin.from("cron_runs").upsert({
+          cron_key: "identidad-trabados",
+          last_run_at: ahora,
+          last_status: `${trabadosSinEmpuje} trabados`,
+          last_alerted_at: ahora,
+          updated_at: ahora,
+        });
+        await sendDoctoAlert(
+          `${trabadosSinEmpuje} profesionales aprobados que no pueden recibir pacientes`,
+          [
+            `Hay ${trabadosSinEmpuje} profesionales con la cuenta aprobada que NO aparecen en la`,
+            "clínica, porque les falta la verificación de identidad. Ya no reciben el",
+            "recordatorio automático, así que nadie los está empujando.",
+            "",
+            rechazados > 0
+              ? `· ${rechazados} con la verificación RECHAZADA. A estos el sistema no les escribe a propósito: un rechazo lo mira una persona antes de invitar a reintentar, porque puede no ser un problema de foto.`
+              : "",
+            nunca > 0 ? `· ${nunca} que nunca la arrancaron y ya pasaron los 30 días de insistencia.` : "",
+            "",
+            "Qué significa: son profesionales que se registraron, aprobaste, y hoy no",
+            "pueden atender a nadie. Oferta apagada.",
+            "",
+            "Dónde verlos: el panel de médicos (/admin/medicos) los marca con el badge",
+            "de identidad. Desde ahí se los puede contactar o eximir de la biometría.",
+            "",
+            "Este aviso se repite una vez por semana mientras quede alguno.",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        );
+      }
+    }
+  } catch (e) {
+    // Un aviso que falla NUNCA voltea la reconciliación, que es lo importante.
+    console.error(
+      "[cron/reconciliar-identidad] no se pudo revisar los trabados sin empuje:",
+      e instanceof Error ? e.message : String(e)
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    procesados: candidatos.length,
+    validados,
+    recordatorios,
+    trabados_sin_empuje: trabadosSinEmpuje,
+    resumen,
+  });
 }
 
 export const GET = withCron("reconciliar-identidad", handler);
