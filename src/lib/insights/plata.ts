@@ -38,16 +38,36 @@ export function comisionDe(f: FilaPago): number {
   return 0;
 }
 
-/** MP aprobó el pago. Es plata que ENTRÓ, haya vuelto a salir o no. */
+/** MP aprobó el pago y sigue así. */
 export const aprobada = (f: FilaPago): boolean => f.mp_status === "approved";
 
-/** La plata ya volvió al paciente. */
+/**
+ * La plata ya volvió al paciente.
+ *
+ * DOS SEÑALES, no una. Cuando el refund sale bien, el webhook de MP mueve
+ * `mp_status` de `approved` a `refunded`; `reintegro_estado='reembolsado'` lo
+ * escribe nuestro motor de reembolsos. Mirar una sola deja casos afuera:
+ *   · solo `reintegro_estado` → se pierden las filas que MP ya marcó `refunded`
+ *     (que son la mayoría de las reales).
+ *   · solo `mp_status`        → se pierden las devoluciones que se ejecutaron
+ *     sin que el webhook llegara. En este repo los webhooks fallados en
+ *     silencio son un antecedente concreto, no una hipótesis.
+ */
 export const reintegrada = (f: FilaPago): boolean =>
-  aprobada(f) && f.reintegro_estado === "reembolsado";
+  f.mp_status === "refunded" || f.reintegro_estado === "reembolsado";
 
 /** Devolución iniciada que todavía no se concretó: deuda, no salida. */
 export const reintegroEnCurso = (f: FilaPago): boolean =>
-  aprobada(f) && !!f.reintegro_estado && f.reintegro_estado !== "reembolsado";
+  !reintegrada(f) && !!f.reintegro_estado && f.reintegro_estado !== "reembolsado";
+
+/**
+ * Filas que movieron plata: la que entró y se quedó, y la que entró y volvió.
+ *
+ * Es el universo correcto para cualquier corte de plata. Filtrar por `aprobada`
+ * antes de agrupar dejaba los reintegros afuera del cálculo — y el corte por
+ * causa salía vacío justo cuando había devoluciones que mostrar.
+ */
+export const conMovimiento = (f: FilaPago): boolean => aprobada(f) || reintegrada(f);
 
 /**
  * Plata efectivamente cobrada: aprobada y NO devuelta.

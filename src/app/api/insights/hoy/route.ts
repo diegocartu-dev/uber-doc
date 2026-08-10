@@ -9,8 +9,8 @@ import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reserv
 // separarse sin que nadie se enterara.
 import {
   type FilaPago,
-  aprobada,
   cobradoDe,
+  conMovimiento,
   comisionTotalDe,
   pagada,
   reintegrada,
@@ -94,16 +94,20 @@ export async function GET(req: NextRequest) {
   // plata que perdimos por una falla nuestra y se acciona; uno por cancelación
   // del paciente es costo normal. Antes todo esto sumaba al cobrado porque un
   // refund de MP no toca `mp_status` (decisión Diego, 09/08).
-  const aprobadasHoy: FilaPago[] = [
-    ...consultasHoy.filter(aprobada),
-    ...turnosAtencionHoy.filter(aprobada),
+  // Universo: TODO lo que movió plata — lo cobrado y lo devuelto. Filtrar por
+  // `aprobada` acá dejaba los reintegros afuera antes de agruparlos, porque un
+  // refund exitoso mueve `mp_status` a `refunded`: el corte por causa salía
+  // vacío justo cuando había devoluciones que mostrar.
+  const conPlataHoy: FilaPago[] = [
+    ...consultasHoy.filter(conMovimiento),
+    ...turnosAtencionHoy.filter(conMovimiento),
   ];
-  const cobradoHoy = cobradoDe(aprobadasHoy);
-  const comisionDocto = comisionTotalDe(aprobadasHoy);
+  const cobradoHoy = cobradoDe(conPlataHoy);
+  const comisionDocto = comisionTotalDe(conPlataHoy);
   const netoMedicos = cobradoHoy - comisionDocto;
-  const reintegradoHoy = reintegradoDe(aprobadasHoy);
-  const reintegroEnCursoHoy = reintegroEnCursoDe(aprobadasHoy);
-  const reintegrosHoy = reintegrosPorCausa(aprobadasHoy);
+  const reintegradoHoy = reintegradoDe(conPlataHoy);
+  const reintegroEnCursoHoy = reintegroEnCursoDe(conPlataHoy);
+  const reintegrosHoy = reintegrosPorCausa(conPlataHoy);
 
   // ── Disponibles: turnos habilitados HOY y/o CI activa, con jurisdicciones ──
   const medicosConTurnoHoy = new Set(turnosHoy.filter(t => t.estado === "disponible").map(t => t.medico_id));
