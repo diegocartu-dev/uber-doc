@@ -33,9 +33,11 @@
 >   Quedan como registro de qué profesionales abarcó cada lote — dato útil por sí
 >   mismo. `enviado_at` en NULL significa "no se avisó", no "falta avisar".
 > - No corre ningún plazo de 10 días hábiles: no hay nada que consolidar.
-> - Si un profesional pregunta o objeta por su cuenta, sigue vigente la regla del
->   punto 6.2: **se revoca el sello de ese documento**, el log no se borra, se
->   emite el estado "sin sello" y se registra la objeción.
+> - **Tampoco queda en pie la revocación automática por objeción** (decisión de
+>   Diego del 09/08, en la misma línea). El documento recomendaba comprometerse
+>   de antemano a revocar el sello de quien objetara. No se asume ese compromiso:
+>   el sello acredita algo que efectivamente pasó, y no se va a deshacer por
+>   regla. Si alguna vez alguien plantea algo, lo resuelve Diego en ese momento.
 > - A los pacientes tampoco se avisa (ya estaba decidido así).
 
 ---
@@ -245,9 +247,12 @@ Quedan fuera del lote, y van a revisión manual o a nada:
    más serio. Mitigación: **avisar a los profesionales** —la notificación sin
    objeción funciona como ratificación— y crear el T&C de firma para adelante.
 2. **Repudio** ("yo nunca firmé eso"). Mitigación: log encadenado + consulta
-   realizada + pago acreditado + documento entregado ese día + el aviso. Regla
-   operativa: **si un profesional objeta, se revoca el sello de ese documento** —
-   el log no se borra, se emite el estado "sin sello" y se registra la objeción.
+   realizada + pago acreditado + documento entregado ese día. La evidencia se
+   sostiene sola y no depende de ningún aviso previo.
+   ~~Regla operativa: si un profesional objeta, se revoca el sello de ese
+   documento.~~ **NO SE ADOPTA** (Diego, 09/08/2026): no se asume de antemano el
+   compromiso de deshacer un sello que acredita algo que efectivamente pasó. Un
+   planteo concreto lo resuelve Diego en el momento.
 3. **Documento con un error que el profesional hubiera querido corregir queda
    congelado.** Mitigación: ventana de 10 días hábiles para observar antes de
    considerar el lote consolidado.
@@ -286,8 +291,9 @@ verificación ya lo explica.
 5. **No sellar** lo enumerado en el punto 5.
 6. **No re-sellar ni firmar dos veces**, y **no tocar `firma_logs`**: sin UPDATE,
    sin DELETE, sin "corregir" una fila.
-7. **No atribuir la firma a un profesional sin darle vía de objeción**, y revocar el
-   sello del documento del que objete.
+7. ~~**No atribuir la firma a un profesional sin darle vía de objeción**, y
+   revocar el sello del documento del que objete.~~ **NO SE ADOPTA** (Diego,
+   09/08/2026): ver la decisión al principio del documento.
 8. **No reenviar los PDFs sellados a los pacientes** como si fueran documentos
    nuevos. Quedan disponibles en la descarga, nada más.
 
