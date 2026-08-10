@@ -86,13 +86,18 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
     // stale (Roberto, gate #253) — sin esta cota, una CI abandonada bloquearía las
     // reservas con ese médico para siempre. Falla permisiva: mejor dejar reservar de
     // más que bloquear por dato viejo.
+    // Solo las PAGAS bloquean (regla del Uber, Diego 09/08 — ver CLAUDE.md).
+    // `esperando` y `aceptada` salieron de esta lista: son solicitudes sin pagar,
+    // y el paciente es libre de dejarlas. Reservar un turno con su plata es
+    // decisión suya; lo único que no puede hacer es estar en dos atenciones
+    // pagas a la vez con el mismo profesional.
     const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: ciActivas } = await supabase
       .from("consultas")
       .select("id", { count: "exact", head: true })
       .eq("paciente_id", user.id)
       .eq("medico_id", turno.medico_id)
-      .in("estado", ["esperando", "aceptada", "pagada", "en_curso"])
+      .in("estado", ["pagada", "en_curso"])
       .gte("created_at", hace24h);
     if (ciActivas && ciActivas > 0) {
       return { error: "Ya tenés una consulta activa con este profesional. Cuando termine, vas a poder reservar un nuevo turno." };

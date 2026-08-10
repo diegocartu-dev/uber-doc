@@ -260,6 +260,67 @@ export default function SalaEsperaCliente({
   const pagoEnCamino = medicoAcepto && !salaVideoUrl && pago === "en_camino";
   const pagoConfirmado = medicoAcepto && pago === "confirmado";
 
+  // ── Venció el plazo de 30 minutos (cron resolver-consultas-vencidas) ───────
+  // El profesional no entró: la plata vuelve entera y el paciente queda libre.
+  // Lo importante es que las dos cosas se digan JUNTAS — "te devolvemos todo" y
+  // "podés elegir otro" —: sin la segunda, el paciente se queda mirando una
+  // pantalla que le informa una pérdida y no le ofrece salida.
+  if (estado === "medico_ausente") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/10">
+          <span className="text-5xl">💚</span>
+        </div>
+        <h1 className="mt-6 text-xl font-bold text-gray-900">Te devolvemos el 100%</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          {nombreMedico ? `${nombreMedico} no llegó` : "El profesional no llegó"} a tomar tu consulta
+          dentro de los 30 minutos. <strong>Ya iniciamos la devolución total</strong> del importe al
+          mismo medio con el que pagaste.
+        </p>
+        <p className="mt-2 text-sm text-gray-600">
+          Podés elegir otro profesional ahora mismo.
+        </p>
+        <a
+          href="/clinica"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Elegir otro profesional
+        </a>
+      </div>
+    );
+  }
+
+  // El paciente no llegó a entrar. Se dice el HECHO que el sistema puede probar
+  // —no registramos tu ingreso— y no una acusación, con la regla, la salida y el
+  // recurso. Mismo criterio que el aviso de turnos (gate Sofía).
+  if (estado === "no_show_paciente") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
+          <span className="text-5xl">🕐</span>
+        </div>
+        <h1 className="mt-6 text-xl font-bold text-gray-900">Tu consulta venció</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Pasaron 30 minutos sin que registráramos tu ingreso a la consulta. Las consultas que no se
+          usan <strong>no tienen reintegro</strong>.
+        </p>
+        <p className="mt-2 text-sm text-gray-600">
+          Podés pedir una nueva cuando quieras. Si creés que hubo un error, escribinos a{" "}
+          <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
+            soporte@docto.com.ar
+          </a>
+          .
+        </p>
+        <a
+          href="/clinica"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Pedir una nueva consulta
+        </a>
+      </div>
+    );
+  }
+
   // La solicitud murió (la canceló el paciente, el sistema o el médico no la tomó):
   // decirlo con todas las letras — antes esta pantalla seguía mostrando el spinner
   // de "sala de espera" para siempre (caso 04/08: un paciente esperó más de una hora).

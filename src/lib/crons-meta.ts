@@ -107,6 +107,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada 10 minutos",
     autoRecupera: false,
   },
+  "resolver-consultas-vencidas": {
+    nombre: "Plazo de la consulta inmediata (30 min)",
+    queHace: "cierra las CI pagadas que nadie tomó: reintegro del 100% si faltó el profesional, sin reintegro si faltó el paciente",
+    impacto: "un paciente que pagó y no fue atendido no recibe su devolución y queda sin poder consultar con otro",
+    cadencia: "cada 10 minutos",
+    autoRecupera: false,
+  },
   "resolver-turnos-vencidos": {
     nombre: "Resolución de turnos vencidos",
     queHace: "marca las ausencias (médico o paciente) y dispara el reembolso automático cuando corresponde",

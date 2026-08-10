@@ -48,6 +48,11 @@ const estadoConfig: Record<string, { color: string; bg: string; label: string }>
   cancelado_medico: { color: "var(--color-danger)", bg: "var(--color-danger-soft)", label: "Cancelado" },
   ausente_paciente: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Ausente" },
   ausente_medico: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Ausente" },
+  // Desenlaces del plazo de 30 min de la CI. Sin estas dos entradas el chip
+  // mostraba el valor crudo de la base ("medico_ausente") en la pantalla del
+  // paciente — hasta ahora no se notaba porque ningún código los seteaba.
+  medico_ausente: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Devuelta" },
+  no_show_paciente: { color: "var(--color-muted)", bg: "var(--color-muted-soft)", label: "Vencida" },
 };
 
 const tipoDocLabel: Record<string, string> = {
