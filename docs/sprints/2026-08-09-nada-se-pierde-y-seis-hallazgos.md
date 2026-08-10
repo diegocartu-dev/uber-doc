@@ -230,22 +230,52 @@ Si el profesional escribió una receta y el paciente **no tiene el CUIL cargado 
 ese momento**, la receta se descarta: los demás documentos salen normalmente, el
 borrador se limpia igual, y **nadie se entera**. Ni el profesional ni el paciente.
 
-Caso real medido (23/07): la profesional escribió todo, generó la evolución
-14:25:46, finalizó 14:25:58, y salieron **indicaciones + certificado + orden,
-los tres firmados**. La receta, no. La evolución auto-compuesta —que embebe la
-receta en la sección "se indica"— confirma que la había escrito. El paciente pagó
-y nunca recibió la receta.
+Caso real medido (23/07): la profesional generó la evolución 14:25:46, finalizó
+14:25:58, y salieron **indicaciones + certificado + orden, los tres firmados**.
+La receta, no. El borrador quedó vacío.
 
-Dos cosas importantes:
+**Qué está probado y qué es inferencia** — importa, porque de esto depende qué se
+le dice a una profesional real:
 
-1. **No fue culpa del profesional.** Cerró bien, la emisión funcionó, tres
-   documentos salieron. La plataforma tiró uno solo, en silencio.
-2. **El texto NO está perdido**: vive en la evolución, y desde el PR #369 el
+- PROBADO: los tres documentos salieron bien y la receta no. El borrador se
+  limpió igual.
+- PROBADO (con grupo de control): la evolución de esa consulta tiene dosis
+  numérica y frecuencia ("cada N horas"), señales que la plantilla auto-compuesta
+  NO produce sola. En las 6 consultas reales que SÍ emitieron receta, las 6
+  tienen esa señal; de las 4 que no emitieron, solo esta la tiene. O sea: hay
+  medicación indicada sin receta emitida.
+- INFERENCIA, no medida: que la causa haya sido el CUIL faltante. El guard
+  `sinCuil` es el único camino del código que descarta una receta escrita, y
+  existe desde el 18/04 —o sea que estaba vivo ese día—, pero `pacientes` no
+  tiene `updated_at`, así que **no se puede probar** que el CUIL faltara en ese
+  momento. Hoy el paciente sí lo tiene.
+
+Dos cosas que sí se sostienen:
+
+1. **No hay evidencia de que el profesional haya hecho algo mal.** Cerró, la
+   emisión funcionó, tres documentos salieron firmados.
+2. **El texto no está perdido**: vive en la evolución, y desde el PR #369 el
    profesional puede volver a la atención cerrada y emitir la receta que faltó.
 
 Qué falta arreglar: que el descarte deje de ser mudo. O se frena antes de
 finalizar (pidiendo el CUIL, como ya hace el modal de cobertura), o se avisa
 explícitamente que la receta no salió y por qué.
+
+## Dos casos distintos que NO hay que confundir
+
+Aparecieron dos atenciones reales cobradas con documentación faltante, y tienen
+causas y montos distintos:
+
+| | 09/06 | 23/07 |
+|---|---|---|
+| Borrador con contenido | **sí** | no |
+| Documentos entregados | **cero** | tres (indicaciones, certificado, orden) |
+| Qué faltó | todo | la receta |
+| Lectura | se escribió y no se entregó nada | se entregó casi todo, faltó una pieza |
+
+Son fallas diferentes. La primera es la que motivó el sprint de rescate del
+borrador; la segunda es el hallazgo abierto de la receta. Mezclarlas lleva a
+decirle a un profesional algo que no hizo.
 
 ## Lo que quedó pendiente
 

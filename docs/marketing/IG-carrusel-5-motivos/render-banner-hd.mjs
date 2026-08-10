@@ -1,0 +1,14 @@
+import { chromium } from "@playwright/test";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import os from "node:os";
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const dest = path.join(os.homedir(), "Desktop", "Docto-banner.png");
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1500, height: 500 }, deviceScaleFactor: 2 });
+await page.goto("file://" + path.join(dir, "banner.html"));
+await page.evaluate(() => document.fonts.ready);
+await page.waitForTimeout(500);
+await page.locator(".banner").screenshot({ path: dest });
+console.log("Guardado en:", dest);
+await browser.close();
