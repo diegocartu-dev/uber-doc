@@ -907,8 +907,12 @@ export async function sellarDocumentoDiferido(
   // este modo de falla. Por eso se escribe acá y no al final del lote: un corte
   // en el medio deja la deuda anotada igual.
   //
-  // `enviado_at` queda en NULL a propósito: la fila dice "hay que avisarle",
-  // no "ya se le avisó". El envío lo marca después quien manda el mail.
+  // QUÉ SIGNIFICA ESTA FILA (decisión Diego, 09/08/2026): es el REGISTRO DE
+  // ALCANCE del lote — qué profesionales abarcó—, NO una deuda de notificación.
+  // Se decidió NO avisarles: el sello no creó ninguna obligación nueva ni cambió
+  // el contrato, la firma del art. 5 ya había ocurrido al emitir y no aplicar el
+  // sello fue un bug nuestro. `enviado_at` en NULL significa "no se avisó", no
+  // "falta avisar". Ver docs/legal/2026-08-07-sellado-diferido-documentos-historicos.md.
   //
   // Best-effort deliberado: si esto falla, el documento YA quedó sellado y
   // revertir el sello sería peor. El error se registra y el repaso del lote lo

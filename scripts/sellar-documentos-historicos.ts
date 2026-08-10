@@ -336,7 +336,7 @@ function reporte(r: {
   console.log(
     `Profesionales del lote         : ${
       r.medicosLote ?? "no se pudo leer — revisar `sellado_diferido_avisos`"
-    }  ← a estos hay que avisarles`
+    }  ← alcance del lote (NO se les avisa, ver abajo)`
   );
   console.log(`Claves generadas para el sello : ${r.clavesCreadas}`);
   console.log(`Sin sellar todavía             : ${r.pendientes}`);
@@ -346,10 +346,15 @@ function reporte(r: {
 
   console.log("");
   console.log("Qué queda por hacer (no lo hace este script):");
-  console.log("  1. Avisar a los profesionales alcanzados (mail firma Valentina) y");
-  console.log("     anotar envío y respuestas en `sellado_diferido_avisos`.");
-  console.log("  2. Revisar a mano lo que quedó en 'medico_no_validado_al_emitir'.");
-  console.log("  3. NO se avisa a los pacientes (decisión de producto).");
+  console.log("  1. Revisar a mano lo que quedó en 'medico_no_validado_al_emitir'.");
+  console.log("");
+  console.log("A quién NO se avisa (decisión Diego, 09/08/2026):");
+  console.log("  · A los profesionales: NO. El sello no creó ninguna obligación nueva");
+  console.log("    ni cambió el contrato — se corrigió un bug que dejó sin sello");
+  console.log("    documentos ya firmados. Avisar sembraría dudas sobre documentos");
+  console.log("    que están bien. Las filas de `sellado_diferido_avisos` quedan como");
+  console.log("    registro del alcance del lote, no como deuda pendiente.");
+  console.log("  · A los pacientes: NO (ya estaba decidido).");
 }
 
 function detallarSalteados(salteados: Map<MotivoSalteo, { id: string; detalle: string }[]>) {

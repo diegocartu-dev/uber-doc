@@ -5,6 +5,41 @@
 **Sustituye en lo pertinente** al criterio de la mañana, que recomendaba no sellar
 (registrado en `2026-08-07-firma-electronica-hallazgo-y-remediacion.md`, punto 5).
 
+> ## ⚠️ DECISIÓN DEL CEO — 09/08/2026: NO se avisa a los profesionales
+>
+> Este documento recomendaba, en el punto 6, avisarle a cada profesional
+> alcanzado. **Diego decidió que no se avisa.** La recomendación queda registrada
+> abajo tal como se escribió, pero **no se ejecuta**.
+>
+> Su razonamiento, que rechaza la premisa del punto 6 y no solo la conclusión:
+>
+> - **No hubo acto unilateral que ratificar.** El sello no creó ninguna
+>   obligación nueva ni cambió una sola condición del contrato con el
+>   profesional. La firma del art. 5 ya había ocurrido al emitir; el sello es
+>   evidencia de esa firma. Encuadrarlo como "acto unilateral de la plataforma"
+>   es un error de encuadre.
+> - **Fue un bug nuestro, y lo arreglamos.** El sello tendría que haberse
+>   aplicado en el momento de la emisión. No aplicarlo fue una falla de
+>   ejecución; aplicarlo después restituye el estado que siempre debió existir.
+>   Es lo mismo que un paciente que hoy puede descargar su certificado: lo tiene
+>   como lo debió tener desde el principio.
+> - **Avisar genera dudas donde hay certezas.** Un mail explicando firmas y
+>   sellos sobre documentos que están bien instala una sospecha que hoy no existe
+>   en ninguno de los cuatro profesionales. Nadie reclamó nada.
+> - Es una **decisión comercial y estratégica**, y como tal es del CEO.
+>
+> **Consecuencias operativas:**
+> - Las filas de `sellado_diferido_avisos` **no son una deuda de notificación**.
+>   Quedan como registro de qué profesionales abarcó cada lote — dato útil por sí
+>   mismo. `enviado_at` en NULL significa "no se avisó", no "falta avisar".
+> - No corre ningún plazo de 10 días hábiles: no hay nada que consolidar.
+> - **Tampoco queda en pie la revocación automática por objeción** (decisión de
+>   Diego del 09/08, en la misma línea). El documento recomendaba comprometerse
+>   de antemano a revocar el sello de quien objetara. No se asume ese compromiso:
+>   el sello acredita algo que efectivamente pasó, y no se va a deshacer por
+>   regla. Si alguna vez alguien plantea algo, lo resuelve Diego en ese momento.
+> - A los pacientes tampoco se avisa (ya estaba decidido así).
+
 ---
 
 ## 1. La decisión y por qué
@@ -212,9 +247,12 @@ Quedan fuera del lote, y van a revisión manual o a nada:
    más serio. Mitigación: **avisar a los profesionales** —la notificación sin
    objeción funciona como ratificación— y crear el T&C de firma para adelante.
 2. **Repudio** ("yo nunca firmé eso"). Mitigación: log encadenado + consulta
-   realizada + pago acreditado + documento entregado ese día + el aviso. Regla
-   operativa: **si un profesional objeta, se revoca el sello de ese documento** —
-   el log no se borra, se emite el estado "sin sello" y se registra la objeción.
+   realizada + pago acreditado + documento entregado ese día. La evidencia se
+   sostiene sola y no depende de ningún aviso previo.
+   ~~Regla operativa: si un profesional objeta, se revoca el sello de ese
+   documento.~~ **NO SE ADOPTA** (Diego, 09/08/2026): no se asume de antemano el
+   compromiso de deshacer un sello que acredita algo que efectivamente pasó. Un
+   planteo concreto lo resuelve Diego en el momento.
 3. **Documento con un error que el profesional hubiera querido corregir queda
    congelado.** Mitigación: ventana de 10 días hábiles para observar antes de
    considerar el lote consolidado.
@@ -223,10 +261,13 @@ Quedan fuera del lote, y van a revisión manual o a nada:
 5. **Profesional sin clave activa.** Si el par se genera ahora, queda registrado
    como tal. No se oculta.
 
-**Aviso a los profesionales: obligatorio.** Es lo que convierte un acto unilateral
-de la plataforma en algo ratificado. Mail individual, firma Valentina, sin
-explicación técnica, con vía de objeción a soporte@docto.com.ar y plazo de 10 días
-hábiles. El registro de envío y respuesta va en `sellado_diferido_avisos`.
+**~~Aviso a los profesionales: obligatorio.~~ NO SE EJECUTA — ver la decisión del
+CEO del 09/08/2026 al principio de este documento.** El texto original decía:
+"es lo que convierte un acto unilateral de la plataforma en algo ratificado; mail
+individual, firma Valentina, sin explicación técnica, con vía de objeción a
+soporte@docto.com.ar y plazo de 10 días hábiles". Diego rechazó la premisa: no
+hubo acto unilateral porque no se creó ninguna obligación nueva — se corrigió un
+bug que dejaba sin sello documentos ya firmados.
 
 **A los pacientes no se avisa.** Un mail masivo sobre firmas convierte un problema
 invisible en uno visible y alarma sin necesidad. Si alguno pregunta, la página de
@@ -250,8 +291,9 @@ verificación ya lo explica.
 5. **No sellar** lo enumerado en el punto 5.
 6. **No re-sellar ni firmar dos veces**, y **no tocar `firma_logs`**: sin UPDATE,
    sin DELETE, sin "corregir" una fila.
-7. **No atribuir la firma a un profesional sin darle vía de objeción**, y revocar el
-   sello del documento del que objete.
+7. ~~**No atribuir la firma a un profesional sin darle vía de objeción**, y
+   revocar el sello del documento del que objete.~~ **NO SE ADOPTA** (Diego,
+   09/08/2026): ver la decisión al principio del documento.
 8. **No reenviar los PDFs sellados a los pacientes** como si fueran documentos
    nuevos. Quedan disponibles en la descarga, nada más.
 
@@ -265,11 +307,13 @@ verificación ya lo explica.
    (no escribe nada; imprime cuántos se sellarían y por qué se saltean los demás).
 3. Ejecutar: `npx tsx scripts/sellar-documentos-historicos.ts --aplicar`
    Es reanudable e idempotente: si se corta, se vuelve a correr el mismo comando.
-4. Avisar a los profesionales alcanzados y registrar envíos y respuestas.
+4. ~~Avisar a los profesionales alcanzados~~ — **NO se avisa** (decisión del CEO,
+   09/08/2026). Las filas de `sellado_diferido_avisos` quedan como registro del
+   alcance de cada lote, no como deuda pendiente.
 5. Revisar a mano lo que quedó fuera por validación no computable.
 
-Tres garantías del backfill que sostienen el punto 4, y que valen aunque la corrida
-se corte a la mitad:
+Tres garantías del backfill sobre el registro de alcance, que valen aunque la
+corrida se corte a la mitad:
 
 - **La fila de aviso se escribe apenas se sella el primer documento de cada
   profesional**, no al final. Si se escribía al cierre, un corte dejaba documentos

@@ -80,7 +80,11 @@ lote, esos documentos ya no son candidatos, así que esos 4 no volvían a aparec
 nunca — el propio dictamen había previsto ese modo de falla. Ahora la fila se
 escribe al sellar cada documento, no al final del lote.
 
-**Pendiente: el envío del aviso a los 4 profesionales.** No es decisión técnica.
+**Cerrado el 09/08 sin envío: NO se avisa a los profesionales** (decisión del CEO).
+El sello no creó ninguna obligación nueva ni cambió el contrato — se corrigió un
+bug que dejaba sin sello documentos ya firmados. Avisar sembraría dudas sobre
+documentos que están bien. Las 4 filas quedan como registro del alcance del lote.
+Fundamento completo en `docs/legal/2026-08-07-sellado-diferido-documentos-historicos.md`.
 
 ---
 
@@ -287,8 +291,9 @@ decirle a un profesional algo que no hizo.
    justo lo que no se quiere. Ver "Mecánica del reembolso" abajo.
 3. **Aviso a la profesional de ese caso** — el mensaje NO puede decir que abandonó
    la consulta: la evidencia muestra lo contrario. El texto lo aprueba Diego.
-3. **Aviso a los 4 profesionales del sellado diferido** — la deuda está anotada en
-   `sellado_diferido_avisos` (4 filas, `enviado_at` NULL). El texto lo aprueba Diego.
+3. ~~**Aviso a los 4 profesionales del sellado diferido**~~ — **CERRADO el 09/08:
+   no se avisa** (decisión del CEO). Las 4 filas de `sellado_diferido_avisos`
+   quedan como registro del alcance del lote, no como deuda.
 4. **Oferta médica** — 0 médicos con CI prendida; 13 aprobados trabados por
    identidad (12 nunca arrancaron la biometría, 1 rechazado). Es la palanca grande.
 5. **UX menor** — si un paciente con consulta activa vuelve al triage, el
