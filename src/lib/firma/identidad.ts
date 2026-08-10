@@ -28,6 +28,7 @@
 // acá (requeriría hashear el binario y versionar el bucket).
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cuilDePaciente } from "@/lib/cuil";
 
 /**
  * Subconjunto EXACTO de `DocumentoPDF` (src/lib/pdf/receta.ts) que sale impreso
@@ -137,7 +138,13 @@ export async function construirIdentidadDocumento(
     medico_firma_manuscrita_path: textoONull(medico.firma_manuscrita_url),
     paciente_nombre: texto(paciente.nombre_completo),
     paciente_dni: texto(paciente.dni),
-    paciente_cuil: texto(paciente.cuil),
+    // El CUIL guardado si lo hay; si no, derivado de DNI + sexo. La columna
+    // `cuil` solo se llenaba en dos momentos del alta, así que un paciente que
+    // llegó por cualquier otro camino quedaba sin CUIL para siempre aunque
+    // tuviéramos los datos para calcularlo. Derivarlo acá hace que el documento
+    // salga completo igual. Si no alcanza para derivarlo queda "" y el PDF
+    // imprime el bloque del paciente con nombre + DNI, que es válido.
+    paciente_cuil: cuilDePaciente(paciente),
     paciente_sexo_dni: textoONull(paciente.sexo_dni),
     paciente_fecha_nacimiento: textoONull(paciente.fecha_nacimiento),
     paciente_tiene_cobertura: paciente.tiene_cobertura === true,

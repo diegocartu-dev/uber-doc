@@ -473,7 +473,6 @@ type Props = {
     tiempo_sintomas: string | null;
     paciente_nombre: string;
     paciente_nacimiento: string | null;
-    paciente_cuil: string | null;
     paciente_sexo_dni: string | null;
     paciente_id: string;
     paciente_cobertura: DatosCobertura;
@@ -1401,8 +1400,6 @@ export default function WorkspaceConsulta({
     if (finalizandoRef.current) return;
     if (!validarCamposObligatorios()) return;
 
-    const sinCuil = receta.trim() && !consulta.paciente_cuil;
-
     setFinalizando(true);
     // Marcar finalización iniciada por el médico ANTES de borrar la sala, para
     // que onDisconnected (que se dispara al destruirse el room) NO muestre el
@@ -1437,7 +1434,7 @@ export default function WorkspaceConsulta({
     }
 
     // 3. Navegar al dashboard sin esperar Supabase
-    router.push(sinCuil ? "/dashboard?aviso=sin-cuil&from=videollamada" : "/dashboard?from=videollamada");
+    router.push("/dashboard?from=videollamada");
 
     // 4. Guardar documentos y cerrar consulta/turno en background (fire-and-forget)
     //    Mismo flujo para ambos canales; solo cambian tabla, estado y FK del paciente.
@@ -1525,7 +1522,17 @@ export default function WorkspaceConsulta({
           tratamiento?: string | null;
           dias_reposo?: number | null;
         }[] = [];
-        if (receta.trim() && !sinCuil) docs.push({ tipo: "receta", contenido: receta.trim() });
+        // La receta se emite SIEMPRE que el profesional la haya escrito. Acá
+        // vivía un `&& !sinCuil` que la descartaba en silencio cuando el
+        // paciente no tenía el CUIL cargado: los demás documentos salían, el
+        // borrador se limpiaba igual, y ni el profesional ni el paciente se
+        // enteraban de que faltaba la receta. Costó una consulta real.
+        //
+        // El CUIL nunca fue necesario para emitir: el PDF ya imprime el bloque
+        // del paciente con nombre + DNI cuando no lo hay (`src/lib/pdf/receta.ts`),
+        // y además es DERIVABLE de DNI + sexo — lo deriva `cuilDePaciente` al
+        // armar el snapshot de identidad del documento.
+        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
         if (indicaciones.trim())
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
         // Certificado de reposo (art. 210 LCT): se emite si hay tratamiento o días.

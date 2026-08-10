@@ -94,7 +94,7 @@ export default async function VideoTurnoPage({
 
   // Datos del paciente
   const { data: paciente } = await supabase
-    .from("pacientes").select("nombre_completo, fecha_nacimiento, cuil, sexo_dni")
+    .from("pacientes").select("nombre_completo, fecha_nacimiento, sexo_dni")
     .eq("id", turno.paciente_id).maybeSingle();
 
   // Datos de cobertura (SELECT separado per CLAUDE.md)
@@ -187,7 +187,6 @@ export default async function VideoTurnoPage({
         tiempo_sintomas: null,
         paciente_nombre: paciente?.nombre_completo ?? "Paciente",
         paciente_nacimiento: paciente?.fecha_nacimiento ?? null,
-        paciente_cuil: paciente?.cuil ?? null,
         paciente_sexo_dni: paciente?.sexo_dni ?? null,
         paciente_id: turno.paciente_id ?? "",
         paciente_cobertura: {

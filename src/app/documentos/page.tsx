@@ -6,6 +6,7 @@ import BannerConsultaActiva from "./BannerConsultaActiva";
 import { Pill, FileText, Award, ClipboardList } from "lucide-react";
 import OrigenBadge from "@/components/OrigenBadge";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { cuilDePaciente } from "@/lib/cuil";
 import type { LucideIcon } from "lucide-react";
 
 const tipoLabel: Record<string, string> = {
@@ -124,7 +125,11 @@ export default async function DocumentosPage() {
       medico_domicilio: med?.domicilio ?? "",
       paciente_nombre: paciente.nombre_completo,
       paciente_dni: paciente.dni ?? "",
-      paciente_cuil: paciente.cuil ?? "",
+      paciente_cuil: cuilDePaciente({
+        cuil: paciente.cuil,
+        dni: paciente.dni,
+        sexo_dni: perfilMedico?.sexo_dni,
+      }),
       paciente_sexo_dni: perfilMedico?.sexo_dni ?? null,
       paciente_fecha_nacimiento: perfilMedico?.fecha_nacimiento ?? null,
       paciente_tiene_cobertura: perfilMedico?.tiene_cobertura ?? null,
