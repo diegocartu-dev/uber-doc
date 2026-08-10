@@ -6,6 +6,11 @@ type EventoFunnel =
   | "mp_oauth_callback_success"
   | "mp_oauth_callback_error"
   | "mp_oauth_disconnect"
+  // El paciente VIO la pantalla de pago (todavía no apretó pagar). La distancia
+  // entre este evento y `pago_creado` es el abandono del checkout — antes era
+  // invisible: sabíamos que alguien reservó (queda la fila del turno) pero no
+  // si llegó a ver la pantalla de pago ni si la vio y se fue.
+  | "pago_vista"
   | "pago_creado"
   | "pago_aprobado"
   | "pago_rechazado"

@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { waitUntil } from "@vercel/functions";
+import { trackEvent } from "@/lib/funnel";
 import { createClient } from "@/lib/supabase/server";
 import PagoPendiente from "./PagoPendiente";
 import DoctoLogo from "@/components/DoctoLogo";
@@ -24,6 +26,18 @@ export default async function PagoTurnoPage({
   const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen);
   if (turno.estado === "confirmado") redirect(`/turno/${turnoId}/confirmacion`);
   if (turno.estado !== "reservado_pendiente") redirect("/clinica");
+
+  // El paciente llegó a la pantalla de pago. `waitUntil` y no un await: un
+  // evento de análisis no puede demorar la página de pago ni un milisegundo.
+  // Recargar la página emite otro evento — igual que `clinica_vista`; el
+  // análisis dedupea por paciente+turno.
+  waitUntil(
+    trackEvent({
+      evento: "pago_vista",
+      pacienteId: user.id,
+      metadata: { tipo: "turno", turnoId },
+    })
+  );
 
   // `titulo` ("Dr."/"Dra.") lo elige el médico en su registro. Sin él, el detalle del
   // turno muestra el nombre sin tratamiento. Tiene GRANT SELECT para authenticated,
