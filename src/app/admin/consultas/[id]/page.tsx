@@ -5,6 +5,14 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeft, Stethoscope, User, FileText, CircleDollarSign, Clock } from "lucide-react";
 
+// El reloj se lee acá y no en el cuerpo del componente: esta página es un
+// Server Component y se evalúa una vez por request, pero la regla de pureza de
+// React no distingue server de cliente.
+function ahoraMs(): number {
+  return new Date().getTime();
+}
+
+
 // Ficha de detalle de una atención (pedido Diego 04/08, tras un reclamo de un
 // paciente que no recibió su documentación): toda la
 // línea de tiempo, la plata, los documentos y los DATOS DE MÉDICO Y PACIENTE
@@ -64,8 +72,30 @@ export default async function DetalleAtencionPage({
     paciente = porUser.data ?? (await admin.from("pacientes").select("id, user_id, nombre_completo, email, telefono, dni, provincia, obra_social, nro_afiliado, tiene_cobertura, fecha_nacimiento").eq("id", at.paciente_id).maybeSingle()).data;
   }
 
+  // Retención de la reserva. `reservado_hasta` = instante de la reserva + 15 min
+  // (`reservarTurno`), así que restarle 15 da el momento exacto en que el
+  // paciente tomó el lugar — dato que no está en ninguna columna y que era lo
+  // único que explicaba qué pasó en un turno sin pago.
+  const HOLD_MIN = 15;
+  // El cron `liberar-reservas` no libera al vencer: espera 45 min más de gracia
+  // por si un pago de Mercado Pago aprueba tarde. Sin decirlo, la pantalla
+  // parecía trabada.
+  const GRACIA_LIBERACION_MIN = 45;
+  const reservadoHastaMs = at.reservado_hasta ? new Date(at.reservado_hasta).getTime() : null;
+  const reservadoEn = reservadoHastaMs ? new Date(reservadoHastaMs - HOLD_MIN * 60000).toISOString() : null;
+  const retencionVencida = reservadoHastaMs !== null && reservadoHastaMs < ahoraMs();
+  const seLiberaEn = reservadoHastaMs
+    ? new Date(reservadoHastaMs + GRACIA_LIBERACION_MIN * 60000).toISOString()
+    : null;
+  const huboPago = at.mp_status === "approved" || !!at.pago_id;
+
   const timeline: { hora: string | null; label: string }[] = esTurno
     ? [
+        { hora: fmtHora(reservadoEn), label: `Reservó el lugar — retención de ${HOLD_MIN} min` },
+        {
+          hora: !huboPago && retencionVencida ? fmtHora(at.reservado_hasta) : null,
+          label: `Venció la retención sin pago — el lugar se libera solo${seLiberaEn ? ` a las ${fmtHora(seLiberaEn)}` : ""} (gracia de ${GRACIA_LIBERACION_MIN} min por si un pago aprueba tarde)`,
+        },
         { hora: fmtHora(at.mp_payment_created_at), label: `Reserva pagada (${fmtARS(at.monto)})` },
         { hora: at.fecha ? `${String(at.fecha).split("-").reverse().slice(0, 2).join("/")} ${String(at.hora_inicio).slice(0, 5)}` : null, label: "Cita programada" },
         { hora: fmtHora(at.en_curso_at), label: "Video iniciado" },
@@ -125,9 +155,26 @@ export default async function DetalleAtencionPage({
       <div className="mt-4 rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
         <h2 className="flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide text-gray-400"><CircleDollarSign size={14} /> Plata</h2>
         <div className="mt-2 flex flex-wrap gap-x-8 gap-y-1 text-sm text-gray-700">
-          <span>Pagado: <strong>{fmtARS(at.monto)}</strong> ({String(at.mp_status ?? "sin pago")})</span>
-          <span>Comisión Docto: {fmtARS(at.mp_application_fee)}</span>
-          <span>Neto médico: {fmtARS(neto)}</span>
+          {/* Sin pago NO se dice "Pagado". Acá decía `Pagado: $15.000 (sin pago)`
+              sobre un turno que nadie pagó: ese número es el precio del lugar al
+              momento de publicarlo, no plata que entró. Se leía como un cobro y
+              costó una investigación. Ojo: el precio del turno puede diferir del
+              precio actual del profesional — el slot conserva el de su creación,
+              que es el que se le prometió al paciente. */}
+          {huboPago ? (
+            <>
+              <span>Pagado: <strong>{fmtARS(at.monto)}</strong> ({String(at.mp_status ?? "sin estado")})</span>
+              <span>Comisión Docto: {fmtARS(at.mp_application_fee)}</span>
+              <span>Neto médico: {fmtARS(neto)}</span>
+            </>
+          ) : (
+            <>
+              <span>Precio del lugar: <strong>{fmtARS(at.monto)}</strong></span>
+              <span className="font-medium text-[#BA7517]">
+                Sin pago{at.mp_status ? ` — Mercado Pago: ${String(at.mp_status)}` : " — el paciente nunca llegó al checkout"}
+              </span>
+            </>
+          )}
           {refund && <span className="font-medium text-[#E24B4A]">Reembolso: {String(refund.estado)}</span>}
           {"reintegro_estado" in at && at.reintegro_estado ? (
             <span className="font-medium text-[#BA7517]">Reintegro: {String(at.reintegro_estado)}</span>
