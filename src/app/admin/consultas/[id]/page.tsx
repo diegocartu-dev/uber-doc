@@ -77,16 +77,9 @@ export default async function DetalleAtencionPage({
   // paciente tomó el lugar — dato que no está en ninguna columna y que era lo
   // único que explicaba qué pasó en un turno sin pago.
   const HOLD_MIN = 15;
-  // El cron `liberar-reservas` no libera al vencer: espera 45 min más de gracia
-  // por si un pago de Mercado Pago aprueba tarde. Sin decirlo, la pantalla
-  // parecía trabada.
-  const GRACIA_LIBERACION_MIN = 45;
   const reservadoHastaMs = at.reservado_hasta ? new Date(at.reservado_hasta).getTime() : null;
   const reservadoEn = reservadoHastaMs ? new Date(reservadoHastaMs - HOLD_MIN * 60000).toISOString() : null;
   const retencionVencida = reservadoHastaMs !== null && reservadoHastaMs < ahoraMs();
-  const seLiberaEn = reservadoHastaMs
-    ? new Date(reservadoHastaMs + GRACIA_LIBERACION_MIN * 60000).toISOString()
-    : null;
   const huboPago = at.mp_status === "approved" || !!at.pago_id;
 
   const timeline: { hora: string | null; label: string }[] = esTurno
@@ -94,7 +87,9 @@ export default async function DetalleAtencionPage({
         { hora: fmtHora(reservadoEn), label: `Reservó el lugar — retención de ${HOLD_MIN} min` },
         {
           hora: !huboPago && retencionVencida ? fmtHora(at.reservado_hasta) : null,
-          label: `Venció la retención sin pago — el lugar se libera solo${seLiberaEn ? ` a las ${fmtHora(seLiberaEn)}` : ""} (gracia de ${GRACIA_LIBERACION_MIN} min por si un pago aprueba tarde)`,
+          // El pago es fundacional (Diego, 10/08): sin pago a los 15 minutos, el
+          // lugar vuelve a la oferta en la próxima corrida del cron (≤10 min).
+          label: "Venció la retención sin pago — el lugar vuelve a estar disponible solo",
         },
         { hora: fmtHora(at.mp_payment_created_at), label: `Reserva pagada (${fmtARS(at.monto)})` },
         { hora: at.fecha ? `${String(at.fecha).split("-").reverse().slice(0, 2).join("/")} ${String(at.hora_inicio).slice(0, 5)}` : null, label: "Cita programada" },
@@ -126,7 +121,9 @@ export default async function DetalleAtencionPage({
       <div className="mt-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">
           {esTurno ? "Turno" : "Consulta inmediata"}
-          <span className="ml-3 rounded-full bg-gray-100 px-2.5 py-0.5 text-sm font-medium text-gray-600">{String(at.estado)}</span>
+          <span className="ml-3 rounded-full bg-gray-100 px-2.5 py-0.5 text-sm font-medium text-gray-600">
+            {at.estado === "reservado_pendiente" ? "Pendiente de pago" : String(at.estado)}
+          </span>
         </h1>
         {duracionMin && (
           <span className="inline-flex items-center gap-1 text-sm text-gray-500"><Clock size={14} /> {duracionMin} min</span>
