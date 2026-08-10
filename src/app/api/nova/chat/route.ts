@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
+import { waitUntil } from "@vercel/functions";
+import {
+  asegurarConversacion,
+  conversacionIdValido,
+  guardarTurno,
+} from "@/lib/nova/conversaciones";
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -330,7 +336,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { mensajes: historial, medico_id } = await req.json();
+    const { mensajes: historial, medico_id, conversacion_id } = await req.json();
 
     if (!historial || !Array.isArray(historial) || historial.length === 0 || !medico_id) {
       return new Response(
@@ -369,6 +375,39 @@ export async function POST(req: NextRequest) {
     }
 
     const medicoDbId = medicoRow.id;
+
+    // ── Guardado de la conversación (best-effort, nunca bloquea) ─────────────
+    // Lo que el profesional le pide a Nova es la lista de lo que le falta a la
+    // app dicha con sus palabras. Se guarda para leerla después, NO para
+    // devolvérsela a nadie en vivo: ver `@/lib/nova/conversaciones`.
+    //
+    // Se guarda el ÚLTIMO mensaje del historial —el que acaba de escribir— y no
+    // todo el historial: el frontend lo reenvía entero en cada request, y la
+    // clave (conversacion_id, orden) hace que un reintento no duplique.
+    const conversacionId = conversacionIdValido(conversacion_id) ? conversacion_id : null;
+    const ordenDelPedido = historial.length - 1;
+    const ultimoDelMedico = historial[ordenDelPedido] as { role?: string; content?: string } | undefined;
+
+    // `waitUntil` y no un `void` suelto: en serverless, una promesa sin await
+    // puede morir cuando la función termina de responder. Con `void` el guardado
+    // se perdía justo en las conversaciones cortas, que son las que más dicen.
+    // No agrega latencia: no se espera antes de contestarle al profesional.
+    if (conversacionId) {
+      waitUntil(
+        (async () => {
+          await asegurarConversacion(conversacionId, medicoDbId);
+          if (ultimoDelMedico?.role !== "nova" && typeof ultimoDelMedico?.content === "string") {
+            await guardarTurno({
+              conversacionId,
+              medicoId: medicoDbId,
+              rol: "medico",
+              contenido: ultimoDelMedico.content,
+              orden: ordenDelPedido,
+            });
+          }
+        })()
+      );
+    }
 
     // Fecha límite: 45 días (horizonte máximo de turnos programados)
     const limite45d = new Date(new Date(hoy).getTime() + 45 * 86400000);
@@ -592,6 +631,11 @@ Próximos 45 días (resumen): ${proximosResumen}`;
 
           // Loop para manejar tool use iterativo con streaming real
           let continuar = true;
+          // Lo que Nova respondió, para guardarlo al cerrar. Se acumula del
+          // mismo stream que ya va al cliente: no cuesta una request extra ni
+          // cambia lo que el profesional ve.
+          let respuestaDeNova = "";
+          let herramientaUsada: string | null = null;
           while (continuar) {
             // stream() emite tokens de texto en cuanto llegan (~300ms TTFT vs ~2-4s sin streaming)
             const msgStream = anthropic.messages.stream({
@@ -611,6 +655,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
 
             // Emitir cada delta de texto inmediatamente al cliente
             msgStream.on("text", (textDelta) => {
+              respuestaDeNova += textDelta;
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({ type: "text", content: textDelta })}\n\n`
@@ -628,6 +673,9 @@ Próximos 45 días (resumen): ${proximosResumen}`;
               } else {
                 const toolName = toolBlock.name;
                 const toolInput = toolBlock.input as Record<string, unknown>;
+                // Con qué herramienta terminó el turno. Es lo que después separa
+                // "le preguntó algo" de "le hizo hacer algo".
+                herramientaUsada = toolName;
 
                 if (TOOLS_SOLO_LECTURA.includes(toolName)) {
                   const resultado = await ejecutarTool(toolName, toolInput, medicoDbId, supabase);
@@ -693,6 +741,22 @@ Próximos 45 días (resumen): ${proximosResumen}`;
               .from("nova_perfiles")
               .update({ es_primera_sesion: false })
               .eq("medico_id", medico_id);
+          }
+
+          // Lo que respondió Nova. Va DESPUÉS de cerrarle el stream al
+          // profesional (fire-and-forget): guardar para analizar después nunca
+          // puede demorar la respuesta de quien está trabajando.
+          if (conversacionId) {
+            waitUntil(
+              guardarTurno({
+                conversacionId,
+                medicoId: medicoDbId,
+                rol: "nova",
+                contenido: respuestaDeNova,
+                herramienta: herramientaUsada,
+                orden: ordenDelPedido + 1,
+              })
+            );
           }
 
           controller.enqueue(

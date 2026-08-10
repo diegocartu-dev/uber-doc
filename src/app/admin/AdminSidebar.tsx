@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Send,
   Inbox,
+  Sparkles,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -22,6 +23,9 @@ const NAV_ITEMS = [
   { href: "/admin/medicos", label: "Medicos", icon: Stethoscope, badgeKey: "medicos" as const },
   { href: "/admin/pacientes", label: "Pacientes", icon: Users, badgeKey: null },
   { href: "/admin/consultas", label: "Consultas", icon: MessageSquare, badgeKey: null },
+  // Lo que los profesionales le piden a Nova: la lista de lo que falta, dicha
+  // con sus palabras (decisión Diego 10/08).
+  { href: "/admin/nova", label: "Nova", icon: Sparkles, badgeKey: null },
   // Insights vive fuera de /admin pero es admin-only (GMV, comisión Docto,
   // funnel, demanda por especialidad). Sin este link era invisible.
   { href: "/insights", label: "Insights", icon: TrendingUp, badgeKey: null },

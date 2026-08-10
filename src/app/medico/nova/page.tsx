@@ -182,6 +182,13 @@ export default function NovaChat() {
   const [enviando, setEnviando] = useState(false);
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
+  // Id de esta conversación. Se genera una sola vez al montar la pantalla, así
+  // que abrir Nova de nuevo (o en otra pestaña) es un hilo distinto — que es lo
+  // correcto: son consultas distintas. Solo sirve para agrupar del lado del
+  // servidor lo que se guarda; el chat funciona igual si no llega.
+  const conversacionIdRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : ""
+  );
   // TTS desactivado: Nova escucha voz (dictado) pero responde solo por texto.
   // El delay de TTS era demasiado grande y molestaba al médico.
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -233,7 +240,11 @@ export default function NovaChat() {
         const res = await fetch("/api/nova/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mensajes: historial, medico_id: medicoId }),
+          body: JSON.stringify({
+            mensajes: historial,
+            medico_id: medicoId,
+            conversacion_id: conversacionIdRef.current,
+          }),
         });
 
         if (!res.ok || !res.body) {
