@@ -41,7 +41,7 @@ type Tab = "esperando" | "en_curso" | "hoy" | "historial" | "cancelaciones";
 // 'reservado_pendiente' acá es SIEMPRE una reserva viva (la API ya descarta las
 // abandonadas): el paciente está pagando, todavía no es una consulta.
 const ETIQUETAS_ESTADO: Record<string, { label: string; bg: string; text: string }> = {
-  reservado_pendiente: { label: "Reservando…", bg: "bg-[#BA7517]/15", text: "text-[#BA7517]" },
+  reservado_pendiente: { label: "Pendiente de pago", bg: "bg-[#BA7517]/15", text: "text-[#BA7517]" },
 };
 
 function EstadoChip({ estado }: { estado: string }) {

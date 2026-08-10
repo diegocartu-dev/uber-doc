@@ -22,19 +22,21 @@ import { withCron } from "@/lib/cron-guard";
  *
  * Este cron lo hace del lado del servidor con service role, cada 10 minutos.
  *
- * NUNCA le saques el turno a alguien que pagó. Tres guardas, en orden de
- * importancia (las tres nacen de la revisión adversarial del 06/08):
+ * EL PAGO ES FUNDACIONAL (decisión Diego, 10/08/2026): sin pago, el paciente no
+ * consume el turno. La retención son 15 minutos y al vencer SE LIBERA — sin
+ * margen de gracia. Acá había 45 minutos extra "por si un pago de MP aprueba
+ * tarde": Diego lo bajó — un pago instantáneo que se demora es una rareza que no
+ * justifica tener 45 minutos de oferta invisible por CADA reserva abandonada, y
+ * además desde #375 el checkout solo ofrece medios instantáneos (tarjeta, dinero
+ * en cuenta, transferencia): el cupón de Rapipago que motivaba la espera ya no
+ * se puede elegir.
  *
- * 1. MARGEN DE GRACIA de 45 min sobre el vencimiento. La retención son 15 min,
- *    pero un checkout de Mercado Pago con login + clave del banco puede aprobar
- *    DESPUÉS de que venció, y entre esa aprobación y nuestro webhook hay otro
- *    tramo. Liberar al segundo siguiente era una lotería: el slot ya estaba
- *    bloqueado igual, esperar un rato más no cuesta nada y evita el peor
- *    escenario del sistema (paciente que pagó y se queda sin turno).
- * 2. Ningún estado de pago VIVO: approved, pending, in_process o authorized.
- *    `pending` es el cupón de Rapipago/Pago Fácil, que se paga horas o días
- *    después — ese turno tiene que quedar retenido hasta que se resuelva.
- * 3. Sin `pago_id`: si existe un pago asociado, hay plata en juego; que lo
+ * NUNCA le saques el turno a alguien que pagó. Dos guardas:
+ *
+ * 1. Ningún estado de pago VIVO: approved, pending, in_process o authorized.
+ *    Estas no demoran la liberación de una reserva abandonada — solo frenan
+ *    cuando MP nos AVISÓ que hay un pago en juego, y ahí no aplica "sin pago".
+ * 2. Sin `pago_id`: si existe un pago asociado, hay plata en juego; que lo
  *    resuelva una persona, no este cron.
  *
  * Fecha pasada → `bloqueado`, no `disponible`: un turno de ayer no debe volver
@@ -42,7 +44,9 @@ import { withCron } from "@/lib/cron-guard";
  */
 export const maxDuration = 60;
 
-const GRACIA_MIN = 45;
+// 0 a propósito — ver "EL PAGO ES FUNDACIONAL" arriba. Si esto vuelve a subir,
+// cada reserva abandonada vuelve a ser oferta invisible por ese tiempo extra.
+const GRACIA_MIN = 0;
 const PAGOS_VIVOS = ["approved", "pending", "in_process", "authorized"];
 
 export const GET = withCron("liberar-reservas", async () => {
