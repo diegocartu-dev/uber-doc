@@ -99,8 +99,21 @@ async function main() {
       medicos: MEDICOS,
     });
     const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
+    // Bloquea, PERO marcado como "en camino": la pantalla no puede afirmar que
+    // ya está paga cuando MP todavía no acreditó.
     await check(`aceptada con pago "${mp}" NO se puede abandonar`,
-      { pagado: r?.pagado }, { pagado: true });
+      { pagado: r?.pagado, pagoEnCamino: r?.pagoEnCamino }, { pagado: true, pagoEnCamino: true });
+  }
+
+  // Y al revés: una acreditada NO se anuncia como "en camino".
+  {
+    const db = fakeSupabase({
+      consultas: [{ id: "cOk", medico_id: "med-A", paciente_id: USER, estado: "en_curso", mp_status: "approved" }],
+      medicos: MEDICOS,
+    });
+    const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
+    await check("una consulta acreditada no se marca en camino",
+      { pagado: r?.pagado, pagoEnCamino: r?.pagoEnCamino }, { pagado: true, pagoEnCamino: false });
   }
 
   // ── Los impagos: NO bloquean, se pueden abandonar ──────────────────────────

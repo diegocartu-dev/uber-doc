@@ -51,6 +51,12 @@ export type EncuentroActivo = {
   medicoNombre: string;
   /** true = hay plata comprometida. Define si bloquea o si se puede abandonar. */
   pagado: boolean;
+  /**
+   * El pago existe pero MP todavía no lo acreditó (cupón, revisión, tarjeta
+   * autorizada sin capturar). Bloquea igual —la plata está retenida— pero la
+   * pantalla NO puede afirmar "ya está paga": todavía no lo está.
+   */
+  pagoEnCamino?: boolean;
   /** A dónde mandar al paciente para retomarlo. */
   href: string;
 };
@@ -108,6 +114,7 @@ export async function buscarEncuentroActivo(
       medicoId: conPlata.medico_id,
       medicoNombre: await nombreDelMedico(supabase, conPlata.medico_id),
       pagado: true,
+      pagoEnCamino: estadoPagoConsulta(conPlata.estado, conPlata.mp_status) === "en_camino",
       href: `/consulta/${conPlata.id}/confirmacion`,
     };
   }

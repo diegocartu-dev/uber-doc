@@ -41,6 +41,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ejecutarRefund } from "@/lib/cancelaciones";
+import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { pushAlPaciente } from "@/lib/push";
 import { logError, logInfo } from "@/lib/logger";
 
@@ -110,12 +111,12 @@ export async function medicosOcupados(medicoIds: string[]): Promise<Set<string>>
       .in("medico_id", medicoIds)
       .eq("estado", "en_curso")
       .not("sala_video_url", "is", null),
-    admin
-      .from("turnos")
-      .select("medico_id")
-      .in("medico_id", medicoIds)
-      .eq("estado", "en_curso")
-      .not("sala_video_url", "is", null),
+    // TURNOS: sin el refinamiento de `sala_video_url`. Acá `en_curso` SÍ
+    // significa que el profesional está adentro (lo escribe su propia pantalla
+    // de video), y la sala se guarda en un update aparte que puede fallar. Pedir
+    // la sala haría que un profesional que está atendiendo un turno dejara de
+    // contar como ocupado, y se le marcaría ausencia en una CI que espera.
+    admin.from("turnos").select("medico_id").in("medico_id", medicoIds).eq("estado", "en_curso"),
   ]);
   return new Set([...(cis ?? []), ...(turnos ?? [])].map((r) => r.medico_id).filter(Boolean));
 }
@@ -244,6 +245,31 @@ export async function resolverConsultaVencida(
 
   let reintegro: string | null = null;
   if (consulta.pago_id) {
+    // RESERVA EN LA COLA ANTES DE LLAMAR A MP.
+    //
+    // Entre "tomar la fila" y "anotar el reintegro" hay una llamada a Mercado
+    // Pago. Si el proceso muere ahí —deploy en el medio, reciclado de instancia,
+    // una llamada que cuelga— la consulta queda `medico_ausente` con
+    // `reintegro_estado` en NULL y NADIE la vuelve a mirar: ya no es candidata
+    // del cron, y `ejecutarRefund` solo encola cuando MP RESPONDE mal, no cuando
+    // no llega a responder. El paciente vería la pantalla que le promete la
+    // devolución, sobre plata que nunca salió.
+    //
+    // Dejando la fila en la cola ANTES, ese huérfano cae solo en
+    // `cron/reintentar-refunds`, que ya existe. La cola es idempotente por
+    // (tipo, recurso_id), así que si `ejecutarRefund` después la vuelve a
+    // escribir por un fallo real, la pisa sin duplicar.
+    await registrarRefundPendiente({
+      tipo: "consulta",
+      recursoId: consulta.id,
+      medicoId: consulta.medico_id,
+      pagoId: consulta.pago_id,
+      netoMedico: consulta.mp_net_amount_medico ?? 0,
+      applicationFee: consulta.mp_application_fee ?? 0,
+      estado: "pendiente",
+      error: "reservado antes de llamar a MP (plazo 30 min)",
+    });
+
     reintegro = await ejecutarRefund(
       consulta.id,
       consulta.medico_id,
@@ -252,6 +278,23 @@ export async function resolverConsultaVencida(
       consulta.mp_application_fee ?? 0,
       "consulta"
     );
+
+    // Salió bien: se saca la reserva de la cola para que el cron de reintentos
+    // no la levante. Si NO salió bien, la fila queda —con el estado real que le
+    // haya puesto `ejecutarRefund`— y el reintento diario se encarga.
+    if (reintegro === "reembolsado") {
+      const { error: errCola } = await admin
+        .from("refunds_pendientes")
+        .update({ estado: "resuelto", resuelto_at: new Date().toISOString(), ultimo_error: null })
+        .eq("tipo", "consulta")
+        .eq("recurso_id", consulta.id);
+      if (errCola) {
+        logError("[plazo-ci]", "Reintegro OK pero la reserva quedó en la cola", {
+          consultaId: consulta.id,
+          error: errCola.message,
+        });
+      }
+    }
 
     const { error: errReintegro } = await admin
       .from("consultas")

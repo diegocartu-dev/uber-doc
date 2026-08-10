@@ -82,6 +82,13 @@ const ESTADOS_ANULADOS = new Set([
   "cancelado_medico",
   "ausente_paciente",
   "ausente_medico",
+  // Desenlaces del plazo de 30 min de la CI. Sin estos dos, "Finalizar consulta"
+  // pisaba con `completada` una consulta que el cron ya había cerrado y
+  // REEMBOLSADO al 100%: emitía documentos, la contaba como atendida y cobrada
+  // en el tablero, y volvía a retener al paciente. Hasta que existió el plazo
+  // ningún código escribía estos estados, por eso faltaban acá.
+  "medico_ausente",
+  "no_show_paciente",
   "reprogramado",
   "bloqueado",
   "bloqueado_sin_cobro",
