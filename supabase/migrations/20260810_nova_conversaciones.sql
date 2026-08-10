@@ -6,15 +6,19 @@
 -- que sabíamos quiénes la abrieron (10 de 37 aprobados reales) pero no cuántas
 -- veces ni para qué. Esto lo convierte en fuente de producto.
 --
--- DATO SENSIBLE, NO TELEMETRÍA. Un profesional le va a preguntar a Nova sobre un
--- paciente concreto. Estas tablas se tratan como dato clínico:
---   · RLS activa SIN NINGUNA POLICY y GRANTs revocados → ni `anon` ni
---     `authenticated` pueden leer una sola fila, ni siquiera el propio médico
---     desde el browser. Solo `service_role`, que no se ve afectado por REVOKE.
---   · Se borra en cascada si se borra el médico.
+-- QUÉ SE GUARDA: la conversación COMPLETA, tal cual, sin filtrar nada. Lo que un
+-- profesional le pregunta a Nova —incluido el nombre de un paciente que pidió
+-- turno— es dato que ya se ve en cualquier otra pantalla de /admin, igual que
+-- los diagnósticos y las recetas emitidas. No se le pone una capa especial: la
+-- distinción no existe en el producto (criterio de Diego, 10/08).
 --
--- LO QUE ESTA MIGRACIÓN NO HACE: no expone las conversaciones en ninguna
--- pantalla. La lectura se agrega aparte y con criterio explícito.
+-- POR QUÉ IGUAL VA CERRADA (RLS activa sin policies + REVOKE): NO es por el
+-- contenido, es por a quién le pertenece. Sin cierre, cualquier sesión
+-- `authenticated` podría leer las conversaciones de OTRO profesional. `/admin`
+-- lee todo sin restricción porque corre en el servidor con service_role, que no
+-- se ve afectado por REVOKE. Mismo patrón que `notificaciones_medico`.
+--
+-- Se borra en cascada si se borra el médico.
 
 -- ─── Conversación ────────────────────────────────────────────────────────────
 -- Una fila por sesión de chat. El id lo genera el navegador al montar la

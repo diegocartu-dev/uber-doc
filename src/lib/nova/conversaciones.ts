@@ -12,10 +12,12 @@
 //      conversación sigue igual. Guardar para analizar después nunca puede
 //      costarle una respuesta a quien está trabajando.
 //
-//   2. NO ES TELEMETRÍA, ES DATO CLÍNICO. Un profesional le va a preguntar a
-//      Nova sobre un paciente concreto. Las tablas tienen RLS activa sin
-//      policies y GRANTs revocados: solo service_role. Por eso este módulo usa
-//      `createAdminClient` y vive del lado del servidor.
+//   2. SE GUARDA LA CONVERSACIÓN COMPLETA, SIN FILTRAR. Lo que un profesional
+//      le pregunta a Nova es dato que ya se ve en cualquier otra pantalla de
+//      /admin. Las tablas van cerradas (RLS sin policies + REVOKE) NO por el
+//      contenido sino por pertenencia: sin eso, una sesión `authenticated`
+//      podría leer las conversaciones de otro profesional. Por eso este módulo
+//      usa `createAdminClient` y vive del lado del servidor.
 //
 // IDEMPOTENCIA: el frontend reenvía TODO el historial en cada request, así que
 // la clave es (conversacion_id, orden) con UNIQUE en la base. Un reintento, un

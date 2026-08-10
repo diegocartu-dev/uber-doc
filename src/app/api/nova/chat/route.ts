@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
+import { waitUntil } from "@vercel/functions";
 import {
   asegurarConversacion,
   conversacionIdValido,
@@ -387,19 +388,25 @@ export async function POST(req: NextRequest) {
     const ordenDelPedido = historial.length - 1;
     const ultimoDelMedico = historial[ordenDelPedido] as { role?: string; content?: string } | undefined;
 
+    // `waitUntil` y no un `void` suelto: en serverless, una promesa sin await
+    // puede morir cuando la función termina de responder. Con `void` el guardado
+    // se perdía justo en las conversaciones cortas, que son las que más dicen.
+    // No agrega latencia: no se espera antes de contestarle al profesional.
     if (conversacionId) {
-      void (async () => {
-        await asegurarConversacion(conversacionId, medicoDbId);
-        if (ultimoDelMedico?.role !== "nova" && typeof ultimoDelMedico?.content === "string") {
-          await guardarTurno({
-            conversacionId,
-            medicoId: medicoDbId,
-            rol: "medico",
-            contenido: ultimoDelMedico.content,
-            orden: ordenDelPedido,
-          });
-        }
-      })();
+      waitUntil(
+        (async () => {
+          await asegurarConversacion(conversacionId, medicoDbId);
+          if (ultimoDelMedico?.role !== "nova" && typeof ultimoDelMedico?.content === "string") {
+            await guardarTurno({
+              conversacionId,
+              medicoId: medicoDbId,
+              rol: "medico",
+              contenido: ultimoDelMedico.content,
+              orden: ordenDelPedido,
+            });
+          }
+        })()
+      );
     }
 
     // Fecha límite: 45 días (horizonte máximo de turnos programados)
@@ -740,14 +747,16 @@ Próximos 45 días (resumen): ${proximosResumen}`;
           // profesional (fire-and-forget): guardar para analizar después nunca
           // puede demorar la respuesta de quien está trabajando.
           if (conversacionId) {
-            void guardarTurno({
-              conversacionId,
-              medicoId: medicoDbId,
-              rol: "nova",
-              contenido: respuestaDeNova,
-              herramienta: herramientaUsada,
-              orden: ordenDelPedido + 1,
-            });
+            waitUntil(
+              guardarTurno({
+                conversacionId,
+                medicoId: medicoDbId,
+                rol: "nova",
+                contenido: respuestaDeNova,
+                herramienta: herramientaUsada,
+                orden: ordenDelPedido + 1,
+              })
+            );
           }
 
           controller.enqueue(
