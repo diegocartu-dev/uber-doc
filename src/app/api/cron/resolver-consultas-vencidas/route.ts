@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withCron } from "@/lib/cron-guard";
 import {
+  ESTADOS_RESOLUBLES,
   PLAZO_CI_MIN,
   medicosOcupados,
   momentoDePago,
@@ -38,12 +39,26 @@ async function handler() {
   const nowMs = Date.now();
   const plazoMs = PLAZO_CI_MIN * 60 * 1000;
 
+  // CANDIDATAS: pagadas de verdad, en las que el profesional NUNCA abrió la sala.
+  //
+  // NO se filtra por `estado = 'pagada'`. Un pago REAL de CI salta de `aceptada`
+  // directo a `en_curso` (lo escribe el webhook de MP al acreditar, antes de que
+  // el profesional toque nada); `pagada` solo la escribe la simulación de las
+  // cuentas de test. Filtrar por `pagada` era filtrar por el estado que la plata
+  // real NUNCA alcanza: este cron no se ejecutaba sobre una sola consulta de
+  // verdad, mientras la regla del Uber sí retenía al paciente.
+  //
+  // `sala_video_url IS NULL` es la señal de que el profesional no entró: esa
+  // columna solo la escriben el workspace y /api/livekit/crear-sala, y las dos
+  // exigen que actúe él.
   const { data: pagadas } = await admin
     .from("consultas")
     .select(
-      "id, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, mp_payment_created_at, aceptada_at, created_at"
+      "id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, mp_payment_created_at, aceptada_at, created_at"
     )
-    .eq("estado", "pagada")
+    .eq("mp_status", "approved")
+    .in("estado", ESTADOS_RESOLUBLES)
+    .is("sala_video_url", null)
     .order("created_at", { ascending: true })
     .limit(200);
 

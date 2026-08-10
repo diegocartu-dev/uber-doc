@@ -4,6 +4,7 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 import { esReservaViva, sinReservasAbandonadas } from "@/lib/insights/reservas";
+import { pagada } from "@/lib/insights/plata";
 
 // ── Página "Especialidades" v2 (directivas Diego 28/07) ──────────────────────
 // 1. Solo las especialidades que TENEMOS (con médicos; una sin médicos solo
@@ -100,7 +101,13 @@ export async function GET(req: NextRequest) {
     e.total++;
     e.totalCI++;
     if (c.estado === "completada") e.atendidas++;
-    if (c.mp_status === "approved" && !refundeados.has(`consulta:${c.id}`)) e.cobrado += Number(c.monto) || 0;
+    // Misma doctrina de plata que /insights/hoy y /insights/medicos: cobrado =
+    // aprobado Y no devuelto (`pagada` de lib/insights/plata.ts). Acá vivía un
+    // criterio propio que solo descontaba lo que figuraba en `refunds_pendientes`
+    // — una tabla donde SOLO se encolan los refunds que FALLARON. Un reintegro
+    // exitoso no deja fila ahí, así que se seguía contando como cobrado y las
+    // páginas del mismo tablero informaban cifras distintas.
+    if (pagada(c) && !refundeados.has(`consulta:${c.id}`)) e.cobrado += Number(c.monto) || 0;
   }
   for (const t of turnos) {
     const esp = especialidadDeMedico.get(t.medico_id);
@@ -118,7 +125,7 @@ export async function GET(req: NextRequest) {
       else e.totalTurnoClinica++;
     }
     if (t.estado === "completado") e.atendidas++;
-    if (t.mp_status === "approved" && !refundeados.has(`turno:${t.id}`)) e.cobrado += Number(t.monto) || 0;
+    if (pagada(t) && !refundeados.has(`turno:${t.id}`)) e.cobrado += Number(t.monto) || 0;
   }
 
   const result = [...espMap.entries()]

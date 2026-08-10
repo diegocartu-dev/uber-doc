@@ -17,14 +17,27 @@
 // trabajando. Mientras siga ocupado no se resuelve nada y el paciente sigue
 // esperando — es exactamente el mismo criterio que ya usa el cron de turnos.
 //
+// CÓMO SE SABE QUE EL PROFESIONAL NO ENTRÓ — leer esto antes de tocar el filtro
+//
+// NO se puede usar el estado. Un pago REAL de CI salta de `aceptada` directo a
+// `en_curso`: lo escribe el webhook de MP en el instante en que acredita, mucho
+// antes de que el profesional abra nada. `pagada` solo la escribe la simulación
+// de cuentas de test. La primera versión de este módulo filtraba por `pagada` y
+// por eso NUNCA se ejecutó sobre plata real: el plazo de 30 minutos no existía
+// para ningún paciente de verdad, mientras la regla del Uber sí lo retenía.
+// (Ya estaba documentado en `src/lib/estado-pago-consulta.ts`.)
+//
+// La señal correcta es `sala_video_url`. Se escribe en exactamente dos lugares
+// —el workspace del profesional y `/api/livekit/crear-sala`— y las dos exigen
+// que EL PROFESIONAL actúe. `sala_video_url IS NULL` significa que nunca se
+// creó la sala, o sea que nunca entró.
+//
 // CÓMO SE DECIDE QUIÉN FALTÓ, y por qué se inclina a favor del paciente
-// Si la consulta sigue en `pagada`, el médico PROVABLEMENTE no entró: apenas
-// abre el workspace pasa a `en_curso` y deja de ser candidata. Lo que hay que
-// distinguir es si el paciente estuvo. La única evidencia dura de que NO estuvo
-// es que no exista ni una entrada suya a la sala (`sala_espera_entradas`).
-// Ante la duda se resuelve como médico ausente CON reintegro: equivocarse para
-// ese lado cuesta plata, equivocarse para el otro le niega el reintegro a
-// alguien que esperó media hora. El error caro es el segundo.
+// Lo que hay que distinguir es si el paciente estuvo. La única evidencia dura de
+// que NO estuvo es que no exista ni una entrada suya a la sala
+// (`sala_espera_entradas`). Ante la duda se resuelve como médico ausente CON
+// reintegro: equivocarse para ese lado cuesta plata, equivocarse para el otro le
+// niega el reintegro a alguien que esperó media hora. El error caro es el segundo.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ejecutarRefund } from "@/lib/cancelaciones";
@@ -43,10 +56,20 @@ type ConsultaVencida = {
   id: string;
   medico_id: string;
   paciente_id: string;
+  estado: string;
   pago_id: string | null;
   mp_net_amount_medico: number | null;
   mp_application_fee: number | null;
 };
+
+/**
+ * Estados desde los que se puede resolver. `en_curso` es el de la plata real;
+ * `pagada` queda para las cuentas de test, que sí pasan por ahí.
+ *
+ * El UPDATE se condiciona al estado EXACTO que se leyó (`.eq("estado", ...)`),
+ * no a la lista: es el candado de idempotencia contra dos corridas solapadas.
+ */
+export const ESTADOS_RESOLUBLES = ["pagada", "en_curso"];
 
 /**
  * Momento desde el que se cuentan los 30 minutos.
@@ -69,13 +92,30 @@ export function momentoDePago(c: {
   return NaN;
 }
 
-/** ¿El profesional está adentro de otra atención ahora mismo? */
+/**
+ * ¿El profesional está adentro de otra atención ahora mismo?
+ *
+ * Se exige `sala_video_url` NO nulo, no solo `estado = 'en_curso'`. Sin eso, la
+ * propia consulta colgada —que está en `en_curso` desde que MP acreditó— hacía
+ * ver ocupado a su propio profesional y congelaba el plazo para siempre: el
+ * paciente no se liberaba nunca.
+ */
 export async function medicosOcupados(medicoIds: string[]): Promise<Set<string>> {
   if (medicoIds.length === 0) return new Set();
   const admin = createAdminClient();
   const [{ data: cis }, { data: turnos }] = await Promise.all([
-    admin.from("consultas").select("medico_id").in("medico_id", medicoIds).eq("estado", "en_curso"),
-    admin.from("turnos").select("medico_id").in("medico_id", medicoIds).eq("estado", "en_curso"),
+    admin
+      .from("consultas")
+      .select("medico_id")
+      .in("medico_id", medicoIds)
+      .eq("estado", "en_curso")
+      .not("sala_video_url", "is", null),
+    admin
+      .from("turnos")
+      .select("medico_id")
+      .in("medico_id", medicoIds)
+      .eq("estado", "en_curso")
+      .not("sala_video_url", "is", null),
   ]);
   return new Set([...(cis ?? []), ...(turnos ?? [])].map((r) => r.medico_id).filter(Boolean));
 }
@@ -145,7 +185,8 @@ export async function resolverConsultaVencida(
         resuelta_por: "plazo_30min",
       })
       .eq("id", consulta.id)
-      .eq("estado", "pagada")
+      .eq("estado", consulta.estado)
+      .is("sala_video_url", null)
       .select("id")
       .maybeSingle();
 
@@ -168,11 +209,39 @@ export async function resolverConsultaVencida(
   }
 
   // ── El profesional no entró: reintegro del 100% ────────────────────────────
-  // El refund va ANTES del cambio de estado a propósito. Si se hiciera después y
-  // el proceso muriera en el medio, la consulta quedaría cerrada y sin plata
-  // devuelta — y nadie volvería a mirarla porque ya no sería candidata. Al
-  // revés, un refund con el cierre fallado deja la fila candidata otra vez, y
-  // `ejecutarRefund` es idempotente contra MP por su clave de idempotencia.
+  //
+  // ORDEN: PRIMERO se toma la fila, DESPUÉS se devuelve la plata.
+  //
+  // El UPDATE condicionado (`estado` exacto + `sala_video_url` nulo) es lo único
+  // que garantiza que una sola corrida resuelva esta consulta. Si se refundeara
+  // antes, dos corridas solapadas podrían mandar dos refunds a MP, y peor: con
+  // el guard nuevo de `sala_video_url`, un profesional que abre la sala entre el
+  // refund y el UPDATE dejaba la plata devuelta y la consulta viva.
+  //
+  // El hueco que abre este orden —tomada y todavía sin devolver— es acotado y
+  // VISIBLE: queda como `medico_ausente` con `reintegro_estado` en NULL, y el
+  // paciente ya está liberado (el estado es terminal, sale de la retención).
+  // Es un estado consultable y reparable; lo contrario —plata devuelta sin
+  // rastro en la base— no lo es.
+  const { data: tomada } = await admin
+    .from("consultas")
+    .update({
+      estado: "medico_ausente",
+      resolucion_motivo: "medico_ausente",
+      resuelta_at: new Date().toISOString(),
+      resuelta_por: "plazo_30min",
+    })
+    .eq("id", consulta.id)
+    .eq("estado", consulta.estado)
+    // Si entre el SELECT y este UPDATE el profesional abrió la sala, NO se
+    // resuelve: llegó tarde pero llegó. La condición viaja en el propio UPDATE
+    // para que no haya ventana entre el chequeo y la escritura.
+    .is("sala_video_url", null)
+    .select("id")
+    .maybeSingle();
+
+  if (!tomada) return { resuelta: false, motivo: "carrera_perdida" };
+
   let reintegro: string | null = null;
   if (consulta.pago_id) {
     reintegro = await ejecutarRefund(
@@ -183,31 +252,36 @@ export async function resolverConsultaVencida(
       consulta.mp_application_fee ?? 0,
       "consulta"
     );
+
+    const { error: errReintegro } = await admin
+      .from("consultas")
+      .update({ reintegro_estado: reintegro })
+      .eq("id", consulta.id);
+
+    // Que no se pueda anotar el reintegro NO revierte nada: la plata ya salió.
+    // Se grita fuerte para que quede en los logs y se pueda reconciliar.
+    if (errReintegro) {
+      logError("[plazo-ci]", "Reintegro ejecutado pero NO anotado en la consulta", {
+        consultaId: consulta.id,
+        reintegro,
+        error: errReintegro.message,
+      });
+    }
+  } else {
+    // Sin `pago_id` no hay nada que devolver. Pasa con las cuentas de test, que
+    // simulan el pago sin registrar uno real.
+    logInfo("[plazo-ci]", "Sin pago registrado: no hay reintegro que ejecutar", {
+      consultaId: consulta.id,
+    });
   }
-
-  const { data: cerrada } = await admin
-    .from("consultas")
-    .update({
-      estado: "medico_ausente",
-      resolucion_motivo: "medico_ausente",
-      reintegro_estado: reintegro,
-      resuelta_at: new Date().toISOString(),
-      resuelta_por: "plazo_30min",
-    })
-    .eq("id", consulta.id)
-    .eq("estado", "pagada")
-    .select("id")
-    .maybeSingle();
-
-  if (!cerrada) return { resuelta: false, motivo: "carrera_perdida" };
 
   const filaPac = await filaPaciente(consulta.paciente_id);
   if (filaPac) {
     await pushAlPaciente(filaPac, {
-    title: "Te devolvemos el 100%",
-    body: "El profesional no pudo tomar tu consulta. Ya iniciamos la devolución total y podés elegir otro.",
-    url: "/clinica",
-    tag: `ausente-${consulta.id}`,
+      title: "Te devolvemos el 100%",
+      body: "El profesional no pudo tomar tu consulta. Ya iniciamos la devolución total y podés elegir otro.",
+      url: "/clinica",
+      tag: `ausente-${consulta.id}`,
     }).catch(() => {});
   }
 

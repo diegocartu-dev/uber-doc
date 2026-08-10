@@ -161,7 +161,17 @@ export default async function WorkspacePage({
         updateData.en_curso_at = new Date().toISOString();
       }
       if (Object.keys(updateData).length > 0) {
-        await supabase.from("consultas").update(updateData).eq("id", consultaId);
+        // `.eq("estado", consulta.estado)`: concurrencia optimista sobre el
+        // estado que se leyó arriba. Sin esto, este UPDATE pisaba CUALQUIER
+        // estado — incluido uno terminal. Con el plazo de 30 min corriendo, el
+        // cron puede resolver `medico_ausente` y devolver el 100% mientras esta
+        // página arma la sala; sin el guard, el profesional entraba igual y
+        // atendía una consulta ya reembolsada, con el paciente retenido de nuevo.
+        await supabase
+          .from("consultas")
+          .update(updateData)
+          .eq("id", consultaId)
+          .eq("estado", consulta.estado);
         if (updateData.estado === "en_curso") {
           cerrarEntradaSala({ consultaId, motivo: "atendido" }).catch(() => {});
         }

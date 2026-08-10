@@ -26,12 +26,20 @@
 // consulta inmediata NO — su único barrido es el cron de las 3 AM.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 
-/** Consulta inmediata con la plata ya comprometida. */
-const CI_PAGADA = ["pagada", "en_curso"];
-
-/** Consulta inmediata pedida pero todavía sin pagar. */
-const CI_IMPAGA = ["esperando", "aceptada"];
+/**
+ * Estados en los que una CI sigue viva. Si está pagada o impaga NO se decide por
+ * el estado: se decide con `estadoPagoConsulta`, que mira también `mp_status`.
+ *
+ * Por qué no alcanza el estado: un pago REAL de CI salta de `aceptada` directo a
+ * `en_curso` (lo hace el webhook de MP); `pagada` solo la escribe la simulación
+ * de cuentas de test. Y una consulta con el pago EN CAMINO (`in_process`,
+ * `authorized`, `pending`) sigue en `aceptada` con plata retenida — tratarla
+ * como impaga dejaba que el paciente la abandonara mientras MP acreditaba, y la
+ * pantalla encima le afirmaba "todavía no la pagaste".
+ */
+const CI_VIVA = ["esperando", "aceptada", "pagada", "en_curso"];
 
 /** Turno en el que el paciente ya está adentro. Ver nota de arriba. */
 const TURNO_EN_CURSO = ["en_espera", "en_curso"];
@@ -79,23 +87,28 @@ export async function buscarEncuentroActivo(
   userId: string,
   pacienteRowId: string | null
 ): Promise<EncuentroActivo | null> {
-  const { data: ciPagada } = await supabase
+  // Se traen TODAS las vivas y se clasifican en JS: el estado solo no alcanza
+  // (ver la nota de CI_VIVA). `mp_status` es imprescindible acá.
+  const { data: cis } = await supabase
     .from("consultas")
-    .select("id, medico_id")
+    .select("id, medico_id, estado, mp_status")
     .eq("paciente_id", userId)
-    .in("estado", CI_PAGADA)
+    .in("estado", CI_VIVA)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
-  if (ciPagada) {
+  const conPlata = (cis ?? []).find(
+    (c) => estadoPagoConsulta(c.estado, c.mp_status) !== "falta_pagar"
+  );
+
+  if (conPlata) {
     return {
       canal: "consulta",
-      id: ciPagada.id,
-      medicoId: ciPagada.medico_id,
-      medicoNombre: await nombreDelMedico(supabase, ciPagada.medico_id),
+      id: conPlata.id,
+      medicoId: conPlata.medico_id,
+      medicoNombre: await nombreDelMedico(supabase, conPlata.medico_id),
       pagado: true,
-      href: `/consulta/${ciPagada.id}/confirmacion`,
+      href: `/consulta/${conPlata.id}/confirmacion`,
     };
   }
 
@@ -121,14 +134,9 @@ export async function buscarEncuentroActivo(
     }
   }
 
-  const { data: ciImpaga } = await supabase
-    .from("consultas")
-    .select("id, medico_id")
-    .eq("paciente_id", userId)
-    .in("estado", CI_IMPAGA)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const ciImpaga = (cis ?? []).find(
+    (c) => estadoPagoConsulta(c.estado, c.mp_status) === "falta_pagar"
+  );
 
   if (ciImpaga) {
     return {

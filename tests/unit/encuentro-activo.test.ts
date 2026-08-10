@@ -18,6 +18,8 @@ function fakeSupabase(datos: { consultas?: Fila[]; turnos?: Fila[]; medicos?: Fi
     from(tabla: string) {
       const filas = (datos as Record<string, Fila[] | undefined>)[tabla] ?? [];
       let candidatas = [...filas];
+      // Encadenable Y awaitable: el módulo usa las dos formas — `.maybeSingle()`
+      // para el turno y `await` directo sobre la query para traer varias CI.
       const api = {
         select: () => api,
         order: () => api,
@@ -31,6 +33,9 @@ function fakeSupabase(datos: { consultas?: Fila[]; turnos?: Fila[]; medicos?: Fi
           return api;
         },
         maybeSingle: async () => ({ data: candidatas[0] ?? null }),
+        then(resolve: (v: { data: Fila[] }) => unknown) {
+          return Promise.resolve({ data: candidatas }).then(resolve);
+        },
       };
       return api;
     },
@@ -63,7 +68,7 @@ async function main() {
   // ── El caso que el guard viejo dejaba pasar ────────────────────────────────
   for (const estado of ["pagada", "en_curso"]) {
     const db = fakeSupabase({
-      consultas: [{ id: "c1", medico_id: "med-A", paciente_id: USER, estado }],
+      consultas: [{ id: "c1", medico_id: "med-A", paciente_id: USER, estado, mp_status: null }],
       medicos: MEDICOS,
     });
     const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
@@ -71,10 +76,37 @@ async function main() {
       { canal: r?.canal, pagado: r?.pagado, id: r?.id }, { canal: "consulta", pagado: true, id: "c1" });
   }
 
+  // EL FLUJO REAL DE PRODUCCIÓN: un pago aprobado de CI deja la consulta en
+  // `aceptada` con mp_status 'approved' hasta que el webhook la mueve, y salta
+  // directo a `en_curso` — NUNCA pasa por `pagada`. Clasificar por estado solo
+  // la trataba como impaga y dejaba abandonar una consulta ya pagada.
+  {
+    const db = fakeSupabase({
+      consultas: [{ id: "cReal", medico_id: "med-A", paciente_id: USER, estado: "aceptada", mp_status: "approved" }],
+      medicos: MEDICOS,
+    });
+    const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
+    await check("aceptada con pago aprobado cuenta como PAGA",
+      { pagado: r?.pagado, id: r?.id }, { pagado: true, id: "cReal" });
+  }
+
+  // Pago EN CAMINO (cupón, revisión de MP, tarjeta autorizada): hay plata
+  // retenida. Tratarla como impaga dejaba que el paciente la cancelara mientras
+  // MP acreditaba, y la pantalla encima le afirmaba "todavía no la pagaste".
+  for (const mp of ["pending", "in_process", "authorized"]) {
+    const db = fakeSupabase({
+      consultas: [{ id: "cVuelo", medico_id: "med-A", paciente_id: USER, estado: "aceptada", mp_status: mp }],
+      medicos: MEDICOS,
+    });
+    const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
+    await check(`aceptada con pago "${mp}" NO se puede abandonar`,
+      { pagado: r?.pagado }, { pagado: true });
+  }
+
   // ── Los impagos: NO bloquean, se pueden abandonar ──────────────────────────
   for (const estado of ["esperando", "aceptada"]) {
     const db = fakeSupabase({
-      consultas: [{ id: "c2", medico_id: "med-A", paciente_id: USER, estado }],
+      consultas: [{ id: "c2", medico_id: "med-A", paciente_id: USER, estado, mp_status: null }],
       medicos: MEDICOS,
     });
     const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
@@ -87,7 +119,7 @@ async function main() {
   // extra: el encuentro cambia de estado y deja de figurar acá.
   for (const estado of ["completada", "cancelada", "no_show_paciente", "medico_ausente", "interrumpida"]) {
     const db = fakeSupabase({
-      consultas: [{ id: "c3", medico_id: "med-A", paciente_id: USER, estado }],
+      consultas: [{ id: "c3", medico_id: "med-A", paciente_id: USER, estado, mp_status: null }],
       medicos: MEDICOS,
     });
     await check(`consulta "${estado}" ya no retiene al paciente`,
@@ -120,8 +152,8 @@ async function main() {
   {
     const db = fakeSupabase({
       consultas: [
-        { id: "impaga", medico_id: "med-A", paciente_id: USER, estado: "esperando" },
-        { id: "paga", medico_id: "med-B", paciente_id: USER, estado: "pagada" },
+        { id: "impaga", medico_id: "med-A", paciente_id: USER, estado: "esperando", mp_status: null },
+        { id: "paga", medico_id: "med-B", paciente_id: USER, estado: "pagada", mp_status: null },
       ],
       medicos: MEDICOS,
     });
@@ -148,7 +180,7 @@ async function main() {
   // ── El nombre del profesional llega al cartel ─────────────────────────────
   {
     const db = fakeSupabase({
-      consultas: [{ id: "c9", medico_id: "med-A", paciente_id: USER, estado: "pagada" }],
+      consultas: [{ id: "c9", medico_id: "med-A", paciente_id: USER, estado: "pagada", mp_status: null }],
       medicos: MEDICOS,
     });
     const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);
@@ -158,7 +190,7 @@ async function main() {
   // Sin nombre en ficha no se muestra un hueco.
   {
     const db = fakeSupabase({
-      consultas: [{ id: "c10", medico_id: "med-Z", paciente_id: USER, estado: "pagada" }],
+      consultas: [{ id: "c10", medico_id: "med-Z", paciente_id: USER, estado: "pagada", mp_status: null }],
       medicos: [{ id: "med-Z", nombre_completo: "   " }],
     });
     const r = await buscarEncuentroActivo(db, USER, PACIENTE_ROW);

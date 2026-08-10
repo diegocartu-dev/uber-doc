@@ -116,7 +116,14 @@ export async function POST(req: NextRequest) {
       updateData.en_curso_at = new Date().toISOString();
     }
     if (Object.keys(updateData).length > 0) {
-      await supabase.from(tabla).update(updateData).eq("id", consultaId);
+      // Concurrencia optimista sobre el estado leído: este UPDATE no puede
+      // resucitar una atención que se resolvió mientras se armaba la sala
+      // (p. ej. `medico_ausente` con el reintegro ya ejecutado).
+      await supabase
+        .from(tabla)
+        .update(updateData)
+        .eq("id", consultaId)
+        .eq("estado", consulta.estado);
     }
 
     if (transicionaEnCurso) {
