@@ -62,6 +62,23 @@ Reglas concretas:
 
 Un sprint o tarea NO se considera cerrado hasta que la documentación esté actualizada. "Hecho" sin doc = no hecho a efectos del registro.
 
+## Una atención por vez — la regla del Uber (decisión Diego, 09/08/2026)
+*"Como usar un Uber y querer pedir otro."*
+
+**Si el paciente YA PAGÓ**, esa atención es la suya: no puede abrir otra, y la pantalla lo lleva ahí en vez de mostrarle un cartel. **Si todavía NO pagó**, es libre de dejar a ese profesional y elegir otro — igual que cancelarle a un chofer antes de que llegue.
+
+Fuente de verdad: **`src/lib/consultas/encuentro-activo.ts`**. Todo guard nuevo que pregunte "¿el paciente ya está en una atención?" usa `buscarEncuentroActivo`, no una lista de estados escrita a mano.
+
+- **Bloquean** (hay plata comprometida): consulta en `pagada` o `en_curso`; turno en `en_espera` o `en_curso`.
+- **No bloquean**: consulta en `esperando` o `aceptada` (pedida sin pagar), y **cualquier turno agendado** (`confirmado`, `reservado_pendiente`). Un turno para el jueves no es un viaje en progreso y no impide una consulta inmediata hoy.
+- **Impago con el MISMO profesional** = volver, no pedir de nuevo: redirect a su sala de espera, sin carteles.
+- **Impago con OTRO profesional** = se le pregunta antes de cancelar (nunca callado: puede haber entrado por error), y al profesional que queda esperando le llega *"El paciente canceló esta consulta"* — cartel de 5 minutos que se va solo, más la fila permanente en la campana. Sin ese aviso se reproduce el problema de las reservas abandonadas descrito abajo.
+- **La liberación no se fuerza**: cuando el paciente no asiste o vence el plazo, el encuentro cambia de estado y deja de figurar. No hay código de vencimiento en el guard.
+
+**Historia del bug (no repetirlo):** el guard viejo de `crearConsulta` miraba `["esperando","aceptada","en_curso"]` y **se olvidaba de `pagada`** — tenía las dos mitades al revés: bloqueaba a los impagos (que deberían poder irse) y dejaba pasar a los pagos (los únicos a blindar). Encima el mensaje se pintaba arriba de un formulario largo, fuera de la vista del paciente, y sin ningún link a su consulta.
+
+**Deuda abierta:** el turno tiene plazo (cron `resolver-turnos-vencidos` cada 10 min, 20 de gracia → `ausente_paciente`); **la consulta inmediata NO tiene ninguno** — su único barrido es `cerrar-huerfanas` a las 3 AM. Un paciente con una CI paga cuyo profesional nunca apareció queda retenido hasta la madrugada. Resolverlo implica decidir el reembolso.
+
 ## Reportes — las reservas abandonadas NO se muestran (decisión Diego, 06/08/2026)
 Cuando un paciente toma un turno, el slot queda en `reservado_pendiente` con `reservado_hasta` = ahora + ~15 min (retención para pagar). Si paga, el webhook de MP lo pasa a `confirmado` con `mp_status='approved'`. Si no paga, la retención vence y el lugar se libera — pero la liberación es **perezosa**: la hace `limpiarReservasExpiradas` (`src/app/clinica/[medicoId]/turnos/actions.ts`), que solo corre cuando alguien abre el calendario de ese médico (`CalendarioTurnos.tsx`). Hasta entonces la fila queda `reservado_pendiente` con la retención vencida por horas o días.
 
