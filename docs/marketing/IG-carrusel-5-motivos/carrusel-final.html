@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Regular.ttf');font-weight:400;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Medium.ttf');font-weight:500;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-SemiBold.ttf');font-weight:600;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Bold.ttf');font-weight:700;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+body{background:#555;}
+.slide{width:1080px;height:1350px;position:relative;overflow:hidden;background:#fff;padding:88px 90px 80px;display:flex;flex-direction:column;}
+
+/* ---- HEADER CANONICO (idéntico en las 7 placas) ---- */
+.lockup{position:absolute;top:72px;left:90px;display:flex;align-items:center;gap:12px;z-index:3;}
+.lockup .wm{font-size:30px;font-weight:700;color:#111827;letter-spacing:-0.9px;}
+.counter{position:absolute;top:78px;right:90px;z-index:3;text-align:right;white-space:nowrap;}
+.counter .lab{font-size:18px;font-weight:700;letter-spacing:2.5px;color:#9CA3AF;}
+.counter .n{font-size:20px;font-weight:700;color:#111827;letter-spacing:0.5px;}
+.counter.eyebrow{font-size:18px;font-weight:700;letter-spacing:2.5px;color:#9CA3AF;top:80px;}
+.progress{position:absolute;top:126px;right:90px;display:flex;gap:6px;z-index:3;}
+.progress .seg{width:36px;height:5px;border-radius:2px;background:#E5E7EB;}
+.progress .seg.on{background:#378ADD;}
+
+/* ---- ESCALA CANONICA RAZONES ---- */
+.gancho{margin-top:72px;font-size:50px;font-weight:600;color:#378ADD;line-height:1.15;letter-spacing:-0.8px;max-width:880px;}
+.capwrap{flex:1;display:flex;align-items:center;justify-content:center;margin:14px 0;}
+.rtitle{font-size:52px;font-weight:700;color:#111827;line-height:1.08;letter-spacing:-1.6px;}
+.rtitle .b{color:#378ADD;}
+.rdet{margin-top:20px;font-size:30px;font-weight:400;color:#4B5563;line-height:1.36;max-width:900px;}
+.cap{border-radius:30px;box-shadow:0 24px 60px rgba(17,24,39,0.12);overflow:hidden;display:block;}
+
+/* ---- mock consultorio (razón 2) ---- */
+.screen{width:606px;background:#F8F9FA;border:1px solid #E5E7EB;border-radius:30px;box-shadow:0 24px 60px rgba(17,24,39,0.12);padding:26px 24px;}
+.snav{font-size:23px;font-weight:700;color:#111827;letter-spacing:-0.5px;margin-bottom:18px;}
+.urlpill{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E9ECEF;border-radius:13px;height:54px;padding:0 18px;font-size:22px;font-weight:500;color:#9CA3AF;letter-spacing:-0.3px;}
+.urlpill .slug{color:#378ADD;font-weight:600;}
+.card{background:#fff;border:1px solid #E5E7EB;border-radius:18px;padding:22px 22px 24px;margin-top:16px;}
+.docrow{display:flex;align-items:center;gap:16px;}
+.avatar{width:66px;height:66px;border-radius:50%;flex-shrink:0;overflow:hidden;background:#E3EBF3;}
+.dname{font-size:25px;font-weight:600;color:#111827;letter-spacing:-0.4px;}
+.dspec{font-size:19px;color:#4B5563;margin-top:2px;}
+.status{display:flex;align-items:center;gap:9px;margin-top:6px;}
+.sdot{width:11px;height:11px;border-radius:50%;background:#1D9E75;}
+.stxt{font-size:19px;font-weight:500;color:#1D9E75;}
+.pricebox{display:flex;justify-content:space-between;align-items:center;background:#F1F3F5;border-radius:13px;padding:15px 18px;margin-top:18px;}
+.plabel{font-size:15px;color:#9CA3AF;}
+.pval{font-size:27px;font-weight:600;color:#111827;margin-top:2px;letter-spacing:-0.5px;}
+.btnp{margin-top:16px;background:#378ADD;color:#fff;text-align:center;border-radius:13px;padding:16px;font-size:22px;font-weight:600;}
+.btns{margin-top:11px;background:#fff;border:1px solid #D1D5DB;color:#4B5563;text-align:center;border-radius:13px;padding:15px;font-size:21px;font-weight:500;}
+
+/* ---- frame compartido (receta + refeps) ---- */
+.frame{position:relative;width:606px;background:#F8F9FA;border:1px solid #E5E7EB;border-radius:30px;box-shadow:0 24px 60px rgba(17,24,39,0.12);padding:30px;}
+.badge{position:absolute;top:-14px;right:24px;display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #C0E6D6;border-radius:999px;padding:8px 16px;box-shadow:0 6px 16px rgba(17,24,39,0.10);font-size:19px;font-weight:600;color:#0F6E56;}
+
+/* ---- receta sheet (razón 4) ---- */
+.sheet{background:#fff;border:1px solid #ECECEC;border-radius:9px;box-shadow:0 6px 22px rgba(0,0,0,0.07);padding:24px 26px;}
+.rtit{text-align:center;}
+.rtit .t1{font-size:20px;font-weight:700;color:#378ADD;letter-spacing:1.5px;}
+.rtit .t2{font-size:13px;color:#7A7A7A;margin-top:3px;}
+.rtit .t3{font-size:12px;color:#9A9A9A;margin-top:1px;}
+.hr{height:1.5px;background:#378ADD;margin:12px 0;border-radius:2px;}
+.box{background:#F6F7F8;border:1px solid #EAEBED;border-radius:5px;padding:10px 13px;margin-bottom:10px;}
+.lab{font-size:10px;font-weight:600;color:#378ADD;letter-spacing:1.2px;}
+.nm{font-size:15px;font-weight:600;color:#1a1a1a;margin-top:4px;}
+.sub{font-size:12.5px;color:#555;margin-top:2px;}
+.sec{margin-bottom:10px;}
+.rp{font-size:15px;margin-top:5px;}
+.rp .k{color:#378ADD;font-weight:600;}
+.rp .d{color:#111;font-weight:700;}
+.rpdet{font-size:12px;color:#666;margin-top:3px;padding-left:30px;line-height:1.5;}
+.firma{display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px;gap:18px;}
+.fcol{text-align:center;flex:1;}
+.fcap{font-size:11px;color:#777;margin-top:4px;}
+.fline{border-top:1px solid #bbb;margin-top:2px;padding-top:3px;}
+.foot{font-size:9.5px;color:#9A9A9A;line-height:1.5;margin-top:14px;text-align:center;}
+
+/* ---- credencial REFEPS (razón 5) ---- */
+.vsheet{background:#fff;border:1px solid #ECEDEF;border-radius:16px;box-shadow:0 6px 22px rgba(0,0,0,0.06);padding:32px 34px;}
+.vhead{display:flex;align-items:center;gap:18px;}
+.vavatar{width:74px;height:74px;border-radius:50%;overflow:hidden;flex-shrink:0;background:#E3EBF3;}
+.vname{font-size:30px;font-weight:600;color:#111827;letter-spacing:-0.4px;}
+.vspec{font-size:21px;color:#4B5563;margin-top:3px;}
+.vdiv{height:1px;background:#EEF0F2;margin:24px 0;}
+.vmatrow{display:flex;justify-content:space-between;align-items:center;gap:14px;}
+.vlabel{font-size:16px;font-weight:600;color:#378ADD;letter-spacing:1.2px;}
+.vmn{font-size:32px;font-weight:700;color:#111827;margin-top:7px;letter-spacing:-0.5px;}
+.vpill{display:inline-flex;align-items:center;gap:9px;background:#fff;border:1.5px solid #C0E6D6;border-radius:999px;padding:11px 18px;font-size:21px;font-weight:600;color:#0F6E56;white-space:nowrap;}
+.vfoot{font-size:17px;color:#8A8F98;margin-top:24px;line-height:1.5;}
+
+/* ---- PORTADA ---- */
+.cover{justify-content:flex-end;}
+.cover .bignum{position:absolute;right:14px;bottom:-104px;font-size:540px;font-weight:700;color:#EBF3FC;line-height:1;letter-spacing:-12px;z-index:0;}
+.cbody{position:relative;z-index:1;}
+.ctitle{font-size:88px;font-weight:700;color:#111827;letter-spacing:-3px;line-height:1.02;}
+.cblue{margin-top:28px;font-size:46px;font-weight:700;color:#378ADD;letter-spacing:-1.4px;}
+.csub{margin-top:30px;font-size:31px;font-weight:500;color:#5F6B7A;line-height:1.4;max-width:840px;}
+.cswipe{margin-top:48px;font-size:25px;font-weight:600;color:#9CA3AF;letter-spacing:0.3px;}
+
+/* ---- CIERRE ---- */
+.close{justify-content:center;}
+.clbody{position:relative;z-index:1;}
+.cl-eyebrow{font-size:23px;font-weight:700;color:#378ADD;letter-spacing:3px;}
+.cl-title{margin-top:24px;font-size:70px;font-weight:700;color:#111827;letter-spacing:-2.2px;line-height:1.06;}
+.cl-title .b{color:#378ADD;}
+.cl-checks{margin-top:40px;display:flex;flex-direction:column;gap:16px;}
+.cl-check{display:flex;align-items:center;gap:16px;font-size:31px;font-weight:500;color:#1f2937;}
+.cl-pill{display:inline-flex;align-items:center;gap:14px;margin-top:46px;background:#378ADD;color:#fff;border-radius:16px;padding:24px 40px;font-size:30px;font-weight:700;letter-spacing:-0.3px;box-shadow:0 14px 34px rgba(55,138,221,0.28);}
+.cl-pie{margin-top:28px;font-size:24px;font-weight:500;color:#9CA3AF;}
+</style></head>
+<body>
+
+<!-- ============ 1 · PORTADA ============ -->
+<div class="slide cover" id="portada">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter eyebrow">PARA MÉDICOS</div>
+  <div class="progress" data-active="1"></div>
+
+  <div class="bignum">5</div>
+  <div class="cbody">
+    <div class="ctitle">Llevá tu consultorio<br>a Docto.</div>
+    <div class="cblue">5 razones para dar el paso.</div>
+    <div class="csub">Cobrás en el momento, manejás tu agenda y atendés a tu nombre. Sin abono, sin contrato, sin exclusividad.</div>
+    <div class="cswipe">Deslizá&nbsp;&nbsp;→</div>
+  </div>
+</div>
+
+<!-- ============ 2 · RAZÓN 1 — HONORARIOS ============ -->
+<div class="slide" id="r1">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter"><span class="lab">RAZÓN&nbsp;</span><span class="n">01 · 05</span></div>
+  <div class="progress" data-active="2"></div>
+
+  <div class="gancho">¿Decidir vos el precio de tu consulta?</div>
+  <div class="capwrap"><img class="cap" src="captura-cobro-50k.png" style="width:600px;"></div>
+  <div>
+    <div class="rtitle">Tus honorarios, en el momento de la consulta.</div>
+    <div class="rdet">Directo a tu Mercado Pago. Sin abono, sin contrato y sin intermediarios.</div>
+  </div>
+</div>
+
+<!-- ============ 3 · RAZÓN 2 — CONSULTORIO ============ -->
+<div class="slide" id="r2">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter"><span class="lab">RAZÓN&nbsp;</span><span class="n">02 · 05</span></div>
+  <div class="progress" data-active="3"></div>
+
+  <div class="gancho">¿Que te elijan a vos, no a un logo?</div>
+  <div class="capwrap">
+    <div class="screen">
+      <div class="snav">docto</div>
+      <div class="urlpill"><svg width="17" height="20" viewBox="0 0 17 20" fill="none"><rect x="1.5" y="8.5" width="14" height="10" rx="2.5" stroke="#9CA3AF" stroke-width="1.6"/><path d="M4.5 8.5V6a4 4 0 0 1 8 0v2.5" stroke="#9CA3AF" stroke-width="1.6"/></svg><span>docto.com.ar/dr/<span class="slug">raul-scacchi</span></span></div>
+      <div class="card">
+        <div class="docrow">
+          <div class="avatar"><svg viewBox="0 0 66 66" width="66" height="66"><rect width="66" height="66" fill="#E3EBF3"/><circle cx="33" cy="26" r="12" fill="#A9BED5"/><path d="M11 60c0-11.6 9.85-20 22-20s22 8.4 22 20z" fill="#A9BED5"/></svg></div>
+          <div>
+            <div class="dname">Dr. Raúl Scacchi</div>
+            <div class="dspec">Clínica Médica · MN 128.456</div>
+            <div class="status"><span class="sdot"></span><span class="stxt">Disponible ahora</span></div>
+          </div>
+        </div>
+        <div class="pricebox">
+          <div class="plabel">Consulta</div>
+          <div class="pval">$50.000</div>
+        </div>
+        <div class="btnp">Consulta ahora</div>
+        <div class="btns">Agendar turno</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="rtitle">Consultorio Particular Virtual.</div>
+    <div class="rdet">Tu link personal, tu consultorio exclusivo, tus pacientes. Docto es tu herramienta, sin intermediarios.</div>
+  </div>
+</div>
+
+<!-- ============ 4 · RAZÓN 3 — NOVA ============ -->
+<div class="slide" id="r3">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter"><span class="lab">RAZÓN&nbsp;</span><span class="n">03 · 05</span></div>
+  <div class="progress" data-active="4"></div>
+
+  <div class="gancho">¿Armar tu agenda hablándole, como si le dictaras a una secretaria?</div>
+  <div class="capwrap"><img class="cap" src="captura-nova-50k.png" style="height:540px;"></div>
+  <div>
+    <div class="rtitle">Tu asistente se llama Nova.</div>
+    <div class="rdet">Le hablás y te asiste en todo lo que necesites.</div>
+  </div>
+</div>
+
+<!-- ============ 5 · RAZÓN 4 — RECETA ============ -->
+<div class="slide" id="r4">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter"><span class="lab">RAZÓN&nbsp;</span><span class="n">04 · 05</span></div>
+  <div class="progress" data-active="5"></div>
+
+  <div class="gancho">¿Cerrar la consulta sin quedarte escribiendo media hora?</div>
+  <div class="capwrap">
+    <div class="frame">
+      <div class="badge"><svg width="19" height="19" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#1D9E75"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#fff" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Firmada</div>
+      <div class="sheet">
+        <div class="rtit">
+          <div class="t1">RECETA MÉDICA</div>
+          <div class="t2">Docto — Telemedicina</div>
+          <div class="t3">12 de junio de 2026 · 10:42 hs</div>
+        </div>
+        <div class="hr"></div>
+        <div class="box">
+          <div class="lab">PROFESIONAL</div>
+          <div class="nm">Dr. Raúl Scacchi</div>
+          <div class="sub">Clínica Médica · MN 128.456</div>
+        </div>
+        <div class="box">
+          <div class="lab">PACIENTE</div>
+          <div class="nm">Marta Beatriz Ferreyra</div>
+          <div class="sub">DNI 30.114.882 · Cobertura: Particular</div>
+        </div>
+        <div class="sec">
+          <div class="lab">DIAGNÓSTICO</div>
+          <div class="sub" style="font-size:13.5px;color:#222;margin-top:4px;">Faringitis aguda.</div>
+        </div>
+        <div class="sec">
+          <div class="lab">PRESCRIPCIÓN</div>
+          <div class="rp"><span class="k">1. Rp/</span> <span class="d">AMOXICILINA</span></div>
+          <div class="rpdet">Amoxidal · Comprimidos recubiertos · 875 mg x 14 · Vía oral</div>
+        </div>
+        <div class="firma">
+          <div class="fcol" style="flex:0 0 auto;">
+            <svg width="66" height="66" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#fff"/><path fill="#111" d="M2 2h9v9H2zM4 4v5h5V4zM22 2h9v9h-9zM24 4v5h5V4zM2 22h9v9H2zM4 24v5h5V24zM14 2h2v2h-2zM18 4h2v2h-2zM14 6h2v4h-2zM16 14h2v2h-2zM20 14h2v2h-2zM24 14h2v2h-2zM28 16h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM22 20h2v2h-2zM26 20h2v2h-2zM14 24h2v2h-2zM18 26h2v2h-2zM22 24h2v4h-2zM26 26h2v2h-2zM30 24h1v6h-1z"/></svg>
+            <div class="fcap">Verificá<br>la receta</div>
+          </div>
+          <div class="fcol">
+            <svg width="160" height="46" viewBox="0 0 160 46"><path d="M6 34 C18 6 28 8 32 30 S46 44 56 24 C64 10 72 12 78 30 C84 44 100 42 116 20 C128 6 150 14 154 33" stroke="#1a3a6b" stroke-width="2.3" fill="none" stroke-linecap="round"/></svg>
+            <div class="fline fcap" style="margin-top:0;"><b style="color:#444;font-weight:600;">Dr. Raúl Scacchi</b> · MN 128.456</div>
+          </div>
+        </div>
+        <div class="foot">Firmado electrónicamente por Dr. Raúl Scacchi.<br>ReNaPDiS · Ley 27.553 · Firma electrónica con validez legal (Ley 25.506).</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="rtitle">La evolución se arma sola. La receta sale firmada.</div>
+    <div class="rdet">Documentás mientras atendés, no después. La receta lleva tu firma electrónica y queda verificable.</div>
+  </div>
+</div>
+
+<!-- ============ 6 · RAZÓN 5 — REFEPS ============ -->
+<div class="slide" id="r5">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter"><span class="lab">RAZÓN&nbsp;</span><span class="n">05 · 05</span></div>
+  <div class="progress" data-active="6"></div>
+
+  <div class="gancho">¿Trabajar solo entre colegas de verdad?</div>
+  <div class="capwrap">
+    <div class="frame">
+      <div class="badge"><svg width="19" height="19" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#1D9E75"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#fff" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Médico verificado</div>
+      <div class="vsheet">
+        <div class="vhead">
+          <div class="vavatar"><svg viewBox="0 0 66 66" width="74" height="74"><rect width="66" height="66" fill="#E3EBF3"/><circle cx="33" cy="26" r="12" fill="#A9BED5"/><path d="M11 60c0-11.6 9.85-20 22-20s22 8.4 22 20z" fill="#A9BED5"/></svg></div>
+          <div>
+            <div class="vname">Dr. Raúl Scacchi</div>
+            <div class="vspec">Clínica Médica</div>
+          </div>
+        </div>
+        <div class="vdiv"></div>
+        <div class="vmatrow">
+          <div>
+            <div class="vlabel">MATRÍCULA NACIONAL</div>
+            <div class="vmn">MN 128.456</div>
+          </div>
+          <div class="vpill"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#1D9E75"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#fff" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Verificada en REFEPS</div>
+        </div>
+        <div class="vfoot">Registro Federal de Profesionales de la Salud · Validada el 14/06/2026</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="rtitle">Acá adentro son todos médicos reales.</div>
+    <div class="rdet">Validamos cada matrícula contra REFEPS. Tu firma queda entre profesionales, no entre perfiles truchos.</div>
+  </div>
+</div>
+
+<!-- ============ 7 · CIERRE ============ -->
+<div class="slide close" id="cierre">
+  <div class="lockup">
+    <svg viewBox="0 0 40 40" width="40" height="40" fill="none"><path d="M13 8 L13 18 Q13 25 20 25 Q27 25 27 18 L27 8" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round" fill="none"/><line x1="20" y1="25" x2="20" y2="30" stroke="#378ADD" stroke-width="2.6" stroke-linecap="round"/><circle cx="13" cy="7" r="2.8" fill="#378ADD"/><circle cx="27" cy="7" r="2.8" fill="#378ADD"/><circle cx="20" cy="33.2" r="3.4" fill="#378ADD"/></svg>
+    <span class="wm">Docto</span>
+  </div>
+  <div class="counter eyebrow">EMPEZÁ HOY</div>
+  <div class="progress" data-active="7"></div>
+
+  <div class="clbody">
+    <div class="cl-eyebrow">TU CONSULTORIO TE ESPERA</div>
+    <div class="cl-title">Armá tu consultorio<br>virtual hoy. <span class="b">En<br>minutos, gratis.</span></div>
+    <div class="cl-checks">
+      <div class="cl-check"><svg width="38" height="38" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#EBF3FC"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#378ADD" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Sin abono.</div>
+      <div class="cl-check"><svg width="38" height="38" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#EBF3FC"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#378ADD" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Sin contrato.</div>
+      <div class="cl-check"><svg width="38" height="38" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#EBF3FC"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#378ADD" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Sin exclusividad.</div>
+    </div>
+    <div class="cl-pill">Registrate en docto.com.ar/medicos&nbsp;&nbsp;→</div>
+    <div class="cl-pie">Es gratis registrarte. Empezás a atender cuando quieras.</div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.progress').forEach(function(p){
+  var a = +p.dataset.active;
+  for (var i = 1; i <= 7; i++) {
+    var s = document.createElement('span');
+    s.className = 'seg' + (i === a ? ' on' : '');
+    p.appendChild(s);
+  }
+});
+</script>
+</body></html>

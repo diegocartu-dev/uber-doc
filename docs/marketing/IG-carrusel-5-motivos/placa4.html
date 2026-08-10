@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Regular.ttf');font-weight:400;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Medium.ttf');font-weight:500;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-SemiBold.ttf');font-weight:600;}
+@font-face{font-family:'Inter';src:url('../../../src/fonts/Inter-Bold.ttf');font-weight:700;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+body{background:#555;}
+.slide{width:1080px;height:1350px;position:relative;overflow:hidden;background:#fff;padding:90px 90px 66px;display:flex;flex-direction:column;}
+.wm{position:absolute;top:84px;left:90px;font-size:30px;font-weight:700;color:#111827;letter-spacing:-0.6px;}
+.num{position:absolute;top:88px;right:90px;font-size:26px;font-weight:600;color:#9CA3AF;}
+.gancho{margin-top:74px;font-size:48px;line-height:1.16;font-weight:600;color:#378ADD;letter-spacing:-0.8px;max-width:880px;}
+.capwrap{flex:1;display:flex;align-items:center;justify-content:center;margin:10px 0;}
+.frame{position:relative;width:606px;background:#F8F9FA;border:1px solid #E5E7EB;border-radius:30px;box-shadow:0 24px 60px rgba(17,24,39,0.12);padding:30px;}
+.badge{position:absolute;top:-14px;right:24px;display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #C0E6D6;border-radius:999px;padding:7px 15px;box-shadow:0 6px 16px rgba(17,24,39,0.10);font-size:18px;font-weight:600;color:#0F6E56;}
+.bdot{display:inline-flex;}
+/* --- receta sheet --- */
+.sheet{background:#fff;border:1px solid #ECECEC;border-radius:9px;box-shadow:0 6px 22px rgba(0,0,0,0.07);padding:24px 26px;}
+.rtit{text-align:center;}
+.rtit .t1{font-size:20px;font-weight:700;color:#378ADD;letter-spacing:1.5px;}
+.rtit .t2{font-size:13px;color:#7A7A7A;margin-top:3px;}
+.rtit .t3{font-size:12px;color:#9A9A9A;margin-top:1px;}
+.hr{height:1.5px;background:#378ADD;margin:12px 0;border-radius:2px;}
+.box{background:#F6F7F8;border:1px solid #EAEBED;border-radius:5px;padding:10px 13px;margin-bottom:10px;}
+.lab{font-size:10px;font-weight:600;color:#378ADD;letter-spacing:1.2px;}
+.nm{font-size:15px;font-weight:600;color:#1a1a1a;margin-top:4px;}
+.sub{font-size:12.5px;color:#555;margin-top:2px;}
+.sec{margin-bottom:10px;}
+.rp{font-size:15px;margin-top:5px;}
+.rp .k{color:#378ADD;font-weight:600;}
+.rp .d{color:#111;font-weight:700;}
+.rpdet{font-size:12px;color:#666;margin-top:3px;padding-left:30px;line-height:1.5;}
+.barcode{height:28px;background:repeating-linear-gradient(90deg,#1a1a1a 0 2px,#fff 2px 4px,#1a1a1a 4px 5px,#fff 5px 8px,#1a1a1a 8px 9px,#fff 9px 11px);}
+.firma{display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px;gap:18px;}
+.fcol{text-align:center;flex:1;}
+.fcap{font-size:11px;color:#777;margin-top:4px;}
+.fline{border-top:1px solid #bbb;margin-top:2px;padding-top:3px;}
+.foot{font-size:9.5px;color:#9A9A9A;line-height:1.5;margin-top:14px;text-align:center;}
+.rtitle{font-size:50px;font-weight:700;color:#111827;line-height:1.08;letter-spacing:-1.5px;}
+.rdet{font-size:30px;line-height:1.36;color:#4B5563;margin-top:20px;font-weight:400;max-width:900px;}
+</style></head>
+<body>
+
+<div class="slide" id="s4">
+  <span class="wm">docto</span><span class="num">04 / 05</span>
+  <div class="gancho">¿Cerrar la consulta sin quedarte escribiendo media hora?</div>
+
+  <div class="capwrap">
+    <div class="frame">
+      <div class="badge"><span class="bdot"><svg width="19" height="19" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#1D9E75"/><path d="M7 12.4l3.2 3.2L17 9.1" stroke="#fff" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Firmada</div>
+      <div class="sheet">
+        <div class="rtit">
+          <div class="t1">RECETA MÉDICA</div>
+          <div class="t2">Docto — Telemedicina</div>
+          <div class="t3">12 de junio de 2026 · 10:42 hs</div>
+        </div>
+        <div class="hr"></div>
+
+        <div class="box">
+          <div class="lab">PROFESIONAL</div>
+          <div class="nm">Dr. Raúl Scacchi</div>
+          <div class="sub">Clínica Médica · MN 128.456</div>
+        </div>
+
+        <div class="box">
+          <div class="lab">PACIENTE</div>
+          <div class="nm">Marta Beatriz Ferreyra</div>
+          <div class="sub">DNI 30.114.882 · Cobertura: Particular</div>
+        </div>
+
+        <div class="sec">
+          <div class="lab">DIAGNÓSTICO</div>
+          <div class="sub" style="font-size:13.5px;color:#222;margin-top:4px;">Faringitis aguda.</div>
+        </div>
+
+        <div class="sec">
+          <div class="lab">PRESCRIPCIÓN</div>
+          <div class="rp"><span class="k">1. Rp/</span> <span class="d">AMOXICILINA</span></div>
+          <div class="rpdet">Amoxidal · Comprimidos recubiertos · 875 mg x 14 · Vía oral</div>
+        </div>
+
+        <div class="firma">
+          <div class="fcol" style="flex:0 0 auto;">
+            <svg width="66" height="66" viewBox="0 0 33 33" shape-rendering="crispEdges"><rect width="33" height="33" fill="#fff"/><path fill="#111" d="M2 2h9v9H2zM4 4v5h5V4zM22 2h9v9h-9zM24 4v5h5V4zM2 22h9v9H2zM4 24v5h5V24zM14 2h2v2h-2zM18 4h2v2h-2zM14 6h2v4h-2zM16 14h2v2h-2zM20 14h2v2h-2zM24 14h2v2h-2zM28 16h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM22 20h2v2h-2zM26 20h2v2h-2zM14 24h2v2h-2zM18 26h2v2h-2zM22 24h2v4h-2zM26 26h2v2h-2zM30 24h1v6h-1z"/></svg>
+            <div class="fcap">Verificá<br>la receta</div>
+          </div>
+          <div class="fcol">
+            <svg width="160" height="46" viewBox="0 0 160 46"><path d="M6 34 C18 6 28 8 32 30 S46 44 56 24 C64 10 72 12 78 30 C84 44 100 42 116 20 C128 6 150 14 154 33" stroke="#1a3a6b" stroke-width="2.3" fill="none" stroke-linecap="round"/></svg>
+            <div class="fline fcap" style="margin-top:0;"><b style="color:#444;font-weight:600;">Dr. Raúl Scacchi</b> · MN 128.456</div>
+          </div>
+        </div>
+
+        <div class="foot">Firmado electrónicamente por Dr. Raúl Scacchi.<br>ReNaPDiS · Ley 27.553 · Firma electrónica con validez legal (Ley 25.506).</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="rtitle">La evolución se arma sola. La receta sale firmada.</div>
+    <div class="rdet">Documentás mientras atendés, no después. La receta lleva tu firma electrónica y queda verificable.</div>
+  </div>
+</div>
+
+</body></html>
