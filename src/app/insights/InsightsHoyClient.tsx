@@ -19,6 +19,9 @@ interface HoyData {
   cobradoHoy: number;
   comisionDocto: number;
   netoMedicos: number;
+  reintegradoHoy: number;
+  reintegroEnCursoHoy: number;
+  reintegrosHoy: { causa: string; motivo: string; cantidad: number; monto: number }[];
   disponiblesAhora: {
     id: string; nombre: string; especialidad: string;
     ci: boolean; turnosHoy: boolean; jurisdicciones: string[];
@@ -177,7 +180,7 @@ export default function InsightsHoyClient() {
           <p className="mt-3 font-['Space_Grotesk'] text-4xl font-bold text-white">
             {formatARS(data.cobradoHoy)}
           </p>
-          <p className="mt-1 text-sm text-white/50">cobrado hoy · pagos aprobados en MP</p>
+          <p className="mt-1 text-sm text-white/50">cobrado hoy · neto de devoluciones</p>
           <div className="mt-3 rounded-lg bg-[#378ADD]/10 px-3 py-2">
             <p className="text-sm font-medium text-[#378ADD]">
               Docto {formatARS(data.comisionDocto)}
@@ -186,6 +189,30 @@ export default function InsightsHoyClient() {
               comisión real de MP · médicos {formatARS(data.netoMedicos)}
             </p>
           </div>
+
+          {/* Devoluciones, con la causa. Antes esta plata estaba SUMADA arriba:
+              un refund de MP no toca `mp_status`, así que lo devuelto seguía
+              figurando como cobrado. Separar por causa es lo que permite ver
+              qué se puede accionar — "el profesional no llegó" es una falla
+              nuestra; una cancelación del paciente es costo de operar. */}
+          {(data.reintegradoHoy > 0 || data.reintegroEnCursoHoy > 0) && (
+            <div className="mt-3 rounded-lg bg-[#E24B4A]/10 px-3 py-2">
+              <p className="text-sm font-medium text-[#E24B4A]">
+                Devuelto {formatARS(data.reintegradoHoy)}
+              </p>
+              {data.reintegrosHoy.map((r) => (
+                <p key={r.motivo} className="text-xs text-[#E24B4A]/70">
+                  {r.causa} · {r.cantidad} {r.cantidad === 1 ? "atención" : "atenciones"} ·{" "}
+                  {formatARS(r.monto)}
+                </p>
+              ))}
+              {data.reintegroEnCursoHoy > 0 && (
+                <p className="mt-1 text-xs text-[#BA7517]">
+                  {formatARS(data.reintegroEnCursoHoy)} con devolución iniciada, todavía sin salir
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

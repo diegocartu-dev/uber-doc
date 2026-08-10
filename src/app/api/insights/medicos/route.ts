@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, verificado, estado_registro, es_cuenta_test, jurisdicciones, precio_consulta").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id, canal_origen, reservado_hasta").gte("fecha", desde),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, canal_origen, created_at, monto, mp_status, mp_application_fee, comision_docto_pct, reintegro_estado, resolucion_motivo").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, updated_at, hora_inicio, monto, mp_status, mp_application_fee, comision_docto_pct, turno_origen_id, canal_origen, reservado_hasta, reintegro_estado, resolucion_motivo").gte("fecha", desde),
     // Refunds ejecutados: esos pagos siguen "approved" en consultas/turnos pero la
     // plata VOLVIÓ al paciente (caso turno de Alexandra 24/07) — se excluyen del cobrado.
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),

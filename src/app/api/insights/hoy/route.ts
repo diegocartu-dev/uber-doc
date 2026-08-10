@@ -4,6 +4,20 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reservas";
+// Fuente única de la plata. Acá vivía una copia de `FilaPago` + `comisionDe`
+// calcada de este módulo: dos implementaciones del mismo cálculo que podían
+// separarse sin que nadie se enterara.
+import {
+  type FilaPago,
+  aprobada,
+  cobradoDe,
+  comisionTotalDe,
+  pagada,
+  reintegrada,
+  reintegradoDe,
+  reintegroEnCursoDe,
+  reintegrosPorCausa,
+} from "@/lib/insights/plata";
 
 // ── Página "Hoy" v2 (rediseño Diego 23/07) ────────────────────────────────────
 // 1. PLATA REAL, no teórica: cobrado = suma de `monto` PAGADO (mp_status
@@ -20,23 +34,6 @@ import { sinReservasAbandonadas, soloActividadReal } from "@/lib/insights/reserv
 //    de lista actual del médico, que reescribe el pasado si lo cambia).
 
 const SLOT = new Set(["disponible", "bloqueado"]);
-
-type FilaPago = {
-  monto: number | null;
-  mp_status: string | null;
-  mp_application_fee: number | string | null;
-  comision_docto_pct: number | string | null;
-};
-
-// Comisión real de una atención pagada: el fee que MP registró; si faltara,
-// reconstruir por pct (5/10%); nunca inventar.
-function comisionDe(f: FilaPago): number {
-  const fee = Number(f.mp_application_fee);
-  if (Number.isFinite(fee) && fee > 0) return fee;
-  const pct = Number(f.comision_docto_pct);
-  if (Number.isFinite(pct) && pct > 0 && f.monto) return (f.monto * pct) / 100;
-  return 0;
-}
 
 export async function GET(req: NextRequest) {
   const user = await verificarAdmin();
@@ -57,8 +54,8 @@ export async function GET(req: NextRequest) {
     { count: ciEsperando },
     { data: medicosDispRaw },
   ] = await Promise.all([
-    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct").gte("created_at", medianocheARenUTC(hoy)),
-    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct, canal_origen, reservado_hasta").eq("fecha", hoy),
+    admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id, especialidad, canal_origen, monto, mp_status, mp_application_fee, comision_docto_pct, reintegro_estado, resolucion_motivo").gte("created_at", medianocheARenUTC(hoy)),
+    admin.from("turnos").select("id, estado, fecha, hora_inicio, medico_id, paciente_id, monto, mp_status, mp_application_fee, comision_docto_pct, canal_origen, reservado_hasta, reintegro_estado, resolucion_motivo").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, created_at, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hace7)).lt("created_at", medianocheARenUTC(hace6)),
     admin.from("turnos").select("id, estado, fecha, medico_id, paciente_id").eq("fecha", hace7),
     admin.from("consultas").select("id", { count: "exact", head: true }).eq("estado", "esperando"),
@@ -91,14 +88,22 @@ export async function GET(req: NextRequest) {
 
   const delta = completadasHoy - completadas7dAgo;
 
-  // ── Plata REAL del día: lo que MP aprobó, la comisión que MP registró ──
-  const pagadasHoy: FilaPago[] = [
-    ...consultasHoy.filter(c => c.mp_status === "approved"),
-    ...turnosAtencionHoy.filter(t => t.mp_status === "approved"),
+  // ── Plata REAL del día ──
+  // Aprobado por MP y NO devuelto. Lo reintegrado sale del cobrado y se informa
+  // aparte con su causa: un reintegro por "el profesional no llegó a atender" es
+  // plata que perdimos por una falla nuestra y se acciona; uno por cancelación
+  // del paciente es costo normal. Antes todo esto sumaba al cobrado porque un
+  // refund de MP no toca `mp_status` (decisión Diego, 09/08).
+  const aprobadasHoy: FilaPago[] = [
+    ...consultasHoy.filter(aprobada),
+    ...turnosAtencionHoy.filter(aprobada),
   ];
-  const cobradoHoy = pagadasHoy.reduce((s, f) => s + (Number(f.monto) || 0), 0);
-  const comisionDocto = pagadasHoy.reduce((s, f) => s + comisionDe(f), 0);
+  const cobradoHoy = cobradoDe(aprobadasHoy);
+  const comisionDocto = comisionTotalDe(aprobadasHoy);
   const netoMedicos = cobradoHoy - comisionDocto;
+  const reintegradoHoy = reintegradoDe(aprobadasHoy);
+  const reintegroEnCursoHoy = reintegroEnCursoDe(aprobadasHoy);
+  const reintegrosHoy = reintegrosPorCausa(aprobadasHoy);
 
   // ── Disponibles: turnos habilitados HOY y/o CI activa, con jurisdicciones ──
   const medicosConTurnoHoy = new Set(turnosHoy.filter(t => t.estado === "disponible").map(t => t.medico_id));
@@ -157,7 +162,8 @@ export async function GET(req: NextRequest) {
         paciente: nombrePaciente(c.paciente_id),
         especialidad: c.especialidad ?? med?.especialidad ?? "",
         monto: Number(c.monto) || med?.precio_consulta || 0,
-        pagada: c.mp_status === "approved",
+        pagada: pagada(c),
+        reintegrada: reintegrada(c),
         inicio: c.created_at,
       };
     }),
@@ -171,7 +177,8 @@ export async function GET(req: NextRequest) {
         paciente: nombrePaciente(t.paciente_id),
         especialidad: med?.especialidad ?? "",
         monto: Number(t.monto) || med?.precio_consulta || 0,
-        pagada: t.mp_status === "approved",
+        pagada: pagada(t),
+        reintegrada: reintegrada(t),
         // Offset explícito: sin él, el server (UTC) y el sort lo leerían como
         // UTC y el turno ordenaría 3 h antes que las CI (que traen instante real).
         inicio: `${t.fecha}T${t.hora_inicio}-03:00`,
@@ -189,6 +196,12 @@ export async function GET(req: NextRequest) {
     cobradoHoy,
     comisionDocto,
     netoMedicos,
+    // Lo devuelto ya NO está adentro de cobradoHoy: se informa aparte y con su
+    // causa, que es lo único que permite separar una falla nuestra de un costo
+    // normal de operar.
+    reintegradoHoy,
+    reintegroEnCursoHoy,
+    reintegrosHoy,
     disponiblesAhora,
     actividad,
   });
