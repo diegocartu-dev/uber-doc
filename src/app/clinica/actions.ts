@@ -7,6 +7,9 @@ import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { avisarMedicoAceptarWhatsApp } from "@/lib/whatsapp";
 import { JURISDICCIONES } from "@/lib/jurisdicciones";
+import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
+import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion";
+import { logInfo } from "@/lib/logger";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -62,7 +65,7 @@ export async function crearConsulta(
   // del pago, no después (evita pay-then-block). Mismo criterio que info-medica.
   const { data: perfil } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, nro_afiliado, es_cuenta_test")
+    .select("id, nombre_completo, dni, fecha_nacimiento, sexo_dni, telefono, tiene_cobertura, nro_afiliado, es_cuenta_test")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -131,15 +134,33 @@ export async function crearConsulta(
     return { error: "El médico no está disponible en este momento. Por favor, elegí otro profesional." };
   }
 
-  const { count } = await supabase
-    .from("consultas")
-    .select("id", { count: "exact", head: true })
-    .eq("paciente_id", user.id)
-    .eq("medico_id", medicoId)
-    .in("estado", ["esperando", "aceptada", "en_curso"]);
+  // ¿Ya está adentro de una atención? Tres salidas distintas, ninguna con un
+  // cartel sin salida (ver `@/lib/consultas/encuentro-activo`):
+  //
+  //   1. YA PAGÓ            → no puede abrir otra. Se le dice cuál tiene y se le
+  //                           da el botón para ir. "Como usar un Uber y querer
+  //                           pedir otro" (Diego, 09/08).
+  //   2. NO PAGÓ, mismo pro → no es una atención nueva, es volver: redirect a su
+  //                           sala de espera. Sin carteles.
+  //   3. NO PAGÓ, otro pro  → puede abandonar y cambiar, pero se le pregunta
+  //                           primero. La cancelación la ejecuta
+  //                           `cambiarDeProfesional`, no esta función.
+  //
+  // Acá vivía un guard que miraba `["esperando","aceptada","en_curso"]` y se
+  // olvidaba de `pagada` — dejaba pasar justo el caso donde hay plata, y trababa
+  // los impagos con un texto que el paciente ni siquiera llegaba a ver (aparecía
+  // arriba de un formulario largo, después de cerrar el modal de confirmación).
+  const encuentro = await buscarEncuentroActivo(supabase, user.id, perfil?.id ?? null);
 
-  if (count && count > 0) {
-    return { error: "Ya tenés una consulta activa con este profesional." };
+  if (encuentro?.pagado) {
+    return { encuentroPagado: encuentro };
+  }
+
+  if (encuentro && !encuentro.pagado) {
+    if (encuentro.medicoId === medicoId) {
+      redirect(encuentro.href);
+    }
+    return { cambioDeProfesional: encuentro };
   }
 
   const { data, error } = await supabase
@@ -168,4 +189,99 @@ export async function crearConsulta(
   void avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "").catch(() => {});
 
   redirect(`/sala-espera/${data.id}`);
+}
+
+/**
+ * El paciente decidió dejar al profesional que había elegido —todavía sin
+ * pagar— y consultar con otro. Cancela la solicitud vieja, le avisa a ese
+ * profesional, y recién entonces crea la nueva.
+ *
+ * "Como un chofer de Uber al que el pasajero le cancela antes de que llegue"
+ * (Diego, 09/08/2026). El pasajero puede hacerlo; el chofer tiene que
+ * enterarse. Sin ese aviso, un profesional que ya aceptó la consulta se queda
+ * esperando a alguien que se fue — el mismo problema de las reservas
+ * abandonadas que ya documentamos para turnos.
+ *
+ * Solo cancela solicitudes SIN pago. Si entre la pantalla y este click el pago
+ * entró, el guard de abajo lo detecta y no se toca nada: la consulta pagada
+ * sigue siendo la del paciente y `crearConsulta` lo va a mandar ahí.
+ */
+export async function cambiarDeProfesional(
+  consultaAAbandonar: string,
+  medicoId: string,
+  especialidad: string,
+  motivoConsulta: string,
+  sintomas: string[],
+  tiempoSintomas: string,
+  canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "No autenticado." };
+  if (!UUID_RE.test(consultaAAbandonar)) return { error: "Consulta inválida." };
+
+  const admin = createAdminClient();
+
+  const { data: vieja } = await admin
+    .from("consultas")
+    .select("id, paciente_id, medico_id, estado, mp_status")
+    .eq("id", consultaAAbandonar)
+    .maybeSingle();
+
+  // Que sea del paciente de la sesión. Sin esto, un id ajeno cancelaría la
+  // consulta de otra persona.
+  if (!vieja || vieja.paciente_id !== user.id) {
+    return { error: "No encontramos esa consulta." };
+  }
+
+  if (vieja.mp_status === "approved") {
+    return {
+      error:
+        "Esa consulta ya tiene un pago hecho, así que no se puede abandonar. Si necesitás ayuda, escribinos a soporte@docto.com.ar.",
+    };
+  }
+
+  // Guard de carrera, mismo criterio que /api/consultas/cancelar-solicitud: el
+  // UPDATE exige que el estado siga siendo cancelable y que no haya aparecido un
+  // pago en el medio. OJO PostgREST: `not.eq` excluye los NULL y `mp_status` es
+  // NULL en las impagas — por eso el filtro es explícito.
+  const { data: cancelada } = await admin
+    .from("consultas")
+    .update({ estado: "cancelada" })
+    .eq("id", consultaAAbandonar)
+    .in("estado", ["esperando", "aceptada"])
+    .or("mp_status.is.null,mp_status.neq.approved")
+    .select("id")
+    .maybeSingle();
+
+  if (!cancelada) {
+    // Perdió la carrera: se pagó o cambió de estado. No se cancela nada y se
+    // deja que `crearConsulta` decida — va a encontrar el encuentro y lo va a
+    // mandar ahí.
+    return { error: "Esa consulta cambió de estado. Volvé a intentar." };
+  }
+
+  logInfo("[cambiar-profesional]", "El paciente abandonó una solicitud sin pagar", {
+    consultaId: consultaAAbandonar,
+  });
+
+  // El profesional se entera. Best-effort a propósito: que falle el aviso no
+  // puede dejar al paciente sin poder consultar con otro.
+  const { data: pacienteFila } = await admin
+    .from("pacientes")
+    .select("nombre_completo")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  await avisarCancelacionDelPaciente(
+    vieja.medico_id,
+    pacienteFila?.nombre_completo ?? "Un paciente"
+  ).catch(() => {});
+
+  // Ya no hay encuentro activo: el camino normal se encarga del resto (gates de
+  // médico, insert, WhatsApp y redirect a la sala de espera).
+  return crearConsulta(medicoId, especialidad, motivoConsulta, sintomas, tiempoSintomas, canalOrigen);
 }

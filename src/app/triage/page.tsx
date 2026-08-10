@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect, useTransition, Suspense } from "react";
 import { AlertTriangle, Check } from "lucide-react";
-import { crearConsulta } from "@/app/clinica/actions";
+import { crearConsulta, cambiarDeProfesional } from "@/app/clinica/actions";
+import type { EncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import DoctoLogo from "@/components/DoctoLogo";
 import LoadingButton from "@/components/ui/LoadingButton";
 import TerminosContent from "@/app/terminos/TerminosContent";
@@ -83,6 +84,10 @@ function TriageContent() {
   const [tiempo, setTiempo] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Atención paga en curso: no se abre otra (regla del Uber, Diego 09/08).
+  const [encuentroPagado, setEncuentroPagado] = useState<EncuentroActivo | null>(null);
+  // Solicitud impaga con otro profesional: se puede abandonar, pero preguntando.
+  const [cambioPendiente, setCambioPendiente] = useState<EncuentroActivo | null>(null);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
 
   const tieneEmergencia = sintomas.some((s) => SINTOMAS_EMERGENCIA.includes(s));
@@ -128,13 +133,53 @@ function TriageContent() {
     setMostrarConfirmacion(true);
   }
 
+  // Tres respuestas posibles del servidor, además del alta normal:
+  //   · error              → el cartel de siempre
+  //   · encuentroPagado    → ya tiene una atención paga: no se abre otra
+  //   · cambioDeProfesional→ tiene una solicitud SIN pagar con otro profesional;
+  //                          se le pregunta antes de cancelarla
+  function procesarRespuesta(result: Awaited<ReturnType<typeof crearConsulta>>) {
+    if (!result) return;
+    if ("encuentroPagado" in result && result.encuentroPagado) {
+      setEncuentroPagado(result.encuentroPagado);
+      return;
+    }
+    if ("cambioDeProfesional" in result && result.cambioDeProfesional) {
+      setCambioPendiente(result.cambioDeProfesional);
+      return;
+    }
+    if ("error" in result && result.error) {
+      setError(result.error);
+    }
+  }
+
   function handleConfirmarConsulta() {
     setMostrarConfirmacion(false);
     startTransition(async () => {
-      const result = await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen);
-      if (result?.error) {
-        setError(result.error);
-      }
+      procesarRespuesta(
+        await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen)
+      );
+    });
+  }
+
+  // El paciente confirmó que deja al profesional anterior. Recién acá se cancela
+  // la solicitud vieja y se le avisa a ese profesional.
+  function handleConfirmarCambio() {
+    const anterior = cambioPendiente;
+    if (!anterior) return;
+    setCambioPendiente(null);
+    startTransition(async () => {
+      procesarRespuesta(
+        await cambiarDeProfesional(
+          anterior.id,
+          medicoId,
+          especialidad,
+          motivo,
+          sintomas,
+          tiempo,
+          canalOrigen
+        )
+      );
     });
   }
 
@@ -387,6 +432,83 @@ function TriageContent() {
           </div>
         )}
       </main>
+
+      {/* Ya tiene una atención PAGA en curso: no se abre otra, se lo lleva a la
+          suya. "Como usar un Uber y querer pedir otro" (Diego, 09/08). Antes
+          esto era un texto rojo arriba del formulario que el paciente no
+          llegaba a ver y que además no ofrecía ninguna salida. */}
+      {encuentroPagado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-gray-900">
+              {encuentroPagado.canal === "turno"
+                ? "Ya tenés un turno activo"
+                : "Ya tenés una consulta activa"}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-700">
+              {encuentroPagado.canal === "turno"
+                ? `Estás en el turno con ${encuentroPagado.medicoNombre}. `
+                : `Tenés una consulta en curso con ${encuentroPagado.medicoNombre}. `}
+              Ya está paga, así que no hace falta pedir otra: te llevamos ahí.
+            </p>
+            <div className="mt-6 space-y-3">
+              <Link
+                href={encuentroPagado.href}
+                className="block w-full rounded-[var(--radius-md)] px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:opacity-90 active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
+              >
+                {encuentroPagado.canal === "turno" ? "Ir a mi turno" : "Ir a mi consulta"}
+              </Link>
+              <Link
+                href="/mis-consultas"
+                className="block w-full rounded-lg border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Ver mis atenciones
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tiene una solicitud SIN PAGAR con otro profesional. Puede dejarla, pero
+          se le pregunta: es su consulta y puede haber entrado acá por error. Si
+          confirma, se cancela la anterior y a ese profesional se le avisa. */}
+      {cambioPendiente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-gray-900">
+              Tenés una consulta pendiente con {cambioPendiente.medicoNombre}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-700">
+              Todavía no la pagaste, así que podés dejarla y consultar con otro
+              profesional. Si seguís, cancelamos esa solicitud y le avisamos para
+              que no te siga esperando.
+            </p>
+            <div className="mt-6 space-y-3">
+              <LoadingButton
+                isLoading={isPending}
+                onClick={handleConfirmarCambio}
+                className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
+                style={{ backgroundColor: "var(--color-primary)" }}
+              >
+                Sí, quiero consultar con este profesional
+              </LoadingButton>
+              <Link
+                href={cambioPendiente.href}
+                className="block w-full rounded-lg border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Volver a mi consulta con {cambioPendiente.medicoNombre}
+              </Link>
+              <button
+                onClick={() => setCambioPendiente(null)}
+                className="w-full px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Popup de confirmación */}
       {mostrarConfirmacion && (
