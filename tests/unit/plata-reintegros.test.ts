@@ -8,6 +8,7 @@
 import {
   aprobada,
   cobradoDe,
+  conMovimiento,
   comisionTotalDe,
   pagada,
   reintegrada,
@@ -43,38 +44,56 @@ const fila = (over: Partial<FilaPago>): FilaPago => ({
 });
 
 const cobrada = fila({});
-const devuelta = fila({ monto: 50000, reintegro_estado: "reembolsado", resolucion_motivo: "medico_ausente" });
-const devuelta2 = fila({ monto: 20000, reintegro_estado: "reembolsado", resolucion_motivo: "cancelado_paciente" });
+// Así queda una devolución REAL en producción: el webhook de MP mueve
+// `mp_status` de "approved" a "refunded". Detectarla solo por
+// `reintegro_estado` la dejaba afuera de todos los cortes.
+const devuelta = fila({ monto: 50000, mp_status: "refunded", reintegro_estado: "reembolsado", resolucion_motivo: "medico_ausente" });
+const devuelta2 = fila({ monto: 20000, mp_status: "refunded", reintegro_estado: "reembolsado", resolucion_motivo: "cancelado_paciente" });
+// Devolución ejecutada cuyo webhook NUNCA llegó: `mp_status` quedó viejo.
+const devueltaSinWebhook = fila({ monto: 15000, mp_status: "approved", reintegro_estado: "reembolsado", resolucion_motivo: "medico_ausente" });
+// Devolución que MP confirmó pero nuestro motor no llegó a anotar.
+const devueltaSoloMp = fila({ monto: 8000, mp_status: "refunded", reintegro_estado: null, resolucion_motivo: "cancelado_medico" });
 const enCurso = fila({ monto: 10000, reintegro_estado: "pendiente", resolucion_motivo: "medico_ausente" });
 const rechazada = fila({ monto: 99999, mp_status: "rejected" });
 
 // ── Clasificación ──────────────────────────────────────────────────────────
 check("una cobrada cuenta como pagada", pagada(cobrada), true);
 check("una devuelta NO cuenta como pagada", pagada(devuelta), false);
-check("pero sigue siendo aprobada (la plata entró)", aprobada(devuelta), true);
+// Ojo: una devuelta ya NO es "aprobada" — MP le movió el estado a "refunded".
+// Por eso el universo de los cortes es `conMovimiento`, no `aprobada`.
+check("una devuelta deja de estar aprobada", aprobada(devuelta), false);
 check("un reintegro en curso todavía cuenta como cobrado", pagada(enCurso), true);
 check("y se marca como en curso", reintegroEnCurso(enCurso), true);
 check("un reintegro concretado no está 'en curso'", reintegroEnCurso(devuelta), false);
 check("un pago rechazado nunca fue cobrado", pagada(rechazada), false);
-check("un pago rechazado no es un reintegro", reintegrada(fila({ mp_status: "rejected", reintegro_estado: "reembolsado" })), false);
+check("se detecta el reintegro por mp_status refunded", reintegrada(devuelta), true);
+check("y también cuando el webhook nunca llegó", reintegrada(devueltaSinWebhook), true);
+check("y cuando MP lo confirmó pero no lo anotamos", reintegrada(devueltaSoloMp), true);
+check("una devuelta sin webhook NO cuenta como cobrada", pagada(devueltaSinWebhook), false);
+
+// El universo de cualquier corte de plata: lo cobrado Y lo devuelto.
+check("una cobrada movió plata", conMovimiento(cobrada), true);
+check("una devuelta también movió plata", conMovimiento(devuelta), true);
+check("un rechazado no movió nada", conMovimiento(rechazada), false);
 
 // ── Totales: EL bug ────────────────────────────────────────────────────────
-const filas = [cobrada, devuelta, devuelta2, enCurso, rechazada];
+const filas = [cobrada, devuelta, devuelta2, devueltaSinWebhook, devueltaSoloMp, enCurso, rechazada];
 
 // Con la regla vieja (solo mp_status) esto habría dado 110.000: los 30.000
 // cobrados + 70.000 ya devueltos + 10.000 en curso.
 check("el cobrado deja afuera lo devuelto", cobradoDe(filas), 30000 + 10000);
-check("lo devuelto se informa aparte", reintegradoDe(filas), 50000 + 20000);
+check("lo devuelto se informa aparte", reintegradoDe(filas), 50000 + 20000 + 15000 + 8000);
 check("lo que está por devolverse, también", reintegroEnCursoDe(filas), 10000);
 check("la comisión tampoco cuenta sobre lo devuelto", comisionTotalDe(filas), 1500 + 1500);
 
 // ── El corte por causa ─────────────────────────────────────────────────────
 check("los reintegros se agrupan por causa, de mayor a menor", reintegrosPorCausa(filas), [
-  { causa: "El profesional no llegó a atender", motivo: "medico_ausente", cantidad: 1, monto: 50000 },
+  { causa: "El profesional no llegó a atender", motivo: "medico_ausente", cantidad: 2, monto: 65000 },
   { causa: "Lo canceló el paciente", motivo: "cancelado_paciente", cantidad: 1, monto: 20000 },
+  { causa: "Lo canceló el profesional", motivo: "cancelado_medico", cantidad: 1, monto: 8000 },
 ]);
 
-check("varias de la misma causa se suman", reintegrosPorCausa([devuelta, fila({ monto: 5000, reintegro_estado: "reembolsado", resolucion_motivo: "medico_ausente" })]), [
+check("varias de la misma causa se suman", reintegrosPorCausa([devuelta, fila({ monto: 5000, mp_status: "refunded", reintegro_estado: "reembolsado", resolucion_motivo: "medico_ausente" })]), [
   { causa: "El profesional no llegó a atender", motivo: "medico_ausente", cantidad: 2, monto: 55000 },
 ]);
 
@@ -85,7 +104,7 @@ check("una causa faltante se nombra, no se oculta", causaEnCriollo(null), "Sin c
 check("una causa desconocida se muestra cruda antes que perderla", causaEnCriollo("motivo_nuevo"), "motivo_nuevo");
 check(
   "un reintegro sin causa igual aparece en el corte",
-  reintegrosPorCausa([fila({ monto: 7000, reintegro_estado: "reembolsado" })]),
+  reintegrosPorCausa([fila({ monto: 7000, mp_status: "refunded", reintegro_estado: "reembolsado" })]),
   [{ causa: "Sin causa registrada", motivo: "", cantidad: 1, monto: 7000 }]
 );
 
