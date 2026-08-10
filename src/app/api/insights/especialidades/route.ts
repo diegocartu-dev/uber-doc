@@ -40,8 +40,8 @@ export async function GET(req: NextRequest) {
 
   const [{ data: medicosRaw }, { data: consultasRaw }, { data: turnosRaw }, { data: refundsRaw }, sets] = await Promise.all([
     admin.from("medicos").select("id, nombre_completo, especialidad, disponible, es_cuenta_test, jurisdicciones").eq("verificado", true),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, monto, mp_status").gte("created_at", medianocheARenUTC(desde)),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id, canal_origen, reservado_hasta").gte("fecha", desde),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id, especialidad, created_at, monto, mp_status, reintegro_estado, resolucion_motivo").gte("created_at", medianocheARenUTC(desde)),
+    admin.from("turnos").select("id, estado, medico_id, paciente_id, fecha, monto, mp_status, turno_origen_id, canal_origen, reservado_hasta, reintegro_estado, resolucion_motivo").gte("fecha", desde),
     admin.from("refunds_pendientes").select("tipo, recurso_id").eq("estado", "resuelto"),
     setsDeTest(admin),
   ]);
