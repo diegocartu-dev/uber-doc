@@ -192,6 +192,68 @@ export default function EsperaVideo({
     return () => clearInterval(interval);
   }, [createdAt]);
 
+  // ---- ESTADO: medico_ausente (venció el plazo de 30 min, plata devuelta) ----
+  // ESTA es la pantalla donde espera el paciente que YA PAGÓ. Sin esta rama, el
+  // estado caía al bloque de pago de abajo y le seguía diciendo "esperá a que el
+  // profesional inicie la videollamada" para siempre — sobre una consulta cuya
+  // plata ya le habíamos devuelto y de la que ya le habíamos mandado un push
+  // prometiéndoselo. La promesa y la pantalla tienen que decir lo mismo.
+  if (estado === "medico_ausente") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#1D9E75]/10">
+          <span className="text-4xl">💚</span>
+        </div>
+        <h1 className="mt-6 text-2xl font-bold text-gray-900">Te devolvemos el 100%</h1>
+        <p className="mt-2 text-gray-600">
+          {nombreMedico ? `${nombreMedico} no llegó` : "El profesional no llegó"} a tomar tu
+          consulta dentro de los 30 minutos. <strong>Ya iniciamos la devolución total</strong> al
+          mismo medio con el que pagaste.
+        </p>
+        <p className="mt-2 text-gray-600">Podés elegir otro profesional ahora mismo.</p>
+
+        <a
+          href="/clinica"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Elegir otro profesional
+        </a>
+        <VolverAlInicio returnUrl={returnUrl} />
+      </div>
+    );
+  }
+
+  // ---- ESTADO: no_show_paciente (venció el plazo sin que registráramos su ingreso) ----
+  if (estado === "no_show_paciente") {
+    return (
+      <div className="text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50">
+          <span className="text-4xl">🕐</span>
+        </div>
+        <h1 className="mt-6 text-2xl font-bold text-gray-900">Tu consulta venció</h1>
+        <p className="mt-2 text-gray-600">
+          Pasaron 30 minutos sin que registráramos tu ingreso a la consulta. Las consultas que no
+          se usan <strong>no tienen reintegro</strong>.
+        </p>
+        <p className="mt-2 text-gray-600">
+          Podés pedir una nueva cuando quieras. Si creés que hubo un error, escribinos a{" "}
+          <a href="mailto:soporte@docto.com.ar" className="text-[#378ADD] underline">
+            soporte@docto.com.ar
+          </a>
+          .
+        </p>
+
+        <a
+          href="/clinica"
+          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
+        >
+          Pedir una nueva consulta
+        </a>
+        <VolverAlInicio returnUrl={returnUrl} />
+      </div>
+    );
+  }
+
   // ---- ESTADO: cancelada / rechazada ----
   // `rechazada` no tenía rama propia y caía al bloque de pago de abajo: a los
   // 3 minutos le ofrecía "Pagar consulta" sobre una consulta que ya estaba

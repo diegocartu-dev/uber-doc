@@ -20,8 +20,12 @@
 export type FilaPago = {
   monto: number | null;
   mp_status: string | null;
-  mp_application_fee: number | string | null;
-  comision_docto_pct: number | string | null;
+  // Opcionales: solo los necesita `comisionDe`. Las funciones de clasificación
+  // (pagada / reintegrada / conMovimiento) trabajan sin ellos, así que un
+  // endpoint que solo quiere saber si una fila cobró no está obligado a traer
+  // columnas que no usa.
+  mp_application_fee?: number | string | null;
+  comision_docto_pct?: number | string | null;
   /** Estado de la devolución. `null` = nunca hubo una. */
   reintegro_estado?: string | null;
   /** Por qué se resolvió así: `medico_ausente`, `paciente_ausente`, etc. */

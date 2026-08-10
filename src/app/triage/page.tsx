@@ -449,7 +449,12 @@ function TriageContent() {
               {encuentroPagado.canal === "turno"
                 ? `Estás en el turno con ${encuentroPagado.medicoNombre}. `
                 : `Tenés una consulta en curso con ${encuentroPagado.medicoNombre}. `}
-              Ya está paga, así que no hace falta pedir otra: te llevamos ahí.
+              {/* No afirmar "ya está paga" cuando MP todavía no acreditó: hay
+                  plata retenida (por eso bloquea), pero decirle que ya pagó
+                  cuando el pago está en revisión es mentirle. */}
+              {encuentroPagado.pagoEnCamino
+                ? "Tu pago está en camino: apenas se acredite vas a poder entrar. No hace falta pagar de nuevo."
+                : "Ya está paga, así que no hace falta pedir otra: te llevamos ahí."}
             </p>
             <div className="mt-6 space-y-3">
               <Link
