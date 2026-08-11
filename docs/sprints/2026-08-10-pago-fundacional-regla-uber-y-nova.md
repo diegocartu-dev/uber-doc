@@ -145,11 +145,29 @@ documentos clínicos se verifica con lentes independientes **antes** del merge, 
 la premisa se verifica contra el código antes de escribir el fix. El dato que
 faltaba estaba escrito en un docstring del repo desde hacía dos días.
 
+## Campaña de activación — ENVIADA (10/08, ~21h ART)
+
+Con el censo nominal (38 aprobados reales) se envió por mail la campaña de
+activación: **37/37 entregados** en 4 segmentos (16 listos para atender, 6 a un
+paso, 5 a mitad de camino, 10 que nunca configuraron), cada uno con su próximo
+paso exacto. Un profesional quedó excluido para contacto personal (identidad
+rechazada por el verificador). Copy aprobado por el CEO en el chat; firma
+Valentina · Equipo Docto; sin mención de cupos.
+
+Mensaje troncal común: categoría **Médico Fundador** (5% por uso de plataforma,
+95% directo al Mercado Pago del profesional, en el acto), **Nova** (armar agenda
+con lenguaje natural y consultar los turnos del día — solo lo que hoy funciona),
+**Consultorio Virtual Particular**, y sumar la agenda a la **Clínica Virtual** +
+Consulta Inmediata para los tiempos muertos.
+
+El efecto es medible desde hoy: logins, avance de onboarding por segmento, CI
+encendidas, y uso de Nova (ahora con conversaciones guardadas).
+
 ## Qué quedó abierto
 
-1. **Plan de activación** (definido por Diego, en curso): censo nominal por
-   profesional → comunicaciones segmentadas (con OK de copy) → encuesta →
-   beneficio Médico Fundador → sugerir funciones, ahora medible con Nova.
+1. **Plan de activación** — campaña enviada (arriba). Siguen: la encuesta a
+   usuarios, el contacto personal del caso excluido, y medir el efecto por
+   segmento en los próximos días.
 2. Instrumentar el abandono en la pantalla de pago de turnos (`pago_vista`).
 3. 7 PRs viejos abiertos (mayo–julio) a triar.
 4. Deudas conocidas: badge "N pendientes" de la agenda cuenta reservas muertas;
