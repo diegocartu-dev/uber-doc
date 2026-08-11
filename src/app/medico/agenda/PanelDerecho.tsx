@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cancelarTurnosMedico } from "@/app/dashboard/actions";
+import { sinReservasAbandonadas } from "@/lib/insights/reservas";
 
 type Turno = {
   id: string; fecha: string; hora_inicio: string; hora_fin: string;
@@ -165,7 +166,7 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
       setCargando(true);
       const supabase = createClient();
       const { data } = await supabase
-        .from("turnos").select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id, canal_origen")
+        .from("turnos").select("id, fecha, hora_inicio, hora_fin, estado, monto, paciente_id, canal_origen, reservado_hasta, mp_status")
         .eq("medico_id", medicoId).gte("fecha", diasSemana[0]).lte("fecha", diasSemana[6])
         .order("hora_inicio", { ascending: true });
       if (!data) { setTurnos([]); setCargando(false); return; }
@@ -192,7 +193,8 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
       const supabase = createClient();
       const p = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-01`;
       const u = `${anioVisible}-${(mesVisible + 1).toString().padStart(2, "0")}-${new Date(anioVisible, mesVisible + 1, 0).getDate()}`;
-      const { data } = await supabase.from("turnos").select("fecha, estado").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ESTADOS_VISIBLES);
+      const { data: crudo } = await supabase.from("turnos").select("fecha, estado, reservado_hasta, mp_status").eq("medico_id", medicoId).gte("fecha", p).lte("fecha", u).in("estado", ESTADOS_VISIBLES);
+      const data = crudo ? sinReservasAbandonadas(crudo) : crudo;
       setTurnosMes(data ?? []);
     }
     load();
@@ -211,7 +213,15 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
   )].sort();
 
   const disponibles = turnos.filter((t) => t.estado === "disponible").length;
-  const reservados = turnos.filter((t) => ESTADOS_OCUPADOS.includes(t.estado));
+  // Las reservas ABANDONADAS (retención vencida, sin pago ni en vuelo) no se
+  // muestran ni se cuentan: son las vueltas de un paciente indeciso, no
+  // actividad (regla de CLAUDE.md, decisión Diego 06/08). El badge las contaba
+  // y el médico veía "3 pendientes" de gente que se fue hace días. Grants
+  // verificados en prod: `reservado_hasta` y `mp_status` de `turnos` SÍ tienen
+  // SELECT para authenticated — la trampa documentada es de `medicos`.
+  const reservados = sinReservasAbandonadas(
+    turnos.filter((t) => ESTADOS_OCUPADOS.includes(t.estado))
+  );
 
   const reservadosPorDia = new Map<string, Turno[]>();
   for (const t of reservados) {
@@ -246,7 +256,7 @@ export default function PanelDerecho({ medicoId, precio, flagNovaAi = true }: { 
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#9FE1CB", color: "#085041" }}>● {disponibles} disponibles</span>
         <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#E8E0F7", color: "#6B4FA0" }}>● {reservados.filter((t) => t.estado === "confirmado" || t.estado === "en_espera").length} confirmados</span>
-        <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.filter((t) => t.estado === "reservado_pendiente").length} pendientes</span>
+        <span className="rounded-full px-3 py-1 text-[11px] font-medium" style={{ background: "#378ADD", color: "#fff" }}>● {reservados.filter((t) => t.estado === "reservado_pendiente").length} pendientes de pago</span>
         <button onClick={goHoy} className="rounded-full bg-[#378ADD] px-3 py-1 text-[11px] font-medium text-white min-h-[44px] md:min-h-0">Hoy</button>
         {flagNovaAi && (
           <button
