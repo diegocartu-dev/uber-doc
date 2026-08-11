@@ -59,6 +59,38 @@ export async function tieneClaves(medicoId: string): Promise<boolean> {
 // Fix I-3 / 4.4: Revocar claves comprometidas o rotar periódicamente.
 // La clave revocada se mantiene para verificar firmas históricas.
 // Se genera un nuevo par de claves activas.
+//
+// ⚠️ ANTES DE USAR ESTA FUNCIÓN, LEER ESTO — HOY NO FUNCIONA.
+//
+// `medico_claves` tiene `medico_id UNIQUE` a nivel tabla (la restricción entera
+// `medico_claves_medico_id_key`, del CREATE TABLE original; el índice parcial
+// posterior sobre `activa=true` NO la reemplaza). O sea: un médico no puede
+// tener más de UNA fila, nunca.
+//
+// Esta función hace UPDATE (marcar la vieja como revocada) y DESPUÉS INSERT de
+// la nueva. Ese INSERT viola la restricción única y falla — pero la revocación
+// YA SE GUARDÓ. Resultado: el profesional queda con una sola clave revocada,
+// sin ninguna activa, y no puede firmar NADA hasta que alguien lo arregle a
+// mano. Es peor que no haber intentado rotar.
+//
+// Por eso hoy no la llama nadie (verificado: cero call sites en todo el repo) y
+// en producción no existe una sola clave revocada.
+//
+// QUÉ HAY QUE DECIDIR CUANDO HAGA FALTA (clave comprometida, cambio de
+// matrícula), porque son dos modelos incompatibles y hay que elegir uno:
+//
+//  (a) UNA clave por médico: se pisa la vieja (UPDATE en vez de INSERT). Simple,
+//      pero las firmas viejas dejan de poder verificarse con su clave original.
+//  (b) HISTORIAL de claves: hay que BORRAR la restricción única entera y dejar
+//      solo el índice parcial sobre `activa=true`. Recién ahí conviven la
+//      revocada y la nueva, y los fallbacks de verificación histórica que ya
+//      existen en `firma/receta.ts` y `firma/documento.ts` empiezan a tener
+//      sentido — hoy son código inalcanzable, porque nunca puede haber una fila
+//      vieja que encontrar.
+//
+// El comentario de acá arriba ("se mantiene para verificar firmas históricas")
+// describe la intención (b), pero la base impone la (a). Esa contradicción es el
+// bug de fondo, no el filtro `activa=true` que proponía el PR #264.
 type RevocarResult = {
   ok: true;
   nuevaPublicKey: string;
