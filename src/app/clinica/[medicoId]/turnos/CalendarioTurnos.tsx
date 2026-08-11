@@ -30,9 +30,46 @@ export default function CalendarioTurnos({
 }) {
   // Mes/año inicial del calendario también en hora AR (borde de mes con TZ corrida).
   const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  const [mes, setMes] = useState(hoy.getMonth());
-  const [anio, setAnio] = useState(hoy.getFullYear());
-  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
+
+  // EL CALENDARIO ABRE CON EL PRIMER DÍA QUE TIENE TURNOS YA ELEGIDO.
+  //
+  // Antes abría con `diaSeleccionado = null`: el bloque de horarios ni se
+  // renderizaba y el paciente veía una grilla de números celestes pálidos y nada
+  // más. Tenía que adivinar que esos números se tocan.
+  //
+  // Costó demanda real y medida (10/08/2026): cuatro pacientes llegaron al
+  // calendario de profesionales con entre 200 y 440 turnos libres, y NINGUNO
+  // reservó. Uno de ellos alternó entre dos profesionales cuatro veces en un
+  // minuto y se fue. Mostrar los horarios de entrada convierte "no hay nada" en
+  // "elegí una hora".
+  //
+  // Se elige el primer día CON TURNOS, no "hoy": a las 23:05 los slots de hoy ya
+  // pasaron y abrir en hoy mostraría un día vacío — que es justo el problema que
+  // esto viene a resolver. Dos de los cuatro entraron de noche.
+  const primerDiaConTurnos = (() => {
+    const ahoraInit = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+    const hoyInit = `${ahoraInit.getFullYear()}-${(ahoraInit.getMonth() + 1).toString().padStart(2, "0")}-${ahoraInit.getDate().toString().padStart(2, "0")}`;
+    const corteInit = ahoraInit.getHours() * 60 + ahoraInit.getMinutes() + 15;
+    const vigentes = turnos.filter((t) => {
+      if (t.fecha > hoyInit) return true;
+      if (t.fecha < hoyInit) return false;
+      const [h, m] = t.hora_inicio.split(":").map(Number);
+      return h * 60 + m > corteInit;
+    });
+    return vigentes.length > 0
+      ? vigentes.reduce((min, t) => (t.fecha < min ? t.fecha : min), vigentes[0].fecha)
+      : null;
+  })();
+
+  // El mes que se muestra es el del primer día con turnos, no el actual: si el
+  // profesional recién abre agenda para el mes que viene, abrir en este mes
+  // mostraba un calendario entero en gris.
+  const mesInicial = primerDiaConTurnos ? Number(primerDiaConTurnos.slice(5, 7)) - 1 : hoy.getMonth();
+  const anioInicial = primerDiaConTurnos ? Number(primerDiaConTurnos.slice(0, 4)) : hoy.getFullYear();
+
+  const [mes, setMes] = useState(mesInicial);
+  const [anio, setAnio] = useState(anioInicial);
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(primerDiaConTurnos);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null);
   const [cuando, setCuando] = useState<string[]>(["24h", "10m"]);
   const [canal, setCanal] = useState("ambos");
@@ -119,6 +156,29 @@ export default function CalendarioTurnos({
 
   return (
     <div className="mt-6">
+      {/* Sin turnos: decirlo, y ofrecer una salida.
+          Antes el paciente veía un calendario ENTERO EN GRIS sin una palabra que
+          explicara por qué. Al 10/08/2026, de los 5 profesionales habilitados
+          para un paciente de Buenos Aires, TRES tenían cero turnos publicados:
+          el que caía en uno de ellos se quedaba mirando una grilla muerta. */}
+      {turnosFiltrados.length === 0 && (
+        <div className="rounded-xl bg-white p-6 text-center" style={{ border: "0.5px solid #e5e7eb" }}>
+          <p className="text-base font-medium text-gray-900">
+            {formatNombreMedico(medico.nombre, medico.titulo)} no tiene turnos publicados por ahora
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            Todavía no abrió su agenda. Podés ver otros profesionales de la clínica que sí
+            tienen turnos disponibles.
+          </p>
+          <a
+            href="/clinica"
+            className="mt-5 inline-flex min-h-[48px] items-center justify-center rounded-lg bg-[#378ADD] px-6 py-2.5 text-sm font-medium text-white"
+          >
+            Ver otros profesionales
+          </a>
+        </div>
+      )}
+
       {/* Calendario */}
       {turnosFiltrados.length > 0 && (
         <div className="rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
