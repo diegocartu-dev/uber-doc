@@ -9,7 +9,8 @@ import LoadingButton from "@/components/ui/LoadingButton";
 // Rediseño 14/07/2026 — FASE A del registro médico: crear la cuenta con lo
 // mínimo (nombre + email + contraseña) y mandar el mail de validación. Los datos
 // profesionales + credencial + biometría se completan DESPUÉS de confirmar el
-// mail, ya logueado (/registro-medico/continuar). Spec: docs/specs/2026-07-14.
+// mail, ya logueado (/registro-medico/continuar).
+// Spec: docs/specs/2026-07-14-rediseno-registro-medico.md
 export default function RegistroMedicoPage() {
   const [enviadoA, setEnviadoA] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
