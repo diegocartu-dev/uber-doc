@@ -8,10 +8,12 @@ interface Props {
   pendingMedicos: number;
   pendingAlertas: number;
   adminEmail: string;
+  /** Flag institucional resuelto en el SERVER (layout) — única fuente. */
+  institucional?: boolean;
   children: React.ReactNode;
 }
 
-export default function AdminShell({ pendingMedicos, pendingAlertas, adminEmail, children }: Props) {
+export default function AdminShell({ pendingMedicos, pendingAlertas, adminEmail, institucional, children }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -22,6 +24,7 @@ export default function AdminShell({ pendingMedicos, pendingAlertas, adminEmail,
           pendingMedicos={pendingMedicos}
           pendingAlertas={pendingAlertas}
           adminEmail={adminEmail}
+          institucional={institucional}
         />
       </div>
 
@@ -34,6 +37,7 @@ export default function AdminShell({ pendingMedicos, pendingAlertas, adminEmail,
               pendingMedicos={pendingMedicos}
               pendingAlertas={pendingAlertas}
               adminEmail={adminEmail}
+              institucional={institucional}
               onNavigate={() => setDrawerOpen(false)}
             />
           </div>
