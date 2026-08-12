@@ -68,7 +68,12 @@ export async function actualizarDisponibilidad(data: {
         .maybeSingle(),
       adminDb.from("medico_claves").select("id").eq("medico_id", previo.id).maybeSingle(),
     ]);
-    const onb = { mpConectado: !!mpRes.data, firmaConfigurada: !!firmaRes.data };
+    // Modo institucional: no hay Mercado Pago (el cobro es a la institución) y
+    // /api/mp/oauth devuelve 404 — el requisito de MP se apaga por el mismo
+    // env (spec §9 Capa B) o el profesional queda en deadlock. Firma sigue
+    // exigida. En B2C, esInstitucional() es false: comportamiento idéntico.
+    const { esInstitucional } = await import("@/lib/instancia");
+    const onb = { mpConectado: esInstitucional() || !!mpRes.data, firmaConfigurada: !!firmaRes.data };
     if (!perfilMedicoCompleto(previo, onb)) {
       const faltan = camposFaltantesMedico(previo, onb).map((c) => c.label);
       return {

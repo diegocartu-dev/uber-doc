@@ -7,6 +7,7 @@ import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { sendDoctoAlert, sendDoctoAlertThrottled } from "@/lib/alertas";
 import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
 import { guardarSiteMp } from "@/lib/mp-site-db";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 const PERFIL_BASE = "/medico/perfil?tab=cobros";
 
@@ -26,6 +27,11 @@ const TIMEOUT_TOKEN_MS = 15_000;
 const TIMEOUT_SITE_MS = 4_000;
 
 export async function GET(req: NextRequest) {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
 

@@ -3,8 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/funnel";
 import { guardarSiteMp } from "@/lib/mp-site-db";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 export async function POST() {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "crypto";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 export async function GET(request: Request) {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   // `origin=onboarding` (lo manda solo el wizard) hace que el callback vuelva al
   // wizard. Sin el param (todo el flujo actual desde /medico/perfil) el state
   // queda plano y el callback vuelve a /medico/perfil como siempre.
