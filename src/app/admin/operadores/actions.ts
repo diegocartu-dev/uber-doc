@@ -45,24 +45,19 @@ export async function crearOperador(input: {
     const email = input.email.trim().toLowerCase();
     if (!email) return { ok: false, error: "Falta el email del operador humano." };
 
-    // Lookup por email PAGINADO (lección de recuperar-registros: listUsers sin
-    // params devuelve SOLO la primera página — 50 usuarios — y el bug es
-    // silencioso: "no tiene cuenta" para cuentas que sí existen). En la
-    // instancia institucional cada paciente provisionado por link también es
-    // una cuenta de auth, así que auth.users supera 50 apenas entra el padrón.
-    const PER_PAGE = 1000;
-    let targetId: string | null = null;
-    for (let page = 1; page <= 20; page++) {
-      const { data: pagina, error: usersError } = await admin.auth.admin.listUsers({
-        page,
-        perPage: PER_PAGE,
-      });
-      if (usersError) {
-        console.error("[admin/operadores] Error listando usuarios:", usersError);
-        return { ok: false, error: "No se pudo buscar el usuario. Intentá de nuevo." };
-      }
-      targetId = pagina.users.find((u) => u.email?.toLowerCase() === email)?.id ?? null;
-      if (targetId || pagina.users.length < PER_PAGE) break;
+    // Lookup por email DIRECTO vía RPC SECURITY DEFINER sobre auth.users
+    // (migración institucional 007). Reemplaza el loop paginado de listUsers,
+    // que cortaba en 20.000 usuarios: con un padrón provincial provisionado
+    // (cada paciente del padrón es una cuenta de auth) ese techo se supera y
+    // el alta devolvía un falso "ese email no tiene cuenta" (spec §11.10,
+    // gate #402). La RPC no tiene EXECUTE para anon/authenticated: solo el
+    // service role puede invocarla.
+    const { data: targetId, error: usersError } = await admin.rpc("buscar_user_id_por_email", {
+      p_email: email,
+    });
+    if (usersError) {
+      console.error("[admin/operadores] Error buscando usuario por email:", usersError);
+      return { ok: false, error: "No se pudo buscar el usuario. Intentá de nuevo." };
     }
     if (!targetId)
       return {
@@ -126,6 +121,37 @@ export async function setOperadorActivo(
   if (!uid) return { ok: false, error: "No autorizado" };
 
   const admin = createAdminClient();
+
+  // Reactivar re-chequea que el usuario no se haya vuelto MÉDICO entretanto
+  // (spec §11.11, gate #402): el alta bloquea médicos, pero entre la baja y la
+  // reactivación la cuenta pudo convertirse en profesional — y reactivarlo
+  // como operador lo sacaría de su dashboard por precedencia de rol
+  // (admin_institucion/otorgador > medico), dejándolo sin poder atender.
+  if (activo) {
+    const { data: fila, error: errFila } = await admin
+      .from("operadores")
+      .select("user_id")
+      .eq("id", operadorId)
+      .maybeSingle();
+    if (errFila) {
+      console.error("[admin/operadores] Error leyendo operador a reactivar:", errFila);
+      return { ok: false, error: "No se pudo actualizar." };
+    }
+    if (fila?.user_id) {
+      const { data: filaMedico } = await admin
+        .from("medicos")
+        .select("id")
+        .eq("user_id", fila.user_id)
+        .maybeSingle();
+      if (filaMedico)
+        return {
+          ok: false,
+          error:
+            "Esa cuenta ahora pertenece a un profesional. Un profesional no puede ser operador: usá otra cuenta.",
+        };
+    }
+  }
+
   // Baja = desactivar, nunca borrar: la fila queda para la auditoría de
   // `asignaciones` (Etapa 2) y el resolver de rol ignora inactivos.
   const { error } = await admin.from("operadores").update({ activo }).eq("id", operadorId);

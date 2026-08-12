@@ -44,6 +44,7 @@ import { ejecutarRefund } from "@/lib/cancelaciones";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { pushAlPaciente } from "@/lib/push";
 import { logError, logInfo } from "@/lib/logger";
+import { esInstitucional } from "@/lib/instancia";
 
 /** Minutos desde el pago antes de resolver. */
 export const PLAZO_CI_MIN = 30;
@@ -86,6 +87,26 @@ export function momentoDePago(c: {
   created_at?: string | null;
 }): number {
   for (const valor of [c.mp_payment_created_at, c.aceptada_at, c.created_at]) {
+    if (!valor) continue;
+    const ms = new Date(valor).getTime();
+    if (!Number.isNaN(ms)) return ms;
+  }
+  return NaN;
+}
+
+/**
+ * Ancla del plazo en MODO INSTITUCIONAL (spec institucional §6.3): acá no hay
+ * pago — la CI la asigna un operador y nace 'pagada' (compromiso institucional)
+ * con `asignada_at` escrita en el mismo UPDATE/INSERT. Anclar en `momentoDePago`
+ * caería siempre a `created_at`… que en la CI institucional coincide con la
+ * asignación, pero el dato semánticamente correcto (y auditable contra
+ * `asignaciones`) es `asignada_at`. Fallback a `created_at` por robustez.
+ */
+export function momentoDeAsignacion(c: {
+  asignada_at?: string | null;
+  created_at?: string | null;
+}): number {
+  for (const valor of [c.asignada_at, c.created_at]) {
     if (!valor) continue;
     const ms = new Date(valor).getTime();
     if (!Number.isNaN(ms)) return ms;
@@ -199,7 +220,11 @@ export async function resolverConsultaVencida(
     if (filaPac) {
       await pushAlPaciente(filaPac, {
       title: "Tu consulta venció",
-      body: "No registramos tu ingreso a la consulta. Las consultas no utilizadas no tienen reintegro.",
+      // En la instancia institucional el paciente no pagó: hablarle de
+      // reintegros que no existen sería confuso. En B2C, copy idéntico.
+      body: esInstitucional()
+        ? "No registramos tu ingreso a la consulta. Comunicate con tu institución si necesitás una nueva."
+        : "No registramos tu ingreso a la consulta. Las consultas no utilizadas no tienen reintegro.",
       url: "/mis-consultas",
       tag: `vencida-${consulta.id}`,
       }).catch(() => {});
@@ -244,7 +269,11 @@ export async function resolverConsultaVencida(
   if (!tomada) return { resuelta: false, motivo: "carrera_perdida" };
 
   let reintegro: string | null = null;
-  if (consulta.pago_id) {
+  // Modo institucional (spec institucional §6.3, gate #401): sin Mercado Pago no
+  // hay nada que devolver — el paciente nunca pagó. `pago_id` debería ser NULL
+  // siempre; el gate por modo evita que un dato sucio encole un refund
+  // imposible. En B2C, esInstitucional() es false: idéntico.
+  if (consulta.pago_id && !esInstitucional()) {
     // RESERVA EN LA COLA ANTES DE LLAMAR A MP.
     //
     // Entre "tomar la fila" y "anotar el reintegro" hay una llamada a Mercado
@@ -320,12 +349,24 @@ export async function resolverConsultaVencida(
 
   const filaPac = await filaPaciente(consulta.paciente_id);
   if (filaPac) {
-    await pushAlPaciente(filaPac, {
-      title: "Te devolvemos el 100%",
-      body: "El profesional no pudo tomar tu consulta. Ya iniciamos la devolución total y podés elegir otro.",
-      url: "/clinica",
-      tag: `ausente-${consulta.id}`,
-    }).catch(() => {});
+    // Modo institucional: no hubo pago → no hay devolución que prometer, y
+    // /clinica (marketplace B2C) no existe en la instancia. En B2C, idéntico.
+    await pushAlPaciente(
+      filaPac,
+      esInstitucional()
+        ? {
+            title: "Tu consulta no pudo realizarse",
+            body: "El profesional no pudo tomar tu consulta. Tu institución va a reasignarla.",
+            url: "/mis-consultas",
+            tag: `ausente-${consulta.id}`,
+          }
+        : {
+            title: "Te devolvemos el 100%",
+            body: "El profesional no pudo tomar tu consulta. Ya iniciamos la devolución total y podés elegir otro.",
+            url: "/clinica",
+            tag: `ausente-${consulta.id}`,
+          }
+    ).catch(() => {});
   }
 
   logInfo("[plazo-ci]", "Consulta cerrada por ausencia del profesional", {

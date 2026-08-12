@@ -8,6 +8,7 @@ import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
+import { esInstitucional } from "@/lib/instancia";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -375,7 +376,13 @@ export async function resolverNoShowMedico(
   if (!turno || turno.estado !== "en_espera") return { ok: false, reembolso: null };
 
   let reintegroEstado: ReintegroEstado = null;
-  if (turno.pago_id) {
+  // Modo institucional (spec institucional §6.3, gate #401): acá NO hay Mercado
+  // Pago — el turno nació 'confirmado' sin pago y `pago_id` debería ser siempre
+  // NULL. El gate por modo es cinturón y tirantes: si un dato sucio trajera un
+  // pago_id, ejecutar la rama de refund encolaría refunds imposibles contra
+  // `medicos_mp_accounts` que no existen. Se resuelve a `ausente_medico` igual,
+  // SIN rama de refund. En B2C, esInstitucional() es false: idéntico.
+  if (turno.pago_id && !esInstitucional()) {
     reintegroEstado = await ejecutarRefund(
       turnoId,
       turno.medico_id,

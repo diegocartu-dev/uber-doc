@@ -6,8 +6,10 @@ import {
   PLAZO_CI_MIN,
   medicosOcupados,
   momentoDePago,
+  momentoDeAsignacion,
   resolverConsultaVencida,
 } from "@/lib/consultas/resolver-vencidas";
+import { esInstitucional } from "@/lib/instancia";
 
 /**
  * Plazo de la consulta inmediata — 30 minutos (decisión Diego, 09/08/2026).
@@ -51,21 +53,57 @@ async function handler() {
   // `sala_video_url IS NULL` es la señal de que el profesional no entró: esa
   // columna solo la escriben el workspace y /api/livekit/crear-sala, y las dos
   // exigen que actúe él.
-  const { data: pagadas } = await admin
-    .from("consultas")
-    .select(
-      "id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, mp_payment_created_at, aceptada_at, created_at"
-    )
-    .eq("mp_status", "approved")
-    .in("estado", ESTADOS_RESOLUBLES)
-    .is("sala_video_url", null)
-    .order("created_at", { ascending: true })
-    .limit(200);
+  // ── MODO INSTITUCIONAL (spec institucional §6.3, gate #401) ────────────────
+  // Acá no existe Mercado Pago: la CI la asigna un operador y nace 'pagada'
+  // (compromiso institucional — decisión §4.5) SIN mp_status. Filtrar por
+  // `mp_status='approved'` dejaría el cron ciego para SIEMPRE (el mismo modo de
+  // falla que el filtro por 'pagada' tuvo en B2C — ver el comentario de abajo).
+  // Candidatas institucionales: estado 'pagada' + sala nunca abierta, ancladas
+  // en `asignada_at` (+30 min). La columna `asignada_at` SOLO existe en la DB
+  // de la instancia (migración institucional 003): jamás sumarla a la query B2C
+  // — PostgREST fallaría la query entera.
+  let vencidas: {
+    id: string;
+    estado: string;
+    medico_id: string;
+    paciente_id: string;
+    pago_id: string | null;
+    mp_net_amount_medico: number | null;
+    mp_application_fee: number | null;
+  }[] = [];
 
-  const vencidas = (pagadas ?? []).filter((c) => {
-    const pago = momentoDePago(c);
-    return !Number.isNaN(pago) && nowMs >= pago + plazoMs;
-  });
+  if (esInstitucional()) {
+    const { data: asignadas } = await admin
+      .from("consultas")
+      .select(
+        "id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, asignada_at, created_at"
+      )
+      .eq("estado", "pagada")
+      .is("sala_video_url", null)
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    vencidas = (asignadas ?? []).filter((c) => {
+      const ancla = momentoDeAsignacion(c);
+      return !Number.isNaN(ancla) && nowMs >= ancla + plazoMs;
+    });
+  } else {
+    const { data: pagadas } = await admin
+      .from("consultas")
+      .select(
+        "id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, mp_payment_created_at, aceptada_at, created_at"
+      )
+      .eq("mp_status", "approved")
+      .in("estado", ESTADOS_RESOLUBLES)
+      .is("sala_video_url", null)
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    vencidas = (pagadas ?? []).filter((c) => {
+      const pago = momentoDePago(c);
+      return !Number.isNaN(pago) && nowMs >= pago + plazoMs;
+    });
+  }
 
   const ocupados = await medicosOcupados([
     ...new Set(vencidas.map((c) => c.medico_id).filter(Boolean)),
