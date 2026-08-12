@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
+import { esInstitucional } from "@/lib/instancia";
 import LandingNav from "@/components/landing/LandingNav";
 import Buscador from "@/components/landing/Buscador";
 import { PhoneMockupHero, PhoneMockupInmediata, PhoneMockupTurnos } from "@/components/landing/PhoneMockup";
@@ -22,6 +23,30 @@ export default async function Home({
 }) {
   const { code } = await searchParams;
   if (code) redirect(`/auth/callback?code=${code}`);
+
+  // ── Modo institucional (Capa A, spec §9): la landing B2C no existe en la
+  // instancia. Redirect por rol, SIN el auto-create de pacientes de abajo
+  // (universo cerrado: el alta es provisionada; el paciente entra por su link).
+  // El visitante anónimo va al login (profesionales/operadores) en vez de ver
+  // marketing B2C con buscador hacia rutas que acá devuelven 404.
+  // En B2C, esInstitucional() es false: comportamiento idéntico.
+  if (esInstitucional()) {
+    const supabaseInst = await createClient();
+    const {
+      data: { user: userInst },
+    } = await supabaseInst.auth.getUser();
+    if (!userInst) redirect("/auth/login");
+    if (await isAdmin(userInst.id)) redirect("/admin");
+    const { data: medicoInst } = await supabaseInst
+      .from("medicos")
+      .select("id")
+      .eq("user_id", userInst.id)
+      .maybeSingle();
+    if (medicoInst) redirect("/dashboard");
+    // Paciente provisionado (o cuenta sin rol): sus atenciones viven en
+    // /mis-consultas. Sin fila en `pacientes` NO se crea nada acá.
+    redirect("/mis-consultas");
+  }
 
   const supabase = await createClient();
   const {
