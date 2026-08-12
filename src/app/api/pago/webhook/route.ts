@@ -6,6 +6,7 @@ import { logInfo, logWarn, logError } from "@/lib/logger";
 import { trackEvent } from "@/lib/funnel";
 import { pushAlMedico } from "@/lib/push";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -122,6 +123,11 @@ async function recordFailedAttempt(ip: string): Promise<void> {
 }
 
 export async function POST(req: NextRequest) {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       ?? req.headers.get("x-real-ip")

@@ -7,6 +7,7 @@ import { pushAlMedico } from "@/lib/push";
 import { getFlag } from "@/lib/feature-flags";
 import { transaccionEsDeTest } from "@/lib/pago-test";
 import { identidadHabilitada } from "@/lib/perfil-medico";
+import { esInstitucional } from "@/lib/instancia";
 
 /**
  * @deprecated No hace nada y NUNCA hizo nada: corre con el cliente RLS del
@@ -25,6 +26,14 @@ export async function limpiarReservasExpiradas() {
 }
 
 export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual") {
+  // Capa B (modo institucional): un server action se invoca por POST con header
+  // Next-Action a CUALQUIER ruta del deploy — el 404 de Capa A sobre /clinica
+  // NO lo neutraliza, y este action hace UPDATE de un slot (no lo frena el
+  // CHECK de canal_origen de la migración 003). En la instancia los turnos los
+  // asigna el otorgador. En B2C el guard es un boolean false y sigue de largo.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   // Feature flag: turnos programados
   if (!(await getFlag("turnos_global"))) {
     return { error: "Estamos actualizando la agenda. La reserva de turnos vuelve en breve." };

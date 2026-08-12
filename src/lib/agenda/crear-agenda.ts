@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertarSlotsSinDuplicar } from "@/lib/agenda/insertar-slots";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
+import { esInstitucional } from "@/lib/instancia";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // crearAgendaModelo — ÚNICO punto de verdad para crear una agenda (modelo +
@@ -103,6 +104,20 @@ export async function crearAgendaModelo(
   input: CrearAgendaInput
 ): Promise<CrearAgendaResult> {
   const { medicoId, nombre, fecha_inicio, fecha_fin, duracion_turno, precio, franjas, canal_origen } = input;
+
+  // Modo institucional: este flujo clonado del B2C escribe canal_origen
+  // 'clinica_virtual'/'consultorio_privado', que el CHECK de la migración
+  // institucional 003 rechaza ('acordado'/'ofrecido'). El flujo de agendas de
+  // la instancia llega en Etapa 2 — hasta entonces, corte amable acá (único
+  // punto de verdad: cubre el form Y Nova) en vez de un error de constraint de
+  // DB pelado. En B2C, esInstitucional() es false: comportamiento idéntico.
+  if (esInstitucional()) {
+    return {
+      ok: false,
+      motivo: "validacion",
+      mensaje: "La creación de agendas todavía no está habilitada en esta instancia.",
+    };
+  }
 
   // 0. Gate duro (Diego 20/07): sin Mercado Pago activo (+ perfil completo:
   // firma, celular, etc.) NO se publica agenda — el paciente reservaría y el

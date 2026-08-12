@@ -9,6 +9,7 @@ import { headers } from "next/headers";
 import { waitUntil } from "@vercel/functions";
 import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
 import { provisionarClaves } from "@/lib/firma/claves";
+import { esInstitucional } from "@/lib/instancia";
 
 // ─── Rediseño 14/07/2026 — registro en DOS fases ─────────────────────────────
 // FASE A `iniciarRegistroMedico`: crea la CUENTA con lo mínimo (nombre + email +
@@ -78,6 +79,14 @@ function dniEnCUIT(dni: string, cuitLimpio: string): boolean {
 
 // ═══════════════════════════ FASE A — Crear cuenta ═══════════════════════════
 export async function iniciarRegistroMedico(formData: FormData) {
+  // Capa B (modo institucional): un server action se invoca por POST con header
+  // Next-Action a CUALQUIER ruta del deploy — el 404 de Capa A sobre
+  // /auth/registro-medico NO lo neutraliza. En la instancia el alta de
+  // profesionales es PROVISIONADA, nunca por registro abierto. En B2C el guard
+  // es un boolean false y sigue de largo.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   const { getFlag } = await import("@/lib/feature-flags");
   if (!(await getFlag("registro_medicos_publico"))) {
     return { error: "El registro de médicos está temporalmente cerrado. Volvé a intentar pronto." };
@@ -149,6 +158,10 @@ export async function iniciarRegistroMedico(formData: FormData) {
 
 // Reenvío del mail de confirmación (por si no llegó o cayó en spam).
 export async function reenviarConfirmacionMedico(email: string) {
+  // Capa B (modo institucional) — ver iniciarRegistroMedico.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   const limpio = (email || "").trim().toLowerCase();
   if (!limpio) return { error: "Falta el email." };
   const supabase = await createClient();
@@ -166,6 +179,11 @@ export async function reenviarConfirmacionMedico(email: string) {
 // ═══════════════════════ FASE B — Completar registro ═════════════════════════
 // El médico ya está logueado (confirmó el mail). Crea la fila de `medicos`.
 export async function completarRegistroMedico(formData: FormData) {
+  // Capa B (modo institucional) — ver iniciarRegistroMedico: el alta es
+  // provisionada; esta fase también crea fila de `medicos` y no debe existir.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   const supabase = await createClient();
   const {
     data: { user },

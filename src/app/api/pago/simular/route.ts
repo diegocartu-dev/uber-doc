@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { transaccionEsDeTest } from "@/lib/pago-test";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 export async function POST(req: NextRequest) {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   try {
     const { consultaId } = await req.json();
     if (!consultaId) {

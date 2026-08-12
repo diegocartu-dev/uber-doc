@@ -10,6 +10,7 @@ import { JURISDICCIONES } from "@/lib/jurisdicciones";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion";
 import { logInfo } from "@/lib/logger";
+import { esInstitucional } from "@/lib/instancia";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -47,6 +48,13 @@ export async function crearConsulta(
   tiempoSintomas: string,
   canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
 ) {
+  // Capa B (modo institucional): un server action se invoca por POST con header
+  // Next-Action a CUALQUIER ruta del deploy — el 404 de Capa A sobre /clinica
+  // NO lo neutraliza. En la instancia la CI la crea el otorgador, nunca este
+  // flujo B2C. En B2C el guard es un boolean false y sigue de largo.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   if (!(await getFlag("consulta_inmediata_global"))) {
     return { error: "La Consulta Inmediata esta en pausa por unos minutos. Proba de nuevo enseguida." };
   }

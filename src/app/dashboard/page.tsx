@@ -440,7 +440,11 @@ export default async function DashboardPage({
         .eq("medico_id", medico.id)
         .maybeSingle(),
     ]);
-    mpConectado = !!mpRes.data;
+    // Modo institucional: el requisito de MP se apaga por env (spec §9 Capa B)
+    // — sin esto el banner "Conectá Mercado Pago" apuntaría a un OAuth que
+    // devuelve 404. En B2C, esInstitucional() es false: idéntico.
+    const { esInstitucional } = await import("@/lib/instancia");
+    mpConectado = esInstitucional() || !!mpRes.data;
     firmaConfigurada = !!firmaRes.data;
   }
 

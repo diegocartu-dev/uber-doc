@@ -10,6 +10,7 @@ import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { trackEvent } from "@/lib/funnel";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { assertNoInstitucional } from "@/lib/instancia";
 
 type TipoPago = "consulta" | "turno";
 
@@ -19,6 +20,11 @@ interface PagoBody {
 }
 
 export async function POST(req: NextRequest) {
+  // Modo institucional: sin Mercado Pago — este endpoint no existe (Capa B).
+  if (!assertNoInstitucional()) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   // El gate de cobro real se evalúa más abajo, una vez conocidos paciente y
   // médico: cobra de verdad si el flag global `pago_marketplace` está ON, o si
   // ambas partes están en la whitelist de prueba controlada (MP_PAGO_REAL_WHITELIST).
