@@ -15,6 +15,7 @@ const STATUS: Record<ErrorAsignacion, number> = {
   sin_canal: 422,
   paciente_ocupado: 409,
   conflicto_slot: 409,
+  acuerdo_completo: 409,
   interno: 500,
 };
 

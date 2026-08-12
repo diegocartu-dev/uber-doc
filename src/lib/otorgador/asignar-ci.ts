@@ -17,7 +17,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
-import { dentroVentanaCI, etiquetaVentana } from "@/lib/otorgador/oferta";
+import { dentroVentanaCI, etiquetaVentana, acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
 import {
   avisarAsignacionCI,
   registrarAvisosEnAsignacion,
@@ -105,15 +105,53 @@ export async function asignarCI(params: {
       error: "El profesional ya no está con la consulta inmediata activa. Refrescá la oferta.",
     };
   }
-  const [{ data: ciEnCurso }, { data: turnoEnCurso }] = await Promise.all([
-    admin.from("consultas").select("id").eq("medico_id", medicoId).eq("estado", "en_curso").limit(1),
+
+  // Pertenencia al piloto, re-validada server-side (hallazgo revisión Etapa 2):
+  // la oferta ya filtra por config.especialidades, pero esta API tiene clientes
+  // que no pasan por la pantalla (operador IA con un medico_id cacheado o
+  // alucinado) — el invariante se verifica acá, no se asume.
+  if (!config.especialidades.includes(medico.especialidad ?? "")) {
+    return {
+      ok: false,
+      codigo: "validacion",
+      error: "Ese profesional no pertenece a las especialidades del piloto de la institución.",
+    };
+  }
+
+  // R6 SERVER-SIDE (06-reglas-operativas): mismo guard que asignar-turno — la
+  // pantalla pinta `seleccionable:false`, pero la equidad vale también por API.
+  const acuerdo = await acuerdoSemanalDelMedico(medicoId);
+  if (acuerdo.completo) {
+    return {
+      ok: false,
+      codigo: "acuerdo_completo",
+      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro.`,
+    };
+  }
+
+  // Ocupación del médico: 'en_curso' (atendiendo) Y TAMBIÉN una CI 'pagada' ya
+  // asignada esperando que abra la sala (hallazgo revisión Etapa 2: mirando
+  // solo 'en_curso' se le podían apilar dos pacientes "para ahora", cada uno
+  // con su reloj de 30 min corriendo). El backstop atómico contra la carrera
+  // entre dos operadores es el índice único parcial de la migración 010 —
+  // el 23505 del INSERT de abajo se traduce a estos mismos errores tipados.
+  const [{ data: ciActiva }, { data: turnoEnCurso }] = await Promise.all([
+    admin
+      .from("consultas")
+      .select("id, estado")
+      .eq("medico_id", medicoId)
+      .in("estado", ["pagada", "en_curso"])
+      .limit(1),
     admin.from("turnos").select("id").eq("medico_id", medicoId).eq("estado", "en_curso").limit(1),
   ]);
-  if ((ciEnCurso?.length ?? 0) > 0 || (turnoEnCurso?.length ?? 0) > 0) {
+  if ((ciActiva?.length ?? 0) > 0 || (turnoEnCurso?.length ?? 0) > 0) {
+    const pendiente = ciActiva?.[0]?.estado === "pagada";
     return {
       ok: false,
       codigo: "medico_no_disponible",
-      error: "El profesional está atendiendo a otro paciente en este momento. Probá con otro o asigná un turno.",
+      error: pendiente
+        ? "El profesional ya tiene una consulta inmediata asignada esperando. Probá con otro o asigná un turno."
+        : "El profesional está atendiendo a otro paciente en este momento. Probá con otro o asigná un turno.",
     };
   }
 
@@ -136,6 +174,19 @@ export async function asignarCI(params: {
     .select("id")
     .single();
   if (errInsert || !consulta) {
+    // 23505 = índices únicos parciales de la migración 010: la carrera que el
+    // check-then-INSERT no puede cerrar la cierra la DB. Se traduce al mismo
+    // error tipado que el guard de arriba.
+    if (errInsert?.code === "23505") {
+      if ((errInsert.message ?? "").includes("idx_consultas_ci_activa_por_paciente")) {
+        return { ok: false, codigo: "paciente_ocupado", error: "El paciente ya está en una atención. Refrescá y verificá." };
+      }
+      return {
+        ok: false,
+        codigo: "medico_no_disponible",
+        error: "El profesional acaba de recibir otra consulta. Refrescá la oferta y probá con otro.",
+      };
+    }
     console.error("[asignar-ci] insert falló:", errInsert?.message);
     return { ok: false, codigo: "interno", error: "No se pudo asignar la consulta. Probá de nuevo." };
   }

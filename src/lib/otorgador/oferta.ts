@@ -236,34 +236,83 @@ function domingoDeSemanaAR(): string {
 // ─── Insumos desde la DB ─────────────────────────────────────────────────────
 
 /**
+ * Tamaño de página para las lecturas paginadas. PostgREST corta en 1000 filas
+ * por defecto SIN error (hallazgo revisión Etapa 2: el conteo semanal — el
+ * número que sostiene el acuerdo de horas con la institución — se truncaba en
+ * silencio a escala de piloto). Todo SELECT de acá que pueda superar eso
+ * pagina con .range() hasta agotar.
+ */
+const PAGINA_DB = 1000;
+
+/**
  * Asignaciones de la semana AR corriente por médico, contadas sobre
  * `asignaciones`: asignadas − canceladas (las reprogramaciones ajustan cuando
  * exista ese motor — Etapa 6). Nunca negativo.
+ *
+ * Lanza si la DB falla: un conteo silenciosamente vacío haría ver "0 de Y" a
+ * todos y rompería tanto la equidad como el guard server-side de R6.
  */
 export async function contarAsignadosSemana(medicoIds: string[]): Promise<Map<string, number>> {
   const conteo = new Map<string, number>();
   if (medicoIds.length === 0) return conteo;
   const admin = createAdminClient();
   const desde = medianocheARenUTC(lunesDeSemanaAR());
-  const { data } = await admin
-    .from("asignaciones")
-    .select("medico_id, accion")
-    .in("medico_id", medicoIds)
-    .gte("created_at", desde);
-  for (const fila of data ?? []) {
-    const delta = fila.accion === "asignada" ? 1 : fila.accion === "cancelada" ? -1 : 0;
-    conteo.set(fila.medico_id, (conteo.get(fila.medico_id) ?? 0) + delta);
+  for (let off = 0; ; off += PAGINA_DB) {
+    const { data, error } = await admin
+      .from("asignaciones")
+      .select("medico_id, accion")
+      .in("medico_id", medicoIds)
+      .gte("created_at", desde)
+      .order("id", { ascending: true }) // orden estable para paginar sin huecos
+      .range(off, off + PAGINA_DB - 1);
+    if (error) {
+      throw new Error(`No se pudo contar las asignaciones de la semana: ${error.message}`);
+    }
+    for (const fila of data ?? []) {
+      const delta = fila.accion === "asignada" ? 1 : fila.accion === "cancelada" ? -1 : 0;
+      conteo.set(fila.medico_id, (conteo.get(fila.medico_id) ?? 0) + delta);
+    }
+    if (!data || data.length < PAGINA_DB) break;
   }
   for (const [k, v] of conteo) if (v < 0) conteo.set(k, 0);
   return conteo;
 }
 
-/** Médicos con un encuentro EN CURSO ahora (CI o turno): no pueden tomar otra CI. */
+/**
+ * Acuerdo semanal de UN médico: asignados, cupo ("Y") y si ya lo completó.
+ * Es el guard server-side de R6 (06-reglas-operativas) que usan asignar-turno
+ * y asignar-ci — la regla NO puede vivir solo en `seleccionable:false` de la
+ * pantalla porque la API tiene clientes que no son la pantalla (operador IA
+ * vía API key, Nova — hallazgo revisión Etapa 2).
+ */
+export async function acuerdoSemanalDelMedico(
+  medicoId: string
+): Promise<{ asignados: number; acuerdo: number; completo: boolean }> {
+  const config = await getConfigInstitucion();
+  const [asignados, horas] = await Promise.all([
+    contarAsignadosSemana([medicoId]),
+    horasAcuerdoVigente([medicoId], Number(config.acuerdo_horas_semana_default)),
+  ]);
+  const x = asignados.get(medicoId) ?? 0;
+  const y = cupoSemanal(horas.get(medicoId) ?? 0, config.slot_duracion_min);
+  return { asignados: x, acuerdo: y, completo: y > 0 && x >= y };
+}
+
+/**
+ * Médicos que NO pueden tomar otra CI ahora: encuentro EN CURSO (CI o turno)
+ * o una CI 'pagada' ya asignada esperando que abran la sala. Sin la pata de
+ * 'pagada' (hallazgo revisión Etapa 2) el médico seguía figurando como
+ * ci_activa recién asignado y se le podían apilar dos pacientes "para ahora".
+ */
 async function medicosEnCurso(medicoIds: string[]): Promise<Set<string>> {
   if (medicoIds.length === 0) return new Set();
   const admin = createAdminClient();
   const [{ data: cis }, { data: tns }] = await Promise.all([
-    admin.from("consultas").select("medico_id").in("medico_id", medicoIds).eq("estado", "en_curso"),
+    admin
+      .from("consultas")
+      .select("medico_id")
+      .in("medico_id", medicoIds)
+      .in("estado", ["pagada", "en_curso"]),
     admin.from("turnos").select("medico_id").in("medico_id", medicoIds).eq("estado", "en_curso"),
   ]);
   return new Set([...(cis ?? []), ...(tns ?? [])].map((r) => r.medico_id).filter(Boolean));
@@ -326,11 +375,17 @@ export async function armarOferta(especialidad: string): Promise<
   const ids = (medicos ?? []).map((m) => m.id);
   const ciAbierta = dentroVentanaCI(config);
 
-  // Slots de la SEMANA AR corriente, visibles hasta T-5 minutos.
+  // Slots de la SEMANA AR corriente, visibles hasta T-5 minutos. Paginado con
+  // .range(): un .limit() fijo hacía desaparecer slots de la oferta sin señal
+  // en cuanto el piloto superaba el techo (hallazgo revisión Etapa 2). El
+  // orden fino (por día/hora) lo arma agruparPorDia; acá solo hace falta un
+  // orden ESTABLE para que las páginas no se solapen.
   const hoy = fechaAR();
   const finSemana = domingoDeSemanaAR();
-  const { data: slots, error: errSlots } = ids.length
-    ? await admin
+  const slots: { id: string; medico_id: string; fecha: string; hora_inicio: string; canal_origen: string }[] = [];
+  if (ids.length) {
+    for (let off = 0; ; off += PAGINA_DB) {
+      const { data, error: errSlots } = await admin
         .from("turnos")
         .select("id, medico_id, fecha, hora_inicio, canal_origen")
         .in("medico_id", ids)
@@ -338,12 +393,15 @@ export async function armarOferta(especialidad: string): Promise<
         .in("canal_origen", ["acordado", "ofrecido"])
         .gte("fecha", hoy)
         .lte("fecha", finSemana)
-        .order("fecha", { ascending: true })
-        .limit(2000)
-    : { data: [], error: null };
-  if (errSlots) {
-    console.error("[otorgador/oferta] Error leyendo slots:", errSlots.message);
-    return { ok: false, error: "No se pudo leer la oferta. Probá de nuevo." };
+        .order("id", { ascending: true })
+        .range(off, off + PAGINA_DB - 1);
+      if (errSlots) {
+        console.error("[otorgador/oferta] Error leyendo slots:", errSlots.message);
+        return { ok: false, error: "No se pudo leer la oferta. Probá de nuevo." };
+      }
+      slots.push(...(data ?? []));
+      if (!data || data.length < PAGINA_DB) break;
+    }
   }
 
   // Filtro T-5: el instante del slot (hora AR, UTC-3 fijo) debe estar a más de

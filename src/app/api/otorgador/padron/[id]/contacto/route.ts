@@ -56,6 +56,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const admin = createAdminClient();
+
+  // Valores ANTERIORES antes de pisar: son el insumo de la bitácora de abajo.
+  const { data: previo, error: errPrevio } = await admin
+    .from("pacientes")
+    .select("id, user_id, telefono, email")
+    .eq("id", id)
+    .maybeSingle();
+  if (errPrevio) {
+    console.error("[otorgador/contacto] Error leyendo paciente:", errPrevio.message);
+    return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
+  }
+  if (!previo) return NextResponse.json({ error: "Paciente no encontrado." }, { status: 404 });
+
   const { data, error } = await admin
     .from("pacientes")
     .update(cambios)
@@ -72,6 +85,38 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ error: "No se pudo guardar." }, { status: 500 });
   }
   if (!data) return NextResponse.json({ error: "Paciente no encontrado." }, { status: 404 });
+
+  // Bitácora del retargeting (hallazgo revisión Etapa 2 — tabla padron_cambios,
+  // migración 010): el link de acceso es la llave de la cuenta del paciente, y
+  // "edito el contacto → asigno → el acceso llega al número nuevo" tiene que
+  // quedar trazado con operador, campo y valor viejo → nuevo. Best-effort CON
+  // registro: un fallo acá no revierte el cambio ya hecho, pero queda en logs.
+  const bitacora = Object.entries(cambios)
+    .filter(([campo, nuevo]) => (previo[campo as "telefono" | "email"] ?? null) !== nuevo)
+    .map(([campo, nuevo]) => ({
+      paciente_id: id,
+      operador_id: sesion.operador.id,
+      campo: campo === "telefono" ? "telefono" : "email",
+      valor_anterior: previo[campo as "telefono" | "email"] ?? null,
+      valor_nuevo: nuevo,
+    }));
+  if (bitacora.length > 0) {
+    const { error: errBitacora } = await admin.from("padron_cambios").insert(bitacora);
+    if (errBitacora) {
+      console.error("[otorgador/contacto] Cambio guardado pero bitácora NO registrada:", errBitacora.message, id);
+    }
+  }
+
+  // Mail nuevo → sincronizar auth.users como hace provisionarPaciente (si no,
+  // auth y padrón divergen — nota del mismo hallazgo). Best-effort: un mail en
+  // uso por otra cuenta auth no frena el cambio del padrón, pero no pasa mudo.
+  if (cambios.email && previo.user_id && cambios.email !== previo.email) {
+    const { error: errAuth } = await admin.auth.admin.updateUserById(previo.user_id, {
+      email: cambios.email,
+      email_confirm: true,
+    });
+    if (errAuth) console.error("[otorgador/contacto] No se pudo actualizar email en auth:", errAuth.message);
+  }
 
   return NextResponse.json({ ok: true, celular: data.telefono ?? null, email: data.email ?? null });
 }

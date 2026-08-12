@@ -40,6 +40,15 @@ export interface ResultadoAviso {
 export interface AvisosAsignacion {
   paciente: ResultadoAviso | null; // null = sin canal posible
   medico: ResultadoAviso | null;
+  /**
+   * URL del acceso-link del paciente (token PELADO adentro). Se emite SIEMPRE
+   * que la asignación se concreta, aunque no haya canal automático (hallazgo
+   * revisión Etapa 2: sin esto, "sin canal" dejaba la asignación hecha SIN
+   * token — nada que dictarle al paciente por teléfono). Viaja SOLO en la
+   * respuesta de la API para el operador; JAMÁS se persiste (en DB va el
+   * sha256 — `registrarAvisosEnAsignacion` lo excluye a propósito).
+   */
+  acceso_url: string | null;
 }
 
 const DIAS_LARGOS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -93,7 +102,7 @@ interface DatosComunes {
 export async function avisarAsignacionTurno(
   params: DatosComunes & { turno: { id: string; fecha: string; hora_inicio: string } }
 ): Promise<AvisosAsignacion> {
-  const resultado: AvisosAsignacion = { paciente: null, medico: null };
+  const resultado: AvisosAsignacion = { paciente: null, medico: null, acceso_url: null };
   try {
     const config = await getConfigInstitucion();
     const waOn = await whatsappHabilitado();
@@ -106,22 +115,30 @@ export async function avisarAsignacionTurno(
     const canalPaciente: "whatsapp" | "mail" | null =
       waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
 
-    if (canalPaciente) {
-      const hora8 =
-        params.turno.hora_inicio.length === 5
-          ? `${params.turno.hora_inicio}:00`
-          : params.turno.hora_inicio.slice(0, 8);
-      const acceso = await crearAccesoLink({
-        pacienteId: params.paciente.id,
-        turnoId: params.turno.id,
-        destino: `/turno/${params.turno.id}/espera`,
-        operadorId: params.operadorId,
-        canal: canalPaciente,
-        enviadoA: canalPaciente === "whatsapp" ? (celPaciente as string) : (params.paciente.email as string),
-        encuentroMs: new Date(`${params.turno.fecha}T${hora8}-03:00`).getTime(),
-      });
-      const link = acceso?.url ?? base;
+    // El acceso se emite SIEMPRE (con o sin canal automático — ver el comentario
+    // de AvisosAsignacion): la asignación ya ocurrió y el token es del paciente.
+    const hora8 =
+      params.turno.hora_inicio.length === 5
+        ? `${params.turno.hora_inicio}:00`
+        : params.turno.hora_inicio.slice(0, 8);
+    const acceso = await crearAccesoLink({
+      pacienteId: params.paciente.id,
+      turnoId: params.turno.id,
+      destino: `/turno/${params.turno.id}/espera`,
+      operadorId: params.operadorId,
+      canal: canalPaciente,
+      enviadoA:
+        canalPaciente === "whatsapp"
+          ? (celPaciente as string)
+          : canalPaciente === "mail"
+            ? (params.paciente.email as string)
+            : null,
+      encuentroMs: new Date(`${params.turno.fecha}T${hora8}-03:00`).getTime(),
+    });
+    const link = acceso?.url ?? base;
+    resultado.acceso_url = acceso?.url ?? null;
 
+    if (canalPaciente) {
       if (canalPaciente === "whatsapp") {
         const sid = config.wa_plantillas?.turno_asignado;
         const ok = sid
@@ -212,7 +229,7 @@ export async function avisarAsignacionTurno(
 export async function avisarAsignacionCI(
   params: DatosComunes & { consultaId: string }
 ): Promise<AvisosAsignacion> {
-  const resultado: AvisosAsignacion = { paciente: null, medico: null };
+  const resultado: AvisosAsignacion = { paciente: null, medico: null, acceso_url: null };
   try {
     const config = await getConfigInstitucion();
     const waOn = await whatsappHabilitado();
@@ -222,17 +239,25 @@ export async function avisarAsignacionCI(
     const canalPaciente: "whatsapp" | "mail" | null =
       waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
 
-    if (canalPaciente) {
-      const acceso = await crearAccesoLink({
-        pacienteId: params.paciente.id,
-        consultaId: params.consultaId,
-        destino: `/consulta/${params.consultaId}/confirmacion`,
-        operadorId: params.operadorId,
-        canal: canalPaciente,
-        enviadoA: canalPaciente === "whatsapp" ? (celPaciente as string) : (params.paciente.email as string),
-      });
-      const link = acceso?.url ?? base;
+    // El acceso se emite SIEMPRE (con o sin canal automático — ver el comentario
+    // de AvisosAsignacion): la asignación ya ocurrió y el token es del paciente.
+    const acceso = await crearAccesoLink({
+      pacienteId: params.paciente.id,
+      consultaId: params.consultaId,
+      destino: `/consulta/${params.consultaId}/confirmacion`,
+      operadorId: params.operadorId,
+      canal: canalPaciente,
+      enviadoA:
+        canalPaciente === "whatsapp"
+          ? (celPaciente as string)
+          : canalPaciente === "mail"
+            ? (params.paciente.email as string)
+            : null,
+    });
+    const link = acceso?.url ?? base;
+    resultado.acceso_url = acceso?.url ?? null;
 
+    if (canalPaciente) {
       if (canalPaciente === "whatsapp") {
         const sid = config.wa_plantillas?.ci_asignada;
         const ok = sid
@@ -312,13 +337,17 @@ export async function registrarAvisosEnAsignacion(
 ): Promise<void> {
   if (!asignacionId) return;
   try {
+    // El token pelado JAMÁS se persiste (en accesos_link ya está su sha256):
+    // acceso_url viaja solo en la respuesta de la API — acá se excluye.
+    const { acceso_url: _soloRespuesta, ...avisosSinToken } = avisos;
+    void _soloRespuesta;
     const admin = createAdminClient();
     const { data } = await admin
       .from("asignaciones")
       .select("detalle")
       .eq("id", asignacionId)
       .maybeSingle();
-    const detalle = { ...((data?.detalle as Record<string, unknown>) ?? {}), avisos };
+    const detalle = { ...((data?.detalle as Record<string, unknown>) ?? {}), avisos: avisosSinToken };
     const { error } = await admin.from("asignaciones").update({ detalle }).eq("id", asignacionId);
     if (error) console.error("[avisos] No se pudo registrar el resultado:", error.message);
   } catch (err) {

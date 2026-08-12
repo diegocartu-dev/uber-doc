@@ -64,6 +64,7 @@ export default function PadronClient({ totalPadron }: { totalPadron: number }) {
   const [confirmando, setConfirmando] = useState(false);
   const [cargando, setCargando] = useState<"preview" | "import" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null);
 
   async function elegirArchivo(f: File) {
     setError(null);
@@ -88,20 +89,44 @@ export default function PadronClient({ totalPadron }: { totalPadron: number }) {
     setConfirmando(false);
     setCargando("import");
     setError(null);
+    setProgreso(null);
     try {
-      const r = await ejecutarImportPadron(archivo.texto, archivo.nombre);
-      if (!r.ok) setError(r.error ?? "El import falló.");
-      else {
-        setReporte(r);
-        setPreview(null);
-        setArchivo(null);
-        if (fileRef.current) fileRef.current.value = "";
-        router.refresh();
+      // Por TANDAS (hallazgo revisión Etapa 2): cada invocación procesa un
+      // bloque acotado y devuelve hasta dónde llegó — un padrón de miles de
+      // filas ya no muere contra el timeout de Vercel, y si una tanda falla
+      // el reporte parcial no se pierde (re-intento idempotente por DNI).
+      const total: ReporteImport = {
+        ok: true, creados: 0, actualizados: 0, fallidos: [], salteados: 0,
+        procesadasHasta: 0, totalFilas: 0, terminado: false,
+      };
+      let desde = 0;
+      for (;;) {
+        const r = await ejecutarImportPadron(archivo.texto, archivo.nombre, desde);
+        if (!r.ok) {
+          setError(r.error ?? "El import falló.");
+          return;
+        }
+        total.creados += r.creados;
+        total.actualizados += r.actualizados;
+        total.fallidos.push(...r.fallidos);
+        total.salteados += r.salteados;
+        total.procesadasHasta = r.procesadasHasta;
+        total.totalFilas = r.totalFilas;
+        total.terminado = r.terminado;
+        setProgreso({ hechas: r.procesadasHasta, total: r.totalFilas });
+        if (r.terminado) break;
+        desde = r.procesadasHasta;
       }
+      setReporte(total);
+      setPreview(null);
+      setArchivo(null);
+      if (fileRef.current) fileRef.current.value = "";
+      router.refresh();
     } catch {
       setError("El import falló a mitad de camino. Revisá el padrón antes de reintentar: las filas ya procesadas no se duplican (el alta es idempotente por DNI).");
     } finally {
       setCargando(null);
+      setProgreso(null);
     }
   }
 
@@ -247,7 +272,11 @@ export default function PadronClient({ totalPadron }: { totalPadron: number }) {
       )}
 
       {cargando === "import" && !confirmando && (
-        <p style={{ fontSize: 13, color: "#4B5563" }}>Importando… no cierres esta pestaña.</p>
+        <p style={{ fontSize: 13, color: "#4B5563", fontVariantNumeric: "tabular-nums" }}>
+          {progreso
+            ? `Importando… ${progreso.hechas} de ${progreso.total} filas procesadas. No cierres esta pestaña.`
+            : "Importando… no cierres esta pestaña."}
+        </p>
       )}
     </div>
   );

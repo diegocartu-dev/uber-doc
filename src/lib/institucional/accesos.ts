@@ -30,8 +30,13 @@ export async function crearAccesoLink(params: {
   consultaId?: string;
   destino: string; // path de aterrizaje post-login
   operadorId: string;
-  canal: "whatsapp" | "mail";
-  enviadoA: string; // celular/mail al momento del envío
+  /**
+   * null = sin canal automático de envío (hallazgo revisión Etapa 2): el
+   * acceso se emite IGUAL — la asignación ya está hecha y el operador necesita
+   * el link como fallback manual. El envío es mejor esfuerzo; el token no.
+   */
+  canal: "whatsapp" | "mail" | null;
+  enviadoA: string | null; // celular/mail al momento del envío (null = sin canal)
   /** Instante del encuentro (turno): ancla de la expiración. */
   encuentroMs?: number;
 }): Promise<AccesoEmitido | null> {
@@ -73,7 +78,7 @@ export async function crearAccesoLink(params: {
       destino: params.destino,
       expira_at: expiraAt,
       creado_por: params.operadorId,
-      canal: params.canal,
+      canal: params.canal, // nullable (migración 010: enviado_a sin NOT NULL)
       enviado_a: params.enviadoA,
     })
     .select("id")
