@@ -99,6 +99,25 @@ export async function GET(request: Request) {
       return medicoResponse;
     }
 
+    // OPERADOR INSTITUCIONAL (spec institucional §11.9, gate #402): un operador
+    // del call center que entre por acá (link de mail, recuperación) no es
+    // médico ni admin — sin este check caería en la rama de abajo y se
+    // AUTO-CREARÍA una fila de `pacientes`, contaminando el padrón institucional
+    // (que es de alta provisionada, nunca de auto-registro). El gate por modo
+    // vive ADENTRO de resolverRolInstitucional: en B2C devuelve null sin tocar
+    // la DB y este bloque es un no-op idéntico al comportamiento actual.
+    const { resolverRolInstitucional, rutaOperador } = await import(
+      "@/lib/auth/rol-institucional"
+    );
+    const rolInstitucional = await resolverRolInstitucional(data.user.id);
+    if (rolInstitucional) {
+      const operadorResponse = NextResponse.redirect(`${origin}${rutaOperador(rolInstitucional)}`);
+      response.cookies.getAll().forEach((cookie) => {
+        operadorResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+      return operadorResponse;
+    }
+
     // No es médico → crear paciente si no existe
     const { data: existente } = await admin
       .from("pacientes")
