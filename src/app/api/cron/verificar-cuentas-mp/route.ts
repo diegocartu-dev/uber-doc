@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { esInstitucional } from "@/lib/instancia";
 import { decrypt } from "@/lib/mp-crypto";
 import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
 import { logWarn } from "@/lib/logger";
@@ -61,6 +62,12 @@ type CuentaMp = {
 };
 
 async function handler() {
+  // Modo institucional: no aplica (Capa C) — nadie conecta cuentas de MP.
+  if (esInstitucional()) {
+    console.log("[verificar-cuentas-mp] modo institucional: no aplica");
+    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
+  }
+
   const admin = createAdminClient();
 
   // Las columnas site_id / site_verificado_at pueden no estar migradas todavía y

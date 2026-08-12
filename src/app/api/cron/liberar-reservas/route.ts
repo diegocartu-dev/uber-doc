@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withCron } from "@/lib/cron-guard";
+import { esInstitucional } from "@/lib/instancia";
 
 /**
  * Libera las reservas de turno VENCIDAS (hallazgo 06/08/2026).
@@ -50,6 +51,12 @@ const GRACIA_MIN = 0;
 const PAGOS_VIVOS = ["approved", "pending", "in_process", "authorized"];
 
 export const GET = withCron("liberar-reservas", async () => {
+  // Modo institucional: no aplica (Capa C) — sin pago no existe `reservado_pendiente`.
+  if (esInstitucional()) {
+    console.log("[liberar-reservas] modo institucional: no aplica");
+    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
+  }
+
   const admin = createAdminClient();
   const corte = new Date(Date.now() - GRACIA_MIN * 60 * 1000).toISOString();
   const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
