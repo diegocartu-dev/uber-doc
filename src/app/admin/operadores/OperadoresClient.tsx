@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { crearOperador, setOperadorActivo } from "./actions";
+import { crearOperador, setOperadorActivo, generarApiKeyOperador } from "./actions";
 
 export interface OperadorFila {
   id: string;
@@ -94,6 +94,20 @@ export default function OperadoresClient({ operadores }: { operadores: OperadorF
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [keyGenerada, setKeyGenerada] = useState<{ nombre: string; key: string } | null>(null);
+  const [generandoKeyId, setGenerandoKeyId] = useState<string | null>(null);
+
+  async function handleGenerarKey(op: OperadorFila) {
+    setGenerandoKeyId(op.id);
+    setError(null);
+    try {
+      const r = await generarApiKeyOperador(op.id);
+      if (!r.ok || !r.key) setError(r.error ?? "No se pudo generar la key.");
+      else setKeyGenerada({ nombre: op.nombre, key: r.key });
+    } finally {
+      setGenerandoKeyId(null);
+    }
+  }
 
   async function handleCrear(e: React.FormEvent) {
     e.preventDefault();
@@ -174,7 +188,7 @@ export default function OperadoresClient({ operadores }: { operadores: OperadorF
         )}
         {tipo === "ia" && (
           <p style={{ marginTop: 8, fontSize: 12, color: "#9CA3AF" }}>
-            La API key del operador IA se gestiona con la API de asignación (próxima etapa).
+            Tras el alta, generá su API key desde la lista (botón &quot;Generar API key&quot;).
           </p>
         )}
         {error && (
@@ -247,6 +261,27 @@ export default function OperadoresClient({ operadores }: { operadores: OperadorF
             <span style={{ fontSize: 13, color: "#4B5563" }}>{NIVEL_LABEL[op.nivel]}</span>
             <span style={{ fontSize: 13, color: "#4B5563" }}>{op.tipo === "ia" ? "IA" : "Humano"}</span>
             <BadgeEstado activo={op.activo} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {op.tipo === "ia" && op.activo && (
+              <button
+                type="button"
+                onClick={() => handleGenerarKey(op)}
+                disabled={generandoKeyId === op.id}
+                style={{
+                  height: 32,
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: generandoKeyId === op.id ? "default" : "pointer",
+                  background: "transparent",
+                  border: `1px solid ${ACCION}`,
+                  color: ACCION,
+                  opacity: generandoKeyId === op.id ? 0.5 : 1,
+                }}
+              >
+                {generandoKeyId === op.id ? "Generando…" : "Generar API key"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleToggle(op)}
@@ -265,9 +300,36 @@ export default function OperadoresClient({ operadores }: { operadores: OperadorF
             >
               {op.activo ? "Dar de baja" : "Reactivar"}
             </button>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Dialog de key generada — se muestra UNA vez; React inline, jamás window.confirm */}
+      {keyGenerada && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(16,24,40,.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ ...card, maxWidth: 520, width: "100%", padding: "24px 24px 20px" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: "#111827", margin: 0 }}>
+              API key de {keyGenerada.nombre}
+            </h2>
+            <p style={{ fontSize: 13, color: "#4B5563", margin: "8px 0 12px" }}>
+              Copiala AHORA: no se puede volver a ver (solo guardamos su hash).
+              Generar una nueva desactiva esta.
+            </p>
+            <code style={{ display: "block", padding: "10px 12px", background: "#F3F4F6", borderRadius: 8, fontSize: 13, wordBreak: "break-all", userSelect: "all" }}>
+              {keyGenerada.key}
+            </code>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button
+                style={{ height: 40, padding: "0 20px", border: "none", borderRadius: 8, background: ACCION, color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }}
+                onClick={() => setKeyGenerada(null)}
+              >
+                Ya la guardé
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

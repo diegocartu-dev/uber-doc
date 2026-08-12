@@ -20,3 +20,17 @@ export const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 /** Fecha argentina ("AAAA-MM-DD") de un instante ISO — para bucketear por día ART. */
 export const fechaARdeISO = (iso: string) =>
   new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * Lunes de la semana argentina que contiene ese instante, como "AAAA-MM-DD"
+ * ([NUEVO] spec institucional §6.4 — el "X de Y asignados esta semana" y el
+ * acuerdo semanal cuentan por semana AR, de lunes a domingo).
+ */
+export function lunesDeSemanaAR(iso?: string): string {
+  const base = iso ? fechaARdeISO(iso) : fechaAR();
+  const d = new Date(base + "T12:00:00Z");
+  const dow = d.getUTCDay(); // 0=domingo … 6=sábado
+  const retroceso = dow === 0 ? 6 : dow - 1;
+  d.setUTCDate(d.getUTCDate() - retroceso);
+  return d.toISOString().slice(0, 10);
+}

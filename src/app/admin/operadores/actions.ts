@@ -113,6 +113,55 @@ export async function crearOperador(input: {
   return { ok: true };
 }
 
+/**
+ * Genera una API key para un operador tipo 'ia' (spec §4.2: su identidad ES la
+ * key — header Authorization: Bearer). La key pelada se devuelve UNA sola vez;
+ * en DB queda solo el sha256 (operador_api_keys.key_hash). Generar una nueva
+ * desactiva las anteriores del mismo operador (rotación simple).
+ */
+export async function generarApiKeyOperador(
+  operadorId: string
+): Promise<{ ok: boolean; key?: string; error?: string }> {
+  const uid = await guardAdminInstitucionalDocto();
+  if (!uid) return { ok: false, error: "No autorizado" };
+
+  const admin = createAdminClient();
+  const { data: operador } = await admin
+    .from("operadores")
+    .select("id, tipo, activo")
+    .eq("id", operadorId)
+    .maybeSingle();
+  if (!operador) return { ok: false, error: "Operador inexistente." };
+  if (operador.tipo !== "ia")
+    return { ok: false, error: "Las API keys son solo para operadores tipo IA. Los humanos entran con su login." };
+  if (!operador.activo) return { ok: false, error: "El operador está inactivo: reactivalo antes." };
+
+  const { generarApiKey } = await import("@/lib/otorgador/auth");
+  const { key, hash } = generarApiKey();
+
+  // Rotación: las keys previas del operador se desactivan ANTES de insertar la
+  // nueva — nunca dos keys vivas para la misma identidad.
+  const { error: errRotacion } = await admin
+    .from("operador_api_keys")
+    .update({ activo: false })
+    .eq("operador_id", operadorId)
+    .eq("activo", true);
+  if (errRotacion) {
+    console.error("[admin/operadores] Error rotando keys:", errRotacion);
+    return { ok: false, error: "No se pudo rotar las keys anteriores." };
+  }
+
+  const { error: errInsert } = await admin
+    .from("operador_api_keys")
+    .insert({ operador_id: operadorId, key_hash: hash, activo: true });
+  if (errInsert) {
+    console.error("[admin/operadores] Error creando key:", errInsert);
+    return { ok: false, error: "No se pudo crear la key." };
+  }
+
+  return { ok: true, key };
+}
+
 export async function setOperadorActivo(
   operadorId: string,
   activo: boolean
