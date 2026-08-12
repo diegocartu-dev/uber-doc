@@ -18,6 +18,7 @@ import {
   Sparkles,
   Landmark,
   UserCog,
+  CalendarDays,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -47,6 +48,7 @@ const NAV_ITEMS_INSTITUCIONAL = [
   { href: "/admin/institucion", label: "Institución", icon: Landmark, badgeKey: null },
   { href: "/admin/operadores", label: "Operadores", icon: UserCog, badgeKey: null },
   { href: "/admin/padron", label: "Padrón", icon: Users, badgeKey: null },
+  { href: "/admin/agendas", label: "Agendas", icon: CalendarDays, badgeKey: null },
 ];
 
 interface Props {

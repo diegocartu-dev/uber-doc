@@ -29,7 +29,14 @@ export type CrearAgendaInput = {
   duracion_turno: number; // minutos
   precio: number;
   franjas: Franja[]; // dia_semana: 1=lunes … 7=domingo
-  canal_origen: "clinica_virtual" | "consultorio_privado";
+  /**
+   * B2C: 'clinica_virtual' | 'consultorio_privado'. Instancia institucional
+   * (spec institucional §4.7): 'acordado' (la levanta la institución) |
+   * 'ofrecido' (la publica el profesional). En modo institucional los canales
+   * B2C que manda la UI clonada del médico se MAPEAN a 'ofrecido' — así el
+   * médico conserva su pantalla sin tocarla (regla de clonado).
+   */
+  canal_origen: "clinica_virtual" | "consultorio_privado" | "acordado" | "ofrecido";
   creado_por_nova?: boolean;
 };
 
@@ -103,22 +110,65 @@ export async function crearAgendaModelo(
   supabase: SupabaseClient<any, any, any>,
   input: CrearAgendaInput
 ): Promise<CrearAgendaResult> {
-  const { medicoId, nombre, fecha_inicio, fecha_fin, duracion_turno, precio, franjas, canal_origen } = input;
+  const { medicoId, nombre, fecha_inicio, fecha_fin, duracion_turno, franjas } = input;
+  let { precio, canal_origen } = input;
 
-  // Modo institucional: este flujo clonado del B2C escribe canal_origen
-  // 'clinica_virtual'/'consultorio_privado', que el CHECK de la migración
-  // institucional 003 rechaza ('acordado'/'ofrecido'). El flujo de agendas de
-  // la instancia llega en Etapa 2 — hasta entonces, corte amable acá (único
-  // punto de verdad: cubre el form Y Nova) en vez de un error de constraint de
-  // DB pelado. En B2C, esInstitucional() es false: comportamiento idéntico.
-  if (esInstitucional()) {
-    return {
-      ok: false,
-      motivo: "validacion",
-      mensaje: "La creación de agendas todavía no está habilitada en esta instancia.",
-    };
+  // ── MODO INSTITUCIONAL (spec institucional §4.7) — deltas gateados ─────────
+  // En B2C, esInstitucional() es false y este bloque no ejecuta NADA: los
+  // canales institucionales se rechazan y todo sigue byte a byte idéntico.
+  const esInst = esInstitucional();
+  if (!esInst && (canal_origen === "acordado" || canal_origen === "ofrecido")) {
+    return { ok: false, motivo: "validacion", mensaje: "Canal de agenda inválido." };
   }
+  if (esInst) {
+    // 1. Canal SIEMPRE explícito de los dos motores institucionales. La UI
+    //    clonada del médico manda 'clinica_virtual'/'consultorio_privado' →
+    //    acá eso ES el motor "ofrecido" (horarios que publica el profesional).
+    //    El caller institucional (/admin/agendas) manda 'acordado'.
+    if (canal_origen !== "acordado" && canal_origen !== "ofrecido") {
+      canal_origen = "ofrecido";
+    }
 
+    // 2. La duración del slot la define la INSTITUCIÓN, no el médico (decisión
+    //    12/08; institucion_config.slot_duracion_min). Se RECHAZA cualquier
+    //    otra — vale para el panel institucional Y para la agenda ofrecida.
+    const { getConfigInstitucion } = await import("@/lib/institucional/config");
+    const config = await getConfigInstitucion();
+    if (duracion_turno !== config.slot_duracion_min) {
+      return {
+        ok: false,
+        motivo: "validacion",
+        mensaje: `En esta institución la duración de la consulta es de ${config.slot_duracion_min} minutos (la define la institución).`,
+      };
+    }
+
+    // 3. El paciente no paga NUNCA (R2): el precio de la agenda es 0 siempre.
+    //    El precio real por consulta vive en la config comercial (metering).
+    precio = 0;
+
+    // 4. Gate del paso 0: se saltea la pata Mercado Pago (acá nadie cobra por
+    //    la plataforma), la FIRMA sí queda — sostiene el pie del documento.
+    //    REFEPS ya se gateó en la aprobación del profesional.
+    const adminGate = createAdminClient();
+    const [medicoInstRes, clavesRes] = await Promise.all([
+      adminGate
+        .from("medicos")
+        .select("id, firma_manuscrita_url")
+        .eq("id", medicoId)
+        .maybeSingle(),
+      adminGate.from("medico_claves").select("id").eq("medico_id", medicoId).maybeSingle(),
+    ]);
+    if (medicoInstRes.error || !medicoInstRes.data) {
+      return { ok: false, motivo: "validacion", mensaje: "No se pudo verificar el perfil del profesional. Probá de nuevo." };
+    }
+    if (!medicoInstRes.data.firma_manuscrita_url || !clavesRes.data) {
+      return {
+        ok: false,
+        motivo: "validacion",
+        mensaje: "El profesional todavía no tiene la firma configurada. Sin firma no hay documentos válidos: configurala antes de abrir la agenda.",
+      };
+    }
+  } else {
   // 0. Gate duro (Diego 20/07): sin Mercado Pago activo (+ perfil completo:
   // firma, celular, etc.) NO se publica agenda — el paciente reservaría y el
   // pago explotaría contra una cuenta MP inexistente. Espejo exacto del gate
@@ -156,6 +206,7 @@ export async function crearAgendaModelo(
       mensaje: `Antes de abrir tu agenda completá tu perfil para poder cobrar y firmar. Falta: ${faltan.join(", ")}.`,
     };
   }
+  }
 
   // 1. Validación
   if (!nombre?.trim() || !fecha_inicio || !fecha_fin || !franjas || franjas.length === 0) {
@@ -184,7 +235,9 @@ export async function crearAgendaModelo(
   // Invariante (mismo espíritu que #270): una agenda sin precio genera slots
   // imposibles de pagar (crear-v2 los rechaza con 422). Corta acá — cubre el form
   // Y el camino de Nova, que cae a medicos.precio_consulta (NULL en médicos nuevos).
-  if (!Number.isFinite(precio) || precio <= 0) {
+  // En modo institucional NO aplica: el precio se forzó a 0 arriba (el paciente
+  // no paga; crear-v2 está apagado por Capa B).
+  if (!esInst && (!Number.isFinite(precio) || precio <= 0)) {
     return { ok: false, motivo: "validacion", mensaje: "Poné el valor de la consulta para esta agenda." };
   }
   for (const f of franjas) {
@@ -299,7 +352,14 @@ export async function crearAgendaModelo(
       );
     });
     if (choque) {
-      const canalNombre = choque.canal_origen === "consultorio_privado" ? "Consultorio particular" : "Clínica virtual";
+      const NOMBRES_CANAL: Record<string, string> = {
+        consultorio_privado: "Consultorio particular",
+        clinica_virtual: "Clínica virtual",
+        // Motores institucionales (solo aparecen en la instancia):
+        acordado: "Turno acordado",
+        ofrecido: "Turno ofrecido",
+      };
+      const canalNombre = NOMBRES_CANAL[choque.canal_origen] ?? "Clínica virtual";
       return {
         ok: false,
         motivo: "conflicto_agenda",

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
 import { insertarSlotsSinDuplicar } from "@/lib/agenda/insertar-slots";
+import { esInstitucional } from "@/lib/instancia";
 
 function getHoyAR(): string {
   const ar = new Date(
@@ -56,6 +57,16 @@ async function handler(req: NextRequest) {
   const supabase = createAdminClient();
   const hoy = getHoyAR();
   const horizonte = addDays(hoy, 30);
+
+  // MODO INSTITUCIONAL (spec institucional §4.7): la duración del slot la
+  // define la INSTITUCIÓN (institucion_config.slot_duracion_min), nunca el
+  // campo del modelo del médico. Se lee UNA vez por corrida. En B2C queda
+  // null y la duración sale del modelo, como siempre.
+  let duracionInstitucional: number | null = null;
+  if (esInstitucional()) {
+    const { getConfigInstitucion } = await import("@/lib/institucional/config");
+    duracionInstitucional = (await getConfigInstitucion()).slot_duracion_min;
+  }
 
   // 1. Obtener modelos activos
   const { data: modelos, error: errModelos } = await supabase
@@ -112,7 +123,7 @@ async function handler(req: NextRequest) {
 
     if (rangoInicio > rangoFin) continue;
 
-    const duracion = modelo.duracion_turno ?? 20;
+    const duracion = duracionInstitucional ?? modelo.duracion_turno ?? 20;
     const turnosAInsertar: {
       medico_id: string;
       modelo_id: string;
