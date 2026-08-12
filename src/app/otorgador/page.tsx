@@ -1,17 +1,17 @@
 export const dynamic = "force-dynamic";
 
-// /otorgador — pantalla del OTORGADOR (spec 04). La pantalla real llega en la
-// Etapa 2 (contra la API de asignación); esta page es el DESTINO mínimo del
-// redirect post-login de rutaOperador(), que existe desde la Etapa 1. Sin
-// esto, un operador dado de alta en /admin/operadores aterrizaba en un 404
-// sin salida (hallazgo revisión Etapa 1).
-// SOLO instancia institucional: en B2C es 404 (mismo gate que /admin/institucion).
+// /otorgador — la pantalla del OTORGADOR (04-spec v2, diseño APROBADO de
+// Sofía; mock de referencia exacta: docto-institucional/mocks/01-otorgador.html
+// + estados de 01b). Server component: guards + branding; la interacción vive
+// en OtorgadorClient contra la API real de asignación (spec §4.3).
+// SOLO instancia institucional: en B2C es 404.
 
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { esInstitucional } from "@/lib/instancia";
 import { resolverOperador } from "@/lib/auth/rol-institucional";
-import PantallaEnConstruccion from "@/components/institucional/PantallaEnConstruccion";
+import { getBrandingInstitucion } from "@/lib/institucional/config";
+import OtorgadorClient from "./OtorgadorClient";
 
 export default async function OtorgadorPage() {
   if (!esInstitucional()) notFound();
@@ -27,11 +27,14 @@ export default async function OtorgadorPage() {
   const operador = await resolverOperador(user.id);
   if (!operador) redirect("/dashboard"); // no-operador: la resolución central lo reencamina
 
+  const branding = await getBrandingInstitucion();
+
   return (
-    <PantallaEnConstruccion
-      titulo="Otorgador"
-      nombre={operador.nombre}
-      detalle="Tu cuenta de operador ya está activa. La pantalla de asignación llega en la próxima etapa: cuando esté lista vas a entrar directo acá con este mismo login."
+    <OtorgadorClient
+      instNombre={branding.nombre}
+      instSubnombre={branding.subnombre}
+      operadorNombre={operador.nombre}
+      operadorRol={operador.nivel === "admin_institucion" ? "Admin institución" : "Otorgador"}
     />
   );
 }
