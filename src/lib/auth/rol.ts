@@ -1,24 +1,31 @@
 import { redirect } from "next/navigation";
 import type { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin-auth";
+import { resolverRolInstitucional, rutaOperador } from "@/lib/auth/rol-institucional";
 
 // Resolución de rol CENTRAL para toda la app. Antes cada página decidía sola y con
 // criterios distintos (ej: /dashboard chequeaba médico/paciente ANTES que admin, así
 // que un admin con fila de paciente quedaba "tapado" y caía en la vista de paciente).
-// Acá la precedencia es ÚNICA: admin > médico > paciente.
+// Acá la precedencia es ÚNICA: admin > admin_institucion > otorgador > médico > paciente.
+// Los dos roles de operador SOLO existen en la instancia institucional
+// (INSTITUCIONAL=true): en B2C jamás se resuelven — el gate vive adentro de
+// resolverRolInstitucional, que devuelve null sin tocar la DB.
 
-export type RolUsuario = "admin" | "medico" | "paciente" | null;
+export type RolUsuario = "admin" | "admin_institucion" | "otorgador" | "medico" | "paciente" | null;
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * Resuelve el rol con precedencia ADMIN > MÉDICO > PACIENTE.
- * Fuente de verdad: las TABLAS (admin_users / medicos / pacientes), no el
+ * Resuelve el rol con precedencia ADMIN > ADMIN_INSTITUCION > OTORGADOR > MÉDICO > PACIENTE.
+ * Fuente de verdad: las TABLAS (admin_users / operadores / medicos / pacientes), no el
  * user_metadata.role (que puede quedar desactualizado). Un usuario recién registrado
  * que todavía no tiene fila en ninguna (en pleno onboarding) → null.
  */
 export async function resolverRol(supabase: Supa, userId: string): Promise<RolUsuario> {
   if (await isAdmin(userId)) return "admin";
+  // Roles de operador institucional — en B2C esto devuelve null sin query.
+  const rolInst = await resolverRolInstitucional(userId);
+  if (rolInst) return rolInst;
   const { data: med } = await supabase.from("medicos").select("id").eq("user_id", userId).maybeSingle();
   if (med) return "medico";
   const { data: pac } = await supabase.from("pacientes").select("id").eq("user_id", userId).maybeSingle();
@@ -38,6 +45,8 @@ export async function resolverRol(supabase: Supa, userId: string): Promise<RolUs
 export async function guardRutaPaciente(supabase: Supa, userId: string): Promise<void> {
   const rol = await resolverRol(supabase, userId);
   if (rol === "admin") redirect("/admin");
+  // Operadores institucionales → su pantalla (solo pueden resolverse bajo flag).
+  if (rol === "admin_institucion" || rol === "otorgador") redirect(rutaOperador(rol));
   if (rol === "medico") redirect("/dashboard");
   // Sin fila en ninguna tabla: puede ser un paciente nuevo (pasa, hace su
   // onboarding) o un MÉDICO que dejó el registro a mitad. A ese hay que

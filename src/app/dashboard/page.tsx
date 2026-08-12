@@ -32,6 +32,7 @@ import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
 import { isAdmin } from "@/lib/admin-auth";
+import { resolverRolInstitucional, rutaOperador } from "@/lib/auth/rol-institucional";
 import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
 import { perfilMedicoCompleto, camposFaltantesMedico, identidadHabilitada } from "@/lib/perfil-medico";
 
@@ -86,6 +87,12 @@ export default async function DashboardPage({
   // Antes este chequeo estaba al final y quedaba "tapado" cuando el admin tenía rol
   // médico/paciente, así que el admin caía en la vista equivocada.
   if (await isAdmin(user.id)) redirect("/admin");
+
+  // Operador institucional (otorgador / admin_institucion) → su pantalla. El login
+  // reusa el flujo B2C y aterriza acá; la resolución central (rol.ts) lo reencamina.
+  // Gate ADENTRO del helper: con INSTITUCIONAL apagado devuelve null sin tocar la DB.
+  const rolOperador = await resolverRolInstitucional(user.id);
+  if (rolOperador) redirect(rutaOperador(rolOperador));
 
   const fullName = user.user_metadata?.full_name || user.email;
   let role = user.user_metadata?.role;
