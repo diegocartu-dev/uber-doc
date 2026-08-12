@@ -19,6 +19,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { dentroVentanaCI, etiquetaVentana } from "@/lib/otorgador/oferta";
 import {
+  avisarAsignacionCI,
+  registrarAvisosEnAsignacion,
+  type AvisosAsignacion,
+} from "@/lib/institucional/avisos";
+import {
   cargarPacienteParaAsignar,
   pacienteConEncuentroActivo,
   type ErrorAsignacion,
@@ -39,6 +44,8 @@ export type ResultadoAsignarCI =
       medico: { id: string; nombre: string; especialidad: string };
       paciente: PacienteAsignacion;
       asignacionId: string | null;
+      /** Resultado de los avisos (spec §8): registrado también en asignaciones.detalle. */
+      avisos: AvisosAsignacion;
     }
   | { ok: false; codigo: ErrorAsignacionCI; error: string };
 
@@ -156,11 +163,28 @@ export async function asignarCI(params: {
     asignacionId = asig.id;
   }
 
+  // ── Avisos (spec §8): "podés entrar ahora" al paciente + paciente-esperando
+  // al profesional. La CI ya está asignada: un aviso fallido no la revierte —
+  // el resultado queda en asignaciones.detalle y viaja en la respuesta.
+  const avisos = await avisarAsignacionCI({
+    paciente: {
+      id: paciente.id,
+      nombre: paciente.nombre,
+      celular: paciente.celular,
+      email: paciente.email,
+    },
+    medico: { id: medicoId, nombre: nombreMedico, especialidad: medico.especialidad ?? "" },
+    operadorId,
+    consultaId: consulta.id,
+  });
+  await registrarAvisosEnAsignacion(asignacionId, avisos);
+
   return {
     ok: true,
     consultaId: consulta.id,
     medico: { id: medicoId, nombre: nombreMedico, especialidad: medico.especialidad ?? "" },
     paciente,
     asignacionId,
+    avisos,
   };
 }

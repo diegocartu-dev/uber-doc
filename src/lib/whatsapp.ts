@@ -71,8 +71,16 @@ async function flagWhatsappOn(): Promise<boolean> {
 
 type Variables = Record<string, string>;
 
-/** Envío de bajo nivel vía Twilio. No revisa flag ni opt-in (eso lo hace el caller). */
-async function enviarTwilio(toE164: string, contentSid: string, variables: Variables): Promise<boolean> {
+/** ¿Hay credenciales Twilio configuradas en este deploy? (lo usa también el
+ *  módulo de avisos institucionales — mismo criterio, una sola fuente). */
+export function twilioConfigurado(): boolean {
+  return configurado();
+}
+
+/** Envío de bajo nivel vía Twilio. No revisa flag ni opt-in (eso lo hace el
+ *  caller). Exportada para los avisos institucionales (src/lib/institucional/
+ *  avisos.ts) — mismo transporte, otras plantillas; en B2C nada cambia. */
+export async function enviarTwilio(toE164: string, contentSid: string, variables: Variables): Promise<boolean> {
   const body = new URLSearchParams();
   body.set("From", TWILIO_FROM);
   body.set("To", `whatsapp:${toE164}`);

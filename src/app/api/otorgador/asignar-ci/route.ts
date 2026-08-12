@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
       celular: res.paciente.celular,
       email: res.paciente.email,
     },
-    // El aviso al paciente/profesional se integra acá (T15).
-    aviso: null,
+    // Resultado de los avisos (spec §8): el del paciente para el éxito de la
+    // pantalla; `avisos` completo para clientes API (operador IA / Nova).
+    aviso: res.avisos.paciente,
+    avisos: res.avisos,
   });
 }

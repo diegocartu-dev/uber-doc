@@ -36,6 +36,7 @@ const CONFIG: ConfigInstitucion = {
   ci_ventana_fin: "20:00:00",
   slot_duracion_min: 15,
   especialidades: ["Clínica Médica", "Pediatría"],
+  wa_plantillas: { turno_asignado: "HX000000000000000000000000000sint" },
   acuerdo_horas_semana_default: 1,
   precio_consulta_centavos: 1200000,
   updated_at: "2026-08-12T00:00:00Z",
@@ -50,6 +51,7 @@ test("soloBranding excluye las DOS columnas comerciales", () => {
   const branding = soloBranding(CONFIG) as Record<string, unknown>;
   assert.ok(!("precio_consulta_centavos" in branding), "precio_consulta_centavos NO puede viajar al cliente");
   assert.ok(!("acuerdo_horas_semana_default" in branding), "acuerdo_horas_semana_default NO puede viajar al cliente");
+  assert.ok(!("wa_plantillas" in branding), "wa_plantillas (server-only) NO puede viajar al cliente");
 });
 
 test("soloBranding conserva branding y operación completos", () => {

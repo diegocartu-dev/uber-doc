@@ -16,6 +16,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import { VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
+import {
+  avisarAsignacionTurno,
+  registrarAvisosEnAsignacion,
+  type AvisosAsignacion,
+} from "@/lib/institucional/avisos";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,6 +47,8 @@ export type ResultadoAsignarTurno =
       medico: { id: string; nombre: string; especialidad: string };
       paciente: PacienteAsignacion;
       asignacionId: string | null;
+      /** Resultado de los avisos (spec §8): registrado también en asignaciones.detalle. */
+      avisos: AvisosAsignacion;
     }
   | { ok: false; codigo: ErrorAsignacion; error: string };
 
@@ -204,6 +211,23 @@ export async function asignarTurno(params: {
     asignacionId = asig.id;
   }
 
+  // ── Avisos (spec §8): link-sesión + WhatsApp con fallback a mail. La
+  // asignación YA está hecha: un aviso fallido no la revierte — el resultado
+  // queda en asignaciones.detalle (anti fallas silenciosas) y viaja en la
+  // respuesta para el éxito de la pantalla.
+  const avisos = await avisarAsignacionTurno({
+    paciente: {
+      id: paciente.id,
+      nombre: paciente.nombre,
+      celular: paciente.celular,
+      email: paciente.email,
+    },
+    medico: { id: turno.medico_id, nombre: nombreMedico, especialidad: medico?.especialidad ?? "" },
+    operadorId,
+    turno: { id: turnoId, fecha: turno.fecha, hora_inicio: turno.hora_inicio ?? "" },
+  });
+  await registrarAvisosEnAsignacion(asignacionId, avisos);
+
   return {
     ok: true,
     turno: {
@@ -219,5 +243,6 @@ export async function asignarTurno(params: {
     },
     paciente,
     asignacionId,
+    avisos,
   };
 }
