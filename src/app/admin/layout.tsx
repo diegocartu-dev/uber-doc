@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
+import { esInstitucional } from "@/lib/instancia";
 import AdminShell from "./AdminShell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       pendingMedicos={pendingMedicos ?? 0}
       pendingAlertas={pendingAlertas ?? 0}
       adminEmail={user.email ?? ""}
+      institucional={esInstitucional()}
     >
       {children}
     </AdminShell>

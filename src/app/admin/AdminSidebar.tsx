@@ -16,6 +16,8 @@ import {
   Send,
   Inbox,
   Sparkles,
+  Landmark,
+  UserCog,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -36,14 +38,25 @@ const NAV_ITEMS = [
   { href: "/admin/configuracion", label: "Configuracion", icon: Settings, badgeKey: null },
 ];
 
+// Instancia INSTITUCIONAL: gestión de la institución y sus operadores. El flag
+// llega por PROP desde el layout server de /admin (esInstitucional(), la misma
+// env `INSTITUCIONAL` que gatea las páginas y las actions) — una sola fuente:
+// links y pantallas no pueden divergir por drift de env vars de provisión
+// (NEXT_PUBLIC_* se inlinea en build; ver esInstitucionalClient en instancia.ts).
+const NAV_ITEMS_INSTITUCIONAL = [
+  { href: "/admin/institucion", label: "Institución", icon: Landmark, badgeKey: null },
+  { href: "/admin/operadores", label: "Operadores", icon: UserCog, badgeKey: null },
+];
+
 interface Props {
   pendingMedicos: number;
   pendingAlertas: number;
   adminEmail: string;
+  institucional?: boolean;
   onNavigate?: () => void;
 }
 
-export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmail, onNavigate }: Props) {
+export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmail, institucional, onNavigate }: Props) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -51,6 +64,8 @@ export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmai
     medicos: pendingMedicos,
     alertas: pendingAlertas,
   };
+
+  const navItems = institucional ? [...NAV_ITEMS, ...NAV_ITEMS_INSTITUCIONAL] : NAV_ITEMS;
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
@@ -74,7 +89,7 @@ export default function AdminSidebar({ pendingMedicos, pendingAlertas, adminEmai
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-4">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, badgeKey }) => {
+        {navItems.map(({ href, label, icon: Icon, badgeKey }) => {
           const active = isActive(href);
           const badge = badgeKey ? badges[badgeKey] : 0;
           return (

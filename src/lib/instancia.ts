@@ -24,6 +24,15 @@ export function esInstitucional(): boolean {
 /**
  * Variante client-side: lee `NEXT_PUBLIC_INSTITUCIONAL` (inlineada por Next
  * en build). Misma regla: solo "true" activa el modo.
+ *
+ * ⚠ PAR ACOPLADO: si algún gate client la usa, `NEXT_PUBLIC_INSTITUCIONAL`
+ * debe setearse JUNTO a `INSTITUCIONAL` en el MISMO deploy — y como se
+ * inlinea en build, cambiarla exige deploy fresco, nunca redeploy (mismo
+ * pitfall que BETA_PASSWORD). Si divergen: links a 404 o pantallas vivas
+ * invisibles. Por eso el sidebar de /admin NO la lee: recibe el flag por
+ * prop desde el layout server (esInstitucional() = una sola fuente). Antes
+ * de sumar un consumer client, preferir ese mismo patrón (prop desde un
+ * server component). Runbook: supabase/migrations-institucional/README.md.
  */
 export function esInstitucionalClient(): boolean {
   return process.env.NEXT_PUBLIC_INSTITUCIONAL === "true";
