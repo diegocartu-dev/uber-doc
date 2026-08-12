@@ -53,8 +53,10 @@ export async function POST(req: NextRequest) {
       celular: res.paciente.celular,
       email: res.paciente.email,
     },
-    // El aviso al paciente/profesional se integra acá (T15): la pantalla de
-    // éxito lee `aviso` de esta respuesta.
-    aviso: null,
+    // Resultado de los avisos (spec §8): la pantalla de éxito muestra el del
+    // paciente ("Le enviamos el acceso por WhatsApp al …"); `avisos` trae
+    // ambos para clientes API (operador IA / Nova).
+    aviso: res.avisos.paciente,
+    avisos: res.avisos,
   });
 }

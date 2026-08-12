@@ -49,6 +49,9 @@ export interface ConfigInstitucion {
   ci_ventana_fin: string;
   slot_duracion_min: number;
   especialidades: string[];
+  // Comunicaciones (server-only) — ContentSids Twilio por instancia
+  // (migración 009; sin grant a authenticated: los lee solo el server).
+  wa_plantillas: Record<string, string> | null;
   // Comercial — SIN grant a authenticated; jamás al cliente
   acuerdo_horas_semana_default: number;
   precio_consulta_centavos: number;
@@ -58,7 +61,7 @@ export interface ConfigInstitucion {
 /** Subconjunto CLIENT-SAFE: branding + operación, sin columnas comerciales. */
 export type BrandingInstitucion = Omit<
   ConfigInstitucion,
-  "precio_consulta_centavos" | "acuerdo_horas_semana_default"
+  "precio_consulta_centavos" | "acuerdo_horas_semana_default" | "wa_plantillas"
 >;
 
 /**
