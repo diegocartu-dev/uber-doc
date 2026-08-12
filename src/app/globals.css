@@ -4,6 +4,14 @@
   --background: #ffffff;
   --foreground: #111827;
 
+  /* Identidad INSTITUCIONAL (marca blanca — solo chrome: franja, logo,
+     acentos de PDF; NUNCA en controles). Placeholder violeta: en la
+     instancia institucional <InstitucionTheme/> los pisa con el config del
+     cliente. En B2C nadie los referencia — cero cambio de comportamiento. */
+  --inst-primary: #4A3F8C;
+  --inst-primary-dark: #37306B;
+  --inst-primary-soft: #EEECF7;
+
   /* Color de marca — Azul Docto */
   --color-brand: #378ADD;
   --color-brand-light: #EBF3FC;

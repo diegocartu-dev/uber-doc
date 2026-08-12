@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import InstitucionTheme from "@/components/institucional/InstitucionTheme";
 
 
 const inter = Inter({
@@ -34,6 +35,8 @@ export default function RootLayout({
         <meta name="theme-color" content="#378ADD" />
       </head>
       <body className="min-h-full flex flex-col">
+        {/* Chrome institucional (marca blanca): en B2C renderiza null. */}
+        <InstitucionTheme />
         {children}
         <script
           dangerouslySetInnerHTML={{
