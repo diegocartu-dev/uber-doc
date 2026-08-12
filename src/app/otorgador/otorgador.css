@@ -1,0 +1,316 @@
+/* /otorgador — CSS CALCADO del mock aprobado (docto-institucional/mocks/
+   01-otorgador.html + 01b-otorgador-estados.html — diseño de Sofía, 12/08).
+   Los tokens y clases son LOS del mock: es la referencia visual exacta.
+   --inst-* llega del <style> que inyecta InstitucionTheme (marca blanca). */
+
+.otg {
+  --accion: #378add;
+  --accion-dark: #2d75c4;
+  --accion-soft: #ebf3fc;
+  --estado-verde: #1d9e75;
+  --t1: #111827;
+  --t2: #4b5563;
+  --t3: #9ca3af;
+  --borde: #e5e7eb;
+  --borde-card: #e9ebef;
+  --borde-suave: #f1f3f4;
+  --fondo: #f8f9fa;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--fondo);
+  color: var(--t1);
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.otg *, .otg *::before, .otg *::after { box-sizing: border-box; }
+.otg .tnum { font-variant-numeric: tabular-nums; }
+
+/* ── identidad institucional ─────────────────────────── */
+.otg .header {
+  height: 64px; background: #fff; border-bottom: 1px solid var(--borde);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+}
+.otg .header-izq { display: flex; align-items: center; gap: 14px; }
+.otg .logo-ph {
+  width: 120px; height: 40px; background: #f1f3f5; border: 1px dashed #c8c7c4; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; letter-spacing: 0.08em; color: #888780;
+}
+.otg .inst-nombre { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.otg .inst-sub { font-size: 12px; color: var(--t2); line-height: 1.3; }
+.otg .header-der { display: flex; align-items: center; gap: 10px; }
+.otg .header-der .quien { text-align: right; }
+.otg .op-nombre { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.otg .op-centro { font-size: 12px; color: var(--t2); line-height: 1.3; }
+.otg .op-avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--inst-primary-soft, #eeecf7);
+  color: var(--inst-primary, #4a3f8c); font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── columna de trabajo ──────────────────────────────── */
+.otg .trabajo { width: 100%; max-width: 1000px; margin: 0 auto; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+.otg .card { background: #fff; border: 1px solid var(--borde-card); border-radius: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
+
+/* cascada de habilitación (04-spec §1.1): nada desaparece, se atenúa */
+.otg .atenuado { opacity: 0.55; pointer-events: none; }
+
+/* labels y kbd */
+.otg .label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+.otg kbd {
+  font-family: inherit; font-size: 10px; font-weight: 500; color: var(--t3);
+  border: 1px solid var(--borde); border-bottom-width: 2px; border-radius: 4px;
+  padding: 1px 5px; background: #fff;
+}
+
+/* buscador */
+.otg .buscar { position: relative; }
+.otg .buscar svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--t3); }
+.otg .buscar input {
+  width: 100%; font-family: inherit; color: var(--t1); background: #fff;
+  border: 1px solid var(--borde); border-radius: 8px; outline: none;
+  height: 52px; font-size: 16px; padding: 0 128px 0 42px;
+}
+.otg .buscar input::placeholder { color: var(--t3); }
+.otg .buscar input:focus { border-color: var(--accion); box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.14); }
+.otg .buscar .hint { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; gap: 5px; align-items: center; font-size: 11px; color: var(--t3); white-space: nowrap; }
+
+/* dropdown de resultados (01b) */
+.otg .dropdown {
+  position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 30;
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.1); overflow: hidden;
+}
+.otg .dd-fila {
+  height: 52px; display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 0;
+  white-space: nowrap; cursor: pointer;
+}
+.otg .dd-fila + .dd-fila { border-top: 1px solid var(--borde-suave); }
+.otg .dd-fila.hl { background: var(--accion-soft); }
+.otg .dd-nombre { font-size: 14px; font-weight: 600; }
+.otg .dd-meta { font-size: 12px; color: var(--t2); }
+.otg .dd-vacio { padding: 16px; }
+.otg .dd-vacio-titulo { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.otg .dd-vacio-cuerpo { font-size: 13px; color: var(--t2); }
+
+/* ── bloque 1 · paciente ─────────────────────────────── */
+.otg .b-paciente { padding: 16px 20px; }
+.otg .b-paciente > .label { display: block; margin-bottom: 10px; }
+.otg .paciente-fijado {
+  margin-top: 12px; border: 1px solid var(--borde-card); border-left: 3px solid var(--accion);
+  border-radius: 8px; padding: 16px 20px 18px;
+}
+.otg .pf-fila1 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+.otg .pf-nombre { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.otg .pf-cambiar { margin-left: auto; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.otg .pf-cambiar a { font-size: 12px; color: var(--t2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.otg .pf-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(200px, 1.2fr) minmax(230px, 1.4fr);
+  column-gap: 48px; row-gap: 16px;
+}
+.otg .pf-par { min-width: 0; }
+.otg .pf-par .label { display: block; margin-bottom: 3px; white-space: nowrap; }
+.otg .pf-valor { font-size: 14px; color: var(--t1); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.otg .pf-valor .sec { font-size: 12px; color: var(--t2); }
+
+.otg .dot-verde { width: 8px; height: 8px; border-radius: 50%; background: var(--estado-verde); flex: none; }
+.otg .dot-pulso { position: relative; }
+.otg .dot-pulso::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1px solid var(--estado-verde); opacity: 0; animation: otg-pulso 2s ease-out infinite;
+}
+@keyframes otg-pulso { 0% { transform: scale(0.6); opacity: 0.7; } 70% { transform: scale(1.25); opacity: 0; } 100% { opacity: 0; } }
+
+/* dato faltante (01b §1.2.3): chip amarillo PENDIENTE + edición inline */
+.otg .chip-pendiente {
+  display: inline-flex; align-items: center; height: 32px; padding: 0 12px;
+  border: 1px dashed #ba7517; border-radius: 8px; background: #fef6e8;
+  font-size: 13px; color: #ba7517; cursor: pointer; white-space: nowrap;
+  font-family: inherit;
+}
+.otg .edit-inline { display: flex; gap: 8px; align-items: center; }
+.otg .edit-inline input {
+  height: 40px; width: 176px; font-family: inherit; font-size: 14px; color: var(--t1);
+  border: 1px solid var(--accion); border-radius: 8px; outline: none; padding: 0 12px;
+  box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.14);
+}
+.otg .edit-inline input::placeholder { color: var(--t3); }
+.otg .btn-guardar {
+  height: 40px; padding: 0 16px; border: none; border-radius: 8px; cursor: pointer;
+  background: var(--accion); color: #fff; font-family: inherit; font-size: 14px; font-weight: 500;
+}
+.otg .microcopy { font-size: 12px; color: var(--t2); margin-top: 6px; }
+.otg .error-inline { font-size: 12px; color: #d85a30; margin-top: 6px; }
+.otg .lapiz { border: none; background: transparent; color: var(--t3); cursor: pointer; padding: 0 2px; font-size: 12px; }
+
+/* ── bloque 2 · especialidad ─────────────────────────── */
+.otg .b-esp { padding: 12px 20px 14px; }
+.otg .esp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.otg .chips-clip { position: relative; }
+.otg .chips-fila { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.otg .chips-fila::-webkit-scrollbar { display: none; }
+.otg .chip-esp {
+  flex: none; height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 14px;
+  border: 1px solid var(--borde); border-radius: 99px; background: #fff;
+  font-size: 13px; color: var(--t2); cursor: pointer; white-space: nowrap;
+  font-family: inherit;
+}
+.otg .chip-esp .dot-verde { width: 6px; height: 6px; }
+.otg .chip-esp.sel { background: var(--accion-soft); border-color: var(--accion); color: var(--accion-dark); font-weight: 500; }
+.otg .chips-mask {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 150px; pointer-events: none;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), #fff 55%);
+}
+.otg .chips-chevron {
+  position: absolute; top: 2px; right: 0; width: 28px; height: 28px; border: 1px solid var(--borde);
+  border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center;
+  color: var(--t2); cursor: pointer;
+}
+.otg .chips-chevron:hover { background: #fafbfc; }
+
+/* ── bloque 3 · oferta ───────────────────────────────── */
+.otg .b-oferta { padding: 16px 0 10px; }
+.otg .of-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 0 20px 4px; }
+.otg .of-head .label { display: block; margin-bottom: 4px; }
+.otg .of-caption { font-size: 12px; color: var(--t2); }
+
+.otg .cat-head { display: flex; align-items: center; gap: 8px; padding: 16px 20px 8px; }
+.otg .cat-titulo { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #374151; white-space: nowrap; }
+.otg .cat-sub { font-size: 12px; color: var(--t3); white-space: nowrap; }
+.otg .chip-info {
+  margin-left: auto; height: 24px; display: inline-flex; align-items: center; padding: 0 10px;
+  background: #f3f4f6; border-radius: 6px; font-size: 12px; color: var(--t2); white-space: nowrap;
+}
+
+/* fila de profesional — misma geometría colapsada y expandida */
+.otg .prof { margin: 0 8px; border: 1px solid transparent; border-radius: 10px; }
+.otg .prof + .prof { margin-top: 4px; }
+.otg .prof-fila {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 236px minmax(148px, max-content) 16px;
+  column-gap: 16px; align-items: center;
+  height: 64px; padding: 0 11px; cursor: pointer; border-radius: 10px;
+}
+.otg .prof:not(.exp):not(.sel-ci):not(.lleno-sem) .prof-fila:hover { background: #fafbfc; }
+.otg .prof-fila:focus-visible { outline: 2px solid var(--accion); outline-offset: -2px; }
+.otg .avatar {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--inst-primary-soft, #eeecf7);
+  color: var(--inst-primary, #4a3f8c); font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.otg .prof-quien { min-width: 0; }
+.otg .prof-nombre { font-size: 14px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.otg .prof-esp { font-size: 12px; color: var(--t2); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.otg .prof-esp .desde { color: var(--t3); }
+
+.otg .cupo { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.otg .cupo-barra { display: flex; gap: 3px; flex: none; }
+.otg .cupo-seg { width: 10px; height: 4px; border-radius: 2px; background: var(--borde); }
+.otg .cupo-seg.lleno { background: var(--accion); }
+.otg .cupo-txt { font-size: 12px; color: var(--t2); }
+
+.otg .prof-cuando { font-size: 13px; font-weight: 600; color: var(--accion-dark); text-align: right; white-space: nowrap; }
+.otg .prof-cuando .pfx { font-weight: 400; color: var(--t2); }
+.otg .chev { color: var(--t3); display: flex; justify-content: flex-end; }
+
+.otg .prof.exp { border-color: var(--accion); box-shadow: 0 1px 3px rgba(55, 138, 221, 0.12); }
+.otg .prof.exp .prof-fila { border-radius: 10px 10px 0 0; cursor: default; }
+.otg .chip-resumen {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 6px;
+  background: var(--accion-soft); border: 1px solid #bbd7f3;
+  font-size: 12px; font-weight: 600; color: var(--accion-dark); white-space: nowrap;
+  justify-self: end;
+}
+.otg .slots { border-top: 1px solid var(--borde-suave); padding: 12px 20px 16px 63px; display: flex; flex-direction: column; gap: 10px; }
+.otg .slots-dia { display: flex; align-items: center; gap: 12px; }
+.otg .slots-dia-label { flex: none; width: 92px; font-size: 12px; font-weight: 600; color: var(--t2); white-space: nowrap; }
+.otg .slots-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.otg .slot {
+  height: 36px; display: inline-flex; align-items: center; padding: 0 14px;
+  border: 1px solid #d1d5db; border-radius: 6px; background: #fff;
+  font-size: 13px; color: var(--t1); cursor: pointer; white-space: nowrap;
+  font-family: inherit;
+}
+.otg .slot:hover { border-color: var(--accion); }
+.otg .slot.sel { background: var(--accion); border-color: var(--accion); color: #fff; font-weight: 500; }
+
+/* fila CI seleccionada (01b §04) */
+.otg .prof.sel-ci { border-color: var(--accion); background: var(--accion-soft); box-shadow: 0 1px 3px rgba(55, 138, 221, 0.12); }
+.otg .prof.sel-ci .prof-fila { border-radius: 10px 10px 0 0; cursor: default; }
+.otg .ci-link { border-top: 1px solid #bbd7f3; padding: 10px 20px 12px 63px; }
+.otg .ci-link a { font-size: 13px; color: var(--accion-dark); text-decoration: none; cursor: pointer; }
+.otg .ci-link a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* conflicto de slot (01b §08) */
+.otg .banner-conflicto {
+  display: flex; align-items: center; gap: 8px; align-self: flex-start;
+  padding: 10px 14px; border: 1px solid #f3c9b8; border-radius: 8px; background: #fdf1ec;
+  font-size: 13px; font-weight: 500; color: #d85a30; white-space: nowrap;
+}
+
+/* categoría vacía + acuerdo completo (01b §10) */
+.otg .cat-colapsada { margin: 12px 20px 0; padding: 14px 0 8px; border-top: 1px solid var(--borde-suave); font-size: 13px; color: var(--t3); }
+.otg .cat-colapsada.sin-borde { border-top: none; padding-top: 2px; }
+.otg .cat-colapsada strong { font-weight: 600; color: var(--t2); }
+.otg .sep-acuerdo { display: flex; align-items: center; gap: 12px; margin: 10px 20px 6px; }
+.otg .sep-acuerdo span { font-size: 12px; color: var(--t3); white-space: nowrap; }
+.otg .sep-acuerdo::after { content: ""; flex: 1; height: 1px; background: var(--borde-suave); }
+.otg .prof.lleno-sem .prof-fila { opacity: 0.55; cursor: default; }
+
+/* estados vacíos (01b §09 / 04-spec §1.5.6) */
+.otg .sin-oferta { padding: 32px 24px; text-align: center; }
+.otg .sin-oferta-titulo { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.otg .sin-oferta-cuerpo { font-size: 13px; color: var(--t2); max-width: 380px; margin: 0 auto; }
+.otg .sin-oferta-cuerpo a { color: var(--accion-dark); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* ── barra sticky ────────────────────────────────────── */
+.otg .barra {
+  position: sticky; bottom: 0; margin-top: auto; height: 72px; background: #fff;
+  border-top: 1px solid var(--borde); box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
+  z-index: 10;
+}
+.otg .barra-in {
+  max-width: 1000px; height: 100%; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+}
+.otg .miga { font-size: 14px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.otg .miga b { font-weight: 600; color: var(--t1); }
+.otg .miga .sep { color: var(--t3); padding: 0 6px; }
+.otg .miga .falta { color: var(--t3); }
+.otg .aviso-contacto { font-size: 13px; color: #d85a30; white-space: nowrap; margin-left: auto; cursor: pointer; background: none; border: none; font-family: inherit; }
+.otg .btn-asignar {
+  flex: none; height: 48px; padding: 0 28px; border: none; border-radius: 8px; cursor: pointer;
+  background: var(--accion); color: #fff; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.otg .btn-asignar:hover { background: var(--accion-dark); }
+.otg .btn-asignar.dis { background: #d1d5db; cursor: default; }
+.otg .btn-asignar.dis:hover { background: #d1d5db; }
+
+/* ── éxito (overlay centrado, 01b §05/§07) ───────────── */
+.otg .overlay {
+  position: fixed; inset: 0; background: rgba(16, 24, 40, 0.4); z-index: 1000;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.otg .exito { padding: 28px 24px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 440px; width: 100%; }
+.otg .check-verde {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--estado-verde);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 14px; flex: none;
+}
+.otg .exito-titulo { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 10px; }
+.otg .exito-quien { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+.otg .exito-cuando { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.otg .exito-aviso { font-size: 13px; color: var(--t2); max-width: 340px; }
+.otg .exito-botones { display: flex; gap: 10px; margin-top: 18px; }
+.otg .btn-primario {
+  height: 44px; padding: 0 20px; border: none; border-radius: 8px; cursor: pointer;
+  background: var(--accion); color: #fff; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.otg .btn-primario:hover { background: var(--accion-dark); }
+.otg .btn-sec {
+  height: 44px; padding: 0 20px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer;
+  background: #fff; color: var(--t1); font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.otg .btn-sec:disabled { opacity: 0.5; cursor: default; }
