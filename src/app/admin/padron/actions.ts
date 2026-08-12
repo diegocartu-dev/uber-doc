@@ -82,35 +82,58 @@ export interface ReporteImport {
   actualizados: number;
   fallidos: { linea: number; error: string }[];
   salteados: number; // filas inválidas de la preview (no se intentan)
+  /** Índice (exclusivo) hasta donde llegó ESTA tanda dentro del archivo. */
+  procesadasHasta: number;
+  totalFilas: number;
+  /** false = quedan tandas: el cliente vuelve a llamar con desdeFila = procesadasHasta. */
+  terminado: boolean;
 }
 
-/** Fase 2 — ejecuta el import (solo las filas válidas; re-parsea server-side). */
+/**
+ * Fase 2 — ejecuta el import POR TANDAS (hallazgo revisión Etapa 2): cada alta
+ * son 2–4 round-trips a Supabase, y un padrón real de miles de filas en una
+ * sola invocación excedía el timeout de Vercel a mitad de camino, perdiendo el
+ * reporte. El cliente llama en loop con `desdeFila` hasta `terminado:true` y
+ * acumula; si una tanda falla, el re-intento es seguro (alta idempotente por
+ * DNI). Se re-parsea server-side en cada tanda: el offset es sobre el MISMO
+ * archivo (los índices de parseo son deterministas).
+ */
+const TANDA_FILAS = 200;
+
 export async function ejecutarImportPadron(
   csvTexto: string,
-  nombreArchivo: string
+  nombreArchivo: string,
+  desdeFila: number = 0
 ): Promise<ReporteImport> {
+  const vacio = { creados: 0, actualizados: 0, fallidos: [], salteados: 0, procesadasHasta: 0, totalFilas: 0, terminado: true };
   const uid = await guardAdminInstitucionalDocto();
-  if (!uid) return { ok: false, error: "No autorizado", creados: 0, actualizados: 0, fallidos: [], salteados: 0 };
+  if (!uid) return { ok: false, error: "No autorizado", ...vacio };
 
   if (new TextEncoder().encode(csvTexto).length > MAX_CSV_BYTES) {
-    return { ok: false, error: "El archivo supera el tamaño máximo.", creados: 0, actualizados: 0, fallidos: [], salteados: 0 };
+    return { ok: false, error: "El archivo supera el tamaño máximo.", ...vacio };
   }
 
   const parseo = parsearPadronCSV(csvTexto);
   if (!parseo.ok) {
-    return { ok: false, error: parseo.error, creados: 0, actualizados: 0, fallidos: [], salteados: 0 };
+    return { ok: false, error: parseo.error, ...vacio };
   }
   if (parseo.filas.length > MAX_FILAS) {
-    return { ok: false, error: "Demasiadas filas para un solo import.", creados: 0, actualizados: 0, fallidos: [], salteados: 0 };
+    return { ok: false, error: "Demasiadas filas para un solo import.", ...vacio };
   }
+
+  const desde = Number.isInteger(desdeFila) && desdeFila > 0 ? desdeFila : 0;
+  const hasta = Math.min(desde + TANDA_FILAS, parseo.filas.length);
 
   let creados = 0;
   let actualizados = 0;
   const fallidos: { linea: number; error: string }[] = [];
-  const salteados = parseo.filas.filter((f) => !f.ok).length;
+  let salteados = 0;
 
-  for (const fila of parseo.filas) {
-    if (!fila.ok || !fila.datos) continue;
+  for (const fila of parseo.filas.slice(desde, hasta)) {
+    if (!fila.ok || !fila.datos) {
+      salteados++;
+      continue;
+    }
     const res = await provisionarPaciente(fila.datos, {
       via: "csv",
       // Sin PII en el detalle: solo quién y desde qué archivo.
@@ -125,5 +148,14 @@ export async function ejecutarImportPadron(
     }
   }
 
-  return { ok: true, creados, actualizados, fallidos, salteados };
+  return {
+    ok: true,
+    creados,
+    actualizados,
+    fallidos,
+    salteados,
+    procesadasHasta: hasta,
+    totalFilas: parseo.filas.length,
+    terminado: hasta >= parseo.filas.length,
+  };
 }

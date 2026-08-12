@@ -15,7 +15,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
-import { VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
+import { VENTANA_ASIGNACION_MIN, acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
 import {
   avisarAsignacionTurno,
   registrarAvisosEnAsignacion,
@@ -38,6 +38,7 @@ export type ErrorAsignacion =
   | "sin_canal" // ni celular ni mail: no hay cómo mandarle el acceso (04-spec §1.6.3)
   | "paciente_ocupado" // regla del Uber: ya está adentro de una atención
   | "conflicto_slot" // otro operador lo tomó (o la ventana T-5 se cerró)
+  | "acuerdo_completo" // R6 server-side: el profesional ya completó su semana
   | "interno";
 
 export type ResultadoAsignarTurno =
@@ -144,6 +145,46 @@ export async function asignarTurno(params: {
   }
   if (!turno) return { ok: false, codigo: "no_encontrado", error: "Ese turno no existe." };
 
+  // El canal del slot se RE-VALIDA server-side (hallazgo revisión Etapa 2): la
+  // instancia no debería tener slots de otros canales (CHECK de la migración
+  // 003), pero un cast silencioso asumía el invariante en vez de verificarlo —
+  // y esta API tiene clientes que no pasan por la pantalla.
+  if (turno.canal_origen !== "acordado" && turno.canal_origen !== "ofrecido") {
+    return { ok: false, codigo: "validacion", error: "Ese turno no pertenece a los motores de la institución." };
+  }
+
+  // El dueño del slot se re-verifica ANTES de tomar el turno (hallazgo revisión
+  // Etapa 2): un médico suspendido con slots 'disponible' remanentes seguía
+  // asignable por API — asignar-ci ya exigía 'aprobado', acá faltaba.
+  const { data: medico, error: errMedico } = await admin
+    .from("medicos")
+    .select("id, nombre_completo, titulo, especialidad, estado_registro")
+    .eq("id", turno.medico_id)
+    .maybeSingle();
+  if (errMedico) {
+    console.error("[asignar-turno] Error leyendo médico:", errMedico.message);
+    return { ok: false, codigo: "interno", error: "No se pudo verificar al profesional." };
+  }
+  if (!medico || medico.estado_registro !== "aprobado") {
+    return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
+  }
+
+  // R6 SERVER-SIDE (06-reglas-operativas): acuerdo semanal completo → no recibe
+  // más asignaciones esa semana. La pantalla ya lo pinta (`seleccionable:false`),
+  // pero el criterio de equidad tiene que valer también para clientes API.
+  // NOTA DE LETRA (para el cierre con Diego): 05-spec §4.4.5 dice "acuerdo
+  // completo Y sin slots → al final"; la implementación (acá y en oferta.ts)
+  // sigue la redacción de R6 — completo bloquea SIEMPRE. Si Diego prefiere la
+  // letra de la spec técnica, se ajusta en un solo lugar: este guard + oferta.
+  const acuerdo = await acuerdoSemanalDelMedico(turno.medico_id);
+  if (acuerdo.completo) {
+    return {
+      ok: false,
+      codigo: "acuerdo_completo",
+      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro.`,
+    };
+  }
+
   // Ventana de asignación (Diego 12/08): hasta 5 minutos antes del horario.
   // La oferta ya lo filtró, pero la pantalla pudo quedar abierta un rato: el
   // server re-valida. Mismo desenlace que el conflicto (elegir otro horario).
@@ -178,14 +219,8 @@ export async function asignarTurno(params: {
     return { ok: false, codigo: "conflicto_slot", error: "Ese horario se acaba de ocupar. Elegí otro." };
   }
 
-  const { data: medico } = await admin
-    .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad")
-    .eq("id", turno.medico_id)
-    .maybeSingle();
-  const nombreMedico = medico
-    ? `${(medico.titulo ?? "").trim()} ${(medico.nombre_completo ?? "").trim()}`.trim()
-    : "";
+  // El médico ya se leyó (y verificó) antes del UPDATE.
+  const nombreMedico = `${(medico.titulo ?? "").trim()} ${(medico.nombre_completo ?? "").trim()}`.trim();
 
   // Auditoría append-only (insumo del "X de Y"). Si falla, la asignación YA
   // ocurrió: se loguea fuerte, no se revierte (regla anti fallas silenciosas:

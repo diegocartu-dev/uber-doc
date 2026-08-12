@@ -60,7 +60,10 @@ export async function GET(req: NextRequest) {
   } else {
     // Prefijo de palabra (apellido o nombre): "cast" matchea "Luis Castro" y
     // "Castro Luis". El % del medio exige límite de palabra (espacio previo).
-    const esc = q.replace(/[%_,()]/g, ""); // sin comodines ni separadores de .or()
+    // Sin comodines ni separadores de .or(). El '*' también: PostgREST lo
+    // traduce a '%' DENTRO del valor de ilike (hallazgo revisión Etapa 2:
+    // "***" pasaba el mínimo de 3 chars y listaba el padrón entero).
+    const esc = q.replace(/[%_,()*]/g, "");
     if (esc.length < 3) return NextResponse.json({ resultados: [] });
     query = query.or(`nombre_completo.ilike.${esc}%,nombre_completo.ilike.% ${esc}%`);
   }

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { esInstitucional } from "@/lib/instancia";
 import {
   rescatarBorradoresAlCerrar,
   rescatarLoEscritoQueNuncaSeEntrego,
@@ -140,30 +141,41 @@ async function handler(req: NextRequest) {
   // origen — gate Roberto #259). `created_at` es la única columna de tiempo
   // confiablemente poblada; en CI la consulta se crea segundos antes del pago,
   // así que created_at + 5 min mantiene la semántica de "quedó pagada y no avanzó".
-  const hace5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const { data: pagadasHuerfanas, error: errPagadas } = await supabase
-    .from("consultas")
-    .select("id")
-    .eq("estado", "pagada")
-    .lt("created_at", hace5min);
-
+  //
+  // ⚠ SOLO B2C (spec institucional §6.3 — hallazgo revisión Etapa 2): este
+  // rescate existe porque en B2C 'pagada' es un glitch del webhook de MP. En la
+  // instancia institucional NO HAY webhook y 'pagada' es el estado LEGÍTIMO y de
+  // vida larga de una CI asignada por el otorgador (nace así — decisión §4.5,
+  // ver src/lib/otorgador/asignar-ci.ts). Flipearlas a 'en_curso' acá las
+  // disfrazaba de consulta en curso con sala_video_url null, las escondía del
+  // resolver de 30 min y al día siguiente este mismo cron las cerraba como
+  // 'completada' sin que nadie las hubiera atendido.
   let pagadasRecuperadas = 0;
-  if (errPagadas) {
-    huboError = true;
-    logError("[CRON/HUERFANAS]", "Error buscando pagadas huérfanas", { error: errPagadas.message });
-  } else if (pagadasHuerfanas && pagadasHuerfanas.length > 0) {
-    const ids = pagadasHuerfanas.map((c) => c.id);
-    const { error: errRecuperar } = await supabase
+  if (!esInstitucional()) {
+    const hace5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: pagadasHuerfanas, error: errPagadas } = await supabase
       .from("consultas")
-      .update({ estado: "en_curso", en_curso_at: new Date().toISOString() })
-      .in("id", ids);
+      .select("id")
+      .eq("estado", "pagada")
+      .lt("created_at", hace5min);
 
-    if (errRecuperar) {
+    if (errPagadas) {
       huboError = true;
-      logError("[CRON/HUERFANAS]", "Error recuperando pagadas a en_curso", { error: errRecuperar.message, ids });
-    } else {
-      pagadasRecuperadas = ids.length;
-      logWarn("[CRON/HUERFANAS]", "Consultas pagadas recuperadas a en_curso (webhook no las transicionó)", { ids });
+      logError("[CRON/HUERFANAS]", "Error buscando pagadas huérfanas", { error: errPagadas.message });
+    } else if (pagadasHuerfanas && pagadasHuerfanas.length > 0) {
+      const ids = pagadasHuerfanas.map((c) => c.id);
+      const { error: errRecuperar } = await supabase
+        .from("consultas")
+        .update({ estado: "en_curso", en_curso_at: new Date().toISOString() })
+        .in("id", ids);
+
+      if (errRecuperar) {
+        huboError = true;
+        logError("[CRON/HUERFANAS]", "Error recuperando pagadas a en_curso", { error: errRecuperar.message, ids });
+      } else {
+        pagadasRecuperadas = ids.length;
+        logWarn("[CRON/HUERFANAS]", "Consultas pagadas recuperadas a en_curso (webhook no las transicionó)", { ids });
+      }
     }
   }
 

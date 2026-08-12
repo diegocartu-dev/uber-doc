@@ -13,7 +13,8 @@
 // (09), categoría vacía colapsada + acuerdo completo (10), barra sticky en 3
 // estados (11), turno ofrecido con oferta (12).
 //
-// TODO (con referencia a 01b / 04-spec — quedan para próximas pasadas):
+// TODO (con referencia a 01b / 04-spec — quedan para próximas pasadas; backlog
+// VISIBLE del sprint: docs/sprints/2026-08-12-institucional-etapa-2-backlog-otorgador.md):
 //   - "Ver la semana completa →" del acordeón de slots (01: .slots-mas) — hoy
 //     se listan todos los días de la semana AR corriente, sin paginado.
 //   - Buscadores compactos "Buscar especialidad" / "Buscar profesional"
@@ -53,6 +54,8 @@ interface Exito {
   especialidad: string;
   fechaLabel: string | null; // solo turno
   aviso: { canal: "whatsapp" | "mail"; destino: string; ok: boolean } | null;
+  /** Link de acceso emitido SIEMPRE (fallback manual si el aviso no salió). */
+  accesoUrl: string | null;
 }
 
 const DIAS_LARGOS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -61,6 +64,15 @@ function hoyISO(): string {
   const d = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** "12345678" → "12.345.678" — el padrón guarda solo dígitos; el mock los
+ * presenta con puntos (01-otorgador.html §1.2.1). Presentación, no dato. */
+function formatearDNI(dni: string | null): string {
+  if (!dni) return "—";
+  const limpio = dni.replace(/\D/g, "");
+  if (!limpio) return dni;
+  return limpio.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
 /** "Hoy 17:15" / "Mar 20/10 · 16:30" (04-spec §1.5.3). */
@@ -130,6 +142,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   // ── Bloque 3: oferta ──
   const [oferta, setOferta] = useState<OfertaEspecialidad | null>(null);
   const [cargandoOferta, setCargandoOferta] = useState(false);
+  const [errorOferta, setErrorOferta] = useState<string | null>(null);
   const [expandido, setExpandido] = useState<string | null>(null); // medico_id
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const [conflictoEn, setConflictoEn] = useState<string | null>(null); // medico_id con banner
@@ -190,6 +203,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     setResultados(null);
     setEspecialidad(null);
     setOferta(null);
+    setErrorOferta(null);
     setExpandido(null);
     setSeleccion(null);
     setConflictoEn(null);
@@ -215,17 +229,31 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     setResultados(null);
   }
 
+  // Un ERROR de la API NO es una oferta vacía (hallazgo revisión Etapa 2): el
+  // estado vacío del 04-spec §1.5.6 ("no tiene horarios esta semana") es una
+  // afirmación que la operadora repite en voz alta — pintarla sobre un 500
+  // era mentirle al vecino. El error tiene su propio estado y su reintento.
   const cargarOferta = useCallback(async (esp: string) => {
     setCargandoOferta(true);
+    setErrorOferta(null);
     try {
       const r = await fetch(`/api/otorgador/oferta?especialidad=${encodeURIComponent(esp)}`);
       if (!r.ok) {
+        let msj = "No se pudo leer la oferta. Probá de nuevo.";
+        try {
+          const data = await r.json();
+          if (typeof data?.error === "string" && data.error) msj = data.error;
+        } catch {
+          /* respuesta sin JSON: queda el mensaje genérico */
+        }
         setOferta(null);
+        setErrorOferta(msj);
         return;
       }
       setOferta((await r.json()) as OfertaEspecialidad);
     } catch {
       setOferta(null);
+      setErrorOferta("No se pudo leer la oferta. Revisá la conexión y probá de nuevo.");
     } finally {
       setCargandoOferta(false);
     }
@@ -345,6 +373,10 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
             ? labelFechaLarga(seleccion.slot.fecha, seleccion.slot.hora)
             : null,
         aviso: data.aviso ?? null,
+        // Emitido SIEMPRE que la asignación se concreta (hallazgo revisión
+        // Etapa 2): si el aviso automático no salió, el operador lo tiene acá
+        // como fallback manual (copiar y mandarlo él, o dictarlo).
+        accesoUrl: data.avisos?.acceso_url ?? null,
       });
     } catch {
       setErrorAsignar("No se pudo asignar. Revisá la conexión y probá de nuevo.");
@@ -587,7 +619,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
                       <div key={r.id} className={`dd-fila${i === 0 ? " hl" : ""}`} onClick={() => fijarPaciente(r)}>
                         <span className="dd-nombre">{r.nombre_completo}</span>
                         <span className="dd-meta tnum">
-                          {r.dni ? `DNI ${r.dni}` : "sin DNI"}
+                          {r.dni ? `DNI ${formatearDNI(r.dni)}` : "sin DNI"}
                           {r.edad !== null ? ` · ${r.edad} años` : ""}
                           {r.localidad ? ` · ${r.localidad}` : ""}
                         </span>
@@ -609,7 +641,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
               <div className="pf-grid">
                 <div className="pf-par">
                   <span className="label">DNI</span>
-                  <span className="pf-valor tnum">{paciente.dni ?? "—"}</span>
+                  <span className="pf-valor tnum">{formatearDNI(paciente.dni)}</span>
                 </div>
                 <div className="pf-par">
                   <span className="label">Fecha de nacimiento</span>
@@ -802,6 +834,15 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
             <div className="sin-oferta">
               <div className="sin-oferta-cuerpo">Buscando la oferta de {especialidad}…</div>
             </div>
+          ) : errorOferta ? (
+            <div className="sin-oferta">
+              <div className="sin-oferta-titulo">{errorOferta}</div>
+              <div className="sin-oferta-cuerpo">
+                <a style={{ color: "#378ADD", cursor: "pointer" }} onClick={() => void cargarOferta(especialidad)}>
+                  Reintentar
+                </a>
+              </div>
+            </div>
           ) : !oferta || profesionales.length === 0 ? (
             <div className="sin-oferta">
               <div className="sin-oferta-titulo">{especialidad} no tiene horarios esta semana.</div>
@@ -884,6 +925,27 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
                 : "No pudimos enviarle el acceso automáticamente todavía: avisale por teléfono."}
               {exito.tipo === "ci" && exito.aviso?.ok ? " Ya puede entrar a la sala de espera." : ""}
             </div>
+            {/* Aviso automático fallido o sin canal → el link de acceso igual
+                existe (se emite SIEMPRE): fallback manual del operador. */}
+            {!exito.aviso?.ok && exito.accesoUrl && (
+              <div className="exito-aviso" style={{ marginTop: 8 }}>
+                Su link de acceso, por si se lo podés hacer llegar vos:
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", marginTop: 6 }}>
+                  <code style={{ fontSize: 12, background: "#F3F4F6", padding: "4px 8px", borderRadius: 6, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {exito.accesoUrl}
+                  </code>
+                  <button
+                    className="btn-sec"
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    onClick={() => {
+                      if (exito.accesoUrl) void navigator.clipboard?.writeText(exito.accesoUrl).catch(() => {});
+                    }}
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="exito-botones">
               <button
                 autoFocus

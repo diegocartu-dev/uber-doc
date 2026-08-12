@@ -29,6 +29,9 @@ const TIMEOUT_EXEMPT_PREFIXES = [
   "/ayuda",            // pedir ayuda NUNCA puede mandarte al login: el que tiene
                        // la sesión vencida es justo el que más la necesita, y en
                        // /auth/login no hay ningún acceso a Ayuda.
+  "/acceso",           // link de acceso del paciente institucional (viaja por
+                       // WhatsApp/mail): es la puerta de entrada de alguien SIN
+                       // sesión — jamás puede rebotar al login por inactividad.
 ];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.

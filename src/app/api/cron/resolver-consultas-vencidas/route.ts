@@ -58,7 +58,11 @@ async function handler() {
   // (compromiso institucional — decisión §4.5) SIN mp_status. Filtrar por
   // `mp_status='approved'` dejaría el cron ciego para SIEMPRE (el mismo modo de
   // falla que el filtro por 'pagada' tuvo en B2C — ver el comentario de abajo).
-  // Candidatas institucionales: estado 'pagada' + sala nunca abierta, ancladas
+  // Candidatas institucionales: ESTADOS_RESOLUBLES ('pagada' es el estado
+  // normal de la CI asignada; 'en_curso' con sala null cubre cualquier flip
+  // espurio — hallazgo revisión Etapa 2: filtrar SOLO por 'pagada' dejaba
+  // invisible para siempre una CI que otro proceso hubiera movido de estado
+  // sin que el profesional abriera la sala) + sala nunca abierta, ancladas
   // en `asignada_at` (+30 min). La columna `asignada_at` SOLO existe en la DB
   // de la instancia (migración institucional 003): jamás sumarla a la query B2C
   // — PostgREST fallaría la query entera.
@@ -78,7 +82,7 @@ async function handler() {
       .select(
         "id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee, asignada_at, created_at"
       )
-      .eq("estado", "pagada")
+      .in("estado", ESTADOS_RESOLUBLES)
       .is("sala_video_url", null)
       .order("created_at", { ascending: true })
       .limit(200);
