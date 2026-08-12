@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
+import { esInstitucional } from "@/lib/instancia";
 
 /**
  * Cron diario (09:00 AR): vigila el SALDO de los servicios prepagos que Docto
@@ -84,6 +85,13 @@ async function saldoTwilio(): Promise<ChequeoSaldo> {
 }
 
 async function handler() {
+  // Modo institucional: no aplica (Capa C) — los saldos de servicios prepagos
+  // los vigila el deploy B2C; duplicar la vigilancia duplicaría las alertas.
+  if (esInstitucional()) {
+    console.log("[saldo-servicios] modo institucional: no aplica");
+    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
+  }
+
   const [didit, twilio] = await Promise.all([saldoDidit(), saldoTwilio()]);
 
   if (didit.ok && didit.saldo < UMBRAL_DIDIT) {

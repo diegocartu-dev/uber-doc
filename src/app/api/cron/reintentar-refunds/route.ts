@@ -6,6 +6,7 @@ import { pushAlMedico } from "@/lib/push";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
+import { esInstitucional } from "@/lib/instancia";
 
 // Horas tras las cuales un refund sin saldo del médico se escala a cobertura
 // manual por CVU (sección 2.2 de la política de reembolsos).
@@ -46,6 +47,12 @@ async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Modo institucional: no aplica (Capa C) — sin Mercado Pago no hay refunds.
+  if (esInstitucional()) {
+    console.log("[reintentar-refunds] modo institucional: no aplica");
+    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
   }
 
   const admin = createAdminClient();
