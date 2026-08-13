@@ -61,6 +61,34 @@
 -- Lo más que se puede hacer es escribir primero la constancia —firmada por un
 -- superadmin activo, con motivo— y usarla en el acto, que es exactamente lo que
 -- la regla pide.
+--
+-- ── LO QUE ESTA PUERTA NO CIERRA (y hay que saber al leer una auditoría) ─────
+-- Todo lo de abajo requiere service role o el dueño de la base, o sea el mismo
+-- puñado de personas que ya podía llamar a la RPC. No son agujeros para un
+-- atacante externo: son los límites de lo que el registro puede AFIRMAR.
+--
+--   a) Desde el SQL Editor, una constancia habilita TODOS los UPDATE que esa
+--      transacción haga sobre ESA fila, no uno solo. La constancia se escribe
+--      con un de→a y después se puede terminar en otro valor; el registro
+--      quedaría diciendo algo distinto de lo que la fila muestra. Por el camino
+--      de la app no pasa: `corregir_encuentro_sellado()` escribe la constancia,
+--      hace UN UPDATE y cierra el permiso (`set_config(..., '')`) en la misma
+--      transacción. Cerrarlo del todo pediría un contador por transacción, que
+--      es más maquinaria de la que este riesgo justifica.
+--   b) La firma dice QUIÉN, no PRUEBA quién. El trigger verifica que
+--      `admin_user_id` sea un superadministrador activo — no que sea el que está
+--      ejecutando (con service role no hay usuario que consultar). Un
+--      superadministrador puede firmar con el user_id de otro superadministrador
+--      activo. Atarlo de verdad exigiría que la corrección viaje siempre por una
+--      sesión autenticada, y hoy la escritura la hace el /admin interno con
+--      service role.
+--   c) El dueño de la base puede `ALTER TABLE … DISABLE TRIGGER` y hacer lo que
+--      quiera. No hay defensa contra eso dentro de Postgres; queda registrado en
+--      los logs del proyecto y es, deliberadamente, un acto ruidoso (el
+--      procedimiento de limpieza del README lo usa, y avisa).
+--
+-- Lo que sí queda cerrado: la corrección de rutina, la del apuro, la del "lo
+-- arreglo por SQL y después aviso". Esa era la que pasaba sin dejar nada.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 0. LOS ÍNDICES DEL SELLO
