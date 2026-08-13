@@ -27,14 +27,28 @@ async function handler() {
 
   // Log solo cuando pasó algo: una corrida vacía cada 10 minutos no le sirve a
   // nadie y esconde las que sí importan.
-  if (resumen.clasificados > 0 || resumen.errores > 0 || resumen.sin_motor > 0) {
+  if (
+    resumen.clasificados > 0 ||
+    resumen.errores > 0 ||
+    resumen.sin_motor > 0 ||
+    resumen.pendientes > 0
+  ) {
     console.log("[cron/metering-clasificar]", JSON.stringify(resumen));
   }
 
   // Un error de lectura o de upsert devuelve 500 a propósito: `withCron` lo
   // convierte en heartbeat fallido + mail. Un contador que deja de contar en
   // silencio es una factura que se arma mal el mes que viene.
-  return NextResponse.json(resumen, { status: resumen.errores > 0 ? 500 : 200 });
+  //
+  // `pendientes_sin_fila` también: significa que quedaron encuentros que NUNCA
+  // se clasificaron y no entraron ni en una corrida entera. La próxima los toma
+  // primero, pero que el contador no dé abasto es exactamente lo que hay que
+  // saber ANTES de que esos encuentros salgan de la ventana de 14 días y se
+  // queden sin factura para siempre.
+  const noDaAbasto = resumen.pendientes_sin_fila > 0;
+  return NextResponse.json(resumen, {
+    status: resumen.errores > 0 || noDaAbasto ? 500 : 200,
+  });
 }
 
 export const GET = withCron("metering-clasificar", handler);

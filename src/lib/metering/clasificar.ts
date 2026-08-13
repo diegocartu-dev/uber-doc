@@ -34,7 +34,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
-import { leerTodoEnLotes } from "@/lib/metering/db";
+import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS Y CONSTANTES DEL CONTRATO
@@ -308,6 +308,14 @@ export interface ResumenMetering {
   salteados_manual: number;
   salteados_recientes: number;
   sin_motor: number;
+  /** Encuentros que no entraron en esta corrida (los toma la siguiente). */
+  pendientes: number;
+  /**
+   * De los pendientes, los que NUNCA se clasificaron. Es el número que importa:
+   * si es > 0, el job no está dando abasto y hay encuentros que podrían salir
+   * de la ventana de 14 días sin fila — o sea, sin factura.
+   */
+  pendientes_sin_fila: number;
   errores: number;
   por_clasificacion: Record<string, number>;
 }
@@ -319,6 +327,8 @@ const resumenVacio = (): ResumenMetering => ({
   salteados_manual: 0,
   salteados_recientes: 0,
   sin_motor: 0,
+  pendientes: 0,
+  pendientes_sin_fila: 0,
   errores: 0,
   por_clasificacion: {},
 });
@@ -385,6 +395,9 @@ export function yaSePuedeClasificar(cierreISO: string | null, ahoraMs: number): 
 
 const DIA_MS = 24 * 3600_000;
 
+/** Encuentros que una corrida escribe como mucho. Techo de tiempo, no de alcance. */
+export const LIMITE_POR_CORRIDA = 500;
+
 /**
  * El job. Barre encuentros terminales recientes, arma su fila y la upsertea.
  *
@@ -393,6 +406,20 @@ const DIA_MS = 24 * 3600_000;
  *   · filas con `facturado_periodo` (ya facturadas — el trigger de la 014 es el
  *     cinturón, este guard es el tirante), y
  *   · filas con `clasificacion_origen='manual_admin'` (las fijó un humano).
+ *
+ * ── POR QUÉ EL LÍMITE NO PUEDE SER UN `.limit()` EN LA QUERY ─────────────────
+ * Lo era, con `order('fecha', desc)`: el recorte se llevaba los encuentros MÁS
+ * VIEJOS de la ventana. Como la corrida siguiente volvía a pedir los 500 más
+ * nuevos, esos nunca entraban, y a los 14 días salían de la ventana y no se
+ * clasificaban NUNCA — sin fila, sin panel y sin factura. Y sin señal:
+ * `candidatos` decía 500 y `errores`, 0.
+ *
+ * Ahora la ventana se lee ENTERA (paginada) y el techo se aplica sobre una cola
+ * priorizada: primero los que no tienen fila, del más viejo al más nuevo;
+ * después, con lo que sobre, los ya clasificados hace más tiempo (que es como
+ * siguen entrando los webhooks y los documentos que llegan tarde). Así la
+ * corrida siguiente empieza por lo que quedó, y lo que queda pendiente se
+ * cuenta y se dice.
  */
 export async function correrMeteringClasificar(opciones?: {
   ahoraMs?: number;
@@ -403,38 +430,48 @@ export async function correrMeteringClasificar(opciones?: {
   const admin = createAdminClient();
   const ahoraMs = opciones?.ahoraMs ?? Date.now();
   const dias = opciones?.dias ?? 14;
-  const limite = opciones?.limite ?? 500;
+  const limite = opciones?.limite ?? LIMITE_POR_CORRIDA;
   const desdeISO = new Date(ahoraMs - dias * DIA_MS).toISOString();
   const desdeFecha = fechaARdeISO(desdeISO);
   const resumen = resumenVacio();
 
   // ── 1) Candidatos de los dos canales ───────────────────────────────────────
-  const [{ data: turnos, error: errT }, { data: consultas, error: errC }] = await Promise.all([
-    admin
-      .from("turnos")
-      .select("id, estado, canal_origen, medico_id, paciente_id, fecha, hora_inicio, completada_at, hora_fin")
-      .in("estado", ESTADOS_TERMINALES_TURNO as unknown as string[])
-      .gte("fecha", desdeFecha)
-      .not("paciente_id", "is", null)
-      .order("fecha", { ascending: false })
-      .limit(limite),
-    admin
-      .from("consultas")
-      .select("id, estado, canal_origen, medico_id, paciente_id, created_at, asignada_at, completada_at")
-      .in("estado", ESTADOS_TERMINALES_CONSULTA as unknown as string[])
-      .gte("created_at", desdeISO)
-      .order("created_at", { ascending: false })
-      .limit(limite),
-  ]);
-
-  if (errT || errC) {
-    console.error("[metering] Error leyendo candidatos:", errT?.message, errC?.message);
+  let turnos: Record<string, unknown>[];
+  let consultas: Record<string, unknown>[];
+  try {
+    [turnos, consultas] = await Promise.all([
+      leerTodo<Record<string, unknown>>("turnos terminales de la ventana", (desde, hasta) =>
+        admin
+          .from("turnos")
+          .select(
+            "id, estado, canal_origen, medico_id, paciente_id, fecha, hora_inicio, completada_at, hora_fin"
+          )
+          .in("estado", ESTADOS_TERMINALES_TURNO as unknown as string[])
+          .gte("fecha", desdeFecha)
+          .not("paciente_id", "is", null)
+          .order("fecha", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+      ),
+      leerTodo<Record<string, unknown>>("consultas terminales de la ventana", (desde, hasta) =>
+        admin
+          .from("consultas")
+          .select("id, estado, canal_origen, medico_id, paciente_id, created_at, asignada_at, completada_at")
+          .in("estado", ESTADOS_TERMINALES_CONSULTA as unknown as string[])
+          .gte("created_at", desdeISO)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+      ),
+    ]);
+  } catch (err) {
+    console.error("[metering] Error leyendo candidatos:", err);
     resumen.errores++;
     return resumen;
   }
 
   const candidatos: EncuentroCandidato[] = [
-    ...(turnos ?? []).map((t) => ({
+    ...turnos.map((t) => ({
       tipo: "turno" as const,
       id: t.id as string,
       estado: t.estado as string,
@@ -446,7 +483,7 @@ export async function correrMeteringClasificar(opciones?: {
       // nadie tomó, el fin de su franja (ahí lo resolvió el cron de vencidos).
       cierreISO: (t.completada_at as string | null) ?? instanteAR(t.fecha as string, t.hora_fin as string),
     })),
-    ...(consultas ?? []).map((c) => ({
+    ...consultas.map((c) => ({
       tipo: "consulta" as const,
       id: c.id as string,
       estado: c.estado as string,
@@ -484,7 +521,7 @@ export async function correrMeteringClasificar(opciones?: {
       (lote, desde, hasta) =>
         admin
           .from("encuentros_metering")
-          .select("tipo, recurso_id, clasificacion_origen, facturado_periodo")
+          .select("tipo, recurso_id, clasificacion_origen, facturado_periodo, clasificado_at")
           .in("recurso_id", lote)
           .order("id", { ascending: true })
           .range(desde, hasta)
@@ -495,6 +532,7 @@ export async function correrMeteringClasificar(opciones?: {
     return resumen;
   }
   const intocables = new Set<string>();
+  const clasificadoAt = new Map<string, number>();
   for (const f of existentes) {
     const clave = `${f.tipo}|${f.recurso_id}`;
     if (f.facturado_periodo) {
@@ -503,9 +541,30 @@ export async function correrMeteringClasificar(opciones?: {
     } else if (f.clasificacion_origen === "manual_admin") {
       intocables.add(clave);
       resumen.salteados_manual++;
+    } else {
+      clasificadoAt.set(clave, Date.parse((f.clasificado_at as string) ?? "") || 0);
     }
   }
-  const aClasificar = maduros.filter((c) => !intocables.has(`${c.tipo}|${c.id}`));
+  const pendientes = maduros.filter((c) => !intocables.has(`${c.tipo}|${c.id}`));
+  if (pendientes.length === 0) return resumen;
+
+  // ── 3 bis) La cola: primero lo que nunca se clasificó, del más viejo al más
+  // nuevo. Es lo único que se puede PERDER (a los 14 días sale de la ventana);
+  // una fila que ya existe, en cambio, ya está en el panel y en la factura.
+  const sinFila: EncuentroCandidato[] = [];
+  const conFila: EncuentroCandidato[] = [];
+  for (const c of pendientes) {
+    (clasificadoAt.has(`${c.tipo}|${c.id}`) ? conFila : sinFila).push(c);
+  }
+  sinFila.sort((a, b) => Date.parse(a.ocurridoISO) - Date.parse(b.ocurridoISO));
+  conFila.sort(
+    (a, b) =>
+      (clasificadoAt.get(`${a.tipo}|${a.id}`) ?? 0) - (clasificadoAt.get(`${b.tipo}|${b.id}`) ?? 0)
+  );
+  const cola = [...sinFila, ...conFila];
+  const aClasificar = cola.slice(0, limite);
+  resumen.pendientes = cola.length - aClasificar.length;
+  resumen.pendientes_sin_fila = Math.max(0, sinFila.length - limite);
   if (aClasificar.length === 0) return resumen;
 
   const idsTurno = aClasificar.filter((c) => c.tipo === "turno").map((c) => c.id);
