@@ -120,12 +120,27 @@ export async function reenviarAccesoSelfService(params: {
     const registrado = normalizarTelefonoAR(paciente.telefono);
     if (!registrado || registrado !== celular) return;
 
-    // Cooldown + techo diario sobre las emisiones recientes del paciente.
+    // Cooldown + techo diario sobre los REENVÍOS del paciente.
+    //
+    // El filtro por `origen` es la mitad que faltaba. Sin él, la query traía
+    // TODAS las emisiones del paciente en las últimas 24 h, o sea que los
+    // enlaces que emitió el call center al asignar el turno —y los de una
+    // reprogramación— consumían la cuota self-service. El caso que rompía es el
+    // más frecuente y el que motiva esta pantalla: el operador asigna, el
+    // mensaje no llega, el paciente entra a pedir el enlace dentro de los 10
+    // minutos y no se manda nada. Y como la respuesta es neutra a propósito, se
+    // queda esperando un mensaje que nunca existió. Con el techo diario es
+    // peor: un paciente con varios turnos asignados el mismo día se quedaba sin
+    // ningún reenvío hasta el otro día — justo el que más movimiento tiene.
+    //
+    // Los topes son política del reenvío self-service, no del ritmo de trabajo
+    // del call center. Para eso la migración 012 agregó la columna.
     const desde = new Date(Date.now() - DIA_MS).toISOString();
     const { data: emisiones } = await admin
       .from("accesos_link")
       .select("created_at")
       .eq("paciente_id", paciente.id)
+      .eq("origen", "reenvio_paciente")
       .gte("created_at", desde)
       .order("created_at", { ascending: false });
     const recientes = (emisiones ?? []).map((e) => new Date(e.created_at).getTime());
