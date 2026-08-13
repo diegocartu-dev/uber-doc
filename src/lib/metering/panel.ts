@@ -261,18 +261,39 @@ async function nombresDePacientes(
 export async function encuentrosDeSemana(params: {
   semanaAr: string;
   limite?: number;
-}): Promise<EncuentroDelPanel[]> {
+}): Promise<{ encuentros: EncuentroDelPanel[]; total: number; limite: number }> {
   const admin = createAdminClient();
-  const { data: filas } = await admin
-    .from("encuentros_metering")
-    .select(
-      "tipo, recurso_id, motor, medico_id, paciente_id, especialidad, fecha_ar, clasificacion, segundos_ambos_en_sala"
-    )
-    .eq("semana_ar", params.semanaAr)
-    .order("fecha_ar", { ascending: false })
-    .limit(params.limite ?? 200);
+  const limite = params.limite ?? 200;
 
-  if (!filas || filas.length === 0) return [];
+  // El TOTAL se cuenta aparte y en el servidor. La tabla se corta en 200 (una
+  // pantalla ya es larguísima), pero el pie tiene que decir de cuántas está
+  // mostrando 200: esta tab es el ÚNICO lugar donde la institución ve los
+  // `no_facturable_corta`, o sea la diferencia entre lo que pasó y lo que se
+  // factura. Un pie que dice "mostrando 200 consultas de la semana" cuando hubo
+  // 260 convierte esa explicación en otra pregunta.
+  const [{ count, error: errCount }, { data: filas, error }] = await Promise.all([
+    admin
+      .from("encuentros_metering")
+      .select("id", { count: "exact", head: true })
+      .eq("semana_ar", params.semanaAr),
+    admin
+      .from("encuentros_metering")
+      .select(
+        "tipo, recurso_id, motor, medico_id, paciente_id, especialidad, fecha_ar, clasificacion, segundos_ambos_en_sala"
+      )
+      .eq("semana_ar", params.semanaAr)
+      .order("fecha_ar", { ascending: false })
+      .order("id", { ascending: true })
+      .range(0, limite - 1),
+  ]);
+  if (errCount || error) {
+    throw new Error(
+      `No se pudieron leer los encuentros de la semana: ${errCount?.message ?? error?.message}`
+    );
+  }
+
+  const total = count ?? 0;
+  if (!filas || filas.length === 0) return { encuentros: [], total, limite };
 
   const idsTurno = filas.filter((f) => f.tipo === "turno").map((f) => f.recurso_id as string);
   const idsConsulta = filas.filter((f) => f.tipo === "consulta").map((f) => f.recurso_id as string);
@@ -340,7 +361,7 @@ export async function encuentrosDeSemana(params: {
   for (const d of docsTurno) sumar(`turno|${d.turno_id}`, d);
   for (const d of docsConsulta) sumar(`consulta|${d.consulta_id}`, d);
 
-  return filas.map((f) => ({
+  const encuentros = filas.map((f) => ({
     tipo: f.tipo as "consulta" | "turno",
     recursoId: f.recurso_id as string,
     fechaAr: f.fecha_ar as string,
@@ -352,4 +373,5 @@ export async function encuentrosDeSemana(params: {
     minutos: Math.round(Number(f.segundos_ambos_en_sala ?? 0) / 60),
     documentos: docsPorRecurso.get(`${f.tipo}|${f.recurso_id}`) ?? [],
   }));
+  return { encuentros, total, limite };
 }

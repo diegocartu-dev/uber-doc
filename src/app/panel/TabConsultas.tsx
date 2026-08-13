@@ -32,7 +32,14 @@ function diaCorto(fechaAr: string): string {
   return `${fechaAr.slice(8, 10)}/${fechaAr.slice(5, 7)}`;
 }
 
-export default function TabConsultas({ encuentros }: { encuentros: EncuentroDelPanel[] }) {
+export default function TabConsultas({
+  encuentros,
+  total,
+}: {
+  encuentros: EncuentroDelPanel[];
+  /** Cuántas hubo en la semana. Puede ser mayor que las que se muestran. */
+  total: number;
+}) {
   if (encuentros.length === 0) {
     return (
       <section className="card">
@@ -96,8 +103,10 @@ export default function TabConsultas({ encuentros }: { encuentros: EncuentroDelP
       })}
 
       <div className="pag">
-        Mostrando {encuentros.length} consulta{encuentros.length === 1 ? "" : "s"} de la semana. Cada descarga de
-        documentación queda registrada.
+        {encuentros.length < total
+          ? `Mostrando las primeras ${encuentros.length} de ${total} consultas de la semana.`
+          : `Mostrando ${encuentros.length} consulta${encuentros.length === 1 ? "" : "s"} de la semana.`}{" "}
+        Cada descarga de documentación queda registrada.
       </div>
     </section>
   );

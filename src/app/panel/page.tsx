@@ -92,7 +92,9 @@ export default async function PanelPage({
         console.error("[panel] No se pudo calcular la facturación del período:", err);
         return null;
       }),
-    tabActiva === "consultas" ? encuentrosDeSemana({ semanaAr }) : Promise.resolve([]),
+    tabActiva === "consultas"
+      ? encuentrosDeSemana({ semanaAr })
+      : Promise.resolve({ encuentros: [], total: 0, limite: 0 }),
   ]);
 
   // `fechaAR()` y no `new Date()` acá: el reloj vive en el helper del repo (y
@@ -150,7 +152,9 @@ export default async function PanelPage({
           />
         )}
 
-        {tabActiva === "consultas" && <TabConsultas encuentros={encuentros} />}
+        {tabActiva === "consultas" && (
+          <TabConsultas encuentros={encuentros.encuentros} total={encuentros.total} />
+        )}
 
         {tabActiva === "nova" && (
           <section className="card">
