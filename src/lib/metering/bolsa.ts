@@ -1369,8 +1369,20 @@ export async function semanasPendientesDeSellar(
 export const SEMANAS_POR_CORRIDA = 2;
 
 /**
- * Cuáles de las pendientes toma ESTA corrida: las más viejas primero, pero
- * SIEMPRE con lugar reservado para la más reciente.
+ * El número de corrida del barrido: días AR transcurridos desde el epoch. El
+ * cron corre una vez por día, así que sube de a uno y es el mismo dentro de una
+ * misma corrida. Puro respecto del reloj que le pasen.
+ *
+ * Existe para que `semanasDeLaCorrida` pueda ROTAR sin guardar estado en
+ * ninguna tabla: qué semanas toca hoy depende del día, no de lo que pasó ayer.
+ */
+export function corridaDelBarrido(ahoraMs = Date.now()): number {
+  return Math.floor((ahoraMs - 3 * 3600_000) / 86_400_000);
+}
+
+/**
+ * Cuáles de las pendientes toma ESTA corrida: lugar reservado para la más
+ * reciente, y el resto ROTANDO entre las viejas, corrida por corrida.
  *
  * ── EL HAMBRE DE LA MÁS NUEVA ────────────────────────────────────────────────
  * El barrido tomaba `pendientes.slice(0, 2)`, o sea las dos más viejas. Alcanza
@@ -1381,25 +1393,46 @@ export const SEMANAS_POR_CORRIDA = 2;
  * semanas de atraso sobre lo que la institución está leyendo AHORA, con el
  * watchdog en verde y el mail rojo hablando siempre de las mismas dos.
  *
- * Con la marca de la 024 el caso más común de traba (la semana sin padrón) ya
- * no existe: esa semana se cierra y sale de la lista. Pero "se destraba solo"
- * vale para ESA traba, no para las otras — la precondición del contador puede
- * abortar indefinidamente por un encuentro que quedó mal, y ese caso no lo
- * arregla ninguna marca. Reservar el último lugar para la más reciente hace que
- * el progreso no dependa de que ninguna vieja esté rota.
+ * ── Y EL HAMBRE DE LAS DEL MEDIO ─────────────────────────────────────────────
+ * Reservar el último lugar arregla la punta nueva y deja el mismo problema una
+ * fila más abajo. Con `max = 2` y DOS trabadas permanentes —la más vieja y la
+ * más reciente— la corrida es siempre `[la vieja rota, la reciente rota]` y las
+ * del medio no se intentan NUNCA: se quedan pendientes hasta que la ventana de
+ * ocho las expulsa, o sea unas ocho semanas de atraso sobre una semana que sí
+ * se podía sellar. Y no es hipotético: dos trabas simultáneas es exactamente el
+ * escenario que este reparto vino a contemplar.
  *
- * Con `max = 1` no hay lugar para reservar: gana la más vieja (el orden de
- * siempre). Con 0 o menos, nada.
+ * Por eso el cupo que queda después de la reserva ROTA: cada corrida arranca un
+ * lugar más adelante en la lista de viejas. La garantía es de progreso real —
+ * toda pendiente vieja se intenta al menos una vez cada `viejas.length`
+ * corridas, esté trabada la que esté—, sin guardar en ninguna tabla qué se
+ * intentó ayer: el índice sale del día (`corridaDelBarrido`).
+ *
+ * Con `max = 1` no hay lugar para reservar: rota sobre TODAS (con `corrida = 0`
+ * gana la más vieja, el orden de siempre). Con 0 o menos, nada.
+ *
+ * El orden de salida es siempre el de entrada (viejas primero): la rotación
+ * elige QUIÉNES, no en qué orden se sellan.
  */
 export function semanasDeLaCorrida(
   pendientes: string[],
-  max = SEMANAS_POR_CORRIDA
+  max = SEMANAS_POR_CORRIDA,
+  corrida = 0
 ): string[] {
   if (max <= 0) return [];
   if (pendientes.length <= max) return [...pendientes];
-  if (max === 1) return [pendientes[0]];
+  /** Índice de arranque de esta corrida, sin sorpresas con negativos. */
+  const arranque = (largo: number) => ((corrida % largo) + largo) % largo;
+  if (max === 1) return [pendientes[arranque(pendientes.length)]];
+
   const masReciente = pendientes[pendientes.length - 1];
-  return [...pendientes.slice(0, max - 1), masReciente];
+  const viejas = pendientes.slice(0, -1);
+  const desde = arranque(viejas.length);
+  // `max - 1 < viejas.length` siempre (acá `pendientes.length > max`), así que
+  // la ventana circular nunca se muerde la cola: no hay repetidas.
+  const elegidas = new Set<number>();
+  for (let i = 0; i < max - 1; i++) elegidas.add((desde + i) % viejas.length);
+  return [...viejas.filter((_, i) => elegidas.has(i)), masReciente];
 }
 
 /** La semana AR de hoy (default del selector del panel). */

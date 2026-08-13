@@ -57,7 +57,9 @@ import {
   cumplimientoSaleDeLoSellado,
   filasDeLoSellado,
   totalDeBolsa,
+  corridaDelBarrido,
   semanasDeLaCorrida,
+  SEMANAS_POR_CORRIDA,
   type CumplimientoProfesional,
   type PuertoCierreSemana,
   type PuertoSemanaSellada,
@@ -1245,6 +1247,58 @@ test("barrido semanal · ninguna semana se procesa dos veces en la misma corrida
   }
   assert.deepEqual(semanasDeLaCorrida(pendientes, 1), ["a"], "con un solo lugar gana la más vieja");
   assert.deepEqual(semanasDeLaCorrida(pendientes, 0), []);
+});
+
+test("barrido semanal · dos trabadas no dejan a las del medio sin intentarse NUNCA", () => {
+  // El residual: reservar el último lugar arregla la punta nueva y deja el mismo
+  // hambre una fila más abajo. Con max=2 y las DOS puntas trabadas de forma
+  // permanente, la corrida era siempre [la vieja rota, la reciente rota] y las
+  // seis del medio no se tocaban hasta que la ventana de ocho las expulsara.
+  const TODAS = ["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7"];
+  const TRABADAS = new Set(["c0", "c7"]);
+
+  // 1) La cobertura, sobre la lista quieta: en `viejas.length` corridas se
+  //    intenta TODA pendiente vieja, esté trabada la que esté.
+  const intentadas = new Set<string>();
+  for (let corrida = 0; corrida < TODAS.length - 1; corrida++) {
+    for (const s of semanasDeLaCorrida(TODAS, SEMANAS_POR_CORRIDA, corrida)) intentadas.add(s);
+  }
+  assert.deepEqual([...intentadas].sort(), TODAS, "quedó alguna sin intentarse");
+
+  // 2) Y el barrido de verdad: las que se pueden sellar se sellan y salen de la
+  //    lista. Antes, seis corridas dejaban la tabla vacía (siempre las mismas
+  //    dos trabadas); ahora las seis del medio quedan selladas.
+  let pendientes = [...TODAS];
+  const selladas: string[] = [];
+  for (let corrida = 0; corrida < 12 && pendientes.length > TRABADAS.size; corrida++) {
+    for (const semana of semanasDeLaCorrida(pendientes, SEMANAS_POR_CORRIDA, corrida)) {
+      if (TRABADAS.has(semana)) continue; // la precondición aborta, se reintenta
+      selladas.push(semana);
+      pendientes = pendientes.filter((s) => s !== semana);
+    }
+  }
+  assert.deepEqual(selladas.sort(), ["c1", "c2", "c3", "c4", "c5", "c6"]);
+  assert.deepEqual(pendientes, ["c0", "c7"], "solo quedan pendientes las trabadas");
+});
+
+test("barrido semanal · la rotación sale del día y no de una tabla de estado", () => {
+  // `corridaDelBarrido` es lo único que hace que la corrida de hoy no repita la
+  // de ayer. Tiene que subir de a uno por día y ser el mismo número dentro de
+  // una misma corrida (el cron corre a las 04:00 ART).
+  const lunes = Date.parse("2026-10-26T04:00:00-03:00");
+  const martes = Date.parse("2026-10-27T04:00:00-03:00");
+  assert.equal(corridaDelBarrido(martes) - corridaDelBarrido(lunes), 1);
+  assert.equal(
+    corridaDelBarrido(lunes),
+    corridaDelBarrido(lunes + 60_000),
+    "un reintento un minuto después es la MISMA corrida"
+  );
+  // Días AR consecutivos, números consecutivos: nunca dos veces el mismo salto.
+  const saltos = new Set<number>();
+  for (let i = 0; i < 14; i++) {
+    saltos.add(corridaDelBarrido(lunes + i * 86_400_000));
+  }
+  assert.equal(saltos.size, 14);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

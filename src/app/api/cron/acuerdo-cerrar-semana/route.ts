@@ -3,6 +3,8 @@ import { withCron } from "@/lib/cron-guard";
 import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
 import {
   cerrarSemana,
+  corridaDelBarrido,
+  SEMANAS_POR_CORRIDA,
   semanasDeLaCorrida,
   semanasPendientesDeSellar,
   type ResumenCierreSemana,
@@ -60,12 +62,14 @@ import {
  * reintenta mañana; el 500 llega al mail de `withCron` con la semana y el motivo
  * adentro. Una semana que aborta no frena a las otras.
  *
- * Cada corrida toma como mucho dos semanas (`semanasDeLaCorrida`): las más
- * viejas primero, pero con el último lugar SIEMPRE reservado para la más
- * reciente. Sin esa reserva, dos semanas viejas trabadas se quedaban con todas
- * las corridas y la semana que la institución está por leer no se sellaba hasta
- * que la ventana de ocho las expulsara — seis semanas de atraso, con el
- * watchdog en verde.
+ * Cada corrida toma como mucho dos semanas (`semanasDeLaCorrida`): el último
+ * lugar SIEMPRE reservado para la más reciente, y el otro ROTANDO entre las
+ * viejas según el día. Sin la reserva, dos semanas viejas trabadas se quedaban
+ * con todas las corridas y la semana que la institución está por leer no se
+ * sellaba hasta que la ventana de ocho las expulsara — seis semanas de atraso,
+ * con el watchdog en verde. Y sin la rotación quedaba el mismo hambre una fila
+ * más abajo: con la más vieja Y la más reciente trabadas, las del medio no se
+ * intentaban NUNCA.
  *
  * Idempotente: si no hay ninguna semana pendiente —el caso de seis días de cada
  * siete— no toca nada.
@@ -90,11 +94,11 @@ async function handler() {
     return NextResponse.json({ error: detalle }, { status: 500 });
   }
 
-  // Las más viejas primero, pero con el último lugar reservado para la más
-  // reciente: una semana vieja trabada no puede quedarse con toda la corrida
-  // y dejar sin sellar la que la institución está por leer. Ver
-  // `semanasDeLaCorrida`.
-  const aCerrar = semanasDeLaCorrida(pendientes);
+  // Último lugar reservado para la más reciente —una semana vieja trabada no
+  // puede quedarse con toda la corrida y dejar sin sellar la que la institución
+  // está por leer— y el resto rotando por día, para que dos trabadas no dejen a
+  // las del medio sin intentarse nunca. Ver `semanasDeLaCorrida`.
+  const aCerrar = semanasDeLaCorrida(pendientes, SEMANAS_POR_CORRIDA, corridaDelBarrido());
   const cerradas: ResumenCierreSemana[] = [];
   const fallidas: { semana_ar: string; error: string }[] = [];
 
