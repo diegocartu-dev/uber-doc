@@ -30,6 +30,7 @@ import {
   correspondeRefund,
   permiteAutoCrearPaciente,
   destinoSinSesion,
+  destinoConfirmacionCI,
   rebotePaciente,
   esInstitucional,
 } from "@/lib/instancia";
@@ -131,6 +132,15 @@ test("(e) los rebotes de las pantallas del B2C no cambian de destino", () => {
   assert.equal(rebotePaciente("/auth/login", "/acceso/reenviar"), "/auth/login");
 });
 
+test("(f) el paciente del B2C que vuelve del pago se queda en su confirmación", () => {
+  // Un gate escrito al revés acá manda a TODO paciente del B2C que acaba de
+  // pagar a `/consulta/[id]/acceso`, una ruta que en el B2C no existe: 404
+  // después de cobrarle. Es el delta por modo más caro de esta etapa en código
+  // compartido, y hasta ahora era un `esInstitucional()` inline que ningún test
+  // miraba.
+  assert.equal(destinoConfirmacionCI("abc"), null);
+});
+
 test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
   for (const valor of ["", "false", "TRUE", "True", "1", "yes", "si"]) {
     process.env.INSTITUCIONAL = valor;
@@ -199,6 +209,11 @@ test("prendido: los rebotes vuelven a la pantalla del paciente, no al dashboard"
   process.env.INSTITUCIONAL = "true";
   assert.equal(rebotePaciente("/dashboard", "/turno/x/acceso"), "/turno/x/acceso");
   assert.equal(rebotePaciente("/auth/login", "/acceso/reenviar"), "/acceso/reenviar");
+});
+
+test("prendido: la confirmación de pago rebota a la pantalla propia del paciente", () => {
+  process.env.INSTITUCIONAL = "true";
+  assert.equal(destinoConfirmacionCI("abc"), "/consulta/abc/acceso");
 });
 
 test("prendido: bloquea la ruta exacta y sus hijas, NUNCA un prefijo parecido", () => {
