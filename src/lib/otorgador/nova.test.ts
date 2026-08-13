@@ -224,3 +224,20 @@ test("fecha · un día del mes que ya pasó se toma del mes que viene", () => {
   // el 5 de noviembre. Lo que no se hace es saltar un AÑO.
   assert.equal(fechaDelTexto("no puede el 5", HOY), "2026-11-05");
 });
+
+test("el cierre cuenta AVISOS ENTREGADOS, no turnos movidos", () => {
+  // 4 turnos reprogramados, pero a uno el WhatsApp le rebotó. La fila queda en
+  // rojo ("No se pudo enviar el aviso") y el cierre tiene que decir 3, no 4:
+  // antes recibía `reasignados` para las dos cosas y contradecía a la tabla que
+  // está justo arriba, en una tarjeta que un ministerio va a estar mirando.
+  const t = textoCierre({ reasignados: 4, pacientes: 3, profesionales: 2, manuales: [] });
+  assert.equal(t, "Listo. Reasigné 4 turnos y avisé a los 3 pacientes y a los 2 profesionales.");
+});
+
+test("si no se pudo avisar a nadie, el cierre no dice 'avisé a los 0 pacientes'", () => {
+  const t = textoCierre({ reasignados: 2, pacientes: 0, profesionales: 0, manuales: [] });
+  assert.equal(
+    t,
+    "Listo. Reasigné 2 turnos, pero no pude avisar a nadie: revisalo en el turnero."
+  );
+});
