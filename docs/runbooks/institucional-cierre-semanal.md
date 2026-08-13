@@ -49,17 +49,25 @@ Respuesta:
   escribió en `encuentros_metering`. Causa típica: el cron `metering-clasificar`
   estuvo caído, o la ventana de 14 días quedó corta tras un atraso largo.
 - **`vivos`** — encuentros de esa semana que **siguen abiertos**. El caso real
-  que motivó el chequeo: una consulta inmediata colgada el domingo a las 20:00
-  no es terminal el lunes a las 02:00 (la cierra `cerrar-huerfanas` el martes a
-  las 3 AM), así que se sellaba la semana sin ella y después la factura la
-  cobraba igual. Los dos números contractuales, divergiendo en silencio.
+  que motivó el chequeo: una consulta inmediata que quedó colgada el domingo a
+  la noche no es terminal el lunes a las 02:00, cuando corre el cron del cierre,
+  así que se sellaba la semana sin ella y después la factura la cobraba igual.
+  Los dos números contractuales, divergiendo en silencio.
+
+  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 5 * * 1`
+  (lunes 02:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
+  todos los días** — no "el martes a las 3 AM". Para una CI que arrancó el
+  domingo a las 20:00, el umbral de 4 h de ese cron se cumple a las 00:00 del
+  lunes y la cierra esa misma madrugada; el caso que sobrevive al lunes 02:00 es
+  el de una CI que arrancó más tarde. Ante la duda, mirar el cron crudo en
+  `vercel.json` y convertir a ART (UTC−3), no la memoria.
 
 ## 2. Destrabar lo que falte
 
 | Qué dice el diagnóstico | Qué hacer |
 |---|---|
 | `sin_fila > 0` | Revisar el cron `metering-clasificar` (corre cada 10 min). Sus logs traen `pendientes` y `pendientes_sin_fila`. Si hay atraso, dejarlo correr y volver a mirar. |
-| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` (cada 10 min), `resolver-vencidas` y `cerrar-huerfanas` (3 AM). |
+| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` y `resolver-consultas-vencidas` (cada 10 min) y `cerrar-huerfanas` (`0 3 * * *` UTC = **00:00 ART, todos los días**). |
 | `vivos > 0` y la semana es vieja | Hay un encuentro trabado. Buscarlo en `/admin` y resolverlo por el camino normal (cerrarlo o marcarlo como corresponda). **No** forzar el sello: no hay forma de hacerlo, y es a propósito. |
 
 ## 3. Sellar
