@@ -15,6 +15,8 @@ import {
   periodoDeHoy,
   periodoDeSemana,
   corteDePeriodo,
+  mesTerminado,
+  periodoASellar,
   pesos,
   facturacionACSV,
   type Facturacion,
@@ -163,4 +165,48 @@ test("chart · sin consultas la lectura lo dice, no inventa un 0%", () => {
     lecturaDelChart({ acordado: 0, espontaneo: 0, ofrecido: 0 }, 0),
     "Todavía no hay consultas facturables en esta semana."
   );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL CIERRE DEL MES (R31-R32, Diego 13/08)
+// ─────────────────────────────────────────────────────────────────────────────
+// La parte pura: cuándo terminó un mes y cuál es el que hay que cerrar. Es la
+// aritmética que decide si se sella una foto entera o media — y el sello es
+// inmutable, así que un borde mal calculado no se arregla con un deploy.
+
+const ar = (iso: string) => Date.parse(iso); // los ISO de abajo llevan -03:00
+
+test("mes terminado · el corte es 23:59:59 del último día, hora AR", () => {
+  // Un minuto antes de la medianoche del 31: octubre sigue abierto.
+  assert.equal(mesTerminado("2026-10", ar("2026-10-31T23:59:00-03:00")), false);
+  // Un segundo después: octubre es una foto.
+  assert.equal(mesTerminado("2026-10", ar("2026-11-01T00:00:01-03:00")), true);
+  // Y la hora del cron (02:00 del día 1) cae del lado correcto.
+  assert.equal(mesTerminado("2026-10", ar("2026-11-01T02:00:00-03:00")), true);
+});
+
+test("mes terminado · febrero corto y meses de 31: el último día sale del calendario", () => {
+  assert.equal(mesTerminado("2026-02", ar("2026-02-28T23:00:00-03:00")), false);
+  assert.equal(mesTerminado("2026-02", ar("2026-03-01T00:30:00-03:00")), true);
+  // Bisiesto: 2028 tiene 29 días. El 29 a la tarde todavía no cerró.
+  assert.equal(mesTerminado("2028-02", ar("2028-02-29T18:00:00-03:00")), false);
+});
+
+test("el mes a sellar es el ANTERIOR en hora AR, no en UTC", () => {
+  // 01/11 a las 02:00 ART: el cron cierra octubre.
+  assert.equal(periodoASellar(ar("2026-11-01T02:00:00-03:00")), "2026-10");
+  // Cambio de año: el 1 de enero se cierra diciembre del año que pasó.
+  assert.equal(periodoASellar(ar("2027-01-01T02:00:00-03:00")), "2026-12");
+  // El borde que importa: 31/10 a las 22:00 ART es 01/11 en UTC. Leído en UTC,
+  // el cron creería que ya es día 1 y cerraría octubre con un día entero de
+  // atenciones todavía por delante.
+  assert.equal(periodoASellar(ar("2026-10-31T22:00:00-03:00")), "2026-09");
+});
+
+test("el mes en curso NUNCA es el que se cierra", () => {
+  const ahora = ar("2026-11-14T10:00:00-03:00");
+  const aSellar = periodoASellar(ahora);
+  assert.equal(aSellar, "2026-10");
+  assert.equal(mesTerminado(aSellar, ahora), true, "el que se sella siempre terminó");
+  assert.equal(mesTerminado("2026-11", ahora), false, "el mes en curso, jamás");
 });

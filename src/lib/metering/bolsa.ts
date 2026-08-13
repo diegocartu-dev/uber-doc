@@ -217,6 +217,13 @@ export function domingoDeSemana(lunesAr: string): string {
   return diasDeSemana(lunesAr)[6];
 }
 
+/** "2026-10-31" + 1 → "2026-11-01". Mediodía UTC para no rozar ningún borde. */
+export function correrDias(diaAr: string, dias: number): string {
+  const d = new Date(`${diaAr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Lunes de la semana anterior a la de ese lunes (o a la de hoy). */
 export function semanaAnterior(lunesAr: string): string {
   const d = new Date(`${lunesAr}T12:00:00Z`);
@@ -721,13 +728,16 @@ export function bloqueaElSello(
   }
 }
 
-export interface FaltantesDeSemana {
+export interface Faltantes {
   /** Terminales sin fila en el contador (el job no llegó). */
   sin_fila: number;
   /** Todavía vivos: van a producir fila DESPUÉS del sello si se sella ahora. */
   vivos: number;
   total: number;
 }
+
+/** Nombre viejo, cuando el único sello era el semanal. */
+export type FaltantesDeSemana = Faltantes;
 
 /**
  * Encuentros de esa semana que impiden sellarla. Es la precondición del sello.
@@ -762,79 +772,115 @@ export interface FaltantesDeSemana {
  * un motor válido. Un slot que nadie tomó o un canal desconocido no generan
  * fila por diseño, y contarlos dejaría el sello bloqueado para siempre.
  */
-export async function encuentrosSinClasificar(semanaAr: string): Promise<FaltantesDeSemana> {
+export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltantes> {
+  return encuentrosSinClasificarEnRango(semanaAr, domingoDeSemana(semanaAr));
+}
+
+/**
+ * La misma precondición, sobre un rango de días AR cualquiera.
+ *
+ * Existe porque el sello mensual (R31, `cerrarMes`) necesita EXACTAMENTE la
+ * misma garantía que el semanal: no congelar un período mientras el contador
+ * todavía está contándolo. La regla —qué bloquea y qué no— es una sola
+ * (`bloqueaElSello`) y no se re-escribe por período: si divergieran, el mes y
+ * la semana podrían dar respuestas distintas sobre el mismo encuentro, y el
+ * cumplimiento sellado y la factura volverían a mirarse de reojo.
+ *
+ * Los dos extremos son inclusive y en hora AR: `hastaAr` incluye todo el día
+ * (hasta 23:59:59.999 AR), que es el "corte a las 24:00" de R31.
+ */
+export async function encuentrosSinClasificarEnRango(
+  desdeAr: string,
+  hastaAr: string
+): Promise<Faltantes> {
   const admin = createAdminClient();
-  const lunes = semanaAr;
-  const domingo = domingoDeSemana(lunes);
+  const desdeDia = desdeAr;
+  const hastaDia = hastaAr;
   const MOTORES = ["acordado", "espontaneo", "ofrecido"];
   const TERMINALES_TURNO = ESTADOS_TERMINALES_TURNO as unknown as string[];
   const TERMINALES_CONSULTA = ESTADOS_TERMINALES_CONSULTA as unknown as string[];
 
+  // Las CI se piden con UN DÍA DE MÁS de cada lado y se filtran en JS. Su día
+  // AR sale de `asignada_at` (con `created_at` de respaldo), que puede caer del
+  // otro lado del borde respecto de `created_at` — que es por lo que filtra la
+  // query. Sin el margen, una CI asignada a la medianoche del último día del
+  // período no entraba a la lista de candidatos y el sello no la veía. Pedir de
+  // más es barato; el que decide es el filtro de abajo.
+  const desdeMargen = correrDias(desdeDia, -1);
+  const hastaMargen = correrDias(hastaDia, 1);
+
   const [turnos, turnosVivos, consultas, consultasVivas, filas] = await Promise.all([
-    leerTodo<Record<string, unknown>>("turnos terminales de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("turnos terminales del período", (desde, hasta) =>
       admin
         .from("turnos")
         .select("id, estado")
         .in("estado", TERMINALES_TURNO)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
-        .gte("fecha", lunes)
-        .lte("fecha", domingo)
+        .gte("fecha", desdeDia)
+        .lte("fecha", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
     // Vivos por COMPLEMENTO, no por lista blanca: un estado que no conozcamos
     // bloquea el sello en vez de pasar de largo. Sellar es irreversible; la
     // duda se resuelve esperando.
-    leerTodo<Record<string, unknown>>("turnos todavía vivos de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("turnos todavía vivos del período", (desde, hasta) =>
       admin
         .from("turnos")
         .select("id, estado")
         .not("estado", "in", `(${[...TERMINALES_TURNO, ...TURNO_SIN_DESTINO].join(",")})`)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
-        .gte("fecha", lunes)
-        .lte("fecha", domingo)
+        .gte("fecha", desdeDia)
+        .lte("fecha", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    // La CI no tiene columna de fecha AR: su semana sale del instante de
-    // asignación, igual que en el contador. Se pide un día de más de cada lado
-    // y se filtra en JS.
-    leerTodo<Record<string, unknown>>("consultas terminales de la semana", (desde, hasta) =>
+    // La CI no tiene columna de fecha AR: su día sale del instante de
+    // asignación, igual que en el contador.
+    leerTodo<Record<string, unknown>>("consultas terminales del período", (desde, hasta) =>
       admin
         .from("consultas")
         .select("id, estado, asignada_at, created_at")
         .in("estado", TERMINALES_CONSULTA)
         .in("canal_origen", MOTORES)
-        .gte("created_at", `${lunes}T00:00:00-03:00`)
-        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .gte("created_at", `${desdeMargen}T00:00:00-03:00`)
+        .lte("created_at", `${hastaMargen}T23:59:59.999-03:00`)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    leerTodo<Record<string, unknown>>("consultas todavía vivas de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("consultas todavía vivas del período", (desde, hasta) =>
       admin
         .from("consultas")
         .select("id, estado, asignada_at, created_at")
         .not("estado", "in", `(${TERMINALES_CONSULTA.join(",")})`)
         .in("canal_origen", MOTORES)
-        .gte("created_at", `${lunes}T00:00:00-03:00`)
-        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .gte("created_at", `${desdeMargen}T00:00:00-03:00`)
+        .lte("created_at", `${hastaMargen}T23:59:59.999-03:00`)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    leerTodo<Record<string, unknown>>("filas del contador de la semana", (desde, hasta) =>
+    // El contador se lee por DÍA AR y no por `semana_ar`, que es lo que hacía
+    // la versión semanal: el mes no es un múltiplo de semanas. `fecha_ar` y
+    // `semana_ar` salen del mismo instante en `clasificar.ts`, así que para una
+    // semana el conjunto es exactamente el mismo.
+    leerTodo<Record<string, unknown>>("filas del contador del período", (desde, hasta) =>
       admin
         .from("encuentros_metering")
         .select("tipo, recurso_id")
-        .eq("semana_ar", lunes)
+        .gte("fecha_ar", desdeDia)
+        .lte("fecha_ar", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
   ]);
 
-  const deLaSemana = (c: Record<string, unknown>) =>
-    lunesDeSemanaAR((c.asignada_at as string | null) ?? (c.created_at as string)) === lunes;
+  /** ¿El día AR de esta CI cae adentro del período? */
+  const delPeriodo = (c: Record<string, unknown>) => {
+    const dia = fechaARdeISO((c.asignada_at as string | null) ?? (c.created_at as string));
+    return dia >= desdeDia && dia <= hastaDia;
+  };
 
   // El conteo pasa por `bloqueaElSello` —la decisión pura y testeada— y no por
   // la forma de la query: los `.in()` / `.not(...in...)` de arriba son un
@@ -845,14 +891,14 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
     if (bloqueaElSello("turno", t.estado as string, conFila.has(`turno|${t.id}`))) sinFila++;
   }
   for (const c of consultas) {
-    if (!deLaSemana(c)) continue;
+    if (!delPeriodo(c)) continue;
     if (bloqueaElSello("consulta", c.estado as string, conFila.has(`consulta|${c.id}`))) sinFila++;
   }
 
   const vivos =
     turnosVivos.filter((t) => bloqueaElSello("turno", t.estado as string, false)).length +
     consultasVivas
-      .filter(deLaSemana)
+      .filter(delPeriodo)
       .filter((c) => bloqueaElSello("consulta", c.estado as string, false)).length;
   return { sin_fila: sinFila, vivos, total: sinFila + vivos };
 }

@@ -19,6 +19,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { contarExacto, leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
+import { encuentrosSinClasificarEnRango } from "@/lib/metering/bolsa";
 import type { Motor } from "@/lib/metering/clasificar";
 
 export interface LineaFacturacion {
@@ -229,6 +230,95 @@ export async function facturacionDePeriodo(
 function precioDeFila(fila: Record<string, unknown>, vigente: number): number {
   const guardado = Number(fila.precio_centavos);
   return Number.isFinite(guardado) && guardado > 0 ? guardado : vigente;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL CIERRE DEL MES (R31-R32, Diego 13/08)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// "El mes se cierra solo, el último día a las 24:00." Es una FOTO del mes
+// calendario: entra todo lo que ocurrió hasta las 23:59:59 del último día, hora
+// argentina; lo posterior es del mes siguiente. Nadie tiene que cerrar nada a
+// mano, y la institución no cierra NUNCA: descargar es leer (R32).
+//
+// El corte de datos es a las 24:00 exactas, pero el sello se estampa unas horas
+// después (madrugada del día 1) porque el contador necesita terminar de
+// clasificar los últimos encuentros: una consulta que termina 23:55 se clasifica
+// pasada la medianoche. La foto siempre es del mes; lo que se demora es el
+// revelado.
+
+/** ¿Ese mes ya terminó en hora AR? (pasó el 23:59:59.999 del último día) */
+export function mesTerminado(periodo: string, ahoraMs = Date.now()): boolean {
+  const { hasta } = rangoDePeriodo(periodo);
+  return ahoraMs > Date.parse(`${hasta}T23:59:59.999-03:00`);
+}
+
+/** El período que el cron del día 1 tiene que sellar: el mes que terminó. */
+export function periodoASellar(ahoraMs = Date.now()): string {
+  const hoy = new Date(ahoraMs - 3 * 3600_000);
+  // Día 0 del mes AR corriente = último día del mes anterior.
+  return new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 0))
+    .toISOString()
+    .slice(0, 7);
+}
+
+export interface ResumenCierreMes {
+  periodo: string;
+  /** Facturables del mes al momento del sello (las que la factura cobra). */
+  facturables: number;
+  /** Cuántas selló ESTA corrida. */
+  selladas: number;
+  /** Ya venían selladas (corrida repetida): la idempotencia, visible. */
+  ya_estaban: number;
+}
+
+/**
+ * Cierra un mes: sella sus filas facturables. Es lo que corre el cron del día 1
+ * y lo que se puede volver a correr a mano si ese día falló.
+ *
+ * ── LAS DOS PRECONDICIONES, Y POR QUÉ ABORTA EN VEZ DE SELLAR ────────────────
+ * 1. El mes TERMINÓ. Sellar un mes en curso congelaría medio mes como si fuera
+ *    entero, y el sello no se levanta con un botón.
+ * 2. El contador terminó de contarlo — la MISMA precondición del cierre semanal
+ *    (`encuentrosSinClasificar`), extendida al rango del mes: si queda un
+ *    encuentro terminal sin clasificar, o uno TODAVÍA VIVO del último día, no
+ *    se sella nada. El caso concreto: la consulta que quedó abierta el 31 a las
+ *    23:50 no es terminal a las 02:00 del día 1; si se sellara igual, su fila
+ *    aparecería después —facturable— sobre un mes ya congelado.
+ *
+ * Abortar es más barato que sellar mal: el mes se cierra unas horas más tarde
+ * con la corrida manual, mientras que un sello incompleto hay que levantarlo
+ * fila por fila con la auditoría de la 021 encima.
+ *
+ * Idempotente: si vuelve a correr sobre un mes ya sellado, `sellarPeriodo` no
+ * toca ninguna fila y el resumen lo dice (`selladas: 0`).
+ */
+export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<ResumenCierreMes> {
+  if (!periodoValido(periodo)) {
+    throw new Error(`Período inválido: "${periodo}" (formato AAAA-MM).`);
+  }
+  if (!mesTerminado(periodo, ahoraMs)) {
+    throw new Error(
+      `El mes ${periodo} TODAVÍA NO TERMINÓ: no se puede cerrar. El sello es inmutable ` +
+        `y la foto es del mes calendario completo (hasta las 23:59:59 del último día, ` +
+        `hora argentina). El último mes terminado es ${periodoASellar(ahoraMs)}.`
+    );
+  }
+
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  const faltan = await encuentrosSinClasificarEnRango(desde, hasta);
+  if (faltan.total > 0) {
+    throw new Error(
+      `El mes ${periodo} todavía no se puede cerrar: ${faltan.sin_fila} encuentro(s) terminales ` +
+        `sin clasificar y ${faltan.vivos} todavía en curso. Revisá el cron metering-clasificar ` +
+        `(y, si hay vivos, esperá a que cierren o a que los cierre cerrar-huerfanas) y volvé a ` +
+        `correr el cierre con POST /api/admin/institucional/cerrar-mes.`
+    );
+  }
+
+  const selladas = await sellarPeriodo(periodo);
+  const facturables = (await facturacionDePeriodo(periodo)).consultas;
+  return { periodo, facturables, selladas, ya_estaban: Math.max(0, facturables - selladas) };
 }
 
 /**

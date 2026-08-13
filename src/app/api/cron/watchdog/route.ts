@@ -57,6 +57,16 @@ const ESPERADOS: Record<string, number> = {
   // puede correr a mano después. Bajarlo exigiría un umbral por cron en la
   // fórmula compartida, que le movería el margen a los 20 crons del B2C.
   "acuerdo-cerrar-semana": 7 * 24 * 60,
+  // Mensual (día 1, 02:00 ART). Se declara con el mes MÁS LARGO (31 días) a
+  // propósito: el umbral es `1,5 × intervalo + 30 min`, así que declarar 30
+  // días no adelantaría el aviso de manera útil y sí acercaría el margen a un
+  // enero-marzo legítimo. Con 31 el aviso llega ~46 días después de la última
+  // corrida — tarde para enterarse por acá, igual que en el semanal: lo que
+  // cubre el watchdog es "Vercel dejó de invocarlo", porque una corrida que
+  // FALLA (incluida la precondición incumplida) ya avisa sola por `withCron`.
+  // El cierre de un mes se puede correr a mano después con
+  // POST /api/admin/institucional/cerrar-mes.
+  "metering-cerrar-mes": 31 * 24 * 60,
   uptime: 1,
 };
 

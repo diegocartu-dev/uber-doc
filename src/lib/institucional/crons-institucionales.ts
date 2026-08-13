@@ -3,8 +3,8 @@
 // institucional (spec §9, tabla de crons — fila "metering-clasificar,
 // acuerdo-cerrar-semana [NUEVOS]: solo hacen trabajo en modo institucional").
 //
-// `vercel.json` es uno solo por repo, así que estos dos también se invocan en
-// el deploy del B2C. Ahí no tienen NADA que hacer: `encuentros_metering` y
+// `vercel.json` es uno solo por repo, así que estos también se invocan en el
+// deploy del B2C. Ahí no tienen NADA que hacer: `encuentros_metering` y
 // `acuerdo_semanas` ni siquiera existen en esa base. Sin este corte, cada
 // corrida terminaría en un error de PostgREST ("relation does not exist"), el
 // heartbeat lo registraría como fallo y el watchdog empezaría a mandar mails
@@ -24,6 +24,7 @@ import { esInstitucional } from "@/lib/instancia";
 export const CRONS_SOLO_INSTITUCIONALES = [
   "metering-clasificar", // el contador contractual (spec §6.3)
   "acuerdo-cerrar-semana", // sella la bolsa de horas de la semana que pasó (§6.4)
+  "metering-cerrar-mes", // sella la facturación del mes que terminó (R31)
 ] as const;
 
 export type CronSoloInstitucional = (typeof CRONS_SOLO_INSTITUCIONALES)[number];

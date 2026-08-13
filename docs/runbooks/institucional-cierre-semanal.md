@@ -113,7 +113,12 @@ aparecer "Incompleto" — nunca con la semana abierta, R30).
   el default de PostgREST. Si en el proyecto de la instancia quedó configurado
   en menos, revisar `PAGINA_DB` / `TAMANIO_PAGINA` antes de confiar en un
   conteo.
-- **El CSV de facturación SELLA.** Bajar el detalle de un mes ya terminado desde
-  `/panel` marca `facturado_periodo` en sus filas y las vuelve inmutables. El mes
-  en curso no se sella. (Si alguna vez se quiere una vista "para mirar" sin
-  sellar, hay que separarla — está anotado como señal para Diego en el gate.)
+- **El CSV de facturación YA NO SELLA** (R32, decisión de Diego del 13/08).
+  Descargar es leer: la institución puede bajar el detalle de cualquier mes las
+  veces que quiera y no cambia una fila. El sello de la facturación pasó a ser
+  automático y mensual — runbook aparte:
+  `docs/runbooks/institucional-cierre-mensual.md`.
+- **Son dos sellos distintos y no se mezclan.** El semanal congela el
+  CUMPLIMIENTO (`acuerdo_semanas`, horas); el mensual congela la FACTURACIÓN
+  (`encuentros_metering.facturado_periodo`, consultas). Comparten la
+  precondición —el contador terminó de contar— y nada más.

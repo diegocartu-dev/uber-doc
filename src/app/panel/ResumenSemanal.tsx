@@ -276,14 +276,13 @@ export default function ResumenSemanalVista({
               </>
             )}
           </div>
-          {/* Es un link y no un form, pero NO es una descarga inocua: bajar el
-              detalle de un mes YA TERMINADO SELLA sus filas (`facturado_periodo`)
-              y a partir de ahí son inmutables por el trigger de la 014. El mes en
-              curso no se sella — se puede mirar cuantas veces haga falta.
-              El comentario que estaba acá decía lo contrario ("es un archivo, no
-              una acción con efectos"): quedó viejo cuando el sello se conectó, y
-              es justo la clase de comentario que hace que alguien mueva el botón
-              a un lugar más cómodo sin saber lo que dispara. */}
+          {/* Descargar es LEER (R32, Diego 13/08): este botón no sella nada y
+              se puede tocar las veces que haga falta, en cualquier mes. Hubo
+              una etapa en que la descarga de un mes terminado SELLABA sus filas
+              — atar un estado contable irreversible a quién abrió qué pantalla
+              fue un error, y el cierre pasó a ser automático (cron
+              `metering-cerrar-mes`, R31). Si alguien vuelve a colgarle un
+              efecto a este link, está reabriendo eso. */}
           <a className="btn-sec" href={`/api/panel/facturacion/csv?periodo=${periodo}`} download>
             Exportar CSV
           </a>

@@ -77,12 +77,12 @@ test("(a) los 5 crons de Capa C siguen su camino B2C", () => {
 });
 
 test("(a bis) los crons NUEVOS del modo institucional no hacen NADA en el B2C", () => {
-  // El espejo de la Capa C (spec §9): `metering-clasificar` y
-  // `acuerdo-cerrar-semana` se invocan en los dos deploys porque `vercel.json`
-  // es uno solo. En el B2C sus tablas ni existen — sin este corte cada corrida
-  // terminaría en error y el watchdog mandaría mails rojos por una tarea que
-  // en el B2C no significa nada.
-  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 2);
+  // El espejo de la Capa C (spec §9): `metering-clasificar`,
+  // `acuerdo-cerrar-semana` y `metering-cerrar-mes` se invocan en los dos
+  // deploys porque `vercel.json` es uno solo. En el B2C sus tablas ni existen —
+  // sin este corte cada corrida terminaría en error y el watchdog mandaría
+  // mails rojos por una tarea que en el B2C no significa nada.
+  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 3);
   for (const key of CRONS_SOLO_INSTITUCIONALES) {
     const res = cortarSiB2C(key);
     assert.ok(res, `${key} tiene que cortar en el B2C`);
@@ -147,6 +147,7 @@ test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
     assert.equal(esInstitucional(), false, `INSTITUCIONAL=${JSON.stringify(valor)}`);
     assert.equal(cortarSiInstitucional("liberar-reservas"), null);
     assert.ok(cortarSiB2C("metering-clasificar"), "el metering sigue apagado");
+    assert.ok(cortarSiB2C("metering-cerrar-mes"), "el cierre mensual sigue apagado");
     assert.equal(correspondeRefund(PAGO), true);
     assert.equal(permiteAutoCrearPaciente(), true);
     assert.equal(bloqueaRutaInstitucional("/clinica"), false);
