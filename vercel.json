@@ -97,7 +97,7 @@
     },
     {
       "path": "/api/cron/acuerdo-cerrar-semana",
-      "schedule": "0 7 * * 1"
+      "schedule": "0 7 * * *"
     },
     {
       "path": "/api/cron/metering-cerrar-mes",

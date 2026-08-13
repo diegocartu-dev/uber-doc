@@ -1021,6 +1021,80 @@ export function semanaASellar(ahoraMs = Date.now()): string {
   return lunesDeSemanaAR(new Date(ahoraMs - 7 * 24 * 3600_000).toISOString());
 }
 
+/**
+ * Cuántas semanas hacia atrás mira el barrido del cierre semanal. Ocho son dos
+ * meses: si una semana estuvo sin sellar más que eso, el problema ya no es que
+ * el cron no llegó, y sellarla ahora congelaría un cumplimiento que nadie miró
+ * a tiempo.
+ */
+export const SEMANAS_QUE_MIRA_EL_CIERRE = 8;
+
+/**
+ * Las semanas ya terminadas, de la más VIEJA a la más nueva, terminando en la
+ * que le toca sellar al cron de hoy. Puro: es la lista de candidatas del
+ * barrido, el espejo de `mesesTerminadosHaciaAtras`.
+ */
+export function semanasTerminadasHaciaAtras(
+  ahoraMs = Date.now(),
+  cuantas = SEMANAS_QUE_MIRA_EL_CIERRE
+): string[] {
+  const ultima = semanaASellar(ahoraMs);
+  const out: string[] = [];
+  for (let i = cuantas - 1; i >= 0; i--) {
+    const d = new Date(`${ultima}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 7 * i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/**
+ * Semanas terminadas que quedaron SIN SELLAR — lo que el cron tiene que cerrar.
+ *
+ * ── POR QUÉ NO ALCANZA CON "LA SEMANA ANTERIOR" ──────────────────────────────
+ * Es el mismo agujero que tenía el cierre mensual, y en el semanal pega más
+ * seguido: el cron sellaba siempre `semanaASellar()` y no volvía NUNCA sobre la
+ * que faltó. Un lunes con el clasificador atrasado, o con una consulta que quedó
+ * viva el domingo a la noche, terminaba en un mail rojo y nada más; si ese mail
+ * se perdía, esa semana se quedaba en "en curso" para siempre, con el watchdog
+ * en verde (vigila el latido, y el cron latía).
+ *
+ * Y la precondición se endureció en esta misma etapa —las CI ahora se filtran
+ * por el día de su asignación, con un día de margen de cada lado— así que
+ * aborta MÁS seguido que antes. Endurecer una precondición sin darle reintento
+ * es cambiar un error silencioso por otro.
+ *
+ * ── POR QUÉ UNA SEMANA YA SELLADA NO VUELVE A LA LISTA ───────────────────────
+ * Igual que con el mes. Una semana puede tener filas selladas y profesionales
+ * sin fila: los que entraron al padrón DESPUÉS del cierre. Sellarlos ahora les
+ * agregaría cumplimiento a una semana que la institución ya leyó, y el KPI de
+ * arriba —que suma las filas listadas— se movería solo. Lo que se selló, se
+ * selló.
+ *
+ * Una sola lectura para todas las candidatas: la pregunta es "¿cuáles de estas
+ * ocho tienen sello?", no ocho preguntas sueltas.
+ */
+export async function semanasPendientesDeSellar(
+  ahoraMs = Date.now(),
+  cuantas = SEMANAS_QUE_MIRA_EL_CIERRE
+): Promise<string[]> {
+  const candidatas = semanasTerminadasHaciaAtras(ahoraMs, cuantas);
+  const admin = createAdminClient();
+  const selladas = await leerTodo<Record<string, unknown>>(
+    "semanas ya selladas",
+    (desde, hasta) =>
+      admin
+        .from("acuerdo_semanas")
+        .select("semana_ar")
+        .in("semana_ar", candidatas)
+        .eq("estado", "cerrada")
+        .order("semana_ar", { ascending: true })
+        .range(desde, hasta)
+  );
+  const conSello = new Set(selladas.map((f) => String(f.semana_ar).slice(0, 10)));
+  return candidatas.filter((s) => !conSello.has(s));
+}
+
 /** La semana AR de hoy (default del selector del panel). */
 export function semanaDeHoy(ahoraMs = Date.now()): string {
   return lunesDeSemanaAR(new Date(ahoraMs).toISOString());

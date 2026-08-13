@@ -205,13 +205,13 @@ export const CRONS_META: Record<string, CronMeta> = {
   "acuerdo-cerrar-semana": {
     nombre: "Cierre semanal del acuerdo (institucional)",
     queHace:
-      "los lunes a la madrugada congela cuántas horas cumplió cada profesional en la semana que terminó",
+      "congela cuántas horas cumplió cada profesional en toda semana terminada que siga abierta",
     impacto:
       "la semana pasada sigue mostrándose 'en curso' y sus números podrían moverse si cambia una agenda vieja",
-    cadencia: "los lunes a las 04:00",
-    autoRecupera: false,
+    cadencia: "todos los días a las 04:00 (solo tiene trabajo cuando terminó una semana)",
+    autoRecupera: true,
     accion:
-      "Sí, avisá: el cierre de esa semana no se hace solo la semana que viene (el cron sella siempre la semana ANTERIOR a la de hoy). Abrí Claude Code y decime: \"corré el cierre semanal del acuerdo para la semana que faltó\".",
+      "Puede esperar: la tarea vuelve a intentarlo mañana y sella igual la semana que faltó. Si la misma semana falla varios días seguidos, abrí Claude Code y decime: \"investigá el cierre semanal del acuerdo\".",
   },
   "metering-cerrar-mes": {
     nombre: "Cierre mensual de la facturación (institucional)",

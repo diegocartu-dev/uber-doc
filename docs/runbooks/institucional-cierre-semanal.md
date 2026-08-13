@@ -8,6 +8,14 @@
 > cron de los lunes, que sella **siempre** la semana que acaba de terminar y
 > **nunca vuelve** sobre la anterior. Una semana perdida se quedaba sin sellar
 > para siempre y no había forma de pasarle el parámetro a nadie.
+>
+> **Desde el 13/08 el cron sí vuelve.** Corre **todos los días a las 04:00 ART**
+> y sella **toda semana terminada que siga abierta** (hasta 8 hacia atrás, 2 por
+> corrida), igual que el cierre mensual. Este runbook queda para el caso que el
+> barrido no cubre: una semana **más vieja que eso**, o una que hay que sellar
+> ya, sin esperar a la madrugada. Una semana ya sellada **no** vuelve a la lista,
+> aunque le falte algún profesional: los que entraron al padrón después del
+> cierre no se le agregan a un cumplimiento que la institución ya leyó.
 
 ## Qué es el sello y por qué importa
 
@@ -55,8 +63,8 @@ Respuesta:
   igual.
   Los dos números contractuales, divergiendo en silencio.
 
-  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 7 * * 1`
-  (lunes 04:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
+  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 7 * * *`
+  (todos los días 04:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
   todos los días** — no "el martes a las 3 AM". El orden importa: el sello corre
   **después** del barrido, nunca antes. Para una CI que arrancó el domingo a las
   20:00, el umbral de 4 h de `cerrar-huerfanas` se cumple a las 00:00 del lunes
@@ -76,14 +84,17 @@ Respuesta:
 > Es un fix, pero **endurece** una precondición que ya corre en producción:
 > semanas que antes sellaban ahora pueden abortar por una CI de borde. La
 > respuesta sigue siendo la misma (esperar y volver a mirar), y desde la Etapa 8
-> el mensual reintenta solo todos los días.
+> los dos cierres —el mensual y el semanal— reintentan solos todos los días. Ese
+> reintento es la otra mitad de este endurecimiento: una precondición más
+> estricta sobre un cron que no volvía nunca cambiaba un error silencioso por
+> otro.
 
 ## 2. Destrabar lo que falte
 
 | Qué dice el diagnóstico | Qué hacer |
 |---|---|
 | `sin_fila > 0` | Revisar el cron `metering-clasificar` (corre cada 10 min). Sus logs traen `pendientes` y `pendientes_sin_fila`. Si hay atraso, dejarlo correr y volver a mirar. |
-| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` y `resolver-consultas-vencidas` (cada 10 min) y `cerrar-huerfanas` (`0 3 * * *` UTC = **00:00 ART, todos los días**). |
+| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` y `resolver-consultas-vencidas` (cada 10 min) y `cerrar-huerfanas` (`0 3 * * *` UTC = **00:00 ART, todos los días**). Y el barrido del cierre vuelve a intentarlo mañana a las 04:00 sin que nadie haga nada. |
 | `vivos > 0` y la semana es vieja | Hay un encuentro trabado. Buscarlo en `/admin` y resolverlo por el camino normal (cerrarlo o marcarlo como corresponda). **No** forzar el sello: no hay forma de hacerlo, y es a propósito. |
 
 ## 3. Sellar

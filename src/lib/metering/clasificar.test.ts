@@ -44,6 +44,7 @@ import {
   etiquetaSemana,
   semanaTerminada,
   semanaASellar,
+  semanasTerminadasHaciaAtras,
   semanaDeHoy,
   semanaAnterior,
   semanaSiguiente,
@@ -528,6 +529,43 @@ test("semana · el cron del lunes sella la que acaba de terminar, no la que arra
   assert.equal(semanaDeHoy(Date.parse("2026-10-26T02:00:00-03:00")), "2026-10-26");
   // Y sigue valiendo en la ventana vieja, por si alguna vez se corre a mano.
   assert.equal(semanaASellar(Date.parse("2026-10-26T00:05:00-03:00")), LUNES);
+});
+
+test("barrido semanal · las candidatas van de la más VIEJA a la más nueva, y la última es la que toca hoy", () => {
+  // El orden importa: si una semana vieja quedó sin sellar, se cierra antes que
+  // la reciente (el techo por corrida recorta desde el final). Es el espejo de
+  // `mesesTerminadosHaciaAtras`.
+  const martes = Date.parse("2026-10-20T04:00:00-03:00");
+  assert.deepEqual(semanasTerminadasHaciaAtras(martes, 4), [
+    "2026-09-21",
+    "2026-09-28",
+    "2026-10-05",
+    "2026-10-12",
+  ]);
+  assert.equal(
+    semanasTerminadasHaciaAtras(martes, 4).at(-1),
+    semanaASellar(martes),
+    "la última candidata es la que el cron sellaría hoy"
+  );
+});
+
+test("barrido semanal · la semana EN CURSO nunca es candidata, ningún día", () => {
+  for (const dia of ["2026-10-19T04:00:00-03:00", "2026-10-25T23:00:00-03:00"]) {
+    const candidatas = semanasTerminadasHaciaAtras(Date.parse(dia), 8);
+    assert.ok(!candidatas.includes("2026-10-19"), `${dia}: la del 19 está en curso`);
+    for (const semana of candidatas) {
+      assert.equal(semanaTerminada(semana, Date.parse(dia)), true, `${semana} tiene que estar terminada`);
+    }
+  }
+});
+
+test("barrido semanal · cruza el año sin inventar una semana rara", () => {
+  // Todas las candidatas son LUNES, también del otro lado del 1 de enero.
+  const enero = Date.parse("2027-01-06T04:00:00-03:00");
+  for (const semana of semanasTerminadasHaciaAtras(enero, 8)) {
+    assert.equal(new Date(`${semana}T12:00:00Z`).getUTCDay(), 1, `${semana} tiene que ser lunes`);
+  }
+  assert.deepEqual(semanasTerminadasHaciaAtras(enero, 2), ["2026-12-21", "2026-12-28"]);
 });
 
 test("semana · el selector avanza y retrocede de a siete días", () => {

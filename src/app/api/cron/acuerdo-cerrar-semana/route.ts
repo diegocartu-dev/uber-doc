@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { withCron } from "@/lib/cron-guard";
 import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
-import { cerrarSemana, semanaASellar } from "@/lib/metering/bolsa";
+import {
+  cerrarSemana,
+  semanasPendientesDeSellar,
+  type ResumenCierreSemana,
+} from "@/lib/metering/bolsa";
 
 /**
- * Cron de los lunes 04:00 ART — SELLA LA SEMANA QUE TERMINÓ (spec §6.4).
+ * Cron diario de las 04:00 ART — SELLA TODA SEMANA TERMINADA QUE SIGA ABIERTA
+ * (spec §6.4).
  *
  * La semana en curso se calcula al vuelo cada vez que alguien abre el panel.
  * La semana que pasó, no: se congela acá. No es una optimización — es la
@@ -26,36 +31,91 @@ import { cerrarSemana, semanaASellar } from "@/lib/metering/bolsa";
  * es terminal la precondición del sello la cuenta como viva y aborta. Sellar
  * antes del barrido es abortar de gusto.
  *
- * El horario es la mitad barata del arreglo. La otra mitad está en
- * `cerrarSemana`, que se niega a sellar si queda un encuentro terminal de esa
- * semana sin fila en el contador — por si el job estuvo caído el fin de semana.
+ * ── POR QUÉ TODOS LOS DÍAS Y NO SOLO LOS LUNES ──────────────────────────────
+ * Espejo exacto del cierre mensual, por el mismo motivo y con el mismo caso
+ * concreto. Corría `0 7 * * 1` y sellaba SIEMPRE la semana anterior, sin volver
+ * nunca sobre la que faltó: un lunes con el clasificador atrasado —o con una
+ * consulta viva del domingo que el barrido todavía no cerró— terminaba en un
+ * mail rojo, y si ese mail se perdía la semana se quedaba "en curso" para
+ * siempre. El watchdog no ayudaba: vigila el latido, y el cron latía.
  *
- * Idempotente: si vuelve a correr sobre una semana ya sellada, no recalcula
- * nada. El primer número es el que vale.
+ * Encima, esta misma etapa ENDURECIÓ la precondición (las consultas inmediatas
+ * se filtran por el día de su asignación, R31 bis), o sea que aborta más seguido
+ * que antes. Endurecer sin dar reintento es cambiar un error silencioso por
+ * otro.
+ *
+ * Corriendo todos los días, la semana del ejemplo se sella sola el martes: a las
+ * 00:00 `cerrar-huerfanas` cierra la CI colgada, el clasificador la escribe, y a
+ * las 04:00 el barrido la encuentra pendiente. Los otros seis días la corrida
+ * cuesta una query y no hace nada.
+ *
+ * Una semana YA sellada no vuelve a la lista, aunque falte algún profesional:
+ * los que entraron al padrón después del cierre no se le agregan a un
+ * cumplimiento que la institución ya leyó.
+ *
+ * ── SI FALTA ALGO, NO SELLA: ABORTA Y AVISA ─────────────────────────────────
+ * `cerrarSemana` se niega si queda un encuentro terminal de esa semana sin fila
+ * en el contador, o uno todavía vivo. Esa semana queda en la lista y se
+ * reintenta mañana; el 500 llega al mail de `withCron` con la semana y el motivo
+ * adentro. Una semana que aborta no frena a las otras.
+ *
+ * Idempotente: si no hay ninguna semana pendiente —el caso de seis días de cada
+ * siete— no toca nada.
  *
  * SOLO instancia institucional: en el B2C corta en la primera línea.
  */
 
 export const maxDuration = 60;
 
+/**
+ * Semanas que sella como mucho una corrida. Menos que el techo del cierre
+ * mensual (3) a propósito: `cerrarSemana` recalcula el cumplimiento de TODO el
+ * padrón —seis lecturas paginadas por semana— mientras que el mensual es un
+ * UPDATE y dos conteos. Techo de tiempo, no de alcance: lo que sobra se sella
+ * mañana. En régimen la lista tiene 0 o 1.
+ */
+const MAX_POR_CORRIDA = 2;
+
 async function handler() {
   const corte = cortarSiB2C("acuerdo-cerrar-semana");
   if (corte) return corte;
 
-  const semana = semanaASellar();
+  let pendientes: string[];
   try {
-    const resumen = await cerrarSemana(semana);
-    console.log("[cron/acuerdo-cerrar-semana]", JSON.stringify(resumen));
-    return NextResponse.json(resumen, { status: resumen.errores > 0 ? 500 : 200 });
+    pendientes = await semanasPendientesDeSellar();
   } catch (err) {
-    // Una lectura fallida NO puede pasar por "no había nada que sellar": el
-    // cron sella siempre la semana anterior y nunca vuelve sobre la que faltó.
-    // El 500 llega al mail de `withCron` con la semana adentro, que es lo que
-    // hace falta para pedir la corrida manual.
+    // Una lectura fallida NO puede pasar por "no había nada que sellar": los
+    // dos terminaban en un 200 y la semana perdida quedaba invisible.
     const detalle = err instanceof Error ? err.message : String(err);
-    console.error("[cron/acuerdo-cerrar-semana] No se pudo cerrar", semana, detalle);
-    return NextResponse.json({ semana_ar: semana, error: detalle }, { status: 500 });
+    console.error("[cron/acuerdo-cerrar-semana] No se pudo leer qué semanas faltan:", detalle);
+    return NextResponse.json({ error: detalle }, { status: 500 });
   }
+
+  const aCerrar = pendientes.slice(0, MAX_POR_CORRIDA);
+  const cerradas: ResumenCierreSemana[] = [];
+  const fallidas: { semana_ar: string; error: string }[] = [];
+
+  for (const semana of aCerrar) {
+    try {
+      const resumen = await cerrarSemana(semana);
+      cerradas.push(resumen);
+    } catch (err) {
+      // Precondición incumplida o lectura fallida. No corta el barrido: una
+      // semana trabada no puede impedir que se cierre otra que sí está lista.
+      const detalle = err instanceof Error ? err.message : String(err);
+      console.error("[cron/acuerdo-cerrar-semana] No se pudo cerrar", semana, detalle);
+      fallidas.push({ semana_ar: semana, error: detalle });
+    }
+  }
+
+  const payload = { pendientes, cerradas, fallidas };
+  console.log("[cron/acuerdo-cerrar-semana]", JSON.stringify(payload));
+
+  // 500 a propósito: lo que no se pudo sellar se reintenta mañana, pero el mail
+  // sale hoy con la semana y el motivo adentro. Un "no pude" en 200 es
+  // invisible. `errores > 0` es el upsert que falló sin excepción.
+  const hubo = fallidas.length > 0 || cerradas.some((c) => c.errores > 0);
+  return NextResponse.json(payload, { status: hubo ? 500 : 200 });
 }
 
 export const GET = withCron("acuerdo-cerrar-semana", handler);
