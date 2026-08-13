@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCron } from "@/lib/cron-guard";
 import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
 import { cerrarMes, mesesPendientesDeSellar, type ResumenCierreMes } from "@/lib/metering/facturacion";
+import { corridaDelBarrido, semanasDeLaCorrida } from "@/lib/metering/bolsa";
 
 /**
  * Cron diario de las 04:00 ART — CIERRA TODO MES TERMINADO QUE SIGA ABIERTO (R31).
@@ -76,7 +77,12 @@ async function handler() {
     return NextResponse.json({ error: detalle }, { status: 500 });
   }
 
-  const aCerrar = pendientes.slice(0, MAX_POR_CORRIDA);
+  // El mismo reparto que usa el barrido semanal: lugar reservado para el mes
+  // MÁS RECIENTE y el resto rotando entre los viejos. Sin esto, el día del
+  // deploy hay ~13 meses sin marca, `slice` toma los 3 más viejos y el mes que
+  // la institución va a mirar se sella recién 4 días después — cuatro días en
+  // los que ese mes sigue siendo reescribible por el clasificador.
+  const aCerrar = semanasDeLaCorrida(pendientes, MAX_POR_CORRIDA, corridaDelBarrido());
   const cerrados: ResumenCierreMes[] = [];
   const fallados: { periodo: string; error: string }[] = [];
 
