@@ -1,12 +1,27 @@
-// POST /acceso/t/[token]/entrar — el minteo de la sesión del paciente.
+// POST /acceso/entrar — el minteo de la sesión del paciente.
 //
 // Esta es la única pieza del producto donde alguien entra SIN escribir nada.
 // Por eso está sola en su propia route y con el orden de pasos explícito:
 //
-//   1. freno de intentos por (IP + token)     — trabajo caro detrás de un link público
+//   0. el POST tiene que venir de NUESTRA landing              — anti login-CSRF
+//   1. freno de intentos                                       — trabajo caro detrás de un link público
 //   2. validación del token contra accesos_link (sha256, vigencia, estado del turno)
 //   3. minteo JIT de la sesión — patrón impersonate del admin (ver abajo)
 //   4. cookies en el response + 303 al destino del acceso
+//
+// ── POR QUÉ EL TOKEN VIAJA EN EL CUERPO Y NO EN EL PATH ──────────────────────
+// Esta route vivía en `/acceso/t/[token]/entrar`. El módulo prometía que el
+// token "NUNCA se guarda ni se loguea" y eso era cierto para la DB y para
+// nuestros `console.*` — pero NO a nivel plataforma: Vercel registra el path
+// completo de cada request en sus logs de acceso, así que la credencial
+// quedaba escrita ahí en claro, y cada fallo la devolvía además en el header
+// `Location` del redirect. El GET de la landing no tiene alternativa (es un
+// link: el token va en la URL sí o sí), pero el minteo sí: el form ya existía,
+// así que el token pasa a ser un campo oculto y el path es fijo.
+//
+// Por lo mismo, un fallo NO redirige de vuelta al token: manda a
+// `/acceso/invalido`, que es la misma pantalla para todos los motivos y no
+// pone la llave en ningún header.
 //
 // ── POR QUÉ EL PATRÓN IMPERSONATE Y NO OTRA COSA (decisión, spec §5.2) ───────
 // El repo YA tiene este camino probado en producción: `/api/admin/impersonate`
@@ -33,6 +48,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
+import { esPostDelMismoSitio } from "@/lib/institucional/origen";
 import {
   validarTokenAcceso,
   registrarUsoAcceso,
@@ -41,23 +57,39 @@ import {
   hashToken,
 } from "@/lib/institucional/accesos";
 
-/** Vuelta al intersticial. Con `reintento` cuando hay que decirle "probá de nuevo". */
-function volverALanding(origin: string, token: string, reintento: boolean) {
-  const url = `${origin}/acceso/t/${encodeURIComponent(token)}${reintento ? "?reintento=1" : ""}`;
+/**
+ * Cualquier final que no sea "entró": una pantalla genérica, sin el token en
+ * ningún header. `reintento` distingue "probá de nuevo" (falla nuestra,
+ * transitoria) de "este enlace no sirve" (definitivo) — pero ni uno ni otro
+ * dicen POR QUÉ ni devuelven la llave.
+ */
+function aInvalido(origin: string, reintento: boolean) {
   // 303: el navegador tiene que seguir con GET, no repetir el POST.
-  return NextResponse.redirect(url, 303);
+  return NextResponse.redirect(`${origin}/acceso/invalido${reintento ? "?reintento=1" : ""}`, 303);
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function POST(request: NextRequest) {
   if (!esInstitucional()) {
     return new NextResponse(null, { status: 404 });
   }
 
-  const { token } = await params;
   const { origin } = new URL(request.url);
+
+  // 0. Anti login-CSRF: esta route ESCRIBE cookies de sesión sin leer ninguna,
+  //    así que SameSite no la protege. Ver src/lib/institucional/origen.ts.
+  if (!esPostDelMismoSitio(request)) {
+    console.warn("[acceso] POST de minteo rechazado: no salió de nuestra landing");
+    return new NextResponse(null, { status: 403 });
+  }
+
+  let token = "";
+  try {
+    const form = await request.formData();
+    token = String(form.get("t") ?? "");
+  } catch (err) {
+    console.error("[acceso] Form ilegible en el minteo:", err);
+    return aInvalido(origin, true);
+  }
 
   // 1. Freno de intentos. La IP sale del proxy de Vercel; sin ella, el freno
   //    queda por token solo (peor, pero nunca deja a nadie afuera).
@@ -67,16 +99,15 @@ export async function POST(
     "sin-ip";
   if (!(await permitirIntentoAcceso(ip, hashToken(token)))) {
     console.warn("[acceso] Freno de intentos activado para un link");
-    return volverALanding(origin, token, true);
+    return aInvalido(origin, true);
   }
 
   // 2. Validación. Sin efectos: el token no se consume nunca.
   const validacion = await validarTokenAcceso(token);
   if (!validacion.ok) {
-    // Sin `reintento`: la landing va a mostrar el estado F por su cuenta, que
-    // es la MISMA pantalla para los cuatro motivos.
+    // Sin `reintento`: es la MISMA pantalla para los cuatro motivos.
     console.warn("[acceso] Link no válido:", validacion.motivo);
-    return volverALanding(origin, token, false);
+    return aInvalido(origin, false);
   }
   const acceso = validacion.acceso;
 
@@ -90,14 +121,14 @@ export async function POST(
     .maybeSingle();
   if (!paciente?.user_id) {
     console.error("[acceso] Acceso válido apuntando a un paciente sin cuenta auth");
-    return volverALanding(origin, token, true);
+    return aInvalido(origin, true);
   }
 
   const { data: userData, error: errUser } = await admin.auth.admin.getUserById(paciente.user_id);
   const email = userData?.user?.email;
   if (errUser || !email) {
     console.error("[acceso] No se pudo resolver el usuario del paciente:", errUser?.message);
-    return volverALanding(origin, token, true);
+    return aInvalido(origin, true);
   }
 
   // Magic link SOLO para quedarse con el OTP: el mail no se envía (y en el
@@ -109,7 +140,7 @@ export async function POST(
   const otp = linkData?.properties?.email_otp;
   if (errLink || !otp) {
     console.error("[acceso] No se pudo generar el acceso:", errLink?.message);
-    return volverALanding(origin, token, true);
+    return aInvalido(origin, true);
   }
 
   // 4. Destino + cookies. El response se arma ANTES del verifyOtp porque es el
@@ -145,7 +176,7 @@ export async function POST(
   });
   if (errOtp) {
     console.error("[acceso] verifyOtp falló:", errOtp.message);
-    return volverALanding(origin, token, true);
+    return aInvalido(origin, true);
   }
 
   // Telemetría del link (cuántas veces se usó, última vez). Se espera a

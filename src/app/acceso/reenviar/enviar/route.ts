@@ -12,12 +12,20 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { esInstitucional } from "@/lib/instancia";
+import { esPostDelMismoSitio } from "@/lib/institucional/origen";
 import { permitirIntentoAcceso } from "@/lib/institucional/accesos";
 import { reenviarAccesoSelfService } from "@/lib/institucional/reenvio";
 
 export async function POST(request: NextRequest) {
   if (!esInstitucional()) {
     return new NextResponse(null, { status: 404 });
+  }
+
+  // Igual que el minteo: es un POST público que dispara trabajo (y un mensaje
+  // al celular de una persona). Una página ajena no lo va a usar de disparador.
+  if (!esPostDelMismoSitio(request)) {
+    console.warn("[reenvio] POST rechazado: no salió de nuestra pantalla");
+    return new NextResponse(null, { status: 403 });
   }
 
   const { origin } = new URL(request.url);
