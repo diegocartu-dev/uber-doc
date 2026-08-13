@@ -295,3 +295,43 @@ export async function permitirIntentoAcceso(ip: string, tokenHash: string): Prom
     return true;
   }
 }
+
+// ─── Revocación (spec §5.4, matriz de revocación) ────────────────────────────
+
+/**
+ * Apaga TODOS los tokens vivos de un encuentro. Después de esto, el link que
+ * el paciente tiene en su WhatsApp muestra "este enlace ya no está activo".
+ *
+ * Se llama cuando el encuentro deja de existir como tal: reprogramación
+ * (llega otro link con el turno nuevo), cancelación, o una revocación manual
+ * del admin institucional (teléfono robado, error de padrón).
+ *
+ * Devuelve cuántos apagó. Nunca lanza: la revocación es la mitad barata de la
+ * operación —la cara es re-acuñar y avisar— y no puede voltear lo que ya se
+ * hizo. Si falla, queda en los logs y el token viejo vence solo.
+ */
+export async function revocarAccesosDe(params: {
+  turnoId?: string;
+  consultaId?: string;
+  motivo: "reprogramacion" | "cancelacion" | "manual" | "cambio_contacto";
+}): Promise<number> {
+  if (!params.turnoId && !params.consultaId) return 0;
+  try {
+    const admin = createAdminClient();
+    const query = admin
+      .from("accesos_link")
+      .update({ revocado_at: new Date().toISOString() })
+      .is("revocado_at", null);
+    const { data, error } = params.turnoId
+      ? await query.eq("turno_id", params.turnoId).select("id")
+      : await query.eq("consulta_id", params.consultaId!).select("id");
+    if (error) {
+      console.error("[accesos] No se pudieron revocar los tokens:", error.message, params.motivo);
+      return 0;
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[accesos] revocarAccesosDe falló:", err);
+    return 0;
+  }
+}

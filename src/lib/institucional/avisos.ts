@@ -15,9 +15,8 @@
 // destinatario. Cualquiera que falte → fallback a mail; sin mail → aviso
 // no enviado (ok:false), visible en la pantalla y en la auditoría.
 //
-// TODO Etapa 6: integrar acá los avisos de REPROGRAMACIÓN (plantillas
-// `reprogramacion` y `reprogramacion_medico` ya cargadas en el config) cuando
-// exista src/lib/otorgador/reprogramar.ts.
+// Avisos de REPROGRAMACIÓN: `avisarReprogramacionTurno` (Etapa 3, T18) — usa
+// las plantillas `reprogramacion` y `reprogramacion_medico` del config.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
@@ -29,6 +28,9 @@ import {
   mailCIAsignadaPaciente,
   mailTurnoAsignadoMedico,
   mailCIAsignadaMedico,
+  mailTurnoReprogramadoPaciente,
+  mailTurnoReprogramadoMedicoRecibe,
+  mailTurnoReprogramadoMedicoLibera,
 } from "@/lib/institucional/emails";
 
 export interface ResultadoAviso {
@@ -356,4 +358,169 @@ export async function registrarAvisosEnAsignacion(
   } catch (err) {
     console.error("[avisos] registrarAvisosEnAsignacion falló:", err);
   }
+}
+
+/**
+ * Avisos de una REPROGRAMACIÓN (spec §4.6 + §8): al paciente con el turno
+ * nuevo y un LINK NUEVO, y a los dos profesionales — el que recibe el turno y
+ * el que lo pierde.
+ *
+ * El link nuevo se acuña acá adentro (`crearAccesoLink` sobre el turno nuevo).
+ * La revocación del viejo NO es trabajo de este módulo: la hace quien
+ * reprograma, ANTES de avisar, para que no exista ni un segundo en el que los
+ * dos links funcionen a la vez.
+ *
+ * Nunca lanza: un aviso que falla no revierte una reprogramación ya hecha.
+ */
+export async function avisarReprogramacionTurno(
+  params: DatosComunes & {
+    turnoNuevo: { id: string; fecha: string; hora_inicio: string };
+    turnoAnterior: { fecha: string; hora_inicio: string };
+    /** El profesional que pierde el turno (null si es el mismo que lo recibe). */
+    medicoAnterior: { id: string; nombre: string } | null;
+  }
+): Promise<AvisosAsignacion> {
+  const resultado: AvisosAsignacion = { paciente: null, medico: null, acceso_url: null };
+  try {
+    const config = await getConfigInstitucion();
+    const waOn = await whatsappHabilitado();
+    const base = `https://${dominioLimpio(config.dominio)}`;
+    const fechaLabel = fechaLabelAR(params.turnoNuevo.fecha);
+    const hora = params.turnoNuevo.hora_inicio.slice(0, 5);
+    const fechaAnterior = fechaLabelAR(params.turnoAnterior.fecha);
+    const horaAnterior = params.turnoAnterior.hora_inicio.slice(0, 5);
+
+    const celPaciente = normalizarTelefonoAR(params.paciente.celular);
+    const canalPaciente: "whatsapp" | "mail" | null =
+      waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
+
+    // Token NUEVO — siempre, haya o no canal por donde mandarlo (misma lección
+    // de la Etapa 2: sin esto, un paciente sin canal quedaba reprogramado y sin
+    // ninguna llave que el operador pudiera dictarle por teléfono).
+    const hora8 =
+      params.turnoNuevo.hora_inicio.length === 5
+        ? `${params.turnoNuevo.hora_inicio}:00`
+        : params.turnoNuevo.hora_inicio.slice(0, 8);
+    const acceso = await crearAccesoLink({
+      pacienteId: params.paciente.id,
+      turnoId: params.turnoNuevo.id,
+      destino: `/turno/${params.turnoNuevo.id}/acceso`,
+      operadorId: params.operadorId,
+      origen: "reprogramacion",
+      canal: canalPaciente,
+      enviadoA:
+        canalPaciente === "whatsapp"
+          ? (celPaciente as string)
+          : canalPaciente === "mail"
+            ? (params.paciente.email as string)
+            : null,
+      encuentroMs: new Date(`${params.turnoNuevo.fecha}T${hora8}-03:00`).getTime(),
+    });
+    const link = acceso?.url ?? base;
+    resultado.acceso_url = acceso?.url ?? null;
+
+    if (canalPaciente === "whatsapp") {
+      const sid = config.wa_plantillas?.reprogramacion;
+      const ok = sid
+        ? await enviarTwilio(celPaciente as string, sid, {
+            "1": primerNombre(params.paciente.nombre),
+            "2": fechaAnterior,
+            "3": horaAnterior,
+            "4": fechaLabel,
+            "5": hora,
+            "6": params.medico.nombre,
+            "7": params.medico.especialidad,
+            "8": link,
+            "9": config.telefono_ayuda ?? "a tu centro de salud",
+          })
+        : false;
+      resultado.paciente = { canal: "whatsapp", destino: celPaciente as string, ok };
+      if (!ok && params.paciente.email) {
+        const okMail = await mailTurnoReprogramadoPaciente({
+          to: params.paciente.email,
+          nombrePaciente: primerNombre(params.paciente.nombre),
+          fechaAnterior,
+          horaAnterior,
+          fechaLabel,
+          hora,
+          medicoNombre: params.medico.nombre,
+          especialidad: params.medico.especialidad,
+          link,
+        });
+        resultado.paciente = { canal: "mail", destino: params.paciente.email, ok: okMail };
+      }
+    } else if (canalPaciente === "mail") {
+      const ok = await mailTurnoReprogramadoPaciente({
+        to: params.paciente.email as string,
+        nombrePaciente: primerNombre(params.paciente.nombre),
+        fechaAnterior,
+        horaAnterior,
+        fechaLabel,
+        hora,
+        medicoNombre: params.medico.nombre,
+        especialidad: params.medico.especialidad,
+        link,
+      });
+      resultado.paciente = { canal: "mail", destino: params.paciente.email as string, ok };
+    }
+
+    // ── El profesional que RECIBE el turno ──
+    const linkAgenda = `${base}/medico/agenda`;
+    const medicoRecibe = await celularMedico(params.medico.id);
+    if (waOn && medicoRecibe.celular) {
+      const sid = config.wa_plantillas?.reprogramacion_medico;
+      const ok = sid
+        ? await enviarTwilio(medicoRecibe.celular, sid, {
+            // La plantilla aprobada habla en plural ("Se agregaron N turnos"):
+            // acá N siempre es 1 porque este camino reprograma de a uno. El
+            // motor masivo (§4.6) va a agrupar por profesional y mandar UN
+            // mensaje con el total — por eso la variable existe.
+            "1": "1",
+            "2": fechaLabel,
+            "3": hora,
+            "4": linkAgenda,
+          })
+        : false;
+      resultado.medico = { canal: "whatsapp", destino: medicoRecibe.celular, ok };
+      if (!ok && medicoRecibe.email) {
+        const okMail = await mailTurnoReprogramadoMedicoRecibe({
+          to: medicoRecibe.email,
+          nombreMedico: primerNombre(medicoRecibe.nombre),
+          fechaLabel,
+          hora,
+          linkAgenda,
+        });
+        resultado.medico = { canal: "mail", destino: medicoRecibe.email, ok: okMail };
+      }
+    } else if (medicoRecibe.email) {
+      const ok = await mailTurnoReprogramadoMedicoRecibe({
+        to: medicoRecibe.email,
+        nombreMedico: primerNombre(medicoRecibe.nombre),
+        fechaLabel,
+        hora,
+        linkAgenda,
+      });
+      resultado.medico = { canal: "mail", destino: medicoRecibe.email, ok };
+    }
+
+    // ── El profesional que PIERDE el turno ──
+    // Solo por mail: no hay plantilla aprobada por Meta para este caso (las 7
+    // de etapa0 no lo cubren) y no se manda texto libre por WhatsApp. Si el
+    // caso se vuelve frecuente, se somete una plantilla nueva.
+    if (params.medicoAnterior && params.medicoAnterior.id !== params.medico.id) {
+      const medicoLibera = await celularMedico(params.medicoAnterior.id);
+      if (medicoLibera.email) {
+        await mailTurnoReprogramadoMedicoLibera({
+          to: medicoLibera.email,
+          nombreMedico: primerNombre(medicoLibera.nombre),
+          fechaLabel: fechaAnterior,
+          hora: horaAnterior,
+          linkAgenda,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[avisos] avisarReprogramacionTurno falló:", err);
+  }
+  return resultado;
 }
