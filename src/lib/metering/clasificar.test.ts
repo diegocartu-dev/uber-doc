@@ -542,6 +542,29 @@ test("borde · el profesional con dos dispositivos sigue presente hasta que se v
   assert.equal(r.segundosAmbosEnSala, 240);
 });
 
+test("borde · una reconexión no le come segundos al reloj (se redondea una vez, al final)", () => {
+  // El paciente pierde señal y vuelve: dos tramos de 30,9 s = 61,8 s reales.
+  // Redondeando por tramo daban 30 + 30 = 60; con 29,9 + 30,9 (60,8 s reales)
+  // daban 59 y la consulta caía en `no_facturable_corta`. En un celular esto no
+  // es un borde raro: es el lunes a la mañana.
+  const t0 = Date.parse(instante(0, "10:00"));
+  const eventos: EventoPresencia[] = [
+    { rol: "medico", identity: "m", evento: "joined", ocurrido_at: new Date(t0).toISOString() },
+    { rol: "paciente", identity: "p", evento: "joined", ocurrido_at: new Date(t0).toISOString() },
+    { rol: "paciente", identity: "p", evento: "left", ocurrido_at: new Date(t0 + 29_900).toISOString() },
+    { rol: "paciente", identity: "p", evento: "joined", ocurrido_at: new Date(t0 + 40_000).toISOString() },
+    { rol: "paciente", identity: "p", evento: "left", ocurrido_at: new Date(t0 + 70_900).toISOString() },
+    { rol: "medico", identity: "m", evento: "left", ocurrido_at: new Date(t0 + 70_900).toISOString() },
+  ];
+  const reloj = reconstruirReloj(eventos, null);
+  assert.equal(reloj.intervalos.length, 2);
+  assert.equal(reloj.segundosAmbosEnSala, 60); // 29,9 + 30,9 = 60,8 s
+  assert.equal(
+    clasificar({ estado: "completada", segundosAmbosEnSala: reloj.segundosAmbosEnSala, documentosEmitidos: 0 }),
+    "facturable"
+  );
+});
+
 test("borde · ambos entraron menos de 60 s y sin documento → no_facturable_corta", () => {
   assert.equal(
     clasificar({ estado: "completado", segundosAmbosEnSala: 42, documentosEmitidos: 0 }),
