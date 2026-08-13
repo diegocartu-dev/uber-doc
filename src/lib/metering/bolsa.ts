@@ -641,6 +641,69 @@ export function totalDeBolsa(filas: CumplimientoProfesional[]): {
  */
 const TURNO_SIN_DESTINO = ["disponible", "bloqueado", "bloqueado_sin_cobro", "reprogramado"];
 
+/** Qué es un encuentro para el sello. Ver `destinoDelEncuentro`. */
+export type DestinoDelEncuentro = "terminal" | "vivo" | "sin_destino";
+
+/**
+ * LA DECISIÓN de I1, en una función pura y testeable.
+ *
+ * Estaba escrita adentro de las queries de `encuentrosSinClasificar` (un
+ * `.not("estado","in", …)`), o sea que la única forma de verificar la parte más
+ * cara del hallazgo —que un encuentro vivo del domingo bloquea el sello y que
+ * un `reprogramado` NO lo bloquea para siempre— era leer código.
+ *
+ * Y el signo importa: si el complemento quedara al revés, o el sello se
+ * bloquearía eternamente (nadie lo notaría hasta que la institución reclame el
+ * cumplimiento) o volvería a sellar de más, que es el bug original.
+ *
+ *   · `terminal`     — ya cerró: DEBE tener fila en el contador.
+ *   · `sin_destino`  — nunca va a producir fila y tampoco va a cambiar de
+ *                      estado: no bloquea nunca (si bloqueara, el sello
+ *                      quedaría trabado PARA SIEMPRE).
+ *   · `vivo`         — todavía está pasando: bloquea.
+ *
+ * Es COMPLEMENTO, no lista blanca: un estado que no conozcamos cae en `vivo` y
+ * bloquea. Sellar es irreversible; la duda se resuelve esperando.
+ */
+export function destinoDelEncuentro(
+  tipo: "turno" | "consulta",
+  estado: string
+): DestinoDelEncuentro {
+  if (tipo === "consulta") {
+    // La CI no tiene estados "sin destino": o cerró o sigue viva. La colgada
+    // del domingo 20:00 cae acá como `vivo`, que es todo el hallazgo I1.
+    return (ESTADOS_TERMINALES_CONSULTA as unknown as string[]).includes(estado)
+      ? "terminal"
+      : "vivo";
+  }
+  if ((ESTADOS_TERMINALES_TURNO as unknown as string[]).includes(estado)) return "terminal";
+  if (TURNO_SIN_DESTINO.includes(estado)) return "sin_destino";
+  return "vivo";
+}
+
+/**
+ * ¿Este encuentro impide sellar la semana?
+ *
+ * `tieneFila` = ya está en `encuentros_metering`. Solo importa para los
+ * terminales: un terminal sin fila es el clasificador atrasado, y sellar sin él
+ * congelaría un número que la facturación —que lee la tabla en vivo— sí va a
+ * cobrar. Dos números contractuales divergiendo en silencio.
+ */
+export function bloqueaElSello(
+  tipo: "turno" | "consulta",
+  estado: string,
+  tieneFila: boolean
+): boolean {
+  switch (destinoDelEncuentro(tipo, estado)) {
+    case "terminal":
+      return !tieneFila;
+    case "sin_destino":
+      return false;
+    case "vivo":
+      return true;
+  }
+}
+
 export interface FaltantesDeSemana {
   /** Terminales sin fila en el contador (el job no llegó). */
   sin_fila: number;
@@ -691,7 +754,7 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
     leerTodo<Record<string, unknown>>("turnos terminales de la semana", (desde, hasta) =>
       admin
         .from("turnos")
-        .select("id")
+        .select("id, estado")
         .in("estado", TERMINALES_TURNO)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
@@ -721,7 +784,7 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
     leerTodo<Record<string, unknown>>("consultas terminales de la semana", (desde, hasta) =>
       admin
         .from("consultas")
-        .select("id, asignada_at, created_at")
+        .select("id, estado, asignada_at, created_at")
         .in("estado", TERMINALES_CONSULTA)
         .in("canal_origen", MOTORES)
         .gte("created_at", `${lunes}T00:00:00-03:00`)
@@ -732,7 +795,7 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
     leerTodo<Record<string, unknown>>("consultas todavía vivas de la semana", (desde, hasta) =>
       admin
         .from("consultas")
-        .select("id, asignada_at, created_at")
+        .select("id, estado, asignada_at, created_at")
         .not("estado", "in", `(${TERMINALES_CONSULTA.join(",")})`)
         .in("canal_origen", MOTORES)
         .gte("created_at", `${lunes}T00:00:00-03:00`)
@@ -753,15 +816,24 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
   const deLaSemana = (c: Record<string, unknown>) =>
     lunesDeSemanaAR((c.asignada_at as string | null) ?? (c.created_at as string)) === lunes;
 
+  // El conteo pasa por `bloqueaElSello` —la decisión pura y testeada— y no por
+  // la forma de la query: los `.in()` / `.not(...in...)` de arriba son un
+  // prefiltro de la DB, no la regla. Si alguna vez divergen, manda la función.
   const conFila = new Set(filas.map((f) => `${f.tipo}|${f.recurso_id}`));
   let sinFila = 0;
-  for (const t of turnos) if (!conFila.has(`turno|${t.id}`)) sinFila++;
+  for (const t of turnos) {
+    if (bloqueaElSello("turno", t.estado as string, conFila.has(`turno|${t.id}`))) sinFila++;
+  }
   for (const c of consultas) {
     if (!deLaSemana(c)) continue;
-    if (!conFila.has(`consulta|${c.id}`)) sinFila++;
+    if (bloqueaElSello("consulta", c.estado as string, conFila.has(`consulta|${c.id}`))) sinFila++;
   }
 
-  const vivos = turnosVivos.length + consultasVivas.filter(deLaSemana).length;
+  const vivos =
+    turnosVivos.filter((t) => bloqueaElSello("turno", t.estado as string, false)).length +
+    consultasVivas
+      .filter(deLaSemana)
+      .filter((c) => bloqueaElSello("consulta", c.estado as string, false)).length;
   return { sin_fila: sinFila, vivos, total: sinFila + vivos };
 }
 

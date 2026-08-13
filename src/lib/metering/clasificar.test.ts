@@ -35,6 +35,8 @@ import {
 } from "@/lib/metering/clasificar";
 import {
   aporteDelSlot,
+  bloqueaElSello,
+  destinoDelEncuentro,
   calcularBolsa,
   minutosAHoras,
   badgeCumplimiento,
@@ -769,4 +771,69 @@ test("la semana AR del encuentro es la del lunes 19, también para el domingo 25
   assert.ok(domingo);
   assert.equal(domingo.semana_ar, LUNES);
   assert.equal(domingo.fecha_ar, "2026-10-25");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LA PRECONDICIÓN DEL SELLO (I1 del gate #405) — qué bloquea y qué no
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// El fix de I1 (contar los encuentros VIVOS de la semana, por complemento) se
+// escribió sin un solo test: la decisión vivía adentro de las queries de
+// `encuentrosSinClasificar` y lo único que había para verificarla era leer
+// código. Es justo el tipo de cambio donde el SIGNO importa: si el complemento
+// quedara al revés, o el sello se bloquea eternamente —y nadie lo nota hasta
+// que la institución reclama el cumplimiento— o vuelve a sellar de más, que es
+// el bug original.
+
+test("sello · la CI colgada del domingo 20:00 bloquea: el lunes 02:00 todavía no es terminal", () => {
+  // EL caso de I1. La cierra `cerrar-huerfanas` recién más tarde, así que el
+  // sello del lunes no la veía, se sellaba la semana sin ella, y cuando
+  // aparecía su fila facturable el cumplimiento sellado ya no la podía
+  // incorporar. La factura la cobraba igual: dos números contractuales
+  // divergiendo en silencio.
+  assert.equal(destinoDelEncuentro("consulta", "en_curso"), "vivo");
+  assert.equal(bloqueaElSello("consulta", "en_curso", false), true);
+  assert.equal(bloqueaElSello("consulta", "pagada", false), true);
+  assert.equal(bloqueaElSello("consulta", "aceptada", false), true);
+});
+
+test("sello · los cuatro estados SIN DESTINO no bloquean nunca: si bloquearan, el sello se traba para siempre", () => {
+  // `disponible`, `bloqueado` y `bloqueado_sin_cobro` no tienen paciente;
+  // `reprogramado` sí lo tiene y NO es terminal, pero es el rastro de un turno
+  // que se movió: el encuentro real es el turno nuevo y este no va a cambiar de
+  // estado nunca más. Ninguno va a producir fila en el contador jamás.
+  for (const estado of ["disponible", "bloqueado", "bloqueado_sin_cobro", "reprogramado"]) {
+    assert.equal(destinoDelEncuentro("turno", estado), "sin_destino", estado);
+    assert.equal(bloqueaElSello("turno", estado, false), false, estado);
+    assert.equal(bloqueaElSello("turno", estado, true), false, estado);
+  }
+});
+
+test("sello · un turno terminal bloquea SOLO si le falta la fila del contador", () => {
+  for (const estado of [
+    "completado",
+    "ausente_paciente",
+    "ausente_medico",
+    "cancelado_paciente",
+    "cancelado_medico",
+  ]) {
+    assert.equal(destinoDelEncuentro("turno", estado), "terminal", estado);
+    assert.equal(bloqueaElSello("turno", estado, false), true, `${estado} sin fila`);
+    assert.equal(bloqueaElSello("turno", estado, true), false, `${estado} con fila`);
+  }
+});
+
+test("sello · un turno vivo bloquea aunque ya tenga fila: todavía puede cambiar de estado", () => {
+  for (const estado of ["confirmado", "en_espera", "en_curso", "reservado_pendiente"]) {
+    assert.equal(destinoDelEncuentro("turno", estado), "vivo", estado);
+    assert.equal(bloqueaElSello("turno", estado, true), true, estado);
+  }
+});
+
+test("sello · un estado DESCONOCIDO bloquea: es complemento, no lista blanca", () => {
+  // El default no puede ser "sellá igual". Sellar es irreversible; la duda se
+  // resuelve esperando, que es barato.
+  assert.equal(destinoDelEncuentro("turno", "estado_que_no_existe_todavia"), "vivo");
+  assert.equal(bloqueaElSello("turno", "estado_que_no_existe_todavia", true), true);
+  assert.equal(bloqueaElSello("consulta", "estado_que_no_existe_todavia", true), true);
 });
