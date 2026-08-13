@@ -32,7 +32,9 @@ interface DocumentoItem {
 
 interface Props {
   turnoId: string;
+  /** Nombre y dominio de la institución: van en las instrucciones de permisos. */
   institucion: string;
+  dominio: string;
   telefonoAyuda: string | null;
   pantallaInicial: PantallaTurno;
   primerNombre: string;
@@ -102,7 +104,6 @@ export default function AccesoTurnoClient(props: Props) {
   const [pantalla, setPantalla] = useState<PantallaTurno>(props.pantallaInicial);
   const [entrando, setEntrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mostrarAyuda, setMostrarAyuda] = useState(false);
   // Prueba de cámara y micrófono (CTA secundaria del estado A).
   const [prueba, setPrueba] = useState<"cerrada" | "pidiendo" | "ok" | "falla">("cerrada");
   const [pruebaError, setPruebaError] = useState<string | null>(null);
@@ -248,7 +249,11 @@ export default function AccesoTurnoClient(props: Props) {
     setPruebaError(null);
     const ok = await pedirDispositivos();
     if (!ok) {
-      setPruebaError(instruccionesPermiso("micrófono"));
+      // Con la marca de la institución: el texto compartido con el pre-join del
+      // canal clínico nombra el producto, y acá el producto es otro.
+      setPruebaError(
+        instruccionesPermiso("micrófono", { nombre: props.institucion, dominio: props.dominio })
+      );
       setPrueba("falla");
       return;
     }
@@ -299,6 +304,50 @@ export default function AccesoTurnoClient(props: Props) {
           <button type="button" className="pac-cta-sec" onClick={cerrarPrueba}>
             Volver
           </button>
+        </div>
+      </MarcoPaciente>
+    );
+  }
+
+  // AUSENCIAS — no son el estado E y no se les puede decir lo mismo.
+  //
+  // Al que estuvo esperando y nadie atendió, decirle "Tu consulta terminó" y
+  // "no quedó documentación cargada" es contarle que lo atendieron. Y al que se
+  // perdió el turno, mandarlo a llamar por una receta que nunca existió. Las
+  // dos necesitan lo mismo: nombrar lo que pasó y dar la salida real, que es
+  // pedir otro turno.
+  if (pantalla === "ausente-profesional" || pantalla === "ausente-paciente") {
+    const noEntroElProfesional = pantalla === "ausente-profesional";
+    return (
+      <MarcoPaciente>
+        <div className="pac-centro">
+          <div className="pac-titulo">
+            {noEntroElProfesional ? "No pudimos atenderte" : "No llegaste a entrar a este turno"}
+          </div>
+          <p className="pac-parrafo-sec">
+            {noEntroElProfesional ? (
+              <>
+                {props.primerNombre ? `${props.primerNombre}, ` : ""}tu turno del{" "}
+                <span className="nw">{props.fechaLabel}</span> a las{" "}
+                <span className="nw tnum">{props.hora} hs</span> quedó sin atender. Lo sentimos.
+              </>
+            ) : (
+              <>
+                Tu turno del <span className="nw">{props.fechaLabel}</span> a las{" "}
+                <span className="nw tnum">{props.hora} hs</span> ya pasó.
+              </>
+            )}
+          </p>
+          <p className="pac-parrafo-sec" style={{ marginTop: 10 }}>
+            {props.telefonoAyuda ? (
+              <>
+                Llamanos al <span className="nw tnum">{props.telefonoAyuda}</span> y te damos otro
+                turno.
+              </>
+            ) : (
+              <>Pedile otro turno a tu centro de salud.</>
+            )}
+          </p>
         </div>
       </MarcoPaciente>
     );
@@ -386,18 +435,22 @@ export default function AccesoTurnoClient(props: Props) {
           <div className="pac-conectado">
             <span className="pac-dot-verde" /> Conectado
           </div>
-          {props.telefonoAyuda && (
-            <div style={{ marginTop: 18 }}>
-              <button type="button" className="pac-link-ter" onClick={() => setMostrarAyuda(true)}>
-                Tengo un problema
-              </button>
-              {mostrarAyuda && (
-                <p style={{ fontSize: 13, color: "#4b5563", marginTop: 8 }}>
+          {/* El mock imprime las dos líneas juntas y SIEMPRE visibles. Estaban
+              detrás de un click, y el bloque entero desaparecía si el config no
+              tenía teléfono: el paciente con un problema —el que menos va a
+              explorar la pantalla— se quedaba sin ninguna salida. */}
+          <div style={{ marginTop: 18 }}>
+            <div className="pac-link-ter">Tengo un problema</div>
+            <p style={{ fontSize: 13, color: "#4b5563", marginTop: 8 }}>
+              {props.telefonoAyuda ? (
+                <>
                   Llamanos al <span className="nw tnum">{props.telefonoAyuda}</span> y te ayudamos.
-                </p>
+                </>
+              ) : (
+                <>Cerrá esta pantalla y volvé a tocar el enlace que te mandamos.</>
               )}
-            </div>
-          )}
+            </p>
+          </div>
         </div>
       </MarcoPaciente>
     );

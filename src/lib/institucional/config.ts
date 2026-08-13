@@ -105,6 +105,15 @@ export function soloBranding(config: ConfigInstitucion): BrandingInstitucion {
   };
 }
 
+/**
+ * "https://salud.gob.ar/algo" → "salud.gob.ar". El config guarda el dominio
+ * como lo tipeó el admin; todo lo que lo muestre o lo meta en una URL pasa por
+ * acá. Vivía duplicado en avisos.ts y en accesos.ts.
+ */
+export function dominioLimpio(dominio: string): string {
+  return dominio.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
 const CACHE_TTL_MS = 60_000;
 
 let cache: { config: ConfigInstitucion; fetchedAt: number } | null = null;

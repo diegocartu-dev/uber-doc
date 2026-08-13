@@ -20,7 +20,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { accesoSigueVivo, COOKIE_ACCESO } from "@/lib/institucional/accesos";
 import { esInstitucional } from "@/lib/instancia";
-import { getBrandingInstitucion } from "@/lib/institucional/config";
+import { getBrandingInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { pantallaDelTurno, instanteAR } from "@/lib/institucional/pantalla-turno";
 import { fechaLabelAR } from "@/lib/institucional/avisos";
 import { formatNombreMedico } from "@/lib/utils/texto";
@@ -134,6 +134,7 @@ export default async function AccesoTurnoPage({
     <AccesoTurnoClient
       turnoId={turno.id}
       institucion={branding.nombre}
+      dominio={dominioLimpio(branding.dominio)}
       telefonoAyuda={branding.telefono_ayuda}
       pantallaInicial={pantalla}
       primerNombre={primerNombre(paciente.nombre_completo)}

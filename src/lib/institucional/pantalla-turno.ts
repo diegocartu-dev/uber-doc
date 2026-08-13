@@ -15,8 +15,22 @@
 //   E "terminado" — el encuentro pasó; quedan los documentos.
 //   F "inactivo"  — el link no lleva a ningún lado (reprogramado, cancelado).
 //   + "sala"      — no es un estado de esta pantalla: hay que mandarlo al video.
+//
+// El mock tiene seis estados porque no contempló las AUSENCIAS, y resolverlas
+// mapeándolas al más parecido producía el mensaje equivocado en el peor
+// momento: a alguien que estuvo esperando y a quien nadie atendió se le decía
+// "Tu consulta terminó" y "no quedó documentación cargada", como si lo hubieran
+// atendido. Por eso hay dos pantallas más, con copy propio y una salida real.
 
-export type PantallaTurno = "falta" | "ventana" | "espera" | "sala" | "terminado" | "inactivo";
+export type PantallaTurno =
+  | "falta"
+  | "ventana"
+  | "espera"
+  | "sala"
+  | "terminado"
+  | "ausente-profesional"
+  | "ausente-paciente"
+  | "inactivo";
 
 /**
  * ESTADOS EN LOS QUE EL TURNO YA NO RECIBE A NADIE — la única lista.
@@ -58,8 +72,16 @@ export function turnoMuerto(estado: string): boolean {
  * Terminales "el encuentro ya pasó". NO son inactivos: es justo cuando el
  * paciente vuelve al link a buscar sus documentos, que es para lo que existen
  * los `vigencia_documentos_dias` del config.
+ *
+ * Los tres terminan el turno, pero NO terminan lo mismo: `completado` es la
+ * consulta que ocurrió, `ausente_medico` es una falla de servicio nuestra y
+ * `ausente_paciente` es un turno que se perdió. Cada uno tiene su pantalla.
  */
-const TERMINADOS = new Set(["completado", "ausente_paciente", "ausente_medico"]);
+const TERMINADOS: Record<string, PantallaTurno> = {
+  completado: "terminado",
+  ausente_medico: "ausente-profesional",
+  ausente_paciente: "ausente-paciente",
+};
 
 /**
  * ── LA VENTANA NO CIERRA, Y ES A PROPÓSITO ───────────────────────────────────
@@ -88,7 +110,7 @@ export function pantallaDelTurno(params: {
   const ahoraMs = params.ahoraMs ?? Date.now();
 
   if (ESTADOS_TURNO_MUERTO.has(estado)) return "inactivo";
-  if (TERMINADOS.has(estado)) return "terminado";
+  if (TERMINADOS[estado]) return TERMINADOS[estado];
   if (estado === "en_curso") return "sala";
   if (estado === "en_espera") return "espera";
 

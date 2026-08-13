@@ -17,7 +17,7 @@
 
 import { createHash, randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { turnoMuerto } from "@/lib/institucional/pantalla-turno";
 
 const DIA_MS = 24 * 3600_000;
@@ -116,8 +116,10 @@ export async function crearAccesoLink(params: {
     // Se sigue igual: el token nuevo es el que viaja; el viejo vence solo.
   }
 
-  const dominio = config.dominio.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  return { url: `https://${dominio}/acceso/t/${token}`, accesoId: data.id };
+  return {
+    url: `https://${dominioLimpio(config.dominio)}/acceso/t/${token}`,
+    accesoId: data.id,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
