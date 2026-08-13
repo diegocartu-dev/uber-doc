@@ -14,19 +14,19 @@
 
 import "./paciente.css";
 
-/** Fondo + marca + card centrada de 400px. Todo estado vive adentro de esto. */
-export function MarcoPaciente({
-  institucion,
-  children,
-}: {
-  institucion: string;
-  children: React.ReactNode;
-}) {
+/**
+ * Fondo + card centrada de 400px. Todo estado vive adentro de esto.
+ *
+ * La identidad de la institución NO se pinta acá: ya la pone el chrome del
+ * layout (`InstitucionTheme` — franja de 4px + banda con nombre y subnombre),
+ * que se monta en TODAS las páginas. Este marco tenía además su propio
+ * `pac-marca` con el mismo nombre, así que la pantalla mostraba la institución
+ * dos veces, una arriba de la otra. En el mock hay franja + UN solo bloque de
+ * identidad; cuando llegue el logo real (Etapa 5) la duplicación se vería peor.
+ */
+export function MarcoPaciente({ children }: { children: React.ReactNode }) {
   return (
     <main className="pac-app">
-      {/* Placeholder del logo hasta la Etapa 5 (bucket institucion-assets):
-          por ahora la marca es el nombre. Mismo criterio que InstitucionTheme. */}
-      <div className="pac-marca">{institucion}</div>
       <div className="pac-card">{children}</div>
     </main>
   );
@@ -81,18 +81,16 @@ function IconoCandado() {
  * el reenvío self-service está disponible, el camino para pedir uno nuevo.
  */
 export function LinkInactivo({
-  institucion,
   telefonoAyuda,
   hrefReenvio = null,
   cooldownMinutos,
 }: {
-  institucion: string;
   telefonoAyuda: string | null;
   hrefReenvio?: string | null;
   cooldownMinutos?: number;
 }) {
   return (
-    <MarcoPaciente institucion={institucion}>
+    <MarcoPaciente>
       <div className="pac-centro">
         <IconoCandado />
         <div className="pac-titulo">Este enlace ya no está activo.</div>

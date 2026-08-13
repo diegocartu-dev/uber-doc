@@ -267,7 +267,7 @@ export default function AccesoTurnoClient(props: Props) {
   // modo ensayo: se pide el permiso dentro del toque y se suelta al cerrar.
   if (prueba !== "cerrada") {
     return (
-      <MarcoPaciente institucion={props.institucion}>
+      <MarcoPaciente>
         <div className="pac-centro">
           {prueba === "ok" ? (
             <>
@@ -307,7 +307,7 @@ export default function AccesoTurnoClient(props: Props) {
   // ESTADO E — el encuentro terminó; quedan los documentos.
   if (pantalla === "terminado") {
     return (
-      <MarcoPaciente institucion={props.institucion}>
+      <MarcoPaciente>
         <div className="pac-titulo">Tu consulta terminó</div>
         {props.documentos.length > 0 ? (
           <>
@@ -365,7 +365,7 @@ export default function AccesoTurnoClient(props: Props) {
   // ESTADO D — sala de espera.
   if (pantalla === "espera" || pantalla === "sala") {
     return (
-      <MarcoPaciente institucion={props.institucion}>
+      <MarcoPaciente>
         <div className="pac-centro">
           <div className="pac-preview">
             {conPreview ? (
@@ -405,7 +405,7 @@ export default function AccesoTurnoClient(props: Props) {
 
   // ESTADOS A y B — comparten encabezado; cambia lo que se puede hacer.
   return (
-    <MarcoPaciente institucion={props.institucion}>
+    <MarcoPaciente>
       <EncabezadoTurno
         primerNombre={props.primerNombre}
         especialidad={props.especialidad || "consulta"}
