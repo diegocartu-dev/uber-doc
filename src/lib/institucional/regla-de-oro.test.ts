@@ -34,6 +34,7 @@ import {
   esInstitucional,
 } from "@/lib/instancia";
 import { cortarSiInstitucional, CRONS_CAPA_C } from "@/lib/institucional/capa-c";
+import { cortarSiB2C, CRONS_SOLO_INSTITUCIONALES } from "@/lib/institucional/crons-institucionales";
 import { resolverRolInstitucional, type OperadorActivo } from "@/lib/auth/rol-institucional";
 
 const PAGO = "1234567890"; // id de pago sintético
@@ -71,6 +72,20 @@ test("(a) los 5 crons de Capa C siguen su camino B2C", () => {
   assert.equal(CRONS_CAPA_C.length, 5);
   for (const key of CRONS_CAPA_C) {
     assert.equal(cortarSiInstitucional(key), null, `${key} NO puede cortar en B2C`);
+  }
+});
+
+test("(a bis) los crons NUEVOS del modo institucional no hacen NADA en el B2C", () => {
+  // El espejo de la Capa C (spec §9): `metering-clasificar` y
+  // `acuerdo-cerrar-semana` se invocan en los dos deploys porque `vercel.json`
+  // es uno solo. En el B2C sus tablas ni existen — sin este corte cada corrida
+  // terminaría en error y el watchdog mandaría mails rojos por una tarea que
+  // en el B2C no significa nada.
+  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 2);
+  for (const key of CRONS_SOLO_INSTITUCIONALES) {
+    const res = cortarSiB2C(key);
+    assert.ok(res, `${key} tiene que cortar en el B2C`);
+    assert.equal(res.status, 200);
   }
 });
 
@@ -121,6 +136,7 @@ test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
     process.env.INSTITUCIONAL = valor;
     assert.equal(esInstitucional(), false, `INSTITUCIONAL=${JSON.stringify(valor)}`);
     assert.equal(cortarSiInstitucional("liberar-reservas"), null);
+    assert.ok(cortarSiB2C("metering-clasificar"), "el metering sigue apagado");
     assert.equal(correspondeRefund(PAGO), true);
     assert.equal(permiteAutoCrearPaciente(), true);
     assert.equal(bloqueaRutaInstitucional("/clinica"), false);
@@ -141,6 +157,13 @@ test("prendido: los 5 crons cortan con la MISMA respuesta de siempre", async () 
     assert.equal(res.status, 200);
     // El body lo leen el heartbeat de withCron y el watchdog: no puede cambiar.
     assert.deepEqual(await res.json(), { ok: true, mensaje: "modo institucional: no aplica" });
+  }
+});
+
+test("prendido: los crons del metering SÍ hacen su trabajo", () => {
+  process.env.INSTITUCIONAL = "true";
+  for (const key of CRONS_SOLO_INSTITUCIONALES) {
+    assert.equal(cortarSiB2C(key), null, `${key} NO puede cortar en la instancia`);
   }
 });
 

@@ -90,6 +90,10 @@
     {
       "path": "/api/cron/documentos-sin-sello",
       "schedule": "17 * * * *"
+    },
+    {
+      "path": "/api/cron/metering-clasificar",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
