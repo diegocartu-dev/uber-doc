@@ -119,6 +119,21 @@ export const FIXTURES: { nombre: string; doc: DocumentoPDF }[] = [
     },
   },
   {
+    // ⚠ ESCENARIO TODAVÍA-NO-PRODUCIBLE, y hay que leerlo así.
+    //
+    // Este es el único fixture con `tratamiento` seteado en un documento de
+    // tipo `receta`, o sea el único que ejercita el bloque "Tratamiento
+    // indicado" del generador. Producción NO puede producir esta forma:
+    // `documentos.tratamiento` lo escribe únicamente el candidato de tipo
+    // `certificado` (completar-documentacion/route.ts y WorkspaceConsulta.tsx),
+    // así que toda receta real viaja con `tratamiento` en null y el bloque
+    // nunca se dibuja.
+    //
+    // Está acá para que el código del bloque no se pudra mientras se decide la
+    // captura separada en el workspace (decisión pendiente de Diego: toca el
+    // canal clínico). NO es evidencia de que el delta §3.3 de 03-spec esté
+    // cubierto — no lo está: en V1 la posología sigue viajando adentro del
+    // cuerpo del Rp/, igual que en el B2C.
     nombre: "receta de TRES medicamentos (presupuesto de alto del pie)",
     doc: {
       id: "00000000-0000-4000-8000-000000000005",
