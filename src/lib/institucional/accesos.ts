@@ -36,7 +36,8 @@ export async function crearAccesoLink(params: {
   turnoId?: string;
   consultaId?: string;
   destino: string; // path de aterrizaje post-login
-  operadorId: string;
+  /** null SOLO cuando el token lo pidió el propio paciente (reenvío). */
+  operadorId: string | null;
   /**
    * null = sin canal automático de envío (hallazgo revisión Etapa 2): el
    * acceso se emite IGUAL — la asignación ya está hecha y el operador necesita
@@ -46,6 +47,12 @@ export async function crearAccesoLink(params: {
   enviadoA: string | null; // celular/mail al momento del envío (null = sin canal)
   /** Instante del encuentro (turno): ancla de la expiración. */
   encuentroMs?: number;
+  /**
+   * De dónde salió este token (migración 012). `reenvio_paciente` es el único
+   * que puede venir SIN operador: lo pidió el paciente desde la pantalla
+   * pública, no lo emitió nadie del call center.
+   */
+  origen?: "asignacion" | "reenvio_paciente" | "reprogramacion";
 }): Promise<AccesoEmitido | null> {
   if (!params.turnoId === !params.consultaId) {
     // exactamente uno (CHECK accesos_link_un_recurso)
@@ -85,6 +92,7 @@ export async function crearAccesoLink(params: {
       destino: params.destino,
       expira_at: expiraAt,
       creado_por: params.operadorId,
+      origen: params.origen ?? "asignacion",
       canal: params.canal, // nullable (migración 010: enviado_a sin NOT NULL)
       enviado_a: params.enviadoA,
     })

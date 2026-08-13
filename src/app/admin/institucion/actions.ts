@@ -38,6 +38,13 @@ export interface ConfigInstitucionInput {
   ci_ventana_fin: string;
   slot_duracion_min: number;
   especialidades: string[];
+  // Ciclo de vida del link de acceso del paciente (migración 011). Son los
+  // números de la POLÍTICA, editables sin tocar código: la propuesta vigente
+  // de la spec §5.4 es el default de la tabla, no una constante del repo.
+  ventana_entrada_min: number;
+  vigencia_documentos_dias: number;
+  reenvio_cooldown_minutos: number;
+  reenvio_max_por_dia: number;
   mail_from: string;
   wa_remitente_nombre: string;
   telefono_ayuda: string;
@@ -68,6 +75,22 @@ function validar(input: ConfigInstitucionInput): string | null {
     return "La ventana de consulta inmediata debe empezar antes de terminar.";
   if (!Number.isInteger(input.slot_duracion_min) || input.slot_duracion_min < 5 || input.slot_duracion_min > 120)
     return "La duración del slot debe ser un entero entre 5 y 120 minutos.";
+  if (!Number.isInteger(input.ventana_entrada_min) || input.ventana_entrada_min < 0 || input.ventana_entrada_min > 240)
+    return "La ventana de entrada del paciente debe ser un entero entre 0 y 240 minutos.";
+  if (
+    !Number.isInteger(input.vigencia_documentos_dias) ||
+    input.vigencia_documentos_dias < 0 ||
+    input.vigencia_documentos_dias > 3650
+  )
+    return "La vigencia de documentos debe ser un entero entre 0 y 3650 días.";
+  if (
+    !Number.isInteger(input.reenvio_cooldown_minutos) ||
+    input.reenvio_cooldown_minutos < 0 ||
+    input.reenvio_cooldown_minutos > 1440
+  )
+    return "La espera entre reenvíos debe ser un entero entre 0 y 1440 minutos.";
+  if (!Number.isInteger(input.reenvio_max_por_dia) || input.reenvio_max_por_dia < 1 || input.reenvio_max_por_dia > 100)
+    return "El máximo de reenvíos por día debe ser un entero entre 1 y 100.";
   if (!Number.isInteger(input.precio_consulta_centavos) || input.precio_consulta_centavos < 0)
     return "El precio por consulta (en centavos) debe ser un entero ≥ 0.";
   if (!(input.acuerdo_horas_semana_default > 0))
@@ -98,6 +121,10 @@ export async function guardarConfigInstitucion(
     ci_ventana_fin: input.ci_ventana_fin,
     slot_duracion_min: input.slot_duracion_min,
     especialidades: input.especialidades.map((e) => e.trim()).filter(Boolean),
+    ventana_entrada_min: input.ventana_entrada_min,
+    vigencia_documentos_dias: input.vigencia_documentos_dias,
+    reenvio_cooldown_minutos: input.reenvio_cooldown_minutos,
+    reenvio_max_por_dia: input.reenvio_max_por_dia,
     mail_from: input.mail_from.trim(),
     wa_remitente_nombre: input.wa_remitente_nombre.trim() || null,
     telefono_ayuda: input.telefono_ayuda.trim() || null,

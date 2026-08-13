@@ -124,7 +124,10 @@ export async function avisarAsignacionTurno(
     const acceso = await crearAccesoLink({
       pacienteId: params.paciente.id,
       turnoId: params.turno.id,
-      destino: `/turno/${params.turno.id}/espera`,
+      // Etapa 3: el link aterriza en LA pantalla del paciente institucional
+      // (los seis estados del mock), no en la sala de espera del B2C — esa
+      // tiene barra de navegación y "Inicio", que acá no van.
+      destino: `/turno/${params.turno.id}/acceso`,
       operadorId: params.operadorId,
       canal: canalPaciente,
       enviadoA:

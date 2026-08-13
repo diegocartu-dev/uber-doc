@@ -39,6 +39,25 @@ export function esInstitucionalClient(): boolean {
 }
 
 /**
+ * ¿Se le puede crear la ficha de paciente a un usuario que acaba de confirmar
+ * su mail / volver de OAuth? (spec institucional §5.3)
+ *
+ * En B2C SÍ: ese auto-create ES el onboarding — alguien se registró y su fila
+ * de `pacientes` nace en el callback.
+ *
+ * En la instancia NO, nunca: el padrón es de ALTA PROVISIONADA (R17) y una
+ * sesión sin fila de paciente no es un usuario nuevo, es un error — un
+ * profesional, un operador, o un enlace apuntando a un alta a medias. Crearle
+ * una ficha en ese momento mete basura en el padrón de la provincia.
+ *
+ * Se lee como una pregunta y no como `!esInstitucional()` suelto para que el
+ * gate quede visible en los dos callbacks y testeable de un lado solo.
+ */
+export function permiteAutoCrearPaciente(): boolean {
+  return !esInstitucional();
+}
+
+/**
  * Guard para routes de API que NO existen en modo institucional (Capa B:
  * pagos / Mercado Pago).
  *

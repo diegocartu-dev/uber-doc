@@ -14,6 +14,11 @@ import { Track, DisconnectReason } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { formatNombreMedico } from "@/lib/utils/texto";
+// Detección de plataforma + instrucciones de permiso por plataforma. Vivían acá;
+// se movieron a @/lib/media/permisos SIN cambios para que la pantalla del
+// paciente institucional (prueba de cámara y micrófono) use las MISMAS
+// instrucciones y no una copia que se despegue.
+import { instruccionesPermiso } from "@/lib/media/permisos";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -187,44 +192,6 @@ function DictadoBanner({
       </span>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Detección de plataforma — los permisos de mic/cam fallan distinto en cada una
-// y las instrucciones para desbloquearlos son diferentes (iOS no tiene candadito,
-// la PWA de iOS no tiene barra de direcciones, etc.)
-// ---------------------------------------------------------------------------
-
-function esIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (
-    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    // iPadOS se reporta como Mac pero tiene touch
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
-}
-
-function esStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia?.("(display-mode: standalone)")?.matches ||
-    (navigator as { standalone?: boolean }).standalone === true
-  );
-}
-
-function instruccionesPermiso(dispositivo: "micrófono" | "cámara"): string {
-  const ios = esIOS();
-  const pwa = esStandalone();
-  if (ios && pwa) {
-    return `El permiso de ${dispositivo} está bloqueado para la app de Docto. Andá a Ajustes de tu iPhone, buscá «Docto» y activá Micrófono y Cámara. Si no aparece, abrí docto.com.ar desde Safari.`;
-  }
-  if (ios) {
-    return `El ${dispositivo} está bloqueado. En Safari, tocá «ᴀA» en la barra de direcciones → «Configuración del sitio web» → permití Micrófono y Cámara, y recargá la página.`;
-  }
-  if (pwa) {
-    return `El ${dispositivo} está bloqueado. Cerrá la app, abrí Chrome, entrá a docto.com.ar y habilitá el ${dispositivo} desde ahí.`;
-  }
-  return `El ${dispositivo} está bloqueado. Tocá el candadito al lado de la dirección y permití el acceso al ${dispositivo}.`;
 }
 
 // Hook para controles mic/cam — debe usarse dentro de LiveKitRoom
