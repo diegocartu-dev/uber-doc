@@ -151,6 +151,23 @@ que lo verifica contra las huellas del generador de `main`. Las leyendas A y B
 —firma electrónica art. 5 de la Ley 25.506 y marco regulatorio por tipo— no se
 tocaron ni una coma.
 
+**Lo que esta etapa NO entrega: el delta §3.3 de 03-spec.** La spec de diseño
+pide que la receta institucional lleve Diagnóstico → Prescripción →
+**Tratamiento indicado**, con el `Rp/` reducido a lo que dispensa la farmacia
+(droga, presentación, cantidad) y la posología, las pautas y el control en el
+bloque nuevo. El bloque está escrito en el generador y gateado por `branding`,
+pero **en producción no se puede llegar a él**: `documentos.tratamiento` lo
+escribe únicamente el candidato de tipo `certificado`
+(`completar-documentacion/route.ts` y `WorkspaceConsulta.tsx`), así que el de
+tipo `receta` viaja siempre con `tratamiento` en null.
+
+O sea que **en V1 la posología sigue viajando adentro del cuerpo del `Rp/`,
+igual que en el B2C**. Falta la captura separada en el workspace, que es la
+decisión pendiente de Diego de la tabla de más abajo (toca el canal clínico).
+El fixture del golden que ejercita el bloque está marcado como **escenario
+todavía-no-producible**: existe para que el código no se pudra, no como
+evidencia de que §3.3 esté cubierto.
+
 ### Etapa 6 — Nova
 
 La tab Nova del panel resuelve por conversación el caso que hoy se hace a mano:
@@ -224,7 +241,7 @@ semana está abierta, y nada de esta vista existe del lado del profesional.
 | **Gate biométrico** para profesionales institucionales | Onboarding ultraliviano vs. gate prendido en B2C |
 | **Dominio del remitente** (subdominio de Docto vs. dominio del cliente) | DNS de la provincia = fricción de contrato |
 | **`motivo_consulta`** en la CI asignada | Obligatorio en B2C; el otorgador no lo captura |
-| **Captura separada de "Tratamiento indicado"** en el workspace | Toca el canal clínico. V1 degrada al campo de indicaciones |
+| **Captura separada de "Tratamiento indicado"** en el workspace | Toca el canal clínico. **Sin esto, el delta §3.3 NO está entregado**: `documentos.tratamiento` solo lo escribe el certificado, así que el bloque de la receta institucional es inalcanzable en producción y la posología sigue viajando dentro del `Rp/` |
 | **Convivencia operador + paciente** (una operadora que además es paciente del padrón) | La precedencia de rol se come sus flujos de paciente |
 
 ### Técnico

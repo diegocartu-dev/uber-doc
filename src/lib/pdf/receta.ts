@@ -336,12 +336,22 @@ export async function generarRecetaPDF(
         // en las recetas del B2C cambiaría el papel de todos —el que ya está
         // impreso en farmacias— sin que nadie lo haya decidido.
         //
-        // ⚠ CAPTURA PENDIENTE (spec §7.4, decisión #12 de Diego): el workspace
-        // todavía no tiene un campo separado de tratamiento para recetas —
-        // tocarlo es tocar el canal clínico y necesita su OK. Hasta entonces
-        // este bloque sale solo si `doc.tratamiento` ya viene con contenido; el
-        // degradado aceptado para V1 es que las indicaciones sigan viajando en
-        // el cuerpo de la receta.
+        // ⚠ HOY ESTE BLOQUE ES INALCANZABLE EN PRODUCCIÓN, y por lo tanto el
+        // delta §3.3 NO está entregado en V1. `documentos.tratamiento` lo
+        // escribe únicamente el candidato de tipo `certificado`
+        // (src/app/api/consulta/[id]/completar-documentacion/route.ts y
+        // src/app/medico/consulta/[id]/workspace/WorkspaceConsulta.tsx): el
+        // candidato de tipo `receta` viaja siempre con `tratamiento` en null,
+        // así que la condición de abajo no puede ser verdadera.
+        //
+        // Falta la CAPTURA separada en el workspace (spec §7.4, decisión
+        // pendiente de Diego): tocarla es tocar el canal clínico y necesita su
+        // OK. Hasta entonces el degradado aceptado es que la posología siga
+        // viajando adentro del cuerpo del Rp/, igual que en el B2C.
+        //
+        // El código queda escrito —y con un fixture del golden que lo
+        // ejercita, marcado ahí como escenario todavía-no-producible— para que
+        // no se pudra mientras tanto.
         if (branding && esReceta && doc.tratamiento?.trim()) {
           pdf.moveDown(0.4);
           renderSectionLabel(pdf, "TRATAMIENTO INDICADO", accent);
