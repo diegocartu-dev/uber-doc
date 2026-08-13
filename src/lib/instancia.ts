@@ -129,6 +129,26 @@ export function rebotePaciente(fallbackB2C: string, destinoInstitucional: string
 }
 
 /**
+ * ¿La confirmación de pago de la CI tiene que rebotar a la pantalla propia?
+ *
+ * Devuelve el destino en la instancia y `null` en B2C ("seguí"). Es una función
+ * con nombre y no un `if (esInstitucional())` suelto adentro de la pantalla
+ * porque el golden test verifica LA DECISIÓN: un gate escrito al revés acá
+ * mandaría a TODO paciente del B2C que vuelve del pago a una ruta que en el
+ * B2C no existe, y ese es justo el modo de falla que el golden test existe para
+ * frenar — silencioso, en el B2C y sobre plata real.
+ *
+ * La pantalla del B2C tiene logo de Docto, copy de pagos y links a
+ * `/documentos` y `/mis-consultas`, que en la instancia dan 404. El paciente
+ * institucional tiene la suya (`/consulta/[id]/acceso`); los enlaces viejos que
+ * ya salieron por WhatsApp siguen apuntando a la vieja, así que el rebote se
+ * queda como puerta de atrás.
+ */
+export function destinoConfirmacionCI(consultaId: string): string | null {
+  return esInstitucional() ? `/consulta/${consultaId}/acceso` : null;
+}
+
+/**
  * ¿Hay plata que devolver? (spec institucional §6.3, gate #401)
  *
  * En B2C: sí, si hay un pago registrado — la rama de refund de siempre.
