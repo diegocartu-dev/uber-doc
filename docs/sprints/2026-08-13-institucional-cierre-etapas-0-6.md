@@ -279,6 +279,7 @@ Fuente: `renderFooter()` en `src/lib/pdf/receta.ts`.
 | **Plantillas de WhatsApp en Meta** | Camino crítico de la escena 2. Lead time real; se dispara antes que nada |
 | **Bucket `institucion-assets`** | Creado en la migración 018 y consumido por el PDF. El panel y el turnero siguen con el hueco reservado del mock |
 | **Micrófono de Nova** | El dictado que anda vive dentro del workspace del profesional; extraerlo es un trabajo aparte |
+| **La gestión manual no se PINTA en el turnero** | Ya queda auditada (fila `gestion_manual` en `asignaciones`, migración 020), pero ninguna pantalla la muestra: el call center la ve en la propuesta de Nova y después tiene que acordarse. Por eso el copy de cierre dejó de prometer una marca en el turnero |
 | **Reprogramación masiva fuera de la semana corriente** | La oferta de candidatos es de la semana AR corriente (heredado de `oferta.ts`): por eso el copy dice "sin lugar esta semana" |
 | **Aviso al profesional que pierde un turno** | Solo por mail: no hay plantilla aprobada por Meta para ese caso |
 | **"Reenviar aviso" del otorgador** | El token pelado no se guarda nunca. O se re-acuña o el operador dicta el link. Decisión pendiente |
@@ -302,7 +303,7 @@ aplicó desde este sprint: se aplican en la provisión.
 | 3 | 011 ciclo de vida del acceso · 012 reenvío · 013 cerrar sesiones |
 | 4 | 014 `encuentros_metering` · 015 `acuerdo_semanas` · 016 `descargas_hc` · 017 manual gana |
 | 5 | **018** bucket `institucion-assets` |
-| 6 | **019** backstops del metering (`TRUNCATE` + precio de filas manuales) |
+| 6 | **019** backstops del metering (`TRUNCATE` + precio de filas manuales) · **020** `gestion_manual` en `asignaciones` |
 
 ## Cómo se verificó esta etapa
 

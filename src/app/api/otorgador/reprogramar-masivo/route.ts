@@ -27,6 +27,7 @@ import { planReprogramacionMasiva, type ErrorPlan } from "@/lib/otorgador/reprog
 import {
   reprogramarTurnoInstitucional,
   marcarDiaSinAtencionDelProfesional,
+  registrarGestionManual,
 } from "@/lib/otorgador/reprogramar";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest) {
     items?: { turno_id?: string; turno_nuevo_id?: string }[];
     /** Cierre de la corrida: el día del profesional que no puede atender. */
     cerrar_dia?: { medico_id?: string; fecha?: string };
+    /** Los que quedan para el call center: sin candidato o desmarcados. */
+    gestion_manual?: { turno_id?: string; motivo?: string }[];
   };
   try {
     body = await req.json();
@@ -74,6 +77,33 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ ok: true, dry_run: true, plan: res.plan });
+  }
+
+  // ── FASE 2b: lo que queda para el call center ──────────────────────────────
+  // La fila naranja del mock es una feature, pero era una feature SOLO VISUAL:
+  // no disparaba ninguna escritura, así que cerrada la pestaña no quedaba
+  // rastro de que ese paciente hubiera quedado colgado. Ahora cada uno deja su
+  // fila en `asignaciones` con el motivo.
+  if (body.gestion_manual && body.gestion_manual.length > 0) {
+    if (body.gestion_manual.length > MAX_ITEMS) {
+      return NextResponse.json({ error: `Máximo ${MAX_ITEMS} turnos por pedido.` }, { status: 422 });
+    }
+    const registrados = [];
+    for (const g of body.gestion_manual) {
+      if (!g.turno_id) continue;
+      const res = await registrarGestionManual({
+        turnoId: g.turno_id,
+        operadorId: identidad.operador.id,
+        via: identidad.via,
+        motivo: g.motivo === "excluido_por_operador" ? "excluido_por_operador" : "sin_lugar",
+        detalle: body.motivo,
+      });
+      registrados.push({ turno_id: g.turno_id, ok: res.ok });
+    }
+    return NextResponse.json({
+      ok: registrados.every((r) => r.ok),
+      gestion_manual: registrados,
+    });
   }
 
   // ── FASE 3: cerrar el día del profesional que no puede atender ─────────────
