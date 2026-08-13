@@ -45,6 +45,34 @@ export type DocumentoPDF = {
   medico_firma_manuscrita_path?: string | null;
 };
 
+/**
+ * Marca blanca del documento institucional (spec institucional §7 + 03-spec §3).
+ *
+ * ── LA REGLA DE ESTE PARÁMETRO ───────────────────────────────────────────────
+ * SIN branding (`undefined`), el PDF del B2C sale BYTE A BYTE IDÉNTICO al de
+ * antes de la Etapa 5. No "parecido": idéntico, y hay un golden test que lo
+ * verifica con cuatro documentos sintéticos (`receta-golden.test.ts`). Por eso
+ * cada delta de acá abajo está escrito como `if (branding)` y no como un valor
+ * por defecto distinto: un default nuevo cambiaría el papel de todos.
+ *
+ * CON branding cambian la marca de arriba, el color de los acentos, la
+ * cobertura del paciente y el pie (que suma la Sección C del efector). Lo que
+ * NO cambia NUNCA: las Secciones A y B del pie —leyenda de firma electrónica y
+ * marco regulatorio—, el sello, el QR de verificación y los barcodes.
+ */
+export type BrandingPDF = {
+  /** "Ministerio de Salud" — arriba a la izquierda, junto al isologo. */
+  nombre: string;
+  /** "Provincia de ___" — segunda línea, más chica y gris. */
+  subnombre?: string | null;
+  /** Isologo ya descargado (120×40). Si no viaja, la marca sale en texto. */
+  isologoBuffer?: Buffer | null;
+  /** Color de los acentos del papel (`institucion_config.pdf_accent`). */
+  accent?: string | null;
+  /** Texto de la Sección C — efector tecnológico (`pdf_efector_texto`). */
+  efectorTexto: string;
+};
+
 export type FirmaDigitalPDF = {
   hash: string;
   algoritmo: string;
@@ -124,6 +152,20 @@ function generarNumeroReceta(id: string, createdAt: string): string {
   return `REC-${anio}-${code}`;
 }
 
+/**
+ * Color de acento efectivo del documento.
+ *
+ * El valor viene de la config de la institución, o sea de un campo de texto que
+ * alguien tipeó en un /admin. Un `#12345` o un `azul` haría que pdfkit tire al
+ * pintar y el documento —que es clínico y ya se le prometió al paciente— no
+ * saldría. Ante un color que no es un color, el papel sale con el azul de
+ * siempre: se pierde la marca, no el documento.
+ */
+export function accentDe(branding?: BrandingPDF | null): string {
+  const valor = (branding?.accent ?? "").trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(valor) ? valor : COLORS.accent;
+}
+
 async function generarBarcodePNG(texto: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer(
@@ -144,7 +186,11 @@ async function generarBarcodePNG(texto: string): Promise<Buffer> {
 
 // ─── Generador principal ─────────────────────────────────────────────────────
 
-export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
+export async function generarRecetaPDF(
+  doc: DocumentoPDF,
+  branding?: BrandingPDF | null
+): Promise<Buffer> {
+  const accent = accentDe(branding);
   return new Promise(async (resolve, reject) => {
     try {
       const pdf = new PDFDocument({
@@ -173,17 +219,17 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
       const esReceta = doc.tipo === "receta";
 
       // ─── HEADER ──────────────────────────────────────────────────────
-      renderHeader(pdf, titulo, doc.created_at);
+      renderHeader(pdf, titulo, doc.created_at, accent, branding);
 
       // ─── PROFESIONAL (Hallazgo 1) ───────────────────────────────────────
-      await renderProfesionalBox(pdf, doc);
+      await renderProfesionalBox(pdf, doc, accent);
 
       // ─── PACIENTE (Hallazgo 1) ───────────────────────────────────────
-      renderPacienteBox(pdf, doc);
+      renderPacienteBox(pdf, doc, accent, branding);
 
       // ─── DIAGNÓSTICO (Hallazgo 7, 9) ─────────────────────────────────
       pdf.moveDown(0.3);
-      renderSectionLabel(pdf, "DIAGNÓSTICO");
+      renderSectionLabel(pdf, "DIAGNÓSTICO", accent);
       pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
       pdf.text(doc.diagnostico, MARGIN.left, undefined, { width: CONTENT_WIDTH });
 
@@ -194,7 +240,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
       if (doc.tipo === "certificado") {
         // Certificado de reposo laboral (art. 210 LCT) — bloques estructurados.
         // El diagnóstico ya se renderizó arriba. Acá: tratamiento + días de reposo.
-        renderSectionLabel(pdf, "TRATAMIENTO INDICADO");
+        renderSectionLabel(pdf, "TRATAMIENTO INDICADO", accent);
         pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
         pdf.text(doc.tratamiento?.trim() || doc.contenido?.trim() || "—", MARGIN.left, undefined, {
           width: CONTENT_WIDTH,
@@ -202,7 +248,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
         });
 
         pdf.moveDown(0.4);
-        renderSectionLabel(pdf, "REPOSO LABORAL");
+        renderSectionLabel(pdf, "REPOSO LABORAL", accent);
         const dias = doc.dias_reposo ?? 0;
         // El reposo corto (≤ 3 días calendario) se expresa en horas (24/48/72 hs); el
         // largo en días. La unidad se deriva del conteo sin ambigüedad porque las horas
@@ -234,10 +280,10 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
           );
         }
       } else {
-        renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo);
+        renderSectionLabel(pdf, esReceta ? "PRESCRIPCIÓN" : titulo, accent);
         if (esReceta && doc.contenido.includes("Rp/")) {
           // Receta estructurada con formato IFA — tipografía diferenciada
-          renderRecetaEstructurada(pdf, doc.contenido);
+          renderRecetaEstructurada(pdf, doc.contenido, accent);
         } else {
           // Texto plano (indicaciones, orden, recetas legacy)
           pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
@@ -246,11 +292,42 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
             lineGap: 2,
           });
         }
+
+        // ─── TRATAMIENTO INDICADO — el tercer bloque clínico ─────────────
+        // Delta 03-spec §3.3 (Diego, 12/08): el documento institucional lleva
+        // Diagnóstico → Prescripción → Tratamiento indicado, y el Rp/ queda
+        // SOLO con lo que dispensa la farmacia (droga, presentación,
+        // cantidad); la posología, las pautas y el control salen acá.
+        //
+        // Va gateado por `branding` a propósito. En el B2C el mismo campo
+        // existe pero hoy solo lo escribe el certificado: renderizarlo también
+        // en las recetas del B2C cambiaría el papel de todos —el que ya está
+        // impreso en farmacias— sin que nadie lo haya decidido.
+        //
+        // ⚠ CAPTURA PENDIENTE (spec §7.4, decisión #12 de Diego): el workspace
+        // todavía no tiene un campo separado de tratamiento para recetas —
+        // tocarlo es tocar el canal clínico y necesita su OK. Hasta entonces
+        // este bloque sale solo si `doc.tratamiento` ya viene con contenido; el
+        // degradado aceptado para V1 es que las indicaciones sigan viajando en
+        // el cuerpo de la receta.
+        if (branding && esReceta && doc.tratamiento?.trim()) {
+          pdf.moveDown(0.4);
+          renderSectionLabel(pdf, "TRATAMIENTO INDICADO", accent);
+          pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
+          pdf.text(doc.tratamiento.trim(), MARGIN.left, undefined, {
+            width: CONTENT_WIDTH,
+            lineGap: 2,
+          });
+        }
       }
 
       // ─── Calcular posición del footer ─────────────────────────────────
       // No-recetas ahora llevan leyenda de firma + marco regulatorio por tipo.
-      const footerHeight = esReceta ? 125 : 95;
+      // Con branding, el pie suma la Sección C (efector tecnológico): ~13pt
+      // más de presupuesto. El umbral de salto de página cuelga de
+      // `footerTopY`, así que se recalcula solo — verificado con una receta de
+      // tres medicamentos, que sigue entrando en una página.
+      const footerHeight = (esReceta ? 125 : 95) + (branding ? 13 : 0);
       const footerTopY = PAGE_HEIGHT - MARGIN.bottom - footerHeight;
 
       // Si el contenido ya pasó de donde debería ir la firma, agregar página
@@ -263,11 +340,11 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
 
       // ─── SELLO FIRMA ELECTRÓNICA — solo si la receta está firmada ───
       if (doc.firma) {
-        await renderSelloFirma(pdf, doc.firma, footerTopY);
+        await renderSelloFirma(pdf, doc.firma, footerTopY, branding);
       }
 
       // ─── FOOTER (Hallazgo 4 + 11 — leyendas ReNaPDiS) ───────────────
-      renderFooter(pdf, doc, esReceta, footerTopY);
+      renderFooter(pdf, doc, esReceta, footerTopY, branding);
 
       // ─── BARCODE RECETA — a pie de página, centrado, abajo de todo ──
       if (esReceta) {
@@ -286,7 +363,7 @@ export async function generarRecetaPDF(doc: DocumentoPDF): Promise<Buffer> {
 
 // Renderizado estructurado de receta con formato IFA (AAIP/ReNaPDiS compatible)
 // Parsea bloques "Rp/ IFA_NAME" seguidos de líneas indentadas con detalles
-function renderRecetaEstructurada(pdf: PDFKit.PDFDocument, contenido: string) {
+function renderRecetaEstructurada(pdf: PDFKit.PDFDocument, contenido: string, accent: string) {
   const bloques = contenido.split(/\n\n+/);
   let medIndex = 0;
 
@@ -298,8 +375,8 @@ function renderRecetaEstructurada(pdf: PDFKit.PDFDocument, contenido: string) {
       medIndex++;
       const ifa = primeraLinea.replace(/^Rp\/\s*/, "").trim();
 
-      // Número + "Rp/" en azul accent
-      pdf.font("Inter-SemiBold").fontSize(10).fillColor(COLORS.accent);
+      // Número + "Rp/" en el color de acento del papel
+      pdf.font("Inter-SemiBold").fontSize(10).fillColor(accent);
       pdf.text(`${medIndex}. Rp/`, MARGIN.left, undefined, {
         width: CONTENT_WIDTH,
         continued: true,
@@ -332,36 +409,84 @@ function renderRecetaEstructurada(pdf: PDFKit.PDFDocument, contenido: string) {
   }
 }
 
-function renderHeader(pdf: PDFKit.PDFDocument, titulo: string, createdAt: string) {
+function renderHeader(
+  pdf: PDFKit.PDFDocument,
+  titulo: string,
+  createdAt: string,
+  accent: string,
+  branding?: BrandingPDF | null
+) {
   const fecha = formatFecha(createdAt);
   const hora = formatHora(createdAt);
 
-  pdf.font("Inter-SemiBold").fontSize(15).fillColor(COLORS.accent);
-  pdf.text(titulo, MARGIN.left, MARGIN.top, {
-    width: CONTENT_WIDTH,
-    align: "center",
-  });
+  if (branding) {
+    // ── Marca de la INSTITUCIÓN arriba (03-spec §3.1) ──────────────────────
+    // La línea "Docto — Telemedicina" NO se imprime acá: la marca de la
+    // plataforma se muda al pie (Sección C). En papel oficial de un ministerio,
+    // arriba va el ministerio.
+    const topY = MARGIN.top;
+    let textoX = MARGIN.left;
+    if (branding.isologoBuffer) {
+      try {
+        pdf.image(branding.isologoBuffer, MARGIN.left, topY, { fit: [120, 40] });
+        textoX = MARGIN.left + 132;
+      } catch {
+        // Isologo ilegible (formato raro, archivo cortado): la marca sale en
+        // texto. Un documento clínico no se cae por una imagen.
+      }
+    }
 
-  pdf.moveDown(0.2);
-  pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
-  pdf.text("Docto — Telemedicina", MARGIN.left, undefined, {
-    width: CONTENT_WIDTH,
-    align: "center",
-  });
+    pdf.font("Inter-SemiBold").fontSize(11).fillColor(COLORS.primary);
+    pdf.text(branding.nombre, textoX, topY + 6, {
+      width: PAGE_WIDTH - MARGIN.right - textoX,
+    });
+    if (branding.subnombre) {
+      pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
+      pdf.text(branding.subnombre, textoX, undefined, {
+        width: PAGE_WIDTH - MARGIN.right - textoX,
+      });
+    }
 
-  // Hallazgo 8 — Fecha con hora de emisión
-  pdf.moveDown(0.1);
-  pdf.text(`${fecha} — ${hora} hs`, MARGIN.left, undefined, {
-    width: CONTENT_WIDTH,
-    align: "center",
-  });
+    // El bloque de marca reserva el alto del isologo aunque el texto sea corto.
+    pdf.y = Math.max(pdf.y, topY + 40) + 10;
 
-  // Línea separadora azul
+    pdf.font("Inter-SemiBold").fontSize(15).fillColor(accent);
+    pdf.text(titulo, MARGIN.left, pdf.y, { width: CONTENT_WIDTH, align: "center" });
+
+    pdf.moveDown(0.1);
+    pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
+    pdf.text(`${fecha} — ${hora} hs`, MARGIN.left, undefined, {
+      width: CONTENT_WIDTH,
+      align: "center",
+    });
+  } else {
+    pdf.font("Inter-SemiBold").fontSize(15).fillColor(accent);
+    pdf.text(titulo, MARGIN.left, MARGIN.top, {
+      width: CONTENT_WIDTH,
+      align: "center",
+    });
+
+    pdf.moveDown(0.2);
+    pdf.font("Inter").fontSize(9).fillColor(COLORS.secondary);
+    pdf.text("Docto — Telemedicina", MARGIN.left, undefined, {
+      width: CONTENT_WIDTH,
+      align: "center",
+    });
+
+    // Hallazgo 8 — Fecha con hora de emisión
+    pdf.moveDown(0.1);
+    pdf.text(`${fecha} — ${hora} hs`, MARGIN.left, undefined, {
+      width: CONTENT_WIDTH,
+      align: "center",
+    });
+  }
+
+  // Línea separadora del color de acento
   const lineY = pdf.y + 8;
   pdf
     .moveTo(MARGIN.left, lineY)
     .lineTo(PAGE_WIDTH - MARGIN.right, lineY)
-    .strokeColor(COLORS.accent)
+    .strokeColor(accent)
     .lineWidth(1.5)
     .stroke();
 
@@ -369,7 +494,7 @@ function renderHeader(pdf: PDFKit.PDFDocument, titulo: string, createdAt: string
 }
 
 // Bloque PROFESIONAL — barcode matrícula + nombre + especialidad + domicilio
-async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
+async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, accent: string) {
   const boxX = MARGIN.left;
   const boxWidth = CONTENT_WIDTH;
   const padding = 10;
@@ -395,7 +520,7 @@ async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) 
 
   // Título
   let currentY = boxY + padding;
-  pdf.font("Inter-SemiBold").fontSize(8).fillColor(COLORS.accent);
+  pdf.font("Inter-SemiBold").fontSize(8).fillColor(accent);
   pdf.text("PROFESIONAL", boxX + padding, currentY, {
     width: boxWidth - padding * 2,
     characterSpacing: 1,
@@ -429,7 +554,12 @@ async function renderProfesionalBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) 
 }
 
 // Hallazgo 1 — Bloque PACIENTE en caja gris equivalente
-function renderPacienteBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
+function renderPacienteBox(
+  pdf: PDFKit.PDFDocument,
+  doc: DocumentoPDF,
+  accent: string,
+  branding?: BrandingPDF | null
+) {
   const rows: Array<{ left: string; right?: string }> = [];
 
   rows.push({ left: doc.paciente_nombre });
@@ -459,10 +589,12 @@ function renderPacienteBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
     rows.push({ left: `Plan: ${doc.paciente_plan_obra_social ?? ""}` });
     rows.push({ left: `Nº Afiliado: ${doc.paciente_nro_afiliado ?? ""}` });
   } else {
-    rows.push({ left: "Cobertura: Particular" });
+    // Único delta de CONTENIDO de esta caja (03-spec §3.4): el paciente
+    // institucional no es "Particular" — lo cubre la institución que lo mandó.
+    rows.push({ left: `Cobertura: ${branding ? branding.nombre : "Particular"}` });
   }
 
-  renderInfoBoxTwoCol(pdf, "PACIENTE", rows);
+  renderInfoBoxTwoCol(pdf, "PACIENTE", rows, accent);
 }
 
 // ─── Box rendering helpers ────────────────────────────────────────────────────
@@ -470,7 +602,8 @@ function renderPacienteBox(pdf: PDFKit.PDFDocument, doc: DocumentoPDF) {
 function renderInfoBoxTwoCol(
   pdf: PDFKit.PDFDocument,
   title: string,
-  rows: Array<{ left: string; right?: string }>
+  rows: Array<{ left: string; right?: string }>,
+  accent: string
 ) {
   const boxX = MARGIN.left;
   const boxWidth = CONTENT_WIDTH;
@@ -488,7 +621,7 @@ function renderInfoBoxTwoCol(
 
   // Título de bloque
   let currentY = boxY + padding;
-  pdf.font("Inter-SemiBold").fontSize(8).fillColor(COLORS.accent);
+  pdf.font("Inter-SemiBold").fontSize(8).fillColor(accent);
   pdf.text(title, boxX + padding, currentY, {
     width: boxWidth - padding * 2,
     characterSpacing: 1,
@@ -521,8 +654,8 @@ function renderInfoBoxTwoCol(
 }
 
 // Hallazgo 7, 9 — Label de sección con tilde y estilo consistente
-function renderSectionLabel(pdf: PDFKit.PDFDocument, label: string) {
-  pdf.font("Inter-SemiBold").fontSize(9).fillColor(COLORS.accent);
+function renderSectionLabel(pdf: PDFKit.PDFDocument, label: string, accent: string) {
+  pdf.font("Inter-SemiBold").fontSize(9).fillColor(accent);
   pdf.text(label, MARGIN.left, undefined, {
     width: CONTENT_WIDTH,
     characterSpacing: 1,
@@ -651,7 +784,8 @@ async function generarQRCodePNG(url: string): Promise<Buffer> {
 async function renderSelloFirma(
   pdf: PDFKit.PDFDocument,
   firma: FirmaDigitalPDF,
-  footerTopY: number
+  footerTopY: number,
+  branding?: BrandingPDF | null
 ) {
   const qrSize = 55;
   const selloWidth = qrSize + 16; // QR + padding
@@ -686,7 +820,10 @@ async function renderSelloFirma(
       selloY + 10,
       { width: 180 }
     );
-    pdf.font("Inter").fontSize(6).fillColor(COLORS.accent);
+    // El fallback del sello sale GRIS en el documento institucional: la URL de
+    // verificación es un dato de verificación, no la marca de la institución, y
+    // pintarla con el color del ministerio la haría leer como tal.
+    pdf.font("Inter").fontSize(6).fillColor(branding ? COLORS.secondary : COLORS.accent);
     pdf.text(
       `${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
       selloX + 8,
@@ -729,7 +866,8 @@ function renderFooter(
   pdf: PDFKit.PDFDocument,
   doc: DocumentoPDF,
   esReceta: boolean,
-  footerTopY: number
+  footerTopY: number,
+  branding?: BrandingPDF | null
 ) {
   let y = footerTopY;
 
@@ -844,4 +982,34 @@ function renderFooter(
     MARGIN.left, y,
     { width: CONTENT_WIDTH, align: "center" }
   );
+
+  // ─── Sección C — EFECTOR TECNOLÓGICO (solo documento institucional) ───
+  // Acá abajo vive la marca de Docto en el papel de la institución: arriba está
+  // el ministerio, y quien emitió técnicamente el documento se declara al pie.
+  // Sin logo — texto solo: es más defendible y no compite con el isologo
+  // institucional (03-spec §3.2).
+  //
+  // ⚠ TEXTO PROVISORIO. La redacción final de la identificación del efector la
+  // define Diego con el abogado, junto al DPA (spec §11, decisión pendiente 2).
+  // Lo que se imprime sale de `institucion_config.pdf_efector_texto`: el día que
+  // el abogado entregue el copy definitivo, se cambia el config y NO el código.
+  //
+  // Las Secciones A y B de arriba NO se tocan ni una coma: son las leyendas
+  // dictaminadas (firma electrónica art. 5 Ley 25.506 y marco regulatorio por
+  // tipo de documento).
+  if (branding && branding.efectorTexto.trim()) {
+    y = pdf.y + 4;
+    pdf
+      .moveTo(MARGIN.left, y)
+      .lineTo(PAGE_WIDTH - MARGIN.right, y)
+      .strokeColor(COLORS.border)
+      .lineWidth(0.5)
+      .stroke();
+    y += 5;
+    pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
+    pdf.text(branding.efectorTexto.trim(), MARGIN.left, y, {
+      width: CONTENT_WIDTH,
+      align: "center",
+    });
+  }
 }

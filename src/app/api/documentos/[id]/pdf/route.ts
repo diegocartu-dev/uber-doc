@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import { armarDocumentoParaPDF } from "@/lib/pdf/documento-desde-db";
+import { brandingParaPDF } from "@/lib/institucional/branding-pdf";
 
 /**
  * El PDF de un documento clínico, para su paciente o para el profesional que
@@ -40,7 +41,9 @@ export async function GET(
   }
 
   try {
-    const pdfBuffer = await generarRecetaPDF(armado.documento);
+    // Marca blanca del documento (spec §7). En B2C devuelve `undefined` sin
+    // tocar nada y el papel sale idéntico al de siempre.
+    const pdfBuffer = await generarRecetaPDF(armado.documento, await brandingParaPDF());
 
     return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,
