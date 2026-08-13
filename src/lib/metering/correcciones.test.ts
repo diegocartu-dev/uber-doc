@@ -311,6 +311,35 @@ test("021 · ni el superadmin puede mudar la consulta de mes", () => {
   assert.match(SQL_021, /NEW\.facturado_periodo IS DISTINCT FROM OLD\.facturado_periodo/);
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LA CUARTA PUERTA: EL INSERT
+// ─────────────────────────────────────────────────────────────────────────────
+// La 014 y la 021 blindan la fila sellada contra UPDATE y DELETE. Faltaba el
+// INSERT: una fila que NACE con `facturado_periodo` le agrega una línea a una
+// factura emitida y ningún trigger se entera, porque sobre una fila que todavía
+// no existe no hay nada que proteger.
+
+const SQL_022 = readFileSync(
+  join(process.cwd(), "supabase/migrations-institucional/022_metering_insert_sin_sello.sql"),
+  "utf8"
+);
+
+test("022 · una fila del contador NACE sin sello", () => {
+  assert.match(SQL_022, /BEFORE INSERT ON encuentros_metering/);
+  assert.match(SQL_022, /IF NEW\.facturado_periodo IS NOT NULL THEN/);
+  assert.match(SQL_022, /RAISE EXCEPTION/);
+});
+
+test("022 · es reentrante: volver a aplicarla no rompe nada", () => {
+  // Una migración que no se puede repetir se aplica a medias cuando el SQL
+  // Editor corta a la mitad, y el segundo intento falla por lo que YA estaba.
+  assert.match(SQL_022, /CREATE OR REPLACE FUNCTION encuentros_metering_nace_sin_sello/);
+  assert.match(
+    SQL_022,
+    /DROP TRIGGER IF EXISTS trg_encuentros_metering_insert_sellado ON encuentros_metering/
+  );
+});
+
 test("etiqueta del período · se lee como un mes, no como un código", () => {
   assert.equal(etiquetaPeriodo("2026-10"), "Octubre de 2026");
 });
