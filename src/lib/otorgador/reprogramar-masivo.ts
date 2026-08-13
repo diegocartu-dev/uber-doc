@@ -181,11 +181,28 @@ export async function planReprogramacionMasiva(params: {
     prioridad: number;
   }
   const libres: SlotLibre[] = [];
+  /**
+   * Cuántos turnos MÁS puede recibir cada profesional esta semana (R6).
+   *
+   * El filtro por `seleccionable` es una foto PREVIA y se evalúa una sola vez:
+   * sin este cupo, el plan repartía N turnos sobre el mismo profesional aunque
+   * le quedara lugar para uno. El guard server-side de `reprogramar.ts` lo
+   * frenaría de a uno, pero el operador vería una propuesta prolija que después
+   * falla a la mitad de la corrida — y con los avisos ya enviados a los
+   * primeros.
+   */
+  const cupoRestante = new Map<string, number>();
   oferta.oferta.profesionales.forEach((p, prioridad) => {
     // Al profesional que no puede atender no se le devuelven sus propios
     // pacientes, y a quien ya completó su acuerdo no se le carga uno más (R6:
     // `seleccionable: false` es un guard, no un color de la pantalla).
     if (p.medico_id === medicoId || !p.seleccionable) return;
+    // `acuerdo: 0` = sin acuerdo cargado; ahí R6 no aplica (mismo criterio que
+    // `acuerdoSemanalDelMedico`, que exige `y > 0` para dar por completo).
+    cupoRestante.set(
+      p.medico_id,
+      p.acuerdo > 0 ? Math.max(0, p.acuerdo - p.asignados) : Number.POSITIVE_INFINITY
+    );
     for (const dia of p.slots_semana) {
       for (const h of dia.horas) {
         libres.push({
@@ -212,13 +229,19 @@ export async function planReprogramacionMasiva(params: {
 
   // ── 4) El reparto ──────────────────────────────────────────────────────────
   const tomados = new Set<string>();
+  /** El slot sirve si nadie lo tomó en ESTE plan y a su dueño le queda cupo. */
+  const disponible = (s: SlotLibre) =>
+    !tomados.has(s.turno_id) && (cupoRestante.get(s.medico_id) ?? 0) > 0;
   const items: ItemPlan[] = turnos.map((t) => {
     const hora = ((t.hora_inicio as string | null) ?? "").slice(0, 5);
     const elegido =
-      libres.find((s) => !tomados.has(s.turno_id) && s.fecha === fecha) ??
-      libres.find((s) => !tomados.has(s.turno_id)) ??
+      libres.find((s) => disponible(s) && s.fecha === fecha) ??
+      libres.find((s) => disponible(s)) ??
       null;
-    if (elegido) tomados.add(elegido.turno_id);
+    if (elegido) {
+      tomados.add(elegido.turno_id);
+      cupoRestante.set(elegido.medico_id, (cupoRestante.get(elegido.medico_id) ?? 1) - 1);
+    }
     return {
       turno_id: t.id as string,
       paciente: {

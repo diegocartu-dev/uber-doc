@@ -13,6 +13,7 @@ import {
   priorizarOferta,
   cupoSemanal,
   dentroVentanaCI,
+  deltaDeAsignacion,
   type MedicoParaPriorizar,
 } from "./oferta";
 
@@ -137,4 +138,41 @@ test("dentroVentanaCI: bordes de la ventana en hora AR", () => {
   assert.equal(dentroVentanaCI(config, new Date("2026-10-19T22:59:00Z")), true);
   assert.equal(dentroVentanaCI(config, new Date("2026-10-19T23:00:00Z")), false);
   assert.equal(dentroVentanaCI(config, new Date("2026-10-19T10:59:00Z")), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL CONTADOR DE EQUIDAD — qué mueve cada fila de `asignaciones`
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("una reprogramación SUMA al que recibe: la fila registra a quien se queda con el paciente", () => {
+  // `reprogramada` valía 0. Consecuencia exacta el día que se reprograma la
+  // agenda de un profesional: los que RECIBÍAN sus pacientes no movían su
+  // contador, así que seguían primeros en la fila de equidad (asignados ASC) y
+  // se les seguía apilando trabajo; y el que no atendió a nadie conservaba sus
+  // asignaciones y bajaba de prioridad. La equidad invertida justo el día que
+  // más se la necesita, y el "X de Y" del turnero mintiendo.
+  assert.equal(deltaDeAsignacion("asignada"), 1);
+  assert.equal(deltaDeAsignacion("reprogramada"), 1);
+  assert.equal(deltaDeAsignacion("cancelada"), -1);
+});
+
+test("las acciones que no reparten pacientes no mueven el contador", () => {
+  assert.equal(deltaDeAsignacion("reenvio_aviso"), 0);
+  assert.equal(deltaDeAsignacion("gestion_manual"), 0);
+  assert.equal(deltaDeAsignacion("una_accion_que_no_existe"), 0);
+});
+
+test("mover a un paciente entre dos horarios del MISMO profesional no lo cuenta dos veces", () => {
+  // `reprogramarTurnoInstitucional` escribe SIEMPRE el par: `reprogramada` para
+  // el que recibe y `cancelada` para el que pierde, aunque sean el mismo. Neto
+  // 0 — sigue siendo un paciente, no dos.
+  const neto = deltaDeAsignacion("reprogramada") + deltaDeAsignacion("cancelada");
+  assert.equal(neto, 0);
+});
+
+test("mover a un paciente ENTRE profesionales le suma a uno y le resta al otro", () => {
+  const recibe = deltaDeAsignacion("asignada") + deltaDeAsignacion("reprogramada");
+  const pierde = deltaDeAsignacion("asignada") + deltaDeAsignacion("cancelada");
+  assert.equal(recibe, 2, "el que recibe pasa a tener dos pacientes");
+  assert.equal(pierde, 0, "el que pierde vuelve a cero y sube en la fila de equidad");
 });
