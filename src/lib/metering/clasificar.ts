@@ -372,6 +372,8 @@ export interface FilaMetering {
 export interface EncuentroCandidato {
   tipo: "consulta" | "turno";
   id: string;
+  /** Encuentro de una reunión de DEMOSTRACIÓN (migración 025): no se factura. */
+  es_demo?: boolean;
   estado: string;
   canal_origen: string | null;
   medico_id: string;
@@ -382,12 +384,28 @@ export interface EncuentroCandidato {
   cierreISO: string | null;
 }
 
+/**
+ * Saca de la cola los encuentros de una reunión de DEMOSTRACIÓN.
+ *
+ * Pura y exportada para poder probarla: es una línea, pero es la línea que
+ * separa "consulta que la provincia pagó" de "consulta que ocurrió en una sala
+ * de reuniones". Un `!` de menos acá le factura a un ministerio una atención
+ * que nadie le pidió.
+ *
+ * Fail-safe hacia el lado caro: solo pasa lo que la base afirma que NO es demo.
+ */
+export function sinEncuentrosDemo<T extends { es_demo?: boolean }>(candidatos: T[]): T[] {
+  return candidatos.filter((c) => c.es_demo !== true);
+}
+
 export interface ResumenMetering {
   candidatos: number;
   clasificados: number;
   salteados_sellados: number;
   salteados_manual: number;
   salteados_recientes: number;
+  /** Encuentros de una reunión de demostración: nunca entran a la factura. */
+  salteados_demo: number;
   sin_motor: number;
   /** Encuentros que no entraron en esta corrida (los toma la siguiente). */
   pendientes: number;
@@ -407,6 +425,7 @@ const resumenVacio = (): ResumenMetering => ({
   salteados_sellados: 0,
   salteados_manual: 0,
   salteados_recientes: 0,
+  salteados_demo: 0,
   sin_motor: 0,
   pendientes: 0,
   pendientes_sin_fila: 0,
@@ -567,7 +586,7 @@ export async function correrMeteringClasificar(opciones?: {
         admin
           .from("turnos")
           .select(
-            "id, estado, canal_origen, medico_id, paciente_id, fecha, hora_inicio, completada_at, hora_fin"
+            "id, estado, canal_origen, medico_id, paciente_id, fecha, hora_inicio, completada_at, hora_fin, es_demo"
           )
           .in("estado", ESTADOS_TERMINALES_TURNO as unknown as string[])
           .gte("fecha", desdeFecha)
@@ -579,7 +598,7 @@ export async function correrMeteringClasificar(opciones?: {
       leerTodo<Record<string, unknown>>("consultas terminales de la ventana", (desde, hasta) =>
         admin
           .from("consultas")
-          .select("id, estado, canal_origen, medico_id, paciente_id, created_at, asignada_at, completada_at")
+          .select("id, estado, canal_origen, medico_id, paciente_id, created_at, asignada_at, completada_at, es_demo")
           .in("estado", ESTADOS_TERMINALES_CONSULTA as unknown as string[])
           .gte("created_at", desdeISO)
           .order("created_at", { ascending: true })
@@ -597,6 +616,7 @@ export async function correrMeteringClasificar(opciones?: {
     ...turnos.map((t) => ({
       tipo: "turno" as const,
       id: t.id as string,
+      es_demo: t.es_demo === true,
       estado: t.estado as string,
       canal_origen: t.canal_origen as string | null,
       medico_id: t.medico_id as string,
@@ -609,6 +629,7 @@ export async function correrMeteringClasificar(opciones?: {
     ...consultas.map((c) => ({
       tipo: "consulta" as const,
       id: c.id as string,
+      es_demo: c.es_demo === true,
       estado: c.estado as string,
       canal_origen: c.canal_origen as string | null,
       medico_id: c.medico_id as string,
@@ -618,6 +639,22 @@ export async function correrMeteringClasificar(opciones?: {
       cierreISO: (c.completada_at as string | null) ?? null,
     })),
   ];
+  // ── LO QUE PASÓ EN UNA DEMO NO SE FACTURA ─────────────────────────────────
+  // Un encuentro de una reunión de venta es una atención de verdad —hubo
+  // videollamada, hubo receta— pero no es servicio prestado a la institución:
+  // el "paciente" era un participante de la reunión. Si entrara al contador,
+  // la provincia recibiría una factura con consultas que nunca le pidió, y el
+  // panel le mostraría ausentismo y cumplimiento de un profesional que no
+  // existe.
+  //
+  // La marca la pone un trigger en la base (migración 025), así que no depende
+  // de que ningún caller se acuerde. Acá solo se descarta, y se cuenta cuántos:
+  // un salto raro en ese número es la señal de que quedó una demo sin limpiar.
+  const sinDemo = sinEncuentrosDemo(candidatos);
+  resumen.salteados_demo = candidatos.length - sinDemo.length;
+  candidatos.length = 0;
+  candidatos.push(...sinDemo);
+
   resumen.candidatos = candidatos.length;
   if (candidatos.length === 0) return resumen;
 

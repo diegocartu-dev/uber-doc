@@ -307,6 +307,31 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   const pacienteIds = filas.map((p) => p.paciente_id as string | null).filter((x): x is string => !!x);
   const userIds = filas.map((p) => p.user_id as string | null).filter((x): x is string => !!x);
 
+  // ⚠ NO ALCANZA CON LOS PARTICIPANTES. El escenario precargado crea pacientes
+  // de utilería (los que rellenan la agenda para que no se vea vacía) que NO
+  // tienen fila en `demo_participantes` — nadie los invitó. Si la limpieza
+  // mirara solo la lista de invitados, esos se quedarían para siempre en el
+  // padrón de la provincia, indistinguibles de un vecino real.
+  //
+  // La fuente de verdad de "esto es de esta reunión" es `demo_sesion_id`, así
+  // que se pregunta también por ahí y se unen los dos conjuntos.
+  {
+    const [{ data: medicosSesion }, { data: pacientesSesion }] = await Promise.all([
+      admin.from("medicos").select("id, user_id").eq("demo_sesion_id", sesionId),
+      admin.from("pacientes").select("id, user_id").eq("demo_sesion_id", sesionId),
+    ]);
+    for (const m of medicosSesion ?? []) {
+      if (!medicoIds.includes(m.id as string)) medicoIds.push(m.id as string);
+      const u = m.user_id as string | null;
+      if (u && !userIds.includes(u)) userIds.push(u);
+    }
+    for (const pa of pacientesSesion ?? []) {
+      if (!pacienteIds.includes(pa.id as string)) pacienteIds.push(pa.id as string);
+      const u = pa.user_id as string | null;
+      if (u && !userIds.includes(u)) userIds.push(u);
+    }
+  }
+
   // 0. Apagar los enlaces y echar las sesiones abiertas ANTES de borrar nada:
   //    si alguien está adentro con su teléfono, que quede afuera primero.
   for (const medicoId of medicoIds) await revocarAccesosDeSujeto({ medicoId });

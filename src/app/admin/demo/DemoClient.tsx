@@ -22,6 +22,7 @@ import {
   mostrarQR,
   enviarPorWhatsApp,
   limpiarReunion,
+  prepararEscenarioDemo,
   type EnlaceListo,
 } from "./actions";
 import type { ParticipanteDemo, SesionDemo } from "@/lib/institucional/demo";
@@ -174,6 +175,22 @@ export default function DemoClient({
     });
   }
 
+  function prepararAgenda(medicoId: string) {
+    if (!sesionElegida) return;
+    limpiarMensajes();
+    startTransition(async () => {
+      const res = await prepararEscenarioDemo({ sesionId: sesionElegida.id, medicoId });
+      if (!res.ok) {
+        setError(res.error ?? "No se pudo dejar la agenda lista.");
+        setProblemas(res.notas ?? []);
+      } else {
+        setAviso(`Agenda lista: ${res.resumen}`);
+        setProblemas(res.notas ?? []);
+      }
+      router.refresh();
+    });
+  }
+
   function verQR(participanteId: string) {
     limpiarMensajes();
     startTransition(async () => {
@@ -293,6 +310,13 @@ export default function DemoClient({
       {aviso && (
         <div style={{ ...card, padding: 16, marginBottom: 20, borderColor: VERDE, background: "#E8F5F0" }}>
           <p style={{ margin: 0, fontSize: 14, color: "#12684C" }}>{aviso}</p>
+          {problemas.length > 0 && (
+            <ul style={{ margin: "8px 0 0 18px", fontSize: 13, color: "#12684C" }}>
+              {problemas.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -515,6 +539,17 @@ export default function DemoClient({
                   </span>
                   <span style={{ color: estado.color, width: 100 }}>{estado.texto}</span>
                   <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    {p.rol === "profesional" && p.medico_id && (
+                      <button
+                        type="button"
+                        style={btnSec}
+                        disabled={pendiente}
+                        title="Turnos del 20 al 30 de agosto, una franja de hoy para el call center, y algunos horarios ya ocupados"
+                        onClick={() => prepararAgenda(p.medico_id as string)}
+                      >
+                        Preparar agenda
+                      </button>
+                    )}
                     <button type="button" style={btnSec} disabled={pendiente} onClick={() => verQR(p.id)}>
                       Ver QR
                     </button>

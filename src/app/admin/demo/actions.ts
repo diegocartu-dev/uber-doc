@@ -24,6 +24,7 @@ import {
   regenerarEnlace,
   limpiarSesionDemo,
 } from "@/lib/institucional/demo-invitacion";
+import { prepararEscenario, rangoEscenarioPorDefecto } from "@/lib/institucional/demo-escenario";
 
 async function guardAdminInstitucionalDocto(): Promise<string | null> {
   if (!esInstitucional()) return null; // en B2C estas actions no existen
@@ -212,4 +213,44 @@ export async function limpiarReunion(
     };
   }
   return { ok: true, participantes: res.participantes };
+}
+
+// ─── El escenario ────────────────────────────────────────────────────────────
+
+/**
+ * Deja la agenda del profesional lista para el guion: turnos acordados del 20
+ * al 30 de agosto, una franja de HOY para que el call center pueda asignar
+ * "para ahora", y unos pocos pacientes de utilería sentados para que la grilla
+ * no se proyecte vacía.
+ *
+ * Se corre después de invitarlo y antes de que empiece la reunión. Volver a
+ * correrlo no duplica nada.
+ */
+export async function prepararEscenarioDemo(input: {
+  sesionId: string;
+  medicoId: string;
+  desde?: string;
+  hasta?: string;
+}): Promise<{ ok: boolean; error?: string; resumen?: string; notas?: string[] }> {
+  const uid = await guardAdminInstitucionalDocto();
+  if (!uid) return { ok: false, error: "No autorizado" };
+
+  const res = await prepararEscenario({
+    medicoId: input.medicoId,
+    sesionId: input.sesionId,
+    desde: input.desde,
+    hasta: input.hasta,
+  });
+
+  revalidatePath("/admin/demo");
+  const resumen = `${res.turnosCreados} turnos creados · ${res.turnosOcupados} ya ocupados por pacientes de utilería.`;
+  if (!res.ok) {
+    return { ok: false, error: "No se pudo dejar la agenda lista.", notas: res.notas };
+  }
+  return { ok: true, resumen, notas: res.notas };
+}
+
+/** El rango que la pantalla muestra por defecto (el del guion, sin fechas viejas). */
+export async function rangoSugerido(): Promise<{ desde: string; hasta: string }> {
+  return rangoEscenarioPorDefecto();
 }

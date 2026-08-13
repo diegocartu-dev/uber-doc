@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
+import { esInstitucional } from "@/lib/instancia";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { waitUntil } from "@vercel/functions";
 import {
@@ -20,7 +21,16 @@ function fechaLegible(fechaISO: string): string {
 
 // Descripción legible para la confirmación de crear_disponibilidad (rango + recurrencia).
 function describirCrearDisponibilidad(t: Record<string, unknown>): string {
-  const canal = t.canal_origen === "clinica_virtual" ? "Clínica Virtual" : "Consultorio Particular";
+  // En la instancia institucional los dos canales del B2C se mapean a UN motor:
+  // "turno ofrecido" — el horario que publica el profesional (spec §4.7,
+  // `crearAgendaModelo`). Nombrar acá "Clínica Virtual" sería mostrarle al
+  // profesional, en la confirmación que va a tocar, un canal que en su
+  // institución no existe. En B2C nada cambia.
+  const canal = esInstitucional()
+    ? "Turno ofrecido"
+    : t.canal_origen === "clinica_virtual"
+      ? "Clínica Virtual"
+      : "Consultorio Particular";
   const precioTxt = typeof t.precio === "number" && t.precio > 0 ? ` a $${(t.precio as number).toLocaleString("es-AR")}` : "";
   const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min${precioTxt}`;
   const desde = t.fecha_desde as string;

@@ -72,6 +72,10 @@ de demo se podría emitir — con el fallo apareciendo recién en la reunión.
    levantarle una agenda y comprobar con service role que sus `turnos` tienen
    `es_demo = true`. Si salen en `false`, el trigger no quedó y la factura de la
    institución va a contar la demo.
+3. **Que Nova pueda armar la agenda.** El modo demo apoya una escena del guion
+   en Nova (`crear_disponibilidad`), y Nova depende del flag `nova_ai` de
+   `feature_flags` y de `ANTHROPIC_API_KEY` en el deploy de la instancia. Las
+   dos cosas se verifican ANTES de la reunión, no durante.
 
 ## Checklist post-aplicación: verificar los REVOKE de verdad
 

@@ -31,6 +31,7 @@ import {
   ESPERA_DEMO,
 } from "@/lib/institucional/demo";
 import { provisionarProfesionalDemo, matriculaDemo } from "@/lib/institucional/demo-profesional";
+import { sinEncuentrosDemo } from "@/lib/metering/clasificar";
 
 const DOC = "00000000-0000-0000-0000-0000000000e5";
 const PACIENTE = "00000000-0000-0000-0000-0000000000a1";
@@ -132,4 +133,27 @@ test("la matrícula de una cuenta de demo no puede confundirse con una real", ()
   const m = matriculaDemo("a1b2c3d4");
   assert.match(m, /^DEMO-/);
   assert.equal(/^\d+$/.test(m), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL CONTADOR CONTRACTUAL — lo que pasó en una demo no se factura
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("los encuentros de una reunión no entran a la factura de la institución", () => {
+  // Una consulta de demo es una atención de verdad —hubo videollamada, hubo
+  // receta— pero el "paciente" era un participante de la reunión. Si entrara al
+  // contador, la provincia recibiría una factura con consultas que nunca pidió.
+  const cola = [
+    { id: "real-1", es_demo: false },
+    { id: "de-la-reunion", es_demo: true },
+    { id: "real-2" }, // sin la columna: encuentro viejo, anterior a la migración
+  ];
+  const quedan = sinEncuentrosDemo(cola).map((c) => c.id);
+  assert.deepEqual(quedan, ["real-1", "real-2"]);
+});
+
+test("un encuentro sin marca se factura: la marca es la excepción, no la regla", () => {
+  // Al revés sería peor de los dos lados posibles: dejaría de facturarse
+  // servicio realmente prestado y nadie se enteraría hasta el cierre del mes.
+  assert.deepEqual(sinEncuentrosDemo([{ es_demo: undefined }]).length, 1);
 });
