@@ -7,6 +7,7 @@ import {
   facturacionDePeriodo,
   periodoDeHoy,
   periodoValido,
+  sellarPeriodo,
 } from "@/lib/metering/facturacion";
 
 /**
@@ -17,10 +18,16 @@ import {
  * con lo que la pantalla tenía paginado, y una factura que dependa del scroll
  * del que la descargó no es una factura.
  *
- * Lo que este export NO hace: sellar. El sello (`facturado_periodo`, que
- * congela las filas) lo pone el export corrido desde el /admin interno de
- * Docto — el día que la factura se emite de verdad. La institución puede mirar
- * su detalle cuantas veces quiera sin congelar nada.
+ * ── EL SELLO ─────────────────────────────────────────────────────────────────
+ * Bajar el detalle de un mes YA TERMINADO sella sus filas
+ * (`facturado_periodo`): a partir de ahí son inmutables por el trigger de la
+ * 014 y ni el job ni un backfill pueden moverlas. Es el papel con el que se
+ * arma la factura; una vez que salió, la fila que lo sostiene no se toca más.
+ *
+ * El mes EN CURSO no se sella: la institución mira su parcial cuantas veces
+ * quiera y el contador sigue trabajando sobre él. Y sellar no cierra el
+ * período — un encuentro que aparezca tarde se inserta igual: esconder una
+ * atención que ocurrió sería peor que sumarla tarde.
  *
  * SOLO instancia institucional: en B2C es 404.
  */
@@ -47,6 +54,15 @@ export async function GET(req: NextRequest) {
   try {
     const facturacion = await facturacionDePeriodo(pedido, { detalle: true });
     csv = facturacionACSV(facturacion);
+    // El sello va ANTES de servir el archivo, igual que la auditoría de las
+    // descargas de historia clínica: si no se pudo congelar lo que este CSV
+    // afirma, no se entrega el CSV.
+    if (pedido < periodoDeHoy()) {
+      const selladas = await sellarPeriodo(pedido);
+      if (selladas > 0) {
+        console.log(`[panel/facturacion] Período ${pedido} sellado: ${selladas} filas.`);
+      }
+    }
   } catch (err) {
     console.error("[panel/facturacion] No se pudo armar el CSV de", pedido, err);
     return NextResponse.json(
