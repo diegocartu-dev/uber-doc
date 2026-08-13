@@ -1,0 +1,222 @@
+/* /panel — CSS CALCADO del mock aprobado (docto-institucional/mocks/
+   04-panel-admin.html — diseño de Sofía). Los tokens y las clases son LOS del
+   mock: es la referencia visual exacta.
+   --inst-* llega del <style> que inyecta InstitucionTheme (marca blanca).
+
+   Regla del design system que acá se respeta al pie: --inst-* es IDENTIDAD
+   (franja, avatar); el azul #378ADD es la ACCIÓN (tabs activas, botones,
+   barras de la serie principal); el verde y el amarillo son ESTADO y viven
+   solo en los badges. El rojo directamente no existe en esta pantalla: el
+   panel informa, no escracha. */
+
+.pnl {
+  --accion: #378add;
+  --accion-dark: #2d75c4;
+  --accion-soft: #ebf3fc;
+  --estado-verde: #1d9e75;
+  --verde-soft: #e8f5f0;
+  --ama: #ba7517;
+  --ama-soft: #fef6e8;
+  --serie-indigo: #6b8de3;
+  --serie-celeste: #a8cbf0;
+  --t1: #111827;
+  --t2: #4b5563;
+  --t3: #9ca3af;
+  --borde: #e5e7eb;
+  --borde-card: #e9ebef;
+  --borde-suave: #f1f3f4;
+  --fondo: #f8f9fa;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--fondo);
+  color: var(--t1);
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.pnl *, .pnl *::before, .pnl *::after { box-sizing: border-box; }
+.pnl .tnum { font-variant-numeric: tabular-nums; }
+
+/* ── identidad institucional ─────────────────────────── */
+.pnl .header {
+  height: 64px; background: #fff; border-bottom: 1px solid var(--borde);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+}
+.pnl .header-izq { display: flex; align-items: center; gap: 14px; }
+.pnl .logo-ph {
+  width: 120px; height: 40px; background: #f1f3f5; border: 1px dashed #c8c7c4; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; letter-spacing: 0.08em; color: #888780; text-align: center;
+}
+.pnl .inst-nombre { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.pnl .inst-sub { font-size: 12px; color: var(--t2); line-height: 1.3; }
+.pnl .header-der { display: flex; align-items: center; gap: 10px; }
+.pnl .header-der .quien { text-align: right; }
+.pnl .op-nombre { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.pnl .op-centro { font-size: 12px; color: var(--t2); line-height: 1.3; }
+.pnl .op-avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--inst-primary-soft, #eeecf7);
+  color: var(--inst-primary, #4a3f8c); font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+
+/* ── tabs superiores ─────────────────────────────────── */
+.pnl .tabs { background: #fff; border-bottom: 1px solid var(--borde); }
+.pnl .tabs-in { max-width: 1080px; margin: 0 auto; padding: 0 24px; display: flex; gap: 28px; overflow-x: auto; }
+.pnl .tab {
+  padding: 13px 2px 11px; font-size: 14px; color: var(--t2); cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap; text-decoration: none;
+}
+.pnl .tab:hover { color: var(--t1); }
+.pnl .tab.on { color: var(--t1); font-weight: 600; border-bottom-color: var(--accion); }
+.pnl .tab .nova-star { color: var(--inst-primary, #4a3f8c); font-size: 12px; margin-right: 2px; }
+
+/* ── columna de trabajo ──────────────────────────────── */
+.pnl .trabajo {
+  width: 100%; max-width: 1080px; margin: 0 auto; padding: 16px 24px 48px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.pnl .card { background: #fff; border: 1px solid var(--borde-card); border-radius: 12px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
+
+.pnl .label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t3); }
+.pnl .cat-titulo { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #374151; }
+
+/* badges semánticos soft */
+.pnl .badge {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 99px;
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+.pnl .b-verde { background: var(--verde-soft); color: var(--estado-verde); }
+.pnl .b-ama { background: var(--ama-soft); color: var(--ama); }
+.pnl .b-gris { background: #f1f3f5; color: var(--t2); }
+
+/* ── selector de semana ──────────────────────────────── */
+.pnl .semana { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px 0 0; flex-wrap: wrap; }
+.pnl .semana-btn {
+  width: 28px; height: 28px; border: 1px solid var(--borde); border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: var(--t2); cursor: pointer; flex: none;
+  text-decoration: none;
+}
+.pnl .semana-btn:hover { background: #fafbfc; }
+.pnl .semana-btn[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
+.pnl .semana-titulo { font-size: 15px; font-weight: 600; white-space: nowrap; }
+
+/* ── KPIs gemelos ────────────────────────────────────── */
+.pnl .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.pnl .kpi { padding: 16px 20px 18px; }
+.pnl .kpi .label { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; white-space: nowrap; }
+.pnl .kpi-num { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; }
+.pnl .kpi-num .den { font-size: 15px; font-weight: 400; color: var(--t2); }
+.pnl .kpi-sub { font-size: 12px; color: var(--t3); margin-top: 6px; line-height: 1.45; }
+.pnl .info {
+  display: inline-flex; width: 14px; height: 14px; border-radius: 50%; flex: none;
+  border: 1px solid var(--t3); color: var(--t3); font-size: 9px; font-weight: 500;
+  align-items: center; justify-content: center; text-transform: none; letter-spacing: 0; cursor: help;
+}
+
+/* ── franja definición contractual ───────────────────── */
+.pnl .def {
+  padding: 10px 20px; background: #f6f8fb; border: 1px solid #e4e9f1; border-radius: 10px;
+  font-size: 12px; color: var(--t2); line-height: 1.5; display: flex; gap: 10px; align-items: baseline;
+}
+.pnl .def .def-ico { flex: none; color: var(--t3); }
+.pnl .def b { font-weight: 600; color: var(--t1); }
+
+/* ── chart de barras apiladas ────────────────────────── */
+.pnl .b-chart { padding: 16px 20px 18px; }
+.pnl .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.pnl .leyenda { display: flex; gap: 20px; font-size: 12px; color: var(--t2); white-space: nowrap; flex-wrap: wrap; }
+.pnl .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+.pnl .leyenda i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.pnl .chart { display: flex; height: 140px; align-items: flex-end; border-bottom: 1px solid var(--borde); }
+.pnl .chart .col { flex: 1; display: flex; justify-content: center; }
+.pnl .barra-ap { width: 32px; display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+.pnl .seg-a { background: var(--accion); }
+.pnl .seg-e { background: var(--serie-celeste); }
+.pnl .seg-o { background: var(--serie-indigo); }
+.pnl .chart-labs { display: flex; margin-top: 8px; }
+.pnl .chart-labs .col { flex: 1; text-align: center; }
+.pnl .chart-dia { font-size: 11px; color: var(--t2); white-space: nowrap; }
+.pnl .chart-tot { font-size: 11px; color: var(--t3); margin-top: 2px; }
+.pnl .lectura { font-size: 12px; color: var(--t2); margin-top: 14px; }
+
+/* ── tabla cumplimiento — grilla compartida ──────────── */
+.pnl .b-tabla { padding: 16px 0 6px; }
+.pnl .tabla-head { padding: 0 20px; margin-bottom: 4px; }
+.pnl .fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px 108px 120px 118px 104px;
+  column-gap: 16px; align-items: center; padding: 0 20px;
+}
+.pnl .fila-th { height: 32px; border-bottom: 1px solid var(--borde); }
+.pnl .fila-th .label { white-space: nowrap; }
+.pnl .fila-tr { height: 56px; border-bottom: 1px solid var(--borde-suave); }
+.pnl .fila-tr:last-of-type { border-bottom: none; }
+.pnl .prof-quien { min-width: 0; }
+.pnl .prof-nombre { font-size: 14px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl .prof-esp { font-size: 12px; color: var(--t2); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl .celda { font-size: 13px; color: var(--t1); white-space: nowrap; }
+.pnl .celda.mudo { color: var(--t3); }
+.pnl .motores { font-size: 12px; color: var(--t2); white-space: nowrap; }
+.pnl .motores.mudo { color: var(--t3); }
+.pnl .fila .badge { justify-self: end; }
+
+.pnl .cupo-barra { display: flex; gap: 3px; flex: none; }
+.pnl .cupo-seg { width: 10px; height: 4px; border-radius: 2px; background: var(--borde); }
+.pnl .cupo-seg.lleno { background: var(--accion); }
+
+.pnl .pag { padding: 12px 20px 10px; font-size: 12px; color: var(--t3); }
+
+/* ── dos cards finales ───────────────────────────────── */
+.pnl .dosc { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.pnl .b-fact, .pnl .b-aus { padding: 16px 20px 18px; display: flex; flex-direction: column; }
+.pnl .b-fact .cat-titulo, .pnl .b-aus .cat-titulo { display: block; margin-bottom: 12px; }
+.pnl .fact-linea { font-size: 14px; color: var(--t1); }
+.pnl .fact-linea b { font-weight: 600; }
+.pnl .btn-sec {
+  align-self: flex-start; margin-top: 14px; height: 36px; padding: 0 16px; border-radius: 8px; cursor: pointer;
+  background: #fff; color: var(--accion-dark); border: 1px solid var(--accion);
+  font-family: inherit; font-size: 13px; font-weight: 500; text-decoration: none;
+  display: inline-flex; align-items: center;
+}
+.pnl .btn-sec:hover { background: var(--accion-soft); }
+.pnl .micro { font-size: 12px; color: var(--t3); line-height: 1.5; padding-top: 14px; }
+.pnl .aus { list-style: none; margin: 0; padding: 0; }
+.pnl .aus li {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 7px 0; border-bottom: 1px solid var(--borde-suave);
+}
+.pnl .aus li:last-child { border-bottom: none; }
+.pnl .aus .esp-nombre { font-size: 13px; color: var(--t1); white-space: nowrap; }
+.pnl .aus b { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+/* ── vacío honesto ───────────────────────────────────── */
+.pnl .vacio { padding: 28px 20px; text-align: center; color: var(--t2); font-size: 13px; line-height: 1.6; }
+.pnl .vacio b { display: block; color: var(--t1); font-size: 14px; margin-bottom: 4px; }
+
+/* ── tab Consultas: listado de encuentros con su documentación ── */
+.pnl .enc { padding: 16px 0 6px; }
+.pnl .enc-fila {
+  display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr) 128px minmax(0, 200px);
+  column-gap: 16px; align-items: center; padding: 0 20px;
+}
+.pnl .enc-th { height: 32px; border-bottom: 1px solid var(--borde); }
+.pnl .enc-tr { min-height: 56px; padding-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--borde-suave); }
+.pnl .enc-tr:last-of-type { border-bottom: none; }
+.pnl .doc-link {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--accion-dark);
+  text-decoration: none; border: 1px solid var(--borde); border-radius: 6px; padding: 3px 8px;
+  margin: 2px 6px 2px 0; white-space: nowrap;
+}
+.pnl .doc-link:hover { background: var(--accion-soft); border-color: var(--accion); }
+.pnl .sin-docs { font-size: 12px; color: var(--t3); }
+
+/* ── responsive: el panel es de escritorio, pero no se rompe ── */
+@media (max-width: 900px) {
+  .pnl .kpis { grid-template-columns: repeat(2, 1fr); }
+  .pnl .dosc { grid-template-columns: 1fr; }
+  .pnl .fila, .pnl .enc-fila { grid-template-columns: minmax(0, 1fr) 96px 104px; row-gap: 6px; }
+  .pnl .fila .cupo-barra, .pnl .fila .motores, .pnl .enc-fila > .oculta-mobile { display: none; }
+  .pnl .fila-tr { height: auto; padding-top: 10px; padding-bottom: 10px; }
+}
