@@ -32,6 +32,10 @@ const TIMEOUT_EXEMPT_PREFIXES = [
   "/acceso",           // link de acceso del paciente institucional (viaja por
                        // WhatsApp/mail): es la puerta de entrada de alguien SIN
                        // sesión — jamás puede rebotar al login por inactividad.
+                       // Desde la Etapa 3 el prefijo además está EXCLUIDO del
+                       // matcher (ver abajo), así que esta línea ya no se
+                       // evalúa; se deja porque el día que /acceso vuelva al
+                       // matcher, la exención por inactividad tiene que seguir.
 ];
 
 // Rutas EXACTAS de creación de cuenta que el guard protege.
@@ -177,6 +181,14 @@ export const config = {
     // auth/confirmar excluido igual que auth/callback: ambos setean cookies de
     // sesión en el route handler y el updateSession del middleware podría
     // pisarlas con un refresh concurrente (visto en commits 787c163/0d04628).
-    "/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirmar|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //
+    // REGLA: toda ruta que CREE sesión entra acá. `acceso` es la tercera —
+    // /acceso/t/[token]/entrar mintea la sesión del paciente institucional
+    // (link por WhatsApp) y escribe sus cookies en el response.
+    // Efecto colateral buscado: el intersticial (el GET) tampoco pasa por
+    // updateSession, así que el bot de preview de WhatsApp no dispara ningún
+    // refresh de sesión sobre un visitante que todavía no es nadie.
+    // En B2C /acceso no existe (la page es 404 por modo): sin cambio.
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirmar|acceso|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

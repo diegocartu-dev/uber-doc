@@ -36,6 +36,10 @@ const CONFIG: ConfigInstitucion = {
   ci_ventana_fin: "20:00:00",
   slot_duracion_min: 15,
   especialidades: ["Clínica Médica", "Pediatría"],
+  vigencia_documentos_dias: 30,
+  reenvio_cooldown_minutos: 10,
+  reenvio_max_por_dia: 5,
+  ventana_entrada_min: 10,
   wa_plantillas: { turno_asignado: "HX000000000000000000000000000sint" },
   acuerdo_horas_semana_default: 1,
   precio_consulta_centavos: 1200000,
@@ -63,6 +67,12 @@ test("soloBranding conserva branding y operación completos", () => {
   assert.equal(branding.slot_duracion_min, 15);
   assert.deepEqual(branding.especialidades, ["Clínica Médica", "Pediatría"]);
   assert.equal(branding.telefono_ayuda, "0800-555-0000");
+  // Ciclo de vida del link (migración 011): es política operativa, la ven las
+  // pantallas del paciente — tiene que pasar la lista blanca.
+  assert.equal(branding.vigencia_documentos_dias, 30);
+  assert.equal(branding.reenvio_cooldown_minutos, 10);
+  assert.equal(branding.reenvio_max_por_dia, 5);
+  assert.equal(branding.ventana_entrada_min, 10);
 });
 
 test("soloBranding es una lista blanca cerrada (ninguna clave inesperada)", () => {

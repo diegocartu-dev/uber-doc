@@ -1,0 +1,237 @@
+/* src/components/institucional/paciente.css
+ * Estilos de LA pantalla del paciente institucional — transplante del mock
+ * aprobado (docto-institucional/mocks/02-paciente.html §2). Un solo layout,
+ * seis estados: todas las clases de acá se comparten entre la landing del link
+ * (/acceso/t/[token]) y la pantalla del turno (/turno/[id]/acceso).
+ *
+ * Frontera del theming (regla del lenguaje aprobado): --inst-* es SOLO
+ * identidad (la franja del layout, el logo, los acentos). La ACCIÓN sigue
+ * siendo el azul #378ADD del design system de Docto, y el verde #1D9E75 sigue
+ * siendo SOLO estado (el dot "Conectado"). Ningún control pintado de --inst-*.
+ *
+ * Mobile primero y liviano a propósito (nota del mock: "vecino del interior,
+ * señal limitada, página < 50 KB"): sin dependencias, sin utilidades sueltas.
+ */
+
+.pac-app {
+  min-height: 100dvh;
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 40px;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: #111827;
+}
+
+/* Marca de la institución sobre la card. Placeholder del logo hasta que exista
+   el bucket institucion-assets (Etapa 5): por ahora, el nombre. */
+.pac-marca {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #888780;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.pac-card {
+  background: #fff;
+  border: 1px solid #e9ebef;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.pac-centro { text-align: center; }
+.tnum { font-variant-numeric: tabular-nums; }
+.nw { white-space: nowrap; }
+
+.pac-hola { font-size: 15px; color: #4b5563; }
+.pac-titulo {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 4px 0 10px;
+}
+.pac-fecha { font-size: 17px; line-height: 1.4; }
+.pac-prof { font-size: 15px; color: #4b5563; margin: 2px 0 16px; }
+.pac-parrafo { font-size: 17px; line-height: 1.5; color: #111827; }
+.pac-parrafo-sec { font-size: 15px; line-height: 1.55; color: #4b5563; }
+
+/* CTA 56px: el botón importante de la pantalla (uno solo por estado). */
+.pac-cta {
+  display: block;
+  width: 100%;
+  height: 56px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #378add;
+  color: #fff;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 56px;
+  text-decoration: none;
+}
+.pac-cta:disabled { opacity: 0.6; cursor: default; }
+.pac-cta-sec {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #fff;
+  color: #4b5563;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 50px;
+  text-decoration: none;
+}
+.pac-micro { font-size: 13px; color: #888780; text-align: center; margin-top: 10px; }
+.pac-error {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #d85a30;
+  margin-top: 12px;
+}
+
+/* Card de preparación del estado A. */
+.pac-prep { border: 1px solid #e9ebef; border-radius: 10px; padding: 6px 14px; margin-top: 14px; }
+.pac-prep-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  color: #4b5563;
+  padding: 9px 0;
+}
+.pac-prep-item + .pac-prep-item { border-top: 1px solid #f1f3f4; }
+.pac-prep-item svg { flex: none; color: #888780; }
+
+/* Estado D — sala de espera. El verde es ESTADO, nunca control. */
+.pac-preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  background: linear-gradient(160deg, #2a3342, #1c2430);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7686;
+  font-size: 13px;
+  overflow: hidden;
+}
+.pac-preview video { width: 100%; height: 100%; object-fit: cover; }
+.pac-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--inst-primary-soft);
+  color: var(--inst-primary);
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 10px;
+}
+.pac-conectado { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #4b5563; }
+.pac-dot-verde {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1d9e75;
+  flex: none;
+  display: inline-block;
+  position: relative;
+}
+.pac-dot-verde::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid #1d9e75;
+  opacity: 0;
+  animation: pac-pulso 2s ease-out infinite;
+}
+@keyframes pac-pulso {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  70% { transform: scale(1.25); opacity: 0; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pac-dot-verde::after { animation: none; }
+}
+.pac-link-ter {
+  font-size: 15px;
+  color: #4b5563;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  padding: 0;
+}
+
+/* Estado E — documentos. */
+.pac-doc { border: 1px solid #e9ebef; border-radius: 10px; padding: 14px; margin-top: 14px; }
+.pac-doc-top { display: flex; align-items: center; gap: 12px; }
+.pac-doc-ico {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--inst-primary-soft);
+  color: var(--inst-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pac-doc-quien { min-width: 0; flex: 1; }
+.pac-doc-quien b { font-size: 15px; font-weight: 600; display: block; line-height: 1.35; }
+.pac-doc-quien span { font-size: 12px; color: #4b5563; line-height: 1.4; display: block; }
+.pac-btn-doc {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #378add;
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 44px;
+  text-decoration: none;
+}
+
+.pac-ico-estado { color: #888780; margin-bottom: 10px; }
+
+/* Formulario del reenvío self-service. */
+.pac-campo { display: block; margin-top: 14px; }
+.pac-campo span { display: block; font-size: 13px; color: #4b5563; margin-bottom: 6px; }
+.pac-campo input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 17px; /* 17px o más: abajo de eso, iOS hace zoom al enfocar */
+  color: #111827;
+  background: #fff;
+}
