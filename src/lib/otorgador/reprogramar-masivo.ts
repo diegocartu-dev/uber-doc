@@ -16,9 +16,10 @@
 // ── DE DÓNDE SALEN LOS CANDIDATOS ────────────────────────────────────────────
 // De `armarOferta()` — la MISMA priorización server-side que ve el turnero
 // (§4.4: categoría → asignados ASC → próximo slot más cercano, dedup por
-// profesional, acuerdo completo al final y no seleccionable). No se
-// reimplementa el criterio de equidad: si mañana cambia, cambia acá también
-// sin tocar una línea. Consecuencia heredada y buscada: los slots son los de
+// profesional, acuerdo completo al final pero ELEGIBLE — R6 flexible, decisión
+// de Diego del 13/08: el turno publicado se puede tomar aunque el profesional
+// ya haya cumplido su semana). No se reimplementa el criterio de equidad: si
+// mañana cambia, cambia acá también sin tocar una línea. Consecuencia heredada y buscada: los slots son los de
 // la SEMANA AR CORRIENTE y hasta 5 minutos antes de su horario — por eso el
 // mock dice "Sin lugar esta semana" y no "sin lugar".
 //
