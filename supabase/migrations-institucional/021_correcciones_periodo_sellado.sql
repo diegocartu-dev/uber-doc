@@ -3,6 +3,10 @@
 -- Migración SOLO de la instancia institucional. NUNCA corre en el B2C.
 -- Requiere: 014_encuentros_metering.sql, 017_metering_manual_gana.sql,
 --           019_metering_backstops.sql, y `admin_users` del schema B2C.
+-- Reentrante: se puede volver a aplicar sin romper nada. No es un detalle —
+-- este archivo se corre a mano en el SQL Editor, y una migración que falla en la
+-- segunda mitad (o un editor que corta el pegado) deja que el reintento reviente
+-- por lo que YA estaba creado, con la mitad de las defensas puestas.
 --
 -- ── LA REGLA (Diego, 13/08) ──────────────────────────────────────────────────
 -- "Congelado para todos menos para uno. Un mes sellado es inmutable para la
@@ -66,13 +70,13 @@
 -- de un mes ya cerrado, el listado de /admin/periodos y el barrido de meses que
 -- quedaron sin sellar. La 014 solo indexó `(fecha_ar) WHERE facturable`.
 
-CREATE INDEX idx_encuentros_metering_facturado
+CREATE INDEX IF NOT EXISTS idx_encuentros_metering_facturado
   ON encuentros_metering (facturado_periodo, fecha_ar)
   WHERE facturado_periodo IS NOT NULL;
 
 -- El complemento: "¿queda algo del mes X sin sellar?" — la pregunta del cron de
 -- cierre y de las filas que llegaron después del cierre.
-CREATE INDEX idx_encuentros_metering_sin_sellar
+CREATE INDEX IF NOT EXISTS idx_encuentros_metering_sin_sellar
   ON encuentros_metering (fecha_ar)
   WHERE facturado_periodo IS NULL;
 
@@ -80,7 +84,7 @@ CREATE INDEX idx_encuentros_metering_sin_sellar
 -- 1. EL REGISTRO
 -- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE TABLE metering_correcciones (
+CREATE TABLE IF NOT EXISTS metering_correcciones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
   -- Qué fila se tocó, y en qué período estaba sellada cuando se la tocó.
@@ -112,8 +116,8 @@ CREATE TABLE metering_correcciones (
   txid BIGINT NOT NULL DEFAULT txid_current()
 );
 
-CREATE INDEX idx_metering_correcciones_periodo ON metering_correcciones (periodo, corregido_at DESC);
-CREATE INDEX idx_metering_correcciones_encuentro ON metering_correcciones (encuentro_id);
+CREATE INDEX IF NOT EXISTS idx_metering_correcciones_periodo ON metering_correcciones (periodo, corregido_at DESC);
+CREATE INDEX IF NOT EXISTS idx_metering_correcciones_encuentro ON metering_correcciones (encuentro_id);
 
 -- El registro es APPEND-ONLY. Una auditoría que se puede editar o borrar no es
 -- una auditoría: sería el mismo agujero de antes con un paso más.
@@ -123,10 +127,12 @@ BEGIN
   RAISE EXCEPTION 'metering_correcciones es append-only: una corrección registrada no se edita ni se borra. Si el registro está mal, agregá otra corrección que lo explique.';
 END $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_metering_correcciones_no_update ON metering_correcciones;
 CREATE TRIGGER trg_metering_correcciones_no_update
   BEFORE UPDATE ON metering_correcciones
   FOR EACH ROW EXECUTE FUNCTION metering_correcciones_append_only();
 
+DROP TRIGGER IF EXISTS trg_metering_correcciones_no_delete ON metering_correcciones;
 CREATE TRIGGER trg_metering_correcciones_no_delete
   BEFORE DELETE ON metering_correcciones
   FOR EACH ROW EXECUTE FUNCTION metering_correcciones_append_only();
@@ -135,6 +141,7 @@ CREATE TRIGGER trg_metering_correcciones_no_delete
 -- por los dos lados.
 REVOKE TRUNCATE ON metering_correcciones FROM anon, authenticated, service_role;
 
+DROP TRIGGER IF EXISTS trg_metering_correcciones_no_truncate ON metering_correcciones;
 CREATE TRIGGER trg_metering_correcciones_no_truncate
   BEFORE TRUNCATE ON metering_correcciones
   FOR EACH STATEMENT EXECUTE FUNCTION metering_no_truncate();
@@ -160,6 +167,7 @@ BEGIN
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_metering_correcciones_firma ON metering_correcciones;
 CREATE TRIGGER trg_metering_correcciones_firma
   BEFORE INSERT ON metering_correcciones
   FOR EACH ROW EXECUTE FUNCTION metering_correcciones_firma_valida();

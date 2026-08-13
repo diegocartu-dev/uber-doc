@@ -330,6 +330,18 @@ test("022 · una fila del contador NACE sin sello", () => {
   assert.match(SQL_022, /RAISE EXCEPTION/);
 });
 
+test("021 · es reentrante: volver a aplicarla no rompe nada", () => {
+  // Se aplica a mano, en el SQL Editor. Un pegado que se corta a la mitad deja
+  // la mitad de las defensas puestas, y el reintento revienta por lo que YA
+  // estaba: el final probable es "aplicá lo que falta a ojo".
+  assert.match(SQL_021, /CREATE TABLE IF NOT EXISTS metering_correcciones/);
+  const indices = SQL_021.match(/CREATE INDEX IF NOT EXISTS/g) ?? [];
+  assert.equal(indices.length, 4, "los cuatro índices se crean con IF NOT EXISTS");
+  const creados = SQL_021.match(/CREATE TRIGGER/g) ?? [];
+  const dropeados = SQL_021.match(/DROP TRIGGER IF EXISTS/g) ?? [];
+  assert.equal(dropeados.length, creados.length, "cada trigger se dropea antes de crearse");
+});
+
 test("022 · es reentrante: volver a aplicarla no rompe nada", () => {
   // Una migración que no se puede repetir se aplica a medias cuando el SQL
   // Editor corta a la mitad, y el segundo intento falla por lo que YA estaba.

@@ -7,6 +7,26 @@ Estos `.sql` se aplican **SOLO en la base de una instancia institucional** (proy
 - **`INSTITUCIONAL=true`** — la fuente de verdad del modo (server, runtime). Todo gate de código sale de acá vía `src/lib/instancia.ts`: páginas, server actions, crons, capas A/B/C, y también el sidebar de `/admin` (que recibe el flag por **prop** desde el layout server — no lee ninguna env client).
 - **`NEXT_PUBLIC_INSTITUCIONAL=true`** — variante client-side. Se **inlinea en build**: cambiarla exige **deploy fresco**, nunca `vercel redeploy` (mismo pitfall que `BETA_PASSWORD`). Hoy ningún componente la consume, pero si un gate client la llegara a usar, **setear las dos juntas en el mismo deploy**: si divergen, la UI muestra links a 404 (solo client seteada) o esconde pantallas vivas (solo server seteada). Preferir siempre pasar el flag por prop desde un server component antes que sumar un consumer de la env client.
 
+## Orden de despliegue: la migración ANTES que el código
+
+Los `.sql` de esta carpeta se aplican **a mano** y el código se despliega solo
+(push a main → Vercel). Cuando un deploy trae código que consulta algo que
+todavía no existe en la base, la pantalla no se degrada: **tira 500**.
+
+**Regla: primero el SQL, después el push.** Concretamente, para el paquete de la
+Etapa 8:
+
+| Migración | Qué se cae si el código llega antes |
+|---|---|
+| **021** | `/admin/periodos` entero: el combo de meses llama a la RPC `periodos_sellados()`, y el botón de corregir a `corregir_encuentro_sellado()`. Sin la migración, la primera es un 404 de PostgREST y la pantalla no abre. |
+| **022** | Nada — el trigger solo agrega una prohibición. Se puede aplicar después sin romper, pero mientras no esté, la puerta del INSERT sigue abierta. |
+| **023** | La **facturación** de cualquier mes: `periodoEstaSellado()` lee `metering_periodos_cerrados` y **tira** si no puede (a propósito: si esa lectura fallara en silencio, un mes cerrado se vería abierto y el barrido volvería a sellarlo). O sea que sin la 023 aplicada, la card de facturación del panel y el cierre mensual fallan. |
+
+Las tres son **reentrantes**: si el SQL Editor corta a la mitad, se vuelve a
+pegar el archivo entero sin miedo.
+
+Y ninguna de las tres toca el B2C: son de la base de la instancia.
+
 ## Checklist post-aplicación: verificar los REVOKE de verdad
 
 Tres migraciones crean funciones `SECURITY DEFINER`, que corren con los permisos de su dueño y **no** con los de quien las llama. Las tres revocan el `EXECUTE` a `anon` y `authenticated`… y ese `REVOKE` es exactamente la clase de línea que se da por buena porque está escrita.
