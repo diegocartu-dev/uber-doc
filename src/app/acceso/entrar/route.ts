@@ -4,8 +4,9 @@
 // Por eso está sola en su propia route y con el orden de pasos explícito:
 //
 //   0. el POST tiene que venir de NUESTRA landing              — anti login-CSRF
-//   1. freno de intentos                                       — trabajo caro detrás de un link público
+//   1. freno por IP (solo lee)                                 — techo del que barre tokens
 //   2. validación del token contra accesos_link (sha256, vigencia, estado del turno)
+//   2b. freno del martilleo de ESE enlace                      — trabajo caro detrás de un link público
 //   3. minteo JIT de la sesión — patrón impersonate del admin (ver abajo)
 //   4. cookies en el response + 303 al destino del acceso
 //
@@ -53,6 +54,8 @@ import {
   validarTokenAcceso,
   registrarUsoAcceso,
   permitirIntentoAcceso,
+  ipQuemadaPorFallos,
+  anotarFalloDeAcceso,
   destinoSeguro,
   hashToken,
   segundosDeVida,
@@ -93,25 +96,35 @@ export async function POST(request: NextRequest) {
     return aInvalido(origin, true);
   }
 
-  // 1. Freno de intentos. La IP sale del proxy de Vercel; sin ella, el freno
-  //    queda por token solo (peor, pero nunca deja a nadie afuera).
+  // 1. Freno por IP: el que le pone techo al que BARRE tokens. Solo LEE — un
+  //    barrido de tokens inexistentes no puede hacer crecer la tabla por el
+  //    simple hecho de preguntar. La IP sale del proxy de Vercel.
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") ||
     "sin-ip";
-  if (!(await permitirIntentoAcceso(ip, hashToken(token)))) {
-    console.warn("[acceso] Freno de intentos activado para un link");
+  if (await ipQuemadaPorFallos(ip)) {
+    console.warn("[acceso] Freno por IP: demasiados intentos fallidos");
     return aInvalido(origin, true);
   }
 
-  // 2. Validación. Sin efectos: el token no se consume nunca.
+  // 2. Validación. Sin efectos: el token no se consume nunca. Va ANTES del
+  //    bucket por enlace para que un token basura no estrene fila.
   const validacion = await validarTokenAcceso(token);
   if (!validacion.ok) {
     // Sin `reintento`: es la MISMA pantalla para los cuatro motivos.
     console.warn("[acceso] Link no válido:", validacion.motivo);
+    await anotarFalloDeAcceso(ip);
     return aInvalido(origin, false);
   }
   const acceso = validacion.acceso;
+
+  // 2b. Freno del martilleo de ESTE enlace, ya sabiendo que existe. Recién acá
+  //     se escribe un bucket, y a partir de acá empieza el trabajo caro.
+  if (!(await permitirIntentoAcceso(ip, hashToken(token)))) {
+    console.warn("[acceso] Freno de intentos activado para un link");
+    return aInvalido(origin, true);
+  }
 
   // 3. Del paciente del padrón al usuario de auth. Sin `user_id` no hay a quién
   //    loguear (un alta a medias): se trata como link que no sirve.

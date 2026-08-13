@@ -244,23 +244,80 @@ export function destinoSeguro(destino: string | null | undefined, fallback: stri
   return destino;
 }
 
-// ─── Freno de fuerza bruta de la landing (migración 011) ─────────────────────
+// ─── Frenos de la landing (migración 011) ────────────────────────────────────
+//
+// Son DOS frenos con trabajos distintos, y confundirlos era el bug:
+//
+//   · POR ENLACE (IP + token_hash) — le pone techo al martilleo de UN link
+//     legítimo. Es el que ya estaba y para lo suyo funciona.
+//   · POR IP (la IP sola, contando FALLOS) — le pone techo al que BARRE
+//     tokens. Faltaba: como el token formaba parte de la clave, cada intento
+//     con un token distinto estrenaba bucket, el contador arrancaba en 1 y el
+//     techo no se disparaba NUNCA. El único a quien el freno alcanzaba era el
+//     paciente legítimo, que sí repite el mismo token.
+//
+// El de IP cuenta SOLO intentos fallidos, a propósito: un paciente de verdad
+// nunca falla (su token existe), así que ni con media provincia detrás de la
+// misma IP de la operadora se puede dejar a nadie afuera.
+//
+// Y el ORDEN importa tanto como los frenos. El bucket por enlace se toca
+// DESPUÉS de validar el token: antes se escribía una fila por request, o sea
+// que un loop anónimo con basura en el campo era, literalmente, un INSERT por
+// request en la base de la instancia — lo contrario de lo que promete el
+// comentario de la migración ("un bucket por clave, no una fila por intento").
+// Ahora la cardinalidad está acotada: una fila por IP que falla, una por enlace
+// real, y las viejas se barren.
 
-/** Intentos permitidos por (IP + token) dentro de la ventana. */
-const INTENTOS_MAX = 10;
 const VENTANA_MIN = 15;
+/** Intentos permitidos sobre UN mismo enlace desde una misma IP. */
+const INTENTOS_MAX_POR_ENLACE = 10;
+/** Intentos FALLIDOS permitidos por IP: el techo del que enumera. */
+const FALLOS_MAX_POR_IP = 30;
+/** Los buckets se olvidan al día: la ventana es de 15 minutos. */
+const BUCKET_VIVE_MS = DIA_MS;
 
 /**
- * Estos DOS números se quedan en el código a propósito, mientras el resto del
+ * Estos números se quedan en el código a propósito, mientras el resto del
  * ciclo de vida se fue al config: son un techo ANTI-ABUSO, no política de la
  * institución. Un campo editable desde /admin que aflojara el freno sería un
  * botón para desactivar una defensa sin que nadie lo note.
  */
-export async function permitirIntentoAcceso(ip: string, tokenHash: string): Promise<boolean> {
-  const clave = createHash("sha256").update(`${ip}|${tokenHash}`, "utf8").digest("hex");
+function claveBucket(partes: string): string {
+  return createHash("sha256").update(partes, "utf8").digest("hex");
+}
+
+/**
+ * Barrido de buckets viejos. La migración 011 crea el índice
+ * `idx_accesos_intentos_updated` "para que los limpie el propio código, de a
+ * poco" — y ese código no existía: la tabla solo crecía. Se hace acá, en una de
+ * cada cincuenta llamadas, para no sumar un cron por una tabla de juguete.
+ * Fire-and-forget: que el barrido falle no puede demorar a nadie.
+ */
+function barrerBucketsViejos(admin: ReturnType<typeof createAdminClient>): void {
+  if (Math.random() > 0.02) return;
+  const corte = new Date(Date.now() - BUCKET_VIVE_MS).toISOString();
+  void admin
+    .from("accesos_intentos")
+    .delete()
+    .lt("updated_at", corte)
+    .then(({ error }) => {
+      if (error) console.error("[accesos] No se pudieron barrer los buckets viejos:", error.message);
+    });
+}
+
+/**
+ * Suma uno al bucket y dice si todavía está por debajo del techo.
+ *
+ * Fail-OPEN a propósito: si el freno se cae, el paciente igual entra. El riesgo
+ * de dejar afuera a alguien con un turno en curso es mayor que el de un rato
+ * sin techo de intentos sobre un token de 32 bytes al azar.
+ */
+async function tocarBucket(clave: string, max: number): Promise<boolean> {
   const ahora = new Date();
   try {
     const admin = createAdminClient();
+    barrerBucketsViejos(admin);
+
     const { data } = await admin
       .from("accesos_intentos")
       .select("ventana_inicio, intentos")
@@ -280,7 +337,7 @@ export async function permitirIntentoAcceso(ip: string, tokenHash: string): Prom
       return true;
     }
 
-    if (data.intentos >= INTENTOS_MAX) return false;
+    if (data.intentos >= max) return false;
 
     await admin
       .from("accesos_intentos")
@@ -288,12 +345,46 @@ export async function permitirIntentoAcceso(ip: string, tokenHash: string): Prom
       .eq("clave", clave);
     return true;
   } catch (err) {
-    // Fail-OPEN a propósito: si el freno se cae, el paciente igual entra. El
-    // riesgo de dejar afuera a alguien con un turno en curso es mayor que el
-    // de un rato sin techo de intentos sobre un token de 32 bytes al azar.
     console.error("[accesos] Freno de intentos no disponible, se deja pasar:", err);
     return true;
   }
+}
+
+/**
+ * Freno del martilleo de UN enlace desde UNA IP. Se llama con un token que YA
+ * validó: así el bucket solo existe para enlaces reales.
+ */
+export async function permitirIntentoAcceso(ip: string, tokenHash: string): Promise<boolean> {
+  return tocarBucket(claveBucket(`enlace|${ip}|${tokenHash}`), INTENTOS_MAX_POR_ENLACE);
+}
+
+/**
+ * ¿Esta IP ya quemó su cupo de intentos FALLIDOS? SOLO LEE: no crea ninguna
+ * fila, así que un barrido de tokens inexistentes no puede hacer crecer la
+ * tabla por el simple hecho de preguntar.
+ */
+export async function ipQuemadaPorFallos(ip: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("accesos_intentos")
+      .select("ventana_inicio, intentos")
+      .eq("clave", claveBucket(`ip|${ip}`))
+      .maybeSingle();
+    if (!data) return false;
+    if (new Date(data.ventana_inicio).getTime() + VENTANA_MIN * 60_000 <= Date.now()) return false;
+    return data.intentos >= FALLOS_MAX_POR_IP;
+  } catch (err) {
+    console.error("[accesos] Freno por IP no disponible, se deja pasar:", err);
+    return false;
+  }
+}
+
+/** Anota un intento FALLIDO de esa IP (token que no existe, venció o murió). */
+export async function anotarFalloDeAcceso(ip: string): Promise<void> {
+  // Sin techo acá: el techo lo aplica `ipQuemadaPorFallos` al leer. Esta
+  // función solo cuenta.
+  await tocarBucket(claveBucket(`ip|${ip}`), Number.MAX_SAFE_INTEGER);
 }
 
 // ─── Revocación (spec §5.4, matriz de revocación) ────────────────────────────
