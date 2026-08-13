@@ -235,7 +235,7 @@ semana está abierta, y nada de esta vista existe del lado del profesional.
 
 | Tema | Qué bloquea |
 |---|---|
-| **Texto legal de la Sección C** (efector tecnológico), junto al DPA | El PDF ya sale; el copy final es legal. Se cambia el config, no el código |
+| **El PIE COMPLETO del documento institucional** (Secciones B **y** C), junto al DPA | Ver abajo: no es solo el copy de la C |
 | **Ciclo de vida del link** (§5.4): vigencia, reenvío, matriz de revocación | Los defaults de la migración 011 son la propuesta vigente |
 | **Email sintético** para pacientes sin mail | Condiciona el DPA |
 | **Gate biométrico** para profesionales institucionales | Onboarding ultraliviano vs. gate prendido en B2C |
@@ -243,6 +243,34 @@ semana está abierta, y nada de esta vista existe del lado del profesional.
 | **`motivo_consulta`** en la CI asignada | Obligatorio en B2C; el otorgador no lo captura |
 | **Captura separada de "Tratamiento indicado"** en el workspace | Toca el canal clínico. **Sin esto, el delta §3.3 NO está entregado**: `documentos.tratamiento` solo lo escribe el certificado, así que el bloque de la receta institucional es inalcanzable en producción y la posología sigue viajando dentro del `Rp/` |
 | **Convivencia operador + paciente** (una operadora que además es paciente del padrón) | La precedencia de rol se come sus flujos de paciente |
+
+#### El pie completo, no solo el copy de la Sección C
+
+La premisa de la Etapa 5 es *"arriba el ministerio, Docto declarado al pie como
+efector tecnológico"*. Eso es la mitad de lo que se imprime. La **Sección B**
+—intacta por diseño, porque es la leyenda dictaminada del marco regulatorio por
+tipo de documento— dice, en el papel de la institución:
+
+- receta: *"Documento emitido por Docto — Plataforma 0270, ReNaPDiS — Ley
+  27.553 y Decreto 63/2024."*
+- orden / indicaciones: *"Documento emitido por Docto — Plataforma de
+  telemedicina habilitada por Ley 27.553."*
+- certificado: *"Documento emitido por Docto — Plataforma de telemedicina…"*
+
+Y tres líneas más abajo la **Sección C** dice *"Emitido a través de Docto
+(docto.com.ar)… efector tecnológico"*. O sea que sobre membrete del ministerio,
+el mismo pie declara a Docto como **emisor** del documento y como **efector
+tecnológico**: dos roles distintos y en tensión, y justo la afirmación
+("emitido por Docto") que la marca blanca busca evitar.
+
+No es un bug: es la consecuencia de la regla *"A y B no se tocan"*, que está
+bien como regla — esas leyendas son dictaminadas y no las cambia un sprint de
+producto. Pero la pregunta que hay que llevarle al abogado es más grande que el
+copy de la C: **qué dice el papel del ministerio sobre quién emitió el
+documento**. El abogado tiene que ver el **pie entero** en la instancia
+institucional, no el fragmento nuevo.
+
+Fuente: `renderFooter()` en `src/lib/pdf/receta.ts`.
 
 ### Técnico
 

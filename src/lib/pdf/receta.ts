@@ -1009,6 +1009,18 @@ function renderFooter(
   // casos: era falsa mientras no había firma y sobreafirmada aun con firma. Un
   // documento no declara su propia validez — declara el mecanismo (Sección A) y
   // deja la validez donde corresponde, que es el derecho.
+  //
+  // ⚠ EN EL DOCUMENTO INSTITUCIONAL, ESTA SECCIÓN DICE "EMITIDO POR DOCTO".
+  // La premisa de la marca blanca es "arriba el ministerio, Docto al pie como
+  // EFECTOR TECNOLÓGICO" (Sección C, tres líneas más abajo). Pero esta sección
+  // —que no se toca, y está bien que no se toque: son las leyendas
+  // dictaminadas— declara a Docto EMISOR del documento. Sobre membrete de un
+  // ministerio, el mismo pie afirma dos roles distintos y en tensión.
+  //
+  // No se resuelve acá: es la decisión pendiente del pie completo, que va al
+  // abogado junto al DPA. Y lo que tiene que ver el abogado es el PIE ENTERO
+  // en la instancia institucional, no el fragmento nuevo de la Sección C.
+  // Detalle en docs/sprints/2026-08-13-institucional-cierre-etapas-0-6.md.
   pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
   let seccionB: string;
   if (doc.tipo === "receta") {
