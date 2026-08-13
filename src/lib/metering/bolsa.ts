@@ -316,7 +316,27 @@ export async function cumplimientoDeSemana(params: {
   const lunes = params.semanaAr;
   const domingo = domingoDeSemana(lunes);
 
-  // ── 1) El universo: los profesionales del piloto ───────────────────────────
+  // ── 1) Los sellos de esta semana ───────────────────────────────────────────
+  // Van PRIMERO y sin filtrar por el padrón de hoy, porque son la mitad del
+  // universo. Antes se leían con `.in('medico_id', ids)` sobre el padrón vivo:
+  // el profesional que dejaba el piloto (o cuya especialidad salía del config)
+  // desaparecía de una semana YA CERRADA, y como el KPI de cumplimiento suma
+  // sobre las filas listadas, el 98 % de octubre cambiaba solo. Justo lo que la
+  // 015 promete que no puede pasar: "lo que la institución vio el lunes tiene
+  // que seguir diciendo lo mismo en diciembre".
+  const selladas = await leerTodo<SemanaSellada>("sellos de la semana", (desde, hasta) =>
+    admin
+      .from("acuerdo_semanas")
+      .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
+      .eq("semana_ar", lunes)
+      .eq("estado", "cerrada")
+      .order("medico_id", { ascending: true })
+      .range(desde, hasta)
+  );
+  const selladaPorMedico = new Map<string, SemanaSellada>();
+  for (const s of selladas) selladaPorMedico.set(s.medico_id, s);
+
+  // ── 2) El universo: el padrón de HOY ∪ los que tienen sello esa semana ─────
   const medicos = await leerTodo<Record<string, unknown>>(
     "padrón de profesionales del piloto",
     (desde, hasta) =>
@@ -328,8 +348,23 @@ export async function cumplimientoDeSemana(params: {
         .order("id", { ascending: true })
         .range(desde, hasta)
   );
+  const enElPadron = new Set(medicos.map((m) => m.id as string));
+  // A los sellados que ya no están en el padrón se les busca el nombre igual:
+  // su fila tiene que seguir en la tabla, con el número que se selló.
+  const selladosFuera = [...selladaPorMedico.keys()].filter((id) => !enElPadron.has(id));
+  const medicosFuera = await leerTodoEnLotes<Record<string, unknown>>(
+    "profesionales con semana sellada fuera del padrón",
+    selladosFuera,
+    (lote, desde, hasta) =>
+      admin
+        .from("medicos")
+        .select("id, nombre_completo, titulo, especialidad")
+        .in("id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
 
-  const universo = medicos.map((m) => ({
+  const universo = [...medicos, ...medicosFuera].map((m) => ({
     id: m.id as string,
     nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
     especialidad: (m.especialidad as string | null) ?? "",
@@ -337,7 +372,7 @@ export async function cumplimientoDeSemana(params: {
   if (universo.length === 0) return [];
   const ids = universo.map((m) => m.id);
 
-  // ── 2) Acuerdo vigente ESA semana (no hoy: la semana puede ser vieja) ──────
+  // ── 3) Acuerdo vigente ESA semana (no hoy: la semana puede ser vieja) ──────
   // El lote nunca parte a un profesional al medio, así que el "gana el
   // `vigente_desde` más nuevo" de abajo sigue viendo todos los acuerdos de cada
   // uno juntos y en orden.
@@ -360,24 +395,6 @@ export async function cumplimientoDeSemana(params: {
     if (!horasPorMedico.has(a.medico_id as string)) {
       horasPorMedico.set(a.medico_id as string, Number(a.horas_semanales));
     }
-  }
-
-  // ── 3) ¿La semana está sellada? ────────────────────────────────────────────
-  const selladas = await leerTodoEnLotes<SemanaSellada>(
-    "sellos de la semana",
-    ids,
-    (lote, desde, hasta) =>
-      admin
-        .from("acuerdo_semanas")
-        .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
-        .eq("semana_ar", lunes)
-        .in("medico_id", lote)
-        .order("medico_id", { ascending: true })
-        .range(desde, hasta)
-  );
-  const selladaPorMedico = new Map<string, SemanaSellada>();
-  for (const s of selladas) {
-    if (s.estado === "cerrada") selladaPorMedico.set(s.medico_id, s);
   }
 
   // ── 4) Disposición: los slots de agenda de la semana que ya transcurrieron ─
