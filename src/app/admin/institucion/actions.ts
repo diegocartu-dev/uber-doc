@@ -62,6 +62,10 @@ export interface ConfigInstitucionInput {
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+// Largo máximo de la Sección C del pie — ver `validar()`. NO se exporta: en un
+// módulo "use server" solo pueden exportarse funciones async (el form repite el
+// 800 en su `maxLength`, con el mismo comentario).
+const MAX_EFECTOR_CHARS = 800;
 
 function validar(input: ConfigInstitucionInput): string | null {
   if (!input.nombre.trim()) return "Falta el nombre de la institución.";
@@ -70,6 +74,15 @@ function validar(input: ConfigInstitucionInput): string | null {
   // NOT NULL en la tabla, y la promesa de §2 es que el texto legal se cambia
   // desde acá sin redeploy (la redacción final la traen el CEO y el abogado).
   if (!input.pdf_efector_texto.trim()) return "Falta el texto de efector de los documentos.";
+  // Techo del pie. El alto de la Sección C ahora se MIDE al generar el PDF, así
+  // que un texto largo ya no desborda: dispara un salto de página limpio. Pero
+  // una receta de dos hojas es un problema en el mostrador de una farmacia, y
+  // este campo es justamente el que se cambia sin tocar código. Medido con
+  // pdfkit sobre el caso más apretado (receta de tres medicamentos): hasta ~900
+  // caracteres entra en una hoja; a los 1000 se parte. El tope queda con
+  // margen.
+  if (input.pdf_efector_texto.trim().length > MAX_EFECTOR_CHARS)
+    return `El texto de efector no puede pasar de ${MAX_EFECTOR_CHARS} caracteres: más largo, la receta se va a dos hojas.`;
   for (const [campo, valor] of [
     ["primario", input.color_primary],
     ["oscuro", input.color_primary_dark],

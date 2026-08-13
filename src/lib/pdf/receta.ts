@@ -166,6 +166,38 @@ export function accentDe(branding?: BrandingPDF | null): string {
   return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(valor) ? valor : COLORS.accent;
 }
 
+/** Tipografía y cuerpo de la Sección C — una sola fuente de verdad. */
+const SECCION_C = { fuente: "Inter", cuerpo: 6.5, gapAntes: 4, gapDespues: 5, colchon: 4 } as const;
+
+/**
+ * Cuánto alto hay que reservarle a la Sección C del pie (efector tecnológico).
+ *
+ * ── POR QUÉ SE MIDE Y NO SE ESTIMA ───────────────────────────────────────────
+ * Acá había un `13` fijo, y el texto que se imprime NO SALE DEL CÓDIGO: sale de
+ * `institucion_config.pdf_efector_texto`, que es un campo de /admin y que el
+ * propio comentario declara PROVISORIO hasta que el abogado entregue la
+ * redacción final. Medido con pdfkit, el placeholder sintético ya ocupa ~24,7 pt
+ * —casi el doble del presupuesto— y entraba en una página solo porque
+ * `MARGIN.bottom` es 10 pt y sobraba colchón.
+ *
+ * Con una redacción legal de cuatro oraciones el papel se partía en dos: la
+ * página 1 se quedaba con el QR y el barcode y a la página 2 se iba el número
+ * de receta suelto. O sea que el barcode que escanea una farmacia se dibujaba
+ * en coordenadas absolutas con `pdf.y` ya pasado el borde inferior. Y el camino
+ * previsto para ese cambio es justamente "se cambia el config y NO el código":
+ * nada avisaba.
+ *
+ * Devuelve 0 sin branding — el B2C no tiene Sección C y su presupuesto de pie
+ * no se mueve ni un punto.
+ */
+function altoSeccionC(pdf: PDFKit.PDFDocument, branding?: BrandingPDF | null): number {
+  const texto = branding?.efectorTexto?.trim();
+  if (!texto) return 0;
+  pdf.font(SECCION_C.fuente).fontSize(SECCION_C.cuerpo);
+  const alto = pdf.heightOfString(texto, { width: CONTENT_WIDTH, align: "center" });
+  return SECCION_C.gapAntes + SECCION_C.gapDespues + alto + SECCION_C.colchon;
+}
+
 async function generarBarcodePNG(texto: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer(
@@ -323,11 +355,10 @@ export async function generarRecetaPDF(
 
       // ─── Calcular posición del footer ─────────────────────────────────
       // No-recetas ahora llevan leyenda de firma + marco regulatorio por tipo.
-      // Con branding, el pie suma la Sección C (efector tecnológico): ~13pt
-      // más de presupuesto. El umbral de salto de página cuelga de
-      // `footerTopY`, así que se recalcula solo — verificado con una receta de
-      // tres medicamentos, que sigue entrando en una página.
-      const footerHeight = (esReceta ? 125 : 95) + (branding ? 13 : 0);
+      // Con branding, el pie suma la Sección C (efector tecnológico), y su
+      // alto se MIDE — no se estima. El umbral de salto de página cuelga de
+      // `footerTopY`, así que se recalcula solo.
+      const footerHeight = (esReceta ? 125 : 95) + altoSeccionC(pdf, branding);
       const footerTopY = PAGE_HEIGHT - MARGIN.bottom - footerHeight;
 
       // Si el contenido ya pasó de donde debería ir la firma, agregar página
@@ -1007,16 +1038,18 @@ function renderFooter(
   // Las Secciones A y B de arriba NO se tocan ni una coma: son las leyendas
   // dictaminadas (firma electrónica art. 5 Ley 25.506 y marco regulatorio por
   // tipo de documento).
+  // El alto de este bloque lo reservó `altoSeccionC()` con las MISMAS
+  // constantes: si se toca un gap acá, se toca allá.
   if (branding && branding.efectorTexto.trim()) {
-    y = pdf.y + 4;
+    y = pdf.y + SECCION_C.gapAntes;
     pdf
       .moveTo(MARGIN.left, y)
       .lineTo(PAGE_WIDTH - MARGIN.right, y)
       .strokeColor(COLORS.border)
       .lineWidth(0.5)
       .stroke();
-    y += 5;
-    pdf.font("Inter").fontSize(6.5).fillColor(COLORS.footerText);
+    y += SECCION_C.gapDespues;
+    pdf.font(SECCION_C.fuente).fontSize(SECCION_C.cuerpo).fillColor(COLORS.footerText);
     pdf.text(branding.efectorTexto.trim(), MARGIN.left, y, {
       width: CONTENT_WIDTH,
       align: "center",

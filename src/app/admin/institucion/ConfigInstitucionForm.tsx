@@ -22,6 +22,12 @@ import {
 const EFECTOR_PLACEHOLDER =
   "Emitido a través de Docto (docto.com.ar) — plataforma de telemedicina. Matrícula del profesional verificada en REFEPS — Red Federal de Registros de Profesionales de la Salud.";
 
+// El mismo techo que valida `guardarConfigInstitucion()`. Está repetido y no
+// importado porque en un módulo "use server" solo se pueden exportar funciones
+// async. Medido con pdfkit sobre el caso más apretado (receta de tres
+// medicamentos): hasta ~900 caracteres entra en una hoja; a los 1000 se parte.
+const MAX_EFECTOR_CHARS = 800;
+
 // ── Gramática visual (tokens.css del handoff) ────────────────────────────────
 const ACCION = "#378ADD";
 const card: React.CSSProperties = {
@@ -369,11 +375,12 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
           </div>
           <Campo
             titulo="Texto de efector (pie de los PDFs)"
-            hint="⚠ Placeholder legal: la redacción final la definen el CEO y el abogado. Se cambia desde acá, sin redeploy."
+            hint={`⚠ Placeholder legal: la redacción final la definen el CEO y el abogado. Se cambia desde acá, sin redeploy. Máximo ${MAX_EFECTOR_CHARS} caracteres — más largo, la receta se va a dos hojas (${f.pdf_efector_texto.trim().length} usados).`}
           >
             <textarea
               style={{ ...inputBase, height: 96, padding: "8px 12px", resize: "vertical", fontFamily: "inherit" }}
               value={f.pdf_efector_texto}
+              maxLength={MAX_EFECTOR_CHARS}
               onChange={(e) => set("pdf_efector_texto", e.target.value)}
               {...focusRing}
             />

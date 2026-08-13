@@ -180,6 +180,27 @@ export const BRANDING_SINTETICO = {
     "Matrícula del profesional verificada en REFEPS — Red Federal de Registros de Profesionales de la Salud.",
 } as const;
 
+/**
+ * La Sección C que todavía no existe: una redacción legal REALISTA, de cuatro
+ * oraciones, del largo que puede tener el copy definitivo del abogado.
+ *
+ * El texto del pie NO sale del código: sale de `institucion_config
+ * .pdf_efector_texto`, y el camino previsto para cambiarlo es "se cambia el
+ * config y NO el código". Con el presupuesto de pie hardcodeado en 13 pt, ese
+ * cambio partía la receta en dos páginas —el barcode de la farmacia en una y
+ * el número de receta en la otra— y ningún test avisaba, porque el golden solo
+ * probaba con el string sintético corto.
+ */
+export const EFECTOR_LEGAL_LARGO =
+  "Este documento fue emitido a través de la plataforma de telemedicina Docto " +
+  "(docto.com.ar), que actúa exclusivamente como efector tecnológico y no " +
+  "interviene en el acto médico. La responsabilidad profesional sobre el " +
+  "contenido corresponde íntegramente al profesional firmante, cuya matrícula " +
+  "fue verificada en REFEPS — Red Federal de Registros de Profesionales de la " +
+  "Salud del Ministerio de Salud de la Nación. El tratamiento de los datos " +
+  "personales de salud se rige por la Ley 25.326 y por el acuerdo de " +
+  "tratamiento de datos suscripto entre la institución y el efector tecnológico.";
+
 /** Cuántas páginas tiene el PDF (el presupuesto de alto del pie se mide acá). */
 export function paginasDePDF(buffer: Buffer): number {
   return (buffer.toString("latin1").match(/\/Type \/Page[^s]/g) ?? []).length;
