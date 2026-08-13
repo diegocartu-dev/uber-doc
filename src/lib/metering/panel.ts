@@ -22,6 +22,7 @@ import {
   totalDeBolsa,
   diasDeSemana,
   domingoDeSemana,
+  semanaTerminada,
   type CumplimientoProfesional,
 } from "@/lib/metering/bolsa";
 
@@ -37,7 +38,18 @@ export interface DiaDelChart {
 
 export interface ResumenSemanal {
   semanaAr: string;
-  /** true = la semana ya terminó y su cumplimiento está sellado. */
+  /**
+   * true = la semana ya terminó (pasó el domingo a medianoche AR).
+   *
+   * Es EL MISMO criterio que usa el badge de cada profesional
+   * (`badgeCumplimiento` ← `semanaTerminada`). Antes el chip miraba el SELLO
+   * (`some(c => c.sellada)`) y el badge miraba el RELOJ: entre el domingo 23:59
+   * y el cierre del lunes —y para siempre, si ese cron fallaba— el panel decía
+   * "En curso" arriba mientras abajo marcaba gente como "Incompleto". Justo la
+   * contradicción que R30 quiere evitar. Encima `some()` es la agregación
+   * equivocada: alcanzaba un solo profesional sellado para dar por cerrada toda
+   * la semana.
+   */
   cerrada: boolean;
   facturables: number;
   porMotor: Record<Motor, number>;
@@ -173,7 +185,7 @@ export async function resumenDeSemana(params: {
 
   return {
     semanaAr: lunes,
-    cerrada: cumplimiento.some((c) => c.sellada),
+    cerrada: semanaTerminada(lunes, ahoraMs),
     facturables,
     porMotor,
     ausenciasPaciente,
