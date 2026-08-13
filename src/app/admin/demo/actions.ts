@@ -116,9 +116,11 @@ export async function cargarParticipante(input: {
 /**
  * Vuelve a mostrar el QR de alguien que ya está cargado.
  *
- * Emite un enlace NUEVO y revoca el anterior, a propósito: es lo que hay que
- * hacer si el QR se escaneó desde el teléfono equivocado, y en el caso normal
- * (se cerró la pestaña) da exactamente lo mismo.
+ * Emite un enlace NUEVO, revoca el anterior Y CIERRA LA SESIÓN que ese anterior
+ * haya minteado: es lo que hay que hacer si el QR se escaneó desde el teléfono
+ * equivocado (revocar el token solo no echa a nadie —la sesión se renueva sola
+ * por refresh token—, que es lo que este comentario afirmaba y no era cierto).
+ * En el caso normal (se cerró la pestaña) da exactamente lo mismo.
  */
 export async function mostrarQR(participanteId: string): Promise<RespuestaAccion> {
   const uid = await guardAdminInstitucionalDocto();

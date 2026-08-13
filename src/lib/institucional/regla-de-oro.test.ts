@@ -84,7 +84,7 @@ test("(a bis) los crons NUEVOS del modo institucional no hacen NADA en el B2C", 
   // deploys porque `vercel.json` es uno solo. En el B2C sus tablas ni existen —
   // sin este corte cada corrida terminaría en error y el watchdog mandaría
   // mails rojos por una tarea que en el B2C no significa nada.
-  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 3);
+  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 4);
   for (const key of CRONS_SOLO_INSTITUCIONALES) {
     const res = cortarSiB2C(key);
     assert.ok(res, `${key} tiene que cortar en el B2C`);

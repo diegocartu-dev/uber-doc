@@ -18,6 +18,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { normalizarTelefonoAR } from "@/lib/telefono";
+import { accesoSigueVivo } from "@/lib/institucional/accesos";
 
 export type RolDemo = "profesional" | "paciente";
 export type EstadoDemo = "invitado" | "entro" | "atendiendo";
@@ -320,4 +321,53 @@ export async function documentoEsDemo(documentoId: string | null | undefined): P
     console.error("[demo] documentoEsDemo falló:", err);
     return false;
   }
+}
+
+// ─── El profesional invitado, después de haber entrado ───────────────────────
+
+/**
+ * ¿El acceso que abrió esta sesión de profesional sigue vivo?
+ *
+ * El enlace del participante es una credencial bearer: quien lo tiene, entra —
+ * y se proyecta en la pared de una sala de reuniones, donde cualquiera lo
+ * fotografía. Revocar el token (lo que hacen "mostrar QR" y "limpiar reunión")
+ * apagaba la puerta pero no echaba a quien ya estaba adentro: esa sesión se
+ * renovaba sola por refresh token y no vencía nunca.
+ *
+ * Esta es la mitad que faltaba, y la miran las pantallas del profesional en cada
+ * request, igual que las del paciente.
+ *
+ * ── FAIL-OPEN A PROPÓSITO PARA TODOS LOS DEMÁS ───────────────────────────────
+ * Solo se le exige la cookie a un profesional CON `demo_sesion_id`. Un
+ * profesional real de la institución (y cualquiera del B2C) entra por login con
+ * contraseña y no tiene ninguna cookie de acceso: exigírsela lo dejaría afuera
+ * de su propio dashboard. El gate es de la demo y de nadie más.
+ */
+export async function profesionalDemoSigueAdentro(params: {
+  medicoId: string;
+  accesoId: string | undefined;
+}): Promise<boolean> {
+  if (!esInstitucional()) return true;
+  let esDemo = false;
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("medicos")
+      .select("demo_sesion_id")
+      .eq("id", params.medicoId)
+      .maybeSingle();
+    if (error) {
+      // No se pudo saber si es de demo. Se deja pasar: cerrarle el dashboard a
+      // un profesional real por un blip de la base es el error caro de este
+      // lado, y el token en sí ya vence en horas.
+      console.error("[demo] No se pudo leer si el profesional es de demostración:", error.message);
+      return true;
+    }
+    esDemo = Boolean(data?.demo_sesion_id);
+  } catch (err) {
+    console.error("[demo] profesionalDemoSigueAdentro falló:", err);
+    return true;
+  }
+  if (!esDemo) return true;
+  return accesoSigueVivo({ accesoId: params.accesoId, medicoId: params.medicoId });
 }

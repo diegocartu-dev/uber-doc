@@ -138,14 +138,21 @@ test("los encuentros de una reunión no entran a la factura de la institución",
   const cola = [
     { id: "real-1", es_demo: false },
     { id: "de-la-reunion", es_demo: true },
-    { id: "real-2" }, // sin la columna: encuentro viejo, anterior a la migración
+    { id: "real-2", es_demo: false },
   ];
   const quedan = sinEncuentrosDemo(cola).map((c) => c.id);
   assert.deepEqual(quedan, ["real-1", "real-2"]);
 });
 
-test("un encuentro sin marca se factura: la marca es la excepción, no la regla", () => {
-  // Al revés sería peor de los dos lados posibles: dejaría de facturarse
-  // servicio realmente prestado y nadie se enteraría hasta el cierre del mes.
-  assert.deepEqual(sinEncuentrosDemo([{ es_demo: undefined }]).length, 1);
+test("un encuentro sin marca NO se factura: pasa solo lo que la base afirma", () => {
+  // La invariante que el docblock de `sinEncuentrosDemo` promete desde el día
+  // uno —"solo pasa lo que la base afirma que NO es demo"— y que la
+  // implementación contradecía: era `!== true`, así que un `undefined` (columna
+  // que no vino en el SELECT, fuente de datos nueva) se colaba a la factura.
+  //
+  // De los dos errores posibles se elige el barato. Facturar de menos se ve y
+  // se corrige; facturarle a un ministerio una consulta que ocurrió en una sala
+  // de reuniones, no.
+  assert.equal(sinEncuentrosDemo([{ es_demo: undefined }]).length, 0);
+  assert.equal(sinEncuentrosDemo([{}]).length, 0);
 });

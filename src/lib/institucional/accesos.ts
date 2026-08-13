@@ -21,6 +21,25 @@ import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config"
 import { turnoMuerto } from "@/lib/institucional/pantalla-turno";
 
 const DIA_MS = 24 * 3600_000;
+const HORA_MS = 3600_000;
+
+/**
+ * Vigencia del enlace de una REUNIÓN DE DEMOSTRACIÓN. Horas, no días.
+ *
+ * El resto de los enlaces vence a los `vigencia_documentos_dias` del config
+ * (30 por default), y ese número es política de RETENCIÓN DE DOCUMENTOS del
+ * paciente: cuántos días puede volver a buscar su receta. Aplicárselo al enlace
+ * del profesional invitado era darle un mes de vida a un acceso sin usuario ni
+ * contraseña, multi-uso y sin segundo factor, que aterriza directo en el
+ * dashboard clínico con pacientes e historia clínica — desde un QR que se
+ * proyectó en la pared de una sala de reuniones y que muy probablemente quedó en
+ * fotos y en la grabación del encuentro.
+ *
+ * 12 horas cubre el día de la reunión con margen (se prepara a la mañana, se
+ * hace a la tarde) y no cubre el día siguiente. Si hace falta más, se regenera
+ * el QR desde el panel, que además echa al que ya había entrado.
+ */
+export const HORAS_ACCESO_DEMO = 12;
 
 export interface AccesoEmitido {
   url: string; // https://<dominio>/acceso/t/<token>
@@ -90,7 +109,12 @@ export async function crearAccesoLink(params: {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const ancla = params.encuentroMs && !Number.isNaN(params.encuentroMs) ? params.encuentroMs : Date.now();
-  const expiraAt = new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
+  // La demo tiene su propio reloj y NO el de la retención de documentos: ver
+  // `HORAS_ACCESO_DEMO`. Va primero para que no dependa del config de nadie.
+  const expiraAt =
+    params.origen === "demo"
+      ? new Date(Date.now() + HORAS_ACCESO_DEMO * HORA_MS).toISOString()
+      : new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
 
   // ── PRIMERO INSERTAR, DESPUÉS REVOCAR ──────────────────────────────────────
   // El orden era el inverso: se revocaban los tokens vivos y recién ahí se
@@ -638,21 +662,41 @@ export function segundosDeVida(expiraAt: string): number {
  */
 export async function accesoSigueVivo(params: {
   accesoId: string | undefined;
-  pacienteId: string;
+  /** `pacientes.id`. Exactamente uno de los dos sujetos, igual que al emitir. */
+  pacienteId?: string;
+  /**
+   * `medicos.id` — el PROFESIONAL invitado a una demo (migración 026).
+   *
+   * Faltaba, y con él faltaba la mitad entera de la defensa de ese lado:
+   * `/acceso/entrar` setea la cookie para los DOS sujetos, pero acá se comparaba
+   * `data.paciente_id !== params.pacienteId`, que para una fila con `medico_id`
+   * es `null !== <id>` → siempre false → el acceso "seguía vivo" pasara lo que
+   * pasara. El comentario de `cerrarSesionesDeUsuarios` promete esta mitad para
+   * cubrir la hora en la que el access token todavía se puede usar; para el
+   * profesional no existía.
+   */
+  medicoId?: string;
   turnoId?: string;
   consultaId?: string;
 }): Promise<boolean> {
   if (!params.accesoId) return false;
+  if (!params.pacienteId === !params.medicoId) return false; // exactamente uno
   try {
     const admin = createAdminClient();
     const { data } = await admin
       .from("accesos_link")
-      .select("paciente_id, turno_id, consulta_id, es_demo, expira_at, revocado_at")
+      .select("paciente_id, medico_id, turno_id, consulta_id, es_demo, expira_at, revocado_at")
       .eq("id", params.accesoId)
       .maybeSingle();
     if (!data) return false;
     if (data.revocado_at) return false;
     if (new Date(data.expira_at).getTime() <= Date.now()) return false;
+    if (params.medicoId) {
+      // El acceso del profesional no lleva encuentro nunca (CHECK
+      // accesos_link_recurso_coherente): con el sujeto correcto ya está dicho
+      // todo.
+      return data.medico_id === params.medicoId;
+    }
     if (data.paciente_id !== params.pacienteId) return false;
 
     // ── EL ÚNICO ENSANCHE, Y ESTÁ ACOTADO A LA DEMO ────────────────────────

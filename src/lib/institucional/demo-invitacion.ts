@@ -217,9 +217,18 @@ export async function invitarParticipante(params: {
  * Vuelve a acuñar el enlace de un participante que ya está cargado.
  *
  * Para el caso más probable de una reunión: alguien cerró la pestaña, se quedó
- * sin batería, o el QR se escaneó desde el teléfono equivocado. Emitir uno nuevo
- * REVOCA el anterior (`crearAccesoLink` lo hace solo), que es exactamente lo que
- * se espera cuando el enlace terminó en el teléfono de otro.
+ * sin batería, o el QR se escaneó desde el teléfono equivocado.
+ *
+ * ── PRIMERO SE ECHA AL QUE ESTÁ ADENTRO, DESPUÉS SE ACUÑA ────────────────────
+ * `crearAccesoLink` revoca el token anterior solo, y eso alcanzaba para el caso
+ * "cerré la pestaña" y para ningún otro: un token revocado no impide nada a
+ * quien YA lo usó, porque la sesión que minteó se renueva sola por refresh
+ * token. O sea que "regenerar el QR" —que es lo que uno hace justo cuando el
+ * enlace terminó en el teléfono equivocado— no echaba a nadie.
+ *
+ * `revocarAccesosDeSujeto` sí: apaga los enlaces y cierra las sesiones abiertas
+ * de esa persona. Va ANTES de acuñar el nuevo para no matar el que se acaba de
+ * emitir.
  */
 export async function regenerarEnlace(participanteId: string): Promise<ResultadoInvitacion> {
   if (!esInstitucional()) {
@@ -234,6 +243,11 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
     .eq("id", participanteId)
     .maybeSingle();
   if (!p) return { ok: false, error: "Ese participante no existe." };
+
+  // Ver el encabezado: revocar el token viejo no echa a quien ya entró con él.
+  const medicoPrevio = (p.medico_id as string | null) ?? undefined;
+  const pacientePrevio = (p.paciente_id as string | null) ?? undefined;
+  await revocarAccesosDeSujeto(medicoPrevio ? { medicoId: medicoPrevio } : { pacienteId: pacientePrevio! });
 
   const acceso = await crearAccesoLink({
     medicoId: (p.medico_id as string | null) ?? undefined,
@@ -616,4 +630,60 @@ async function anonimizarSobrevivientes(
         `sin nombre, sin celular y sin DNI.`
     );
   }
+}
+
+// ─── El barrido: ninguna reunión queda abierta para siempre ──────────────────
+
+/**
+ * Horas después de las cuales una reunión abierta se limpia sola.
+ *
+ * El único apagador que había era el botón "Limpiar reunión". Si nadie lo tocaba
+ * —y en una gira de tres o cuatro reuniones eso pasa— quedaban dando vueltas en
+ * la base de la provincia el nombre y el celular de gente que fue a una reunión,
+ * fichas de profesional con agenda cargada, y pacientes de utilería en el
+ * padrón. Nada de eso tiene fecha de vencimiento propia.
+ *
+ * 24 h deja pasar la reunión más larga imaginable con margen, y es más que la
+ * vigencia del enlace (`HORAS_ACCESO_DEMO`), así que cuando el barrido llega los
+ * accesos ya estaban muertos: lo que limpia son los datos, no una puerta.
+ */
+export const HORAS_REUNION_ABIERTA = 24;
+
+export interface ResumenBarridoDemo {
+  abiertas: number;
+  limpiadas: number;
+  conProblemas: { sesionId: string; problemas: string[] }[];
+}
+
+/**
+ * Limpia las reuniones que quedaron abiertas de más. Idempotente y sin PII en
+ * los logs: ids y contadores, nunca nombres.
+ */
+export async function cerrarReunionesVencidas(
+  horas = HORAS_REUNION_ABIERTA
+): Promise<ResumenBarridoDemo> {
+  const resumen: ResumenBarridoDemo = { abiertas: 0, limpiadas: 0, conProblemas: [] };
+  if (!esInstitucional()) return resumen;
+
+  const admin = createAdminClient();
+  const corte = new Date(Date.now() - horas * 3600_000).toISOString();
+  const { data, error } = await admin
+    .from("demo_sesiones")
+    .select("id")
+    .is("cerrada_at", null)
+    .lt("created_at", corte)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("[demo] No se pudieron listar las reuniones vencidas:", error.message);
+    return resumen;
+  }
+
+  const vencidas = (data ?? []).map((s) => s.id as string);
+  resumen.abiertas = vencidas.length;
+  for (const sesionId of vencidas) {
+    const res = await limpiarSesionDemo(sesionId);
+    if (res.ok) resumen.limpiadas++;
+    else resumen.conProblemas.push({ sesionId, problemas: res.problemas });
+  }
+  return resumen;
 }

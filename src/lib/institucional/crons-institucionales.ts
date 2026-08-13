@@ -25,6 +25,7 @@ export const CRONS_SOLO_INSTITUCIONALES = [
   "metering-clasificar", // el contador contractual (spec §6.3)
   "acuerdo-cerrar-semana", // sella la bolsa de horas de la semana que pasó (§6.4)
   "metering-cerrar-mes", // sella la facturación del mes que terminó (R31)
+  "demo-cerrar-abiertas", // limpia las reuniones de demostración que quedaron abiertas
 ] as const;
 
 export type CronSoloInstitucional = (typeof CRONS_SOLO_INSTITUCIONALES)[number];

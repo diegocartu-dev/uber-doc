@@ -25,6 +25,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { HORAS_ACCESO_DEMO } from "@/lib/institucional/accesos";
 
 /**
  * El archivo SIN comentarios. Hace falta: los comentarios de este repo tienen
@@ -164,5 +165,45 @@ test("la reunión no se marca como cerrada si quedó algo por reintentar", () =>
     /if \(problemas\.length === 0\)/,
     "volvió a cerrarse la reunión con problemas abiertos: la pantalla esconde el botón " +
       "de limpiar y no queda forma de reintentar"
+  );
+});
+
+test("el enlace de una reunión vence en horas, no en la retención de documentos", () => {
+  const codigo = fuente("src/lib/institucional/accesos.ts");
+  assert.match(
+    codigo,
+    /params\.origen === "demo"[\s\S]{0,160}HORAS_ACCESO_DEMO \* HORA_MS/,
+    "el enlace de demo volvió a vencer con `vigencia_documentos_dias` (30 días por " +
+      "default): es política de retención de documentos del paciente, no el TTL de un " +
+      "acceso bearer al dashboard clínico que se proyecta en una pared"
+  );
+  assert.ok(HORAS_ACCESO_DEMO <= 24, "el enlace de la reunión no puede durar más de un día");
+});
+
+test("regenerar el QR echa al que ya había entrado con el anterior", () => {
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  const i = codigo.indexOf("export async function regenerarEnlace");
+  assert.ok(i > 0, "cambió la forma de regenerarEnlace: revisá este test");
+  const cuerpo = codigo.slice(i, codigo.indexOf("// ─── Limpiar la reunión", i));
+  const revoca = cuerpo.indexOf("revocarAccesosDeSujeto");
+  const acuna = cuerpo.indexOf("crearAccesoLink");
+  assert.ok(revoca > 0, "regenerar el QR volvió a revocar solo el token: la sesión que ese " +
+    "token minteó se renueva sola y no se echa a nadie");
+  assert.ok(revoca < acuna, "se revoca DESPUÉS de acuñar: mata el enlace recién emitido");
+});
+
+test("la cookie del acceso también acota la sesión del profesional", () => {
+  const codigo = fuente("src/lib/institucional/accesos.ts");
+  assert.match(
+    codigo,
+    /return data\.medico_id === params\.medicoId/,
+    "accesoSigueVivo volvió a comparar solo por paciente_id: para una fila de profesional " +
+      "eso es `null !== <id>` y el acceso queda vivo pase lo que pase"
+  );
+  const dashboard = fuente("src/app/dashboard/page.tsx");
+  assert.match(
+    dashboard,
+    /profesionalDemoSigueAdentro/,
+    "el dashboard del profesional dejó de mirar si su acceso sigue vivo"
   );
 });
