@@ -11,6 +11,13 @@
 // Si alguna vez este test falla, hay dos posibilidades y ninguna es "ajustar el
 // número esperado": o se rompió la regla contractual, o el mock miente. Las dos
 // se resuelven hablando, no editando la aserción.
+//
+// El detalle fino que este archivo blinda es la BOLSA DE HORAS (§6.4, decisión
+// de Diego del 12/08): los turnos valen por poner la agenda, las consultas
+// inmediatas valen por atender. Las dos lecturas que la discusión descartó
+// —contar solo lo consumido (24,5 hs) y contar los 120 slots como disposición
+// (100 %)— están escritas como aserciones NEGATIVAS: si el día de mañana
+// alguien "simplifica" la regla hacia cualquiera de las dos, el test lo frena.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,6 +32,18 @@ import {
   type EncuentroCandidato,
   type EventoPresencia,
 } from "@/lib/metering/clasificar";
+import {
+  calcularBolsa,
+  minutosAHoras,
+  badgeCumplimiento,
+  diasDeSemana,
+  etiquetaSemana,
+  semanaTerminada,
+  semanaASellar,
+  semanaDeHoy,
+  semanaAnterior,
+  semanaSiguiente,
+} from "@/lib/metering/bolsa";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIXTURE — la semana del 19 al 25 de octubre (mock 4)
@@ -219,6 +238,218 @@ test("mock 4 · en el contador no existe ningún concepto de Mercado Pago", () =
     false,
     `columnas del contador: ${claves.join(", ")}`
   );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LA BOLSA DE HORAS — la regla híbrida (§6.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * La agenda del fixture: 106 huecos de agenda (61 acordados + 12 ofrecidos + 9
+ * con ausencia del paciente + 2 con ausencia del profesional + 22 libres) que
+ * ya transcurrieron, más 14 consultas inmediatas que no ocupan agenda.
+ *
+ * Los 30 profesionales se cuentan juntos, como los mira el KPI del panel: la
+ * `clave` de cada hueco lo mantiene separado del de al lado.
+ */
+const AGENDA_SLOTS = 61 + 12 + 9 + 2 + 22; // 106
+const CI_FACTURABLES = 14;
+const HORAS_COMPROMETIDAS = 30; // 30 profesionales × 1 h
+
+const hueco = (i: number, hora: string, descuenta: boolean) => {
+  const medicoId = `medico-${i % 30}`;
+  return {
+    clave: `${medicoId}|slot-${i}|${hora}`,
+    medicoId,
+    inicioMs: Date.parse(instante(i % 7, hora)),
+    finMs: Date.parse(instante(i % 7, hora)) + DURACION_SLOT_MIN * 60_000,
+    descuenta,
+  };
+};
+
+const bolsa = calcularBolsa({
+  duracionSlotMin: DURACION_SLOT_MIN,
+  horasComprometidas: HORAS_COMPROMETIDAS,
+  slots: [
+    ...Array.from({ length: AGENDA_SLOTS - 2 }, (_, i) => hueco(i, "09:00", false)),
+    // Los dos slots donde faltó el profesional: descuentan.
+    ...Array.from({ length: 2 }, (_, i) => hueco(1000 + i, "18:00", true)),
+  ],
+  // Las 14 CI caen fuera de toda franja propia (14:00; las franjas del fixture
+  // están a las 09:00 y a las 18:00): suman bloque completo.
+  cis: Array.from({ length: CI_FACTURABLES }, (_, i) => ({
+    medicoId: `medico-${i % 30}`,
+    inicioMs: Date.parse(instante(i % 7, "14:00")),
+  })),
+});
+
+test("bolsa · los turnos valen por DISPOSICIÓN: (106 − 2) × 15 min = 26 hs", () => {
+  assert.equal(bolsa.slotsContados, AGENDA_SLOTS - 2);
+  assert.equal(bolsa.slotsDescontados, 2);
+  assert.equal(bolsa.minutosTurnos, (AGENDA_SLOTS - 2) * DURACION_SLOT_MIN);
+  assert.equal(minutosAHoras(bolsa.minutosTurnos), 26);
+});
+
+test("bolsa · las consultas inmediatas valen por ATENCIÓN: 14 bloques de 15 min = 3,5 hs", () => {
+  assert.equal(bolsa.cisContadas, CI_FACTURABLES);
+  assert.equal(bolsa.minutosCI, CI_FACTURABLES * DURACION_SLOT_MIN);
+  assert.equal(minutosAHoras(bolsa.minutosCI), 3.5);
+});
+
+test("bolsa · 29,5 de 30 horas = 98 % (el número del mock 4)", () => {
+  assert.equal(minutosAHoras(bolsa.minutosCumplidos), 29.5);
+  assert.equal(minutosAHoras(bolsa.minutosComprometidos), 30);
+  assert.equal(bolsa.porcentaje, 98);
+});
+
+test("bolsa · la lectura CONSUMO (24,5 hs) está RECHAZADA", () => {
+  // Consumo = contar los 98 encuentros atendidos × 15 min. Es la lectura que
+  // castiga al profesional por una agenda que la institución no llenó.
+  const consumo = 98 * DURACION_SLOT_MIN;
+  assert.equal(minutosAHoras(consumo), 24.5);
+  assert.notEqual(bolsa.minutosCumplidos, consumo);
+});
+
+test("bolsa · la lectura DISPOSICIÓN-sobre-120 (100 %) está RECHAZADA", () => {
+  // Contar los 120 slot-equivalentes como disposición daría 30 de 30 = 100 %:
+  // le regalaría al profesional las dos horas donde no apareció.
+  const disposicionSobre120 = 120 * DURACION_SLOT_MIN;
+  assert.equal(minutosAHoras(disposicionSobre120), 30);
+  assert.notEqual(bolsa.minutosCumplidos, disposicionSobre120);
+  assert.notEqual(bolsa.porcentaje, 100);
+});
+
+test("bolsa · una CI atendida DENTRO de una franja propia ya transcurrida no suma dos veces", () => {
+  const inicio = Date.parse(instante(0, "09:00"));
+  const r = calcularBolsa({
+    duracionSlotMin: 15,
+    horasComprometidas: 1,
+    slots: [{ clave: "m1|d1|09:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 15 * 60_000, descuenta: false }],
+    cis: [{ medicoId: "m1", inicioMs: inicio + 3 * 60_000 }], // adentro de su propia franja
+  });
+  assert.equal(r.minutosTurnos, 15);
+  assert.equal(r.minutosCI, 0, "esa hora ya está contada por disposición");
+  assert.equal(r.cisDentroDeFranja, 1);
+  assert.equal(r.minutosCumplidos, 15);
+});
+
+test("bolsa · la CI de un profesional NO se tapa con la franja de OTRO", () => {
+  const inicio = Date.parse(instante(0, "09:00"));
+  const r = calcularBolsa({
+    duracionSlotMin: 15,
+    horasComprometidas: 1,
+    slots: [{ clave: "m1|d1|09:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 15 * 60_000, descuenta: false }],
+    cis: [{ medicoId: "m2", inicioMs: inicio + 3 * 60_000 }],
+  });
+  assert.equal(r.cisContadas, 1);
+  assert.equal(r.minutosCI, 15);
+});
+
+test("bolsa · el mismo hueco levantado dos veces (turno reprogramado) cuenta UNA sola vez", () => {
+  // Un turno reprogramado queda como fila terminal Y su horario vuelve a la
+  // oferta como slot disponible: son dos filas y una sola hora de agenda.
+  const inicio = Date.parse(instante(0, "10:00"));
+  const fila = { clave: "m1|d1|10:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 15 * 60_000, descuenta: false };
+  const r = calcularBolsa({ duracionSlotMin: 15, horasComprometidas: 1, slots: [fila, { ...fila }], cis: [] });
+  assert.equal(r.slotsContados, 1);
+  assert.equal(r.minutosTurnos, 15);
+});
+
+test("bolsa · si UNA de las filas del hueco es ausencia del profesional, el hueco descuenta", () => {
+  const inicio = Date.parse(instante(0, "11:00"));
+  const base = { clave: "m1|d1|11:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 15 * 60_000 };
+  const r = calcularBolsa({
+    duracionSlotMin: 15,
+    horasComprometidas: 1,
+    slots: [{ ...base, descuenta: false }, { ...base, descuenta: true }],
+    cis: [],
+  });
+  assert.equal(r.slotsContados, 0);
+  assert.equal(r.slotsDescontados, 1);
+  assert.equal(r.minutosTurnos, 0);
+});
+
+test("bolsa · los minutos del turno salen de la duración REAL del slot, no del config", () => {
+  // Agenda vieja de 20 min con el config ya en 15: lo que puso a disposición
+  // fueron 20 minutos. El config manda en el bloque de la CI, no acá.
+  const inicio = Date.parse(instante(0, "12:00"));
+  const r = calcularBolsa({
+    duracionSlotMin: 15,
+    horasComprometidas: 1,
+    slots: [{ clave: "m1|d1|12:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 20 * 60_000, descuenta: false }],
+    cis: [],
+  });
+  assert.equal(r.minutosTurnos, 20);
+});
+
+test("bolsa · sin agenda ni consultas, el profesional queda en 0 % (nunca en NaN)", () => {
+  const r = calcularBolsa({ duracionSlotMin: 15, horasComprometidas: 1, slots: [], cis: [] });
+  assert.equal(r.minutosCumplidos, 0);
+  assert.equal(r.porcentaje, 0);
+});
+
+test("bolsa · sin acuerdo cargado (0 horas) el porcentaje no divide por cero", () => {
+  const inicio = Date.parse(instante(0, "09:00"));
+  const r = calcularBolsa({
+    duracionSlotMin: 15,
+    horasComprometidas: 0,
+    slots: [{ clave: "m1|d1|09:00", medicoId: "m1", inicioMs: inicio, finMs: inicio + 15 * 60_000, descuenta: false }],
+    cis: [],
+  });
+  assert.equal(r.porcentaje, 0);
+  assert.equal(Number.isFinite(r.porcentaje), true);
+});
+
+// ── R30: la semana en curso no marca a nadie como incompleto ─────────────────
+
+test("badge · un miércoles nadie figura 'Incompleto' — figura 'En curso'", () => {
+  assert.equal(badgeCumplimiento(15, 60, false), "En curso");
+  assert.equal(badgeCumplimiento(15, 60, true), "Incompleto");
+});
+
+test("badge · cumplido es cumplido, esté la semana abierta o cerrada", () => {
+  assert.equal(badgeCumplimiento(60, 60, false), "Cumplido");
+  assert.equal(badgeCumplimiento(75, 60, true), "Cumplido");
+});
+
+test("badge · sin un solo minuto, 'Sin actividad' (y nunca 'Incompleto' en curso)", () => {
+  assert.equal(badgeCumplimiento(0, 60, false), "Sin actividad");
+  assert.equal(badgeCumplimiento(0, 60, true), "Sin actividad");
+});
+
+// ── La semana AR ─────────────────────────────────────────────────────────────
+
+test("semana · el 19 al 25 de octubre es de lunes a domingo", () => {
+  assert.deepEqual(diasDeSemana(LUNES), [
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22",
+    "2026-10-23",
+    "2026-10-24",
+    "2026-10-25",
+  ]);
+  assert.equal(etiquetaSemana(LUNES), "19 al 25 de octubre");
+});
+
+test("semana · una semana a caballo de dos meses se nombra con los dos", () => {
+  assert.equal(etiquetaSemana("2026-10-26"), "26 de octubre al 1 de noviembre");
+});
+
+test("semana · terminada = pasó el domingo a medianoche AR, no antes", () => {
+  assert.equal(semanaTerminada(LUNES, Date.parse("2026-10-25T20:00:00-03:00")), false);
+  assert.equal(semanaTerminada(LUNES, Date.parse("2026-10-26T00:30:00-03:00")), true);
+});
+
+test("semana · el cron del lunes sella la que acaba de terminar, no la que arranca", () => {
+  // Lunes 26 a las 00:05 ART: la semana a sellar es la del 19.
+  assert.equal(semanaASellar(Date.parse("2026-10-26T00:05:00-03:00")), LUNES);
+  assert.equal(semanaDeHoy(Date.parse("2026-10-26T00:05:00-03:00")), "2026-10-26");
+});
+
+test("semana · el selector avanza y retrocede de a siete días", () => {
+  assert.equal(semanaAnterior(LUNES), "2026-10-12");
+  assert.equal(semanaSiguiente(LUNES), "2026-10-26");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
