@@ -352,6 +352,36 @@ BEGIN
   RETURN registro;
 END $$;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. EL COMBO DE MESES DE /admin/periodos
+-- ─────────────────────────────────────────────────────────────────────────────
+-- La pantalla necesita ~12 strings ("qué meses tienen filas selladas"), y los
+-- sacaba leyendo `encuentros_metering` ENTERA y haciendo el `DISTINCT` en
+-- memoria, en cada carga (`force-dynamic`). Con el volumen del piloto no se
+-- nota; a 3.000 encuentros facturables por mes son ~36.000 filas en ~36
+-- requests paginados cada vez que un admin abre la pantalla, y no deja de
+-- crecer nunca porque los sellos no se archivan.
+--
+-- Un `DISTINCT` del lado del servidor, apoyado en el índice parcial de arriba.
+-- No hace falta `SECURITY DEFINER`: la llama el /admin interno con service
+-- role, que no pasa por RLS.
+
+CREATE OR REPLACE FUNCTION periodos_sellados()
+RETURNS TABLE (periodo TEXT)
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT DISTINCT facturado_periodo
+    FROM encuentros_metering
+   WHERE facturado_periodo IS NOT NULL
+   ORDER BY 1 DESC
+$$;
+
+REVOKE ALL ON FUNCTION periodos_sellados() FROM PUBLIC;
+REVOKE ALL ON FUNCTION periodos_sellados() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION periodos_sellados() TO service_role;
+
 -- La puerta no se abre desde el navegador: ni el paciente con sesión de link ni
 -- un operador de la institución pueden invocarla. La llama el /admin interno de
 -- Docto con service role.

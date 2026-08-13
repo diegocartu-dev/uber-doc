@@ -263,19 +263,25 @@ export async function historialDePeriodo(periodo: string): Promise<CorreccionReg
   });
 }
 
-/** Meses que tienen filas selladas — el selector de la pantalla. */
+/**
+ * Meses que tienen filas selladas — el selector de la pantalla.
+ *
+ * Va por RPC (`periodos_sellados`, migración 021) y no por un `select` que
+ * después deduplica en memoria: son ~12 strings, pero salían de leer
+ * `encuentros_metering` ENTERA en cada carga de /admin/periodos, que es
+ * `force-dynamic`. A 3.000 encuentros por mes eso son ~36.000 filas y ~36
+ * requests paginados por visita, creciendo con la facturación histórica y sin
+ * techo (los sellos no se archivan).
+ *
+ * TIRA si la base falla, como el resto del módulo: un combo vacío se ve igual
+ * que "todavía no hay ningún mes cerrado".
+ */
 export async function periodosSellados(): Promise<string[]> {
   const admin = createAdminClient();
-  const filas = await leerTodo<Record<string, unknown>>("períodos sellados", (desde, hasta) =>
-    admin
-      .from("encuentros_metering")
-      .select("facturado_periodo")
-      .not("facturado_periodo", "is", null)
-      .order("facturado_periodo", { ascending: false })
-      .order("id", { ascending: true })
-      .range(desde, hasta)
-  );
-  return [...new Set(filas.map((f) => f.facturado_periodo as string))].sort().reverse();
+  const { data, error } = await admin.rpc("periodos_sellados");
+  if (error) throw new Error(`períodos sellados: ${error.message}`);
+  const filas = (data ?? []) as { periodo: string | null }[];
+  return filas.map((f) => f.periodo).filter((p): p is string => Boolean(p));
 }
 
 // ─── Escritura: la corrección auditada ───────────────────────────────────────
