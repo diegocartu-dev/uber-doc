@@ -265,10 +265,23 @@ export async function sellarPeriodo(periodo: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Escapa un valor para CSV (comillas dobles, comas y saltos de línea). */
+/**
+ * Escapa un valor para CSV: comillas dobles, comas, `;` y saltos de línea…
+ *
+ * …y las FÓRMULAS. Un texto que arranca con `=`, `+`, `-` o `@` lo ejecuta
+ * Excel al abrir la planilla, y dos columnas de este archivo —profesional y
+ * especialidad— salen de la base, o sea de lo que alguien tipeó en un alta. El
+ * archivo está pensado explícitamente para el Excel de la administración de un
+ * ministerio: un `=HYPERLINK(...)` cargado como nombre se ejecutaría en esa
+ * máquina. El apóstrofo adelante lo convierte en texto.
+ *
+ * Solo se le pone a los strings: los números de este CSV son conteos y precios,
+ * y prefijarlos rompería la planilla para nada.
+ */
 function celda(valor: string | number): string {
   const s = String(valor ?? "");
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const texto = typeof valor === "string" && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\n;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
 }
 
 /**
