@@ -396,6 +396,15 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   const activos = profesionales.filter((p) => !p.acuerdo_completo);
   const completos = profesionales.filter((p) => p.acuerdo_completo);
   const porCategoria = (cat: ProfesionalOferta["categoria"]) => activos.filter((p) => p.categoria === cat);
+  /**
+   * Los que ya cumplieron su acuerdo pero SÍ tienen algo que ofrecer en esa
+   * categoría. Los estados vacíos los necesitan: con R6 flexible un profesional
+   * completo es elegible, así que "nadie activo en este momento" era mentira
+   * cuando el único activo estaba dos secciones más abajo — y es el caso que
+   * más duele, con el paciente del otro lado del mostrador.
+   */
+  const completosDe = (cat: ProfesionalOferta["categoria"]) =>
+    completos.filter((p) => p.seleccionable && p.categoria === cat);
 
   const seleccionDe = (p: ProfesionalOferta) =>
     seleccion && seleccion.profesional.medico_id === p.medico_id ? seleccion : null;
@@ -505,10 +514,16 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   function renderCategoriaCI() {
     const filas = porCategoria("ci_activa");
     if (filas.length === 0) {
+      const abajo = completosDe("ci_activa").length;
       return (
         <div className="cat-colapsada sin-borde">
-          <strong>Puede atender ahora</strong> — nadie activo en este momento ·{" "}
-          <span className="tnum">Ventana: {ventanaCI}</span>
+          <strong>Puede atender ahora</strong> —{" "}
+          {abajo > 0
+            ? abajo === 1
+              ? "hay 1 profesional activo que ya cumplió su acuerdo, más abajo"
+              : `hay ${abajo} profesionales activos que ya cumplieron su acuerdo, más abajo`
+            : "nadie activo en este momento"}{" "}
+          · <span className="tnum">Ventana: {ventanaCI}</span>
         </div>
       );
     }
@@ -529,9 +544,14 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     const titulo = cat === "turno_acordado" ? "Turno acordado" : "Turno ofrecido";
     const sub = cat === "turno_acordado" ? "— agenda asignada por la institución" : "— horarios que publicó el profesional";
     if (filas.length === 0) {
+      const abajo = completosDe(cat).length;
+      const publicados = cat === "turno_ofrecido" ? "publicados " : "";
       return (
         <div className="cat-colapsada">
-          <strong>{titulo}</strong> — sin horarios {cat === "turno_ofrecido" ? "publicados " : ""}esta semana.
+          <strong>{titulo}</strong> —{" "}
+          {abajo > 0
+            ? `los únicos horarios ${publicados}de esta semana son de ${abajo === 1 ? "un profesional que ya cumplió" : `${abajo} profesionales que ya cumplieron`} su acuerdo, más abajo.`
+            : `sin horarios ${publicados}esta semana.`}
         </div>
       );
     }
