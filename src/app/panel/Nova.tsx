@@ -185,7 +185,11 @@ export default function Nova() {
         );
 
       let reasignados = 0;
-      const medicosQueRecibieron = new Set<string>();
+      // Los que se cuentan para el cierre son los avisos ENTREGADOS, no los
+      // turnos movidos: un turno que se reprogramó bien pero cuyo WhatsApp
+      // rebotó pinta la fila en rojo, y el cierre no puede decir que se avisó.
+      let pacientesAvisados = 0;
+      const medicosAvisados = new Set<string>();
       const fallados: string[] = [];
       for (const item of aMover) {
         const clavePac = `pac:${item.turno_id}`;
@@ -212,17 +216,26 @@ export default function Nova() {
             continue;
           }
           reasignados++;
-          medicosQueRecibieron.add(item.propuesta!.medico_id);
           const avisoPac = r.avisos?.paciente ?? null;
+          if (avisoPac?.ok) pacientesAvisados++;
           pintar(clavePac, {
             estado: avisoPac?.ok ? "enviado" : "fallado",
-            detalle: avisoPac?.ok ? etiquetaCanal(avisoPac.canal) : "No se pudo enviar el aviso",
+            detalle: avisoPac?.ok
+              ? etiquetaCanal(avisoPac.canal)
+              : avisoPac
+                ? "No se pudo enviar el aviso"
+                : "Sin WhatsApp ni mail: hay que llamarlo",
             hora: horaAhora(),
           });
           const avisoMed = r.avisos?.medico ?? null;
+          if (avisoMed?.ok) medicosAvisados.add(item.propuesta!.medico_id);
           pintar(claveMed, {
             estado: avisoMed?.ok ? "enviado" : "fallado",
-            detalle: avisoMed?.ok ? etiquetaCanal(avisoMed.canal) : "No se pudo enviar el aviso",
+            detalle: avisoMed?.ok
+              ? etiquetaCanal(avisoMed.canal)
+              : avisoMed
+                ? "No se pudo enviar el aviso"
+                : "Sin WhatsApp ni mail: hay que avisarle",
             hora: horaAhora(),
           });
         } catch {
@@ -276,17 +289,39 @@ export default function Nova() {
         // El cierre del día no puede voltear una corrida ya hecha y avisada.
       }
 
+      // Cerrar el checklist SIN dejar filas colgadas. Si un ítem falla al
+      // reprogramar (o revienta el fetch), su fila de profesional nunca se
+      // pinta: quedaba con el punto gris "pendiente" para siempre, debajo de un
+      // encabezado que ya decía "Avisos enviados". Una tarjeta final que dice
+      // que terminó no puede tener filas que dicen que están esperando.
       setHilo((h) =>
-        h.map((b) => (b.tipo === "avisos" && b.id === idAvisos ? { ...b, terminado: true } : b))
+        h.map((b) =>
+          b.tipo === "avisos" && b.id === idAvisos
+            ? {
+                ...b,
+                terminado: true,
+                filas: b.filas.map((f) =>
+                  f.estado === "pendiente" || f.estado === "enviando"
+                    ? { ...f, estado: "fallado", detalle: "No se avisó", hora: horaAhora() }
+                    : f
+                ),
+              }
+            : b
+        )
       );
 
       const manuales = burbuja.plan.items
         .filter((i) => !i.propuesta || burbuja.excluidos.includes(i.turno_id))
         .map((i) => i.paciente.nombre || "un paciente");
-      const pacientes = reasignados;
-      const profesionales = medicosQueRecibieron.size;
 
-      let cierre = textoCierre({ reasignados, pacientes, profesionales, manuales });
+      let cierre = textoCierre({
+        reasignados,
+        // AVISOS ENTREGADOS, no turnos movidos: la última frase de la tarjeta no
+        // puede contradecir la tabla que está justo arriba.
+        pacientes: pacientesAvisados,
+        profesionales: medicosAvisados.size,
+        manuales,
+      });
       if (fallados.length > 0) {
         cierre += ` No pude mover el turno de ${fallados.join(", ")}: revisalo en el turnero.`;
       }

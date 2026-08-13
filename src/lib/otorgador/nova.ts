@@ -283,15 +283,26 @@ export function textoPropuesta(params: {
 /** El cierre, después de ejecutar. Nombra lo que quedó sin resolver. */
 export function textoCierre(params: {
   reasignados: number;
+  /** Avisos ENTREGADOS al paciente, no turnos movidos. Ver abajo. */
   pacientes: number;
+  /** Profesionales a los que el aviso llegó de verdad. */
   profesionales: number;
   manuales: string[];
 }): string {
   const { reasignados, pacientes, profesionales, manuales } = params;
+  // `pacientes` y `profesionales` son AVISOS ENTREGADOS, no reprogramaciones.
+  // La pantalla le pasaba `reasignados` a los dos, así que un turno que se
+  // movió bien pero cuyo WhatsApp rebotó —fila roja "No se pudo enviar el
+  // aviso"— igual sumaba al "avisé a los N pacientes" del cierre. En una demo
+  // frente a un ministerio, la última frase contradecía la tabla de arriba.
+  const aQuienes = (n: number, uno: string, varios: string) =>
+    n === 1 ? `1 ${uno}` : `los ${n} ${varios}`;
   const base =
-    `Listo. Reasigné ${reasignados} turno${reasignados === 1 ? "" : "s"} y avisé a ` +
-    `${pacientes === 1 ? "1 paciente" : `los ${pacientes} pacientes`} y a ` +
-    `${profesionales === 1 ? "1 profesional" : `los ${profesionales} profesionales`}.`;
+    pacientes === 0 && profesionales === 0
+      ? `Listo. Reasigné ${reasignados} turno${reasignados === 1 ? "" : "s"}, pero no pude avisar a nadie: revisalo en el turnero.`
+      : `Listo. Reasigné ${reasignados} turno${reasignados === 1 ? "" : "s"} y avisé a ` +
+        `${aQuienes(pacientes, "paciente", "pacientes")} y a ` +
+        `${aQuienes(profesionales, "profesional", "profesionales")}.`;
   if (manuales.length === 0) return base;
   // "en el turnero" era una promesa que nadie cumplía: el turnero no pinta
   // ninguna marca. Lo que sí existe es la fila en `asignaciones` que deja
