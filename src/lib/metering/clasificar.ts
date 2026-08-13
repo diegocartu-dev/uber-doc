@@ -366,6 +366,17 @@ export interface FilaMetering {
   clasificacion: Clasificacion;
   clasificacion_origen: "job";
   clasificado_at: string;
+  /**
+   * Encuentro de una reunión de DEMOSTRACIÓN (migraciones 025 y 027).
+   *
+   * Entra al contador MARCADO en vez de quedarse afuera. Afuera trababa el
+   * sello (la precondición del cierre lo esperaba y el clasificador no se lo
+   * iba a escribir nunca) y dejaba el panel de la institución en cero justo en
+   * la escena que cierra el guion de la reunión.
+   *
+   * Quien filtra es la FACTURACIÓN, y solo ella.
+   */
+  es_demo: boolean;
 }
 
 /** Encuentro candidato, ya normalizado (turno y CI se ven igual desde acá). */
@@ -385,17 +396,28 @@ export interface EncuentroCandidato {
 }
 
 /**
- * Saca de la cola los encuentros de una reunión de DEMOSTRACIÓN.
+ * Saca de un lote los encuentros de una reunión de DEMOSTRACIÓN.
  *
  * Pura y exportada para poder probarla: es una línea, pero es la línea que
  * separa "consulta que la provincia pagó" de "consulta que ocurrió en una sala
  * de reuniones". Un `!` de menos acá le factura a un ministerio una atención
  * que nadie le pidió.
  *
- * Fail-safe hacia el lado caro: solo pasa lo que la base afirma que NO es demo.
+ * ── FAIL-SAFE HACIA EL LADO CARO, DE VERDAD ──────────────────────────────────
+ * Pasa SOLO lo que la base afirma que NO es demo (`=== false`), no todo lo que
+ * no afirma que sí. La versión anterior decía esto mismo en el comentario y
+ * hacía lo contrario (`!== true`): un `undefined` —dato ausente, fuente nueva,
+ * columna que no vino en el SELECT— se colaba a la factura. La invariante
+ * documentada y la implementada eran inversas, y el comentario es el contrato
+ * que va a leer el próximo que reuse esto con otra query.
+ *
+ * De los dos errores posibles, el que se elige es facturar de menos.
+ *
+ * Es el cinturón EN MEMORIA de la facturación; el tirante es el predicado
+ * `es_demo = false` en cada query de `facturacion.ts`.
  */
 export function sinEncuentrosDemo<T extends { es_demo?: boolean }>(candidatos: T[]): T[] {
-  return candidatos.filter((c) => c.es_demo !== true);
+  return candidatos.filter((c) => c.es_demo === false);
 }
 
 export interface ResumenMetering {
@@ -404,8 +426,8 @@ export interface ResumenMetering {
   salteados_sellados: number;
   salteados_manual: number;
   salteados_recientes: number;
-  /** Encuentros de una reunión de demostración: nunca entran a la factura. */
-  salteados_demo: number;
+  /** Encuentros de una reunión de demostración: entran marcados, nunca a la factura. */
+  marcados_demo: number;
   sin_motor: number;
   /** Encuentros que no entraron en esta corrida (los toma la siguiente). */
   pendientes: number;
@@ -425,7 +447,7 @@ const resumenVacio = (): ResumenMetering => ({
   salteados_sellados: 0,
   salteados_manual: 0,
   salteados_recientes: 0,
-  salteados_demo: 0,
+  marcados_demo: 0,
   sin_motor: 0,
   pendientes: 0,
   pendientes_sin_fila: 0,
@@ -499,6 +521,10 @@ export function componerFila(params: {
     clasificacion,
     clasificacion_origen: "job",
     clasificado_at: params.ahoraISO ?? new Date().toISOString(),
+    // La marca viaja con la fila. La pone un trigger en la base (la 025) sobre
+    // el encuentro, así que no depende de que ningún caller se acuerde; acá solo
+    // se copia, y `=== true` la coerce: un dato ausente NO es "no es demo".
+    es_demo: encuentro.es_demo === true,
   };
 }
 
@@ -639,21 +665,25 @@ export async function correrMeteringClasificar(opciones?: {
       cierreISO: (c.completada_at as string | null) ?? null,
     })),
   ];
-  // ── LO QUE PASÓ EN UNA DEMO NO SE FACTURA ─────────────────────────────────
+  // ── LO QUE PASÓ EN UNA DEMO ENTRA MARCADO, NO SE DESCARTA ─────────────────
   // Un encuentro de una reunión de venta es una atención de verdad —hubo
   // videollamada, hubo receta— pero no es servicio prestado a la institución:
-  // el "paciente" era un participante de la reunión. Si entrara al contador,
-  // la provincia recibiría una factura con consultas que nunca le pidió, y el
-  // panel le mostraría ausentismo y cumplimiento de un profesional que no
-  // existe.
+  // el "paciente" era un participante de la reunión. No se factura, y de eso se
+  // ocupa `facturacion.ts`, que no lee una sola fila sin `es_demo = false`.
+  //
+  // Pero DESCARTARLO acá, que es lo que se hacía antes, rompía dos cosas que
+  // también salen de esta tabla:
+  //   · el SELLO — su precondición cuenta todo encuentro terminal del período
+  //     que debería tener fila, y esta era una fila que el clasificador no iba a
+  //     escribir NUNCA. El cierre semanal y el mensual quedaban trabados de
+  //     forma indefinida, acusando a un cron que estaba sano;
+  //   · el PANEL de la institución, que lee todo de acá y se proyectaba en cero
+  //     justo después de la videoconsulta en vivo que cierra el guion.
   //
   // La marca la pone un trigger en la base (migración 025), así que no depende
-  // de que ningún caller se acuerde. Acá solo se descarta, y se cuenta cuántos:
-  // un salto raro en ese número es la señal de que quedó una demo sin limpiar.
-  const sinDemo = sinEncuentrosDemo(candidatos);
-  resumen.salteados_demo = candidatos.length - sinDemo.length;
-  candidatos.length = 0;
-  candidatos.push(...sinDemo);
+  // de que ningún caller se acuerde. Se cuenta cuántas hubo: un salto raro en
+  // ese número es la señal de que quedó una demo sin limpiar.
+  resumen.marcados_demo = candidatos.filter((c) => c.es_demo === true).length;
 
   resumen.candidatos = candidatos.length;
   if (candidatos.length === 0) return resumen;

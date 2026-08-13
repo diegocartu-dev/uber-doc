@@ -98,3 +98,26 @@ test("los slots de la escenografía no se cuentan como oferta que nadie tomó", 
     );
   }
 });
+
+test("la facturación no lee una sola fila del contador sin excluir la demostración", () => {
+  const codigo = fuente("src/lib/metering/facturacion.ts");
+  const queries = queriesDe(codigo, "encuentros_metering");
+  assert.ok(queries.length >= 5, "cambió la forma de facturacion.ts: revisá este test");
+  for (const q of queries) {
+    assert.match(
+      q,
+      /\.eq\("es_demo", false\)/,
+      "una query de facturación perdió el filtro de demostración: la provincia " +
+        "recibiría una factura con consultas de una reunión de venta"
+    );
+  }
+});
+
+test("el clasificador escribe la marca de demostración en la fila del contador", () => {
+  const codigo = fuente("src/lib/metering/clasificar.ts");
+  assert.match(
+    codigo,
+    /es_demo: encuentro\.es_demo === true/,
+    "la fila del contador dejó de llevar la marca: la facturación no la puede filtrar"
+  );
+});

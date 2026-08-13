@@ -43,18 +43,22 @@ Y ninguna de las cuatro toca el B2C: son de la base de la instancia.
 de más abajo no son opcionales: son la única prueba de que las defensas escritas
 frenan algo.
 
-## Modo demo (migración 025) — el SQL primero, igual que siempre
+## Modo demo (migraciones 025 a 027) — el SQL primero, igual que siempre
 
 La **025** trae el modo demo: las dos tablas de la reunión (`demo_sesiones`,
 `demo_participantes`) y las marcas de demostración sobre `medicos`, `pacientes`,
-`turnos`, `consultas` y `documentos`.
+`turnos`, `consultas` y `documentos`. La **027** lleva esa misma marca al
+contador contractual, que es lo que permite que un encuentro de demostración
+entre a `encuentros_metering` (y no trabe el sello) sin llegar nunca a la
+factura.
 
 | Migración | Qué se cae si el código llega antes |
 |---|---|
 | **025** | `/admin/demo` entero (la pantalla que se usa EN la reunión): sin las tablas, listar reuniones y cargar participantes fallan. Y lo más caro: sin la columna `es_demo`, un encuentro de demostración entra al contador contractual como servicio real, y el documento que firma un participante que no es médico **sale sin la marca de agua**. |
 | **026** | El **enlace del profesional invitado** y el del paciente de demo: sin `accesos_link.medico_id`, emitirlos falla, y con el CHECK viejo (`turno XOR consulta`) un enlace sin encuentro **no se puede insertar**. O sea: la reunión se queda sin la única forma de que los participantes entren. |
+| **027** | El **cron de metering, entero**: desde este código toda fila que el clasificador escribe lleva `encuentros_metering.es_demo`, así que sin la columna el upsert falla y **no se clasifica ni un encuentro real**. Con la migración aplicada y el código viejo no pasa nada (la columna tiene DEFAULT), o sea que el orden es el de siempre: primero el SQL. |
 
-Las dos son **reentrantes** y no tocan el B2C.
+Las tres son **reentrantes** y no tocan el B2C.
 
 ⚠ La **026** aborta a propósito si no encuentra los constraints que espera por
 nombre (`accesos_link_un_recurso`, `accesos_link_origen_check`). Es el mismo
