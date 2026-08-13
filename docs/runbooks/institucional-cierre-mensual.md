@@ -140,6 +140,50 @@ Bajar el CSV del mes desde `/panel` (o `GET /api/panel/facturacion/csv`) y
 comparar el total con `facturables`. La descarga no cambia nada: se puede
 repetir.
 
+## La fila que llega tarde
+
+**Qué es.** Una consulta del mes que aparece en el contador **después** del
+cierre: un webhook muy tardío, un encuentro que el clasificador escribió con
+atraso, una consulta recuperada a mano. Su fila queda **sin sello**.
+
+**Dónde se ve.** En `/admin/periodos`, marcada como *"llegó después del cierre"*,
+y en el conteo `tardias` que devuelve el cierre. **No** está en la factura que se
+emitió y **no** está congelada.
+
+**Lo que NO hay que hacer:**
+
+```sql
+-- ✗ NUNCA
+UPDATE encuentros_metering SET facturado_periodo = '2026-10' WHERE id = '…';
+INSERT INTO encuentros_metering (…, facturado_periodo) VALUES (…, '2026-10');
+```
+
+Las dos le agregan una línea a una factura ya emitida, sin motivo, sin firma y
+sin nada que lo explique después. La segunda ya rebota (migración 022) y la
+primera está desalentada por todos lados — pero era **la única acción manual que
+quedaba a mano**, y hasta el 13/08 el propio cierre la hacía sola cuando alguien
+lo corría dos veces.
+
+**Cómo se decide.** No es una decisión técnica: es cuánto se le factura al
+cliente por un mes que ya se le pasó. **La toma Diego**, caso por caso, y hoy hay
+tres salidas posibles — ninguna implementada, a propósito:
+
+| Salida | Qué implica |
+|---|---|
+| **Dejarla afuera** | Es lo que pasa solo si nadie hace nada. La consulta queda registrada y visible, sin cobrarse. |
+| **Cobrarla en el mes siguiente** | Necesita una regla que hoy no existe (¿con qué fecha entra?, ¿con qué precio, el del mes que ocurrió o el vigente?). |
+| **Nota de débito aparte** | Fuera del sistema: la factura del mes cerrado no se toca y la diferencia se factura por separado. |
+
+Mientras no haya decisión, la fila **se queda a la vista y afuera de la
+factura**. Es la única salida honesta: ni cobrarla a escondidas ni hacerla
+desaparecer.
+
+**Ojo con confundirla con el otro caso.** Si la fila **está sellada** y lo que
+está mal es su clasificación (se marcó ausencia y en realidad se atendió, o al
+revés), eso **sí** tiene camino: la corrección auditada de R33, abajo. La puerta
+de R33 **no** alcanza a las tardías —la RPC exige que la fila esté sellada— y es
+deliberado: no hay nada congelado que desbloquear.
+
 ## Y si hay que corregir un mes ya sellado
 
 Se puede, **solo el superadministrador de Docto** y **con motivo obligatorio**
