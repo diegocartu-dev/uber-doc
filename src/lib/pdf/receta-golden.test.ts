@@ -31,18 +31,27 @@ import {
   paginasDePDF,
 } from "@/lib/pdf/receta-golden.fixtures";
 
-/** Huella esperada por fixture (generador de `main`, sellado el 13/08/2026). */
+/**
+ * Huella esperada por fixture (generador de `origin/main`, re-sellado el
+ * 13/08/2026 al hacer PORTABLE la huella — ver `normalizarStreams` en las
+ * fixtures).
+ *
+ * ⚠ RE-SELLAR SOLO CON `scripts/pdf-golden-huellas.mts` Y SOBRE `origin/main`.
+ * Estas huellas ya no dependen de la versión de Node: verificadas idénticas en
+ * Node 20.19 (el del CI) y en Node 25.8, con archivos que difieren ~3 KB entre
+ * sí porque cada zlib comprime distinto.
+ */
 const HUELLAS: Record<string, string> = {
   "receta firmada con Rp/ estructurado":
-    "b01f77411177da76ebe903e7a0071f53ad23efecb44509ace75db7a6c5cf9238",
+    "fc9d5cda3816dc9de2f2d5f226d191813402f847677f199370fde3233a76c188",
   "receta SIN firma (leyenda de sello ausente)":
-    "ee9ea2cb05629a6044028092d71b113d2bc6035b9488ea89896b9924850ae92a",
+    "b925ace7afac2ac165752228b602f4873f94daea9478342afc805f423d04b30e",
   "certificado de reposo firmado":
-    "8b3e7231dbfc73cc1c9af06cd94c4753e16cc18dda32d15c67f01349ff9bbf65",
+    "396efe8468b7a3eac29fc14358cf5d5fba35c66ed9c4bbffefeb6970f90d5c05",
   "receta de TRES medicamentos (presupuesto de alto del pie)":
-    "3a13735847ffee0a652381934610abb72345e4312ed722eff1d33c6d459a68af",
+    "9c4d706d2c329d4947a285dcb6ce8a6148ca24f6b01b18c8df89b6368e2bd35b",
   "orden médica (rama de texto plano)":
-    "28524a1a8ebf3f6cb18d8c6f27881b62f193cead3cd5e4e4ecc4e53037452055",
+    "abd21acdfc86a9b9e1d4a394578c940bf15feb5d5f322a27e2791a018cc2bae4",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

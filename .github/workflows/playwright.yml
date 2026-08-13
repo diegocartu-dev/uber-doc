@@ -23,9 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La versión sale de `.nvmrc` y no de acá: es la misma que tiene que usar
+      # quien re-selle las huellas del golden del PDF a mano
+      # (scripts/pdf-golden-huellas.mts). Con el número escrito en dos lugares,
+      # el día que uno se mueva el otro no se entera.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
