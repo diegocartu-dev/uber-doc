@@ -182,23 +182,29 @@ export async function planReprogramacionMasiva(params: {
   }
   const libres: SlotLibre[] = [];
   /**
-   * Cuántos turnos MÁS puede recibir cada profesional esta semana (R6).
+   * Cuántos turnos le faltan a cada profesional para llegar a su acuerdo.
    *
-   * El filtro por `seleccionable` es una foto PREVIA y se evalúa una sola vez:
-   * sin este cupo, el plan repartía N turnos sobre el mismo profesional aunque
-   * le quedara lugar para uno. El guard server-side de `reprogramar.ts` lo
-   * frenaría de a uno, pero el operador vería una propuesta prolija que después
-   * falla a la mitad de la corrida — y con los avisos ya enviados a los
-   * primeros.
+   * ── ES UNA PREFERENCIA, NO UN TOPE (R6 flexible, Diego 13/08) ─────────────
+   * El acuerdo es el PISO de servicio comprometido, no un techo: un horario
+   * publicado y libre se puede tomar aunque su dueño ya haya cumplido. Así que
+   * este número decide el ORDEN del reparto —primero se llena a quien le falta,
+   * que es la equidad de R5— y NO quién queda afuera. Cuando ya nadie tiene
+   * cupo, el reparto sigue de largo con los slots que queden (ver el reparto
+   * más abajo): mandar a un paciente a gestión manual con horarios libres
+   * enfrente sería peor que cargarle uno más a quien ya cumplió.
+   *
+   * Antes era un tope duro que emparejaba el guard server-side de
+   * `reprogramar.ts`. Ese guard ya no existe, y este dejó de ser una foto de lo
+   * que la API iba a rechazar: es la política de reparto, y nada más.
    */
   const cupoRestante = new Map<string, number>();
   oferta.oferta.profesionales.forEach((p, prioridad) => {
     // Al profesional que no puede atender no se le devuelven sus propios
-    // pacientes, y a quien ya completó su acuerdo no se le carga uno más (R6:
-    // `seleccionable: false` es un guard, no un color de la pantalla).
+    // pacientes; y el que no tiene NADA que ofrecer (sin CI activa y sin slots)
+    // no entra al reparto — eso es lo que hoy significa `seleccionable`.
     if (p.medico_id === medicoId || !p.seleccionable) return;
-    // `acuerdo: 0` = sin acuerdo cargado; ahí R6 no aplica (mismo criterio que
-    // `acuerdoSemanalDelMedico`, que exige `y > 0` para dar por completo).
+    // `acuerdo: 0` = sin acuerdo cargado: no hay piso que llenar, así que
+    // ningún criterio de cupo lo posterga.
     cupoRestante.set(
       p.medico_id,
       p.acuerdo > 0 ? Math.max(0, p.acuerdo - p.asignados) : Number.POSITIVE_INFINITY
@@ -229,14 +235,24 @@ export async function planReprogramacionMasiva(params: {
 
   // ── 4) El reparto ──────────────────────────────────────────────────────────
   const tomados = new Set<string>();
-  /** El slot sirve si nadie lo tomó en ESTE plan y a su dueño le queda cupo. */
-  const disponible = (s: SlotLibre) =>
-    !tomados.has(s.turno_id) && (cupoRestante.get(s.medico_id) ?? 0) > 0;
+  /** El slot está libre en ESTE plan (nadie se lo llevó todavía). */
+  const libre = (s: SlotLibre) => !tomados.has(s.turno_id);
+  /** …y además su dueño todavía no llegó a su acuerdo: es el candidato ideal. */
+  const conCupo = (s: SlotLibre) => libre(s) && (cupoRestante.get(s.medico_id) ?? 0) > 0;
   const items: ItemPlan[] = turnos.map((t) => {
     const hora = ((t.hora_inicio as string | null) ?? "").slice(0, 5);
+    // Orden de preferencia: mismo día y con cupo → cualquier día con cupo →
+    // mismo día sin cupo → cualquier día sin cupo. Los dos últimos escalones
+    // son R6 flexible: antes de mandar al paciente a gestión manual se usa un
+    // horario publicado y libre, aunque su dueño ya haya cumplido su acuerdo.
+    // (`libres` viene ordenado por la prioridad de `armarOferta`, que ya pone
+    // último al que completó — así que dentro de cada escalón el reparto sigue
+    // prefiriendo a quien menos lleva.)
     const elegido =
-      libres.find((s) => disponible(s) && s.fecha === fecha) ??
-      libres.find((s) => disponible(s)) ??
+      libres.find((s) => conCupo(s) && s.fecha === fecha) ??
+      libres.find((s) => conCupo(s)) ??
+      libres.find((s) => libre(s) && s.fecha === fecha) ??
+      libres.find((s) => libre(s)) ??
       null;
     if (elegido) {
       tomados.add(elegido.turno_id);

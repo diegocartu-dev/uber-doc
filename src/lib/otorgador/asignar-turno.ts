@@ -15,7 +15,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
-import { VENTANA_ASIGNACION_MIN, acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
+import { VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
 import {
   avisarAsignacionTurno,
   registrarAvisosEnAsignacion,
@@ -38,7 +38,6 @@ export type ErrorAsignacion =
   | "sin_canal" // ni celular ni mail: no hay cómo mandarle el acceso (04-spec §1.6.3)
   | "paciente_ocupado" // regla del Uber: ya está adentro de una atención
   | "conflicto_slot" // otro operador lo tomó (o la ventana T-5 se cerró)
-  | "acuerdo_completo" // R6 server-side: el profesional ya completó su semana
   | "interno";
 
 export type ResultadoAsignarTurno =
@@ -169,21 +168,20 @@ export async function asignarTurno(params: {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
   }
 
-  // R6 SERVER-SIDE (06-reglas-operativas): acuerdo semanal completo → no recibe
-  // más asignaciones esa semana. La pantalla ya lo pinta (`seleccionable:false`),
-  // pero el criterio de equidad tiene que valer también para clientes API.
-  // NOTA DE LETRA (para el cierre con Diego): 05-spec §4.4.5 dice "acuerdo
-  // completo Y sin slots → al final"; la implementación (acá y en oferta.ts)
-  // sigue la redacción de R6 — completo bloquea SIEMPRE. Si Diego prefiere la
-  // letra de la spec técnica, se ajusta en un solo lugar: este guard + oferta.
-  const acuerdo = await acuerdoSemanalDelMedico(turno.medico_id);
-  if (acuerdo.completo) {
-    return {
-      ok: false,
-      codigo: "acuerdo_completo",
-      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro.`,
-    };
-  }
+  // ── R6 ES FLEXIBLE: EL SLOT LIBRE MANDA (Diego, 13/08) ────────────────────
+  // Acá vivía un guard duro: acuerdo semanal completo → 409 `acuerdo_completo`.
+  // Ya no. "Mientras el profesional tenga un turno publicado, ese turno se
+  // puede tomar": el acuerdo es el PISO de servicio comprometido, no un techo,
+  // y el que publicó el lugar fue el propio profesional. Bloquear era decirle
+  // que no a una hora que él mismo puso a disposición, y dejar al paciente sin
+  // turno con la agenda vacía enfrente.
+  //
+  // La equidad no se pierde: se resuelve en el ORDEN de la oferta (menos
+  // asignados primero; el acuerdo completo, último — `priorizarOferta`), que es
+  // el criterio que ven por igual la pantalla, un operador IA y Nova.
+  //
+  // Lo que SIGUE mandando es el estado del slot: el `.eq('estado','disponible')`
+  // del UPDATE de abajo y la ventana T-5. Nada de eso se relajó.
 
   // Ventana de asignación (Diego 12/08): hasta 5 minutos antes del horario.
   // La oferta ya lo filtró, pero la pantalla pudo quedar abierta un rato: el

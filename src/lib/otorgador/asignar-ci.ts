@@ -17,7 +17,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
-import { dentroVentanaCI, etiquetaVentana, acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
+import { dentroVentanaCI, etiquetaVentana } from "@/lib/otorgador/oferta";
 import {
   avisarAsignacionCI,
   registrarAvisosEnAsignacion,
@@ -118,16 +118,27 @@ export async function asignarCI(params: {
     };
   }
 
-  // R6 SERVER-SIDE (06-reglas-operativas): mismo guard que asignar-turno — la
-  // pantalla pinta `seleccionable:false`, pero la equidad vale también por API.
-  const acuerdo = await acuerdoSemanalDelMedico(medicoId);
-  if (acuerdo.completo) {
-    return {
-      ok: false,
-      codigo: "acuerdo_completo",
-      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro.`,
-    };
-  }
+  // ── R6 ES FLEXIBLE, TAMBIÉN PARA LA CI (Diego, 13/08) ─────────────────────
+  // Acá vivía el mismo guard duro que en `asignarTurno`, y se cae por el mismo
+  // motivo. La regla escrita habla de "un turno publicado", y la CI espontánea
+  // no tiene slot publicado — así que hay que razonarla, no copiarla:
+  //
+  //   · El equivalente exacto de "publicar un lugar" en la CI es PONERSE
+  //     ACTIVO. Es el propio profesional el que prende el toggle, dentro de la
+  //     ventana horaria que habilita la institución, y lo puede apagar cuando
+  //     quiera. Un profesional activo está diciendo "puedo atender ahora",
+  //     igual que el que deja un horario libre en su agenda.
+  //   · Bloquearlo sería peor que en el turno: el paciente ya está del otro
+  //     lado del mostrador esperando, y el sistema le diría que no habiendo
+  //     alguien listo para atenderlo del otro lado.
+  //   · Y la contradicción operativa: el mismo profesional, con el mismo
+  //     acuerdo cumplido, podría recibir un turno publicado y no una inmediata.
+  //     La única diferencia sería el motor, que es lo que R6 justamente no
+  //     mira.
+  //
+  // El acuerdo sigue siendo piso, no techo. La equidad la resuelve el orden de
+  // la oferta, y el "no puedo ahora" lo sigue resolviendo el toggle del propio
+  // profesional (guard `medico.disponible` de arriba) y su ocupación de abajo.
 
   // Ocupación del médico: 'en_curso' (atendiendo) Y TAMBIÉN una CI 'pagada' ya
   // asignada esperando que abra la sala (hallazgo revisión Etapa 2: mirando

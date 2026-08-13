@@ -16,11 +16,18 @@
 | "Reenviar aviso" del éxito | 04-spec §1.7 | Deshabilitado a propósito: reenviar necesita la landing del link (Etapa 3). El link ya se emite SIEMPRE y el éxito lo muestra como fallback manual cuando el envío automático falla. |
 | "Registrale el pedido" de especialidad sin oferta | 04-spec §1.5.6 | Pendiente: el registro del pedido de oferta no existe todavía — se muestra sin acción |
 
-## Decisión de letra pendiente (para Diego)
+## Decisión de letra — RESUELTA por Diego el 13/08
 
-- **R6 vs. 05-spec §4.4.5:** R6 dice "acuerdo semanal completo → no recibe más
-  asignaciones esa semana" (bloquea SIEMPRE); la spec técnica §4.4.5 dice
-  "acuerdo completo Y sin slots → al final". La implementación (oferta +
-  guards server-side de asignar-turno/asignar-ci) sigue la redacción de R6.
-  Si se prefiere la letra de la spec técnica, se ajusta en un solo lugar:
-  `acuerdoSemanalDelMedico` + `priorizarOferta`.
+- **R6 vs. 05-spec §4.4.5:** la implementación seguía la lectura dura de R6
+  ("acuerdo semanal completo → no recibe más asignaciones esa semana", bloquea
+  SIEMPRE), mientras la spec técnica §4.4.5 decía "acuerdo completo Y sin slots
+  → al final".
+- **Diego decidió la lectura flexible (13/08):** *mientras el profesional tenga
+  un turno publicado, ese turno se puede tomar*. El acuerdo es el **piso** de
+  servicio comprometido, no un techo. El que ya cumplió **baja de prioridad**
+  (va al final de la oferta), pero su horario publicado se puede asignar.
+- Implementado en la Etapa 8: `priorizarOferta` (`seleccionable` pasó a
+  significar "tiene algo que ofrecer" y los slots viajan siempre) y se cayeron
+  los guards duros de `asignar-turno`, `asignar-ci` y `reprogramar`. El cupo del
+  plan de reprogramación masiva quedó como preferencia de reparto, no como tope.
+  Regla actualizada en `06-reglas-operativas.md` §R6.

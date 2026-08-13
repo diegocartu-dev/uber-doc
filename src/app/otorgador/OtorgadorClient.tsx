@@ -386,6 +386,12 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   }
 
   // ── Render de la lista priorizada (la API ordena; acá SOLO se agrupa) ──
+  //
+  // Los que ya completaron su acuerdo van en su propia sección, al final, y sus
+  // filas SE PUEDEN ELEGIR (R6 flexible, Diego 13/08): el acuerdo es el piso de
+  // servicio comprometido, no un techo, así que un horario que el profesional
+  // publicó se puede tomar igual. La sección es una agrupación informativa —
+  // "estos ya cumplieron, buscá primero arriba"—, no un cementerio.
   const profesionales = oferta?.profesionales ?? [];
   const activos = profesionales.filter((p) => !p.acuerdo_completo);
   const completos = profesionales.filter((p) => p.acuerdo_completo);
@@ -471,7 +477,13 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
           ) : (
             <div />
           )}
-          <div className="chev">{p.acuerdo_completo ? null : <Chevron arriba={estaExpandido} />}</div>
+          {/* El chevron lo decide tener algo que ABRIR, no el acuerdo: con R6
+              flexible, una fila con la semana completa pero con horarios
+              publicados se expande igual. Sin CI y sin slots no hay nada que
+              mostrar (el único caso: acuerdo completo y agenda vacía). */}
+          <div className="chev">
+            {!esCI && p.slots_semana.length === 0 ? null : <Chevron arriba={estaExpandido} />}
+          </div>
         </div>
 
         {/* CI seleccionada: el matiz "recomendación, no jaula" (04-spec §1.5.4) */}
@@ -867,6 +879,12 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
                 <>
                   <div className="sep-acuerdo">
                     <span>Con el acuerdo de esta semana completo</span>
+                    {/* R6 flexible: la sección explica por qué están abajo, no
+                        que estén vetados. Sin esta línea, un operador que ve
+                        "completo" no vuelve a intentar. */}
+                    <span className="sep-nota">
+                      — se les puede asignar igual: el acuerdo es un mínimo, no un tope
+                    </span>
                   </div>
                   {completos.map(renderFila)}
                 </>
