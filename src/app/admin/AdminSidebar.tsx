@@ -20,6 +20,7 @@ import {
   UserCog,
   CalendarDays,
   FileLock2,
+  Presentation,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -55,6 +56,9 @@ const NAV_ITEMS_INSTITUCIONAL = [
   // Ruta hermana y no hija de /admin/institucion a propósito: el resaltado del
   // sidebar es por prefijo, y colgarla abajo dejaba los dos links encendidos.
   { href: "/admin/periodos", label: "Períodos", icon: FileLock2, badgeKey: null },
+  // La pantalla que se usa EN una reunión de venta: cargar participantes,
+  // proyectarles el QR y borrar todo después.
+  { href: "/admin/demo", label: "Demo", icon: Presentation, badgeKey: null },
 ];
 
 interface Props {
