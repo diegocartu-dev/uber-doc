@@ -93,7 +93,14 @@ export default async function InstitucionTheme() {
       <style dangerouslySetInnerHTML={{ __html: css }} />
       {/* Franja institucional de 4px — identidad, nunca interacción */}
       <div aria-hidden style={{ height: 4, background: "var(--inst-primary)" }} />
+      {/* Banda con el nombre. La necesitan las pantallas que NO tienen header
+          propio (las del paciente, que a propósito borraron su `pac-marca`
+          para no duplicarlo). Las que sí lo traen —el panel y el otorgador—
+          la apagan desde su CSS con `.inst-banda`: en el mock hay franja +
+          UN solo bloque de identidad, y con el logo real (Etapa 5) la
+          duplicación se vería peor. */}
       <div
+        className="inst-banda"
         style={{
           display: "flex",
           alignItems: "baseline",

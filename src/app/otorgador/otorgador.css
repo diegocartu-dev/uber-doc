@@ -314,3 +314,10 @@
   background: #fff; color: var(--t1); font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap;
 }
 .otg .btn-sec:disabled { opacity: 0.5; cursor: default; }
+
+/* ── una sola identidad arriba ────────────────────────
+   Igual que en /panel: el header de esta pantalla ya muestra el nombre de la
+   institución, así que la banda del chrome del layout sobra y quedaba apilada
+   debajo de la franja. Las pantallas del paciente no tienen header propio y
+   siguen usándola. */
+body:has(.otg) .inst-banda { display: none; }
