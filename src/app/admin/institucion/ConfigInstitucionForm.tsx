@@ -90,6 +90,7 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
     color_primary: inicial?.color_primary ?? "#4A3F8C",
     color_primary_dark: inicial?.color_primary_dark ?? "#37306B",
     color_primary_soft: inicial?.color_primary_soft ?? "#EEECF7",
+    pdf_accent: inicial?.pdf_accent ?? "",
     pdf_efector_texto: inicial?.pdf_efector_texto ?? EFECTOR_PLACEHOLDER,
     ci_ventana_inicio: horaCorta(inicial?.ci_ventana_inicio, "08:00"),
     ci_ventana_fin: horaCorta(inicial?.ci_ventana_fin, "20:00"),
@@ -122,30 +123,40 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
     }
   }
 
-  const colorCampo = (k: "color_primary" | "color_primary_dark" | "color_primary_soft", titulo: string) => (
-    <Campo titulo={titulo}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <span
-          aria-hidden
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            border: "1px solid #E5E7EB",
-            background: /^#[0-9a-fA-F]{6}$/.test(f[k]) ? f[k] : "#fff",
-            flexShrink: 0,
-          }}
-        />
-        <input
-          style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }}
-          value={f[k]}
-          onChange={(e) => set(k, e.target.value)}
-          placeholder="#4A3F8C"
-          {...focusRing}
-        />
-      </div>
-    </Campo>
-  );
+  const colorCampo = (
+    k: "color_primary" | "color_primary_dark" | "color_primary_soft" | "pdf_accent",
+    titulo: string,
+    opciones?: { hint?: string; vacioEs?: string; placeholder?: string }
+  ) => {
+    // La muestra pinta el color EFECTIVO: si el campo está vacío y hay un
+    // fallback (el acento del PDF cae al primario), se ve el que va a salir
+    // impreso, no un cuadrado blanco.
+    const efectivo = /^#[0-9a-fA-F]{6}$/.test(f[k]) ? f[k] : (opciones?.vacioEs ?? "");
+    return (
+      <Campo titulo={titulo} hint={opciones?.hint}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span
+            aria-hidden
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #E5E7EB",
+              background: /^#[0-9a-fA-F]{6}$/.test(efectivo) ? efectivo : "#fff",
+              flexShrink: 0,
+            }}
+          />
+          <input
+            style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }}
+            value={f[k]}
+            onChange={(e) => set(k, e.target.value)}
+            placeholder={opciones?.placeholder ?? "#4A3F8C"}
+            {...focusRing}
+          />
+        </div>
+      </Campo>
+    );
+  };
 
   return (
     <form onSubmit={handleGuardar} style={{ maxWidth: 720, margin: "0 auto", padding: 24 }}>
@@ -196,10 +207,19 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
         </section>
 
         {/* ── DOCUMENTOS ── */}
-        {/* Solo el texto de efector: los assets (logo, isologo, acento del
-            PDF) llegan con el bucket institucion-assets en la Etapa 5. */}
+        {/* Lo que sale impreso en la receta, la orden y el certificado. El
+            acento es OPCIONAL: vacío = el primario de la institución (el
+            "default efectivo" de la migración 001). El isologo del encabezado
+            se sube más abajo, al bucket institucion-assets. */}
         <section style={card}>
           <h2 style={{ ...label, fontSize: 12, color: "#374151", marginBottom: 16 }}>Documentos</h2>
+          <div style={{ marginBottom: 16 }}>
+            {colorCampo("pdf_accent", "Acento de los documentos", {
+              hint: "Opcional. Vacío = el color primario de la institución. Solo se completa si ese color no funciona impreso.",
+              vacioEs: f.color_primary,
+              placeholder: `Vacío = ${f.color_primary || "el primario"}`,
+            })}
+          </div>
           <Campo
             titulo="Texto de efector (pie de los PDFs)"
             hint="⚠ Placeholder legal: la redacción final la definen el CEO y el abogado. Se cambia desde acá, sin redeploy."

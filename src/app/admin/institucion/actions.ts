@@ -33,6 +33,13 @@ export interface ConfigInstitucionInput {
   color_primary: string;
   color_primary_dark: string;
   color_primary_soft: string;
+  /**
+   * Acento de los DOCUMENTOS. Vacío = el primario de la institución (el
+   * "default efectivo: color_primary" que la migración 001 declara y que
+   * resuelve `accentEfectivo()`). Se completa solo si el color del chrome no
+   * funciona impreso.
+   */
+  pdf_accent: string;
   pdf_efector_texto: string;
   ci_ventana_inicio: string; // "HH:MM"
   ci_ventana_fin: string;
@@ -69,6 +76,12 @@ function validar(input: ConfigInstitucionInput): string | null {
   ] as const) {
     if (!HEX.test(valor)) return `El color ${campo} debe ser un hex de 6 dígitos (ej. #4A3F8C).`;
   }
+  // El acento del PDF es OPCIONAL (vacío = color primario). Pero si se
+  // completa, tiene que ser un color de verdad: un "#12345" haría que
+  // `accentDe()` lo descarte en silencio y el documento saldría con el azul de
+  // Docto sin que nadie se entere hasta ver el papel impreso.
+  if (input.pdf_accent.trim() && !HEX.test(input.pdf_accent.trim()))
+    return "El acento de los documentos debe ser un hex de 6 dígitos (ej. #4A3F8C), o quedar vacío para usar el color primario.";
   if (!HORA.test(input.ci_ventana_inicio) || !HORA.test(input.ci_ventana_fin))
     return "La ventana de consulta inmediata debe tener formato HH:MM.";
   if (input.ci_ventana_inicio >= input.ci_ventana_fin)
@@ -116,6 +129,8 @@ export async function guardarConfigInstitucion(
     color_primary: input.color_primary,
     color_primary_dark: input.color_primary_dark,
     color_primary_soft: input.color_primary_soft,
+    // NULL y no "" — el default efectivo se resuelve por ausencia.
+    pdf_accent: input.pdf_accent.trim() || null,
     pdf_efector_texto: input.pdf_efector_texto.trim(),
     ci_ventana_inicio: input.ci_ventana_inicio,
     ci_ventana_fin: input.ci_ventana_fin,
