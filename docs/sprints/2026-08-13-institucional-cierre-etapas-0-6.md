@@ -316,3 +316,11 @@ aplicó desde este sprint: se aplican en la provisión.
 - Las huellas del golden del PDF se verificaron **dos veces**: contra el
   generador de `main` antes de tocarlo, y contra `origin/main` después del
   cambio.
+- Y **en dos versiones de Node**: 25.8 (la máquina de desarrollo) y **20.19, la
+  que fija el CI**. No es un detalle: la primera versión de `huellaPDF`
+  hasheaba los streams comprimidos, y la salida de deflate depende de la zlib
+  que trae Node (20.19 → 1.3.0.1-motley; 25.8 → 1.2.12). Medido: 6 de 12 casos
+  del golden fallaban en Node 20 con las huellas selladas en Node 25, o sea que
+  **todos los PRs a main se habrían puesto en rojo** con un falso "el papel
+  cambió". Ahora la huella infla los streams antes de hashear: los mismos cinco
+  hashes en las dos versiones, con archivos que difieren ~3 KB entre sí.

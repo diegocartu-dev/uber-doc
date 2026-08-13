@@ -18,6 +18,7 @@
 // DNI, CUIL y matrículas de acá no existen.
 
 import { createHash } from "crypto";
+import { inflateSync } from "zlib";
 import type { DocumentoPDF } from "@/lib/pdf/receta";
 
 /** Fecha fija: el papel imprime fecha y hora de emisión, y el golden es byte a byte. */
@@ -222,11 +223,50 @@ export function paginasDePDF(buffer: Buffer): number {
 }
 
 /**
+ * Descomprime los streams Flate de un objeto y neutraliza su `/Length`.
+ *
+ * ── POR QUÉ ESTO ES LO QUE HACE PORTABLE A LA HUELLA ─────────────────────────
+ * Porque la salida de deflate es función de la VERSIÓN DE ZLIB, y la trae Node.
+ * Medido: Node 20.19 embebe zlib 1.3.0.1-motley y Node 25.8 embebe 1.2.12 — el
+ * MISMO PDF, generado por el MISMO código, da bytes comprimidos distintos.
+ * Hasheando los streams tal como salen, las huellas selladas en una máquina de
+ * desarrollo ponían en rojo TODOS los PRs en el CI (que fija Node 20) con un
+ * falso "el papel cambió", y el arreglo tentador —re-sellar el hash— destruye
+ * la garantía en silencio. Verificado empíricamente: 6 de 12 casos fallaban.
+ *
+ * Inflando, se hashea el contenido ORIGINAL: el mismo en cualquier zlib. Y no
+ * se pierde vigilancia — el contenido de los streams (todo el texto dibujado,
+ * las coordenadas, la fuente embebida, los píxeles del QR y del barcode) entra
+ * igual al hash, solo que descomprimido.
+ *
+ * El `/Length` se neutraliza porque es el largo COMPRIMIDO. Un cambio real del
+ * papel cambia el contenido inflado, que es lo que se hashea.
+ */
+function normalizarStreams(cuerpo: string): string {
+  const marcaInicio = cuerpo.indexOf("stream\n");
+  if (marcaInicio < 0 || !/\/Filter\s*\/FlateDecode/.test(cuerpo)) return cuerpo;
+  const inicio = marcaInicio + "stream\n".length;
+  const fin = cuerpo.lastIndexOf("\nendstream");
+  if (fin <= inicio) return cuerpo;
+  const comprimido = Buffer.from(cuerpo.slice(inicio, fin), "latin1");
+  let plano: string;
+  try {
+    plano = inflateSync(comprimido).toString("latin1");
+  } catch {
+    // No era Flate (o está cortado): se hashea tal cual. Peor portabilidad para
+    // ese objeto, pero nunca un falso verde.
+    return cuerpo;
+  }
+  const diccionario = cuerpo.slice(0, marcaInicio).replace(/\/Length \d+/g, "/Length N");
+  return `${diccionario}stream\n${plano}\nendstream${cuerpo.slice(fin + "\nendstream".length)}`;
+}
+
+/**
  * Huella estable del PDF: SHA-256 del CONTENIDO del archivo, normalizado.
  *
  * ── POR QUÉ NO ES EL SHA DEL ARCHIVO CRUDO ───────────────────────────────────
  * Porque dos corridas del MISMO código no dan el mismo archivo, y eso no es una
- * licencia: está medido. Dos cosas varían sin que cambie una sola línea del
+ * licencia: está medido. Tres cosas varían sin que cambie una sola línea del
  * papel:
  *   · `/CreationDate` y `/ModDate` — el reloj de la máquina.
  *   · La NUMERACIÓN de los objetos de imagen. Los PNG con transparencia (el QR
@@ -234,18 +274,21 @@ export function paginasDePDF(buffer: Buffer): number {
  *     inflate asíncrono: los dos objetos se numeran en el orden en que terminan
  *     de descomprimirse, que a veces es 11/12 y a veces 12/11. El archivo mide
  *     exactamente lo mismo y se ve exactamente igual.
+ *   · Los BYTES COMPRIMIDOS de cada stream, que dependen de la versión de zlib
+ *     que trae Node (ver `normalizarStreams`). Este es el que rompía el CI.
  *
  * Entonces se normaliza: se descarta la tabla `xref` (son offsets), se parte el
- * cuerpo en objetos, se despersonalizan las referencias (`12 0 R` → `R`) y las
- * fechas, y se hashea el CONJUNTO ORDENADO de cuerpos más su cantidad y el
- * tamaño total del archivo.
+ * cuerpo en objetos, se INFLAN los streams, se despersonalizan las referencias
+ * (`12 0 R` → `R`) y las fechas, y se hashea el CONJUNTO ORDENADO de cuerpos
+ * más su cantidad. El TAMAÑO del archivo no entra: también es función de la
+ * compresión.
  *
- * Lo que sigue vigilando: cada byte de texto, tipografía, color, coordenada,
- * imagen y stream comprimido del documento. Un punto de más en una leyenda, un
- * `#378ADD` que se movió, un bloque que cambió de lugar o una fuente distinta
- * rompen el hash. Lo único que deja pasar es un reordenamiento de objetos que
- * no cambie ningún cuerpo — algo que este generador no puede producir por sí
- * solo salvo en el caso de arriba.
+ * Lo que sigue vigilando: cada byte de texto, tipografía, color, coordenada e
+ * imagen del documento. Un punto de más en una leyenda, un `#378ADD` que se
+ * movió, un bloque que cambió de lugar o una fuente distinta rompen el hash. Lo
+ * único que deja pasar es un reordenamiento de objetos que no cambie ningún
+ * cuerpo — algo que este generador no puede producir por sí solo salvo en el
+ * caso de arriba.
  */
 export function huellaPDF(buffer: Buffer): string {
   const texto = buffer.toString("latin1");
@@ -254,7 +297,7 @@ export function huellaPDF(buffer: Buffer): string {
 
   const objetos = [...cuerpo.matchAll(/\d+ 0 obj\n([\s\S]*?)\nendobj/g)]
     .map((m) =>
-      m[1]
+      normalizarStreams(m[1])
         .replace(/\d+ 0 R/g, "R")
         // pdfkit no escribe la fecha adentro del diccionario `/Info`: la pone
         // en un objeto suelto (`/CreationDate 17 0 R` → `17 0 obj (D:2026…)`).
@@ -265,6 +308,6 @@ export function huellaPDF(buffer: Buffer): string {
     .sort();
 
   return createHash("sha256")
-    .update(Buffer.from(`${buffer.length}|${objetos.length}|${objetos.join("\n%%\n")}`, "latin1"))
+    .update(Buffer.from(`${objetos.length}|${objetos.join("\n%%\n")}`, "latin1"))
     .digest("hex");
 }
