@@ -16,7 +16,6 @@ const STATUS: Record<ErrorAsignacionCI, number> = {
   sin_canal: 422,
   paciente_ocupado: 409,
   conflicto_slot: 409,
-  acuerdo_completo: 409,
   fuera_de_ventana: 422,
   medico_no_disponible: 409,
   interno: 500,

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { CRONS_META, horaArgentina } from "@/lib/crons-meta";
+import { esInstitucional } from "@/lib/instancia";
 
 // ─── Guard + heartbeat de crons ───────────────────────────────────────────────
 // Nacido de la auditoría de fallas silenciosas (13/07/2026): ningún cron avisaba
@@ -105,6 +106,54 @@ async function alertarCron(key: string, subject: string, text: string): Promise<
   }
 }
 
+/**
+ * El "por qué" que el propio cron devolvió, para que el mail lo diga.
+ *
+ * Sin esto, `alertarCron` armaba el texto SOLO con `CRONS_META[key]` y con
+ * `HTTP ${status}`: nunca leía el body. Los crons del metering contestan el 500
+ * con el detalle que hace falta para actuar —el cierre mensual, con qué mes
+ * falló y cuántos encuentros lo bloquean— y ese dato quedaba únicamente en
+ * `console.error` de Vercel, mientras el mail decía "devolvió HTTP 500" y nada
+ * más.
+ *
+ * ── SOLO EN MODO INSTITUCIONAL, Y ESTO NO ES COSMÉTICO ───────────────────────
+ * La necesidad nació en la instancia, pero esta función vive en `withCron`, que
+ * envuelve a los ~25 crons del B2C: sin el gate, TODOS los mails de alerta del
+ * producto en producción empezaban a traer hasta 600 caracteres del cuerpo de
+ * la respuesta, y varios de esos crons contestan listas con ids de consultas y
+ * de turnos. Es un cambio de comportamiento del B2C que nadie pidió, sobre
+ * mails que salen de un incidente real. Con el flag apagado el mail vuelve a
+ * ser EXACTAMENTE el de antes — texto incluido, no "parecido" (ver
+ * `detalleTecnicoHTTP` y su test).
+ *
+ * `res.clone()` es obligatorio: el body es un stream de un solo uso y la
+ * respuesta original todavía tiene que salir hacia Vercel. Best-effort y
+ * acotado: si no se puede leer, el mail sale igual que antes.
+ */
+export async function detalleDelCuerpo(res: Response): Promise<string> {
+  if (!esInstitucional()) return "";
+  try {
+    if (!(res.headers.get("content-type") ?? "").includes("json")) return "";
+    const cuerpo: unknown = await res.clone().json();
+    if (cuerpo === null || typeof cuerpo !== "object") return "";
+    return JSON.stringify(cuerpo).slice(0, 600);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * La línea de "Detalle técnico" del mail rojo cuando un cron devuelve ≥ 500.
+ *
+ * Está afuera del template para poder fijar con un test que sin cuerpo el texto
+ * es carácter por carácter el que salía antes de que existiera
+ * `detalleDelCuerpo` — incluido el espacio simple antes de "Revisar logs".
+ */
+export function detalleTecnicoHTTP(key: string, status: number, cuerpo: string): string {
+  const respuesta = cuerpo ? `\nRespuesta: ${cuerpo}\n` : " ";
+  return `Detalle técnico (para Claude): cron ${key} devolvió HTTP ${status}.${respuesta}Revisar logs en Vercel.`;
+}
+
 export function withCron(key: string, handler: CronHandler): CronHandler {
   return async (req: NextRequest): Promise<Response> => {
     // Fail-closed: sin CRON_SECRET, "Bearer undefined" pasaría cualquier check.
@@ -124,10 +173,11 @@ export function withCron(key: string, handler: CronHandler): CronHandler {
       if (res.status >= 500) {
         const meta = CRONS_META[key];
         const nombre = meta?.nombre ?? `Tarea "${key}"`;
+        const cuerpo = await detalleDelCuerpo(res);
         await alertarCron(
           key,
           `🔴 Tarea automática fallando: ${nombre}`,
-          `${nombre} intentó correr pero terminó con error.\n${meta ? `Qué hace: ${meta.queHace}.\nImpacto mientras falle: ${meta.impacto}.` : ""}\n\n¿Tenés que hacer algo? Sí: una tarea que corre y falla no suele arreglarse sola. Abrí Claude Code y decime: "investigá el cron ${key}". Si igual se recupera sola, te llega un mail verde "✅ Tarea recuperada" y no hace falta nada.\n\n———\nDetalle técnico (para Claude): cron ${key} devolvió HTTP ${res.status}. Revisar logs en Vercel.`
+          `${nombre} intentó correr pero terminó con error.\n${meta ? `Qué hace: ${meta.queHace}.\nImpacto mientras falle: ${meta.impacto}.` : ""}\n\n¿Tenés que hacer algo? Sí: una tarea que corre y falla no suele arreglarse sola. Abrí Claude Code y decime: "investigá el cron ${key}". Si igual se recupera sola, te llega un mail verde "✅ Tarea recuperada" y no hace falta nada.\n\n———\n${detalleTecnicoHTTP(key, res.status, cuerpo)}`
         );
       }
       return res;

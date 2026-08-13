@@ -21,6 +21,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   ESTADOS_CONSULTA_VALIDOS,
   ESTADOS_TURNO_VALIDOS,
@@ -48,9 +50,23 @@ import {
   etiquetaSemana,
   semanaTerminada,
   semanaASellar,
+  semanasTerminadasHaciaAtras,
   semanaDeHoy,
   semanaAnterior,
   semanaSiguiente,
+  correrDias,
+  diaARdeConsulta,
+  cerrarSemana,
+  cumplimientoDeSemana,
+  cumplimientoSaleDeLoSellado,
+  filasDeLoSellado,
+  totalDeBolsa,
+  corridaDelBarrido,
+  semanasDeLaCorrida,
+  SEMANAS_POR_CORRIDA,
+  type CumplimientoProfesional,
+  type PuertoCierreSemana,
+  type PuertoSemanaSellada,
 } from "@/lib/metering/bolsa";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -532,6 +548,44 @@ test("semana · el cron del lunes sella la que acaba de terminar, no la que arra
   assert.equal(semanaASellar(Date.parse("2026-10-26T00:05:00-03:00")), LUNES);
 });
 
+test("barrido semanal · las candidatas van de la más VIEJA a la más nueva, y la última es la que toca hoy", () => {
+  // El orden importa: si una semana vieja quedó sin sellar, se atiende antes
+  // que la reciente — con el matiz de `semanasDeLaCorrida`, que igual le
+  // reserva un lugar a la más nueva. Es el espejo de
+  // `mesesTerminadosHaciaAtras`.
+  const martes = Date.parse("2026-10-20T04:00:00-03:00");
+  assert.deepEqual(semanasTerminadasHaciaAtras(martes, 4), [
+    "2026-09-21",
+    "2026-09-28",
+    "2026-10-05",
+    "2026-10-12",
+  ]);
+  assert.equal(
+    semanasTerminadasHaciaAtras(martes, 4).at(-1),
+    semanaASellar(martes),
+    "la última candidata es la que el cron sellaría hoy"
+  );
+});
+
+test("barrido semanal · la semana EN CURSO nunca es candidata, ningún día", () => {
+  for (const dia of ["2026-10-19T04:00:00-03:00", "2026-10-25T23:00:00-03:00"]) {
+    const candidatas = semanasTerminadasHaciaAtras(Date.parse(dia), 8);
+    assert.ok(!candidatas.includes("2026-10-19"), `${dia}: la del 19 está en curso`);
+    for (const semana of candidatas) {
+      assert.equal(semanaTerminada(semana, Date.parse(dia)), true, `${semana} tiene que estar terminada`);
+    }
+  }
+});
+
+test("barrido semanal · cruza el año sin inventar una semana rara", () => {
+  // Todas las candidatas son LUNES, también del otro lado del 1 de enero.
+  const enero = Date.parse("2027-01-06T04:00:00-03:00");
+  for (const semana of semanasTerminadasHaciaAtras(enero, 8)) {
+    assert.equal(new Date(`${semana}T12:00:00Z`).getUTCDay(), 1, `${semana} tiene que ser lunes`);
+  }
+  assert.deepEqual(semanasTerminadasHaciaAtras(enero, 2), ["2026-12-21", "2026-12-28"]);
+});
+
 test("semana · el selector avanza y retrocede de a siete días", () => {
   assert.equal(semanaAnterior(LUNES), "2026-10-12");
   assert.equal(semanaSiguiente(LUNES), "2026-10-26");
@@ -794,6 +848,67 @@ test("la semana AR del encuentro es la del lunes 19, también para el domingo 25
 // que la institución reclama el cumplimiento— o vuelve a sellar de más, que es
 // el bug original.
 
+// ─── El margen del rango: la otra mitad de la precondición ───────────────────
+// `encuentrosSinClasificarEnRango` pide las consultas inmediatas con UN DÍA de
+// más de cada lado y después las filtra en JS. El margen existe porque la query
+// filtra por `created_at` y la pertenencia al período la decide el día de la
+// ASIGNACIÓN (R31 bis): son dos instantes distintos y pueden caer en días
+// distintos. Sin el margen, una CI asignada en el borde no entraba siquiera a
+// la lista de candidatos y el sello no la veía.
+//
+// Las dos piezas del margen —correr un día, y de dónde sale el día— no tenían
+// un solo test, y son justo las que deciden si el sello ve o no ve un encuentro
+// del último día del mes.
+
+test("margen · correr un día cruza fin de mes, fin de año y el 29 de febrero", () => {
+  assert.equal(correrDias("2026-10-31", 1), "2026-11-01");
+  assert.equal(correrDias("2026-11-01", -1), "2026-10-31");
+  assert.equal(correrDias("2026-12-31", 1), "2027-01-01");
+  assert.equal(correrDias("2027-01-01", -1), "2026-12-31");
+  // Bisiesto: 2028 tiene 29 de febrero; 2026 no.
+  assert.equal(correrDias("2028-02-28", 1), "2028-02-29");
+  assert.equal(correrDias("2026-02-28", 1), "2026-03-01");
+  assert.equal(correrDias("2026-10-19", 0), "2026-10-19");
+});
+
+test("margen · el día de una CI es el de su ASIGNACIÓN, no el de su creación", () => {
+  // El caso que el margen rescata: la consulta se creó el 31 a las 23:58 y el
+  // otorgador la asignó el 1 a las 00:03. Es de noviembre, aunque la query del
+  // sello de octubre la traiga por `created_at`.
+  assert.equal(
+    diaARdeConsulta({
+      created_at: "2026-10-31T23:58:00-03:00",
+      asignada_at: "2026-11-01T00:03:00-03:00",
+    }),
+    "2026-11-01"
+  );
+  // Y el simétrico, que es el que se perdía sin el margen: la fila se creó ya
+  // en noviembre pero la asignación fue el 31, así que la consulta es de
+  // OCTUBRE y el sello de octubre tiene que verla — aunque su `created_at`
+  // caiga fuera del rango por el que pregunta la query.
+  assert.equal(
+    diaARdeConsulta({
+      created_at: "2026-11-01T00:02:00-03:00",
+      asignada_at: "2026-10-31T23:59:00-03:00",
+    }),
+    "2026-10-31"
+  );
+});
+
+test("margen · sin asignación manda la creación, y el corte es AR, no UTC", () => {
+  assert.equal(diaARdeConsulta({ created_at: "2026-10-31T22:00:00-03:00" }), "2026-10-31");
+  assert.equal(
+    diaARdeConsulta({ created_at: "2026-10-31T22:00:00-03:00", asignada_at: null }),
+    "2026-10-31"
+  );
+  // 22:00 ART del 31 es 01:00 UTC del 1: leído en UTC, esta CI se iría de mes.
+  assert.equal(
+    new Date("2026-10-31T22:00:00-03:00").toISOString().slice(0, 10),
+    "2026-11-01",
+    "el mismo instante, en UTC, es del mes siguiente"
+  );
+});
+
 test("sello · la CI colgada del domingo 20:00 bloquea: el lunes 02:00 todavía no es terminal", () => {
   // EL caso de I1. La cierra `cerrar-huerfanas` recién más tarde, así que el
   // sello del lunes no la veía, se sellaba la semana sin ella, y cuando
@@ -848,6 +963,373 @@ test("sello · un estado DESCONOCIDO bloquea: es complemento, no lista blanca", 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UNA SEMANA CERRADA NO SE VUELVE A CERRAR — Y LA VACÍA TAMBIÉN SE CIERRA
+// ─────────────────────────────────────────────────────────────────────────────
+// El crítico del gate, del lado semanal. Con el padrón vacío `cerrarSemana`
+// volvía sin escribir nada, así que esa semana nunca quedaba registrada como
+// cerrada: seguía apareciendo pendiente todos los días y, el día que entraba
+// alguien al padrón, el barrido la veía abierta y la sellaba CON ÉL —
+// cumplimiento sellado sobre una semana que la institución ya había leído como
+// "en curso". Se prueba con una base de mentira detrás del puerto, que respeta
+// las mismas reglas que las queries reales.
+
+function profesional(id: string, sellada = false): CumplimientoProfesional {
+  return {
+    medicoId: id,
+    nombre: `Profesional ${id}`,
+    especialidad: "Prueba",
+    horasComprometidas: 10,
+    minutosComprometidos: 600,
+    minutosCumplidos: 600,
+    minutosTurnos: 600,
+    minutosCI: 0,
+    porcentaje: 100,
+    motores: { acordado: 600, espontaneo: 0, ofrecido: 0 },
+    badge: "Cumplido",
+    sellada,
+  };
+}
+
+/**
+ * `acuerdo_semanas` + `acuerdo_semanas_cerradas`, en memoria. `padron` es el
+ * universo de HOY: se le pueden agregar profesionales DESPUÉS del cierre, que
+ * es justo el escenario que importa.
+ */
+function baseSemanal(padron: string[] = []) {
+  const llamadas = { sellar: 0, faltantes: 0, cumplimiento: 0 };
+  const selladas = new Map<string, Set<string>>(); // semana → medicoIds
+  const marcas = new Map<string, { profesionales: number; sellados: number }>();
+  const sellosDe = (semana: string) => selladas.get(semana) ?? new Set<string>();
+  const puerto: PuertoCierreSemana = {
+    estaCerrada: async (semana) => marcas.has(semana) || sellosDe(semana).size > 0,
+    sellados: async (semana) => sellosDe(semana).size,
+    faltantes: async () => {
+      llamadas.faltantes++;
+      return { sin_fila: 0, vivos: 0, total: 0 };
+    },
+    // `cumplimientoDeSemana`: el universo es el padrón de HOY ∪ los sellados de
+    // esa semana, y `sellada` sale de si ya tiene fila.
+    cumplimiento: async (semana) => {
+      llamadas.cumplimiento++;
+      const conSello = sellosDe(semana);
+      const ids = [...new Set([...padron, ...conSello])].sort();
+      return ids.map((id) => profesional(id, conSello.has(id)));
+    },
+    sellar: async (semana, filas) => {
+      llamadas.sellar++;
+      const set = selladas.get(semana) ?? new Set<string>();
+      for (const f of filas) set.add(f.medicoId);
+      selladas.set(semana, set);
+    },
+    marcar: async (semana, profesionales, sellados) => {
+      if (!marcas.has(semana)) marcas.set(semana, { profesionales, sellados });
+    },
+  };
+  return { puerto, llamadas, selladas, marcas, padron };
+}
+
+const LUNES_SIGUIENTE = Date.parse("2026-10-26T04:00:00-03:00"); // cierra la del 19
+
+test("cierre semanal · la semana con padrón se sella y queda marcada", async () => {
+  const base = baseSemanal(["m1", "m2"]);
+  const r = await cerrarSemana(LUNES, LUNES_SIGUIENTE, base.puerto);
+  assert.equal(r.sellados, 2);
+  assert.equal(r.profesionales, 2);
+  assert.equal(r.errores, 0);
+  assert.deepEqual(base.marcas.get(LUNES), { profesionales: 2, sellados: 2 });
+});
+
+test("cierre semanal · la semana SIN NADIE en el padrón queda cerrada igual, y se nota", async () => {
+  // Sin marca explícita, "cerrada en cero" y "nunca se cerró" se ven iguales: no
+  // hay ninguna fila que contar en `acuerdo_semanas`.
+  const base = baseSemanal([]);
+  const r = await cerrarSemana(LUNES, LUNES_SIGUIENTE, base.puerto);
+  assert.equal(r.profesionales, 0);
+  assert.equal(r.sellados, 0);
+  assert.equal(r.errores, 0);
+  assert.ok(base.marcas.has(LUNES), "la semana vacía queda MARCADA como cerrada");
+
+  // Un mes después entra el primer profesional al padrón. La semana vieja NO se
+  // sella con él: la institución ya la leyó.
+  base.padron.push("m1");
+  const segundo = await cerrarSemana(LUNES, Date.parse("2026-11-23T04:00:00-03:00"), base.puerto);
+  assert.equal(base.llamadas.sellar, 0, "no se escribe ni una fila");
+  assert.equal(base.llamadas.cumplimiento, 1, "ni se recalcula el cumplimiento");
+  assert.equal(segundo.sellados, 0);
+});
+
+test("cierre semanal · una semana ya cerrada ni evalúa la precondición del contador", async () => {
+  const base = baseSemanal(["m1"]);
+  await cerrarSemana(LUNES, LUNES_SIGUIENTE, base.puerto);
+  base.padron.push("m2"); // entra al padrón DESPUÉS del cierre
+
+  const segundo = await cerrarSemana(LUNES, Date.parse("2026-11-02T04:00:00-03:00"), base.puerto);
+  assert.equal(base.llamadas.faltantes, 1, "la segunda vez no se evalúa");
+  assert.equal(base.llamadas.sellar, 1, "el upsert ni se intenta");
+  assert.equal(segundo.sellados, 0);
+  assert.equal(segundo.ya_estaban, 1);
+  assert.ok(!base.selladas.get(LUNES)?.has("m2"), "el que llegó después no entra a la semana");
+});
+
+test("cierre semanal · si el sello falla, la semana NO queda marcada como cerrada", async () => {
+  // El orden es sellar → marcar. Una semana marcada cuyas filas no se
+  // escribieron mostraría cero horas cumplidas teniendo actividad, y no volvería
+  // nunca al barrido.
+  const base = baseSemanal(["m1"]);
+  const puerto: PuertoCierreSemana = {
+    ...base.puerto,
+    sellar: async () => {
+      throw new Error("timeout de la base");
+    },
+  };
+  const r = await cerrarSemana(LUNES, LUNES_SIGUIENTE, puerto);
+  assert.equal(r.errores, 1);
+  assert.equal(r.sellados, 0);
+  assert.equal(base.marcas.size, 0, "ninguna semana marcada sin su cumplimiento escrito");
+});
+
+test("cierre semanal · una semana sellada ANTES de la 024 recibe la marca en la primera pasada", async () => {
+  // Es la deuda de transición: "cerrada" es la marca O las filas. Sin esto, toda
+  // semana sellada antes de la migración volvería al barrido para siempre.
+  const base = baseSemanal([]);
+  base.selladas.set(LUNES, new Set(["m1", "m2", "m3"]));
+  const r = await cerrarSemana(LUNES, LUNES_SIGUIENTE, base.puerto);
+  assert.deepEqual(base.marcas.get(LUNES), { profesionales: 3, sellados: 0 });
+  assert.equal(r.ya_estaban, 3);
+  assert.equal(base.llamadas.sellar, 0);
+});
+
+test("cierre semanal · la semana EN CURSO no se cierra ni con el padrón vacío", async () => {
+  const base = baseSemanal([]);
+  await assert.rejects(
+    () => cerrarSemana("2026-10-26", LUNES_SIGUIENTE, base.puerto),
+    /TODAVÍA NO TERMINÓ/
+  );
+  assert.equal(base.marcas.size, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL PANEL DE UNA SEMANA CERRADA NO SE MUEVE (la otra mitad de la 024)
+// ─────────────────────────────────────────────────────────────────────────────
+// `cerrarSemana` ya no vuelve sobre una semana cerrada, pero el PANEL la
+// calculaba igual: su universo era "el padrón de HOY ∪ los sellados", así que
+// un profesional dado de alta DESPUÉS del cierre estrenaba una fila viva —con
+// sus horas comprometidas enteras y cero cumplidas— en una semana que la
+// institución ya había leído. En la semana cerrada en CERO el efecto era
+// completo: cero filas antes del alta, una de 10 h después. Nadie toca plata,
+// pero el KPI de arriba (`totalDeBolsa` suma las filas listadas) cambiaba solo
+// entre dos visitas al mismo panel.
+//
+// Se prueba contra la función REAL, con el puerto de las lecturas del sello: la
+// rama en vivo ni se toca (si se tocara, el fake no alcanzaría y el test
+// fallaría por intentar hablar con Supabase, que es la señal correcta).
+
+/** Sello de `acuerdo_semanas` como lo devuelve la base. */
+function sello(medicoId: string, minutosCumplidos = 600) {
+  return {
+    medico_id: medicoId,
+    horas_comprometidas: 10,
+    minutos_cumplidos: minutosCumplidos,
+    desglose_motores: {
+      turnos: minutosCumplidos,
+      ci: 0,
+      motores: { acordado: minutosCumplidos, espontaneo: 0, ofrecido: 0 },
+    },
+    estado: "cerrada",
+  };
+}
+
+/** El padrón de HOY, que puede tener gente que entró después del cierre. */
+function puertoDelPanel(params: {
+  marcada: boolean;
+  sellos: ReturnType<typeof sello>[];
+  padron: string[];
+}): PuertoSemanaSellada {
+  return {
+    marcada: async () => params.marcada,
+    sellos: async () => params.sellos,
+    // El panel busca los nombres de los ids que le pidan; el padrón de hoy los
+    // tiene a todos (los sellados que ya se fueron también se resuelven).
+    perfiles: async (ids) =>
+      ids.map((id) => ({ id, nombre: `Profesional ${id}`, especialidad: "Prueba" })),
+  };
+}
+
+test("panel · la semana cerrada EN CERO no le abre fila a quien entró después", async () => {
+  // El caso reproducido: semana MARCADA cerrada, cero filas selladas, y un alta
+  // posterior al cierre. Antes devolvía [{ sellada: false, minutosComprometidos: 600 }].
+  const filas = await cumplimientoDeSemana({
+    semanaAr: LUNES,
+    ahoraMs: LUNES_SIGUIENTE,
+    puerto: puertoDelPanel({ marcada: true, sellos: [], padron: ["m1"] }),
+  });
+  assert.deepEqual(filas, [], "la semana cerrada en cero se muestra en cero, siempre");
+});
+
+test("panel · la semana cerrada muestra lo sellado y NADA más", async () => {
+  const filas = await cumplimientoDeSemana({
+    semanaAr: LUNES,
+    ahoraMs: LUNES_SIGUIENTE,
+    puerto: puertoDelPanel({
+      marcada: true,
+      sellos: [sello("m1", 600), sello("m2", 300)],
+      padron: ["m1", "m2", "m3"], // m3 entró DESPUÉS del cierre
+    }),
+  });
+  assert.deepEqual(
+    filas.map((f) => f.medicoId),
+    ["m1", "m2"],
+    "el que entró después del cierre no aparece"
+  );
+  assert.ok(
+    filas.every((f) => f.sellada),
+    "ninguna fila de una semana cerrada se recalcula"
+  );
+  assert.equal(filas[0].minutosCumplidos, 600);
+  assert.equal(filas[0].badge, "Cumplido");
+  assert.equal(filas[1].minutosCumplidos, 300);
+  assert.equal(filas[1].badge, "Incompleto");
+  // El KPI de arriba suma las filas listadas: es el número que no se puede mover.
+  assert.deepEqual(totalDeBolsa(filas), {
+    minutosCumplidos: 900,
+    minutosComprometidos: 1200,
+    porcentaje: 75,
+  });
+});
+
+test("panel · una semana cerrada ANTES de la 024 (sellos sin marca) también es cerrada", () => {
+  // Transición: "cerrada" es la marca O las filas selladas, igual que en
+  // `semanaEstaCerrada`. Si solo mirara la marca, el panel de esas semanas
+  // volvería a agregarle filas vivas a lo ya sellado.
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: false, sellos: 3 }), true);
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: true, sellos: 0 }), true);
+  // Y la semana abierta se sigue calculando al vuelo, que es todo el panel de
+  // la semana en curso.
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: false, sellos: 0 }), false);
+});
+
+test("panel · el sello sin ficha del profesional NO desaparece de la tabla", () => {
+  // El minuto sellado sostiene un acuerdo: si la ficha ya no está, se pierde el
+  // nombre, nunca la fila.
+  const filas = filasDeLoSellado([sello("m9", 120)], new Map());
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].medicoId, "m9");
+  assert.equal(filas[0].minutosCumplidos, 120);
+  assert.deepEqual(filas[0].motores, { acordado: 120, espontaneo: 0, ofrecido: 0 });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL BARRIDO NO PUEDE DEJARLE LA CORRIDA ENTERA A LAS MÁS VIEJAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("barrido semanal · la más reciente SIEMPRE entra en la corrida", () => {
+  const pendientes = ["2026-09-07", "2026-09-14", "2026-09-21", "2026-10-12"];
+  assert.deepEqual(semanasDeLaCorrida(pendientes), ["2026-09-07", "2026-10-12"]);
+  // Y si las viejas siguen trabadas mañana, la reciente igual se toca.
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 3), [
+    "2026-09-07",
+    "2026-09-14",
+    "2026-10-12",
+  ]);
+});
+
+test("barrido semanal · con pocas pendientes se toman todas, sin duplicar la última", () => {
+  assert.deepEqual(semanasDeLaCorrida([]), []);
+  assert.deepEqual(semanasDeLaCorrida(["2026-10-12"]), ["2026-10-12"]);
+  assert.deepEqual(semanasDeLaCorrida(["2026-10-05", "2026-10-12"]), [
+    "2026-10-05",
+    "2026-10-12",
+  ]);
+});
+
+test("barrido semanal · ninguna semana se procesa dos veces en la misma corrida", () => {
+  const pendientes = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (const max of [1, 2, 3, 8]) {
+    const corrida = semanasDeLaCorrida(pendientes, max);
+    assert.equal(new Set(corrida).size, corrida.length, `max=${max} duplica`);
+    assert.ok(corrida.length <= max, `max=${max} se pasa del techo`);
+  }
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 1), ["a"], "con un solo lugar gana la más vieja");
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 0), []);
+});
+
+test("barrido semanal · dos trabadas no dejan a las del medio sin intentarse NUNCA", () => {
+  // El residual: reservar el último lugar arregla la punta nueva y deja el mismo
+  // hambre una fila más abajo. Con max=2 y las DOS puntas trabadas de forma
+  // permanente, la corrida era siempre [la vieja rota, la reciente rota] y las
+  // seis del medio no se tocaban hasta que la ventana de ocho las expulsara.
+  const TODAS = ["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7"];
+  const TRABADAS = new Set(["c0", "c7"]);
+
+  // 1) La cobertura, sobre la lista quieta: en `viejas.length` corridas se
+  //    intenta TODA pendiente vieja, esté trabada la que esté.
+  const intentadas = new Set<string>();
+  for (let corrida = 0; corrida < TODAS.length - 1; corrida++) {
+    for (const s of semanasDeLaCorrida(TODAS, SEMANAS_POR_CORRIDA, corrida)) intentadas.add(s);
+  }
+  assert.deepEqual([...intentadas].sort(), TODAS, "quedó alguna sin intentarse");
+
+  // 2) Y el barrido de verdad: las que se pueden sellar se sellan y salen de la
+  //    lista. Antes, seis corridas dejaban la tabla vacía (siempre las mismas
+  //    dos trabadas); ahora las seis del medio quedan selladas.
+  let pendientes = [...TODAS];
+  const selladas: string[] = [];
+  for (let corrida = 0; corrida < 12 && pendientes.length > TRABADAS.size; corrida++) {
+    for (const semana of semanasDeLaCorrida(pendientes, SEMANAS_POR_CORRIDA, corrida)) {
+      if (TRABADAS.has(semana)) continue; // la precondición aborta, se reintenta
+      selladas.push(semana);
+      pendientes = pendientes.filter((s) => s !== semana);
+    }
+  }
+  assert.deepEqual(selladas.sort(), ["c1", "c2", "c3", "c4", "c5", "c6"]);
+  assert.deepEqual(pendientes, ["c0", "c7"], "solo quedan pendientes las trabadas");
+});
+
+test("barrido semanal · la rotación sale del día y no de una tabla de estado", () => {
+  // `corridaDelBarrido` es lo único que hace que la corrida de hoy no repita la
+  // de ayer. Tiene que subir de a uno por día y ser el mismo número dentro de
+  // una misma corrida (el cron corre a las 04:00 ART).
+  const lunes = Date.parse("2026-10-26T04:00:00-03:00");
+  const martes = Date.parse("2026-10-27T04:00:00-03:00");
+  assert.equal(corridaDelBarrido(martes) - corridaDelBarrido(lunes), 1);
+  assert.equal(
+    corridaDelBarrido(lunes),
+    corridaDelBarrido(lunes + 60_000),
+    "un reintento un minuto después es la MISMA corrida"
+  );
+  // Días AR consecutivos, números consecutivos: nunca dos veces el mismo salto.
+  const saltos = new Set<number>();
+  for (let i = 0; i < 14; i++) {
+    saltos.add(corridaDelBarrido(lunes + i * 86_400_000));
+  }
+  assert.equal(saltos.size, 14);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LA MIGRACIÓN 024 — la marca tiene que ser inmutable, o "cerrada" es opinión
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SQL_024 = readFileSync(
+  join(process.cwd(), "supabase/migrations-institucional/024_semanas_cerradas.sql"),
+  "utf8"
+);
+
+test("024 · una semana cerrada no se reabre ni se borra", () => {
+  assert.match(SQL_024, /BEFORE UPDATE ON acuerdo_semanas_cerradas/);
+  assert.match(SQL_024, /BEFORE DELETE ON acuerdo_semanas_cerradas/);
+  assert.match(SQL_024, /BEFORE TRUNCATE ON acuerdo_semanas_cerradas/);
+  assert.match(
+    SQL_024,
+    /REVOKE TRUNCATE ON acuerdo_semanas_cerradas FROM anon, authenticated, service_role/
+  );
+  assert.match(SQL_024, /ENABLE ROW LEVEL SECURITY/);
+});
+
+test("024 · es reentrante: volver a aplicarla no rompe nada", () => {
+  assert.match(SQL_024, /CREATE TABLE IF NOT EXISTS acuerdo_semanas_cerradas/);
+  const triggers = SQL_024.match(/DROP TRIGGER IF EXISTS/g) ?? [];
+  assert.equal(triggers.length, 3, "los tres triggers se dropean antes de crearse");
+});
 // EL CONTRATO CON LA BASE
 //
 // Estas dos listas se mandan a PostgREST dentro de un `.in()`. No son adorno:

@@ -8,6 +8,48 @@
 > cron de los lunes, que sella **siempre** la semana que acaba de terminar y
 > **nunca vuelve** sobre la anterior. Una semana perdida se quedaba sin sellar
 > para siempre y no había forma de pasarle el parámetro a nadie.
+>
+> **Desde el 13/08 el cron sí vuelve.** Corre **todos los días a las 04:00 ART**
+> y sella **toda semana terminada que siga abierta** (hasta 8 hacia atrás, 2 por
+> corrida: la más vieja pendiente y **siempre** la más reciente, para que una
+> semana trabada no se quede con toda la corrida), igual que el cierre mensual.
+> Este runbook queda para el caso que el barrido no cubre: una semana **más
+> vieja que eso**, o una que hay que sellar ya, sin esperar a la madrugada. Una semana ya sellada **no** vuelve a la lista,
+> aunque le falte algún profesional: los que entraron al padrón después del
+> cierre no se le agregan a un cumplimiento que la institución ya leyó.
+
+> ## 🛑 Antes de nada: el SQL va ANTES que el deploy
+>
+> **Las migraciones 021, 022, 023 y 024 se aplican a la base de la instancia
+> ANTES de desplegar el código de la Etapa 8.** La que le toca a este runbook es
+> la **024** (`acuerdo_semanas_cerradas`): `semanasPendientesDeSellar()` la lee y
+> **tira** si no puede —una lectura que falla en silencio haría que una semana
+> cerrada se viera abierta y el barrido volviera a sellarla—, así que con el
+> código desplegado y el SQL sin aplicar el cron `acuerdo-cerrar-semana`
+> responde **500 todos los días** (con su mail rojo) y la corrida manual
+> también. El panel de cumplimiento, que lee `acuerdo_semanas` directo, sigue
+> andando: por eso el síntoma es "el cierre falla" y no "se cayó el panel".
+>
+> Son reentrantes. Verificación: `supabase/migrations-institucional/README.md`.
+
+## La semana sin nadie en el padrón también se cierra
+
+Desde la **024** el cierre deja una **marca explícita** en
+`acuerdo_semanas_cerradas`, además de las filas de `acuerdo_semanas`. Existe por
+un caso concreto: con el padrón vacío —el piloto arrancando, una especialidad
+que salió del config— no hay ninguna fila que escribir, así que "cerrada en
+cero" y "nunca se cerró" se veían iguales. Esa semana volvía al barrido todos
+los días y, el día que entraba alguien al padrón, se sellaba **con él**:
+cumplimiento sellado sobre una semana que la institución ya había leído.
+
+Consecuencias prácticas para quien opera:
+
+- El diagnóstico (`GET`) informa **`cerrada`**. Una semana ya cerrada tiene
+  `sellable: false`, aunque no le falte nada: no hay nada que hacerle.
+- Correr el `POST` sobre una semana cerrada es **inofensivo**: devuelve su foto
+  con `sellados: 0` y no toca la base.
+- Las semanas que se cerraron **antes** de la 024 aparecen pendientes **una
+  vez**, reciben la marca en esa pasada (sin sellar nada) y no vuelven.
 
 ## Qué es el sello y por qué importa
 
@@ -38,36 +80,57 @@ curl -s "https://<host-de-la-instancia>/api/admin/institucional/cerrar-semana?se
 Respuesta:
 
 ```json
-{ "semana_ar": "2026-10-19", "sellable": true, "termino": true, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
+{ "semana_ar": "2026-10-19", "sellable": true, "termino": true, "cerrada": false, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
 ```
 
 - **`termino`** — si la semana ya cerró (pasó el domingo a medianoche AR). Una
   semana que **no terminó** nunca es sellable, por más que `faltantes` dé cero:
   "no falta nada" es trivialmente cierto en una semana que todavía no pasó.
-
+- **`cerrada`** — si esa semana ya se selló (marca de la 024 **o** filas
+  selladas). Una semana cerrada nunca es `sellable`: el `POST` sobre ella no
+  toca la base.
 - **`sin_fila`** — encuentros ya terminales que el clasificador todavía no
   escribió en `encuentros_metering`. Causa típica: el cron `metering-clasificar`
   estuvo caído, o la ventana de 14 días quedó corta tras un atraso largo.
 - **`vivos`** — encuentros de esa semana que **siguen abiertos**. El caso real
   que motivó el chequeo: una consulta inmediata que quedó colgada el domingo a
-  la noche no es terminal el lunes a las 02:00, cuando corre el cron del cierre,
-  así que se sellaba la semana sin ella y después la factura la cobraba igual.
+  la noche no es terminal el lunes a la madrugada, cuando corre el cron del
+  cierre, así que se sellaba la semana sin ella y después la factura la cobraba
+  igual.
   Los dos números contractuales, divergiendo en silencio.
 
-  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 5 * * 1`
-  (lunes 02:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
-  todos los días** — no "el martes a las 3 AM". Para una CI que arrancó el
-  domingo a las 20:00, el umbral de 4 h de ese cron se cumple a las 00:00 del
-  lunes y la cierra esa misma madrugada; el caso que sobrevive al lunes 02:00 es
-  el de una CI que arrancó más tarde. Ante la duda, mirar el cron crudo en
+  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 7 * * *`
+  (todos los días 04:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
+  todos los días** — no "el martes a las 3 AM". El orden importa: el sello corre
+  **después** del barrido, nunca antes. Para una CI que arrancó el domingo a las
+  20:00, el umbral de 4 h de `cerrar-huerfanas` se cumple a las 00:00 del lunes
+  y la cierra esa misma madrugada; el caso que sobrevive es el de una CI que
+  arrancó después de las 20:00. Ante la duda, mirar el cron crudo en
   `vercel.json` y convertir a ART (UTC−3), no la memoria.
+
+> **Cambió en la Etapa 8 (extensión de alcance, reportada):** la precondición
+> del cierre semanal pasó a compartir código con la del mensual
+> (`encuentrosSinClasificarEnRango`). No es un refactor neutro: las consultas
+> inmediatas ahora se piden con **un día de margen de cada lado** y se filtran
+> por el día de su **asignación** (R31 bis), no por `created_at`. Antes la query
+> pedía la semana exacta por `created_at` y el filtro en JS solo podía
+> descartar, nunca sumar — así que una CI asignada en el borde de la medianoche
+> no entraba a la lista de candidatos y el sello no la veía.
+>
+> Es un fix, pero **endurece** una precondición que ya corre en producción:
+> semanas que antes sellaban ahora pueden abortar por una CI de borde. La
+> respuesta sigue siendo la misma (esperar y volver a mirar), y desde la Etapa 8
+> los dos cierres —el mensual y el semanal— reintentan solos todos los días. Ese
+> reintento es la otra mitad de este endurecimiento: una precondición más
+> estricta sobre un cron que no volvía nunca cambiaba un error silencioso por
+> otro.
 
 ## 2. Destrabar lo que falte
 
 | Qué dice el diagnóstico | Qué hacer |
 |---|---|
 | `sin_fila > 0` | Revisar el cron `metering-clasificar` (corre cada 10 min). Sus logs traen `pendientes` y `pendientes_sin_fila`. Si hay atraso, dejarlo correr y volver a mirar. |
-| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` y `resolver-consultas-vencidas` (cada 10 min) y `cerrar-huerfanas` (`0 3 * * *` UTC = **00:00 ART, todos los días**). |
+| `vivos > 0` y la semana es reciente | **Esperar.** Van a cerrar solos: `resolver-turnos-vencidos` y `resolver-consultas-vencidas` (cada 10 min) y `cerrar-huerfanas` (`0 3 * * *` UTC = **00:00 ART, todos los días**). Y el barrido del cierre vuelve a intentarlo mañana a las 04:00 sin que nadie haga nada. |
 | `vivos > 0` y la semana es vieja | Hay un encuentro trabado. Buscarlo en `/admin` y resolverlo por el camino normal (cerrarlo o marcarlo como corresponda). **No** forzar el sello: no hay forma de hacerlo, y es a propósito. |
 
 ## 3. Sellar
@@ -113,7 +176,12 @@ aparecer "Incompleto" — nunca con la semana abierta, R30).
   el default de PostgREST. Si en el proyecto de la instancia quedó configurado
   en menos, revisar `PAGINA_DB` / `TAMANIO_PAGINA` antes de confiar en un
   conteo.
-- **El CSV de facturación SELLA.** Bajar el detalle de un mes ya terminado desde
-  `/panel` marca `facturado_periodo` en sus filas y las vuelve inmutables. El mes
-  en curso no se sella. (Si alguna vez se quiere una vista "para mirar" sin
-  sellar, hay que separarla — está anotado como señal para Diego en el gate.)
+- **El CSV de facturación YA NO SELLA** (R32, decisión de Diego del 13/08).
+  Descargar es leer: la institución puede bajar el detalle de cualquier mes las
+  veces que quiera y no cambia una fila. El sello de la facturación pasó a ser
+  automático y mensual — runbook aparte:
+  `docs/runbooks/institucional-cierre-mensual.md`.
+- **Son dos sellos distintos y no se mezclan.** El semanal congela el
+  CUMPLIMIENTO (`acuerdo_semanas`, horas); el mensual congela la FACTURACIÓN
+  (`encuentros_metering.facturado_periodo`, consultas). Comparten la
+  precondición —el contador terminó de contar— y nada más.

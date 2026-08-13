@@ -19,8 +19,26 @@
 //      por origen).
 //   4. "X de Y": Y = horas_semanales (acuerdos_servicio) × 60 /
 //      slot_duracion_min (config). La conversión horas→consultas vive ACÁ.
-//   5. Acuerdo completo → al final, seleccionable: false (se ve, no se elige —
-//      R6 de las reglas operativas).
+//   5. Acuerdo completo → BAJA DE PRIORIDAD (va al final), pero SE PUEDE ELEGIR
+//      igual: R6 es flexible (ver abajo).
+//
+// ── R6 ES FLEXIBLE: EL ACUERDO ES PISO, NO TECHO (Diego, 13/08) ──────────────
+// "Mientras el profesional tenga un turno publicado, ese turno se puede tomar"
+// —aunque ya haya completado su acuerdo semanal—. El acuerdo es el mínimo de
+// servicio comprometido; si el profesional publicó lugar, la institución puede
+// llenarlo. La equidad se sigue cuidando por el ORDEN (menos asignados primero,
+// y el completo al final), no bloqueando.
+//
+// Lo que había antes: `seleccionable:false` acá + un guard duro en
+// `asignar-turno`/`asignar-ci` que devolvía 409 `acuerdo_completo`. Con eso, un
+// turno publicado y libre era inasignable — el sistema le decía que no a una
+// hora que el propio profesional había puesto a disposición.
+//
+// Hoy `seleccionable` significa una sola cosa: TIENE ALGO QUE OFRECER (CI
+// activa o al menos un slot libre). El profesional con el acuerdo completo y
+// sin nada publicado se sigue listando al final para que el operador entienda
+// por qué no aparece arriba, y esa fila —esa sí— no se puede elegir: no hay
+// nada que tomar.
 //
 // VENTANA DE ASIGNACIÓN (Diego 12/08): un slot se ofrece hasta 5 MINUTOS antes
 // de su horario; después desaparece de la oferta (filtro server-side acá).
@@ -59,8 +77,13 @@ export interface ProfesionalOferta {
   proximo: { fecha: string; hora: string } | null;
   asignados: number;
   acuerdo: number; // el "Y" del "X de Y"
-  /** false = acuerdo semanal completo: se ve al final, no se puede elegir. */
+  /**
+   * `true` = tiene algo que tomar AHORA (CI activa o algún slot libre). El
+   * acuerdo completo NO lo apaga (R6 flexible): un turno publicado se puede
+   * tomar aunque la semana esté cumplida.
+   */
   seleccionable: boolean;
+  /** `true` = ya cumplió su acuerdo semanal. Baja de prioridad, no bloquea. */
   acuerdo_completo: boolean;
   slots_semana: SlotsDia[];
 }
@@ -128,7 +151,8 @@ function claveProximo(m: MedicoParaPriorizar): string {
  * La priorización pura. Recibe los médicos de la especialidad con sus insumos
  * ya resueltos y devuelve la lista EXACTA que pinta la pantalla (y que ve un
  * operador IA): categorías en orden fijo, asignados ASC adentro, dedup un
- * profesional una vez en su mejor categoría, acuerdo completo al final.
+ * profesional una vez en su mejor categoría, acuerdo completo al final —
+ * ÚLTIMO, pero con su oferta adentro y elegible (R6 flexible).
  * Los médicos sin CI activa, sin slots y sin acuerdo completo NO aparecen
  * (no tienen nada que ofrecer ni nada que explicar).
  */
@@ -158,11 +182,13 @@ export function priorizarOferta(medicos: MedicoParaPriorizar[]): ProfesionalOfer
       proximo: proximoSlot(m.slots),
       asignados: m.asignados,
       acuerdo: m.acuerdo,
-      seleccionable: !completo,
+      // R6 flexible: lo que habilita la fila es tener oferta, no el acuerdo.
+      seleccionable: categoria !== null,
       acuerdo_completo: completo,
-      // Acuerdo completo: la fila se ve pero no se elige — sin slots adentro
-      // (04-spec §1.5.5: barra llena, sin chevron).
-      slots_semana: completo ? [] : agruparPorDia(m.slots),
+      // Los slots viajan SIEMPRE, completo o no: son la oferta que se puede
+      // tomar. (Antes se vaciaban con el acuerdo completo — la fila quedaba
+      // sin nada adentro y el turno publicado se volvía inalcanzable.)
+      slots_semana: agruparPorDia(m.slots),
       _claveProximo: claveProximo(m),
     });
   }
@@ -174,7 +200,12 @@ export function priorizarOferta(medicos: MedicoParaPriorizar[]): ProfesionalOfer
   };
 
   filas.sort((a, b) => {
-    // 1. Acuerdo completo SIEMPRE al final.
+    // 1. Acuerdo completo al final. Es DEPRIORIZACIÓN, no bloqueo (R6
+    //    flexible): la fila sigue siendo elegible, pero se le ofrece último.
+    //    El `asignados ASC` de abajo ya empuja para el mismo lado (el que
+    //    completó su acuerdo es, por definición, el que más lleva); esta clave
+    //    lo hace explícito y hace que el corte de la lista coincida con la
+    //    agrupación que pinta la pantalla, también para los clientes API.
     if (a.acuerdo_completo !== b.acuerdo_completo) return a.acuerdo_completo ? 1 : -1;
     // 2. Categoría.
     if (pesoCategoria[a.categoria] !== pesoCategoria[b.categoria]) {
@@ -278,7 +309,8 @@ export function deltaDeAsignacion(accion: string): number {
  * `asignaciones` con `deltaDeAsignacion`. Nunca negativo.
  *
  * Lanza si la DB falla: un conteo silenciosamente vacío haría ver "0 de Y" a
- * todos y rompería tanto la equidad como el guard server-side de R6.
+ * todos y rompería la equidad — es el número con el que se ordena la oferta y
+ * el que el operador lee para repartir.
  */
 export async function contarAsignadosSemana(medicoIds: string[]): Promise<Map<string, number>> {
   const conteo = new Map<string, number>();
@@ -308,10 +340,10 @@ export async function contarAsignadosSemana(medicoIds: string[]): Promise<Map<st
 
 /**
  * Acuerdo semanal de UN médico: asignados, cupo ("Y") y si ya lo completó.
- * Es el guard server-side de R6 (06-reglas-operativas) que usan asignar-turno
- * y asignar-ci — la regla NO puede vivir solo en `seleccionable:false` de la
- * pantalla porque la API tiene clientes que no son la pantalla (operador IA
- * vía API key, Nova — hallazgo revisión Etapa 2).
+ *
+ * Es INFORMATIVO, no un guard: desde que R6 es flexible (Diego, 13/08) el
+ * acuerdo completo no bloquea ninguna asignación. Queda para pintar el "X de Y"
+ * y para ordenar la oferta.
  */
 export async function acuerdoSemanalDelMedico(
   medicoId: string

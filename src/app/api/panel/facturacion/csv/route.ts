@@ -7,7 +7,6 @@ import {
   facturacionDePeriodo,
   periodoDeHoy,
   periodoValido,
-  sellarPeriodo,
 } from "@/lib/metering/facturacion";
 
 /**
@@ -18,16 +17,29 @@ import {
  * con lo que la pantalla tenía paginado, y una factura que dependa del scroll
  * del que la descargó no es una factura.
  *
- * ── EL SELLO ─────────────────────────────────────────────────────────────────
- * Bajar el detalle de un mes YA TERMINADO sella sus filas
- * (`facturado_periodo`): a partir de ahí son inmutables por el trigger de la
- * 014 y ni el job ni un backfill pueden moverlas. Es el papel con el que se
- * arma la factura; una vez que salió, la fila que lo sostiene no se toca más.
+ * ── DESCARGAR ES LEER: ACÁ NO SE SELLA NADA (R32, Diego 13/08) ───────────────
+ * Esta ruta sellaba el período (`facturado_periodo`) cuando alguien bajaba el
+ * detalle de un mes ya terminado. Ya no: **la institución no cierra nada**.
+ * Puede mirar, filtrar y descargar el detalle de cualquier mes las veces que
+ * quiera, y ninguna de esas descargas cambia una fila.
  *
- * El mes EN CURSO no se sella: la institución mira su parcial cuantas veces
- * quiera y el contador sigue trabajando sobre él. Y sellar no cierra el
- * período — un encuentro que aparezca tarde se inserta igual: esconder una
- * atención que ocurrió sería peor que sumarla tarde.
+ * Por qué estaba mal atarlo a la descarga: el sello es irreversible y quedaba
+ * en manos de quién abrió qué pantalla y en qué orden. Una administrativa
+ * bajando un borrador para revisarlo congelaba el mes; y si nadie descargaba,
+ * el mes no se sellaba nunca. El estado contable de un período no puede
+ * depender de un click.
+ *
+ * Ahora el mes se cierra SOLO, con el cron `metering-cerrar-mes` (R31): corte
+ * de datos al último instante del mes, sello en la madrugada del día 1, y si
+ * queda algo sin clasificar aborta, avisa y reintenta al día siguiente en vez
+ * de sellar una foto incompleta. La corrida manual —si hiciera falta
+ * adelantarla— es `POST /api/admin/institucional/cerrar-mes`, de admin de
+ * Docto.
+ *
+ * Y una vez sellado, lo que baja de acá NO se mueve más: `facturacionDePeriodo`
+ * arma la factura de un mes cerrado desde el sello, no desde el rango de
+ * fechas, así que una fila que aparezca después no se le suma sola a un mes ya
+ * facturado.
  *
  * SOLO instancia institucional: en B2C es 404.
  */
@@ -54,15 +66,6 @@ export async function GET(req: NextRequest) {
   try {
     const facturacion = await facturacionDePeriodo(pedido, { detalle: true });
     csv = facturacionACSV(facturacion);
-    // El sello va ANTES de servir el archivo, igual que la auditoría de las
-    // descargas de historia clínica: si no se pudo congelar lo que este CSV
-    // afirma, no se entrega el CSV.
-    if (pedido < periodoDeHoy()) {
-      const selladas = await sellarPeriodo(pedido);
-      if (selladas > 0) {
-        console.log(`[panel/facturacion] Período ${pedido} sellado: ${selladas} filas.`);
-      }
-    }
   } catch (err) {
     console.error("[panel/facturacion] No se pudo armar el CSV de", pedido, err);
     return NextResponse.json(

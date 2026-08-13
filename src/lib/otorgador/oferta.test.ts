@@ -72,21 +72,60 @@ test("categoría por mejor motor: solo-ofrecido cae a turno_ofrecido, mixto sube
   assert.equal(mixta?.slots_semana.flatMap((d) => d.horas).length, 2);
 });
 
-test("acuerdo completo: al final, seleccionable false, sin slots (R6 / 04-spec §1.5.5)", () => {
+// ── R6 FLEXIBLE (Diego, 13/08) ───────────────────────────────────────────────
+// El acuerdo es el PISO de servicio, no un techo: con la semana cumplida el
+// profesional BAJA DE PRIORIDAD, pero su horario publicado se puede tomar. Esta
+// batería reemplaza a la que fijaba lo contrario (`seleccionable:false` y slots
+// vaciados): si alguien vuelve a "optimizar" esa versión, estos tests rompen.
+
+test("acuerdo completo CON horarios publicados: último, pero elegible y con sus slots (R6)", () => {
+  const lista = priorizarOferta([
+    medico({
+      medico_id: "m-completo",
+      nombre: "Dra. Carla Gómez",
+      asignados: 4,
+      acuerdo: 4,
+      slots: [slot("t9", "2026-10-20", "08:00:00")],
+    }),
+    medico({ medico_id: "m-3de4", nombre: "Dr. Tres", asignados: 3, acuerdo: 4, slots: [slot("t8", "2026-10-24", "08:00:00")] }),
+  ]);
+  assert.deepEqual(lista.map((p) => p.medico_id), ["m-3de4", "m-completo"]);
+  const completo = lista[1];
+  assert.equal(completo.acuerdo_completo, true, "sigue marcado como completo: la pantalla lo agrupa aparte");
+  assert.equal(completo.seleccionable, true, "el turno publicado se puede tomar igual");
+  // Y sus horarios viajan: sin esto la fila se abre vacía y el slot libre es
+  // inalcanzable desde la pantalla.
+  assert.equal(completo.slots_semana.flatMap((d) => d.horas).length, 1);
+  assert.deepEqual(completo.proximo, { fecha: "2026-10-20", hora: "08:00" });
+});
+
+test("acuerdo completo con CI activa: también elegible (la habilitó el propio profesional)", () => {
+  const lista = priorizarOferta([
+    medico({ medico_id: "m-ci-completo", ci_activa: true, activa_desde: "14:05", asignados: 4, acuerdo: 4 }),
+  ]);
+  assert.equal(lista[0].categoria, "ci_activa");
+  assert.equal(lista[0].seleccionable, true);
+});
+
+test("acuerdo completo SIN nada publicado: se lista al final, y esa sí no se elige", () => {
   const lista = priorizarOferta([
     medico({ medico_id: "m-gomez", nombre: "Dra. Carla Gómez", asignados: 4, acuerdo: 4, slots: [] }),
     medico({ medico_id: "m-libre", nombre: "Dr. Libre", ci_activa: true, asignados: 0 }),
   ]);
   assert.equal(lista[lista.length - 1].medico_id, "m-gomez");
-  assert.equal(lista[lista.length - 1].seleccionable, false);
   assert.equal(lista[lista.length - 1].acuerdo_completo, true);
+  // No hay nada que tomar: no es el acuerdo lo que la apaga, es la agenda vacía.
+  assert.equal(lista[lista.length - 1].seleccionable, false);
   assert.deepEqual(lista[lista.length - 1].slots_semana, []);
-  // Y aunque tuviera slots, completo va al final igual:
-  const conSlots = priorizarOferta([
-    medico({ medico_id: "m-completo", asignados: 4, acuerdo: 4, slots: [slot("t9", "2026-10-20", "08:00:00")] }),
-    medico({ medico_id: "m-3de4", asignados: 3, acuerdo: 4, slots: [slot("t8", "2026-10-24", "08:00:00")] }),
+});
+
+test("el completo cae al final aunque su categoría sea mejor (deprioriza, no bloquea)", () => {
+  const lista = priorizarOferta([
+    medico({ medico_id: "m-ci-lleno", ci_activa: true, asignados: 4, acuerdo: 4 }),
+    medico({ medico_id: "m-turnos", asignados: 3, acuerdo: 4, slots: [slot("t1", "2026-10-22", "09:00:00")] }),
   ]);
-  assert.deepEqual(conSlots.map((p) => p.medico_id), ["m-3de4", "m-completo"]);
+  assert.deepEqual(lista.map((p) => p.medico_id), ["m-turnos", "m-ci-lleno"]);
+  assert.equal(lista[1].seleccionable, true);
 });
 
 test("sin CI, sin slots y sin acuerdo completo: no aparece (nada que ofrecer)", () => {

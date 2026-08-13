@@ -36,7 +36,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { acuerdoSemanalDelMedico, VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
+import { VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
 import { revocarAccesosDe } from "@/lib/institucional/accesos";
 import {
   avisarReprogramacionTurno,
@@ -54,7 +54,6 @@ export type ErrorReprogramacion =
   | "no_encontrado"
   | "no_reprogramable" // ya empezó, ya pasó, o el slot no tiene paciente
   | "conflicto_slot" // otro operador se llevó el horario nuevo, o el horario ya cerró
-  | "acuerdo_completo" // R6: el que recibe ya completó su acuerdo semanal
   | "interno";
 
 export type ResultadoReprogramar =
@@ -272,19 +271,17 @@ export async function reprogramarTurnoInstitucional(params: {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
   }
 
-  // R6 SERVER-SIDE, igual que en `asignarTurno`: acuerdo semanal completo → no
-  // recibe más pacientes esa semana. Faltaba acá, y el agujero era grande: un
-  // profesional con el acuerdo completo NO podía recibir un turno por
-  // asignación pero SÍ podía recibir cinco por reprogramación — que es
-  // exactamente el día en que llegan de a varios.
-  const acuerdo = await acuerdoSemanalDelMedico(nuevo.medico_id);
-  if (acuerdo.completo) {
-    return {
-      ok: false,
-      codigo: "acuerdo_completo",
-      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro horario.`,
-    };
-  }
+  // ── R6 ES FLEXIBLE (Diego, 13/08): el acuerdo completo NO frena acá ───────
+  // Este guard existía por simetría con `asignarTurno` —y era correcto mientras
+  // R6 bloqueaba—. Con R6 flexible se cae por el mismo motivo, y acá con más
+  // razón: la reprogramación masiva ocurre el día que un profesional no puede
+  // atender, y lo que hay que resolver es a dónde va SU paciente. Rebotarlo
+  // porque el que recibe ya cumplió su piso lo manda a gestión manual del call
+  // center con un horario publicado y libre enfrente.
+  //
+  // El reparto sigue prefiriendo a quien menos lleva: el plan de
+  // `reprogramar-masivo` ordena por la prioridad de `armarOferta` y solo
+  // recurre a los que ya cumplieron cuando no queda otra.
 
   // ── VENTANA DE ASIGNACIÓN (T-5), re-validada acá ─────────────────────────
   // `asignarTurno` ya lo hace con el comentario "la oferta ya lo filtró, pero

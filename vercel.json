@@ -97,7 +97,11 @@
     },
     {
       "path": "/api/cron/acuerdo-cerrar-semana",
-      "schedule": "0 5 * * 1"
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/metering-cerrar-mes",
+      "schedule": "0 7 * * *"
     }
   ]
 }

@@ -32,7 +32,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
-import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
+import { contarExacto, leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import {
   ESTADOS_TERMINALES_CONSULTA,
   ESTADOS_TERMINALES_TURNO,
@@ -217,6 +217,30 @@ export function domingoDeSemana(lunesAr: string): string {
   return diasDeSemana(lunesAr)[6];
 }
 
+/** "2026-10-31" + 1 → "2026-11-01". Mediodía UTC para no rozar ningún borde. */
+export function correrDias(diaAr: string, dias: number): string {
+  const d = new Date(`${diaAr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * El día AR al que pertenece una consulta inmediata: el de su ASIGNACIÓN, con
+ * `created_at` de respaldo.
+ *
+ * Es R31 bis —"manda cuándo se hizo, no cuándo se cerró"— y es la MISMA regla
+ * que usa el contador (`clasificar.ts`, `ocurridoISO`). Está acá afuera, con
+ * nombre, porque es lo que hace que la ventana de la precondición necesite un
+ * día de margen de cada lado: la query filtra por `created_at` y la decisión la
+ * toma esta función, y los dos instantes pueden caer en días distintos.
+ */
+export function diaARdeConsulta(c: {
+  asignada_at?: unknown;
+  created_at?: unknown;
+}): string {
+  return fechaARdeISO((c.asignada_at as string | null) ?? (c.created_at as string));
+}
+
 /** Lunes de la semana anterior a la de ese lunes (o a la de hoy). */
 export function semanaAnterior(lunesAr: string): string {
   const d = new Date(`${lunesAr}T12:00:00Z`);
@@ -271,7 +295,7 @@ export interface CumplimientoProfesional {
 }
 
 /** Fila de `acuerdo_semanas` tal como la lee el panel (el sello de esa semana). */
-interface SemanaSellada {
+export interface SemanaSellada {
   medico_id: string;
   horas_comprometidas: number | string;
   minutos_cumplidos: number | string;
@@ -376,11 +400,145 @@ function msAR(fecha: string, hora: string | null): number {
 
 const MOTORES_VACIOS = (): Record<Motor, number> => ({ acordado: 0, espontaneo: 0, ofrecido: 0 });
 
+/** Un profesional del piloto, como lo muestra la tabla del panel. */
+export interface PerfilDeProfesional {
+  id: string;
+  nombre: string;
+  especialidad: string;
+}
+
+/** "Dra." + "Nombre Apellido" → el nombre que va en la tabla. */
+function perfilDeFila(m: Record<string, unknown>): PerfilDeProfesional {
+  return {
+    id: m.id as string,
+    nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
+    especialidad: (m.especialidad as string | null) ?? "",
+  };
+}
+
+/**
+ * Lo que el panel necesita saber ANTES de decidir si una semana se lee del sello
+ * o se calcula al vuelo. Puerto con default real, igual que `PuertoCierreSemana`
+ * y por el mismo motivo: la garantía que hay que fijar con un test —una semana
+ * MARCADA cerrada en cero, un alta posterior, y que el panel siga mostrando la
+ * misma foto— no se puede escribir contra Postgres desde el runner unitario.
+ */
+export interface PuertoSemanaSellada {
+  /** ¿Tiene la marca explícita de cierre? (la 024) */
+  marcada(semanaAr: string): Promise<boolean>;
+  /** Las filas selladas de esa semana en `acuerdo_semanas`. */
+  sellos(semanaAr: string): Promise<SemanaSellada[]>;
+  /** Nombre y especialidad de esos profesionales, estén o no en el padrón de hoy. */
+  perfiles(ids: string[]): Promise<PerfilDeProfesional[]>;
+}
+
+export const PUERTO_SEMANA_SELLADA: PuertoSemanaSellada = {
+  marcada: (semanaAr) => semanaMarcadaCerrada(semanaAr),
+  sellos: (semanaAr) => {
+    const admin = createAdminClient();
+    return leerTodo<SemanaSellada>("sellos de la semana", (desde, hasta) =>
+      admin
+        .from("acuerdo_semanas")
+        .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
+        .eq("semana_ar", semanaAr)
+        .eq("estado", "cerrada")
+        .order("medico_id", { ascending: true })
+        .range(desde, hasta)
+    );
+  },
+  perfiles: async (ids) => {
+    if (ids.length === 0) return [];
+    const admin = createAdminClient();
+    const filas = await leerTodoEnLotes<Record<string, unknown>>(
+      "profesionales con la semana sellada",
+      ids,
+      (lote, desde, hasta) =>
+        admin
+          .from("medicos")
+          .select("id, nombre_completo, titulo, especialidad")
+          .in("id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+    );
+    return filas.map(perfilDeFila);
+  },
+};
+
+/**
+ * ¿El cumplimiento de esta semana sale de lo SELLADO, o se calcula al vuelo?
+ *
+ * ── EL KPI DE UNA SEMANA CERRADA NO SE PUEDE MOVER SOLO ──────────────────────
+ * Es la misma promesa de la 015 y de la 024, del lado del PANEL. `cerrarSemana`
+ * ya no vuelve sobre una semana cerrada, pero el panel la calculaba igual: el
+ * universo era "el padrón de HOY ∪ los sellados", así que todo profesional que
+ * entró DESPUÉS del cierre estrenaba una fila viva —con sus horas comprometidas
+ * enteras y cero cumplidas— en una semana que la institución ya había leído. En
+ * la semana cerrada EN CERO —la del padrón vacío, que es justo la que la 024
+ * existe para poder afirmar— el efecto era completo: cero filas antes del alta,
+ * una fila de 10 h después.
+ *
+ * Nadie tocó plata, pero el número de arriba (`totalDeBolsa` suma las filas
+ * listadas) cambiaba solo entre dos visitas al mismo panel, que es exactamente
+ * lo que la foto viene a impedir (R30/R31: la semana cerrada no cambia).
+ *
+ * "Cerrada" es la MARCA o las filas selladas — la misma condición que
+ * `semanaEstaCerrada`, y por el mismo motivo (las semanas cerradas antes de la
+ * 024 no tienen marca). Si la semana está cerrada, el universo es el que existía
+ * AL CIERRE: los sellos. No el padrón de hoy.
+ */
+export function cumplimientoSaleDeLoSellado(params: {
+  marcada: boolean;
+  sellos: number;
+}): boolean {
+  return params.marcada || params.sellos > 0;
+}
+
+/**
+ * Las filas del panel para una semana CERRADA: una por sello, con los números
+ * tal como se sellaron. No se recalcula nada — para eso se selló.
+ *
+ * El perfil (nombre y especialidad) sí se lee de hoy: es una etiqueta, no un
+ * número del acuerdo. Al que ya no está en el padrón se lo busca igual; si su
+ * ficha desapareció, la fila queda sin nombre pero NO desaparece: el minuto
+ * sellado tiene que seguir contando.
+ */
+export function filasDeLoSellado(
+  sellos: SemanaSellada[],
+  perfiles: Map<string, PerfilDeProfesional>
+): CumplimientoProfesional[] {
+  return sellos
+    .map((sello) => {
+      const desglose = sello.desglose_motores ?? {};
+      const perfil = perfiles.get(sello.medico_id);
+      const minutosComprometidos = Math.round(Number(sello.horas_comprometidas) * 60);
+      const minutosCumplidos = Number(sello.minutos_cumplidos);
+      return {
+        medicoId: sello.medico_id,
+        nombre: perfil?.nombre ?? "",
+        especialidad: perfil?.especialidad ?? "",
+        horasComprometidas: Number(sello.horas_comprometidas),
+        minutosComprometidos,
+        minutosCumplidos,
+        minutosTurnos: desglose.turnos ?? 0,
+        minutosCI: desglose.ci ?? 0,
+        porcentaje:
+          minutosComprometidos > 0
+            ? Math.round((minutosCumplidos / minutosComprometidos) * 100)
+            : 0,
+        motores: desglose.motores ?? MOTORES_VACIOS(),
+        badge: badgeCumplimiento(minutosCumplidos, minutosComprometidos, true),
+        sellada: true,
+      };
+    })
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
 /**
  * Cumplimiento de TODOS los profesionales del piloto en esa semana.
  *
  * Semana cerrada → se leen los números sellados en `acuerdo_semanas` (no se
- * recalculan: para eso se sellaron). Semana abierta → se calcula al vuelo, que
+ * recalculan: para eso se sellaron), y el universo es el que existía AL CIERRE
+ * (ver `cumplimientoSaleDeLoSellado`). Semana abierta → se calcula al vuelo, que
  * con 30 profesionales cuesta cuatro queries.
  *
  * Orden ALFABÉTICO, como manda el mock: el panel informa, no arma un ranking.
@@ -395,34 +553,34 @@ const MOTORES_VACIOS = (): Record<Motor, number> => ({ acordado: 0, espontaneo: 
 export async function cumplimientoDeSemana(params: {
   semanaAr: string;
   ahoraMs?: number;
+  puerto?: PuertoSemanaSellada;
 }): Promise<CumplimientoProfesional[]> {
-  const admin = createAdminClient();
-  const config = await getConfigInstitucion();
   const ahoraMs = params.ahoraMs ?? Date.now();
   const lunes = params.semanaAr;
   const domingo = domingoDeSemana(lunes);
+  const puerto = params.puerto ?? PUERTO_SEMANA_SELLADA;
 
-  // ── 1) Los sellos de esta semana ───────────────────────────────────────────
-  // Van PRIMERO y sin filtrar por el padrón de hoy, porque son la mitad del
-  // universo. Antes se leían con `.in('medico_id', ids)` sobre el padrón vivo:
-  // el profesional que dejaba el piloto (o cuya especialidad salía del config)
-  // desaparecía de una semana YA CERRADA, y como el KPI de cumplimiento suma
-  // sobre las filas listadas, el 98 % de octubre cambiaba solo. Justo lo que la
-  // 015 promete que no puede pasar: "lo que la institución vio el lunes tiene
-  // que seguir diciendo lo mismo en diciembre".
-  const selladas = await leerTodo<SemanaSellada>("sellos de la semana", (desde, hasta) =>
-    admin
-      .from("acuerdo_semanas")
-      .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
-      .eq("semana_ar", lunes)
-      .eq("estado", "cerrada")
-      .order("medico_id", { ascending: true })
-      .range(desde, hasta)
-  );
-  const selladaPorMedico = new Map<string, SemanaSellada>();
-  for (const s of selladas) selladaPorMedico.set(s.medico_id, s);
+  // ── 1) ¿Esta semana YA ESTÁ CERRADA? ──────────────────────────────────────
+  // Va PRIMERO, y los sellos se leen sin filtrar por el padrón de hoy porque
+  // son el universo entero. Antes se leían con `.in('medico_id', ids)` sobre el
+  // padrón vivo: el profesional que dejaba el piloto (o cuya especialidad salía
+  // del config) desaparecía de una semana YA CERRADA, y como el KPI suma sobre
+  // las filas listadas, el 98 % de octubre cambiaba solo. Justo lo que la 015
+  // promete que no puede pasar: "lo que la institución vio el lunes tiene que
+  // seguir diciendo lo mismo en diciembre".
+  const [marcada, sellos] = await Promise.all([puerto.marcada(lunes), puerto.sellos(lunes)]);
+  if (cumplimientoSaleDeLoSellado({ marcada, sellos: sellos.length })) {
+    const perfiles = await puerto.perfiles(sellos.map((s) => s.medico_id));
+    return filasDeLoSellado(sellos, new Map(perfiles.map((p) => [p.id, p])));
+  }
 
-  // ── 2) El universo: el padrón de HOY ∪ los que tienen sello esa semana ─────
+  // A partir de acá, la semana está ABIERTA: no hay ningún sello que respetar y
+  // todo sale del cálculo en vivo. El config y el cliente se leen recién ahora
+  // porque la semana cerrada no depende de nada de hoy.
+  const admin = createAdminClient();
+  const config = await getConfigInstitucion();
+
+  // ── 2) El universo: el padrón de HOY ──────────────────────────────────────
   const medicos = await leerTodo<Record<string, unknown>>(
     "padrón de profesionales del piloto",
     (desde, hasta) =>
@@ -434,27 +592,8 @@ export async function cumplimientoDeSemana(params: {
         .order("id", { ascending: true })
         .range(desde, hasta)
   );
-  const enElPadron = new Set(medicos.map((m) => m.id as string));
-  // A los sellados que ya no están en el padrón se les busca el nombre igual:
-  // su fila tiene que seguir en la tabla, con el número que se selló.
-  const selladosFuera = [...selladaPorMedico.keys()].filter((id) => !enElPadron.has(id));
-  const medicosFuera = await leerTodoEnLotes<Record<string, unknown>>(
-    "profesionales con semana sellada fuera del padrón",
-    selladosFuera,
-    (lote, desde, hasta) =>
-      admin
-        .from("medicos")
-        .select("id, nombre_completo, titulo, especialidad")
-        .in("id", lote)
-        .order("id", { ascending: true })
-        .range(desde, hasta)
-  );
 
-  const universo = [...medicos, ...medicosFuera].map((m) => ({
-    id: m.id as string,
-    nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
-    especialidad: (m.especialidad as string | null) ?? "",
-  }));
+  const universo = medicos.map(perfilDeFila);
   if (universo.length === 0) return [];
   const ids = universo.map((m) => m.id);
 
@@ -571,35 +710,12 @@ export async function cumplimientoDeSemana(params: {
   }
 
   // ── 6) Componer ────────────────────────────────────────────────────────────
+  // Todas las filas salen del cálculo en vivo: si hubiera un solo sello, esta
+  // función ya habría vuelto por la rama de arriba.
   const cerrada = semanaTerminada(lunes, ahoraMs);
   const filas: CumplimientoProfesional[] = universo.map((m) => {
     const horas = horasPorMedico.get(m.id) ?? Number(config.acuerdo_horas_semana_default);
     const motores = motoresPorMedico.get(m.id) ?? MOTORES_VACIOS();
-    const sello = selladaPorMedico.get(m.id);
-
-    if (sello) {
-      const desglose = (sello.desglose_motores ?? {}) as {
-        turnos?: number;
-        ci?: number;
-        motores?: Record<Motor, number>;
-      };
-      const minutosComprometidos = Math.round(Number(sello.horas_comprometidas) * 60);
-      const minutosCumplidos = Number(sello.minutos_cumplidos);
-      return {
-        medicoId: m.id,
-        nombre: m.nombre,
-        especialidad: m.especialidad,
-        horasComprometidas: Number(sello.horas_comprometidas),
-        minutosComprometidos,
-        minutosCumplidos,
-        minutosTurnos: desglose.turnos ?? 0,
-        minutosCI: desglose.ci ?? 0,
-        porcentaje: minutosComprometidos > 0 ? Math.round((minutosCumplidos / minutosComprometidos) * 100) : 0,
-        motores: desglose.motores ?? motores,
-        badge: badgeCumplimiento(minutosCumplidos, minutosComprometidos, true),
-        sellada: true,
-      };
-    }
 
     const bolsa = calcularBolsa({
       duracionSlotMin: config.slot_duracion_min,
@@ -721,13 +837,16 @@ export function bloqueaElSello(
   }
 }
 
-export interface FaltantesDeSemana {
+export interface Faltantes {
   /** Terminales sin fila en el contador (el job no llegó). */
   sin_fila: number;
   /** Todavía vivos: van a producir fila DESPUÉS del sello si se sella ahora. */
   vivos: number;
   total: number;
 }
+
+/** Nombre viejo, cuando el único sello era el semanal. */
+export type FaltantesDeSemana = Faltantes;
 
 /**
  * Encuentros de esa semana que impiden sellarla. Es la precondición del sello.
@@ -745,7 +864,7 @@ export interface FaltantesDeSemana {
  * ── LOS VIVOS TAMBIÉN CUENTAN (I1 del gate #405) ─────────────────────────────
  * La versión anterior miraba SOLO encuentros ya terminales, y por ese hueco se
  * colaba el caso más caro: una consulta inmediata que quedó colgada el domingo
- * a la noche no es terminal el lunes a las 02:00 —cuando corre el cron del
+ * a la noche no es terminal el lunes a la madrugada —cuando corre el cron del
  * cierre—, así que el sello no la veía, se sellaba la semana sin ella, y cuando
  * después aparecía su fila facturable el cumplimiento sellado ya no la podía
  * incorporar. La factura la cobraba igual: los dos números contractuales, otra
@@ -762,79 +881,115 @@ export interface FaltantesDeSemana {
  * un motor válido. Un slot que nadie tomó o un canal desconocido no generan
  * fila por diseño, y contarlos dejaría el sello bloqueado para siempre.
  */
-export async function encuentrosSinClasificar(semanaAr: string): Promise<FaltantesDeSemana> {
+export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltantes> {
+  return encuentrosSinClasificarEnRango(semanaAr, domingoDeSemana(semanaAr));
+}
+
+/**
+ * La misma precondición, sobre un rango de días AR cualquiera.
+ *
+ * Existe porque el sello mensual (R31, `cerrarMes`) necesita EXACTAMENTE la
+ * misma garantía que el semanal: no congelar un período mientras el contador
+ * todavía está contándolo. La regla —qué bloquea y qué no— es una sola
+ * (`bloqueaElSello`) y no se re-escribe por período: si divergieran, el mes y
+ * la semana podrían dar respuestas distintas sobre el mismo encuentro, y el
+ * cumplimiento sellado y la factura volverían a mirarse de reojo.
+ *
+ * Los dos extremos son inclusive y en hora AR: `hastaAr` incluye todo el día
+ * (hasta 23:59:59.999 AR), que es el "corte a las 24:00" de R31.
+ */
+export async function encuentrosSinClasificarEnRango(
+  desdeAr: string,
+  hastaAr: string
+): Promise<Faltantes> {
   const admin = createAdminClient();
-  const lunes = semanaAr;
-  const domingo = domingoDeSemana(lunes);
+  const desdeDia = desdeAr;
+  const hastaDia = hastaAr;
   const MOTORES = ["acordado", "espontaneo", "ofrecido"];
   const TERMINALES_TURNO = ESTADOS_TERMINALES_TURNO as unknown as string[];
   const TERMINALES_CONSULTA = ESTADOS_TERMINALES_CONSULTA as unknown as string[];
 
+  // Las CI se piden con UN DÍA DE MÁS de cada lado y se filtran en JS. Su día
+  // AR sale de `asignada_at` (con `created_at` de respaldo), que puede caer del
+  // otro lado del borde respecto de `created_at` — que es por lo que filtra la
+  // query. Sin el margen, una CI asignada a la medianoche del último día del
+  // período no entraba a la lista de candidatos y el sello no la veía. Pedir de
+  // más es barato; el que decide es el filtro de abajo.
+  const desdeMargen = correrDias(desdeDia, -1);
+  const hastaMargen = correrDias(hastaDia, 1);
+
   const [turnos, turnosVivos, consultas, consultasVivas, filas] = await Promise.all([
-    leerTodo<Record<string, unknown>>("turnos terminales de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("turnos terminales del período", (desde, hasta) =>
       admin
         .from("turnos")
         .select("id, estado")
         .in("estado", TERMINALES_TURNO)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
-        .gte("fecha", lunes)
-        .lte("fecha", domingo)
+        .gte("fecha", desdeDia)
+        .lte("fecha", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
     // Vivos por COMPLEMENTO, no por lista blanca: un estado que no conozcamos
     // bloquea el sello en vez de pasar de largo. Sellar es irreversible; la
     // duda se resuelve esperando.
-    leerTodo<Record<string, unknown>>("turnos todavía vivos de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("turnos todavía vivos del período", (desde, hasta) =>
       admin
         .from("turnos")
         .select("id, estado")
         .not("estado", "in", `(${[...TERMINALES_TURNO, ...TURNO_SIN_DESTINO].join(",")})`)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
-        .gte("fecha", lunes)
-        .lte("fecha", domingo)
+        .gte("fecha", desdeDia)
+        .lte("fecha", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    // La CI no tiene columna de fecha AR: su semana sale del instante de
-    // asignación, igual que en el contador. Se pide un día de más de cada lado
-    // y se filtra en JS.
-    leerTodo<Record<string, unknown>>("consultas terminales de la semana", (desde, hasta) =>
+    // La CI no tiene columna de fecha AR: su día sale del instante de
+    // asignación, igual que en el contador.
+    leerTodo<Record<string, unknown>>("consultas terminales del período", (desde, hasta) =>
       admin
         .from("consultas")
         .select("id, estado, asignada_at, created_at")
         .in("estado", TERMINALES_CONSULTA)
         .in("canal_origen", MOTORES)
-        .gte("created_at", `${lunes}T00:00:00-03:00`)
-        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .gte("created_at", `${desdeMargen}T00:00:00-03:00`)
+        .lte("created_at", `${hastaMargen}T23:59:59.999-03:00`)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    leerTodo<Record<string, unknown>>("consultas todavía vivas de la semana", (desde, hasta) =>
+    leerTodo<Record<string, unknown>>("consultas todavía vivas del período", (desde, hasta) =>
       admin
         .from("consultas")
         .select("id, estado, asignada_at, created_at")
         .not("estado", "in", `(${TERMINALES_CONSULTA.join(",")})`)
         .in("canal_origen", MOTORES)
-        .gte("created_at", `${lunes}T00:00:00-03:00`)
-        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .gte("created_at", `${desdeMargen}T00:00:00-03:00`)
+        .lte("created_at", `${hastaMargen}T23:59:59.999-03:00`)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
-    leerTodo<Record<string, unknown>>("filas del contador de la semana", (desde, hasta) =>
+    // El contador se lee por DÍA AR y no por `semana_ar`, que es lo que hacía
+    // la versión semanal: el mes no es un múltiplo de semanas. `fecha_ar` y
+    // `semana_ar` salen del mismo instante en `clasificar.ts`, así que para una
+    // semana el conjunto es exactamente el mismo.
+    leerTodo<Record<string, unknown>>("filas del contador del período", (desde, hasta) =>
       admin
         .from("encuentros_metering")
         .select("tipo, recurso_id")
-        .eq("semana_ar", lunes)
+        .gte("fecha_ar", desdeDia)
+        .lte("fecha_ar", hastaDia)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
   ]);
 
-  const deLaSemana = (c: Record<string, unknown>) =>
-    lunesDeSemanaAR((c.asignada_at as string | null) ?? (c.created_at as string)) === lunes;
+  /** ¿El día AR de esta CI cae adentro del período? */
+  const delPeriodo = (c: Record<string, unknown>) => {
+    const dia = diaARdeConsulta(c);
+    return dia >= desdeDia && dia <= hastaDia;
+  };
 
   // El conteo pasa por `bloqueaElSello` —la decisión pura y testeada— y no por
   // la forma de la query: los `.in()` / `.not(...in...)` de arriba son un
@@ -845,14 +1000,14 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltant
     if (bloqueaElSello("turno", t.estado as string, conFila.has(`turno|${t.id}`))) sinFila++;
   }
   for (const c of consultas) {
-    if (!deLaSemana(c)) continue;
+    if (!delPeriodo(c)) continue;
     if (bloqueaElSello("consulta", c.estado as string, conFila.has(`consulta|${c.id}`))) sinFila++;
   }
 
   const vivos =
     turnosVivos.filter((t) => bloqueaElSello("turno", t.estado as string, false)).length +
     consultasVivas
-      .filter(deLaSemana)
+      .filter(delPeriodo)
       .filter((c) => bloqueaElSello("consulta", c.estado as string, false)).length;
   return { sin_fila: sinFila, vivos, total: sinFila + vivos };
 }
@@ -866,11 +1021,63 @@ export interface ResumenCierreSemana {
 }
 
 /**
- * Sella una semana: calcula el cumplimiento y lo escribe como 'cerrada'.
+ * Todo lo que `cerrarSemana` toca de la base, en una sola superficie.
  *
- * Idempotente: una semana ya sellada NO se recalcula (si el cron corre dos
+ * Mismo motivo que `PuertoCierreMes`: la garantía que hay que fijar con un test
+ * es una SECUENCIA sobre la base —cerrar una semana sin nadie en el padrón, que
+ * después entre un profesional, volver a cerrar y que la semana NO se le
+ * selle—, y esa secuencia no se puede escribir contra Postgres desde el runner
+ * unitario. El default es la implementación real, así que ningún caller cambia.
+ */
+export interface PuertoCierreSemana {
+  estaCerrada(semanaAr: string): Promise<boolean>;
+  sellados(semanaAr: string): Promise<number>;
+  faltantes(semanaAr: string): Promise<Faltantes>;
+  cumplimiento(semanaAr: string, ahoraMs: number): Promise<CumplimientoProfesional[]>;
+  /** Escribe las filas como 'cerrada'. TIRA si la base rechaza. */
+  sellar(semanaAr: string, filas: CumplimientoProfesional[], ahoraISO: string): Promise<void>;
+  marcar(semanaAr: string, profesionales: number, sellados: number): Promise<void>;
+}
+
+export const PUERTO_CIERRE_SEMANA: PuertoCierreSemana = {
+  estaCerrada: (semanaAr) => semanaEstaCerrada(semanaAr),
+  sellados: (semanaAr) => filasSelladasDeSemana(semanaAr),
+  faltantes: (semanaAr) => encuentrosSinClasificar(semanaAr),
+  cumplimiento: (semanaAr, ahoraMs) => cumplimientoDeSemana({ semanaAr, ahoraMs }),
+  sellar: (semanaAr, filas, ahoraISO) => sellarSemana(semanaAr, filas, ahoraISO),
+  marcar: (semanaAr, profesionales, sellados) =>
+    marcarSemanaCerrada(semanaAr, profesionales, sellados),
+};
+
+/**
+ * Sella una semana: calcula el cumplimiento, lo escribe como 'cerrada' y deja
+ * la MARCA de que esa semana ya se cerró (la 024).
+ *
+ * Idempotente: una semana ya cerrada NO se recalcula (si el cron corre dos
  * veces, el número de la primera es el que queda). Eso es deliberado — el
  * sello es justamente la promesa de que el número no se mueve más.
+ *
+ * ── POR QUÉ HACE FALTA UNA MARCA, Y NO ALCANZAN LAS FILAS ────────────────────
+ * Es el crítico del gate, del lado semanal. Con el padrón VACÍO —el piloto que
+ * todavía no dio de alta a nadie, la instancia recién provisionada— esta
+ * función no tenía ninguna fila que escribir y volvía sin dejar rastro: esa
+ * semana seguía apareciendo pendiente al día siguiente, y al otro, para
+ * siempre. Y el día que un profesional entraba al padrón, el barrido la veía
+ * abierta y la sellaba CON ÉL: cumplimiento sellado sobre una semana que la
+ * institución ya había leído como "en curso". La 023 cerró exactamente eso para
+ * el mes; la 024 lo cierra para la semana.
+ *
+ * También por eso una semana YA cerrada devuelve enseguida, sin recalcular ni
+ * evaluar la precondición del contador: la ruta manual
+ * (`POST /api/admin/institucional/cerrar-semana`) llama acá directo, y un
+ * reintento "por las dudas" sobre una semana cerrada le agregaba las filas de
+ * los profesionales que entraron después.
+ *
+ * ── EL ORDEN: SELLAR → MARCAR, NUNCA AL REVÉS ────────────────────────────────
+ * El cumplimiento de una semana cerrada se lee de las filas selladas. Una semana
+ * marcada cuyas filas no se escribieron mostraría cero horas teniendo actividad.
+ * Al revés no se pierde nada: sigue cerrada por sus filas y la marca la escribe
+ * el barrido de mañana.
  *
  * TIRA si no pudo leer (la excepción viene de `cumplimientoDeSemana`). "No
  * había nada que sellar" y "no pude leer el padrón" terminaban los dos en
@@ -878,8 +1085,11 @@ export interface ResumenCierreSemana {
  * invisible y, como el cron sella siempre la semana ANTERIOR, no se recuperaba
  * solo. Ahora lo primero devuelve 200 y lo segundo revienta con nombre.
  */
-export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Promise<ResumenCierreSemana> {
-  const admin = createAdminClient();
+export async function cerrarSemana(
+  semanaAr: string,
+  ahoraMs = Date.now(),
+  puerto: PuertoCierreSemana = PUERTO_CIERRE_SEMANA
+): Promise<ResumenCierreSemana> {
   const resumen: ResumenCierreSemana = {
     semana_ar: semanaAr,
     profesionales: 0,
@@ -912,9 +1122,24 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
     );
   }
 
+  // ── ¿YA ESTÁ CERRADA? ──────────────────────────────────────────────────────
+  // Va ANTES de la precondición del contador a propósito (mismo criterio que
+  // `cerrarMes`): sobre una semana cerrada hace semanas, un encuentro tardío
+  // todavía vivo convertiría un reintento inocente en un error confuso. Y una
+  // semana cerrada ANTES de que existiera la 024 —o cerrada a mano por SQL—
+  // recibe acá su marca, en la primera pasada del barrido; si no, volvería a la
+  // lista de pendientes todos los días para siempre.
+  if (await puerto.estaCerrada(semanaAr)) {
+    const sellados = await puerto.sellados(semanaAr);
+    await puerto.marcar(semanaAr, sellados, 0);
+    // `profesionales` es el universo CONGELADO, no el padrón de hoy: los que
+    // entraron después no forman parte de esta semana y no se le agregan.
+    return { ...resumen, profesionales: sellados, ya_estaban: sellados };
+  }
+
   // Precondición: el contador terminó de contar esta semana. Si falta aunque
   // sea un encuentro, no se sella nada — un sello incompleto es inmutable.
-  const faltan = await encuentrosSinClasificar(semanaAr);
+  const faltan = await puerto.faltantes(semanaAr);
   if (faltan.total > 0) {
     throw new Error(
       `La semana ${semanaAr} todavía no se puede sellar: ${faltan.sin_fila} encuentro(s) terminales ` +
@@ -924,15 +1149,45 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
     );
   }
 
-  const filas = await cumplimientoDeSemana({ semanaAr, ahoraMs });
+  const filas = await puerto.cumplimiento(semanaAr, ahoraMs);
   resumen.profesionales = filas.length;
   const aSellar = filas.filter((f) => !f.sellada);
   resumen.ya_estaban = filas.length - aSellar.length;
-  if (aSellar.length === 0) return resumen;
 
-  const ahoraISO = new Date(ahoraMs).toISOString();
+  // Con el padrón vacío no hay NADA que escribir en `acuerdo_semanas`, y esa es
+  // exactamente la semana que antes se perdía: la marca de abajo es lo único
+  // que la registra como cerrada.
+  if (aSellar.length > 0) {
+    try {
+      await puerto.sellar(semanaAr, aSellar, new Date(ahoraMs).toISOString());
+    } catch (e) {
+      const detalle = e instanceof Error ? e.message : String(e);
+      console.error("[bolsa] No se pudo sellar la semana:", semanaAr, detalle);
+      resumen.errores++;
+      // Sin marca: la semana sigue pendiente y el barrido de mañana reintenta.
+      // Marcarla acá la dejaría cerrada con el cumplimiento sin escribir.
+      return resumen;
+    }
+    resumen.sellados = aSellar.length;
+  }
+
+  await puerto.marcar(semanaAr, resumen.profesionales, resumen.sellados);
+  return resumen;
+}
+
+/**
+ * Escribe el cumplimiento de esas filas como 'cerrada'. TIRA si la base
+ * rechaza: quien decide qué hacer con el error es `cerrarSemana` (que no marca
+ * la semana como cerrada y deja que el barrido reintente mañana).
+ */
+async function sellarSemana(
+  semanaAr: string,
+  filas: CumplimientoProfesional[],
+  ahoraISO: string
+): Promise<void> {
+  const admin = createAdminClient();
   const { error } = await admin.from("acuerdo_semanas").upsert(
-    aSellar.map((f) => ({
+    filas.map((f) => ({
       medico_id: f.medicoId,
       semana_ar: semanaAr,
       horas_comprometidas: f.horasComprometidas,
@@ -944,18 +1199,240 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
     })),
     { onConflict: "medico_id,semana_ar" }
   );
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * ¿Esa semana ya se cerró?
+ *
+ * Dos fuentes, y hacen falta las dos (mismo criterio que `periodoEstaSellado`):
+ *   · la MARCA explícita de `acuerdo_semanas_cerradas` (la 024), y
+ *   · las filas selladas en `acuerdo_semanas`, que es lo único que había antes.
+ *
+ * Sin la marca, una semana con el padrón vacío no deja ninguna fila y "cerrada"
+ * se ve igual que "nunca se cerró". Sin las filas, las semanas cerradas ANTES
+ * de la 024 quedarían en el limbo. La marca se agrega, no reemplaza: cualquiera
+ * de las dos alcanza, y el barrido se encarga de que una semana sellada sin
+ * marca la reciba en su próxima pasada.
+ */
+export async function semanaEstaCerrada(semanaAr: string): Promise<boolean> {
+  const [marcada, selladas] = await Promise.all([
+    semanaMarcadaCerrada(semanaAr),
+    filasSelladasDeSemana(semanaAr),
+  ]);
+  return marcada || selladas > 0;
+}
+
+/** ¿Tiene la marca explícita de cierre? (la 024) */
+export async function semanaMarcadaCerrada(semanaAr: string): Promise<boolean> {
+  return (await semanasMarcadasCerradas([semanaAr])).has(semanaAr);
+}
+
+/** Cuáles de esas semanas ya tienen marca de cierre. Una sola lectura. */
+export async function semanasMarcadasCerradas(semanas: string[]): Promise<Set<string>> {
+  if (semanas.length === 0) return new Set();
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("acuerdo_semanas_cerradas")
+    .select("semana_ar")
+    .in("semana_ar", semanas);
+  // TIRA: si esta lectura fallara en silencio, una semana cerrada se vería
+  // abierta y el barrido volvería a sellarla — que es justo lo que la marca
+  // existe para impedir.
   if (error) {
-    console.error("[bolsa] No se pudo sellar la semana:", semanaAr, error.message);
-    resumen.errores++;
-    return resumen;
+    throw new Error(`No se pudo leer qué semanas están cerradas: ${error.message}`);
   }
-  resumen.sellados = aSellar.length;
-  return resumen;
+  return new Set((data ?? []).map((f) => String(f.semana_ar).slice(0, 10)));
+}
+
+/** Cuántas filas de esa semana quedaron selladas en `acuerdo_semanas`. */
+export async function filasSelladasDeSemana(semanaAr: string): Promise<number> {
+  const admin = createAdminClient();
+  return contarExacto(`filas selladas de la semana ${semanaAr}`, () =>
+    admin
+      .from("acuerdo_semanas")
+      .select("medico_id", { count: "exact", head: true })
+      .eq("semana_ar", semanaAr)
+      .eq("estado", "cerrada")
+  );
+}
+
+/**
+ * Deja la marca de cierre de la semana. Idempotente: si ya estaba, no hace nada
+ * (la fila es inmutable — la 024 rechaza cualquier UPDATE).
+ *
+ * Se llama SIEMPRE después de sellar, nunca antes.
+ */
+export async function marcarSemanaCerrada(
+  semanaAr: string,
+  profesionales: number,
+  sellados: number
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("acuerdo_semanas_cerradas")
+    .insert({ semana_ar: semanaAr, profesionales, sellados });
+  // 23505 = ya estaba marcada. No es un error: es la idempotencia.
+  if (error && error.code !== "23505") {
+    throw new Error(`No se pudo marcar la semana ${semanaAr} como cerrada: ${error.message}`);
+  }
 }
 
 /** La semana que el cron del lunes tiene que sellar: la que acaba de terminar. */
 export function semanaASellar(ahoraMs = Date.now()): string {
   return lunesDeSemanaAR(new Date(ahoraMs - 7 * 24 * 3600_000).toISOString());
+}
+
+/**
+ * Cuántas semanas hacia atrás mira el barrido del cierre semanal. Ocho son dos
+ * meses: si una semana estuvo sin sellar más que eso, el problema ya no es que
+ * el cron no llegó, y sellarla ahora congelaría un cumplimiento que nadie miró
+ * a tiempo.
+ */
+export const SEMANAS_QUE_MIRA_EL_CIERRE = 8;
+
+/**
+ * Las semanas ya terminadas, de la más VIEJA a la más nueva, terminando en la
+ * que le toca sellar al cron de hoy. Puro: es la lista de candidatas del
+ * barrido, el espejo de `mesesTerminadosHaciaAtras`.
+ */
+export function semanasTerminadasHaciaAtras(
+  ahoraMs = Date.now(),
+  cuantas = SEMANAS_QUE_MIRA_EL_CIERRE
+): string[] {
+  const ultima = semanaASellar(ahoraMs);
+  const out: string[] = [];
+  for (let i = cuantas - 1; i >= 0; i--) {
+    const d = new Date(`${ultima}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 7 * i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/**
+ * Semanas terminadas que quedaron SIN SELLAR — lo que el cron tiene que cerrar.
+ *
+ * ── POR QUÉ NO ALCANZA CON "LA SEMANA ANTERIOR" ──────────────────────────────
+ * Es el mismo agujero que tenía el cierre mensual, y en el semanal pega más
+ * seguido: el cron sellaba siempre `semanaASellar()` y no volvía NUNCA sobre la
+ * que faltó. Un lunes con el clasificador atrasado, o con una consulta que quedó
+ * viva el domingo a la noche, terminaba en un mail rojo y nada más; si ese mail
+ * se perdía, esa semana se quedaba en "en curso" para siempre, con el watchdog
+ * en verde (vigila el latido, y el cron latía).
+ *
+ * Y la precondición se endureció en esta misma etapa —las CI ahora se filtran
+ * por el día de su asignación, con un día de margen de cada lado— así que
+ * aborta MÁS seguido que antes. Endurecer una precondición sin darle reintento
+ * es cambiar un error silencioso por otro.
+ *
+ * ── POR QUÉ UNA SEMANA YA SELLADA NO VUELVE A LA LISTA ───────────────────────
+ * Igual que con el mes. Una semana puede tener filas selladas y profesionales
+ * sin fila: los que entraron al padrón DESPUÉS del cierre. Sellarlos ahora les
+ * agregaría cumplimiento a una semana que la institución ya leyó, y el KPI de
+ * arriba —que suma las filas listadas— se movería solo. Lo que se selló, se
+ * selló.
+ *
+ * ── Y POR QUÉ LA LISTA SALE DE LA MARCA, NO DE LAS FILAS ─────────────────────
+ * Antes el filtro era "no tiene ninguna fila sellada en `acuerdo_semanas`", o
+ * sea que una semana con el padrón VACÍO —el piloto que todavía no dio de alta
+ * a nadie— nunca salía de la lista: `cerrarSemana` no tenía qué escribir y
+ * volvía sin dejar rastro. Dos consecuencias, las dos malas: esas semanas
+ * fantasma se comían la corrida todos los días (son las más viejas, y el cron
+ * toma las más viejas primero), y el día que entraba alguien al padrón el
+ * barrido las veía abiertas y las sellaba con él.
+ *
+ * Con la marca de la 024, "cerrada" es un hecho registrado y la semana sin
+ * padrón se cierra como cualquier otra. Las semanas que ya estaban selladas sin
+ * marca aparecen una vez, reciben la marca en `cerrarSemana` (que devuelve
+ * enseguida sin tocar nada) y no vuelven.
+ *
+ * Una sola lectura para todas las candidatas: la pregunta es "¿cuáles de estas
+ * ocho están cerradas?", no ocho preguntas sueltas.
+ */
+export async function semanasPendientesDeSellar(
+  ahoraMs = Date.now(),
+  cuantas = SEMANAS_QUE_MIRA_EL_CIERRE
+): Promise<string[]> {
+  const candidatas = semanasTerminadasHaciaAtras(ahoraMs, cuantas);
+  const cerradas = await semanasMarcadasCerradas(candidatas);
+  return candidatas.filter((s) => !cerradas.has(s));
+}
+
+/**
+ * Semanas que sella como mucho una corrida. Menos que el techo del cierre
+ * mensual (3) a propósito: `cerrarSemana` recalcula el cumplimiento de TODO el
+ * padrón —seis lecturas paginadas por semana— mientras que el mensual es un
+ * UPDATE y dos conteos. Techo de tiempo, no de alcance: lo que sobra se sella
+ * mañana. En régimen la lista tiene 0 o 1.
+ */
+export const SEMANAS_POR_CORRIDA = 2;
+
+/**
+ * El número de corrida del barrido: días AR transcurridos desde el epoch. El
+ * cron corre una vez por día, así que sube de a uno y es el mismo dentro de una
+ * misma corrida. Puro respecto del reloj que le pasen.
+ *
+ * Existe para que `semanasDeLaCorrida` pueda ROTAR sin guardar estado en
+ * ninguna tabla: qué semanas toca hoy depende del día, no de lo que pasó ayer.
+ */
+export function corridaDelBarrido(ahoraMs = Date.now()): number {
+  return Math.floor((ahoraMs - 3 * 3600_000) / 86_400_000);
+}
+
+/**
+ * Cuáles de las pendientes toma ESTA corrida: lugar reservado para la más
+ * reciente, y el resto ROTANDO entre las viejas, corrida por corrida.
+ *
+ * ── EL HAMBRE DE LA MÁS NUEVA ────────────────────────────────────────────────
+ * El barrido tomaba `pendientes.slice(0, 2)`, o sea las dos más viejas. Alcanza
+ * con que dos semanas viejas se traben —una precondición que no se cumple
+ * nunca, un encuentro que jamás llega a ser terminal— para que monopolicen
+ * todas las corridas: la semana que acaba de terminar, la única que alguien va
+ * a mirar el lunes, no se toca hasta que la ventana de ocho las expulse. Seis
+ * semanas de atraso sobre lo que la institución está leyendo AHORA, con el
+ * watchdog en verde y el mail rojo hablando siempre de las mismas dos.
+ *
+ * ── Y EL HAMBRE DE LAS DEL MEDIO ─────────────────────────────────────────────
+ * Reservar el último lugar arregla la punta nueva y deja el mismo problema una
+ * fila más abajo. Con `max = 2` y DOS trabadas permanentes —la más vieja y la
+ * más reciente— la corrida es siempre `[la vieja rota, la reciente rota]` y las
+ * del medio no se intentan NUNCA: se quedan pendientes hasta que la ventana de
+ * ocho las expulsa, o sea unas ocho semanas de atraso sobre una semana que sí
+ * se podía sellar. Y no es hipotético: dos trabas simultáneas es exactamente el
+ * escenario que este reparto vino a contemplar.
+ *
+ * Por eso el cupo que queda después de la reserva ROTA: cada corrida arranca un
+ * lugar más adelante en la lista de viejas. La garantía es de progreso real —
+ * toda pendiente vieja se intenta al menos una vez cada `viejas.length`
+ * corridas, esté trabada la que esté—, sin guardar en ninguna tabla qué se
+ * intentó ayer: el índice sale del día (`corridaDelBarrido`).
+ *
+ * Con `max = 1` no hay lugar para reservar: rota sobre TODAS (con `corrida = 0`
+ * gana la más vieja, el orden de siempre). Con 0 o menos, nada.
+ *
+ * El orden de salida es siempre el de entrada (viejas primero): la rotación
+ * elige QUIÉNES, no en qué orden se sellan.
+ */
+export function semanasDeLaCorrida(
+  pendientes: string[],
+  max = SEMANAS_POR_CORRIDA,
+  corrida = 0
+): string[] {
+  if (max <= 0) return [];
+  if (pendientes.length <= max) return [...pendientes];
+  /** Índice de arranque de esta corrida, sin sorpresas con negativos. */
+  const arranque = (largo: number) => ((corrida % largo) + largo) % largo;
+  if (max === 1) return [pendientes[arranque(pendientes.length)]];
+
+  const masReciente = pendientes[pendientes.length - 1];
+  const viejas = pendientes.slice(0, -1);
+  const desde = arranque(viejas.length);
+  // `max - 1 < viejas.length` siempre (acá `pendientes.length > max`), así que
+  // la ventana circular nunca se muerde la cola: no hay repetidas.
+  const elegidas = new Set<number>();
+  for (let i = 0; i < max - 1; i++) elegidas.add((desde + i) % viejas.length);
+  return [...viejas.filter((_, i) => elegidas.has(i)), masReciente];
 }
 
 /** La semana AR de hoy (default del selector del panel). */

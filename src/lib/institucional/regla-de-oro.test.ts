@@ -25,6 +25,8 @@
 
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   bloqueaRutaInstitucional,
   correspondeRefund,
@@ -77,16 +79,85 @@ test("(a) los 5 crons de Capa C siguen su camino B2C", () => {
 });
 
 test("(a bis) los crons NUEVOS del modo institucional no hacen NADA en el B2C", () => {
-  // El espejo de la Capa C (spec §9): `metering-clasificar` y
-  // `acuerdo-cerrar-semana` se invocan en los dos deploys porque `vercel.json`
-  // es uno solo. En el B2C sus tablas ni existen — sin este corte cada corrida
-  // terminaría en error y el watchdog mandaría mails rojos por una tarea que
-  // en el B2C no significa nada.
-  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 2);
+  // El espejo de la Capa C (spec §9): `metering-clasificar`,
+  // `acuerdo-cerrar-semana` y `metering-cerrar-mes` se invocan en los dos
+  // deploys porque `vercel.json` es uno solo. En el B2C sus tablas ni existen —
+  // sin este corte cada corrida terminaría en error y el watchdog mandaría
+  // mails rojos por una tarea que en el B2C no significa nada.
+  assert.equal(CRONS_SOLO_INSTITUCIONALES.length, 3);
   for (const key of CRONS_SOLO_INSTITUCIONALES) {
     const res = cortarSiB2C(key);
     assert.ok(res, `${key} tiene que cortar en el B2C`);
     assert.equal(res.status, 200);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (a ter) LA LISTA Y EL CÓDIGO, ATADOS — el test que sí muerde
+// ─────────────────────────────────────────────────────────────────────────────
+// Los dos tests de arriba recorren las listas y llaman al helper: verifican que
+// el HELPER está bien, no que los crons lo USEN. Un cuarto cron agregado a
+// `CRONS_SOLO_INSTITUCIONALES` sin la llamada en su `route.ts` los pasaba a los
+// dos en verde — y en el B2C ese cron correría contra tablas que no existen,
+// fallando cada corrida y llenando de mails rojos la casilla. Al revés (un cron
+// de Capa C sin `cortarSiInstitucional`) es peor: correría en la instancia
+// haciendo trabajo que ahí no significa nada.
+//
+// Por eso acá se LEEN los archivos. Es un test de forma, no de comportamiento
+// —el runner unitario no puede importar un route de Next—, y esa forma es la
+// misma en los ocho: `const corte = cortarSiX("<key>"); if (corte) return corte;`
+
+/** El `route.ts` de un cron, leído del disco. Falla si el archivo no está. */
+function fuenteDelCron(key: string): string {
+  const ruta = join(process.cwd(), "src/app/api/cron", key, "route.ts");
+  assert.ok(existsSync(ruta), `${key}: está en la lista pero no existe ${ruta}`);
+  return readFileSync(ruta, "utf8");
+}
+
+/**
+ * El corte tiene que estar EN el archivo, con SU key, importado del módulo que
+ * corresponde, y su resultado tiene que devolverse (un `cortarSiB2C(key)` cuyo
+ * valor se descarta no corta nada).
+ */
+function verificarCorte(key: string, helper: string, modulo: string): void {
+  const fuente = fuenteDelCron(key);
+  assert.match(
+    fuente,
+    new RegExp(`from\\s+["']@/lib/institucional/${modulo}["']`),
+    `${key}: no importa ${helper} de @/lib/institucional/${modulo}`
+  );
+  const llamada = new RegExp(`(const|let)\\s+(\\w+)\\s*=\\s*${helper}\\(\\s*["']${key}["']\\s*\\)`);
+  const m = fuente.match(llamada);
+  assert.ok(m, `${key}: su route.ts no llama a ${helper}("${key}")`);
+  assert.match(
+    fuente,
+    new RegExp(`if\\s*\\(\\s*${m![2]}\\s*\\)\\s*return\\s+${m![2]}`),
+    `${key}: llama a ${helper} pero no devuelve el corte — el cron sigue de largo igual`
+  );
+}
+
+test("(a ter) cada cron de Capa C llama a cortarSiInstitucional en SU route.ts", () => {
+  for (const key of CRONS_CAPA_C) verificarCorte(key, "cortarSiInstitucional", "capa-c");
+});
+
+test("(a ter) cada cron del metering llama a cortarSiB2C en SU route.ts", () => {
+  // El que importa para la regla de oro por el otro lado: si este corte falta,
+  // el cron corre en el B2C contra tablas que ahí no existen.
+  for (const key of CRONS_SOLO_INSTITUCIONALES) {
+    verificarCorte(key, "cortarSiB2C", "crons-institucionales");
+  }
+});
+
+test("(a ter) ningún cron llama al helper del OTRO lado", () => {
+  // Un gate cruzado apaga el cron exactamente en el deploy donde tiene trabajo.
+  for (const key of CRONS_CAPA_C) {
+    assert.ok(!fuenteDelCron(key).includes("cortarSiB2C("), `${key}: usa el corte del lado equivocado`);
+  }
+  for (const key of CRONS_SOLO_INSTITUCIONALES) {
+    assert.ok(
+      !fuenteDelCron(key).includes("cortarSiInstitucional("),
+      `${key}: usa el corte del lado equivocado`
+    );
   }
 });
 
@@ -147,6 +218,7 @@ test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
     assert.equal(esInstitucional(), false, `INSTITUCIONAL=${JSON.stringify(valor)}`);
     assert.equal(cortarSiInstitucional("liberar-reservas"), null);
     assert.ok(cortarSiB2C("metering-clasificar"), "el metering sigue apagado");
+    assert.ok(cortarSiB2C("metering-cerrar-mes"), "el cierre mensual sigue apagado");
     assert.equal(correspondeRefund(PAGO), true);
     assert.equal(permiteAutoCrearPaciente(), true);
     assert.equal(bloqueaRutaInstitucional("/clinica"), false);

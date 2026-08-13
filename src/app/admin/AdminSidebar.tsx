@@ -19,6 +19,7 @@ import {
   Landmark,
   UserCog,
   CalendarDays,
+  FileLock2,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -49,6 +50,11 @@ const NAV_ITEMS_INSTITUCIONAL = [
   { href: "/admin/operadores", label: "Operadores", icon: UserCog, badgeKey: null },
   { href: "/admin/padron", label: "Padrón", icon: Users, badgeKey: null },
   { href: "/admin/agendas", label: "Agendas", icon: CalendarDays, badgeKey: null },
+  // Meses ya facturados: mirar el detalle sellado y —solo superadmin, con
+  // motivo— corregir una clasificación dejando constancia (R33).
+  // Ruta hermana y no hija de /admin/institucion a propósito: el resaltado del
+  // sidebar es por prefijo, y colgarla abajo dejaba los dos links encendidos.
+  { href: "/admin/periodos", label: "Períodos", icon: FileLock2, badgeKey: null },
 ];
 
 interface Props {

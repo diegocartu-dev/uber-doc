@@ -34,6 +34,7 @@ import {
   cerrarSemana,
   encuentrosSinClasificar,
   semanaASellar,
+  semanaEstaCerrada,
   semanaTerminada,
 } from "@/lib/metering/bolsa";
 
@@ -58,13 +59,20 @@ export async function GET(req: NextRequest) {
   const semana = semanaValida(req.nextUrl.searchParams.get("semana")) ?? semanaASellar();
   try {
     const termino = semanaTerminada(semana);
-    const faltan = await encuentrosSinClasificar(semana);
+    const [faltan, cerrada] = await Promise.all([
+      encuentrosSinClasificar(semana),
+      semanaEstaCerrada(semana),
+    ]);
     return NextResponse.json({
       semana_ar: semana,
       // Una semana que no terminó NUNCA es sellable, por más que no falte nada:
-      // "no falta nada" es trivialmente cierto en una semana que no empezó.
-      sellable: termino && faltan.total === 0,
+      // "no falta nada" es trivialmente cierto en una semana que no empezó. Y
+      // una YA CERRADA tampoco: el POST sobre ella no toca la base (devuelve su
+      // foto con `sellados: 0`), así que decir "sellable" acá sería mandar a
+      // alguien a hacer una corrida que no hace nada.
+      sellable: termino && !cerrada && faltan.total === 0,
       termino,
+      cerrada,
       faltantes: faltan,
     });
   } catch (err) {

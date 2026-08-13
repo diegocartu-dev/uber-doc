@@ -386,10 +386,25 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   }
 
   // ── Render de la lista priorizada (la API ordena; acá SOLO se agrupa) ──
+  //
+  // Los que ya completaron su acuerdo van en su propia sección, al final, y sus
+  // filas SE PUEDEN ELEGIR (R6 flexible, Diego 13/08): el acuerdo es el piso de
+  // servicio comprometido, no un techo, así que un horario que el profesional
+  // publicó se puede tomar igual. La sección es una agrupación informativa —
+  // "estos ya cumplieron, buscá primero arriba"—, no un cementerio.
   const profesionales = oferta?.profesionales ?? [];
   const activos = profesionales.filter((p) => !p.acuerdo_completo);
   const completos = profesionales.filter((p) => p.acuerdo_completo);
   const porCategoria = (cat: ProfesionalOferta["categoria"]) => activos.filter((p) => p.categoria === cat);
+  /**
+   * Los que ya cumplieron su acuerdo pero SÍ tienen algo que ofrecer en esa
+   * categoría. Los estados vacíos los necesitan: con R6 flexible un profesional
+   * completo es elegible, así que "nadie activo en este momento" era mentira
+   * cuando el único activo estaba dos secciones más abajo — y es el caso que
+   * más duele, con el paciente del otro lado del mostrador.
+   */
+  const completosDe = (cat: ProfesionalOferta["categoria"]) =>
+    completos.filter((p) => p.seleccionable && p.categoria === cat);
 
   const seleccionDe = (p: ProfesionalOferta) =>
     seleccion && seleccion.profesional.medico_id === p.medico_id ? seleccion : null;
@@ -429,13 +444,18 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     const esCI = p.categoria === "ci_activa";
     const estaExpandido = expandido === p.medico_id;
     const ciSeleccionada = esCI && sel?.tipo === "ci";
-    const clase = `prof${estaExpandido ? " exp" : ""}${ciSeleccionada ? " sel-ci" : ""}${p.acuerdo_completo ? " lleno-sem" : ""}`;
+    // `no-elegible` NO es sinónimo de `lleno-sem`: con R6 flexible el acuerdo
+    // completo se puede elegir igual. Lo único que queda sin nada que ofrecer es
+    // el acuerdo completo con la agenda vacía, y esa fila tiene que dejar de
+    // comportarse como un botón (cursor, hover y lectores de pantalla).
+    const clase = `prof${estaExpandido ? " exp" : ""}${ciSeleccionada ? " sel-ci" : ""}${p.acuerdo_completo ? " lleno-sem" : ""}${p.seleccionable ? "" : " no-elegible"}`;
 
     return (
       <div className={clase} key={p.medico_id}>
         <div
           className="prof-fila"
           role="button"
+          aria-disabled={!p.seleccionable}
           tabIndex={p.seleccionable ? 0 : -1}
           onClick={() => (esCI ? clickFilaCI(p) : clickFilaTurno(p))}
           onKeyDown={(e) => {
@@ -471,7 +491,13 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
           ) : (
             <div />
           )}
-          <div className="chev">{p.acuerdo_completo ? null : <Chevron arriba={estaExpandido} />}</div>
+          {/* El chevron lo decide tener algo que ABRIR, no el acuerdo: con R6
+              flexible, una fila con la semana completa pero con horarios
+              publicados se expande igual. Sin CI y sin slots no hay nada que
+              mostrar (el único caso: acuerdo completo y agenda vacía). */}
+          <div className="chev">
+            {!esCI && p.slots_semana.length === 0 ? null : <Chevron arriba={estaExpandido} />}
+          </div>
         </div>
 
         {/* CI seleccionada: el matiz "recomendación, no jaula" (04-spec §1.5.4) */}
@@ -488,10 +514,16 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
   function renderCategoriaCI() {
     const filas = porCategoria("ci_activa");
     if (filas.length === 0) {
+      const abajo = completosDe("ci_activa").length;
       return (
         <div className="cat-colapsada sin-borde">
-          <strong>Puede atender ahora</strong> — nadie activo en este momento ·{" "}
-          <span className="tnum">Ventana: {ventanaCI}</span>
+          <strong>Puede atender ahora</strong> —{" "}
+          {abajo > 0
+            ? abajo === 1
+              ? "hay 1 profesional activo que ya cumplió su acuerdo, más abajo"
+              : `hay ${abajo} profesionales activos que ya cumplieron su acuerdo, más abajo`
+            : "nadie activo en este momento"}{" "}
+          · <span className="tnum">Ventana: {ventanaCI}</span>
         </div>
       );
     }
@@ -512,9 +544,14 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     const titulo = cat === "turno_acordado" ? "Turno acordado" : "Turno ofrecido";
     const sub = cat === "turno_acordado" ? "— agenda asignada por la institución" : "— horarios que publicó el profesional";
     if (filas.length === 0) {
+      const abajo = completosDe(cat).length;
+      const publicados = cat === "turno_ofrecido" ? "publicados " : "";
       return (
         <div className="cat-colapsada">
-          <strong>{titulo}</strong> — sin horarios {cat === "turno_ofrecido" ? "publicados " : ""}esta semana.
+          <strong>{titulo}</strong> —{" "}
+          {abajo > 0
+            ? `los únicos horarios ${publicados}de esta semana son de ${abajo === 1 ? "un profesional que ya cumplió" : `${abajo} profesionales que ya cumplieron`} su acuerdo, más abajo.`
+            : `sin horarios ${publicados}esta semana.`}
         </div>
       );
     }
@@ -867,6 +904,12 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
                 <>
                   <div className="sep-acuerdo">
                     <span>Con el acuerdo de esta semana completo</span>
+                    {/* R6 flexible: la sección explica por qué están abajo, no
+                        que estén vetados. Sin esta línea, un operador que ve
+                        "completo" no vuelve a intentar. */}
+                    <span className="sep-nota">
+                      — se les puede asignar igual: el acuerdo es un mínimo, no un tope
+                    </span>
                   </div>
                   {completos.map(renderFila)}
                 </>
