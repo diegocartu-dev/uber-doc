@@ -34,6 +34,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
+import { leerTodoEnLotes } from "@/lib/metering/db";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS Y CONSTANTES DEL CONTRATO
@@ -469,15 +470,32 @@ export async function correrMeteringClasificar(opciones?: {
   if (maduros.length === 0) return resumen;
 
   // ── 3) Filas que ya existen: selladas y manuales NO se tocan ───────────────
-  const { data: existentes } = await admin
-    .from("encuentros_metering")
-    .select("tipo, recurso_id, clasificacion_origen, facturado_periodo")
-    .in(
-      "recurso_id",
-      maduros.map((c) => c.id)
+  //
+  // Esta lectura NO se puede consumir a medias. Si falla y `intocables` queda
+  // vacío, el upsert de más abajo pisa las filas que un humano fijó a mano como
+  // falla técnica y les escribe `clasificacion_origen: 'job'`: la declaración
+  // desaparece y el encuentro vuelve a ser facturable. Por eso corta la corrida
+  // entera, igual que el paso 1.
+  let existentes: Record<string, unknown>[];
+  try {
+    existentes = await leerTodoEnLotes<Record<string, unknown>>(
+      "filas ya clasificadas",
+      maduros.map((c) => c.id),
+      (lote, desde, hasta) =>
+        admin
+          .from("encuentros_metering")
+          .select("tipo, recurso_id, clasificacion_origen, facturado_periodo")
+          .in("recurso_id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
     );
+  } catch (err) {
+    console.error("[metering] Error leyendo las filas ya clasificadas:", err);
+    resumen.errores++;
+    return resumen;
+  }
   const intocables = new Set<string>();
-  for (const f of existentes ?? []) {
+  for (const f of existentes) {
     const clave = `${f.tipo}|${f.recurso_id}`;
     if (f.facturado_periodo) {
       intocables.add(clave);
@@ -494,29 +512,77 @@ export async function correrMeteringClasificar(opciones?: {
   const idsConsulta = aClasificar.filter((c) => c.tipo === "consulta").map((c) => c.id);
 
   // ── 4) Presencia, documentos y especialidades, en lote ─────────────────────
-  const [presencia, docsTurno, docsConsulta, medicos] = await Promise.all([
-    admin
-      .from("video_presencia")
-      .select("tipo, recurso_id, rol, identity, evento, ocurrido_at, raw")
-      .in(
-        "recurso_id",
-        aClasificar.map((c) => c.id)
-      )
-      .order("ocurrido_at", { ascending: true }),
-    idsTurno.length
-      ? admin.from("documentos").select("id, turno_id").in("turno_id", idsTurno)
-      : Promise.resolve({ data: [] as { id: string; turno_id: string }[] }),
-    idsConsulta.length
-      ? admin.from("documentos").select("id, consulta_id").in("consulta_id", idsConsulta)
-      : Promise.resolve({ data: [] as { id: string; consulta_id: string }[] }),
-    admin
-      .from("medicos")
-      .select("id, especialidad")
-      .in("id", [...new Set(aClasificar.map((c) => c.medico_id))]),
-  ]);
+  //
+  // Las cuatro lecturas cortan la corrida si fallan, por el mismo motivo que la
+  // anterior y con una consecuencia peor: sin presencia, TODOS los encuentros
+  // del lote quedan con reloj en cero y documentos en cero, el árbol los manda
+  // a `no_facturable_corta`, el upsert los escribe con éxito y el cron devuelve
+  // 200. Una factura corta que nadie ve — la falla silenciosa exacta, sobre el
+  // número que se le cobra a la institución.
+  //
+  // Van en lotes de 100 ids porque `.in()` con 500 UUIDs arma una URL de ~19 KB
+  // (no vuelve truncada: vuelve fallada), y paginadas porque un solo encuentro
+  // con reconexiones deja decenas de filas de presencia.
+  let presencia: Record<string, unknown>[];
+  let docsTurno: Record<string, unknown>[];
+  let docsConsulta: Record<string, unknown>[];
+  let medicos: Record<string, unknown>[];
+  try {
+    [presencia, docsTurno, docsConsulta, medicos] = await Promise.all([
+      leerTodoEnLotes<Record<string, unknown>>(
+        "eventos de presencia en sala",
+        aClasificar.map((c) => c.id),
+        (lote, desde, hasta) =>
+          admin
+            .from("video_presencia")
+            .select("tipo, recurso_id, rol, identity, evento, ocurrido_at, raw")
+            .in("recurso_id", lote)
+            .order("ocurrido_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(desde, hasta)
+      ),
+      leerTodoEnLotes<Record<string, unknown>>(
+        "documentos de los turnos",
+        idsTurno,
+        (lote, desde, hasta) =>
+          admin
+            .from("documentos")
+            .select("id, turno_id")
+            .in("turno_id", lote)
+            .order("id", { ascending: true })
+            .range(desde, hasta)
+      ),
+      leerTodoEnLotes<Record<string, unknown>>(
+        "documentos de las consultas",
+        idsConsulta,
+        (lote, desde, hasta) =>
+          admin
+            .from("documentos")
+            .select("id, consulta_id")
+            .in("consulta_id", lote)
+            .order("id", { ascending: true })
+            .range(desde, hasta)
+      ),
+      leerTodoEnLotes<Record<string, unknown>>(
+        "especialidades de los profesionales",
+        [...new Set(aClasificar.map((c) => c.medico_id))],
+        (lote, desde, hasta) =>
+          admin
+            .from("medicos")
+            .select("id, especialidad")
+            .in("id", lote)
+            .order("id", { ascending: true })
+            .range(desde, hasta)
+      ),
+    ]);
+  } catch (err) {
+    console.error("[metering] Error leyendo presencia, documentos o especialidades:", err);
+    resumen.errores++;
+    return resumen;
+  }
 
   const eventosPorRecurso = new Map<string, EventoPresencia[]>();
-  for (const p of presencia.data ?? []) {
+  for (const p of presencia) {
     const clave = `${p.tipo}|${p.recurso_id}`;
     const raw = p.raw as { id?: unknown } | null;
     const lista = eventosPorRecurso.get(clave) ?? [];
@@ -531,17 +597,17 @@ export async function correrMeteringClasificar(opciones?: {
   }
 
   const docsPorRecurso = new Map<string, number>();
-  for (const d of docsTurno.data ?? []) {
+  for (const d of docsTurno) {
     const clave = `turno|${d.turno_id}`;
     docsPorRecurso.set(clave, (docsPorRecurso.get(clave) ?? 0) + 1);
   }
-  for (const d of docsConsulta.data ?? []) {
+  for (const d of docsConsulta) {
     const clave = `consulta|${d.consulta_id}`;
     docsPorRecurso.set(clave, (docsPorRecurso.get(clave) ?? 0) + 1);
   }
 
   const especialidadPorMedico = new Map<string, string | null>();
-  for (const m of medicos.data ?? []) {
+  for (const m of medicos) {
     especialidadPorMedico.set(m.id as string, (m.especialidad as string | null) ?? null);
   }
 
