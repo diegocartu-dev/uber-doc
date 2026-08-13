@@ -305,13 +305,41 @@ aplicó desde este sprint: se aplican en la provisión.
 | 5 | **018** bucket `institucion-assets` |
 | 6 | **019** backstops del metering (`TRUNCATE` + precio de filas manuales) · **020** `gestion_manual` en `asignaciones` |
 
+## Ronda de correcciones del gate de las Etapas 5-6
+
+Veinte hallazgos, uno por commit (dos pares eran el mismo hallazgo visto dos
+veces). Los cinco que cambian algo caro:
+
+| Hallazgo | Qué pasaba | Cómo se cerró |
+|---|---|---|
+| **El golden ponía en rojo todos los PRs** | `huellaPDF` hasheaba los streams comprimidos, y la salida de deflate depende de la zlib que trae Node. Sellado en Node 25, el CI corre Node 20: **6 de 12 casos fallaban**. El arreglo tentador —re-sellar— destruye la garantía en silencio | La huella infla los streams antes de hashear. Huellas re-selladas contra `origin/main`, idénticas en las dos versiones. `.nvmrc` + `node-version-file` en el workflow |
+| **Se podía sellar una semana en curso** | `semanaValida()` pedía formato y lunes, no que la semana hubiera terminado. Un martes 02:00 con el lunes de esta semana → 200 con `sellados: N`, y el sello es inmutable: le factura a la institución el 20 % de las horas | 422 en el endpoint + cinturón en `cerrarSemana`, con `semanaTerminada()`, que ya existía |
+| **La reprogramación no movía el reparto** | `reprogramada` valía 0 en el contador de equidad: el que recibía ocho pacientes seguía primero en la fila y el que no atendió a nadie bajaba de prioridad. Y un profesional con el acuerdo completo podía recibir cinco turnos por reprogramación | `deltaDeAsignacion()` (+1 al que recibe, fila `cancelada` para el que pierde), guard R6 en la reprogramación y cupo acumulado en el plan |
+| **El día que el profesional no atiende le acreditaba horas** | `reprogramado` contaba "a favor", y sus slots libres seguían en `disponible` (también cuenta): el día entero entraba como horas puestas a disposición | `reprogramado` pasa a neutro y el motor cierra el día (`cancelado_medico`, que descuenta) |
+| **El pie institucional partía la receta en dos** | El presupuesto de la Sección C era 13 pt fijos y el texto sale del config: con la redacción legal definitiva, el barcode quedaba en una página y el número de receta en la otra | El alto se mide con `heightOfString`, el golden suma un caso largo y el config topea el texto |
+
+Los otros quince: el acento del PDF salía con el azul de Docto porque
+`pdf_accent` era inalcanzable; el isologo no tenía forma de subirse y el bucket
+aceptaba SVG, que pdfkit no dibuja, con la falla muda; el parser de Nova
+inventaba fechas ("a las 16" → el día 16; fechas pasadas pese al docstring); lo
+irresoluble no quedaba registrado en ningún lado; el profesional que recibía
+tres turnos recibía tres mensajes de "1 turno"; el cierre de Nova decía "avisé"
+sobre avisos que habían fallado y dejaba filas en "pendiente" para siempre; el
+gate por modo del branding no estaba en ningún test; la decisión del sello no
+era testeable; §3.3 figuraba como entregado sin serlo; la Sección B declara a
+Docto **emisor** sobre membrete del ministerio (va al abogado, con el pie
+entero); y el runbook mandaba esperar a un cron a una hora que no existe.
+
 ## Cómo se verificó esta etapa
 
-- `npm run test:unit` — verde, incluidos el golden de la regla de oro, el golden
-  del PDF (cinco documentos sintéticos contra las huellas de `main`) y los tests
-  nuevos del parser de Nova y de la tabla exhaustiva de aportes.
+- `npm run test:unit` — **270 tests, 0 fallas**, incluidos el golden de la regla
+  de oro, el golden del PDF (cinco documentos sintéticos contra las huellas de
+  `main`), el gate por modo del branding, la decisión del sello, el contador de
+  equidad y el parser de fechas de Nova.
 - `npx tsc --noEmit` — sin errores nuevos (los de `tests/unit/` son previos).
-- `npx eslint` sobre los archivos tocados — sin hallazgos.
+- `npx eslint` sobre los archivos tocados — sin hallazgos. (Corrido sobre `src`
+  entero aparecen hallazgos previos en pantallas del B2C que este sprint no
+  toca.)
 - `npx next build` — compilación y TypeScript completos; la corrida entera
   necesita las env de producción, que no viven en el entorno de desarrollo.
 - Las huellas del golden del PDF se verificaron **dos veces**: contra el
