@@ -76,12 +76,34 @@ export type Interpretacion =
  *
  * Formas que entiende, en este orden: `20/10`, `20-10`, `20 de octubre`,
  * `martes 20`, `martes` a secas (el próximo, o hoy si hoy es martes),
- * `mañana`, `hoy`. Un día suelto (`el 20`) también, tomándolo del mes en curso
- * o del siguiente si ya pasó.
+ * `mañana`, `hoy`, y un día con artículo (`el 20`).
  *
- * Devuelve "AAAA-MM-DD" o null. Nunca una fecha PASADA: reprogramar un día que
- * ya ocurrió no es una operación, es un malentendido, y responderlo con una
- * propuesta vacía sería confuso.
+ * Devuelve "AAAA-MM-DD" o `null`.
+ *
+ * ── LA REGLA: ANTE LA DUDA, NULL ─────────────────────────────────────────────
+ * `null` no es un fracaso: cae en `falta_fecha` y Nova PREGUNTA. Entender mal
+ * QUÉ DÍA es uno de los dos errores caros de esta pantalla —el otro es entender
+ * mal A QUIÉN— y a la agenda de un profesional no se la vacía por una
+ * corazonada. Preguntar cuesta una frase; reprogramar el día equivocado cuesta
+ * ocho llamados del call center.
+ *
+ * Tres cosas que ANTES adivinaban mal (corrido de verdad con hoy=2026-10-25):
+ *   · `"no puede el 20/10"` devolvía **2026-10-20**, una fecha PASADA, pese a
+ *     que el docstring juraba que nunca. La rama del año siguiente exigía
+ *     `mes < mesHoy`, que no se cumple dentro del mismo mes.
+ *   · `"20/10/2020"` devolvía **2020-10-20**: con año explícito no había ningún
+ *     guard. Y las dos ramas de fecha pasada se contradecían entre sí
+ *     (`20/10` devolvía el pasado y `20 de octubre` saltaba al 2027).
+ *   · `"no puede atender a las 16"` devolvía **2026-11-16**: el regex del día
+ *     suelto agarraba CUALQUIER número de 1-2 dígitos, así que una frase
+ *     normalísima se interpretaba como reprogramar el día entero del 16/11.
+ *   · `"el martes 20"` con el 20 ya pasado devolvía 2026-11-20, que es
+ *     **viernes**: cuando había número, el día de la semana se ignoraba en vez
+ *     de usarse para verificar.
+ *
+ * Una fecha PASADA nunca se "corrige" saltando al año siguiente: reprogramar
+ * algo a once meses vista no es lo que quiso decir nadie, y la oferta de
+ * candidatos es de la semana AR corriente. Se pregunta.
  */
 export function fechaDelTexto(texto: string, hoyAr: string): string | null {
   const t = normalizar(texto);
@@ -96,6 +118,19 @@ export function fechaDelTexto(texto: string, hoyAr: string): string | null {
     return iso;
   };
 
+  /** Una sola puerta de salida: lo pasado no sale, se pregunta. */
+  const soloFuturo = (iso: string | null): string | null => (iso && iso >= hoyAr ? iso : null);
+
+  /** Ese día del mes: el de este mes si todavía no pasó, si no el del que viene. */
+  const proximoConDia = (dia: number): string | null => {
+    const esteMes = armar(anioHoy, mesHoy, dia);
+    if (esteMes && esteMes >= hoyAr) return esteMes;
+    const mesQueViene = mesHoy === 12 ? 1 : mesHoy + 1;
+    return soloFuturo(armar(mesHoy === 12 ? anioHoy + 1 : anioHoy, mesQueViene, dia));
+  };
+
+  const diaDeLaSemanaDe = (iso: string): number => new Date(`${iso}T12:00:00Z`).getUTCDay();
+
   if (/\bhoy\b/.test(t)) return hoyAr;
   if (/\bmanana\b/.test(t)) {
     const d = new Date(`${hoyAr}T12:00:00Z`);
@@ -108,12 +143,11 @@ export function fechaDelTexto(texto: string, hoyAr: string): string | null {
   if (numerica) {
     const dia = Number(numerica[1]);
     const mes = Number(numerica[2]);
-    const anio = numerica[3] ? Number(numerica[3].length === 2 ? `20${numerica[3]}` : numerica[3]) : anioHoy;
-    const iso = armar(anio, mes, dia);
-    // Sin año explícito, una fecha ya pasada se entiende como la del año que
-    // viene solo si el mes ya pasó; si es este mes y ya pasó, es un error.
-    if (iso && !numerica[3] && iso < hoyAr && mes < mesHoy) return armar(anio + 1, mes, dia);
-    return iso;
+    const anio = numerica[3]
+      ? Number(numerica[3].length === 2 ? `20${numerica[3]}` : numerica[3])
+      : anioHoy;
+    // Con año explícito, lo que dijo es lo que vale — y si ya pasó, se pregunta.
+    return soloFuturo(armar(anio, mes, dia));
   }
 
   // 20 de octubre
@@ -122,9 +156,7 @@ export function fechaDelTexto(texto: string, hoyAr: string): string | null {
     const idx = MESES.indexOf(conMes[2]);
     if (idx >= 0) {
       const mes = idx >= 9 ? idx : idx + 1; // "setiembre" comparte número con "septiembre"
-      const iso = armar(anioHoy, mes, Number(conMes[1]));
-      if (iso && iso < hoyAr) return armar(anioHoy + 1, mes, Number(conMes[1]));
-      return iso;
+      return soloFuturo(armar(anioHoy, mes, Number(conMes[1])));
     }
   }
 
@@ -132,14 +164,19 @@ export function fechaDelTexto(texto: string, hoyAr: string): string | null {
   const diaSemana = DIAS_SEMANA.findIndex((nombres) =>
     nombres.some((n) => new RegExp(`\\b${n}\\b`).test(t))
   );
-  const soloDia = t.match(/\b(?:el\s+)?(\d{1,2})\b/);
   if (diaSemana >= 0) {
-    if (soloDia) {
-      const dia = Number(soloDia[1]);
-      const iso = armar(anioHoy, mesHoy, dia);
-      if (iso && iso >= hoyAr) return iso;
-      const mesQueViene = mesHoy === 12 ? 1 : mesHoy + 1;
-      return armar(mesHoy === 12 ? anioHoy + 1 : anioHoy, mesQueViene, dia);
+    // El número tiene que venir PEGADO al día de la semana ("martes 20"), no
+    // ser cualquier número suelto de la frase.
+    let conNumero: RegExpMatchArray | null = null;
+    for (const n of DIAS_SEMANA[diaSemana]) {
+      conNumero = t.match(new RegExp(`\\b${n}\\s+(?:el\\s+)?(\\d{1,2})\\b`));
+      if (conNumero) break;
+    }
+    if (conNumero) {
+      const iso = proximoConDia(Number(conNumero[1]));
+      // Dijo las dos cosas: el número y el día de la semana. Si no coinciden,
+      // una de las dos está mal y no hay forma de saber cuál — se pregunta.
+      return iso && diaDeLaSemanaDe(iso) === diaSemana ? iso : null;
     }
     const d = new Date(`${hoyAr}T12:00:00Z`);
     const delta = (diaSemana - d.getUTCDay() + 7) % 7;
@@ -147,13 +184,9 @@ export function fechaDelTexto(texto: string, hoyAr: string): string | null {
     return d.toISOString().slice(0, 10);
   }
 
-  if (soloDia) {
-    const dia = Number(soloDia[1]);
-    const iso = armar(anioHoy, mesHoy, dia);
-    if (iso && iso >= hoyAr) return iso;
-    const mesQueViene = mesHoy === 12 ? 1 : mesHoy + 1;
-    return armar(mesHoy === 12 ? anioHoy + 1 : anioHoy, mesQueViene, dia);
-  }
+  // "el 20" — con artículo. Sin él, "a las 16" se leía como el día 16.
+  const soloDia = t.match(/\bel\s+(\d{1,2})\b/);
+  if (soloDia) return proximoConDia(Number(soloDia[1]));
 
   return null;
 }
