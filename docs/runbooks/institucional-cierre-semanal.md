@@ -64,6 +64,20 @@ Respuesta:
   arrancó después de las 20:00. Ante la duda, mirar el cron crudo en
   `vercel.json` y convertir a ART (UTC−3), no la memoria.
 
+> **Cambió en la Etapa 8 (extensión de alcance, reportada):** la precondición
+> del cierre semanal pasó a compartir código con la del mensual
+> (`encuentrosSinClasificarEnRango`). No es un refactor neutro: las consultas
+> inmediatas ahora se piden con **un día de margen de cada lado** y se filtran
+> por el día de su **asignación** (R31 bis), no por `created_at`. Antes la query
+> pedía la semana exacta por `created_at` y el filtro en JS solo podía
+> descartar, nunca sumar — así que una CI asignada en el borde de la medianoche
+> no entraba a la lista de candidatos y el sello no la veía.
+>
+> Es un fix, pero **endurece** una precondición que ya corre en producción:
+> semanas que antes sellaban ahora pueden abortar por una CI de borde. La
+> respuesta sigue siendo la misma (esperar y volver a mirar), y desde la Etapa 8
+> el mensual reintenta solo todos los días.
+
 ## 2. Destrabar lo que falte
 
 | Qué dice el diagnóstico | Qué hacer |

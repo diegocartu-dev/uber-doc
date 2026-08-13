@@ -47,6 +47,8 @@ import {
   semanaDeHoy,
   semanaAnterior,
   semanaSiguiente,
+  correrDias,
+  diaARdeConsulta,
 } from "@/lib/metering/bolsa";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -789,6 +791,67 @@ test("la semana AR del encuentro es la del lunes 19, también para el domingo 25
 // quedara al revés, o el sello se bloquea eternamente —y nadie lo nota hasta
 // que la institución reclama el cumplimiento— o vuelve a sellar de más, que es
 // el bug original.
+
+// ─── El margen del rango: la otra mitad de la precondición ───────────────────
+// `encuentrosSinClasificarEnRango` pide las consultas inmediatas con UN DÍA de
+// más de cada lado y después las filtra en JS. El margen existe porque la query
+// filtra por `created_at` y la pertenencia al período la decide el día de la
+// ASIGNACIÓN (R31 bis): son dos instantes distintos y pueden caer en días
+// distintos. Sin el margen, una CI asignada en el borde no entraba siquiera a
+// la lista de candidatos y el sello no la veía.
+//
+// Las dos piezas del margen —correr un día, y de dónde sale el día— no tenían
+// un solo test, y son justo las que deciden si el sello ve o no ve un encuentro
+// del último día del mes.
+
+test("margen · correr un día cruza fin de mes, fin de año y el 29 de febrero", () => {
+  assert.equal(correrDias("2026-10-31", 1), "2026-11-01");
+  assert.equal(correrDias("2026-11-01", -1), "2026-10-31");
+  assert.equal(correrDias("2026-12-31", 1), "2027-01-01");
+  assert.equal(correrDias("2027-01-01", -1), "2026-12-31");
+  // Bisiesto: 2028 tiene 29 de febrero; 2026 no.
+  assert.equal(correrDias("2028-02-28", 1), "2028-02-29");
+  assert.equal(correrDias("2026-02-28", 1), "2026-03-01");
+  assert.equal(correrDias("2026-10-19", 0), "2026-10-19");
+});
+
+test("margen · el día de una CI es el de su ASIGNACIÓN, no el de su creación", () => {
+  // El caso que el margen rescata: la consulta se creó el 31 a las 23:58 y el
+  // otorgador la asignó el 1 a las 00:03. Es de noviembre, aunque la query del
+  // sello de octubre la traiga por `created_at`.
+  assert.equal(
+    diaARdeConsulta({
+      created_at: "2026-10-31T23:58:00-03:00",
+      asignada_at: "2026-11-01T00:03:00-03:00",
+    }),
+    "2026-11-01"
+  );
+  // Y el simétrico, que es el que se perdía sin el margen: la fila se creó ya
+  // en noviembre pero la asignación fue el 31, así que la consulta es de
+  // OCTUBRE y el sello de octubre tiene que verla — aunque su `created_at`
+  // caiga fuera del rango por el que pregunta la query.
+  assert.equal(
+    diaARdeConsulta({
+      created_at: "2026-11-01T00:02:00-03:00",
+      asignada_at: "2026-10-31T23:59:00-03:00",
+    }),
+    "2026-10-31"
+  );
+});
+
+test("margen · sin asignación manda la creación, y el corte es AR, no UTC", () => {
+  assert.equal(diaARdeConsulta({ created_at: "2026-10-31T22:00:00-03:00" }), "2026-10-31");
+  assert.equal(
+    diaARdeConsulta({ created_at: "2026-10-31T22:00:00-03:00", asignada_at: null }),
+    "2026-10-31"
+  );
+  // 22:00 ART del 31 es 01:00 UTC del 1: leído en UTC, esta CI se iría de mes.
+  assert.equal(
+    new Date("2026-10-31T22:00:00-03:00").toISOString().slice(0, 10),
+    "2026-11-01",
+    "el mismo instante, en UTC, es del mes siguiente"
+  );
+});
 
 test("sello · la CI colgada del domingo 20:00 bloquea: el lunes 02:00 todavía no es terminal", () => {
   // EL caso de I1. La cierra `cerrar-huerfanas` recién más tarde, así que el

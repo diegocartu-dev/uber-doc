@@ -224,6 +224,23 @@ export function correrDias(diaAr: string, dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * El día AR al que pertenece una consulta inmediata: el de su ASIGNACIÓN, con
+ * `created_at` de respaldo.
+ *
+ * Es R31 bis —"manda cuándo se hizo, no cuándo se cerró"— y es la MISMA regla
+ * que usa el contador (`clasificar.ts`, `ocurridoISO`). Está acá afuera, con
+ * nombre, porque es lo que hace que la ventana de la precondición necesite un
+ * día de margen de cada lado: la query filtra por `created_at` y la decisión la
+ * toma esta función, y los dos instantes pueden caer en días distintos.
+ */
+export function diaARdeConsulta(c: {
+  asignada_at?: unknown;
+  created_at?: unknown;
+}): string {
+  return fechaARdeISO((c.asignada_at as string | null) ?? (c.created_at as string));
+}
+
 /** Lunes de la semana anterior a la de ese lunes (o a la de hoy). */
 export function semanaAnterior(lunesAr: string): string {
   const d = new Date(`${lunesAr}T12:00:00Z`);
@@ -878,7 +895,7 @@ export async function encuentrosSinClasificarEnRango(
 
   /** ¿El día AR de esta CI cae adentro del período? */
   const delPeriodo = (c: Record<string, unknown>) => {
-    const dia = fechaARdeISO((c.asignada_at as string | null) ?? (c.created_at as string));
+    const dia = diaARdeConsulta(c);
     return dia >= desdeDia && dia <= hastaDia;
   };
 
