@@ -26,6 +26,7 @@ import { generarRecetaPDF, accentDe } from "@/lib/pdf/receta";
 import {
   FIXTURES,
   BRANDING_SINTETICO,
+  EFECTOR_LEGAL_LARGO,
   huellaPDF,
   paginasDePDF,
 } from "@/lib/pdf/receta-golden.fixtures";
@@ -89,6 +90,23 @@ test("con branding, el documento CAMBIA (y sigue entrando en una página)", asyn
     // El presupuesto de alto del pie: la Sección C suma ~13pt y la receta de
     // tres medicamentos es el caso apretado de la spec (§7.3).
     assert.equal(paginasDePDF(brandeado), 1, `${f.nombre} se fue a dos páginas con el pie institucional`);
+  }
+});
+
+test("la Sección C definitiva del abogado tampoco parte el documento en dos", async () => {
+  // El texto del pie sale del CONFIG, no del código: el camino previsto para
+  // cambiarlo es "se cambia el config y NO el código". Con el presupuesto de
+  // pie hardcodeado en 13 pt, una redacción legal de cuatro oraciones mandaba
+  // el número de receta a una segunda página y el barcode —el que escanea la
+  // farmacia— se dibujaba en coordenadas absolutas con `pdf.y` ya pasado el
+  // borde inferior. Nada avisaba, porque el golden solo probaba con el string
+  // sintético corto.
+  for (const f of FIXTURES) {
+    const pdf = await generarRecetaPDF(f.doc, {
+      ...BRANDING_SINTETICO,
+      efectorTexto: EFECTOR_LEGAL_LARGO,
+    });
+    assert.equal(paginasDePDF(pdf), 1, `${f.nombre} se partió en dos con la Sección C larga`);
   }
 });
 
