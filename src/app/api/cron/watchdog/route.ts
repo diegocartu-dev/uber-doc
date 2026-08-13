@@ -39,6 +39,10 @@ const ESPERADOS: Record<string, number> = {
   "recuperar-registros": 1440,
   "verificar-cuentas-mp": 1440,
   "documentos-sin-sello": 60,
+  // Corre en los dos deploys (vercel.json es uno solo): en el B2C responde
+  // "no aplica" en la primera línea, pero LATE igual — así que el watchdog lo
+  // vigila en los dos lados sin ninguna excepción por modo.
+  "metering-clasificar": 10,
   uptime: 1,
 };
 

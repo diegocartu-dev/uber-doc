@@ -190,6 +190,18 @@ export const CRONS_META: Record<string, CronMeta> = {
   },
   // El guardián no se monitorea a sí mismo (no está en ESPERADOS del watchdog),
   // pero sus propias fallas al correr sí alertan vía cron-guard — con ficha.
+  // Solo trabaja en una instancia institucional (en el B2C corta en la primera
+  // línea y responde 200). La ficha existe igual: si la tarea falla EN LA
+  // INSTITUCIÓN, el mail tiene que explicar por qué importa.
+  "metering-clasificar": {
+    nombre: "Contador de consultas facturables (institucional)",
+    queHace:
+      "revisa las consultas que ya terminaron y anota cuáles se facturan, según el tiempo que estuvieron juntos el profesional y el paciente y los documentos que se emitieron",
+    impacto:
+      "el panel de la institución deja de actualizarse y la factura del mes se arma con datos viejos",
+    cadencia: "cada 10 minutos",
+    autoRecupera: false,
+  },
   watchdog: {
     nombre: "Guardián de tareas automáticas",
     queHace: "vigila que todas las demás tareas automáticas sigan corriendo y te avisa si alguna se calla",
