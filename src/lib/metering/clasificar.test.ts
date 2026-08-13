@@ -22,6 +22,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ESTADOS_CONSULTA_VALIDOS,
+  ESTADOS_TURNO_VALIDOS,
+  ESTADOS_TERMINALES_CONSULTA,
+  ESTADOS_TERMINALES_TURNO,
   reconstruirReloj,
   clasificar,
   componerFila,
@@ -841,4 +845,48 @@ test("sello · un estado DESCONOCIDO bloquea: es complemento, no lista blanca", 
   assert.equal(destinoDelEncuentro("turno", "estado_que_no_existe_todavia"), "vivo");
   assert.equal(bloqueaElSello("turno", "estado_que_no_existe_todavia", true), true);
   assert.equal(bloqueaElSello("consulta", "estado_que_no_existe_todavia", true), true);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL CONTRATO CON LA BASE
+//
+// Estas dos listas se mandan a PostgREST dentro de un `.in()`. No son adorno:
+// un valor que la base no conoce rompe el contador de dos maneras distintas y
+// las dos son caras (ver el comentario largo en clasificar.ts).
+//
+// Incidente que motiva estos tests (13/08/2026): `ESTADOS_TERMINALES_CONSULTA`
+// tenía "rechazada", que nunca existió en el enum. El cron devolvió 500 en el
+// 100 % de sus corridas desde que se prendió y el contador nunca contó nada.
+//
+// Si alguno de estos tests falla, la respuesta NO es agregar el valor al set de
+// válidos: es preguntarse si ese estado existe de verdad en la base.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("contrato · todo estado terminal de consulta existe en el enum de la base", () => {
+  const validos = new Set<string>(ESTADOS_CONSULTA_VALIDOS as unknown as string[]);
+  for (const estado of ESTADOS_TERMINALES_CONSULTA as unknown as string[]) {
+    assert.ok(
+      validos.has(estado),
+      `"${estado}" no es miembro de estado_consulta: la query entera va a fallar ` +
+        `con "invalid input value for enum" y el contador no va a devolver NI UNA fila`
+    );
+  }
+});
+
+test("contrato · todo estado terminal de turno pasa el CHECK de la base", () => {
+  const validos = new Set<string>(ESTADOS_TURNO_VALIDOS as unknown as string[]);
+  for (const estado of ESTADOS_TERMINALES_TURNO as unknown as string[]) {
+    assert.ok(
+      validos.has(estado),
+      `"${estado}" no está en el CHECK de turnos.estado: no va a matchear nunca ` +
+        `y esos encuentros se quedan sin contar EN SILENCIO`
+    );
+  }
+});
+
+test("contrato · 'rechazada' no vuelve: no existe en la base", () => {
+  // Aserción negativa explícita. El valor estuvo en el código meses y suena
+  // plausible — es un estado real de OTRAS tablas, no de `consultas`.
+  assert.ok(!(ESTADOS_CONSULTA_VALIDOS as unknown as string[]).includes("rechazada"));
+  assert.ok(!(ESTADOS_TERMINALES_CONSULTA as unknown as string[]).includes("rechazada"));
 });

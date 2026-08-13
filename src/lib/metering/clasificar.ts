@@ -63,6 +63,73 @@ export const SEGUNDOS_FACTURABLE = 60;
  */
 export const ESPERA_POST_CIERRE_MIN = 15;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LOS ESTADOS QUE LA BASE ACEPTA DE VERDAD
+//
+// Estas dos listas no son documentación: viajan a PostgREST dentro de un `.in()`
+// (acá y en `bolsa.ts`). Un valor inventado NO se ignora — y las dos columnas
+// fallan de maneras opuestas, que es lo que hizo tan cara la última equivocación:
+//
+//   · `consultas.estado` es un ENUM de Postgres. Un valor que no es miembro
+//     rompe la comparación ENTERA: la query tira
+//     `invalid input value for enum estado_consulta`, no vuelve NI UNA fila, y
+//     el contador se queda en cero. No hay degradación parcial.
+//   · `turnos.estado` es `text` con un CHECK. Un valor desconocido no rompe
+//     nada: simplemente no matchea, y el encuentro queda sin contar en silencio.
+//
+// Incidente que las motiva (13/08/2026): `ESTADOS_TERMINALES_CONSULTA` tenía
+// `"rechazada"`, que NUNCA fue miembro de `estado_consulta` —verificado contra
+// las dos bases, la del B2C y la de la instancia—. El contador devolvió 500 en
+// el 100 % de sus corridas desde que se prendió, y el sello semanal
+// (`encuentrosSinClasificar`, que usa la misma lista) habría muerto igual la
+// primera vez que le tocara correr. En el B2C el bug estaba tapado: el gate
+// `cortarSiB2C` frena el cron antes de la query.
+//
+// Por eso abajo están los valores VÁLIDOS, y un test verifica que las listas
+// terminales sean un subconjunto. Un estado inventado ahora rompe el CI, no la
+// factura del mes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Todos los valores del enum `estado_consulta`, tal cual están en la base.
+ * Para refrescar:
+ *   select enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid
+ *   where t.typname = 'estado_consulta' order by e.enumsortorder;
+ */
+export const ESTADOS_CONSULTA_VALIDOS = [
+  "esperando",
+  "aceptada",
+  "pagada",
+  "en_curso",
+  "completada",
+  "cancelada",
+  "no_show_paciente",
+  "medico_ausente",
+  "interrumpida",
+] as const;
+
+/**
+ * Todos los valores que el CHECK de `turnos.estado` acepta.
+ * Para refrescar:
+ *   select pg_get_constraintdef(oid) from pg_constraint
+ *   where conrelid = 'public.turnos'::regclass;
+ */
+export const ESTADOS_TURNO_VALIDOS = [
+  "disponible",
+  "reservado_pendiente",
+  "confirmado",
+  "en_espera",
+  "en_curso",
+  "completado",
+  "ausente_paciente",
+  "ausente_medico",
+  "cancelado_paciente",
+  "cancelado_medico",
+  "reprogramado",
+  "bloqueado",
+  "bloqueado_sin_cobro",
+] as const;
+
 /** Estados terminales de un turno (los que ya no van a cambiar). */
 export const ESTADOS_TERMINALES_TURNO = [
   "completado",
@@ -75,13 +142,18 @@ export const ESTADOS_TERMINALES_TURNO = [
 /**
  * Estados terminales de una consulta inmediata. `no_show_paciente` y
  * `medico_ausente` los escribe el plazo de 30 min (`resolver-vencidas.ts`).
+ *
+ * `interrumpida` existe en el enum pero NO entra acá: hoy no hay una sola línea
+ * de código que lo escriba (quedó de una versión vieja del cron de reingreso) y
+ * cero filas en las dos bases. Si algún día algo empieza a escribirlo, hay que
+ * decidir si se factura ANTES de sumarlo — una consulta interrumpida sin
+ * clasificar queda como pendiente para siempre y traba el sello de la semana.
  */
 export const ESTADOS_TERMINALES_CONSULTA = [
   "completada",
   "no_show_paciente",
   "medico_ausente",
   "cancelada",
-  "rechazada",
 ] as const;
 
 /** Estados que declaran una ausencia, y de quién. Los mismos en los dos canales. */
