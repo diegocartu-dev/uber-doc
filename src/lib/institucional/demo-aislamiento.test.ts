@@ -207,3 +207,14 @@ test("la cookie del acceso también acota la sesión del profesional", () => {
     "el dashboard del profesional dejó de mirar si su acceso sigue vivo"
   );
 });
+
+test("preparar el escenario comprueba que el profesional sea de ESA reunión", () => {
+  const codigo = fuente("src/lib/institucional/demo-escenario.ts");
+  assert.match(
+    codigo,
+    /ficha\.demo_sesion_id !== params\.sesionId/,
+    "prepararEscenario volvió a aceptar cualquier medicoId: apuntado a un profesional real " +
+      "le llena la agenda de turnos a precio 0, le sienta pacientes de utilería, marca esos " +
+      "slots como demo de forma irreversible y después la limpieza se los borra"
+  );
+});

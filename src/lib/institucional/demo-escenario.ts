@@ -162,6 +162,42 @@ export async function prepararEscenario(params: {
   }
 
   const admin = createAdminClient();
+
+  // ── A QUIÉN LE ESTAMOS LLENANDO LA AGENDA ─────────────────────────────────
+  // El `medicoId` viene del cliente (la server action lo pasa tal cual) y este
+  // módulo no leía la fila del profesional en ningún momento: `sesionId` solo
+  // marcaba los pacientes de relleno. Apuntado a un profesional REAL —un id
+  // copiado de otra pestaña del panel, el de una reunión ya cerrada, un request
+  // armado a mano— hacía tres cosas irreversibles en su agenda de verdad:
+  // le creaba once días de turnos a precio 0, le sentaba pacientes de utilería
+  // en sus horarios, y el trigger `trg_turnos_es_demo` estampaba `es_demo` sobre
+  // esos slots de forma irreversible por diseño (la marca solo escala) — o sea
+  // fuera del contador contractual para siempre. Y después "limpiar reunión" los
+  // BORRABA en vez de liberarlos.
+  //
+  // Es admin-only, pero un botón con pérdida de datos silenciosa no se defiende
+  // con que quien lo toca es de confianza. Una query, y se acabó.
+  const { data: ficha, error: errFicha } = await admin
+    .from("medicos")
+    .select("id, demo_sesion_id")
+    .eq("id", params.medicoId)
+    .maybeSingle();
+  if (errFicha) {
+    resumen.notas.push("No se pudo leer la ficha del profesional. Probá de nuevo.");
+    return resumen;
+  }
+  if (!ficha) {
+    resumen.notas.push("Ese profesional no existe.");
+    return resumen;
+  }
+  if (ficha.demo_sesion_id !== params.sesionId) {
+    resumen.notas.push(
+      "Ese profesional NO es de esta reunión: no se le tocó la agenda. " +
+        "Elegí un participante de la lista de arriba."
+    );
+    return resumen;
+  }
+
   const rango = rangoEscenarioPorDefecto();
   const desde = params.desde || rango.desde;
   const hasta = params.hasta || rango.hasta;
