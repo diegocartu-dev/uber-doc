@@ -9,7 +9,7 @@ Estos `.sql` se aplican **SOLO en la base de una instancia institucional** (proy
 
 ## Checklist post-aplicación: verificar los REVOKE de verdad
 
-Dos migraciones crean funciones `SECURITY DEFINER`, que corren con los permisos de su dueño y **no** con los de quien las llama. Las dos revocan el `EXECUTE` a `anon` y `authenticated`… y ese `REVOKE` es exactamente la clase de línea que se da por buena porque está escrita.
+Tres migraciones crean funciones `SECURITY DEFINER`, que corren con los permisos de su dueño y **no** con los de quien las llama. Las tres revocan el `EXECUTE` a `anon` y `authenticated`… y ese `REVOKE` es exactamente la clase de línea que se da por buena porque está escrita.
 
 No lo está hasta que se prueba. Precedente propio: el 08/07/2026 se descubrió que dos RPC del B2C (`expirar_turno`, `marcar_ausente_paciente`) eran **ejecutables por `anon`** — el `REVOKE` nunca se había verificado contra la base real. El método que lo cerró es el mismo de acá abajo.
 
@@ -19,6 +19,7 @@ No lo está hasta que se prueba. Precedente propio: el 08/07/2026 se descubrió 
 |---|---|---|
 | `buscar_user_id_por_email(text)` | 007 | Un paciente logueado por link puede **enumerar los emails del padrón** de la provincia, uno por uno, preguntando si existen. |
 | `cerrar_sesiones_de_usuario(uuid)` | 013 | Cualquiera con sesión puede **desloguear a cualquier otro** (incluidos operadores y profesionales) pasando su `user_id`. |
+| `corregir_encuentro_sellado(...)` | 021 | Es la **única puerta** para tocar una fila ya facturada. Si `anon` o `authenticated` pueden ejecutarla, cualquiera con sesión reclasifica la factura de un mes cerrado. (La función igual verifica contra `admin_users` que quien firma sea superadmin activo: son dos cierres, no uno.) |
 
 **Cómo (en la base de la instancia, con la anon key pública del proyecto — no la service role):**
 
@@ -56,7 +57,7 @@ SELECT p.proname,
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
-  AND p.proname IN ('buscar_user_id_por_email', 'cerrar_sesiones_de_usuario');
+  AND p.proname IN ('buscar_user_id_por_email', 'cerrar_sesiones_de_usuario', 'corregir_encuentro_sellado');
 -- Esperado: anon=false, authenticated=false, service_role=true.
 ```
 
@@ -66,7 +67,7 @@ Si alguna da `true` en `anon` o `authenticated`, volver a correr el `REVOKE` de 
 
 Mismo principio que los REVOKE de arriba, aplicado a la otra defensa del
 contador: **un trigger escrito no es un trigger que frena**. Las migraciones
-014, 015, 017 y 019 protegen lo que ya se facturó y lo que ya se selló, y esa
+014, 015, 017, 019 y 021 protegen lo que ya se facturó y lo que ya se selló, y esa
 protección es lo único que sostiene la frase que se le dice al cliente — *"la
 factura de octubre va a decir lo mismo en diciembre"*.
 
@@ -191,9 +192,90 @@ UPDATE acuerdo_semanas SET estado = 'abierta' WHERE semana_ar = DATE '2000-01-03
 DELETE FROM acuerdo_semanas WHERE semana_ar = DATE '2000-01-03';
 ```
 
+### Ataque 7 — corregir un mes sellado sin dejar rastro (021)
+
+La 021 abre **una** puerta sobre la 014: el superadministrador de Docto puede
+corregir una fila sellada (R33). La puerta está atada a su rastro, y esto lo
+verifica.
+
+`SET LOCAL` solo vive dentro de una transacción: los dos primeros ataques van
+con `BEGIN` / `ROLLBACK` explícitos o no prueban nada.
+
+```sql
+-- 7a) La puerta no se abre sola: sin constancia, el UPDATE sigue rebotando.
+UPDATE encuentros_metering SET facturado_periodo = '2000-01' WHERE id = :fila;  -- sella
+
+BEGIN;
+  SET LOCAL metering.correccion_id = '00000000-0000-0000-0000-000000000000';
+  UPDATE encuentros_metering SET clasificacion = 'falla_tecnica' WHERE id = :fila;
+ROLLBACK;
+```
+
+**Esperado:** el error de la 014 (`ya fue facturada … está sellada`). Un
+`UPDATE 1` significa que el trigger acepta un id de corrección inexistente:
+toda la auditoría sería decorativa.
+
+```sql
+-- 7b) Con una constancia de OTRA fila, tampoco.
+INSERT INTO metering_correcciones (encuentro_id, periodo, admin_user_id, motivo, valores_antes, valores_despues)
+SELECT id, '2000-01', gen_random_uuid(), 'constancia de otra fila, para la prueba',
+       '{}'::jsonb, '{}'::jsonb
+FROM encuentros_metering WHERE id <> :fila LIMIT 1
+RETURNING id;  -- :otra
+
+BEGIN;
+  SET LOCAL metering.correccion_id = ':otra';
+  UPDATE encuentros_metering SET clasificacion = 'falla_tecnica' WHERE id = :fila;
+ROLLBACK;
+```
+
+**Esperado:** el mismo error. La constancia tiene que ser **de ese encuentro**.
+
+```sql
+-- 7c) Un admin que no es superadmin no puede, aunque llame a la RPC directo.
+SELECT corregir_encuentro_sellado(
+  :fila, 'falla_tecnica',
+  'prueba de la verificación post-aplicación', :user_id_de_un_admin_comun, NULL);
+```
+
+**Esperado:** `Solo un superadministrador de Docto activo puede corregir un
+período sellado (R33).`
+
+```sql
+-- 7d) El camino legítimo: superadmin + motivo. Deja la fila corregida Y su rastro.
+SELECT corregir_encuentro_sellado(
+  :fila, 'falla_tecnica',
+  'prueba de la verificación post-aplicación', :user_id_del_superadmin, NULL);
+
+SELECT clasificacion, clasificacion_origen FROM encuentros_metering WHERE id = :fila;
+SELECT motivo, valores_antes ->> 'clasificacion' AS de, valores_despues ->> 'clasificacion' AS a
+  FROM metering_correcciones WHERE encuentro_id = :fila;
+```
+
+**Esperado:** `falla_tecnica` / `manual_admin`, y **una fila** en
+`metering_correcciones` con el motivo y el de→a. Si la fila cambió y el registro
+no existe, la puerta quedó abierta sin auditoría — el peor de los resultados.
+
+```sql
+-- 7e) Y sin motivo, ni el superadmin.
+SELECT corregir_encuentro_sellado(:fila, 'facturable', 'ok', :user_id_del_superadmin, NULL);
+```
+
+**Esperado:** `necesita un motivo de al menos 10 caracteres`.
+
 ### Limpieza
 
 ```sql
+-- El rastro de la prueba es append-only a propósito: para poder borrar la fila
+-- sintética hay que sacar antes sus correcciones, y eso NO se puede por el
+-- trigger. Si hace falta dejar la base impecable, borrar la fila de auditoría
+-- exige desactivar el trigger a mano y volver a activarlo — que es justamente
+-- la fricción que se buscó.
+DELETE FROM metering_correcciones WHERE encuentro_id = :fila;  -- rebota: append-only
+ALTER TABLE metering_correcciones DISABLE TRIGGER trg_metering_correcciones_no_delete;
+DELETE FROM metering_correcciones WHERE encuentro_id = :fila;
+ALTER TABLE metering_correcciones ENABLE TRIGGER trg_metering_correcciones_no_delete;
+
 UPDATE encuentros_metering SET facturado_periodo = NULL WHERE id = :fila;
 DELETE FROM encuentros_metering WHERE id = :fila;
 ```

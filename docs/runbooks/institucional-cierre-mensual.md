@@ -97,7 +97,7 @@ repetir.
 ## Y si hay que corregir un mes ya sellado
 
 Se puede, **solo el superadministrador de Docto** y **con motivo obligatorio**
-(R33): `/admin/institucion/periodo`. Cada corrección queda registrada —quién,
+(R33): `/admin/periodos`. Cada corrección queda registrada —quién,
 cuándo, qué fila, qué cambió y por qué— en `metering_correcciones`, y ese
 registro es parte de la auditoría del período. No hay forma de corregir sin
 dejar rastro: el trigger de la migración 021 rechaza el UPDATE si no viene con
