@@ -5,6 +5,7 @@ import { requireAdminInstitucion } from "@/lib/auth/rol-institucional";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import { armarDocumentoParaPDF } from "@/lib/pdf/documento-desde-db";
+import { brandingParaPDF } from "@/lib/institucional/branding-pdf";
 
 /**
  * Descarga de un documento clínico POR LA INSTITUCIÓN (escena 5 de la demo:
@@ -103,7 +104,10 @@ export async function GET(
   }
 
   try {
-    const pdf = await generarRecetaPDF(armado.documento);
+    // El MISMO papel que baja el paciente, con la MISMA marca (spec §7): si
+    // los dos caminos no pasaran el branding, el documento saldría distinto
+    // según quién lo descargó, con el mismo id impreso al pie.
+    const pdf = await generarRecetaPDF(armado.documento, await brandingParaPDF());
     return new NextResponse(pdf as unknown as BodyInit, {
       status: 200,
       headers: {
