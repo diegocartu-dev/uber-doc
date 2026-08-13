@@ -240,3 +240,131 @@
    y header. El mock tiene franja + header. La banda se apaga solo acá — las
    pantallas del paciente no tienen header propio y la necesitan. */
 body:has(.pnl) .inst-banda { display: none; }
+
+/* ── NOVA (mock 05-nova.html) ──────────────────────────────────────────
+   El hilo de chat + la tarjeta de propuesta + el checklist de avisos. Los
+   nombres de clase son LOS del mock; los colores salen de los tokens de
+   arriba, más el naranja de alerta, que acá tiene un trabajo concreto: marcar
+   lo que Nova NO pudo resolver. Rojo no hay — no es un error del sistema. */
+.pnl .nova { --alerta: #d85a30; --alerta-soft: #fdf0eb; display: flex; flex-direction: column; gap: 4px; }
+.pnl .nova .chat {
+  max-width: 760px; width: 100%; margin: 0 auto; padding: 4px 0 8px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+.pnl .nova .b-user {
+  align-self: flex-end; max-width: 80%;
+  background: var(--accion-soft); border: 1px solid #bbd7f3;
+  border-radius: 12px 12px 2px 12px; padding: 12px 16px; font-size: 14px; line-height: 1.5;
+}
+.pnl .nova .b-nova {
+  align-self: flex-start; max-width: 85%;
+  background: #fff; border: 1px solid var(--borde-card); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border-radius: 12px 12px 12px 2px; padding: 12px 16px; font-size: 14px; line-height: 1.55;
+}
+.pnl .nova .b-nova .quien {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--inst-primary, #4a3f8c); margin-bottom: 5px;
+}
+
+/* ── tarjeta de propuesta ── */
+.pnl .nova .prop { border-left: 3px solid var(--accion); padding: 16px 20px 16px 18px; }
+.pnl .nova .prop-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.pnl .nova .prop-titulo { font-size: 14px; font-weight: 600; }
+.pnl .nova .trow {
+  display: grid; grid-template-columns: 20px minmax(112px, 0.7fr) 128px minmax(0, 1.8fr);
+  column-gap: 14px; align-items: center;
+  padding: 10px 8px; border-bottom: 1px solid var(--borde-suave);
+}
+.pnl .nova .trow.thead { padding: 4px 8px 8px; border-bottom: 1px solid var(--borde); }
+.pnl .nova .trow:last-of-type { border-bottom: 1px solid var(--borde); }
+.pnl .nova .t-pac { font-size: 13px; font-weight: 500; }
+.pnl .nova .t-act { font-size: 13px; color: var(--t2); white-space: nowrap; }
+.pnl .nova .t-prop { font-size: 13px; }
+.pnl .nova .t-prop .flecha { color: var(--t3); margin-right: 6px; }
+.pnl .nova .t-prop .prof { font-weight: 500; }
+.pnl .nova .t-prop .sep { color: var(--t3); padding: 0 4px; }
+.pnl .nova .subnota { display: block; font-size: 11px; color: var(--alerta); margin-top: 2px; }
+.pnl .nova .trow.excluida { opacity: 0.55; }
+.pnl .nova .chk {
+  width: 16px; height: 16px; border-radius: 4px; background: var(--accion); color: #fff;
+  font-size: 10px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accion); padding: 0; cursor: pointer;
+}
+.pnl .nova .chk.off { background: #fff; border-color: var(--borde); }
+.pnl .nova .chk:disabled { cursor: default; opacity: 0.7; }
+.pnl .nova .sin-chk { width: 16px; text-align: center; font-size: 13px; color: var(--t3); }
+.pnl .nova .trow.manual { background: var(--alerta-soft); border-radius: 8px; border-bottom: none; margin-top: 2px; }
+.pnl .nova .trow.manual .t-prop { color: var(--alerta); font-weight: 500; line-height: 1.4; }
+
+.pnl .nova .pie-prop {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  padding-top: 14px; flex-wrap: wrap;
+}
+.pnl .nova .pie-prop p { font-size: 12.5px; color: var(--t2); line-height: 1.5; max-width: 380px; }
+.pnl .nova .botones { display: flex; align-items: center; gap: 6px; }
+.pnl .nova .btn {
+  height: 40px; padding: 0 20px; border: none; border-radius: 8px; cursor: pointer;
+  background: var(--accion); color: #fff; font-family: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap;
+}
+.pnl .nova .btn:hover:not(:disabled) { background: var(--accion-dark); }
+.pnl .nova .btn:disabled { opacity: 0.5; cursor: default; }
+.pnl .nova .btn-ghost {
+  height: 40px; padding: 0 14px; border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--t2); font-family: inherit; font-size: 13.5px;
+}
+.pnl .nova .btn-ghost:hover:not(:disabled) { background: var(--borde-suave); }
+
+/* ── checklist de avisos ── */
+.pnl .nova .avisos { padding: 16px 20px 12px; }
+.pnl .nova .avisos-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pnl .nova .avisos-titulo { font-size: 14px; font-weight: 600; }
+.pnl .nova .av-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: 12px;
+  align-items: center; padding: 8px 0; border-bottom: 1px solid var(--borde-suave);
+}
+.pnl .nova .av-row:last-child { border-bottom: none; }
+.pnl .nova .av-quien { font-size: 13px; }
+.pnl .nova .av-quien .nombre { font-weight: 500; }
+.pnl .nova .av-quien .estado { color: var(--t2); }
+.pnl .nova .av-quien .estado.alerta { color: var(--alerta); }
+.pnl .nova .av-quien .sep { color: var(--t3); padding: 0 5px; }
+.pnl .nova .av-hora { font-size: 12px; color: var(--t3); white-space: nowrap; }
+.pnl .nova .ok {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--estado-verde); color: #fff;
+  font-size: 10px; display: inline-flex; align-items: center; justify-content: center; justify-self: center;
+}
+.pnl .nova .falla {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--alerta); color: #fff;
+  font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; justify-self: center;
+}
+.pnl .nova .spin {
+  width: 15px; height: 15px; border: 2px solid var(--accion-soft); border-top-color: var(--accion);
+  border-radius: 50%; animation: nova-giro 0.9s linear infinite; justify-self: center;
+}
+@keyframes nova-giro { to { transform: rotate(360deg); } }
+.pnl .nova .pend { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; justify-self: center; }
+
+/* ── composer ── */
+.pnl .nova .composer {
+  max-width: 760px; width: 100%; margin: 0 auto; padding: 4px 0 8px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.pnl .nova .chip-sug {
+  align-self: flex-start; height: 32px; display: inline-flex; align-items: center; padding: 0 14px;
+  border: 1px solid var(--accion); border-radius: 99px; background: #fff;
+  font-family: inherit; font-size: 13px; color: var(--accion-dark); cursor: pointer;
+}
+.pnl .nova .chip-sug:hover:not(:disabled) { background: var(--accion-soft); }
+.pnl .nova .campo { display: flex; gap: 8px; }
+.pnl .nova .campo input {
+  flex: 1; height: 52px; border: 1px solid var(--borde); border-radius: 8px; background: #fff;
+  padding: 0 16px; font-family: inherit; font-size: 15px; color: var(--t1); min-width: 0;
+}
+.pnl .nova .campo input:focus { outline: none; border-color: var(--accion); }
+.pnl .nova .campo .btn { height: 52px; }
+
+@media (max-width: 900px) {
+  .pnl .nova .prop { overflow-x: auto; }
+  .pnl .nova .trow { min-width: 620px; }
+}
