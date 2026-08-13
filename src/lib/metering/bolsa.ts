@@ -33,7 +33,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
 import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
-import type { Motor } from "@/lib/metering/clasificar";
+import {
+  ESTADOS_TERMINALES_CONSULTA,
+  ESTADOS_TERMINALES_TURNO,
+  type Motor,
+} from "@/lib/metering/clasificar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EL NÚCLEO PURO
@@ -532,6 +536,78 @@ export function totalDeBolsa(filas: CumplimientoProfesional[]): {
   };
 }
 
+/**
+ * Encuentros terminales de esa semana que TODAVÍA no tienen fila en el
+ * contador. Es la precondición del sello.
+ *
+ * ── POR QUÉ EL SELLO NO PUEDE CORRER SIN ESTO ────────────────────────────────
+ * `cerrarSemana` congela lo que el clasificador HAYA ALCANZADO A ESCRIBIR, y
+ * es idempotente a propósito: no recalcula nunca más. Si el job de metering
+ * estuvo caído el fin de semana, el lunes se sellaría una semana incompleta y
+ * quedaría inmutable — mientras la facturación, que lee la tabla en vivo, sí
+ * cobraría esos encuentros cuando aparezcan. Dos números contractuales
+ * divergiendo en silencio, y ninguno corregible sin levantar el sello a mano.
+ *
+ * Sellar tarde es barato. Sellar un número que todavía se está formando, no.
+ *
+ * Solo se cuentan los encuentros que DEBERÍAN producir fila: con paciente y con
+ * un motor válido. Un slot que nadie tomó o un canal desconocido no generan
+ * fila por diseño, y contarlos dejaría el sello bloqueado para siempre.
+ */
+export async function encuentrosSinClasificar(semanaAr: string): Promise<number> {
+  const admin = createAdminClient();
+  const lunes = semanaAr;
+  const domingo = domingoDeSemana(lunes);
+  const MOTORES = ["acordado", "espontaneo", "ofrecido"];
+
+  const [turnos, consultas, filas] = await Promise.all([
+    leerTodo<Record<string, unknown>>("turnos terminales de la semana", (desde, hasta) =>
+      admin
+        .from("turnos")
+        .select("id")
+        .in("estado", ESTADOS_TERMINALES_TURNO as unknown as string[])
+        .in("canal_origen", MOTORES)
+        .not("paciente_id", "is", null)
+        .gte("fecha", lunes)
+        .lte("fecha", domingo)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
+    // La CI no tiene columna de fecha AR: su semana sale del instante de
+    // asignación, igual que en el contador. Se pide un día de más de cada lado
+    // y se filtra en JS.
+    leerTodo<Record<string, unknown>>("consultas terminales de la semana", (desde, hasta) =>
+      admin
+        .from("consultas")
+        .select("id, asignada_at, created_at")
+        .in("estado", ESTADOS_TERMINALES_CONSULTA as unknown as string[])
+        .in("canal_origen", MOTORES)
+        .gte("created_at", `${lunes}T00:00:00-03:00`)
+        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
+    leerTodo<Record<string, unknown>>("filas del contador de la semana", (desde, hasta) =>
+      admin
+        .from("encuentros_metering")
+        .select("tipo, recurso_id")
+        .eq("semana_ar", lunes)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
+  ]);
+
+  const conFila = new Set(filas.map((f) => `${f.tipo}|${f.recurso_id}`));
+  let faltan = 0;
+  for (const t of turnos) if (!conFila.has(`turno|${t.id}`)) faltan++;
+  for (const c of consultas) {
+    const iso = (c.asignada_at as string | null) ?? (c.created_at as string);
+    if (lunesDeSemanaAR(iso) !== lunes) continue;
+    if (!conFila.has(`consulta|${c.id}`)) faltan++;
+  }
+  return faltan;
+}
+
 export interface ResumenCierreSemana {
   semana_ar: string;
   profesionales: number;
@@ -562,6 +638,16 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
     ya_estaban: 0,
     errores: 0,
   };
+
+  // Precondición: el contador terminó de contar esta semana. Si falta aunque
+  // sea un encuentro, no se sella nada — un sello incompleto es inmutable.
+  const faltan = await encuentrosSinClasificar(semanaAr);
+  if (faltan > 0) {
+    throw new Error(
+      `La semana ${semanaAr} tiene ${faltan} encuentro(s) terminales sin clasificar: no se sella. ` +
+        `Revisá el cron metering-clasificar y volvé a correr el cierre.`
+    );
+  }
 
   const filas = await cumplimientoDeSemana({ semanaAr, ahoraMs });
   resumen.profesionales = filas.length;

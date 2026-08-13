@@ -443,9 +443,13 @@ test("semana · terminada = pasó el domingo a medianoche AR, no antes", () => {
 });
 
 test("semana · el cron del lunes sella la que acaba de terminar, no la que arranca", () => {
-  // Lunes 26 a las 00:05 ART: la semana a sellar es la del 19.
+  // Lunes 26 a las 02:00 ART (el horario del cron): la semana a sellar es la
+  // del 19. Corría a las 00:05, antes de que el contador terminara de clasificar
+  // el domingo a la noche — y el sello congela lo que el contador escribió.
+  assert.equal(semanaASellar(Date.parse("2026-10-26T02:00:00-03:00")), LUNES);
+  assert.equal(semanaDeHoy(Date.parse("2026-10-26T02:00:00-03:00")), "2026-10-26");
+  // Y sigue valiendo en la ventana vieja, por si alguna vez se corre a mano.
   assert.equal(semanaASellar(Date.parse("2026-10-26T00:05:00-03:00")), LUNES);
-  assert.equal(semanaDeHoy(Date.parse("2026-10-26T00:05:00-03:00")), "2026-10-26");
 });
 
 test("semana · el selector avanza y retrocede de a siete días", () => {

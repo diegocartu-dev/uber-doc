@@ -208,7 +208,7 @@ export const CRONS_META: Record<string, CronMeta> = {
       "los lunes a la madrugada congela cuántas horas cumplió cada profesional en la semana que terminó",
     impacto:
       "la semana pasada sigue mostrándose 'en curso' y sus números podrían moverse si cambia una agenda vieja",
-    cadencia: "los lunes a las 00:05",
+    cadencia: "los lunes a las 02:00",
     autoRecupera: false,
     accion:
       "Sí, avisá: el cierre de esa semana no se hace solo la semana que viene (el cron sella siempre la semana ANTERIOR a la de hoy). Abrí Claude Code y decime: \"corré el cierre semanal del acuerdo para la semana que faltó\".",
