@@ -24,7 +24,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { identificarOperador } from "@/lib/otorgador/auth";
 import { planReprogramacionMasiva, type ErrorPlan } from "@/lib/otorgador/reprogramar-masivo";
-import { reprogramarTurnoInstitucional } from "@/lib/otorgador/reprogramar";
+import {
+  reprogramarTurnoInstitucional,
+  marcarDiaSinAtencionDelProfesional,
+} from "@/lib/otorgador/reprogramar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,6 +52,8 @@ export async function POST(req: NextRequest) {
     dry_run?: boolean;
     motivo?: string;
     items?: { turno_id?: string; turno_nuevo_id?: string }[];
+    /** Cierre de la corrida: el día del profesional que no puede atender. */
+    cerrar_dia?: { medico_id?: string; fecha?: string };
   };
   try {
     body = await req.json();
@@ -69,6 +74,24 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ ok: true, dry_run: true, plan: res.plan });
+  }
+
+  // ── FASE 3: cerrar el día del profesional que no puede atender ─────────────
+  // Va al final de la corrida, cuando ya se movió lo que se podía mover. Sin
+  // esto, los slots del día que nadie tomó siguen en `disponible` y `disponible`
+  // CUENTA como hora puesta a disposición: el día entero le entraría al número
+  // contractual que se le factura a la institución, justo el día en que el
+  // profesional dijo que no iba a atender.
+  if (body.cerrar_dia) {
+    const { medico_id: medicoId, fecha } = body.cerrar_dia;
+    if (!medicoId || !fecha) {
+      return NextResponse.json(
+        { error: "`cerrar_dia` necesita medico_id y fecha." },
+        { status: 422 }
+      );
+    }
+    const res = await marcarDiaSinAtencionDelProfesional({ medicoId, fecha });
+    return NextResponse.json({ ok: res.ok, dia_cerrado: res }, { status: res.ok ? 200 : 500 });
   }
 
   // ── FASE 2: la ejecución ───────────────────────────────────────────────────

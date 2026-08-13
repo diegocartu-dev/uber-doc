@@ -231,6 +231,24 @@ export default function Nova() {
         }
       }
 
+      // ── El día del profesional queda MARCADO ─────────────────────────────
+      // Los slots suyos de ese día que nadie tomó siguen en `disponible`, y
+      // `disponible` cuenta como hora puesta a disposición en la bolsa: el día
+      // entero le entraría al número que se le factura a la institución, justo
+      // el día en que avisó que no iba a atender. Va al final de la corrida y
+      // sin bloquear el cierre: si falla, queda en el log del server.
+      try {
+        await fetch("/api/otorgador/reprogramar-masivo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cerrar_dia: { medico_id: burbuja.plan.medico.id, fecha: burbuja.plan.fecha },
+          }),
+        });
+      } catch {
+        // El cierre del día no puede voltear una corrida ya hecha y avisada.
+      }
+
       setHilo((h) =>
         h.map((b) => (b.tipo === "avisos" && b.id === idAvisos ? { ...b, terminado: true } : b))
       );
