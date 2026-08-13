@@ -56,11 +56,12 @@ const inputBase: React.CSSProperties = {
 
 const GRILLA = "96px 1.6fr 1.2fr 150px 120px";
 
-function Badge({ texto, tono }: { texto: string; tono: "verde" | "gris" | "amarillo" }) {
+function Badge({ texto, tono }: { texto: string; tono: "verde" | "gris" | "amarillo" | "naranja" }) {
   const colores = {
     verde: { background: "#E8F5F0", color: "#1D9E75" },
     gris: { background: "#F4F4F3", color: "#888780" },
     amarillo: { background: "#FBF3E4", color: "#BA7517" },
+    naranja: { background: "#FBEDE7", color: "#D85A30" },
   }[tono];
   return (
     <span
@@ -106,7 +107,11 @@ export default function PeriodosClient({ periodo, periodos, encuentros, historia
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  const facturables = encuentros.filter((e) => e.clasificacion === "facturable").length;
+  const selladas = encuentros.filter((e) => !e.llego_tarde);
+  const tarde = encuentros.filter((e) => e.llego_tarde);
+  // Lo facturable se cuenta sobre lo SELLADO: es lo que dice la factura que se
+  // emitió. Una fila que llegó después del cierre no entró a ese número.
+  const facturables = selladas.filter((e) => e.clasificacion === "facturable").length;
 
   function abrir(e: EncuentroSellado) {
     setAbierto(e.id);
@@ -176,14 +181,39 @@ export default function PeriodosClient({ periodo, periodos, encuentros, historia
               ))}
             </select>
             <span style={{ fontSize: 13, color: "#4B5563" }}>
-              {encuentros.length} consulta{encuentros.length === 1 ? "" : "s"} sellada
-              {encuentros.length === 1 ? "" : "s"} · <b>{facturables} facturable
+              {selladas.length} consulta{selladas.length === 1 ? "" : "s"} sellada
+              {selladas.length === 1 ? "" : "s"} · <b>{facturables} facturable
               {facturables === 1 ? "" : "s"}</b>
               {historial.length > 0 && ` · ${historial.length} corrección${historial.length === 1 ? "" : "es"}`}
             </span>
           </div>
         )}
       </div>
+
+      {/* ── Las que llegaron tarde: lo único de este mes que NO está congelado ── */}
+      {tarde.length > 0 && (
+        <div
+          style={{
+            ...card,
+            padding: 16,
+            marginTop: 20,
+            borderColor: "#F0D6C8",
+            background: "#FEF8F5",
+            fontSize: 13,
+            color: "#4B5563",
+            lineHeight: 1.5,
+          }}
+        >
+          <b style={{ color: "#D85A30" }}>
+            {tarde.length} consulta{tarde.length === 1 ? "" : "s"} de este mes llegó
+            {tarde.length === 1 ? "" : "aron"} después del cierre.
+          </b>{" "}
+          Aparecieron en el contador cuando el mes ya estaba sellado, así que{" "}
+          <b>no entraron a la factura que se emitió</b> y no están congeladas. Tampoco se
+          pueden corregir desde acá: la puerta auditada es solo para filas selladas. Si
+          corresponde cobrarlas, se decide a mano y se factura aparte.
+        </div>
+      )}
 
       {/* ── El detalle sellado ── */}
       {encuentros.length > 0 && (
@@ -241,9 +271,15 @@ export default function PeriodosClient({ periodo, periodos, encuentros, historia
                       <Badge texto={`Corregida ${e.correcciones}×`} tono="amarillo" />
                     </>
                   )}
+                  {e.llego_tarde && (
+                    <>
+                      {" "}
+                      <Badge texto="Llegó después del cierre" tono="naranja" />
+                    </>
+                  )}
                 </span>
                 <span style={{ textAlign: "right" }}>
-                  {esSuperadmin && (
+                  {esSuperadmin && !e.llego_tarde && (
                     <button
                       onClick={() => (abierto === e.id ? setAbierto(null) : abrir(e))}
                       style={{

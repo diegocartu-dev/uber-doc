@@ -105,7 +105,15 @@ export interface EncuentroSellado {
   segundos_ambos_en_sala: number;
   documentos_emitidos: number;
   precio_centavos: number;
-  facturado_periodo: string;
+  /** `null` = la fila apareció DESPUÉS del cierre y no está sellada. */
+  facturado_periodo: string | null;
+  /**
+   * La fila es de este mes pero no lleva su sello: entró a la base después del
+   * cierre. No está congelada, no entró a la factura que se emitió, y la puerta
+   * de R33 no la alcanza (la RPC exige que la fila esté sellada). Se muestra
+   * igual —marcada— porque el modo de falla peor es que no la vea nadie.
+   */
+  llego_tarde: boolean;
   /** Cuántas veces se corrigió esta fila (0 = intacta desde el sello). */
   correcciones: number;
 }
@@ -122,28 +130,39 @@ export interface CorreccionRegistrada {
 }
 
 /**
- * Las filas selladas de un período, con el nombre del profesional y cuántas
+ * Las filas de un período facturado, con el nombre del profesional y cuántas
  * veces se corrigió cada una.
  *
  * Se listan TODAS las clasificaciones, no solo las facturables: una corrección
- * típica es justamente sacar de la factura algo que no correspondía, y para
- * poder revertir un error hay que poder verlo. (El sello, hoy, solo se le pone
- * a las facturables — pero el listado no asume eso.)
+ * típica es justamente sacar de la factura algo que no correspondía —o volver a
+ * meter algo que se marcó como ausencia y en realidad se atendió—, y para poder
+ * revertir un error hay que poder verlo.
+ *
+ * ── POR QUÉ SE LISTA POR MES Y NO POR SELLO ──────────────────────────────────
+ * El listado acota por `fecha_ar` (el mes calendario) y no por
+ * `facturado_periodo`. La diferencia entre los dos conjuntos es exactamente lo
+ * que hay que ver: una fila del mes SIN sello es una que entró a la base
+ * después del cierre (un webhook muy tardío). No está congelada y no entró a la
+ * factura emitida, así que si el listado la escondiera, el auditor vería N
+ * filas y el sistema tendría N+1 — la divergencia silenciosa que todo este
+ * módulo existe para evitar. Se muestra marcada con `llego_tarde`.
  *
  * TIRA si la base falla: una pantalla de auditoría que muestra menos de lo que
  * hay es peor que una que no abre.
  */
 export async function encuentrosSelladosDePeriodo(periodo: string): Promise<EncuentroSellado[]> {
   const admin = createAdminClient();
+  const { desde: primerDia, hasta: ultimoDia } = rangoDePeriodo(periodo);
   const filas = await leerTodo<Record<string, unknown>>(
-    `encuentros sellados de ${periodo}`,
+    `encuentros de ${periodo}`,
     (desde, hasta) =>
       admin
         .from("encuentros_metering")
         .select(
           "id, tipo, recurso_id, fecha_ar, motor, especialidad, medico_id, clasificacion, clasificacion_origen, clasificacion_motivo, segundos_ambos_en_sala, documentos_emitidos, precio_centavos, facturado_periodo"
         )
-        .eq("facturado_periodo", periodo)
+        .gte("fecha_ar", primerDia)
+        .lte("fecha_ar", ultimoDia)
         .order("fecha_ar", { ascending: true })
         .order("id", { ascending: true })
         .range(desde, hasta)
@@ -188,7 +207,8 @@ export async function encuentrosSelladosDePeriodo(periodo: string): Promise<Encu
     segundos_ambos_en_sala: Number(f.segundos_ambos_en_sala ?? 0),
     documentos_emitidos: Number(f.documentos_emitidos ?? 0),
     precio_centavos: Number(f.precio_centavos ?? 0),
-    facturado_periodo: f.facturado_periodo as string,
+    facturado_periodo: (f.facturado_periodo as string | null) ?? null,
+    llego_tarde: !f.facturado_periodo,
     correcciones: cuenta.get(f.id as string) ?? 0,
   }));
 }
