@@ -32,6 +32,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
+import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import type { Motor } from "@/lib/metering/clasificar";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,6 +266,15 @@ export interface CumplimientoProfesional {
   sellada: boolean;
 }
 
+/** Fila de `acuerdo_semanas` tal como la lee el panel (el sello de esa semana). */
+interface SemanaSellada {
+  medico_id: string;
+  horas_comprometidas: number | string;
+  minutos_cumplidos: number | string;
+  desglose_motores: { turnos?: number; ci?: number; motores?: Record<Motor, number> } | null;
+  estado: string;
+}
+
 /** Estados de turno que DESCUENTAN de la disposición (§6.4). */
 const ESTADOS_QUE_DESCUENTAN = new Set(["ausente_medico", "cancelado_medico"]);
 
@@ -284,6 +294,13 @@ const MOTORES_VACIOS = (): Record<Motor, number> => ({ acordado: 0, espontaneo: 
  * con 30 profesionales cuesta cuatro queries.
  *
  * Orden ALFABÉTICO, como manda el mock: el panel informa, no arma un ranking.
+ *
+ * ── TIRA SI LA BASE FALLA ────────────────────────────────────────────────────
+ * Todas las lecturas van por `leerTodo` (paginado + error propagado). Antes se
+ * destructuraba solo `data`: si fallaba la primera —el universo— la función
+ * devolvía `[]` sin decir nada, y `cerrarSemana` sellaba CERO filas reportando
+ * éxito. Como el cron sella siempre la semana anterior y nunca reintenta, esa
+ * semana se quedaba sin sellar para siempre con el watchdog en verde.
  */
 export async function cumplimientoDeSemana(params: {
   semanaAr: string;
@@ -296,13 +313,19 @@ export async function cumplimientoDeSemana(params: {
   const domingo = domingoDeSemana(lunes);
 
   // ── 1) El universo: los profesionales del piloto ───────────────────────────
-  const { data: medicos } = await admin
-    .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad")
-    .eq("estado_registro", "aprobado")
-    .in("especialidad", config.especialidades);
+  const medicos = await leerTodo<Record<string, unknown>>(
+    "padrón de profesionales del piloto",
+    (desde, hasta) =>
+      admin
+        .from("medicos")
+        .select("id, nombre_completo, titulo, especialidad")
+        .eq("estado_registro", "aprobado")
+        .in("especialidad", config.especialidades)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
 
-  const universo = (medicos ?? []).map((m) => ({
+  const universo = medicos.map((m) => ({
     id: m.id as string,
     nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
     especialidad: (m.especialidad as string | null) ?? "",
@@ -311,42 +334,66 @@ export async function cumplimientoDeSemana(params: {
   const ids = universo.map((m) => m.id);
 
   // ── 2) Acuerdo vigente ESA semana (no hoy: la semana puede ser vieja) ──────
-  const { data: acuerdos } = await admin
-    .from("acuerdos_servicio")
-    .select("medico_id, horas_semanales, vigente_desde, vigente_hasta")
-    .in("medico_id", ids)
-    .lte("vigente_desde", domingo)
-    .or(`vigente_hasta.is.null,vigente_hasta.gte.${lunes}`)
-    .order("vigente_desde", { ascending: false });
+  // El lote nunca parte a un profesional al medio, así que el "gana el
+  // `vigente_desde` más nuevo" de abajo sigue viendo todos los acuerdos de cada
+  // uno juntos y en orden.
+  const acuerdos = await leerTodoEnLotes<Record<string, unknown>>(
+    "acuerdos de servicio vigentes",
+    ids,
+    (lote, desde, hasta) =>
+      admin
+        .from("acuerdos_servicio")
+        .select("medico_id, horas_semanales, vigente_desde, vigente_hasta")
+        .in("medico_id", lote)
+        .lte("vigente_desde", domingo)
+        .or(`vigente_hasta.is.null,vigente_hasta.gte.${lunes}`)
+        .order("vigente_desde", { ascending: false })
+        .order("id", { ascending: false })
+        .range(desde, hasta)
+  );
   const horasPorMedico = new Map<string, number>();
-  for (const a of acuerdos ?? []) {
+  for (const a of acuerdos) {
     if (!horasPorMedico.has(a.medico_id as string)) {
       horasPorMedico.set(a.medico_id as string, Number(a.horas_semanales));
     }
   }
 
   // ── 3) ¿La semana está sellada? ────────────────────────────────────────────
-  const { data: selladas } = await admin
-    .from("acuerdo_semanas")
-    .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
-    .eq("semana_ar", lunes)
-    .in("medico_id", ids);
-  const selladaPorMedico = new Map<string, (typeof selladas extends null ? never : NonNullable<typeof selladas>[number])>();
-  for (const s of selladas ?? []) {
-    if (s.estado === "cerrada") selladaPorMedico.set(s.medico_id as string, s);
+  const selladas = await leerTodoEnLotes<SemanaSellada>(
+    "sellos de la semana",
+    ids,
+    (lote, desde, hasta) =>
+      admin
+        .from("acuerdo_semanas")
+        .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
+        .eq("semana_ar", lunes)
+        .in("medico_id", lote)
+        .order("medico_id", { ascending: true })
+        .range(desde, hasta)
+  );
+  const selladaPorMedico = new Map<string, SemanaSellada>();
+  for (const s of selladas) {
+    if (s.estado === "cerrada") selladaPorMedico.set(s.medico_id, s);
   }
 
   // ── 4) Disposición: los slots de agenda de la semana que ya transcurrieron ─
-  const { data: turnos } = await admin
-    .from("turnos")
-    .select("id, medico_id, fecha, hora_inicio, hora_fin, estado, canal_origen")
-    .in("medico_id", ids)
-    .gte("fecha", lunes)
-    .lte("fecha", domingo)
-    .in("canal_origen", ["acordado", "ofrecido"]);
+  const turnos = await leerTodoEnLotes<Record<string, unknown>>(
+    "slots de agenda de la semana",
+    ids,
+    (lote, desde, hasta) =>
+      admin
+        .from("turnos")
+        .select("id, medico_id, fecha, hora_inicio, hora_fin, estado, canal_origen")
+        .in("medico_id", lote)
+        .gte("fecha", lunes)
+        .lte("fecha", domingo)
+        .in("canal_origen", ["acordado", "ofrecido"])
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
 
   const slotsPorMedico = new Map<string, SlotDisposicion[]>();
-  for (const t of turnos ?? []) {
+  for (const t of turnos) {
     const inicioMs = msAR(t.fecha as string, t.hora_inicio as string);
     const finMs = msAR(t.fecha as string, t.hora_fin as string);
     // Solo lo TRANSCURRIDO: una agenda de mañana todavía no es una hora puesta.
@@ -364,17 +411,24 @@ export async function cumplimientoDeSemana(params: {
   }
 
   // ── 5) Atención: las CI facturables de la semana, del contador ─────────────
-  const { data: filasMetering } = await admin
-    .from("encuentros_metering")
-    .select("tipo, recurso_id, medico_id, motor, clasificacion")
-    .eq("semana_ar", lunes)
-    .eq("clasificacion", "facturable")
-    .in("medico_id", ids);
+  const filasMetering = await leerTodoEnLotes<Record<string, unknown>>(
+    "encuentros facturables de la semana",
+    ids,
+    (lote, desde, hasta) =>
+      admin
+        .from("encuentros_metering")
+        .select("tipo, recurso_id, medico_id, motor, clasificacion")
+        .eq("semana_ar", lunes)
+        .eq("clasificacion", "facturable")
+        .in("medico_id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
 
   const motoresPorMedico = new Map<string, Record<Motor, number>>();
   const idsCI: string[] = [];
   const medicoDeCI = new Map<string, string>();
-  for (const f of filasMetering ?? []) {
+  for (const f of filasMetering) {
     const medicoId = f.medico_id as string;
     const m = motoresPorMedico.get(medicoId) ?? MOTORES_VACIOS();
     m[f.motor as Motor]++;
@@ -388,18 +442,23 @@ export async function cumplimientoDeSemana(params: {
   // El instante de la CI decide si cayó dentro de una franja propia. Sale de
   // `consultas`, no del contador: ahí está el dato exacto de cuándo se asignó.
   const cisPorMedico = new Map<string, CIAtendida[]>();
-  if (idsCI.length > 0) {
-    const { data: consultas } = await admin
-      .from("consultas")
-      .select("id, medico_id, asignada_at, created_at")
-      .in("id", idsCI);
-    for (const c of consultas ?? []) {
-      const medicoId = (c.medico_id as string) ?? medicoDeCI.get(c.id as string) ?? "";
-      const iso = (c.asignada_at as string | null) ?? (c.created_at as string);
-      const lista = cisPorMedico.get(medicoId) ?? [];
-      lista.push({ medicoId, inicioMs: Date.parse(iso) });
-      cisPorMedico.set(medicoId, lista);
-    }
+  const consultas = await leerTodoEnLotes<Record<string, unknown>>(
+    "instantes de las consultas inmediatas",
+    idsCI,
+    (lote, desde, hasta) =>
+      admin
+        .from("consultas")
+        .select("id, medico_id, asignada_at, created_at")
+        .in("id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
+  for (const c of consultas) {
+    const medicoId = (c.medico_id as string) ?? medicoDeCI.get(c.id as string) ?? "";
+    const iso = (c.asignada_at as string | null) ?? (c.created_at as string);
+    const lista = cisPorMedico.get(medicoId) ?? [];
+    lista.push({ medicoId, inicioMs: Date.parse(iso) });
+    cisPorMedico.set(medicoId, lista);
   }
 
   // ── 6) Componer ────────────────────────────────────────────────────────────
@@ -487,6 +546,12 @@ export interface ResumenCierreSemana {
  * Idempotente: una semana ya sellada NO se recalcula (si el cron corre dos
  * veces, el número de la primera es el que queda). Eso es deliberado — el
  * sello es justamente la promesa de que el número no se mueve más.
+ *
+ * TIRA si no pudo leer (la excepción viene de `cumplimientoDeSemana`). "No
+ * había nada que sellar" y "no pude leer el padrón" terminaban los dos en
+ * `sellados: 0, errores: 0` y en un 200 del cron: el lunes perdido quedaba
+ * invisible y, como el cron sella siempre la semana ANTERIOR, no se recuperaba
+ * solo. Ahora lo primero devuelve 200 y lo segundo revienta con nombre.
  */
 export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Promise<ResumenCierreSemana> {
   const admin = createAdminClient();

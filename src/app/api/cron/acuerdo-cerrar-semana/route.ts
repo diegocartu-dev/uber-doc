@@ -25,10 +25,19 @@ async function handler() {
   if (corte) return corte;
 
   const semana = semanaASellar();
-  const resumen = await cerrarSemana(semana);
-  console.log("[cron/acuerdo-cerrar-semana]", JSON.stringify(resumen));
-
-  return NextResponse.json(resumen, { status: resumen.errores > 0 ? 500 : 200 });
+  try {
+    const resumen = await cerrarSemana(semana);
+    console.log("[cron/acuerdo-cerrar-semana]", JSON.stringify(resumen));
+    return NextResponse.json(resumen, { status: resumen.errores > 0 ? 500 : 200 });
+  } catch (err) {
+    // Una lectura fallida NO puede pasar por "no había nada que sellar": el
+    // cron sella siempre la semana anterior y nunca vuelve sobre la que faltó.
+    // El 500 llega al mail de `withCron` con la semana adentro, que es lo que
+    // hace falta para pedir la corrida manual.
+    const detalle = err instanceof Error ? err.message : String(err);
+    console.error("[cron/acuerdo-cerrar-semana] No se pudo cerrar", semana, detalle);
+    return NextResponse.json({ semana_ar: semana, error: detalle }, { status: 500 });
+  }
 }
 
 export const GET = withCron("acuerdo-cerrar-semana", handler);

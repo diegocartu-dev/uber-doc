@@ -14,6 +14,7 @@
 // tiene sentido.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import type { Motor } from "@/lib/metering/clasificar";
 import {
   cumplimientoDeSemana,
@@ -84,11 +85,15 @@ export async function resumenDeSemana(params: {
   const lunes = params.semanaAr;
   const domingo = domingoDeSemana(lunes);
 
-  const [{ data: filas }, cumplimiento] = await Promise.all([
-    admin
-      .from("encuentros_metering")
-      .select("tipo, recurso_id, motor, medico_id, especialidad, fecha_ar, clasificacion")
-      .eq("semana_ar", lunes),
+  const [filas, cumplimiento] = await Promise.all([
+    leerTodo<Record<string, unknown>>("encuentros de la semana", (desde, hasta) =>
+      admin
+        .from("encuentros_metering")
+        .select("tipo, recurso_id, motor, medico_id, especialidad, fecha_ar, clasificacion")
+        .eq("semana_ar", lunes)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
     cumplimientoDeSemana({ semanaAr: lunes, ahoraMs }),
   ]);
 
@@ -111,7 +116,7 @@ export async function resumenDeSemana(params: {
   const atendieron = new Set<string>();
   const ausentismoPorEspecialidad = new Map<string, number>();
 
-  for (const f of filas ?? []) {
+  for (const f of filas) {
     const clasificacion = f.clasificacion as string;
     if (clasificacion === "facturable") {
       facturables++;
@@ -136,14 +141,20 @@ export async function resumenDeSemana(params: {
   }
 
   // Slots de agenda transcurridos que nadie tomó (KPI "sin asignar", §6.6).
-  const { data: turnos } = await admin
-    .from("turnos")
-    .select("id, fecha, hora_fin, estado, canal_origen")
-    .gte("fecha", lunes)
-    .lte("fecha", domingo)
-    .in("canal_origen", ["acordado", "ofrecido"]);
+  const turnos = await leerTodo<Record<string, unknown>>(
+    "slots de agenda de la semana",
+    (desde, hasta) =>
+      admin
+        .from("turnos")
+        .select("id, fecha, hora_fin, estado, canal_origen")
+        .gte("fecha", lunes)
+        .lte("fecha", domingo)
+        .in("canal_origen", ["acordado", "ofrecido"])
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
   let sinAsignar = 0;
-  for (const t of turnos ?? []) {
+  for (const t of turnos) {
     const finMs = Date.parse(`${t.fecha}T${String(t.hora_fin).slice(0, 8)}-03:00`);
     if (!Number.isFinite(finMs) || finMs > ahoraMs) continue;
     if (!ESTADOS_CON_PACIENTE.has(t.estado as string)) sinAsignar++;
@@ -209,17 +220,31 @@ async function nombresDePacientes(
   const admin = createAdminClient();
   const out = new Map<string, string>();
   // `turnos.paciente_id` → pacientes.id · `consultas.paciente_id` → auth.users.id
-  if (idsDeTurno.length > 0) {
-    const { data } = await admin.from("pacientes").select("id, nombre_completo").in("id", idsDeTurno);
-    for (const p of data ?? []) out.set(p.id as string, (p.nombre_completo as string) ?? "");
-  }
-  if (idsDeConsulta.length > 0) {
-    const { data } = await admin
-      .from("pacientes")
-      .select("user_id, nombre_completo")
-      .in("user_id", idsDeConsulta);
-    for (const p of data ?? []) out.set(p.user_id as string, (p.nombre_completo as string) ?? "");
-  }
+  const porId = await leerTodoEnLotes<Record<string, unknown>>(
+    "pacientes de los turnos de la semana",
+    idsDeTurno,
+    (lote, desde, hasta) =>
+      admin
+        .from("pacientes")
+        .select("id, nombre_completo")
+        .in("id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
+  for (const p of porId) out.set(p.id as string, (p.nombre_completo as string) ?? "");
+
+  const porUser = await leerTodoEnLotes<Record<string, unknown>>(
+    "pacientes de las consultas de la semana",
+    idsDeConsulta,
+    (lote, desde, hasta) =>
+      admin
+        .from("pacientes")
+        .select("user_id, nombre_completo")
+        .in("user_id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
+  for (const p of porUser) out.set(p.user_id as string, (p.nombre_completo as string) ?? "");
   return out;
 }
 
@@ -247,17 +272,40 @@ export async function encuentrosDeSemana(params: {
   const idsTurno = filas.filter((f) => f.tipo === "turno").map((f) => f.recurso_id as string);
   const idsConsulta = filas.filter((f) => f.tipo === "consulta").map((f) => f.recurso_id as string);
 
-  const [{ data: medicos }, { data: docsTurno }, { data: docsConsulta }, pacientes] = await Promise.all([
-    admin
-      .from("medicos")
-      .select("id, nombre_completo, titulo")
-      .in("id", [...new Set(filas.map((f) => f.medico_id as string))]),
-    idsTurno.length
-      ? admin.from("documentos").select("id, tipo, created_at, turno_id").in("turno_id", idsTurno)
-      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-    idsConsulta.length
-      ? admin.from("documentos").select("id, tipo, created_at, consulta_id").in("consulta_id", idsConsulta)
-      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  const [medicos, docsTurno, docsConsulta, pacientes] = await Promise.all([
+    leerTodoEnLotes<Record<string, unknown>>(
+      "profesionales de los encuentros de la semana",
+      [...new Set(filas.map((f) => f.medico_id as string))],
+      (lote, desde, hasta) =>
+        admin
+          .from("medicos")
+          .select("id, nombre_completo, titulo")
+          .in("id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+    ),
+    leerTodoEnLotes<Record<string, unknown>>(
+      "documentos de los turnos de la semana",
+      idsTurno,
+      (lote, desde, hasta) =>
+        admin
+          .from("documentos")
+          .select("id, tipo, created_at, turno_id")
+          .in("turno_id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+    ),
+    leerTodoEnLotes<Record<string, unknown>>(
+      "documentos de las consultas de la semana",
+      idsConsulta,
+      (lote, desde, hasta) =>
+        admin
+          .from("documentos")
+          .select("id, tipo, created_at, consulta_id")
+          .in("consulta_id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+    ),
     nombresDePacientes(
       filas.filter((f) => f.tipo === "turno").map((f) => f.paciente_id as string),
       filas.filter((f) => f.tipo === "consulta").map((f) => f.paciente_id as string)
@@ -265,7 +313,7 @@ export async function encuentrosDeSemana(params: {
   ]);
 
   const nombreMedico = new Map<string, string>();
-  for (const m of medicos ?? []) {
+  for (const m of medicos) {
     nombreMedico.set(
       m.id as string,
       `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim()
@@ -284,8 +332,8 @@ export async function encuentrosDeSemana(params: {
     });
     docsPorRecurso.set(clave, lista);
   };
-  for (const d of docsTurno ?? []) sumar(`turno|${d.turno_id}`, d as Record<string, unknown>);
-  for (const d of docsConsulta ?? []) sumar(`consulta|${d.consulta_id}`, d as Record<string, unknown>);
+  for (const d of docsTurno) sumar(`turno|${d.turno_id}`, d);
+  for (const d of docsConsulta) sumar(`consulta|${d.consulta_id}`, d);
 
   return filas.map((f) => ({
     tipo: f.tipo as "consulta" | "turno",
