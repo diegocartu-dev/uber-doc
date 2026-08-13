@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "playwright test",
+    "test:unit": "node scripts/test-unit.mjs",
     "test:ui": "playwright test --ui"
   },
   "dependencies": {

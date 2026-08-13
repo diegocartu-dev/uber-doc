@@ -30,6 +30,13 @@ jobs:
 
       - run: npm ci
 
+      # Tests unitarios ANTES de todo: corren en segundos, no necesitan preview,
+      # y son los que fijan la regla de oro del modo institucional. Hasta ahora
+      # no los ejecutaba nadie —`npm test` es playwright y su testDir es
+      # tests/e2e—, así que un gate escrito al revés mergeaba en verde.
+      - name: Tests unitarios
+        run: npm run test:unit
+
       - run: npx playwright install chromium
 
       - name: Wait for Vercel preview deployment

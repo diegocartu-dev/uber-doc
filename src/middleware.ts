@@ -182,6 +182,13 @@ export const config = {
     // updateSession, así que el bot de preview de WhatsApp no dispara ningún
     // refresh de sesión sobre un visitante que todavía no es nadie.
     // En B2C /acceso no existe (la page es 404 por modo): sin cambio.
-    "/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirmar|acceso|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //
+    // OJO con la barra de `acceso/`: la exclusión es un prefijo pelado dentro
+    // del lookahead, así que sin ella se comía también cualquier ruta que
+    // EMPIECE con esas letras (`/accesorios`, `/accesos-…`) y esas quedarían
+    // sin beta gate, sin timeout y sin refresh de sesión, en los dos modos.
+    // Todas las rutas del paciente cuelgan de `/acceso/`, así que la barra no
+    // deja nada afuera. Lo fija tests/unit/middleware-matcher.test.ts.
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirmar|acceso/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
