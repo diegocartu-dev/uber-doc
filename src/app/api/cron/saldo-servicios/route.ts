@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
-import { esInstitucional } from "@/lib/instancia";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 
 /**
  * Cron diario (09:00 AR): vigila el SALDO de los servicios prepagos que Docto
@@ -85,12 +85,10 @@ async function saldoTwilio(): Promise<ChequeoSaldo> {
 }
 
 async function handler() {
-  // Modo institucional: no aplica (Capa C) — los saldos de servicios prepagos
-  // los vigila el deploy B2C; duplicar la vigilancia duplicaría las alertas.
-  if (esInstitucional()) {
-    console.log("[saldo-servicios] modo institucional: no aplica");
-    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
-  }
+  // Modo institucional: no aplica (Capa C) — los saldos los vigila el deploy B2C (evita alertas dobles).
+  // En B2C devuelve null y el cron sigue igual (ver capa-c.ts).
+  const corte = cortarSiInstitucional("saldo-servicios");
+  if (corte) return corte;
 
   const [didit, twilio] = await Promise.all([saldoDidit(), saldoTwilio()]);
 

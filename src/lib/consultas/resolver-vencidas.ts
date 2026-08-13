@@ -44,7 +44,7 @@ import { ejecutarRefund } from "@/lib/cancelaciones";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { pushAlPaciente } from "@/lib/push";
 import { logError, logInfo } from "@/lib/logger";
-import { esInstitucional } from "@/lib/instancia";
+import { esInstitucional, correspondeRefund } from "@/lib/instancia";
 
 /** Minutos desde el pago antes de resolver. */
 export const PLAZO_CI_MIN = 30;
@@ -269,11 +269,10 @@ export async function resolverConsultaVencida(
   if (!tomada) return { resuelta: false, motivo: "carrera_perdida" };
 
   let reintegro: string | null = null;
-  // Modo institucional (spec institucional §6.3, gate #401): sin Mercado Pago no
-  // hay nada que devolver — el paciente nunca pagó. `pago_id` debería ser NULL
-  // siempre; el gate por modo evita que un dato sucio encole un refund
-  // imposible. En B2C, esInstitucional() es false: idéntico.
-  if (consulta.pago_id && !esInstitucional()) {
+  // ¿Hay plata que devolver? (spec institucional §6.3, gate #401) En B2C, sí
+  // cuando hay pago: la rama de refund de siempre. En la instancia, nunca —
+  // el paciente no pagó. El porqué completo está en `correspondeRefund`.
+  if (correspondeRefund(consulta.pago_id)) {
     // RESERVA EN LA COLA ANTES DE LLAMAR A MP.
     //
     // Entre "tomar la fila" y "anotar el reintegro" hay una llamada a Mercado

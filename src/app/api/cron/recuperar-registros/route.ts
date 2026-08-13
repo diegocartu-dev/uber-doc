@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarDesdeBandeja } from "@/lib/correo";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
-import { esInstitucional } from "@/lib/instancia";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import { duracionHumana } from "@/lib/crons-meta";
 
 /**
@@ -45,12 +45,10 @@ function primerNombre(fullName: unknown): string {
 }
 
 export const GET = withCron("recuperar-registros", async () => {
-  // Modo institucional: no aplica (Capa C) — el alta es provisionada, no hay
-  // registro médico abandonado que recuperar.
-  if (esInstitucional()) {
-    console.log("[recuperar-registros] modo institucional: no aplica");
-    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
-  }
+  // Modo institucional: no aplica (Capa C) — el alta es provisionada, no hay registro abandonado.
+  // En B2C devuelve null y el cron sigue igual (ver capa-c.ts).
+  const corte = cortarSiInstitucional("recuperar-registros");
+  if (corte) return corte;
 
   const admin = createAdminClient();
   const ahora = Date.now();

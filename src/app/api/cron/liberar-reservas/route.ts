@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withCron } from "@/lib/cron-guard";
-import { esInstitucional } from "@/lib/instancia";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 
 /**
  * Libera las reservas de turno VENCIDAS (hallazgo 06/08/2026).
@@ -51,11 +51,10 @@ const GRACIA_MIN = 0;
 const PAGOS_VIVOS = ["approved", "pending", "in_process", "authorized"];
 
 export const GET = withCron("liberar-reservas", async () => {
-  // Modo institucional: no aplica (Capa C) — sin pago no existe `reservado_pendiente`.
-  if (esInstitucional()) {
-    console.log("[liberar-reservas] modo institucional: no aplica");
-    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
-  }
+  // Modo institucional: no aplica (Capa C) — sin pago no existe `reservado_pendiente` que liberar.
+  // En B2C devuelve null y el cron sigue igual (ver capa-c.ts).
+  const noAplica = cortarSiInstitucional("liberar-reservas");
+  if (noAplica) return noAplica;
 
   const admin = createAdminClient();
   const corte = new Date(Date.now() - GRACIA_MIN * 60 * 1000).toISOString();

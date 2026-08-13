@@ -6,7 +6,7 @@ import { pushAlMedico } from "@/lib/push";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
-import { esInstitucional } from "@/lib/instancia";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 
 // Horas tras las cuales un refund sin saldo del médico se escala a cobertura
 // manual por CVU (sección 2.2 de la política de reembolsos).
@@ -50,10 +50,9 @@ async function handler(req: NextRequest) {
   }
 
   // Modo institucional: no aplica (Capa C) — sin Mercado Pago no hay refunds.
-  if (esInstitucional()) {
-    console.log("[reintentar-refunds] modo institucional: no aplica");
-    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
-  }
+  // En B2C devuelve null y el cron sigue igual (ver capa-c.ts).
+  const corte = cortarSiInstitucional("reintentar-refunds");
+  if (corte) return corte;
 
   const admin = createAdminClient();
   const ahora = new Date();
