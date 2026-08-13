@@ -26,6 +26,7 @@ import { resumenDeSemana, encuentrosDeSemana } from "@/lib/metering/panel";
 import { corteDePeriodo, facturacionDePeriodo, periodoDeSemana } from "@/lib/metering/facturacion";
 import ResumenSemanalVista from "./ResumenSemanal";
 import TabConsultas from "./TabConsultas";
+import Nova from "./Nova";
 import "./panel.css";
 
 type Tab = "resumen" | "consultas" | "nova";
@@ -162,15 +163,7 @@ export default async function PanelPage({
           <TabConsultas encuentros={encuentros.encuentros} total={encuentros.total} />
         )}
 
-        {tabActiva === "nova" && (
-          <section className="card">
-            <div className="vacio">
-              <b>Nova todavía no está disponible en el panel.</b>
-              Nova es el asistente que va a resolver por conversación lo que hoy se hace a mano: reprogramar la agenda
-              de un profesional que no puede atender y avisarle a cada paciente. Llega después del piloto.
-            </div>
-          </section>
-        )}
+        {tabActiva === "nova" && <Nova />}
       </main>
     </div>
   );
