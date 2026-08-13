@@ -29,6 +29,8 @@ import {
   bloqueaRutaInstitucional,
   correspondeRefund,
   permiteAutoCrearPaciente,
+  destinoSinSesion,
+  rebotePaciente,
   esInstitucional,
 } from "@/lib/instancia";
 import { cortarSiInstitucional, CRONS_CAPA_C } from "@/lib/institucional/capa-c";
@@ -47,7 +49,15 @@ const RUTAS_BLOQUEADAS = [
   "/triage",
   "/arrepentimiento",
   "/insights",
+  // Sumadas en la Etapa 3: la biblioteca personal del paciente del B2C, que la
+  // sesión del link dejaba navegable entera.
+  "/mis-consultas",
+  "/mis-datos",
+  "/documentos",
 ];
+
+/** Las rutas del paciente sin sesión, que en cada modo salen a otro lado. */
+const SIN_SESION = ["/turno/abc/acceso", "/turno/abc/espera", "/consulta/abc/sala"];
 
 beforeEach(() => {
   delete process.env.INSTITUCIONAL;
@@ -95,6 +105,17 @@ test("(d) el middleware no bloquea NINGUNA ruta por modo", () => {
   }
 });
 
+test("(e) sin sesión, el B2C sigue yendo al login de siempre", () => {
+  for (const ruta of [...SIN_SESION, "/dashboard", "/admin", "/mis-datos"]) {
+    assert.equal(destinoSinSesion(ruta), "/auth/login", ruta);
+  }
+});
+
+test("(e) los rebotes de las pantallas del B2C no cambian de destino", () => {
+  assert.equal(rebotePaciente("/dashboard", "/turno/x/acceso"), "/dashboard");
+  assert.equal(rebotePaciente("/auth/login", "/acceso/reenviar"), "/auth/login");
+});
+
 test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
   for (const valor of ["", "false", "TRUE", "True", "1", "yes", "si"]) {
     process.env.INSTITUCIONAL = valor;
@@ -103,6 +124,8 @@ test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
     assert.equal(correspondeRefund(PAGO), true);
     assert.equal(permiteAutoCrearPaciente(), true);
     assert.equal(bloqueaRutaInstitucional("/clinica"), false);
+    assert.equal(destinoSinSesion("/turno/x/acceso"), "/auth/login");
+    assert.equal(rebotePaciente("/dashboard", "/turno/x/acceso"), "/dashboard");
   }
 });
 
@@ -136,6 +159,23 @@ test("prendido: las rutas del B2C que no existen en la instancia dan 404", () =>
   for (const ruta of RUTAS_BLOQUEADAS) {
     assert.equal(bloqueaRutaInstitucional(ruta), true, ruta);
   }
+});
+
+test("prendido: el paciente sin sesión va a pedir su enlace, no a un login que no tiene", () => {
+  process.env.INSTITUCIONAL = "true";
+  for (const ruta of SIN_SESION) {
+    assert.equal(destinoSinSesion(ruta), "/acceso/reenviar", ruta);
+  }
+  // Los operadores y los admins de la instancia SÍ tienen login.
+  for (const ruta of ["/admin", "/otorgador", "/admin/padron"]) {
+    assert.equal(destinoSinSesion(ruta), "/auth/login", ruta);
+  }
+});
+
+test("prendido: los rebotes vuelven a la pantalla del paciente, no al dashboard", () => {
+  process.env.INSTITUCIONAL = "true";
+  assert.equal(rebotePaciente("/dashboard", "/turno/x/acceso"), "/turno/x/acceso");
+  assert.equal(rebotePaciente("/auth/login", "/acceso/reenviar"), "/acceso/reenviar");
 });
 
 test("prendido: bloquea la ruta exacta y sus hijas, NUNCA un prefijo parecido", () => {
