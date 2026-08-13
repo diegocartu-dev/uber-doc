@@ -191,6 +191,11 @@ export default function Nova() {
       let pacientesAvisados = 0;
       const medicosAvisados = new Set<string>();
       const fallados: string[] = [];
+      /** Qué turnos le tocaron a cada profesional, para el aviso agrupado. */
+      const turnosPorMedico = new Map<
+        string,
+        { fecha: string; hora: string; medico_id: string }[]
+      >();
       for (const item of aMover) {
         const clavePac = `pac:${item.turno_id}`;
         const claveMed = `med:${item.propuesta!.medico_id}`;
@@ -202,6 +207,10 @@ export default function Nova() {
             body: JSON.stringify({
               items: [{ turno_id: item.turno_id, turno_nuevo_id: item.propuesta!.turno_id }],
               motivo: `Reprogramación del ${burbuja.plan.fecha_label} de ${burbuja.plan.medico.nombre}`,
+              // El aviso al profesional que recibe NO sale por ítem: se junta y
+              // se manda uno solo al final, con el total real. Si no, la que
+              // recibe tres pacientes recibe tres mensajes de "1 turno".
+              agrupar_aviso_medico: true,
             }),
           });
           const data = await res.json();
@@ -227,20 +236,55 @@ export default function Nova() {
                 : "Sin WhatsApp ni mail: hay que llamarlo",
             hora: horaAhora(),
           });
-          const avisoMed = r.avisos?.medico ?? null;
-          if (avisoMed?.ok) medicosAvisados.add(item.propuesta!.medico_id);
-          pintar(claveMed, {
-            estado: avisoMed?.ok ? "enviado" : "fallado",
-            detalle: avisoMed?.ok
-              ? etiquetaCanal(avisoMed.canal)
-              : avisoMed
-                ? "No se pudo enviar el aviso"
-                : "Sin WhatsApp ni mail: hay que avisarle",
-            hora: horaAhora(),
+          // El profesional se avisa DESPUÉS, agrupado. Acá solo se anota qué
+          // turnos le tocaron, y la fila queda "enviando…" hasta el final.
+          const paraEste = turnosPorMedico.get(claveMed) ?? [];
+          paraEste.push({
+            fecha: item.propuesta!.fecha,
+            hora: item.propuesta!.hora,
+            medico_id: item.propuesta!.medico_id,
           });
+          turnosPorMedico.set(claveMed, paraEste);
+          pintar(claveMed, { estado: "enviando", detalle: "enviando…" });
         } catch {
           fallados.push(item.paciente.nombre || "un paciente");
           pintar(clavePac, { estado: "fallado", detalle: "No se pudo enviar", hora: horaAhora() });
+        }
+      }
+
+      // ── UN aviso por profesional, con el total real ──────────────────────
+      // La plantilla aprobada por Meta habla en plural ("Se agregaron N
+      // turnos") justamente para esto: la que recibe tres pacientes tiene que
+      // recibir un mensaje que diga tres, no tres mensajes que digan uno.
+      if (turnosPorMedico.size > 0) {
+        try {
+          const res = await fetch("/api/otorgador/reprogramar-masivo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              avisar_medicos: [...turnosPorMedico.values()].map((turnos) => ({
+                medico_id: turnos[0].medico_id,
+                turnos: turnos.map((t) => ({ fecha: t.fecha, hora: t.hora })),
+              })),
+            }),
+          });
+          const data = await res.json();
+          for (const a of data?.avisos_medicos ?? []) {
+            const clave = `med:${a.medico_id}`;
+            const ok = Boolean(a.aviso?.ok);
+            if (ok) medicosAvisados.add(a.medico_id);
+            pintar(clave, {
+              estado: ok ? "enviado" : "fallado",
+              detalle: ok
+                ? `${etiquetaCanal(a.aviso.canal)} (${a.cantidad} turno${a.cantidad === 1 ? "" : "s"})`
+                : a.aviso
+                  ? "No se pudo enviar el aviso"
+                  : "Sin WhatsApp ni mail: hay que avisarle",
+              hora: horaAhora(),
+            });
+          }
+        } catch {
+          // Las filas que queden sin pintar las cierra el barrido de abajo.
         }
       }
 

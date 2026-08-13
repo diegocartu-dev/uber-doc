@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { identificarOperador } from "@/lib/otorgador/auth";
+import { avisarReprogramacionAgrupadaMedico } from "@/lib/institucional/avisos";
 import { planReprogramacionMasiva, type ErrorPlan } from "@/lib/otorgador/reprogramar-masivo";
 import {
   reprogramarTurnoInstitucional,
@@ -57,6 +58,10 @@ export async function POST(req: NextRequest) {
     cerrar_dia?: { medico_id?: string; fecha?: string };
     /** Los que quedan para el call center: sin candidato o desmarcados. */
     gestion_manual?: { turno_id?: string; motivo?: string }[];
+    /** true = no avisar al profesional en cada ítem; se agrupa al final. */
+    agrupar_aviso_medico?: boolean;
+    /** El aviso agrupado: UN mensaje por profesional, con el total real. */
+    avisar_medicos?: { medico_id?: string; turnos?: { fecha?: string; hora?: string }[] }[];
   };
   try {
     body = await req.json();
@@ -77,6 +82,27 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ ok: true, dry_run: true, plan: res.plan });
+  }
+
+  // ── FASE 2c: UN aviso por profesional, con el total real ───────────────────
+  // La pantalla ejecuta de a un ítem para que el checklist se llene de verdad,
+  // así que el aviso al profesional que RECIBE se agrupa acá, al final: sin
+  // esto, la profesional que recibe tres pacientes recibía tres mensajes
+  // diciendo "se agregó 1 turno", con una plantilla que Meta aprobó redactada
+  // en plural justamente para evitarlo.
+  if (body.avisar_medicos && body.avisar_medicos.length > 0) {
+    const avisados = [];
+    for (const a of body.avisar_medicos) {
+      if (!a.medico_id || !a.turnos?.length) continue;
+      const res = await avisarReprogramacionAgrupadaMedico({
+        medicoId: a.medico_id,
+        turnos: a.turnos
+          .filter((t) => t.fecha)
+          .map((t) => ({ fecha: t.fecha as string, hora_inicio: t.hora ?? "" })),
+      });
+      avisados.push({ medico_id: a.medico_id, aviso: res, cantidad: a.turnos.length });
+    }
+    return NextResponse.json({ ok: true, avisos_medicos: avisados });
   }
 
   // ── FASE 2b: lo que queda para el call center ──────────────────────────────
@@ -150,6 +176,7 @@ export async function POST(req: NextRequest) {
       operadorId: identidad.operador.id,
       via: identidad.via,
       motivo: body.motivo,
+      agruparAvisoMedico: body.agrupar_aviso_medico,
     });
     resultados.push(
       res.ok

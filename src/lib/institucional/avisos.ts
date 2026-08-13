@@ -409,12 +409,91 @@ export async function registrarAvisosEnAsignacion(
  *
  * Nunca lanza: un aviso que falla no revierte una reprogramación ya hecha.
  */
+/**
+ * UN aviso al profesional que RECIBE turnos, con el total real adentro.
+ *
+ * ── POR QUÉ EXISTE COMO FUNCIÓN APARTE ───────────────────────────────────────
+ * La plantilla aprobada por Meta está redactada en plural ("Se agregaron N
+ * turnos") justamente para esto. Antes el "1" iba hardcodeado, con un comentario
+ * que decía "acá N siempre es 1 porque este camino reprograma de a uno; el motor
+ * masivo va a agrupar por profesional". El motor masivo llegó y no agrupaba: la
+ * pantalla dispara un POST por ítem, así que la profesional que recibe tres
+ * pacientes recibía TRES WhatsApps diciendo "se agregó 1 turno".
+ *
+ * Nunca lanza: devuelve `null` si no hay canal posible.
+ */
+export async function avisarReprogramacionAgrupadaMedico(params: {
+  medicoId: string;
+  turnos: { fecha: string; hora_inicio: string }[];
+}): Promise<ResultadoAviso | null> {
+  if (params.turnos.length === 0) return null;
+  try {
+    const config = await getConfigInstitucion();
+    const waOn = await whatsappHabilitado();
+    const base = `https://${dominioLimpio(config.dominio)}`;
+    const linkAgenda = `${base}/medico/agenda`;
+    const medico = await celularMedico(params.medicoId);
+    // Orden cronológico: la plantilla solo tiene lugar para UNA fecha y hora, y
+    // la que corresponde mostrar es la del primer turno que le llega.
+    const ordenados = [...params.turnos].sort((a, b) =>
+      a.fecha === b.fecha
+        ? (a.hora_inicio ?? "").localeCompare(b.hora_inicio ?? "")
+        : a.fecha.localeCompare(b.fecha)
+    );
+    const paraMail = ordenados.map((t) => ({
+      fechaLabel: fechaLabelAR(t.fecha),
+      hora: (t.hora_inicio ?? "").slice(0, 5),
+    }));
+
+    if (waOn && medico.celular) {
+      const sid = config.wa_plantillas?.reprogramacion_medico;
+      const ok = sid
+        ? await enviarTwilio(medico.celular, sid, {
+            "1": String(ordenados.length),
+            "2": paraMail[0].fechaLabel,
+            "3": paraMail[0].hora,
+            "4": linkAgenda,
+          })
+        : false;
+      if (ok) return { canal: "whatsapp", destino: medico.celular, ok };
+      if (medico.email) {
+        const okMail = await mailTurnoReprogramadoMedicoRecibe({
+          to: medico.email,
+          nombreMedico: primerNombre(medico.nombre),
+          turnos: paraMail,
+          linkAgenda,
+        });
+        return { canal: "mail", destino: medico.email, ok: okMail };
+      }
+      return { canal: "whatsapp", destino: medico.celular, ok };
+    }
+    if (medico.email) {
+      const ok = await mailTurnoReprogramadoMedicoRecibe({
+        to: medico.email,
+        nombreMedico: primerNombre(medico.nombre),
+        turnos: paraMail,
+        linkAgenda,
+      });
+      return { canal: "mail", destino: medico.email, ok };
+    }
+    return null;
+  } catch (err) {
+    console.error("[avisos] avisarReprogramacionAgrupadaMedico falló:", err);
+    return null;
+  }
+}
+
 export async function avisarReprogramacionTurno(
   params: DatosComunes & {
     turnoNuevo: { id: string; fecha: string; hora_inicio: string };
     turnoAnterior: { fecha: string; hora_inicio: string };
     /** El profesional que pierde el turno (null si es el mismo que lo recibe). */
     medicoAnterior: { id: string; nombre: string } | null;
+    /**
+     * true = NO avisar acá al profesional que recibe. Lo usa el motor masivo,
+     * que junta todos sus turnos y manda UN solo mensaje al final con el total.
+     */
+    agruparAvisoMedico?: boolean;
   }
 ): Promise<AvisosAsignacion> {
   const resultado: AvisosAsignacion = { paciente: null, medico: null, acceso_url: null };
@@ -517,42 +596,13 @@ export async function avisarReprogramacionTurno(
     }
 
     // ── El profesional que RECIBE el turno ──
-    const linkAgenda = `${base}/medico/agenda`;
-    const medicoRecibe = await celularMedico(params.medico.id);
-    if (waOn && medicoRecibe.celular) {
-      const sid = config.wa_plantillas?.reprogramacion_medico;
-      const ok = sid
-        ? await enviarTwilio(medicoRecibe.celular, sid, {
-            // La plantilla aprobada habla en plural ("Se agregaron N turnos"):
-            // acá N siempre es 1 porque este camino reprograma de a uno. El
-            // motor masivo (§4.6) va a agrupar por profesional y mandar UN
-            // mensaje con el total — por eso la variable existe.
-            "1": "1",
-            "2": fechaLabel,
-            "3": hora,
-            "4": linkAgenda,
-          })
-        : false;
-      resultado.medico = { canal: "whatsapp", destino: medicoRecibe.celular, ok };
-      if (!ok && medicoRecibe.email) {
-        const okMail = await mailTurnoReprogramadoMedicoRecibe({
-          to: medicoRecibe.email,
-          nombreMedico: primerNombre(medicoRecibe.nombre),
-          fechaLabel,
-          hora,
-          linkAgenda,
-        });
-        resultado.medico = { canal: "mail", destino: medicoRecibe.email, ok: okMail };
-      }
-    } else if (medicoRecibe.email) {
-      const ok = await mailTurnoReprogramadoMedicoRecibe({
-        to: medicoRecibe.email,
-        nombreMedico: primerNombre(medicoRecibe.nombre),
-        fechaLabel,
-        hora,
-        linkAgenda,
+    // En la masiva NO se avisa acá: el caller pide `agrupado` y manda UN solo
+    // mensaje al final con el total real (ver `avisarReprogramacionAgrupadaMedico`).
+    if (!params.agruparAvisoMedico) {
+      resultado.medico = await avisarReprogramacionAgrupadaMedico({
+        medicoId: params.medico.id,
+        turnos: [{ fecha: params.turnoNuevo.fecha, hora_inicio: params.turnoNuevo.hora_inicio }],
       });
-      resultado.medico = { canal: "mail", destino: medicoRecibe.email, ok };
     }
 
     // ── El profesional que PIERDE el turno ──
@@ -567,7 +617,7 @@ export async function avisarReprogramacionTurno(
           nombreMedico: primerNombre(medicoLibera.nombre),
           fechaLabel: fechaAnterior,
           hora: horaAnterior,
-          linkAgenda,
+          linkAgenda: `${base}/medico/agenda`,
         });
       }
     }
