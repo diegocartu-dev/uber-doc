@@ -68,7 +68,12 @@ export default async function PanelPage({
   if (operador.nivel !== "admin_institucion") redirect("/otorgador");
 
   const { semana, tab } = await searchParams;
-  const semanaAr = semanaPedida(semana) ?? semanaDeHoy();
+  // El tope es la semana de HOY: más adelante no hay nada que informar, y una
+  // semana que todavía no empezó se vería con todos los KPIs en 0, la tabla
+  // entera en "Sin actividad" y el chip "En curso" sobre algo que no existe.
+  const semanaHoy = semanaDeHoy();
+  const pedida = semanaPedida(semana);
+  const semanaAr = pedida && pedida <= semanaHoy ? pedida : semanaHoy;
   const tabActiva: Tab = tab === "consultas" ? "consultas" : tab === "nova" ? "nova" : "resumen";
 
   const config = await getConfigInstitucion();
@@ -149,6 +154,7 @@ export default async function PanelPage({
             facturacion={facturacion}
             periodo={periodo}
             hastaLabel={hastaLabel}
+            semanaTope={semanaHoy}
           />
         )}
 
