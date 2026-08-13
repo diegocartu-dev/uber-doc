@@ -34,6 +34,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
+import { acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
 import { revocarAccesosDe } from "@/lib/institucional/accesos";
 import {
   avisarReprogramacionTurno,
@@ -50,7 +51,8 @@ export type ErrorReprogramacion =
   | "validacion"
   | "no_encontrado"
   | "no_reprogramable" // ya empezó, ya pasó, o el slot no tiene paciente
-  | "conflicto_slot" // otro operador se llevó el horario nuevo
+  | "conflicto_slot" // otro operador se llevó el horario nuevo, o el horario ya cerró
+  | "acuerdo_completo" // R6: el que recibe ya completó su acuerdo semanal
   | "interno";
 
 export type ResultadoReprogramar =
@@ -146,6 +148,20 @@ export async function reprogramarTurnoInstitucional(params: {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
   }
 
+  // R6 SERVER-SIDE, igual que en `asignarTurno`: acuerdo semanal completo → no
+  // recibe más pacientes esa semana. Faltaba acá, y el agujero era grande: un
+  // profesional con el acuerdo completo NO podía recibir un turno por
+  // asignación pero SÍ podía recibir cinco por reprogramación — que es
+  // exactamente el día en que llegan de a varios.
+  const acuerdo = await acuerdoSemanalDelMedico(nuevo.medico_id);
+  if (acuerdo.completo) {
+    return {
+      ok: false,
+      codigo: "acuerdo_completo",
+      error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro horario.`,
+    };
+  }
+
   // ── 1. TOMAR el turno nuevo (lock optimista, igual que asignarTurno) ──
   const { data: tomado, error: errTomar } = await admin
     .from("turnos")
@@ -236,6 +252,40 @@ export async function reprogramarTurnoInstitucional(params: {
     console.error("[reprogramar] TURNO REPROGRAMADO pero auditoría NO registrada:", errAsig.message);
   } else {
     asignacionId = asig.id;
+  }
+
+  // ── 4b. La OTRA mitad del reparto: el que pierde el paciente ──────────────
+  // La fila `reprogramada` de arriba registra a quien RECIBE (+1). Sin esta,
+  // el profesional que no atendió a nadie conservaba sus asignaciones y bajaba
+  // de prioridad en la fila de equidad, mientras al que se quedó con sus ocho
+  // pacientes el contador no le movía nada — o sea que en la oferta siguiente
+  // seguía primero y se le apilaba más trabajo. La equidad invertida justo el
+  // día que más se la necesita.
+  //
+  // Va SIEMPRE, incluso cuando el que pierde y el que recibe son el mismo
+  // profesional moviéndose de horario: ahí +1 y −1 se cancelan y el neto es 0,
+  // que es lo correcto (sigue siendo un paciente, no dos).
+  const { error: errBaja } = await admin.from("asignaciones").insert({
+    operador_id: operadorId,
+    tipo: "turno",
+    recurso_id: turnoAnteriorId,
+    paciente_id: anterior.paciente_id,
+    medico_id: anterior.medico_id,
+    accion: "cancelada",
+    via,
+    detalle: {
+      por_reprogramacion: true,
+      asignacion_par: asignacionId,
+      a: { turno_id: turnoNuevoId, medico_id: nuevo.medico_id },
+      motivo: params.motivo ?? null,
+    },
+  });
+  if (errBaja) {
+    console.error(
+      "[reprogramar] TURNO REPROGRAMADO pero la BAJA del profesional anterior NO se registró:",
+      errBaja.message,
+      turnoAnteriorId
+    );
   }
 
   const nombreMedico = `${(medicoNuevo.titulo ?? "").trim()} ${(medicoNuevo.nombre_completo ?? "").trim()}`.trim();

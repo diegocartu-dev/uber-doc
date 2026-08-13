@@ -10,9 +10,10 @@
 //   1. CATEGORÍA: ci_activa (puede atender AHORA) → turno_acordado →
 //      turno_ofrecido.
 //   2. Dentro de cada categoría: asignados ASC — asignaciones de la semana AR
-//      corriente contadas sobre la tabla `asignaciones` (asignadas menos
-//      canceladas), NO un COUNT de estados de turnos: una reprogramación no
-//      debe distorsionar el reparto. Tiebreak: próximo slot más cercano.
+//      corriente contadas sobre la tabla `asignaciones` con
+//      `deltaDeAsignacion()`, NO un COUNT de estados de turnos. Una
+//      reprogramación SÍ mueve el reparto: suma al que recibe y descuenta al
+//      que pierde. Tiebreak: próximo slot más cercano.
 //   3. DEDUPLICACIÓN: cada profesional UNA vez, en su mejor categoría, con
 //      TODA su oferta adentro (slots acordado+ofrecido mezclados, etiquetados
 //      por origen).
@@ -245,9 +246,36 @@ function domingoDeSemanaAR(): string {
 const PAGINA_DB = 1000;
 
 /**
+ * Cuánto mueve el contador de equidad UNA fila de `asignaciones`.
+ *
+ * ── LA FILA REGISTRA A QUIEN RECIBE ──────────────────────────────────────────
+ * Por eso `reprogramada` suma +1 y no 0 ni −1: `reprogramarTurnoInstitucional`
+ * escribe esa fila con `medico_id` = el profesional que SE QUEDA con el
+ * paciente. Y el que lo pierde recibe su propia fila `cancelada` (−1), incluso
+ * cuando es el mismo profesional moviéndose de horario — ahí las dos se
+ * cancelan y el neto es 0, que es lo correcto: sigue siendo un paciente.
+ *
+ * ⚠ El comentario de la migración 003 ("asignadas menos canceladas/
+ * reprogramadas") describe otro reparto de filas, el que se imaginó antes de
+ * que el motor existiera. Manda esta función.
+ *
+ * ── POR QUÉ IMPORTA TANTO ────────────────────────────────────────────────────
+ * `reprogramada` valía 0. Reprogramado el día de un profesional: los que
+ * RECIBÍAN sus pacientes no movían su contador, así que seguían primeros en la
+ * fila de equidad (`asignados ASC`) y se les seguía apilando trabajo; y el que
+ * no atendió a nadie conservaba sus asignaciones y bajaba de prioridad. La
+ * equidad quedaba invertida justo el día que más se la necesita, y el "X de Y"
+ * del turnero mentía.
+ */
+export function deltaDeAsignacion(accion: string): number {
+  if (accion === "asignada" || accion === "reprogramada") return 1;
+  if (accion === "cancelada") return -1;
+  return 0; // reenvio_aviso, gestion_manual: no mueven el reparto
+}
+
+/**
  * Asignaciones de la semana AR corriente por médico, contadas sobre
- * `asignaciones`: asignadas − canceladas (las reprogramaciones ajustan cuando
- * exista ese motor — Etapa 6). Nunca negativo.
+ * `asignaciones` con `deltaDeAsignacion`. Nunca negativo.
  *
  * Lanza si la DB falla: un conteo silenciosamente vacío haría ver "0 de Y" a
  * todos y rompería tanto la equidad como el guard server-side de R6.
@@ -269,7 +297,7 @@ export async function contarAsignadosSemana(medicoIds: string[]): Promise<Map<st
       throw new Error(`No se pudo contar las asignaciones de la semana: ${error.message}`);
     }
     for (const fila of data ?? []) {
-      const delta = fila.accion === "asignada" ? 1 : fila.accion === "cancelada" ? -1 : 0;
+      const delta = deltaDeAsignacion(fila.accion);
       conteo.set(fila.medico_id, (conteo.get(fila.medico_id) ?? 0) + delta);
     }
     if (!data || data.length < PAGINA_DB) break;
