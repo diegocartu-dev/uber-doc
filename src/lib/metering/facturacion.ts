@@ -78,6 +78,31 @@ export function periodoDeHoy(ahoraMs = Date.now()): string {
   return new Date(ahoraMs - 3 * 3600_000).toISOString().slice(0, 7);
 }
 
+/**
+ * El período que le corresponde a la semana que el panel está mostrando: el mes
+ * del LUNES. Una semana a caballo de dos meses se factura donde empezó — hace
+ * falta una regla y esta es la que se lee sola en el título ("Semana del 26 de
+ * octubre al 1 de noviembre — Octubre").
+ *
+ * Existe porque la card de facturación tenía el mes de HOY clavado: el 1 de
+ * noviembre, la administración que entraba a facturar octubre veía "Noviembre —
+ * 0 consultas facturables" y un botón que bajaba un CSV vacío.
+ */
+export function periodoDeSemana(lunesAr: string): string {
+  return lunesAr.slice(0, 7);
+}
+
+/**
+ * Hasta qué día llega el conteo del período que se está mirando: hoy si el mes
+ * está en curso, el último día del mes si ya terminó. (Y el primero, si alguien
+ * llegó a un mes que todavía no empezó.)
+ */
+export function corteDePeriodo(periodo: string, hoyAr: string): string {
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  if (hoyAr < desde) return desde;
+  return hoyAr < hasta ? hoyAr : hasta;
+}
+
 /** Centavos → "$ 1.234.500" (sin decimales: los precios del contrato son enteros). */
 export function pesos(centavos: number): string {
   return new Intl.NumberFormat("es-AR", {
