@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { rebotePaciente } from "@/lib/instancia";
 import { entrarSalaEspera } from "@/app/clinica/[medicoId]/turnos/actions";
 import EsperaTurno from "./EsperaTurno";
 import DoctoLogo from "@/components/DoctoLogo";
@@ -14,7 +15,7 @@ export default async function EsperaTurnoPage({
   const { turnoId } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  if (!user) redirect(rebotePaciente("/auth/login", "/acceso/reenviar"));
 
   const { data: turno } = await supabase
     .from("turnos")
@@ -22,10 +23,13 @@ export default async function EsperaTurnoPage({
     .eq("id", turnoId)
     .single();
 
-  if (!turno) redirect("/dashboard");
+  if (!turno) redirect(rebotePaciente("/dashboard", "/acceso/reenviar"));
   const returnUrl = await getReturnUrl(turno.medico_id, turno.canal_origen, "/dashboard");
   if (turno.estado === "en_curso") redirect(`/turno/${turnoId}/sala`);
-  if (turno.estado !== "confirmado" && turno.estado !== "en_espera") redirect("/dashboard");
+  // Ídem: en la instancia esta pantalla es un paso intermedio del que hay que
+  // salir hacia la del paciente, nunca hacia el dashboard del B2C.
+  if (turno.estado !== "confirmado" && turno.estado !== "en_espera")
+    redirect(rebotePaciente("/dashboard", `/turno/${turnoId}/acceso`));
 
   // Marcar como en_espera si está confirmado
   if (turno.estado === "confirmado") {

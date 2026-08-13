@@ -13,6 +13,16 @@ const TIMEOUT_EXEMPT_SUFFIXES = [
   "/video",         // /turno/[id]/video — video turno
   "/espera",        // /turno/[id]/espera — sala de espera turno
   "/workspace",     // /medico/consulta/[id]/workspace — video médico
+  "/acceso",        // /turno/[id]/acceso — LA pantalla del paciente institucional.
+                    // Esta ruta SÍ pasa por el middleware (el matcher solo excluye
+                    // `/acceso/**`, no un `/acceso` final) y no estaba exenta: el
+                    // prefijo "/acceso" de abajo no matchea "/turno/x/acceso".
+                    // Con la cookie de actividad de una visita anterior, el
+                    // middleware ejecutaba signOut y mandaba a /auth/login la
+                    // sesión que el enlace ACABABA de mintear — un login sin
+                    // contraseña, para alguien que no tiene usuario. Escenario
+                    // ordinario: toca el link a la noche para ver de qué se trata
+                    // y lo vuelve a tocar al día siguiente para su turno.
 ];
 
 const TIMEOUT_EXEMPT_PREFIXES = [
