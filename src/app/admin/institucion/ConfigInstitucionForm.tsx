@@ -95,6 +95,10 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
     ci_ventana_fin: horaCorta(inicial?.ci_ventana_fin, "20:00"),
     slot_duracion_min: inicial?.slot_duracion_min ?? 15,
     especialidades: inicial?.especialidades ?? [],
+    ventana_entrada_min: inicial?.ventana_entrada_min ?? 10,
+    vigencia_documentos_dias: inicial?.vigencia_documentos_dias ?? 30,
+    reenvio_cooldown_minutos: inicial?.reenvio_cooldown_minutos ?? 10,
+    reenvio_max_por_dia: inicial?.reenvio_max_por_dia ?? 5,
     mail_from: inicial?.mail_from ?? "",
     wa_remitente_nombre: inicial?.wa_remitente_nombre ?? "",
     telefono_ayuda: inicial?.telefono_ayuda ?? "",
@@ -240,6 +244,29 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
                 placeholder={"Clínica Médica\nPediatría\nCardiología"}
                 {...focusRing}
               />
+            </Campo>
+          </div>
+        </section>
+
+        {/* ── EL ENLACE DEL PACIENTE ── */}
+        <section style={card}>
+          <h2 style={{ ...label, fontSize: 12, color: "#374151", marginBottom: 4 }}>Enlace del paciente</h2>
+          <p style={{ fontSize: 12, color: "#888780", marginBottom: 16 }}>
+            Cuánto vive el enlace que el paciente recibe por WhatsApp y cada cuánto puede pedir uno
+            nuevo. Los valores que están acá son la propuesta vigente; cambiarlos no requiere deploy.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <Campo titulo="Se puede entrar desde" hint="Minutos antes del turno.">
+              <input type="number" min={0} max={240} style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }} value={f.ventana_entrada_min} onChange={(e) => set("ventana_entrada_min", Number(e.target.value))} {...focusRing} />
+            </Campo>
+            <Campo titulo="Documentos disponibles" hint="Días después del turno que el enlace sigue sirviendo.">
+              <input type="number" min={0} max={3650} style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }} value={f.vigencia_documentos_dias} onChange={(e) => set("vigencia_documentos_dias", Number(e.target.value))} {...focusRing} />
+            </Campo>
+            <Campo titulo="Espera entre reenvíos" hint="Minutos. El paciente pide el enlace de nuevo desde la pantalla.">
+              <input type="number" min={0} max={1440} style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }} value={f.reenvio_cooldown_minutos} onChange={(e) => set("reenvio_cooldown_minutos", Number(e.target.value))} {...focusRing} />
+            </Campo>
+            <Campo titulo="Reenvíos por día" hint="Techo diario por paciente.">
+              <input type="number" min={1} max={100} style={{ ...inputBase, fontVariantNumeric: "tabular-nums" }} value={f.reenvio_max_por_dia} onChange={(e) => set("reenvio_max_por_dia", Number(e.target.value))} {...focusRing} />
             </Campo>
           </div>
         </section>

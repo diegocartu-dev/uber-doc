@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { permiteAutoCrearPaciente } from "@/lib/instancia";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -118,20 +119,28 @@ export async function GET(request: Request) {
       return operadorResponse;
     }
 
-    // No es médico → crear paciente si no existe
-    const { data: existente } = await admin
-      .from("pacientes")
-      .select("id")
-      .eq("user_id", data.user.id)
-      .maybeSingle();
+    // No es médico → crear paciente si no existe.
+    // En la instancia institucional el auto-create NO va (spec §5.3): el padrón
+    // es de ALTA PROVISIONADA (R17) y una sesión sin ficha de paciente es un
+    // error, no un usuario nuevo — crearla mete basura en el padrón provincial.
+    // El check de operador de arriba ya cubre al call center; esto cubre al
+    // resto (un enlace a un alta a medias, un usuario de prueba). En B2C
+    // `permiteAutoCrearPaciente()` es true: idéntico a lo de siempre.
+    if (permiteAutoCrearPaciente()) {
+      const { data: existente } = await admin
+        .from("pacientes")
+        .select("id")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
 
-    if (!existente) {
-      const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
-      await admin.from("pacientes").insert({
-        user_id: data.user.id,
-        nombre_completo: fullName,
-        email: data.user.email ?? null,
-      });
+      if (!existente) {
+        const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
+        await admin.from("pacientes").insert({
+          user_id: data.user.id,
+          nombre_completo: fullName,
+          email: data.user.email ?? null,
+        });
+      }
     }
   }
 

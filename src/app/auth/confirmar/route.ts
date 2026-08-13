@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { permiteAutoCrearPaciente } from "@/lib/instancia";
 
 // Confirmación de email / recuperación por token_hash (15/07/2026).
 //
@@ -95,19 +96,34 @@ export async function GET(request: Request) {
     return redirectConSesion(medicoRow ? "/dashboard" : "/registro-medico/continuar");
   }
 
+  // OPERADOR INSTITUCIONAL: mismo check que /auth/callback (gate #402). Un
+  // operador que confirma su mail no es médico ni admin, y sin esto caería en
+  // el auto-create de abajo. En B2C el resolver devuelve null sin tocar la DB:
+  // este bloque es un no-op idéntico al comportamiento actual.
+  const { resolverRolInstitucional, rutaOperador } = await import("@/lib/auth/rol-institucional");
+  const rolInstitucional = await resolverRolInstitucional(data.user.id);
+  if (rolInstitucional) {
+    return redirectConSesion(rutaOperador(rolInstitucional));
+  }
+
   // Paciente: crear la fila si no existe (bypass RLS con admin), como el callback.
-  const { data: existente } = await admin
-    .from("pacientes")
-    .select("id")
-    .eq("user_id", data.user.id)
-    .maybeSingle();
-  if (!existente) {
-    const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
-    await admin.from("pacientes").insert({
-      user_id: data.user.id,
-      nombre_completo: fullName,
-      email: data.user.email ?? null,
-    });
+  // En la instancia institucional el auto-create NO va (spec §5.3): el padrón es
+  // de alta provisionada y una sesión sin ficha es un error, no un onboarding.
+  // En B2C `permiteAutoCrearPaciente()` es true y esto es idéntico a lo de antes.
+  if (permiteAutoCrearPaciente()) {
+    const { data: existente } = await admin
+      .from("pacientes")
+      .select("id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+    if (!existente) {
+      const fullName = data.user.user_metadata?.full_name ?? data.user.email?.split("@")[0] ?? "";
+      await admin.from("pacientes").insert({
+        user_id: data.user.id,
+        nombre_completo: fullName,
+        email: data.user.email ?? null,
+      });
+    }
   }
 
   return redirectConSesion("/");
