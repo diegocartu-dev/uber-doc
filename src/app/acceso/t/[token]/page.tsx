@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 //
 // Por eso el GET es un INTERSTICIAL mudo: valida el token para saber qué
 // mostrar, pero no escribe NADA. La sesión se mintea en el POST del botón
-// (route hermana `entrar/`), o sea después de un gesto del usuario — que además
-// es lo que la regla iOS pide para todo lo que termina pidiendo cámara y micrófono.
+// (`/acceso/entrar`, path fijo, con el token en un campo oculto), o sea después
+// de un gesto del usuario — que además es lo que la regla iOS pide para todo lo
+// que termina pidiendo cámara y micrófono.
 //
 // El token NO se consume: cada toque mintea una sesión fresca (multi-click
 // gratis). Un link vencido/revocado/reprogramado muestra SIEMPRE el mismo
@@ -122,15 +123,12 @@ async function encabezadoDelAcceso(acceso: {
 
 export default async function AccesoLandingPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ reintento?: string }>;
 }) {
   if (!esInstitucional()) notFound();
 
   const { token } = await params;
-  const { reintento } = await searchParams;
   const config = await getConfigInstitucion();
 
   const validacion = await validarTokenAcceso(token);
@@ -156,27 +154,20 @@ export default async function AccesoLandingPage({
       {enc.profesional && <div className="pac-prof nw">{enc.profesional}</div>}
 
       {/* El botón es un submit de un form nativo: sin JavaScript de por medio,
-          funciona igual en el webview de WhatsApp que en el navegador. */}
-      <form method="POST" action={`/acceso/t/${encodeURIComponent(token)}/entrar`}>
+          funciona igual en el webview de WhatsApp que en el navegador.
+
+          El token va en un campo OCULTO y el action es un path FIJO. En el GET
+          no hay alternativa (el link es la URL), pero el POST que crea la
+          sesión no tiene por qué llevar la credencial en el path: ahí la
+          registran los logs de acceso de la plataforma, y cada redirect de
+          fallo la devolvía además en el header `Location`. */}
+      <form method="POST" action="/acceso/entrar">
+        <input type="hidden" name="t" value={token} />
         <button type="submit" className="pac-cta">
           Entrar
         </button>
       </form>
       <div className="pac-micro">Sin usuario ni contraseña. Solo tocá el botón.</div>
-
-      {reintento && (
-        <p className="pac-error">
-          No pudimos abrirte la puerta recién. Esperá un momento y volvé a tocar
-          &laquo;Entrar&raquo;.
-          {config.telefono_ayuda ? (
-            <>
-              {" "}
-              Si tu consulta es ahora, llamanos al{" "}
-              <span className="nw tnum">{config.telefono_ayuda}</span>.
-            </>
-          ) : null}
-        </p>
-      )}
     </MarcoPaciente>
   );
 }
