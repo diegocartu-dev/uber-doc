@@ -53,6 +53,7 @@ import {
   correrDias,
   diaARdeConsulta,
   cerrarSemana,
+  semanasDeLaCorrida,
   type CumplimientoProfesional,
   type PuertoCierreSemana,
 } from "@/lib/metering/bolsa";
@@ -537,8 +538,9 @@ test("semana · el cron del lunes sella la que acaba de terminar, no la que arra
 });
 
 test("barrido semanal · las candidatas van de la más VIEJA a la más nueva, y la última es la que toca hoy", () => {
-  // El orden importa: si una semana vieja quedó sin sellar, se cierra antes que
-  // la reciente (el techo por corrida recorta desde el final). Es el espejo de
+  // El orden importa: si una semana vieja quedó sin sellar, se atiende antes
+  // que la reciente — con el matiz de `semanasDeLaCorrida`, que igual le
+  // reserva un lugar a la más nueva. Es el espejo de
   // `mesesTerminadosHaciaAtras`.
   const martes = Date.parse("2026-10-20T04:00:00-03:00");
   assert.deepEqual(semanasTerminadasHaciaAtras(martes, 4), [
@@ -1093,6 +1095,41 @@ test("cierre semanal · la semana EN CURSO no se cierra ni con el padrón vacío
     /TODAVÍA NO TERMINÓ/
   );
   assert.equal(base.marcas.size, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL BARRIDO NO PUEDE DEJARLE LA CORRIDA ENTERA A LAS MÁS VIEJAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("barrido semanal · la más reciente SIEMPRE entra en la corrida", () => {
+  const pendientes = ["2026-09-07", "2026-09-14", "2026-09-21", "2026-10-12"];
+  assert.deepEqual(semanasDeLaCorrida(pendientes), ["2026-09-07", "2026-10-12"]);
+  // Y si las viejas siguen trabadas mañana, la reciente igual se toca.
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 3), [
+    "2026-09-07",
+    "2026-09-14",
+    "2026-10-12",
+  ]);
+});
+
+test("barrido semanal · con pocas pendientes se toman todas, sin duplicar la última", () => {
+  assert.deepEqual(semanasDeLaCorrida([]), []);
+  assert.deepEqual(semanasDeLaCorrida(["2026-10-12"]), ["2026-10-12"]);
+  assert.deepEqual(semanasDeLaCorrida(["2026-10-05", "2026-10-12"]), [
+    "2026-10-05",
+    "2026-10-12",
+  ]);
+});
+
+test("barrido semanal · ninguna semana se procesa dos veces en la misma corrida", () => {
+  const pendientes = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  for (const max of [1, 2, 3, 8]) {
+    const corrida = semanasDeLaCorrida(pendientes, max);
+    assert.equal(new Set(corrida).size, corrida.length, `max=${max} duplica`);
+    assert.ok(corrida.length <= max, `max=${max} se pasa del techo`);
+  }
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 1), ["a"], "con un solo lugar gana la más vieja");
+  assert.deepEqual(semanasDeLaCorrida(pendientes, 0), []);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

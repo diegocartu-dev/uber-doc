@@ -1267,6 +1267,48 @@ export async function semanasPendientesDeSellar(
   return candidatas.filter((s) => !cerradas.has(s));
 }
 
+/**
+ * Semanas que sella como mucho una corrida. Menos que el techo del cierre
+ * mensual (3) a propósito: `cerrarSemana` recalcula el cumplimiento de TODO el
+ * padrón —seis lecturas paginadas por semana— mientras que el mensual es un
+ * UPDATE y dos conteos. Techo de tiempo, no de alcance: lo que sobra se sella
+ * mañana. En régimen la lista tiene 0 o 1.
+ */
+export const SEMANAS_POR_CORRIDA = 2;
+
+/**
+ * Cuáles de las pendientes toma ESTA corrida: las más viejas primero, pero
+ * SIEMPRE con lugar reservado para la más reciente.
+ *
+ * ── EL HAMBRE DE LA MÁS NUEVA ────────────────────────────────────────────────
+ * El barrido tomaba `pendientes.slice(0, 2)`, o sea las dos más viejas. Alcanza
+ * con que dos semanas viejas se traben —una precondición que no se cumple
+ * nunca, un encuentro que jamás llega a ser terminal— para que monopolicen
+ * todas las corridas: la semana que acaba de terminar, la única que alguien va
+ * a mirar el lunes, no se toca hasta que la ventana de ocho las expulse. Seis
+ * semanas de atraso sobre lo que la institución está leyendo AHORA, con el
+ * watchdog en verde y el mail rojo hablando siempre de las mismas dos.
+ *
+ * Con la marca de la 024 el caso más común de traba (la semana sin padrón) ya
+ * no existe: esa semana se cierra y sale de la lista. Pero "se destraba solo"
+ * vale para ESA traba, no para las otras — la precondición del contador puede
+ * abortar indefinidamente por un encuentro que quedó mal, y ese caso no lo
+ * arregla ninguna marca. Reservar el último lugar para la más reciente hace que
+ * el progreso no dependa de que ninguna vieja esté rota.
+ *
+ * Con `max = 1` no hay lugar para reservar: gana la más vieja (el orden de
+ * siempre). Con 0 o menos, nada.
+ */
+export function semanasDeLaCorrida(
+  pendientes: string[],
+  max = SEMANAS_POR_CORRIDA
+): string[] {
+  if (max <= 0) return [];
+  if (pendientes.length <= max) return [...pendientes];
+  if (max === 1) return [pendientes[0]];
+  const masReciente = pendientes[pendientes.length - 1];
+  return [...pendientes.slice(0, max - 1), masReciente];
+}
 
 /** La semana AR de hoy (default del selector del panel). */
 export function semanaDeHoy(ahoraMs = Date.now()): string {

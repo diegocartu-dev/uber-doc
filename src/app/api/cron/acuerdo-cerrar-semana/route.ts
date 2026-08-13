@@ -3,6 +3,7 @@ import { withCron } from "@/lib/cron-guard";
 import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
 import {
   cerrarSemana,
+  semanasDeLaCorrida,
   semanasPendientesDeSellar,
   type ResumenCierreSemana,
 } from "@/lib/metering/bolsa";
@@ -59,6 +60,13 @@ import {
  * reintenta mañana; el 500 llega al mail de `withCron` con la semana y el motivo
  * adentro. Una semana que aborta no frena a las otras.
  *
+ * Cada corrida toma como mucho dos semanas (`semanasDeLaCorrida`): las más
+ * viejas primero, pero con el último lugar SIEMPRE reservado para la más
+ * reciente. Sin esa reserva, dos semanas viejas trabadas se quedaban con todas
+ * las corridas y la semana que la institución está por leer no se sellaba hasta
+ * que la ventana de ocho las expulsara — seis semanas de atraso, con el
+ * watchdog en verde.
+ *
  * Idempotente: si no hay ninguna semana pendiente —el caso de seis días de cada
  * siete— no toca nada.
  *
@@ -66,15 +74,6 @@ import {
  */
 
 export const maxDuration = 60;
-
-/**
- * Semanas que sella como mucho una corrida. Menos que el techo del cierre
- * mensual (3) a propósito: `cerrarSemana` recalcula el cumplimiento de TODO el
- * padrón —seis lecturas paginadas por semana— mientras que el mensual es un
- * UPDATE y dos conteos. Techo de tiempo, no de alcance: lo que sobra se sella
- * mañana. En régimen la lista tiene 0 o 1.
- */
-const MAX_POR_CORRIDA = 2;
 
 async function handler() {
   const corte = cortarSiB2C("acuerdo-cerrar-semana");
@@ -91,7 +90,11 @@ async function handler() {
     return NextResponse.json({ error: detalle }, { status: 500 });
   }
 
-  const aCerrar = pendientes.slice(0, MAX_POR_CORRIDA);
+  // Las más viejas primero, pero con el último lugar reservado para la más
+  // reciente: una semana vieja trabada no puede quedarse con toda la corrida
+  // y dejar sin sellar la que la institución está por leer. Ver
+  // `semanasDeLaCorrida`.
+  const aCerrar = semanasDeLaCorrida(pendientes);
   const cerradas: ResumenCierreSemana[] = [];
   const fallidas: { semana_ar: string; error: string }[] = [];
 
