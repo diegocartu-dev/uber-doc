@@ -46,8 +46,8 @@ import { cerrarMes, mesesPendientesDeSellar, type ResumenCierreMes } from "@/lib
  * si queda un encuentro terminal sin clasificar —o uno TODAVÍA VIVO del último
  * día— `cerrarMes` se niega. Ese mes queda en la lista y se reintenta mañana; y
  * mientras tanto el 500 llega al mail de `withCron` con el período y el motivo
- * adentro. Una foto incompleta sellada es inmutable; una foto que sale un día
- * tarde, no es nada.
+ * adentro (el mail adjunta el cuerpo JSON de la respuesta). Una foto incompleta
+ * sellada es inmutable; una foto que sale un día tarde, no es nada.
  *
  * Idempotente: si no hay ningún mes pendiente —el caso de 29 días de cada 30—
  * no toca nada y responde en dos queries.
