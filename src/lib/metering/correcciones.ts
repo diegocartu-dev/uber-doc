@@ -22,7 +22,7 @@
 // dos mitades divergieran, manda la DB.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leerTodo } from "@/lib/metering/db";
+import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import { rangoDePeriodo } from "@/lib/metering/facturacion";
 import type { Motor } from "@/lib/metering/clasificar";
 
@@ -169,25 +169,45 @@ export async function encuentrosSelladosDePeriodo(periodo: string): Promise<Encu
   );
   if (filas.length === 0) return [];
 
+  // Las dos lecturas de abajo pasan por los helpers de `db.ts` por lo mismo que
+  // la principal: descartaban el `error` y no paginaban. Si la de correcciones
+  // fallaba —o el período pasaba el tope silencioso de 1000 filas de
+  // PostgREST—, `cuenta` quedaba vacía o corta y cada fila se pintaba con
+  // `correcciones: 0`: el badge "Corregida N×" desaparecía y la pantalla
+  // afirmaba que una fila corregida estaba intacta. Exactamente lo contrario
+  // del contrato de esta función.
   const medicoIds = [...new Set(filas.map((f) => f.medico_id as string).filter(Boolean))];
   const nombres = new Map<string, string>();
-  const { data: medicos } = await admin
-    .from("medicos")
-    .select("id, nombre_completo, titulo")
-    .in("id", medicoIds);
-  for (const m of medicos ?? []) {
+  const medicos = await leerTodoEnLotes<Record<string, unknown>>(
+    "nombres de los profesionales del período",
+    medicoIds,
+    (lote, desde, hasta) =>
+      admin
+        .from("medicos")
+        .select("id, nombre_completo, titulo")
+        .in("id", lote)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
+  for (const m of medicos) {
     nombres.set(
       m.id as string,
       `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim()
     );
   }
 
-  const { data: correcciones } = await admin
-    .from("metering_correcciones")
-    .select("encuentro_id")
-    .eq("periodo", periodo);
+  const correcciones = await leerTodo<Record<string, unknown>>(
+    `correcciones de ${periodo}`,
+    (desde, hasta) =>
+      admin
+        .from("metering_correcciones")
+        .select("id, encuentro_id")
+        .eq("periodo", periodo)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+  );
   const cuenta = new Map<string, number>();
-  for (const c of correcciones ?? []) {
+  for (const c of correcciones) {
     const id = c.encuentro_id as string;
     cuenta.set(id, (cuenta.get(id) ?? 0) + 1);
   }
