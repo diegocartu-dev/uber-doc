@@ -89,12 +89,28 @@ CREATE INDEX idx_encuentros_metering_fecha_facturable
 -- guard de la lib protege del código que YA conocemos. Este trigger protege del
 -- que venga después: un backfill apurado, un /admin nuevo, una corrección "que
 -- no toca nada". Una vez que la institución recibió la factura de octubre, la
--- fila que la sostiene no se toca más — y si hay que corregirla, se corrige a
--- mano levantando el sello, deliberadamente, no de costado.
--- El ÚNICO UPDATE admitido sobre una fila sellada es levantar el sello
--- (`SET facturado_periodo = NULL`) y NADA más en el mismo UPDATE. Sin esa
--- segunda mitad, "corregir la clasificación y de paso re-sellar en otro
--- período" pasaría derecho, que es exactamente lo que el sello previene.
+-- fila que la sostiene no se toca más.
+--
+-- ⚠ ESTA FUNCIÓN LA REEMPLAZA LA 021 — LEER LAS DOS JUNTAS ────────────────────
+-- Tal como está escrita acá abajo, el ÚNICO UPDATE admitido sobre una fila
+-- sellada es LEVANTAR el sello (`SET facturado_periodo = NULL`) y nada más en
+-- el mismo UPDATE. Esa regla YA NO RIGE: la 021
+-- (`021_correcciones_periodo_sellado.sql`) hace `CREATE OR REPLACE` de esta
+-- misma función y elimina ese permiso, porque con él seguían disponibles los
+-- "tres pasos por SQL" —levantar, corregir la fila desprotegida, volver a
+-- sellar— para cualquiera con service role y sin una sola fila de auditoría.
+--
+-- En la base con las dos migraciones aplicadas (que es como se provisiona una
+-- instancia), la regla vigente es: sobre una fila sellada NO pasa ningún
+-- UPDATE, incluido el que solo levanta el sello. La única puerta es
+-- `corregir_encuentro_sellado()` — superadministrador de Docto, motivo
+-- obligatorio y constancia en `metering_correcciones` escrita en la MISMA
+-- transacción (R33). El mensaje de error de acá abajo ("primero levantá el
+-- sello…") lo reescribe la 021 por el mismo motivo.
+--
+-- Esto queda escrito y no borrado a propósito: el archivo es el registro de qué
+-- hacía la base en su momento, y quien lo lea suelto tiene que enterarse acá de
+-- que la regla cambió, no descubrirlo cuando el UPDATE rebote.
 CREATE OR REPLACE FUNCTION encuentros_metering_sellado_inmutable()
 RETURNS TRIGGER AS $$
 DECLARE
