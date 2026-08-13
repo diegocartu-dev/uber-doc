@@ -33,6 +33,7 @@
 // funciones puras — la parte que habla con Supabase es la cáscara.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getConfigInstitucion } from "@/lib/institucional/config";
 import { fechaARdeISO, lunesDeSemanaAR } from "@/lib/insights/fechas";
 import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 
@@ -282,6 +283,8 @@ export interface FilaMetering {
   segundos_ambos_en_sala: number;
   intervalos: { desde: string; hasta: string }[];
   documentos_emitidos: number;
+  /** Precio por consulta CONGELADO en la fila (ver la 014: la factura de un mes cerrado no se reescribe). */
+  precio_centavos: number;
   clasificacion: Clasificacion;
   clasificacion_origen: "job";
   clasificado_at: string;
@@ -349,6 +352,12 @@ export function componerFila(params: {
   eventos: EventoPresencia[];
   documentosEmitidos: number;
   especialidad: string | null;
+  /**
+   * Precio al que se factura ESTE encuentro. Para una fila nueva es el vigente;
+   * para una que ya existe, el que ya tenía — la reclasificación por un webhook
+   * tardío no puede cambiarle el precio a un encuentro de un mes anterior.
+   */
+  precioCentavos: number;
   ahoraISO?: string;
 }): FilaMetering | null {
   const { encuentro } = params;
@@ -376,6 +385,7 @@ export function componerFila(params: {
     segundos_ambos_en_sala: reloj.segundosAmbosEnSala,
     intervalos: reloj.intervalos,
     documentos_emitidos: params.documentosEmitidos,
+    precio_centavos: params.precioCentavos,
     clasificacion,
     clasificacion_origen: "job",
     clasificado_at: params.ahoraISO ?? new Date().toISOString(),
@@ -543,7 +553,9 @@ export async function correrMeteringClasificar(opciones?: {
       (lote, desde, hasta) =>
         admin
           .from("encuentros_metering")
-          .select("tipo, recurso_id, clasificacion_origen, facturado_periodo, clasificado_at")
+          .select(
+            "tipo, recurso_id, clasificacion_origen, facturado_periodo, clasificado_at, precio_centavos"
+          )
           .in("recurso_id", lote)
           .order("id", { ascending: true })
           .range(desde, hasta)
@@ -555,8 +567,11 @@ export async function correrMeteringClasificar(opciones?: {
   }
   const intocables = new Set<string>();
   const clasificadoAt = new Map<string, number>();
+  /** Precio ya congelado en la fila: una reclasificación no lo puede mover. */
+  const precioPrevio = new Map<string, number>();
   for (const f of existentes) {
     const clave = `${f.tipo}|${f.recurso_id}`;
+    if (typeof f.precio_centavos === "number") precioPrevio.set(clave, f.precio_centavos);
     const motivo = motivoIntocable(f);
     if (motivo === "sellada") {
       intocables.add(clave);
@@ -695,6 +710,9 @@ export async function correrMeteringClasificar(opciones?: {
 
   // ── 5) Componer y upsertear ────────────────────────────────────────────────
   const ahoraISO = new Date(ahoraMs).toISOString();
+  // El precio vigente se lee UNA vez por corrida y solo lo estrenan las filas
+  // nuevas: las que ya existían conservan el suyo (ver la 014).
+  const precioVigente = Number((await getConfigInstitucion()).precio_consulta_centavos);
   const filas: FilaMetering[] = [];
   for (const encuentro of aClasificar) {
     const clave = `${encuentro.tipo}|${encuentro.id}`;
@@ -703,6 +721,7 @@ export async function correrMeteringClasificar(opciones?: {
       eventos: eventosPorRecurso.get(clave) ?? [],
       documentosEmitidos: docsPorRecurso.get(clave) ?? 0,
       especialidad: especialidadPorMedico.get(encuentro.medico_id) ?? null,
+      precioCentavos: precioPrevio.get(clave) ?? precioVigente,
       ahoraISO,
     });
     if (!fila) {

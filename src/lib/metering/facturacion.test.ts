@@ -24,6 +24,7 @@ const facturacion = (): Facturacion => ({
   consultas: 2,
   precio_centavos: 1_500_000,
   total_centavos: 3_000_000,
+  total_estimado: false,
   lineas: [
     {
       fecha_ar: "2026-10-20",
@@ -92,6 +93,20 @@ test("CSV · el total coincide con las líneas y va al final", () => {
   assert.equal(total[0], "TOTAL");
   assert.equal(total[7], "2"); // consultas
   assert.equal(total[8], "30000.00"); // 2 × $15.000
+});
+
+test("CSV · cada línea lleva SU precio, aunque el del config haya cambiado después", () => {
+  // El caso: octubre se facturó a $15.000 y en enero se actualizó el precio.
+  // El CSV de octubre tiene que seguir diciendo lo mismo, línea por línea y en
+  // el total — si no, el papel que respalda una factura ya emitida deja de ser
+  // reproducible.
+  const f = facturacion();
+  f.lineas[1].precio_centavos = 2_000_000; // esta consulta se facturó más cara
+  f.total_centavos = f.lineas.reduce((s, l) => s + l.precio_centavos, 0);
+  const filas = facturacionACSV(f).trim().split("\r\n");
+  assert.equal(filas[1].split(";")[8], "15000.00");
+  assert.equal(filas[2].split(";")[8], "20000.00");
+  assert.equal(filas[filas.length - 1].split(";")[8], "35000.00");
 });
 
 test("CSV · arranca con BOM (el Excel en español abre bien los acentos)", () => {

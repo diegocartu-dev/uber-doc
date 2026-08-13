@@ -52,6 +52,8 @@ import {
 
 const LUNES = "2026-10-19"; // lunes AR
 const DURACION_SLOT_MIN = 15;
+/** Precio por consulta del acuerdo, en centavos ($15.000). Viaja en cada fila. */
+const PRECIO_CONSULTA_CENTAVOS = 1_500_000;
 
 /** Instante AR de una hora de un día de la semana del fixture. */
 function instante(diaOffset: number, hhmm: string, segundos = 0): string {
@@ -185,6 +187,7 @@ const filas = encuentros.map((f) => {
     eventos: f.eventos,
     documentosEmitidos: f.documentos,
     especialidad: "Clínica Médica",
+    precioCentavos: PRECIO_CONSULTA_CENTAVOS,
   });
   assert.ok(fila, `el encuentro ${f.encuentro.id} tiene que producir fila`);
   return fila;
@@ -230,6 +233,18 @@ test("mock 4 · el KPI 'sin asignar' se calcula contra la OFERTA de slots, no co
   // sería preguntarle a la factura por lo que no se hizo.
   const slotEquivalentes = 120;
   assert.equal(slotEquivalentes - filas.length, 22);
+});
+
+test("mock 4 · el precio viaja EN la fila (la factura de un mes cerrado no se reescribe)", () => {
+  // El precio vive en el config y cambia. Si la factura se calculara con el
+  // vigente, el CSV de octubre bajado en enero diría otro total con las mismas
+  // líneas. Por eso cada encuentro se lleva el suyo puesto.
+  for (const f of filas) assert.equal(f.precio_centavos, PRECIO_CONSULTA_CENTAVOS);
+  const facturables = filas.filter((f) => f.clasificacion === "facturable");
+  assert.equal(
+    facturables.reduce((s, f) => s + f.precio_centavos, 0),
+    87 * PRECIO_CONSULTA_CENTAVOS
+  );
 });
 
 test("mock 4 · en el contador no existe ningún concepto de Mercado Pago", () => {
@@ -621,6 +636,7 @@ test("borde · un canal_origen desconocido NO produce fila (no se inventa un mot
     eventos: [],
     documentosEmitidos: 0,
     especialidad: null,
+    precioCentavos: PRECIO_CONSULTA_CENTAVOS,
   });
   assert.equal(fila, null);
 });
@@ -640,6 +656,7 @@ test("la semana AR del encuentro es la del lunes 19, también para el domingo 25
     eventos: [],
     documentosEmitidos: 1,
     especialidad: null,
+    precioCentavos: PRECIO_CONSULTA_CENTAVOS,
   });
   assert.ok(domingo);
   assert.equal(domingo.semana_ar, LUNES);

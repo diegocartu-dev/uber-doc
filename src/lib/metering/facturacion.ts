@@ -36,8 +36,15 @@ export interface LineaFacturacion {
 export interface Facturacion {
   periodo: string; // "AAAA-MM"
   consultas: number;
+  /** Precio VIGENTE hoy. Referencia, no la base del total: cada línea trae el suyo. */
   precio_centavos: number;
   total_centavos: number;
+  /**
+   * `true` = el total se estimó multiplicando por el precio vigente (modo KPI,
+   * que no trae filas). El total que vale, el del CSV, suma el precio congelado
+   * de cada línea.
+   */
+  total_estimado: boolean;
   lineas: LineaFacturacion[];
 }
 
@@ -121,6 +128,7 @@ export async function facturacionDePeriodo(
       consultas,
       precio_centavos: precio,
       total_centavos: consultas * precio,
+      total_estimado: true,
       lineas: [],
     };
   }
@@ -131,7 +139,7 @@ export async function facturacionDePeriodo(
       admin
         .from("encuentros_metering")
         .select(
-          "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos"
+          "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos, precio_centavos"
         )
         .eq("clasificacion", "facturable")
         .gte("fecha_ar", desde)
@@ -143,11 +151,16 @@ export async function facturacionDePeriodo(
         .range(dsd, hst)
   );
   const consultas = filas.length;
+  // El total sale de los precios CONGELADOS en las filas, nunca del vigente:
+  // así el CSV de un mes ya facturado sigue dando el mismo número cuando el
+  // precio suba. `precio_centavos` de arriba queda solo como referencia del
+  // precio de hoy.
   const base = {
     periodo,
     consultas,
     precio_centavos: precio,
-    total_centavos: consultas * precio,
+    total_centavos: filas.reduce((s, f) => s + precioDeFila(f, precio), 0),
+    total_estimado: false,
   };
 
   // Nombre del profesional para el detalle: una query, no una por línea.
@@ -182,9 +195,49 @@ export async function facturacionDePeriodo(
       profesional: nombres.get(f.medico_id as string) ?? "",
       segundos_ambos_en_sala: Number(f.segundos_ambos_en_sala ?? 0),
       documentos_emitidos: Number(f.documentos_emitidos ?? 0),
-      precio_centavos: precio,
+      precio_centavos: precioDeFila(f, precio),
     })),
   };
+}
+
+/** Precio congelado de la fila; si por lo que sea no viajó, el vigente. */
+function precioDeFila(fila: Record<string, unknown>, vigente: number): number {
+  const guardado = Number(fila.precio_centavos);
+  return Number.isFinite(guardado) && guardado > 0 ? guardado : vigente;
+}
+
+/**
+ * SELLA el período: marca `facturado_periodo` en las filas facturables que
+ * todavía no lo tienen. Devuelve cuántas selló.
+ *
+ * ── QUÉ CONGELA Y QUÉ NO ─────────────────────────────────────────────────────
+ * A partir del sello, esas filas son inmutables por el trigger de la 014: ni el
+ * job ni un backfill ni un /admin nuevo pueden cambiarles la clasificación o el
+ * reloj. Lo que NO hace es cerrar el período: si un encuentro de octubre
+ * aparece recién en noviembre (un webhook muy tardío), se inserta y se factura
+ * — insertar no está bloqueado, y esconder una atención que ocurrió sería peor
+ * que sumarla tarde.
+ *
+ * Sin esta función, toda la maquinaria de inmutabilidad de la 014 estaba
+ * construida y desconectada: NADIE escribía `facturado_periodo`, así que el
+ * trigger no llegaba a dispararse nunca y toda fila seguía siendo reescribible
+ * por el job cada 10 minutos, indefinidamente.
+ *
+ * `.is('facturado_periodo', null)` es importante: sin eso el UPDATE tocaría las
+ * filas ya selladas y el trigger, correctamente, lo rechazaría entero.
+ */
+export async function sellarPeriodo(periodo: string): Promise<number> {
+  const admin = createAdminClient();
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  const { count, error } = await admin
+    .from("encuentros_metering")
+    .update({ facturado_periodo: periodo }, { count: "exact" })
+    .eq("clasificacion", "facturable")
+    .gte("fecha_ar", desde)
+    .lte("fecha_ar", hasta)
+    .is("facturado_periodo", null);
+  if (error) throw new Error(`No se pudo sellar el período ${periodo}: ${error.message}`);
+  return count ?? 0;
 }
 
 /** Escapa un valor para CSV (comillas dobles, comas y saltos de línea). */

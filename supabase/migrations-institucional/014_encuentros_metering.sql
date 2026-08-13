@@ -50,6 +50,17 @@ CREATE TABLE encuentros_metering (
   -- ── Documentos emitidos (count sobre `documentos`) ─────────────────────────
   documentos_emitidos INT NOT NULL DEFAULT 0,
 
+  -- ── El precio, CONGELADO en la fila ────────────────────────────────────────
+  -- El precio por consulta vive en `institucion_config` y cambia (en Argentina
+  -- eso pasa, no es hipótesis). Si la factura se calculara con el precio
+  -- VIGENTE, el CSV de octubre bajado en enero diría otro total con las mismas
+  -- líneas: el papel que respalda una factura ya emitida dejaría de ser
+  -- reproducible. Por eso el precio viaja con el encuentro, se escribe UNA vez
+  -- (la primera clasificación) y las reclasificaciones posteriores lo arrastran
+  -- tal cual. Sin default: el que inserta una fila decide a qué precio se
+  -- factura, siempre y explícitamente.
+  precio_centavos INT NOT NULL,
+
   -- ── Clasificación contractual (R11-R12) ────────────────────────────────────
   clasificacion TEXT NOT NULL CHECK (clasificacion IN
     ('facturable','no_facturable_corta','ausente_paciente','ausente_profesional','falla_tecnica')),
