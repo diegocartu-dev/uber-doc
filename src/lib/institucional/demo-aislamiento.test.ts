@@ -121,3 +121,48 @@ test("el clasificador escribe la marca de demostración en la fila del contador"
     "la fila del contador dejó de llevar la marca: la facturación no la puede filtrar"
   );
 });
+
+test('"limpiar reunión" nunca borra por médico a secas: exige la marca de demostración', () => {
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  // La recolección tiene que TRAER la marca y decidir con ella. Si vuelve a
+  // seleccionar solo `id`, no hay forma de distinguir el turno de un paciente
+  // real asignado por error al participante — y se borra con su historia.
+  for (const tabla of ["turnos", "consultas"]) {
+    for (const q of queriesDe(codigo, tabla).filter((x) => x.includes(".select("))) {
+      assert.match(
+        q,
+        /\.select\("id, es_demo"\)/,
+        `la recolección de ${tabla} de la limpieza dejó de leer es_demo`
+      );
+    }
+  }
+  assert.match(
+    codigo,
+    /if \(f\.es_demo !== true\)/,
+    "la limpieza dejó de excluir los encuentros sin marca de demostración"
+  );
+});
+
+test("la limpieza no intenta borrar evidencia de firma", () => {
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  for (const tabla of ["recetas", "firma_logs", "otp_firma", "medico_claves"]) {
+    assert.equal(
+      queriesDe(codigo, tabla).length,
+      0,
+      `la limpieza volvió a tocar ${tabla}: tiene trigger anti-DELETE y la operación entera falla`
+    );
+  }
+});
+
+test("la reunión no se marca como cerrada si quedó algo por reintentar", () => {
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  const i = codigo.indexOf("cerrada_at: new Date().toISOString()");
+  assert.ok(i > 0, "cambió la forma del cierre de la reunión: revisá este test");
+  const antes = codigo.slice(Math.max(0, i - 400), i);
+  assert.match(
+    antes,
+    /if \(problemas\.length === 0\)/,
+    "volvió a cerrarse la reunión con problemas abiertos: la pantalla esconde el botón " +
+      "de limpiar y no queda forma de reintentar"
+  );
+});

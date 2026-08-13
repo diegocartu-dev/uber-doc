@@ -231,9 +231,13 @@ export default function DemoClient({
     setConfirmarLimpieza(false);
     startTransition(async () => {
       const res = await limpiarReunion(sesionElegida.id);
+      // Los `retenidos` se muestran en las DOS ramas: son la explicación de por
+      // qué una ficha sobrevivió (la firma del participante la retiene) y de qué
+      // se hizo con ella (quedó anonimizada). Sin ese renglón, "reunión limpia"
+      // y una fila viva en la base se contradicen sin que nadie lo sepa.
+      setProblemas([...(res.problemas ?? []), ...(res.retenidos ?? [])]);
       if (!res.ok) {
         setError(res.error ?? "No se pudo limpiar la reunión.");
-        setProblemas(res.problemas ?? []);
       } else {
         setAviso(`Reunión limpia: se borraron ${res.participantes ?? 0} participantes y todo lo que crearon.`);
       }

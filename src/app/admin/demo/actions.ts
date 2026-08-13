@@ -196,9 +196,14 @@ export async function enviarPorWhatsApp(participanteId: string): Promise<Respues
 
 // ─── Limpiar ─────────────────────────────────────────────────────────────────
 
-export async function limpiarReunion(
-  sesionId: string
-): Promise<{ ok: boolean; error?: string; problemas?: string[]; participantes?: number }> {
+export async function limpiarReunion(sesionId: string): Promise<{
+  ok: boolean;
+  error?: string;
+  problemas?: string[];
+  /** Lo que la evidencia de firma retuvo y quedó anonimizado. No es una falla. */
+  retenidos?: string[];
+  participantes?: number;
+}> {
   const uid = await guardAdminInstitucionalDocto();
   if (!uid) return { ok: false, error: "No autorizado" };
 
@@ -207,12 +212,15 @@ export async function limpiarReunion(
   if (!res.ok) {
     return {
       ok: false,
-      error: "Quedaron cosas sin borrar. Están detalladas abajo: avisá antes de la próxima reunión.",
+      error:
+        "Quedaron cosas sin borrar y la reunión NO se cerró: el botón sigue disponible para " +
+        "reintentar. El detalle está abajo.",
       problemas: res.problemas,
+      retenidos: res.retenidos,
       participantes: res.participantes,
     };
   }
-  return { ok: true, participantes: res.participantes };
+  return { ok: true, participantes: res.participantes, retenidos: res.retenidos };
 }
 
 // ─── El escenario ────────────────────────────────────────────────────────────

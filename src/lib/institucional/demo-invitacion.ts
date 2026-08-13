@@ -266,12 +266,66 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
 
 // ─── Limpiar la reunión ──────────────────────────────────────────────────────
 
+/**
+ * Lo que la base NO deja borrar, por diseño y con service role incluido.
+ *
+ * `recetas`, `firma_logs`, `otp_firma` y `medico_claves` tienen trigger
+ * anti-DELETE desde la auditoría de firma (20260522, reforzado en 20260807):
+ * son evidencia criptográfica de no-repudio con retención de 10 años, y un
+ * DELETE ahí levanta excepción. La limpieza de la reunión NI LO INTENTA — y no
+ * porque falle, sino porque intentarlo sería pedirle a la base que rompa una
+ * garantía que existe para el caso en que un juez pregunte quién firmó qué.
+ *
+ * La consecuencia es la que manda el diseño de abajo: si el participante firmó
+ * un documento —que es exactamente lo que muestra la Escena 4— su ficha de
+ * `medicos` NO se puede borrar, porque `medico_claves.medico_id` y
+ * `firma_logs.medico_id` la sostienen. Para eso está la anonimización.
+ */
+const APPEND_ONLY = ["recetas", "firma_logs", "otp_firma", "medico_claves"] as const;
+
+/** Postgres: violación de FK. Algo que no se puede borrar está reteniendo la fila. */
+const FK_VIOLATION = "23503";
+
+/**
+ * Cinturón: ninguna tabla de evidencia entra a un paso de borrado.
+ *
+ * El tirante es que no están en las listas. Este es el cinturón, y existe porque
+ * la lista de tablas a borrar es lo más fácil de ampliar de este archivo: el día
+ * que alguien sume `recetas` "para que la limpieza quede completa", el DELETE
+ * levanta excepción, la limpieza se reporta fallada, y el que la corre en una
+ * sala de reuniones no tiene forma de entender por qué.
+ */
+function borrable(tabla: string, problemas: string[]): boolean {
+  if (!(APPEND_ONLY as readonly string[]).includes(tabla)) return true;
+  problemas.push(
+    `${tabla} es evidencia de firma (append-only): no se borra. Sacala de la lista de la limpieza.`
+  );
+  return false;
+}
+
 export interface ResultadoLimpieza {
   ok: boolean;
-  /** Qué NO se pudo borrar, con su motivo. Vacío = quedó limpio de verdad. */
+  /**
+   * Lo que falló INESPERADAMENTE y hay que reintentar. Mientras haya algo acá,
+   * la reunión NO se marca como cerrada: el botón "Limpiar reunión" sigue vivo
+   * en la pantalla y se puede volver a correr.
+   */
   problemas: string[];
+  /**
+   * Lo que la base retuvo POR DISEÑO (evidencia de firma) y quedó ANONIMIZADO
+   * en vez de borrado. No es una falla: es el único final posible cuando el
+   * participante firmó algo, y cumple la promesa que importa — el nombre y el
+   * celular de esa persona ya no están en la base de la provincia.
+   */
+  retenidos: string[];
   participantes: number;
 }
+
+/** Texto con el que se reemplaza el nombre de una persona real. */
+const NOMBRE_ANONIMO = {
+  profesional: "Participante de demostración",
+  paciente: "Paciente de demostración",
+} as const;
 
 /**
  * Borra todo lo que la reunión creó, y nada más.
@@ -282,19 +336,45 @@ export interface ResultadoLimpieza {
  * orden inverso al de creación, tabla por tabla y por id — y lo que no se pudo
  * borrar se REPORTA en vez de quedar en silencio.
  *
+ * ── EL ALCANCE SALE DE LA MARCA, NO DE UNA INFERENCIA ────────────────────────
+ * Los encuentros se recolectan por `es_demo = true`, que es LA MISMA marca que
+ * decide si algo se factura. Antes se juntaban por `medico_id` a secas, o sea
+ * asumiendo que "todo lo que tocó un profesional de demo es de la demo". Esa
+ * asunción no la garantiza nada: con un solo paciente real asignado por error al
+ * participante, esta función borraba de forma irreversible el turno, la
+ * evolución y la receta de una persona real del padrón — y con éxito, o sea sin
+ * aparecer en `problemas`.
+ *
+ * Si aparece un encuentro del profesional de demo SIN la marca, no se toca y se
+ * reporta: es el síntoma de que alguien real se le asignó.
+ *
+ * ── LO QUE NO SE PUEDE BORRAR SE ANONIMIZA ───────────────────────────────────
+ * Ver `APPEND_ONLY`. Cuando la evidencia de firma retiene una ficha, la fila
+ * sobrevive pero SIN datos de la persona: nombre de utilería, sin celular, sin
+ * DNI. `demo_sesion_id` se conserva a propósito — es lo que la mantiene fuera de
+ * la oferta del call center y del padrón del panel, para siempre.
+ *
  * La fila de `demo_sesiones` sobrevive, marcada como cerrada: queda el registro
- * de que la reunión ocurrió, sin un solo dato personal adentro (el nombre y el
- * celular se van con los participantes).
+ * de que la reunión ocurrió, sin un solo dato personal adentro.
  */
 export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimpieza> {
   if (!esInstitucional()) {
-    return { ok: false, problemas: ["El modo demo solo existe en la instancia institucional."], participantes: 0 };
+    return {
+      ok: false,
+      problemas: ["El modo demo solo existe en la instancia institucional."],
+      retenidos: [],
+      participantes: 0,
+    };
   }
 
   const admin = createAdminClient();
   const problemas: string[] = [];
-  const anotar = (que: string, error: { message: string } | null) => {
-    if (error) problemas.push(`${que}: ${error.message}`);
+  const retenidos: string[] = [];
+  /** Anota un fallo separando "hay que reintentar" de "la evidencia lo retiene". */
+  const anotar = (que: string, error: { message: string; code?: string } | null) => {
+    if (!error) return;
+    if (error.code === FK_VIOLATION) retenidos.push(`${que}: lo retiene evidencia de firma`);
+    else problemas.push(`${que}: ${error.message}`);
   };
 
   const { data: participantes } = await admin
@@ -337,32 +417,51 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   for (const medicoId of medicoIds) await revocarAccesosDeSujeto({ medicoId });
   for (const pacienteId of pacienteIds) await revocarAccesosDeSujeto({ pacienteId });
 
-  // 1. Los encuentros de la reunión (de acá salen casi todas las dependencias).
+  // 1. Los encuentros DE LA REUNIÓN. `es_demo` y nada más: ver el encabezado.
   const turnoIds: string[] = [];
   const consultaIds: string[] = [];
+  /** Encuentros del profesional de demo que NO llevan la marca: no se tocan. */
+  let ajenos = 0;
+  const sumar = (destino: string[], filasEncontradas: { id: string; es_demo?: boolean }[]) => {
+    for (const f of filasEncontradas) {
+      if (f.es_demo !== true) {
+        ajenos++;
+        continue;
+      }
+      if (!destino.includes(f.id)) destino.push(f.id);
+    }
+  };
   if (medicoIds.length > 0) {
-    const { data: t } = await admin.from("turnos").select("id").in("medico_id", medicoIds);
-    turnoIds.push(...(t ?? []).map((f) => f.id as string));
-    const { data: c } = await admin.from("consultas").select("id").in("medico_id", medicoIds);
-    consultaIds.push(...(c ?? []).map((f) => f.id as string));
+    const { data: t } = await admin.from("turnos").select("id, es_demo").in("medico_id", medicoIds);
+    sumar(turnoIds, (t ?? []) as { id: string; es_demo?: boolean }[]);
+    const { data: c } = await admin.from("consultas").select("id, es_demo").in("medico_id", medicoIds);
+    sumar(consultaIds, (c ?? []) as { id: string; es_demo?: boolean }[]);
   }
   if (pacienteIds.length > 0) {
-    const { data: t } = await admin.from("turnos").select("id").in("paciente_id", pacienteIds);
-    for (const f of t ?? []) if (!turnoIds.includes(f.id as string)) turnoIds.push(f.id as string);
+    const { data: t } = await admin.from("turnos").select("id, es_demo").in("paciente_id", pacienteIds);
+    sumar(turnoIds, (t ?? []) as { id: string; es_demo?: boolean }[]);
   }
   if (userIds.length > 0) {
-    const { data: c } = await admin.from("consultas").select("id").in("paciente_id", userIds);
-    for (const f of c ?? []) if (!consultaIds.includes(f.id as string)) consultaIds.push(f.id as string);
+    const { data: c } = await admin.from("consultas").select("id, es_demo").in("paciente_id", userIds);
+    sumar(consultaIds, (c ?? []) as { id: string; es_demo?: boolean }[]);
+  }
+  if (ajenos > 0) {
+    // Esto no debería pasar nunca (el profesional de demo está fuera de la
+    // oferta del call center). Si pasa, la limpieza NO lo borra y lo dice: es un
+    // encuentro de alguien real, y su historia clínica no es de esta reunión.
+    problemas.push(
+      `${ajenos} encuentro(s) del profesional de la demo NO están marcados como demostración: ` +
+        `NO se borraron. Revisalos a mano antes de dar la reunión por limpia.`
+    );
   }
 
   // 2. Todo lo que cuelga de un encuentro. Se borra ANTES que el encuentro.
+  //    `recetas` NO está en esta lista: ver APPEND_ONLY.
   const porEncuentro: { tabla: string; columna: string; ids: string[] }[] = [
     { tabla: "descargas_hc", columna: "turno_id", ids: turnoIds },
     { tabla: "descargas_hc", columna: "consulta_id", ids: consultaIds },
     { tabla: "documentos", columna: "turno_id", ids: turnoIds },
     { tabla: "documentos", columna: "consulta_id", ids: consultaIds },
-    { tabla: "recetas", columna: "turno_id", ids: turnoIds },
-    { tabla: "recetas", columna: "consulta_id", ids: consultaIds },
     { tabla: "video_presencia", columna: "turno_id", ids: turnoIds },
     { tabla: "video_presencia", columna: "consulta_id", ids: consultaIds },
     { tabla: "sala_espera_entradas", columna: "turno_id", ids: turnoIds },
@@ -371,29 +470,20 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     { tabla: "asignaciones", columna: "recurso_id", ids: [...turnoIds, ...consultaIds] },
   ];
   for (const paso of porEncuentro) {
+    if (!borrable(paso.tabla, problemas)) continue;
     if (paso.ids.length === 0) continue;
     const { error } = await admin.from(paso.tabla).delete().in(paso.columna, paso.ids);
     anotar(`${paso.tabla}.${paso.columna}`, error);
   }
 
-  // 3. Los encuentros.
-  if (turnoIds.length > 0) {
-    const { error } = await admin.from("turnos").delete().in("id", turnoIds);
-    anotar("turnos", error);
-  }
-  if (consultaIds.length > 0) {
-    const { error } = await admin.from("consultas").delete().in("id", consultaIds);
-    anotar("consultas", error);
-  }
-
-  // 4. El registro de la reunión (tiene FK a accesos_link, medicos y pacientes:
+  // 3. El registro de la reunión (tiene FK a accesos_link, medicos y pacientes:
   //    se va antes que ellos). Acá se van el nombre y el celular.
   {
     const { error } = await admin.from("demo_participantes").delete().eq("sesion_id", sesionId);
     anotar("demo_participantes", error);
   }
 
-  // 5. Lo que cuelga del profesional y del paciente.
+  // 4. Lo que cuelga del profesional y del paciente.
   const porSujeto: { tabla: string; columna: string; ids: string[] }[] = [
     { tabla: "accesos_link", columna: "medico_id", ids: medicoIds },
     { tabla: "accesos_link", columna: "paciente_id", ids: pacienteIds },
@@ -402,9 +492,6 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     { tabla: "nova_mensajes", columna: "medico_id", ids: medicoIds },
     { tabla: "nova_conversaciones", columna: "medico_id", ids: medicoIds },
     { tabla: "nova_perfiles", columna: "medico_id", ids: medicoIds },
-    { tabla: "firma_logs", columna: "medico_id", ids: medicoIds },
-    { tabla: "otp_firma", columna: "medico_id", ids: medicoIds },
-    { tabla: "medico_claves", columna: "medico_id", ids: medicoIds },
     { tabla: "medico_paciente_perfil", columna: "medico_id", ids: medicoIds },
     { tabla: "notificaciones_medico", columna: "medico_id", ids: medicoIds },
     { tabla: "disponibilidad_log", columna: "medico_id", ids: medicoIds },
@@ -415,12 +502,13 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     { tabla: "encuentros_metering", columna: "medico_id", ids: medicoIds },
   ];
   for (const paso of porSujeto) {
+    if (!borrable(paso.tabla, problemas)) continue;
     if (paso.ids.length === 0) continue;
     const { error } = await admin.from(paso.tabla).delete().in(paso.columna, paso.ids);
     anotar(`${paso.tabla}.${paso.columna}`, error);
   }
 
-  // 6. Las agendas (franjas antes que modelos).
+  // 5. Las agendas (franjas antes que modelos).
   if (medicoIds.length > 0) {
     const { data: modelos } = await admin.from("agenda_modelos").select("id").in("medico_id", medicoIds);
     const modeloIds = (modelos ?? []).map((m) => m.id as string);
@@ -428,6 +516,14 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
       anotar("agenda_franjas", (await admin.from("agenda_franjas").delete().in("modelo_id", modeloIds)).error);
       anotar("agenda_modelos", (await admin.from("agenda_modelos").delete().in("id", modeloIds)).error);
     }
+  }
+
+  // 6. Los encuentros. Los que tengan receta quedan retenidos por diseño.
+  if (turnoIds.length > 0) {
+    anotar("turnos", (await admin.from("turnos").delete().in("id", turnoIds)).error);
+  }
+  if (consultaIds.length > 0) {
+    anotar("consultas", (await admin.from("consultas").delete().in("id", consultaIds)).error);
   }
 
   // 7. Las fichas.
@@ -443,14 +539,81 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   //    una casilla no entregable de un subdominio sin MX, no un dato personal.
   for (const userId of userIds) {
     const { error } = await admin.auth.admin.deleteUser(userId);
-    if (error) problemas.push(`cuenta de acceso: ${error.message}`);
+    if (error) retenidos.push(`cuenta de acceso: ${error.message}`);
   }
 
-  // 9. La reunión queda cerrada, vacía y con su fecha: el registro de que pasó.
-  anotar(
-    "demo_sesiones",
-    (await admin.from("demo_sesiones").update({ cerrada_at: new Date().toISOString() }).eq("id", sesionId)).error
-  );
+  // 9. ── LA PROMESA DEL MÓDULO ──────────────────────────────────────────────
+  //    Lo que sobrevivió pierde a la persona. Es el paso que hace verdadero el
+  //    encabezado de este archivo ("su nombre y su celular no pueden quedar
+  //    dando vueltas en la base de la provincia") en el caso más probable de
+  //    todos: el participante firmó una receta, y por eso su ficha no se puede
+  //    borrar. Corre SIEMPRE, aunque los deletes hayan dicho que sí: cuesta dos
+  //    UPDATE y cierra el caso en que uno de ellos mintió.
+  await anonimizarSobrevivientes(sesionId, retenidos, problemas);
 
-  return { ok: problemas.length === 0, problemas, participantes: filas.length };
+  // 10. La reunión queda cerrada SOLO si no quedó nada por reintentar. Con
+  //     problemas abiertos se deja sin cerrar a propósito: `cerrada_at` es lo
+  //     único que decide si la pantalla sigue mostrando el botón "Limpiar
+  //     reunión", y marcarla igual dejaba la reunión limpia en la UI y sucia en
+  //     la base, sin ninguna forma de reintentar.
+  if (problemas.length === 0) {
+    anotar(
+      "demo_sesiones",
+      (await admin.from("demo_sesiones").update({ cerrada_at: new Date().toISOString() }).eq("id", sesionId)).error
+    );
+  }
+
+  return { ok: problemas.length === 0, problemas, retenidos, participantes: filas.length };
+}
+
+/**
+ * Le saca la persona a lo que la evidencia de firma no dejó borrar.
+ *
+ * `demo_sesion_id` se conserva A PROPÓSITO: es lo que mantiene a esa ficha fuera
+ * de la oferta del call center, del padrón del panel y del chip de CI activa. Es
+ * la marca que hace que un fantasma sea inofensivo.
+ */
+async function anonimizarSobrevivientes(
+  sesionId: string,
+  retenidos: string[],
+  problemas: string[]
+): Promise<void> {
+  const admin = createAdminClient();
+
+  const { data: medicos, error: errM } = await admin
+    .from("medicos")
+    .update({
+      nombre_completo: NOMBRE_ANONIMO.profesional,
+      titulo: null,
+      celular_personal: null,
+      telefono: null,
+      disponible: false,
+    })
+    .eq("demo_sesion_id", sesionId)
+    .select("id");
+  if (errM) problemas.push(`anonimizar profesionales: ${errM.message}`);
+  else if ((medicos ?? []).length > 0) {
+    retenidos.push(
+      `${medicos!.length} ficha(s) de profesional quedaron en la base (las retiene su firma) ` +
+        `y se anonimizaron: sin nombre, sin celular y fuera de la oferta.`
+    );
+  }
+
+  const { data: pacientes, error: errP } = await admin
+    .from("pacientes")
+    .update({
+      nombre_completo: NOMBRE_ANONIMO.paciente,
+      telefono: null,
+      dni: null,
+      fecha_nacimiento: null,
+    })
+    .eq("demo_sesion_id", sesionId)
+    .select("id");
+  if (errP) problemas.push(`anonimizar pacientes: ${errP.message}`);
+  else if ((pacientes ?? []).length > 0) {
+    retenidos.push(
+      `${pacientes!.length} ficha(s) de paciente quedaron en la base y se anonimizaron: ` +
+        `sin nombre, sin celular y sin DNI.`
+    );
+  }
 }
