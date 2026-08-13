@@ -30,7 +30,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { notFound } from "next/navigation";
 import { esInstitucional } from "@/lib/instancia";
 import { verificarAdmin } from "@/lib/admin-auth";
-import { cerrarSemana, encuentrosSinClasificar, semanaASellar } from "@/lib/metering/bolsa";
+import {
+  cerrarSemana,
+  encuentrosSinClasificar,
+  semanaASellar,
+  semanaTerminada,
+} from "@/lib/metering/bolsa";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -52,10 +57,14 @@ export async function GET(req: NextRequest) {
 
   const semana = semanaValida(req.nextUrl.searchParams.get("semana")) ?? semanaASellar();
   try {
+    const termino = semanaTerminada(semana);
     const faltan = await encuentrosSinClasificar(semana);
     return NextResponse.json({
       semana_ar: semana,
-      sellable: faltan.total === 0,
+      // Una semana que no terminó NUNCA es sellable, por más que no falte nada:
+      // "no falta nada" es trivialmente cierto en una semana que no empezó.
+      sellable: termino && faltan.total === 0,
+      termino,
       faltantes: faltan,
     });
   } catch (err) {
@@ -87,6 +96,31 @@ export async function POST(req: NextRequest) {
       {
         error:
           "Falta `semana` (el LUNES de la semana a sellar, formato AAAA-MM-DD). " +
+          `La última semana terminada es ${semanaASellar()}.`,
+      },
+      { status: 422 }
+    );
+  }
+
+  // ── Y QUE HAYA TERMINADO ───────────────────────────────────────────────────
+  // `semanaValida` verifica formato y que sea lunes; media semana no es una
+  // semana, y una semana que TODAVÍA NO TERMINÓ, tampoco. La precondición de
+  // `cerrarSemana` (encuentros sin clasificar) no cubre este caso: un martes a
+  // la noche —o con un lunes futuro— da total=0 porque no hay nada vivo, y
+  // `cumplimientoDeSemana` solo cuenta lo transcurrido. Resultado: se sellaría
+  // el cumplimiento de un día y medio, o de cero, como si fuera la semana
+  // entera; y el sello es inmutable (trigger de la 015), así que corregirlo es
+  // reabrir filas a mano por SQL.
+  //
+  // Basta un typo de fecha siguiendo el runbook para facturarle a la
+  // institución el 20 % de las horas.
+  if (!semanaTerminada(semana)) {
+    return NextResponse.json(
+      {
+        semana_ar: semana,
+        error:
+          `La semana ${semana} todavía no terminó: no se puede sellar. El sello es ` +
+          `irreversible y el cumplimiento se calcula solo sobre lo transcurrido. ` +
           `La última semana terminada es ${semanaASellar()}.`,
       },
       { status: 422 }
