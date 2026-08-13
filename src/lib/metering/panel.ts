@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import type { Motor } from "@/lib/metering/clasificar";
 import {
+  aporteDelSlot,
   cumplimientoDeSemana,
   totalDeBolsa,
   diasDeSemana,
@@ -162,6 +163,11 @@ export async function resumenDeSemana(params: {
   for (const t of turnos) {
     const finMs = Date.parse(`${t.fecha}T${String(t.hora_fin).slice(0, 8)}-03:00`);
     if (!Number.isFinite(finMs) || finMs > ahoraMs) continue;
+    // Un slot que la institución bloqueó al dar de baja la agenda no es un slot
+    // "que nadie tomó": nadie lo podía tomar. Misma decisión que en la bolsa
+    // (`aporteDelSlot`), para que el mismo hueco no aparezca dos veces con dos
+    // lecturas contradictorias.
+    if (aporteDelSlot(t.estado as string) === "ignora") continue;
     if (!ESTADOS_CON_PACIENTE.has(t.estado as string)) sinAsignar++;
   }
 

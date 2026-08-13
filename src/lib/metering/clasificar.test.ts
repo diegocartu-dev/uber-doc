@@ -34,6 +34,7 @@ import {
   type EventoPresencia,
 } from "@/lib/metering/clasificar";
 import {
+  aporteDelSlot,
   calcularBolsa,
   minutosAHoras,
   badgeCumplimiento,
@@ -333,6 +334,18 @@ test("bolsa · la lectura DISPOSICIÓN-sobre-120 (100 %) está RECHAZADA", () =>
   assert.equal(minutosAHoras(disposicionSobre120), 30);
   assert.notEqual(bolsa.minutosCumplidos, disposicionSobre120);
   assert.notEqual(bolsa.porcentaje, 100);
+});
+
+test("bolsa · un slot que la institución bloqueó no suma ni descuenta", () => {
+  // `desactivarAgenda` pasa a `bloqueado` todos los slots disponibles del
+  // modelo. Ese hueco no es una hora puesta a disposición (nadie podía tomar
+  // turno) ni una ausencia del profesional (la baja no la decidió él).
+  assert.equal(aporteDelSlot("bloqueado"), "ignora");
+  assert.equal(aporteDelSlot("disponible"), "cuenta");
+  assert.equal(aporteDelSlot("completado"), "cuenta");
+  assert.equal(aporteDelSlot("cancelado_paciente"), "cuenta");
+  assert.equal(aporteDelSlot("ausente_medico"), "descuenta");
+  assert.equal(aporteDelSlot("cancelado_medico"), "descuenta");
 });
 
 test("bolsa · una CI atendida DENTRO de una franja propia ya transcurrida no suma dos veces", () => {

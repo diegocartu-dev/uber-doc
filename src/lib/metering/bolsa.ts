@@ -282,6 +282,31 @@ interface SemanaSellada {
 /** Estados de turno que DESCUENTAN de la disposición (§6.4). */
 const ESTADOS_QUE_DESCUENTAN = new Set(["ausente_medico", "cancelado_medico"]);
 
+/**
+ * Qué hace un slot con la bolsa de horas, según su estado.
+ *
+ * ── EL CASO QUE LA REGLA NO CONTEMPLABA: `bloqueado` ────────────────────────
+ * Cuando la INSTITUCIÓN da de baja una agenda (`desactivarAgenda`), todos los
+ * slots `disponible` de ese modelo pasan a `bloqueado`. La regla escrita habla
+ * de la ausencia del profesional y de las agendas que canceló ÉL; de este caso
+ * no dice nada, y por omisión el slot terminaba SUMÁNDOLE horas de disposición
+ * a alguien que ya no podía recibir turnos ahí. El mismo hueco aparecía además
+ * en el KPI "sin asignar", o sea dos veces y con dos lecturas contradictorias:
+ * "cumplió" y "nadie lo tomó".
+ *
+ * Decisión: un slot bloqueado es NEUTRO. No suma —el profesional no puso esa
+ * hora a disposición de nadie, porque la agenda estaba cerrada— y no descuenta
+ * —la baja no la decidió él—. Simplemente no existe para la bolsa.
+ *
+ * ⚠ Es una decisión de producto tomada por omisión hasta que Diego la
+ * confirme: hoy el número lo definía el silencio de la regla, ahora lo define
+ * una línea con nombre y un test.
+ */
+export function aporteDelSlot(estado: string): "cuenta" | "descuenta" | "ignora" {
+  if (estado === "bloqueado") return "ignora";
+  return ESTADOS_QUE_DESCUENTAN.has(estado) ? "descuenta" : "cuenta";
+}
+
 /** "2026-10-20" + "16:30:00" → epoch ms en AR (offset fijo -03:00). */
 function msAR(fecha: string, hora: string | null): number {
   const h = (hora ?? "00:00:00").length === 5 ? `${hora}:00` : (hora ?? "00:00:00").slice(0, 8);
@@ -419,6 +444,8 @@ export async function cumplimientoDeSemana(params: {
     const finMs = msAR(t.fecha as string, t.hora_fin as string);
     // Solo lo TRANSCURRIDO: una agenda de mañana todavía no es una hora puesta.
     if (!Number.isFinite(finMs) || finMs > ahoraMs) continue;
+    const aporte = aporteDelSlot(t.estado as string);
+    if (aporte === "ignora") continue;
     const medicoId = t.medico_id as string;
     const lista = slotsPorMedico.get(medicoId) ?? [];
     lista.push({
@@ -426,7 +453,7 @@ export async function cumplimientoDeSemana(params: {
       medicoId,
       inicioMs,
       finMs,
-      descuenta: ESTADOS_QUE_DESCUENTAN.has(t.estado as string),
+      descuenta: aporte === "descuenta",
     });
     slotsPorMedico.set(medicoId, lista);
   }
