@@ -40,8 +40,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Período inválido (formato AAAA-MM)" }, { status: 400 });
   }
 
-  const facturacion = await facturacionDePeriodo(pedido, { detalle: true });
-  const csv = facturacionACSV(facturacion);
+  // Si la lectura falla, NO se sirve un archivo: un CSV vacío (o corto) es
+  // indistinguible de un mes tranquilo, y este archivo se usa para conciliar
+  // una factura. Mejor un error que un papel que miente.
+  let csv: string;
+  try {
+    const facturacion = await facturacionDePeriodo(pedido, { detalle: true });
+    csv = facturacionACSV(facturacion);
+  } catch (err) {
+    console.error("[panel/facturacion] No se pudo armar el CSV de", pedido, err);
+    return NextResponse.json(
+      { error: "No se pudo generar el detalle del período. Probá de nuevo en un momento." },
+      { status: 500 }
+    );
+  }
 
   return new NextResponse(csv, {
     status: 200,
