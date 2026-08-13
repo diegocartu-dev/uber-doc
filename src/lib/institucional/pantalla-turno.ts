@@ -19,14 +19,28 @@
 export type PantallaTurno = "falta" | "ventana" | "espera" | "sala" | "terminado" | "inactivo";
 
 /**
+ * ESTADOS EN LOS QUE EL TURNO YA NO RECIBE A NADIE — la única lista.
+ *
  * El turno se reprogramó o se canceló: existe (o va a existir) OTRO turno con
  * su propio link. Mandar al paciente a este sería mandarlo a un lugar muerto,
  * así que la pantalla es la misma que la de un link vencido.
  *
- * `disponible` y `bloqueado` entran acá por la misma razón: son estados de un
- * slot SIN paciente — si el turno volvió ahí, este link ya no es de nadie.
+ * `disponible`, `bloqueado` y `bloqueado_sin_cobro` entran acá por la misma
+ * razón: son estados de un slot SIN paciente — si el turno volvió ahí, este
+ * link ya no es de nadie.
+ *
+ * ── POR QUÉ SE EXPORTA ───────────────────────────────────────────────────────
+ * Esta misma regla ("el link murió con el encuentro") se escribía DOS veces:
+ * acá y en `accesos.ts`, en la validación del token. Las dos copias ya
+ * divergían en el primer commit que las creó — a la de accesos.ts le faltaba
+ * `bloqueado_sin_cobro`, así que un turno en ese estado pasaba la validación,
+ * el POST hacía generateLink + verifyOtp y se creaba una sesión de verdad…
+ * para después mostrarle "este enlace ya no está activo". Botón vivo que no
+ * lleva a nada (lo que el mock prohíbe) más una credencial emitida al pedo.
+ *
+ * Es UNA sola pregunta: vive acá, y accesos.ts la importa.
  */
-const INACTIVOS = new Set([
+export const ESTADOS_TURNO_MUERTO = new Set([
   "reprogramado",
   "cancelado_paciente",
   "cancelado_medico",
@@ -35,6 +49,11 @@ const INACTIVOS = new Set([
   "bloqueado_sin_cobro",
 ]);
 
+/** ¿El turno murió y su link con él? Los dos consumidores preguntan por acá. */
+export function turnoMuerto(estado: string): boolean {
+  return ESTADOS_TURNO_MUERTO.has(estado);
+}
+
 /**
  * Terminales "el encuentro ya pasó". NO son inactivos: es justo cuando el
  * paciente vuelve al link a buscar sus documentos, que es para lo que existen
@@ -42,12 +61,20 @@ const INACTIVOS = new Set([
  */
 const TERMINADOS = new Set(["completado", "ausente_paciente", "ausente_medico"]);
 
+/**
+ * ── LA VENTANA NO CIERRA, Y ES A PROPÓSITO ───────────────────────────────────
+ * Esta función recibía además un `finMs` que calculaba el server component,
+ * pasaba, y tiraba con un `void finMs`: un parámetro muerto que hacía pensar
+ * que la puerta se cerraba al final del turno. No se cierra, y no debe: llegar
+ * tarde —o que el profesional se demore— no puede dejar al paciente afuera de
+ * su propia consulta. El que resuelve un turno abandonado es el cron de
+ * vencidos, a los ~20 min de gracia; recién ahí la pantalla cambia sola.
+ * El comentario de la migración 011 decía lo contrario y se corrigió.
+ */
 export function pantallaDelTurno(params: {
   estado: string;
   /** Instante de inicio del turno (ms). */
   inicioMs: number;
-  /** Instante de fin del turno (ms). */
-  finMs: number;
   /**
    * Instante contra el que se compara. Se puede omitir (usa el reloj): así el
    * `Date.now()` queda ACÁ y no adentro del render de un server component,
@@ -57,10 +84,10 @@ export function pantallaDelTurno(params: {
   /** `ventana_entrada_min` del config: cuántos minutos antes se abre la puerta. */
   ventanaEntradaMin: number;
 }): PantallaTurno {
-  const { estado, inicioMs, finMs, ventanaEntradaMin } = params;
+  const { estado, inicioMs, ventanaEntradaMin } = params;
   const ahoraMs = params.ahoraMs ?? Date.now();
 
-  if (INACTIVOS.has(estado)) return "inactivo";
+  if (ESTADOS_TURNO_MUERTO.has(estado)) return "inactivo";
   if (TERMINADOS.has(estado)) return "terminado";
   if (estado === "en_curso") return "sala";
   if (estado === "en_espera") return "espera";
@@ -74,7 +101,6 @@ export function pantallaDelTurno(params: {
   // `reservado_pendiente` no existe en la instancia (no hay pago que esperar) y
   // cualquier estado nuevo que aparezca no tiene por qué inventar una pantalla:
   // se trata como link que no lleva a ningún lado. Fail-safe, no adivinanza.
-  void finMs;
   return "inactivo";
 }
 

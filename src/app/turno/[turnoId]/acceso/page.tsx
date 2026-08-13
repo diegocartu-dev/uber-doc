@@ -85,7 +85,7 @@ export default async function AccesoTurnoPage({
 
   const { data: turno } = await supabase
     .from("turnos")
-    .select("id, fecha, hora_inicio, hora_fin, estado, medico_id")
+    .select("id, fecha, hora_inicio, estado, medico_id")
     .eq("id", turnoId)
     .eq("paciente_id", paciente.id)
     .maybeSingle();
@@ -102,11 +102,9 @@ export default async function AccesoTurnoPage({
     .maybeSingle();
 
   const inicioMs = instanteAR(turno.fecha, turno.hora_inicio);
-  const finMs = instanteAR(turno.fecha, turno.hora_fin ?? turno.hora_inicio);
   const pantalla = pantallaDelTurno({
     estado: turno.estado,
     inicioMs,
-    finMs,
     ventanaEntradaMin: branding.ventana_entrada_min,
   });
 
