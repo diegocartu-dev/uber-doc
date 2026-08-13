@@ -22,13 +22,41 @@
 -- ── CÓMO SE CIERRA ───────────────────────────────────────────────────────────
 -- El desbloqueo es explícito, acotado y ATADO a su rastro: el trigger de la 014
 -- deja pasar el UPDATE únicamente si la transacción trae señalada una fila de
--- `metering_correcciones` que apunta a ESE encuentro. Y la función que la
--- escribe es la misma que aplica el cambio, en la misma transacción.
+-- `metering_correcciones` que apunta a ESE encuentro Y QUE SE ESCRIBIÓ EN ESTA
+-- MISMA TRANSACCIÓN. Y la función que la escribe es la misma que aplica el
+-- cambio, en la misma transacción.
+--
+-- Son cuatro cierres, no uno, y cada uno tapa un camino distinto:
+--
+--   1. La constancia es DE UN SOLO USO (`c.txid = txid_current()`). Sin esa
+--      condición, el id de una corrección vieja quedaba como permiso permanente
+--      sobre esa fila: `SET LOCAL metering.correccion_id = '<id viejo>'` + UPDATE
+--      volvía a abrir la puerta, indefinidamente y sin escribir nada nuevo.
+--   2. El UPDATE habilitado solo puede tocar los CUATRO campos de la decisión
+--      (`clasificacion`, `clasificacion_origen`, `clasificacion_motivo`,
+--      `clasificado_at`). Antes lo único acotado era `facturado_periodo`: la
+--      misma puerta servía para cambiarle el reloj, los documentos o el precio a
+--      una fila facturada, mientras la constancia registraba solo el de→a de la
+--      clasificación. La auditoría diría una cosa y la fila, otra.
+--   3. LEVANTAR EL SELLO ya no es un camino. La 014 admitía un UPDATE que
+--      pusiera `facturado_periodo = NULL` y nada más — o sea que los "tres pasos
+--      por SQL" (levantar, corregir, volver a sellar) seguían disponibles para
+--      cualquiera con service role, sin una sola fila de auditoría. Hoy
+--      cualquier UPDATE sobre una fila sellada sin constancia de esta
+--      transacción es un RAISE, incluido ese.
+--   4. La constancia no se puede firmar con un UUID cualquiera: un trigger de
+--      INSERT sobre `metering_correcciones` exige que `admin_user_id` sea un
+--      superadministrador ACTIVO. Antes esa verificación vivía solo adentro de
+--      la RPC, así que una constancia escrita a mano podía atribuirse a
+--      cualquiera. (Se hace con trigger y no con FK a propósito: el mail se
+--      guarda desnormalizado justamente para que la auditoría sobreviva a la
+--      baja de la cuenta, y una FK impediría esa baja.)
 --
 -- Consecuencia buscada: no hay forma de corregir una fila sellada sin dejar
 -- rastro. Ni desde el código, ni desde el SQL Editor del panel de Supabase.
--- Lo más que se puede hacer es escribir primero la constancia — que es
--- exactamente lo que la regla pide.
+-- Lo más que se puede hacer es escribir primero la constancia —firmada por un
+-- superadmin activo, con motivo— y usarla en el acto, que es exactamente lo que
+-- la regla pide.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 0. LOS ÍNDICES DEL SELLO
@@ -74,7 +102,14 @@ CREATE TABLE metering_correcciones (
   valores_antes JSONB NOT NULL,
   valores_despues JSONB NOT NULL,
 
-  corregido_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  corregido_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- En QUÉ TRANSACCIÓN se escribió. Es lo que vuelve la constancia de un solo
+  -- uso: el trigger de `encuentros_metering` exige que sea la transacción en
+  -- curso, así que el id de una corrección vieja ya no vuelve a abrir la
+  -- puerta. Sin esto, una fila corregida legítimamente una vez quedaba
+  -- desbloqueable para siempre.
+  txid BIGINT NOT NULL DEFAULT txid_current()
 );
 
 CREATE INDEX idx_metering_correcciones_periodo ON metering_correcciones (periodo, corregido_at DESC);
@@ -104,6 +139,31 @@ CREATE TRIGGER trg_metering_correcciones_no_truncate
   BEFORE TRUNCATE ON metering_correcciones
   FOR EACH STATEMENT EXECUTE FUNCTION metering_no_truncate();
 
+-- Quién puede FIRMAR una constancia. La RPC ya lo verifica, pero el guard de
+-- una función es el guard de esa función: una constancia escrita a mano desde
+-- el SQL Editor podía atribuirse a cualquier UUID y después servir de permiso.
+-- Acá la firma se valida en la tabla, contra `admin_users`, y con el mismo
+-- criterio de R33: superadministrador ACTIVO.
+--
+-- No es una FK a propósito. El mail se guarda desnormalizado para que la
+-- auditoría siga diciendo quién fue aunque la cuenta se dé de baja; una FK
+-- convertiría cada corrección vieja en un candado sobre esa baja.
+CREATE OR REPLACE FUNCTION metering_correcciones_firma_valida()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM admin_users a
+     WHERE a.user_id = NEW.admin_user_id AND a.activo AND a.nivel = 'super_admin'
+  ) THEN
+    RAISE EXCEPTION 'metering_correcciones: % no es un superadministrador de Docto activo. Una corrección de un período sellado la firma una persona con nombre (R33), no un UUID cualquiera.', NEW.admin_user_id;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_metering_correcciones_firma
+  BEFORE INSERT ON metering_correcciones
+  FOR EACH ROW EXECUTE FUNCTION metering_correcciones_firma_valida();
+
 -- RLS activo SIN policies (patrón `encuentros_metering`): la lectura del
 -- historial va por service role desde el /admin interno de Docto. La
 -- institución no ve este registro desde su panel — y el profesional, menos.
@@ -114,16 +174,27 @@ ALTER TABLE metering_correcciones ENABLE ROW LEVEL SECURITY;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Se reescribe el trigger de la 014 agregándole UNA puerta: la transacción
 -- tiene que traer en `metering.correccion_id` el id de una fila de
--- `metering_correcciones` que apunte a este mismo encuentro. Ese setting lo
--- pone `corregir_encuentro_sellado()` con `set_config(..., is_local => true)`,
--- así que muere con la transacción y no se filtra a la siguiente query de la
+-- `metering_correcciones` que apunte a este mismo encuentro Y que se haya
+-- escrito en ESTA transacción. Ese setting lo pone
+-- `corregir_encuentro_sellado()` con `set_config(..., is_local => true)`, así
+-- que muere con la transacción y no se filtra a la siguiente query de la
 -- conexión.
 --
 -- Lo que la puerta NO permite, ni siquiera al superadmin:
 --   · mover `facturado_periodo` (la fila sigue perteneciendo al mes que se
 --     facturó: correr una consulta de octubre a noviembre no es corregir, es
---     rehacer dos facturas), y
+--     rehacer dos facturas),
+--   · tocar nada que no sea la decisión: el reloj, los documentos y el precio
+--     son la foto de lo que pasó, y la constancia solo registra el de→a de la
+--     clasificación,
+--   · reusar una constancia vieja (`c.txid = txid_current()`), y
 --   · borrar la fila (el trigger de DELETE de la 014 sigue intacto).
+--
+-- Y lo que se ELIMINA respecto de la 014: la rama que dejaba pasar un UPDATE
+-- que solo pusiera `facturado_periodo = NULL`. Esa rama era el bypass de tres
+-- pasos —levantar el sello, corregir la fila desprotegida, volver a sellar—
+-- que este archivo dice cerrar; existía tal cual, disponible para cualquiera
+-- con service role y sin escribir una sola fila de auditoría.
 
 CREATE OR REPLACE FUNCTION encuentros_metering_sellado_inmutable()
 RETURNS TRIGGER AS $$
@@ -145,20 +216,27 @@ BEGIN
   IF correccion IS NOT NULL
      AND EXISTS (
        SELECT 1 FROM metering_correcciones c
-        WHERE c.id = correccion AND c.encuentro_id = OLD.id
+        WHERE c.id = correccion AND c.encuentro_id = OLD.id AND c.txid = txid_current()
      ) THEN
     IF NEW.facturado_periodo IS DISTINCT FROM OLD.facturado_periodo THEN
       RAISE EXCEPTION 'encuentros_metering: la corrección de la fila % no puede cambiar el período facturado (% → %). Corregir la clasificación sí; mudar la consulta de mes, no.', OLD.id, OLD.facturado_periodo, NEW.facturado_periodo;
     END IF;
+
+    -- La puerta se abre SOLO para la decisión. Se neutralizan los cuatro campos
+    -- que la corrección puede tocar; si después de eso la fila sigue siendo
+    -- distinta, el UPDATE venía trayendo algo más de contrabando.
+    candidato := NEW;
+    candidato.clasificacion        := OLD.clasificacion;
+    candidato.clasificacion_origen := OLD.clasificacion_origen;
+    candidato.clasificacion_motivo := OLD.clasificacion_motivo;
+    candidato.clasificado_at       := OLD.clasificado_at;
+    IF candidato IS DISTINCT FROM OLD THEN
+      RAISE EXCEPTION 'encuentros_metering: la corrección de la fila % solo puede cambiar la clasificación (y su origen, motivo y fecha). El reloj, los documentos y el precio son la foto de lo que pasó, y la constancia no los registra.', OLD.id;
+    END IF;
     RETURN NEW;
   END IF;
 
-  candidato := NEW;
-  candidato.facturado_periodo := OLD.facturado_periodo;  -- neutraliza el único campo editable
-  IF NEW.facturado_periodo IS NOT NULL OR candidato IS DISTINCT FROM OLD THEN
-    RAISE EXCEPTION 'encuentros_metering: la fila % ya fue facturada en el período % — está sellada. Solo el superadministrador de Docto puede corregirla, con motivo, desde /admin/periodos (queda registrada en metering_correcciones).', OLD.id, OLD.facturado_periodo;
-  END IF;
-  RETURN NEW;
+  RAISE EXCEPTION 'encuentros_metering: la fila % ya fue facturada en el período % — está sellada, y eso incluye levantarle el sello. Solo el superadministrador de Docto puede corregirla, con motivo, desde /admin/periodos (queda registrada en metering_correcciones).', OLD.id, OLD.facturado_periodo;
 END $$ LANGUAGE plpgsql;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +297,12 @@ BEGIN
     RAISE EXCEPTION 'El encuentro % no existe.', p_encuentro_id;
   END IF;
   IF fila.facturado_periodo IS NULL THEN
-    RAISE EXCEPTION 'El encuentro % no está sellado: corregilo por el camino normal (clasificación manual). Esta puerta es solo para períodos ya facturados.', p_encuentro_id;
+    -- Una fila sin sellar es, o bien de un mes todavía abierto, o bien una que
+    -- entró al contador DESPUÉS del cierre (y por eso quedó afuera de la
+    -- factura emitida). En los dos casos sigue siendo del job: no hay nada
+    -- congelado que desbloquear, y abrir esta puerta para ella solo agregaría
+    -- una constancia sin objeto.
+    RAISE EXCEPTION 'El encuentro % no está sellado: esta puerta es solo para filas de un período ya facturado. Si es de un mes cerrado, entró después del cierre (figura marcada en /admin/periodos) y se decide a mano.', p_encuentro_id;
   END IF;
   IF fila.clasificacion = p_clasificacion THEN
     RAISE EXCEPTION 'El encuentro % ya está clasificado como %: no hay nada que corregir.', p_encuentro_id, p_clasificacion;

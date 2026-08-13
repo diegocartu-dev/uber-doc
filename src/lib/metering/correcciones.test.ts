@@ -228,13 +228,62 @@ test("021 · el UPDATE sobre una fila sellada exige su fila de auditoría", () =
   // La puerta: el trigger solo deja pasar si el setting apunta a una corrección
   // de ESE encuentro. Sin la condición del `encuentro_id`, una constancia
   // cualquiera abriría cualquier fila.
-  assert.match(SQL_021, /FROM metering_correcciones c\s*\n\s*WHERE c\.id = correccion AND c\.encuentro_id = OLD\.id/);
+  assert.match(
+    SQL_021,
+    /FROM metering_correcciones c\s*\n\s*WHERE c\.id = correccion AND c\.encuentro_id = OLD\.id AND c\.txid = txid_current\(\)/
+  );
   assert.match(SQL_021, /set_config\('metering\.correccion_id', registro\.id::text, true\)/);
   // Y el orden: la constancia se inserta ANTES de habilitar el cambio.
   assert.ok(
     SQL_021.indexOf("INSERT INTO metering_correcciones") <
       SQL_021.indexOf("set_config('metering.correccion_id', registro.id::text"),
     "primero la constancia, después el permiso"
+  );
+});
+
+test("021 · la constancia es de UN SOLO USO: no se puede reusar la de ayer", () => {
+  // Sin `c.txid = txid_current()`, el id de una corrección vieja de esa misma
+  // fila era un permiso PERMANENTE: `SET LOCAL metering.correccion_id = '<id
+  // viejo>'` + UPDATE pasaba, y no se escribía ninguna constancia nueva.
+  assert.match(SQL_021, /txid BIGINT NOT NULL DEFAULT txid_current\(\)/);
+  assert.match(SQL_021, /c\.txid = txid_current\(\)/);
+});
+
+test("021 · levantar el sello TAMPOCO es un camino", () => {
+  // La 014 dejaba pasar el UPDATE que solo ponía `facturado_periodo = NULL`:
+  // eran los tres pasos (levantar, corregir, volver a sellar) que esta
+  // migración dice cerrar, disponibles con service role y sin una sola fila de
+  // auditoría. Esa rama ya no existe.
+  assert.ok(
+    !/NEW\.facturado_periodo IS NOT NULL OR candidato IS DISTINCT FROM OLD/.test(SQL_021),
+    "la rama que permitía des-sellar sigue viva"
+  );
+  assert.match(SQL_021, /está sellada, y eso incluye levantarle el sello/);
+});
+
+test("021 · la corrección solo puede tocar la clasificación, no el reloj ni el precio", () => {
+  // La constancia registra el de→a de la clasificación y nada más. Si el mismo
+  // UPDATE pudiera cambiar `segundos_ambos_en_sala` o `precio_centavos`, la
+  // auditoría diría una cosa y la fila otra.
+  for (const campo of [
+    "candidato.clasificacion ",
+    "candidato.clasificacion_origen",
+    "candidato.clasificacion_motivo",
+    "candidato.clasificado_at",
+  ]) {
+    assert.ok(SQL_021.includes(campo), `el trigger no neutraliza ${campo.trim()}`);
+  }
+  assert.match(SQL_021, /solo puede cambiar la clasificación/);
+});
+
+test("021 · la constancia no se puede firmar con un UUID cualquiera", () => {
+  // La verificación de superadmin vivía SOLO adentro de la RPC. Una constancia
+  // escrita a mano desde el SQL Editor podía atribuirse a quien fuera y después
+  // servir de permiso.
+  assert.match(SQL_021, /BEFORE INSERT ON metering_correcciones/);
+  assert.match(
+    SQL_021,
+    /WHERE a\.user_id = NEW\.admin_user_id AND a\.activo AND a\.nivel = 'super_admin'/
   );
 });
 
