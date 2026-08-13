@@ -17,10 +17,17 @@ process.env.INSTITUCIONAL = "true";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pantallaDelTurno, abreLaPuertaMs, instanteAR } from "./pantalla-turno";
+import {
+  pantallaDelTurno,
+  abreLaPuertaMs,
+  instanteAR,
+  turnoMuerto,
+  ESTADOS_TURNO_MUERTO,
+} from "./pantalla-turno";
 import { permiteReenvio, elegirTurnoParaReenvio } from "./reenvio";
 
 const INICIO = instanteAR("2026-10-20", "17:00:00");
+/** El final del turno NO cierra la puerta; se usa solo para ubicar instantes. */
 const FIN = instanteAR("2026-10-20", "17:15:00");
 const VENTANA = 10; // minutos, el default del config
 
@@ -28,7 +35,6 @@ function pantalla(estado: string, ahoraMs: number) {
   return pantallaDelTurno({
     estado,
     inicioMs: INICIO,
-    finMs: FIN,
     ahoraMs,
     ventanaEntradaMin: VENTANA,
   });
@@ -74,6 +80,22 @@ test("F — reprogramado o cancelado: el enlace viejo no lleva a ningún lado", 
 test("F — un slot que volvió a estar libre ya no es de este paciente", () => {
   assert.equal(pantalla("disponible", INICIO), "inactivo");
   assert.equal(pantalla("bloqueado", INICIO), "inactivo");
+  // Estaba SOLO en esta lista y no en la de la validación del token: un turno
+  // así pasaba la puerta, minteaba sesión, y recién después veía el estado F.
+  assert.equal(pantalla("bloqueado_sin_cobro", INICIO), "inactivo");
+});
+
+test("una sola lista de estados muertos: la que valida el token y la que pinta", () => {
+  // `validarTokenAcceso` (accesos.ts) pregunta por `turnoMuerto`, y esta
+  // pantalla usa el mismo Set. Si alguien vuelve a escribir la regla dos veces,
+  // este test recorre las dos puntas y no deja que diverjan.
+  for (const estado of ESTADOS_TURNO_MUERTO) {
+    assert.equal(turnoMuerto(estado), true, estado);
+    assert.equal(pantalla(estado, INICIO), "inactivo", estado);
+  }
+  for (const vivo of ["confirmado", "en_espera", "en_curso", "completado"]) {
+    assert.equal(turnoMuerto(vivo), false, vivo);
+  }
 });
 
 test("un estado desconocido NO inventa pantalla: cae en 'inactivo'", () => {

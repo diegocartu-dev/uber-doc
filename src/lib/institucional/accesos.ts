@@ -18,6 +18,7 @@
 import { createHash, randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
+import { turnoMuerto } from "@/lib/institucional/pantalla-turno";
 
 const DIA_MS = 24 * 3600_000;
 
@@ -154,17 +155,17 @@ export type ResultadoValidacion =
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,200}$/;
 
 /**
- * Estados en los que el ENCUENTRO ya no puede recibir a nadie y su link muere
- * con él, aunque `expira_at` siga en el futuro (R19: "el link vive mientras
- * viva el turno"). Reprogramado y cancelado son los dos casos: en ambos existe
- * —o va a existir— otro turno con su propio link, y mandar al paciente a un
- * turno muerto es peor que decirle que el enlace no está activo.
+ * Los estados en los que el TURNO ya no recibe a nadie viven en UN solo lugar
+ * —`ESTADOS_TURNO_MUERTO` de pantalla-turno.ts— y se importan. Acá había una
+ * segunda copia de la misma regla, y ya divergía: le faltaba
+ * `bloqueado_sin_cobro`, así que un turno en ese estado pasaba la validación,
+ * se minteaba una sesión de verdad, y la pantalla del paciente le decía
+ * igual "este enlace ya no está activo". Ver el comentario de allá.
  *
  * Los terminales "el turno pasó" (completado, ausente_*) NO entran: ahí es
  * justamente cuando el paciente vuelve a buscar sus documentos, que es para lo
  * que existen los `vigencia_documentos_dias`.
  */
-const TURNO_MUERTO = new Set(["reprogramado", "cancelado_paciente", "cancelado_medico", "disponible", "bloqueado"]);
 const CONSULTA_MUERTA = new Set(["cancelada", "rechazada"]);
 
 /**
@@ -199,7 +200,7 @@ export async function validarTokenAcceso(token: string): Promise<ResultadoValida
   // Vigencia por ESTADO del encuentro, además de por fecha (R19).
   if (data.turno_id) {
     const { data: turno } = await admin.from("turnos").select("estado").eq("id", data.turno_id).maybeSingle();
-    if (!turno || TURNO_MUERTO.has(turno.estado)) return { ok: false, motivo: "encuentro_terminado" };
+    if (!turno || turnoMuerto(turno.estado)) return { ok: false, motivo: "encuentro_terminado" };
   } else if (data.consulta_id) {
     const { data: consulta } = await admin
       .from("consultas")
