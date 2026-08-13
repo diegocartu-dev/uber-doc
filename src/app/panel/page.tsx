@@ -77,9 +77,17 @@ export default async function PanelPage({
 
   // El resumen se pide siempre (los KPIs son el encabezado del panel); el
   // detalle de consultas, solo cuando esa tab está abierta.
+  // La facturación TIRA si la base falla (un cero silencioso en la plata es lo
+  // que no puede pasar). Acá se atrapa para que un blip no se lleve puesto el
+  // panel entero: la card lo dice con todas las letras y el resto sigue vivo.
   const [resumen, facturacion, encuentros] = await Promise.all([
     resumenDeSemana({ semanaAr }),
-    facturacionDePeriodo(periodo),
+    facturacionDePeriodo(periodo)
+      .then((f) => ({ consultas: f.consultas }))
+      .catch((err) => {
+        console.error("[panel] No se pudo calcular la facturación del período:", err);
+        return null;
+      }),
     tabActiva === "consultas" ? encuentrosDeSemana({ semanaAr }) : Promise.resolve([]),
   ]);
 
@@ -129,7 +137,7 @@ export default async function PanelPage({
           <ResumenSemanalVista
             resumen={resumen}
             duracionSlotMin={config.slot_duracion_min}
-            facturacion={{ consultas: facturacion.consultas }}
+            facturacion={facturacion}
             periodo={periodo}
             hastaLabel={hastaLabel}
           />

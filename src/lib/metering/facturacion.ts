@@ -18,6 +18,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
+import { contarExacto, leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import type { Motor } from "@/lib/metering/clasificar";
 
 export interface LineaFacturacion {
@@ -84,6 +85,18 @@ export function pesos(centavos: number): string {
  *
  * `detalle: false` (default del KPI) devuelve solo el conteo y el total —
  * el panel muestra un número, no necesita traerse el mes entero.
+ *
+ * ── CÓMO SE CUENTA, Y POR QUÉ ASÍ ────────────────────────────────────────────
+ * El KPI cuenta con `count: 'exact'` en el servidor y el detalle pagina con
+ * `.range()` hasta agotar. Antes contaba `filas.length` de un select sin tope:
+ * PostgREST corta en 1000 filas sin avisar, así que un mes grande subfacturaba
+ * en silencio — y como el CSV y el KPI salen de la misma función, la
+ * verificación obvia ("el CSV suma lo mismo que el panel") daba OK con los dos
+ * mal. Detalle del hallazgo en `src/lib/metering/db.ts`.
+ *
+ * TIRA si la base falla: una factura vacía por un timeout se ve exactamente
+ * igual que un mes sin actividad, y esa confusión se paga discutiendo con el
+ * cliente.
  */
 export async function facturacionDePeriodo(
   periodo: string,
@@ -94,24 +107,41 @@ export async function facturacionDePeriodo(
   const precio = Number(config.precio_consulta_centavos);
   const { desde, hasta } = rangoDePeriodo(periodo);
 
-  const columnas = opciones?.detalle
-    ? "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos"
-    : "recurso_id";
-
-  const { data, error } = await admin
-    .from("encuentros_metering")
-    .select(columnas)
-    .eq("clasificacion", "facturable")
-    .gte("fecha_ar", desde)
-    .lte("fecha_ar", hasta)
-    .order("fecha_ar", { ascending: true });
-
-  if (error) {
-    console.error("[facturacion] Error leyendo el período:", periodo, error.message);
-    return { periodo, consultas: 0, precio_centavos: precio, total_centavos: 0, lineas: [] };
+  if (!opciones?.detalle) {
+    const consultas = await contarExacto(`facturación de ${periodo}`, () =>
+      admin
+        .from("encuentros_metering")
+        .select("id", { count: "exact", head: true })
+        .eq("clasificacion", "facturable")
+        .gte("fecha_ar", desde)
+        .lte("fecha_ar", hasta)
+    );
+    return {
+      periodo,
+      consultas,
+      precio_centavos: precio,
+      total_centavos: consultas * precio,
+      lineas: [],
+    };
   }
 
-  const filas = (data ?? []) as unknown as Record<string, unknown>[];
+  const filas = await leerTodo<Record<string, unknown>>(
+    `detalle de facturación de ${periodo}`,
+    (dsd, hst) =>
+      admin
+        .from("encuentros_metering")
+        .select(
+          "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos"
+        )
+        .eq("clasificacion", "facturable")
+        .gte("fecha_ar", desde)
+        .lte("fecha_ar", hasta)
+        // `fecha_ar` sola no es un orden total (hay muchas por día): sin el
+        // desempate por `id`, paginar por rango duplicaría filas y saltearía otras.
+        .order("fecha_ar", { ascending: true })
+        .order("id", { ascending: true })
+        .range(dsd, hst)
+  );
   const consultas = filas.length;
   const base = {
     periodo,
@@ -119,22 +149,26 @@ export async function facturacionDePeriodo(
     precio_centavos: precio,
     total_centavos: consultas * precio,
   };
-  if (!opciones?.detalle) return { ...base, lineas: [] };
 
   // Nombre del profesional para el detalle: una query, no una por línea.
   const medicoIds = [...new Set(filas.map((f) => f.medico_id as string).filter(Boolean))];
   const nombres = new Map<string, string>();
-  if (medicoIds.length > 0) {
-    const { data: medicos } = await admin
-      .from("medicos")
-      .select("id, nombre_completo, titulo")
-      .in("id", medicoIds);
-    for (const m of medicos ?? []) {
-      nombres.set(
-        m.id as string,
-        `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim()
-      );
-    }
+  const medicos = await leerTodoEnLotes<Record<string, unknown>>(
+    "nombres de los profesionales de la factura",
+    medicoIds,
+    (lote, dsd, hst) =>
+      admin
+        .from("medicos")
+        .select("id, nombre_completo, titulo")
+        .in("id", lote)
+        .order("id", { ascending: true })
+        .range(dsd, hst)
+  );
+  for (const m of medicos) {
+    nombres.set(
+      m.id as string,
+      `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim()
+    );
   }
 
   return {

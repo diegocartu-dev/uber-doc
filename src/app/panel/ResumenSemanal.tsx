@@ -62,7 +62,8 @@ export default function ResumenSemanalVista({
 }: {
   resumen: ResumenSemanal;
   duracionSlotMin: number;
-  facturacion: { consultas: number };
+  /** `null` = no se pudo calcular (la card lo dice; no se muestra un 0 falso). */
+  facturacion: { consultas: number } | null;
   periodo: string;
   /** "al 25/10" — hasta qué día llega el conteo del período. */
   hastaLabel: string;
@@ -240,7 +241,15 @@ export default function ResumenSemanalVista({
         <div className="card b-fact">
           <span className="cat-titulo">Facturación del período</span>
           <div className="fact-linea tnum">
-            {nombreDePeriodo(periodo)} — <b>{facturacion.consultas} consultas facturables</b> {hastaLabel}
+            {facturacion ? (
+              <>
+                {nombreDePeriodo(periodo)} — <b>{facturacion.consultas} consultas facturables</b> {hastaLabel}
+              </>
+            ) : (
+              <>
+                {nombreDePeriodo(periodo)} — <b>no se pudo calcular</b>. Probá de nuevo en un momento.
+              </>
+            )}
           </div>
           {/* Descarga directa: es un archivo, no una acción con efectos. */}
           <a className="btn-sec" href={`/api/panel/facturacion/csv?periodo=${periodo}`} download>
