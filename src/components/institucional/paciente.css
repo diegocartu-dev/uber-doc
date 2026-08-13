@@ -161,16 +161,14 @@
 @media (prefers-reduced-motion: reduce) {
   .pac-dot-verde::after { animation: none; }
 }
+/* "Tengo un problema" del estado D. NO es un link: el teléfono se imprime
+   siempre debajo (mock 02, estado D), así que subrayarlo o darle cursor de mano
+   prometería una acción que no existe. */
 .pac-link-ter {
   font-size: 15px;
+  font-weight: 600;
   color: #4b5563;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  background: none;
-  border: none;
   font-family: inherit;
-  padding: 0;
 }
 
 /* Estado E — documentos. */

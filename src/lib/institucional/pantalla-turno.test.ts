@@ -65,10 +65,16 @@ test("el profesional abrió la sala: no es una pantalla, es irse al video", () =
   assert.equal(pantalla("en_curso", INICIO), "sala");
 });
 
-test("E — terminados: el enlace sigue sirviendo para los documentos", () => {
-  for (const estado of ["completado", "ausente_paciente", "ausente_medico"]) {
-    assert.equal(pantalla(estado, FIN + 5 * 24 * 3600_000), "terminado", estado);
-  }
+test("E — la consulta que OCURRIÓ: el enlace sigue sirviendo para los documentos", () => {
+  assert.equal(pantalla("completado", FIN + 5 * 24 * 3600_000), "terminado");
+});
+
+test("las ausencias NO son el estado E: cada una tiene su pantalla", () => {
+  // Mapearlas a "terminado" le decía "Tu consulta terminó" y "no quedó
+  // documentación cargada" a alguien a quien nadie atendió — y mandaba al que
+  // se perdió el turno a llamar por una receta que nunca existió.
+  assert.equal(pantalla("ausente_medico", FIN + 60_000), "ausente-profesional");
+  assert.equal(pantalla("ausente_paciente", FIN + 60_000), "ausente-paciente");
 });
 
 test("F — reprogramado o cancelado: el enlace viejo no lleva a ningún lado", () => {

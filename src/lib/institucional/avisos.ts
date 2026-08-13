@@ -20,7 +20,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
-import { getConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { enviarTwilio, twilioConfigurado, normalizarTelefonoAR } from "@/lib/whatsapp";
 import { crearAccesoLink } from "@/lib/institucional/accesos";
 import {
@@ -107,10 +107,6 @@ async function celularMedico(medicoId: string): Promise<{ celular: string | null
     email: data?.email_personal ?? null,
     nombre: data?.nombre_completo ?? "",
   };
-}
-
-function dominioLimpio(dominio: string): string {
-  return dominio.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 }
 
 interface DatosComunes {
