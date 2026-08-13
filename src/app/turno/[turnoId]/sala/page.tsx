@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { rebotePaciente } from "@/lib/instancia";
 import SalaConsultaPaciente from "@/app/consulta/[id]/sala/SalaConsultaPaciente";
 
 export default async function SalaTurnoPage({
@@ -13,7 +14,8 @@ export default async function SalaTurnoPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth/login");
+  // En la instancia el paciente no tiene login: su salida es pedir el enlace.
+  if (!user) redirect(rebotePaciente("/auth/login", "/acceso/reenviar"));
 
   // Verificar que el turno existe
   const { data: turno } = await supabase
@@ -22,7 +24,7 @@ export default async function SalaTurnoPage({
     .eq("id", turnoId)
     .single();
 
-  if (!turno) redirect("/dashboard");
+  if (!turno) redirect(rebotePaciente("/dashboard", "/acceso/reenviar"));
 
   // Verificar que el user es el paciente del turno
   const { data: paciente } = await supabase
@@ -31,11 +33,16 @@ export default async function SalaTurnoPage({
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!paciente || paciente.id !== turno.paciente_id) redirect("/dashboard");
+  if (!paciente || paciente.id !== turno.paciente_id)
+    redirect(rebotePaciente("/dashboard", "/acceso/reenviar"));
 
   // Solo permitir acceso si el turno está en curso
+  // El rebote del B2C es la sala de espera vieja, que a su vez rebota al
+  // dashboard: recargar esta URL después de la consulta —lo que hace cualquiera
+  // con mala señal— sacaba al paciente institucional del universo cerrado y lo
+  // dejaba en el marketplace. En la instancia vuelve a SU pantalla.
   if (turno.estado !== "en_curso") {
-    redirect(`/turno/${turnoId}/espera`);
+    redirect(rebotePaciente(`/turno/${turnoId}/espera`, `/turno/${turnoId}/acceso`));
   }
 
   // Nombre, título y especialidad del médico. `titulo` ("Dr."/"Dra.") lo eligió el

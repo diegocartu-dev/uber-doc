@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { destinoSinSesion } from "@/lib/instancia";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -51,7 +52,10 @@ export async function updateSession(request: NextRequest) {
     protectedPrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix))
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    // En B2C esto es "/auth/login" y no cambia nada. En la instancia, el
+    // paciente no tiene login (su cuenta no tiene contraseña) y el login es un
+    // callejón: se lo manda a pedir el enlace de nuevo. Ver `destinoSinSesion`.
+    url.pathname = destinoSinSesion(request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
 

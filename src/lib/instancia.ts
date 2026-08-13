@@ -94,6 +94,41 @@ export function bloqueaRutaInstitucional(pathname: string): boolean {
 }
 
 /**
+ * ¿A dónde va alguien SIN sesión que pide una ruta protegida?
+ *
+ * En B2C, al login de siempre. En la instancia, el paciente NO TIENE login: su
+ * cuenta no tiene contraseña y el mail del padrón suele ser un alias no
+ * entregable. Mandarlo a `/auth/login` es dejarlo en un callejón sin 0800.
+ * Para él, la salida es pedir el enlace de nuevo.
+ *
+ * Los operadores y los admins de la instancia SÍ tienen login: sus rutas
+ * (`/admin`, `/otorgador`) siguen yendo al de siempre. Por eso la decisión
+ * mira el path y no solo el modo.
+ */
+export function destinoSinSesion(pathname: string): string {
+  if (!esInstitucional()) return "/auth/login";
+  if (pathname.startsWith("/turno") || pathname.startsWith("/consulta")) {
+    return "/acceso/reenviar";
+  }
+  return "/auth/login";
+}
+
+/**
+ * Rebote de una pantalla del B2C que decide que el paciente no puede estar ahí.
+ *
+ * En B2C manda a donde mandaba siempre. En la instancia, a la pantalla del
+ * paciente — porque los destinos del B2C (`/dashboard`, la sala de espera con
+ * su barra y su link "Inicio") son justo las salidas de navegación que la
+ * regla de la pantalla prohíbe, y encima con branding Docto y copy de pagos
+ * que en la instancia no existen.
+ *
+ * Gate primero: en B2C devuelve el fallback sin mirar nada más.
+ */
+export function rebotePaciente(fallbackB2C: string, destinoInstitucional: string): string {
+  return esInstitucional() ? destinoInstitucional : fallbackB2C;
+}
+
+/**
  * ¿Hay plata que devolver? (spec institucional §6.3, gate #401)
  *
  * En B2C: sí, si hay un pago registrado — la rama de refund de siempre.
