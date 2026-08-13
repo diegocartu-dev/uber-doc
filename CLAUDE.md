@@ -77,7 +77,7 @@ Fuente de verdad: **`src/lib/consultas/encuentro-activo.ts`**. Todo guard nuevo 
 
 **Historia del bug (no repetirlo):** el guard viejo de `crearConsulta` miraba `["esperando","aceptada","en_curso"]` y **se olvidaba de `pagada`** — tenía las dos mitades al revés: bloqueaba a los impagos (que deberían poder irse) y dejaba pasar a los pagos (los únicos a blindar). Encima el mensaje se pintaba arriba de un formulario largo, fuera de la vista del paciente, y sin ningún link a su consulta.
 
-**Deuda abierta:** el turno tiene plazo (cron `resolver-turnos-vencidos` cada 10 min, 20 de gracia → `ausente_paciente`); **la consulta inmediata NO tiene ninguno** — su único barrido es `cerrar-huerfanas` a las 3 AM. Un paciente con una CI paga cuyo profesional nunca apareció queda retenido hasta la madrugada. Resolverlo implica decidir el reembolso.
+**Deuda abierta:** el turno tiene plazo (cron `resolver-turnos-vencidos` cada 10 min, 20 de gracia → `ausente_paciente`); **la consulta inmediata NO tiene ninguno** — su único barrido es `cerrar-huerfanas`, que corre **a las 00:00 ART, todos los días** (`0 3 * * *` en `vercel.json`: los crons de Vercel se programan en UTC; el "3 AM" que decía acá era la hora UTC leída como si fuera argentina). Un paciente con una CI paga cuyo profesional nunca apareció queda retenido hasta la medianoche. Resolverlo implica decidir el reembolso.
 
 ## Reportes — las reservas abandonadas NO se muestran (decisión Diego, 06/08/2026)
 Cuando un paciente toma un turno, el slot queda en `reservado_pendiente` con `reservado_hasta` = ahora + ~15 min (retención para pagar). Si paga, el webhook de MP lo pasa a `confirmado` con `mp_status='approved'`. Si no paga, la retención vence y el lugar se libera.

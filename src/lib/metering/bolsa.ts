@@ -728,11 +728,14 @@ export interface FaltantesDeSemana {
  * ── LOS VIVOS TAMBIÉN CUENTAN (I1 del gate #405) ─────────────────────────────
  * La versión anterior miraba SOLO encuentros ya terminales, y por ese hueco se
  * colaba el caso más caro: una consulta inmediata que quedó colgada el domingo
- * a las 20:00 no es terminal el lunes a las 02:00 —la cierra `cerrar-huerfanas`
- * el martes a las 3 AM—, así que el sello no la veía, se sellaba la semana sin
- * ella, y cuando el martes aparecía su fila facturable el cumplimiento sellado
- * ya no la podía incorporar. La factura la cobraba igual: los dos números
- * contractuales, otra vez, divergiendo en silencio.
+ * a la noche no es terminal el lunes a las 02:00 —cuando corre el cron del
+ * cierre—, así que el sello no la veía, se sellaba la semana sin ella, y cuando
+ * después aparecía su fila facturable el cumplimiento sellado ya no la podía
+ * incorporar. La factura la cobraba igual: los dos números contractuales, otra
+ * vez, divergiendo en silencio.
+ *
+ * (Los crons de Vercel se programan en UTC: `cerrar-huerfanas` es `0 3 * * *`,
+ * o sea 00:00 ART y todos los días, no "el martes a las 3 AM".)
  *
  * Ahora un encuentro VIVO de la semana bloquea el sello igual que uno sin
  * clasificar. Es más conservador a propósito: la respuesta correcta a "todavía
