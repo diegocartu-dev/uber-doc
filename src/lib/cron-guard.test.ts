@@ -59,7 +59,7 @@ test("instancia · el cuerpo SÍ viaja: es el motivo por el que el cierre no pud
   assert.match(cuerpo, /3 encuentros sin clasificar/);
   assert.match(
     detalleTecnicoHTTP("metering-cerrar-mes", 500, cuerpo),
-    /\nRespuesta: .*sin clasificar.*\nRevisar logs en Vercel\.$/s
+    /\nRespuesta: [\s\S]*sin clasificar[\s\S]*\nRevisar logs en Vercel\.$/
   );
 });
 
