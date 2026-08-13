@@ -28,6 +28,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { fechaLabelAR } from "@/lib/institucional/avisos";
 import { MarcoPaciente, LinkInactivo } from "@/components/institucional/PantallaPaciente";
+import { metadataPacienteInstitucional } from "@/lib/institucional/metadata";
+
+// Sin esto, el bot de preview de WhatsApp arma la tarjeta del chat con el
+// título y la descripción del B2C — la marca de Docto sobre el mensaje de la
+// institución. Ver src/lib/institucional/metadata.ts.
+export const generateMetadata = metadataPacienteInstitucional;
 
 const primerNombre = (n: string | null | undefined): string =>
   (n ?? "").trim().split(/\s+/)[0] || "";
@@ -133,7 +139,6 @@ export default async function AccesoLandingPage({
     // Estado F — una sola respuesta para los cuatro motivos (ver el módulo).
     return (
       <LinkInactivo
-        institucion={config.nombre}
         telefonoAyuda={config.telefono_ayuda}
         hrefReenvio="/acceso/reenviar"
         cooldownMinutos={config.reenvio_cooldown_minutos}
@@ -144,7 +149,7 @@ export default async function AccesoLandingPage({
   const enc = await encabezadoDelAcceso(validacion.acceso);
 
   return (
-    <MarcoPaciente institucion={config.nombre}>
+    <MarcoPaciente>
       {enc.saludo && <div className="pac-hola">Hola, {enc.saludo}</div>}
       <div className="pac-titulo">{enc.titulo}</div>
       {enc.cuando && <div className="pac-fecha tnum">{enc.cuando}</div>}

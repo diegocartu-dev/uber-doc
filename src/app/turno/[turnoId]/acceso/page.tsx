@@ -24,6 +24,11 @@ import { fechaLabelAR } from "@/lib/institucional/avisos";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { LinkInactivo } from "@/components/institucional/PantallaPaciente";
 import AccesoTurnoClient from "./AccesoTurnoClient";
+import { metadataPacienteInstitucional } from "@/lib/institucional/metadata";
+
+// La pestaña del paciente durante toda la consulta dice el nombre de la
+// institución, no el del marketplace. Ver src/lib/institucional/metadata.ts.
+export const generateMetadata = metadataPacienteInstitucional;
 
 const primerNombre = (n: string | null | undefined): string =>
   (n ?? "").trim().split(/\s+/)[0] || "";
@@ -48,7 +53,6 @@ export default async function AccesoTurnoPage({
   // nunca un dashboard — el paciente institucional no tiene ninguno de los dos.
   const inactivo = (
     <LinkInactivo
-      institucion={branding.nombre}
       telefonoAyuda={branding.telefono_ayuda}
       hrefReenvio="/acceso/reenviar"
       cooldownMinutos={branding.reenvio_cooldown_minutos}

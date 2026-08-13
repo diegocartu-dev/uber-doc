@@ -20,6 +20,11 @@ import { notFound } from "next/navigation";
 import { esInstitucional } from "@/lib/instancia";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { MarcoPaciente } from "@/components/institucional/PantallaPaciente";
+import { metadataPacienteInstitucional } from "@/lib/institucional/metadata";
+
+// Marca blanca también en la pestaña y en la preview: sin esto hereda el
+// title del B2C. Ver src/lib/institucional/metadata.ts.
+export const generateMetadata = metadataPacienteInstitucional;
 
 export default async function ReenviarAccesoPage({
   searchParams,
@@ -33,7 +38,7 @@ export default async function ReenviarAccesoPage({
 
   if (enviado) {
     return (
-      <MarcoPaciente institucion={config.nombre}>
+      <MarcoPaciente>
         <div className="pac-centro">
           <div className="pac-titulo">Listo</div>
           {/* Respuesta NEUTRA: no dice si el DNI existe ni a dónde se mandó.
@@ -54,7 +59,7 @@ export default async function ReenviarAccesoPage({
   }
 
   return (
-    <MarcoPaciente institucion={config.nombre}>
+    <MarcoPaciente>
       <div className="pac-titulo">Reenviarme el enlace</div>
       <p className="pac-parrafo-sec">
         Poné tu DNI y el celular que diste en el centro de salud. Te mandamos el enlace a ese
