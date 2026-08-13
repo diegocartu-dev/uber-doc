@@ -275,7 +275,10 @@ export async function avisarAsignacionCI(
     const acceso = await crearAccesoLink({
       pacienteId: params.paciente.id,
       consultaId: params.consultaId,
-      destino: `/consulta/${params.consultaId}/confirmacion`,
+      // La pantalla institucional de la CI, no el clon del B2C: ese tiene la
+      // marca de Docto, copy de pagos que acá no existen y links que el propio
+      // modo bloquea con 404 (pendiente §11.19, cerrado en la Etapa 4).
+      destino: `/consulta/${params.consultaId}/acceso`,
       operadorId: params.operadorId,
       canal: canalPaciente,
       enviadoA:
