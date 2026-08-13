@@ -299,12 +299,68 @@ export async function permitirIntentoAcceso(ip: string, tokenHash: string): Prom
 // ─── Revocación (spec §5.4, matriz de revocación) ────────────────────────────
 
 /**
+ * Motivos en los que revocar NO alcanza con apagar el token: hay que echar
+ * también a quien YA entró con él.
+ *
+ * Son los dos casos de seguridad que el propio comentario de abajo dice
+ * cubrir. En los dos, el link está en manos de alguien que no corresponde
+ * —teléfono robado, fila equivocada del padrón— y esa persona muy
+ * probablemente ya tocó "Entrar": apagar el token solo le cierra la puerta por
+ * la que no piensa volver a pasar.
+ *
+ * `reprogramacion` NO entra a propósito: matar la sesión ahí echaría al
+ * paciente de una llamada en curso, y el link viejo apagado + el nuevo en su
+ * WhatsApp ya resuelven el caso. `cancelacion` tampoco: la pantalla del
+ * paciente pasa sola al estado F cuando el turno cambia de estado.
+ */
+const MOTIVOS_DE_SEGURIDAD = new Set(["manual", "cambio_contacto"]);
+
+/**
+ * Cierra las sesiones abiertas de estos pacientes. Best-effort: nunca lanza.
+ *
+ * ── POR QUÉ VÍA RPC Y NO CON EL SDK ──────────────────────────────────────────
+ * `auth.admin.signOut()` de @supabase/supabase-js pide el JWT del usuario, que
+ * es justo lo que no tenemos (la sesión vive en el teléfono del otro). No hay
+ * en el SDK ninguna forma de revocar por user_id, así que la revocación baja a
+ * SQL: la función `cerrar_sesiones_de_usuario` de la migración 013 borra las
+ * filas de `auth.sessions` y `auth.refresh_tokens` del usuario.
+ *
+ * ⚠ VENTANA CONOCIDA: el access token que ese navegador ya tiene sigue siendo
+ * válido hasta que expira (una hora, el default de Supabase). Después no puede
+ * renovarlo y queda afuera. Para el intervalo intermedio está la otra mitad de
+ * la defensa: la cookie del acceso (`accesoSigueVivo`), que las pantallas del
+ * paciente miran en CADA request y que se apaga en el mismo instante que el
+ * token.
+ */
+async function cerrarSesionesDe(pacienteIds: string[]): Promise<void> {
+  const unicos = [...new Set(pacienteIds.filter(Boolean))];
+  if (unicos.length === 0) return;
+  try {
+    const admin = createAdminClient();
+    const { data: pacientes } = await admin.from("pacientes").select("user_id").in("id", unicos);
+    for (const p of pacientes ?? []) {
+      if (!p.user_id) continue;
+      const { error } = await admin.rpc("cerrar_sesiones_de_usuario", { p_user_id: p.user_id });
+      if (error) {
+        console.error("[accesos] No se pudo cerrar la sesión del paciente:", error.message);
+      }
+    }
+  } catch (err) {
+    console.error("[accesos] cerrarSesionesDe falló:", err);
+  }
+}
+
+/**
  * Apaga TODOS los tokens vivos de un encuentro. Después de esto, el link que
  * el paciente tiene en su WhatsApp muestra "este enlace ya no está activo".
  *
  * Se llama cuando el encuentro deja de existir como tal: reprogramación
  * (llega otro link con el turno nuevo), cancelación, o una revocación manual
  * del admin institucional (teléfono robado, error de padrón).
+ *
+ * En los motivos de seguridad, además, cierra la sesión que ese link ya haya
+ * minteado: sin eso, revocar apagaba el enlace y dejaba adentro —con acceso a
+ * los documentos clínicos del paciente— a quien tuviera el teléfono.
  *
  * Devuelve cuántos apagó. Nunca lanza: la revocación es la mitad barata de la
  * operación —la cara es re-acuñar y avisar— y no puede voltear lo que ya se
@@ -323,15 +379,77 @@ export async function revocarAccesosDe(params: {
       .update({ revocado_at: new Date().toISOString() })
       .is("revocado_at", null);
     const { data, error } = params.turnoId
-      ? await query.eq("turno_id", params.turnoId).select("id")
-      : await query.eq("consulta_id", params.consultaId!).select("id");
+      ? await query.eq("turno_id", params.turnoId).select("id, paciente_id")
+      : await query.eq("consulta_id", params.consultaId!).select("id, paciente_id");
     if (error) {
       console.error("[accesos] No se pudieron revocar los tokens:", error.message, params.motivo);
       return 0;
+    }
+    if (MOTIVOS_DE_SEGURIDAD.has(params.motivo)) {
+      await cerrarSesionesDe((data ?? []).map((f) => f.paciente_id as string));
     }
     return data?.length ?? 0;
   } catch (err) {
     console.error("[accesos] revocarAccesosDe falló:", err);
     return 0;
+  }
+}
+
+// ─── La cookie del acceso: el token también acota lo que ya minteó ───────────
+//
+// El scoping de R18/R19 (turno, vigencia, estado del encuentro) vivía SOLO en
+// la puerta: pasado el verifyOtp, lo que quedaba en el navegador era la sesión
+// completa del paciente, sin ninguna marca de qué acceso la originó. Dos
+// efectos: un link reenviado a un tercero —o abierto en un teléfono
+// compartido, escenario probable en un padrón provincial— servía para TODOS
+// los encuentros del paciente y no solo para el del token; y cuando el token
+// vencía a los 30 días, la sesión seguía viva.
+//
+// El arreglo es una cookie httpOnly con el id del acceso que minteó la sesión.
+// Las pantallas del paciente la miran en cada request: si ese acceso se revocó,
+// venció o no corresponde al encuentro que se está pidiendo, se ve el estado F.
+// Con esto `revocado_at` y `expira_at` pasan a valer también DESPUÉS del
+// minteo, que es donde no valían.
+
+export const COOKIE_ACCESO = "docto_acceso";
+
+/** Segundos que puede vivir la cookie: nunca más que el token que la creó. */
+export function segundosDeVida(expiraAt: string): number {
+  const restante = Math.floor((new Date(expiraAt).getTime() - Date.now()) / 1000);
+  return Math.max(60, Math.min(restante, 400 * 24 * 3600));
+}
+
+/**
+ * ¿El acceso que abrió esta sesión sigue vivo y es el de ESTE encuentro?
+ *
+ * Fail-closed: sin cookie, con una fila que no existe, revocada, vencida, de
+ * otro paciente o de otro encuentro → false, y la pantalla muestra "este
+ * enlace ya no está activo" con el camino para pedir uno nuevo. Un paciente
+ * legítimo que perdió la cookie vuelve a tocar su link y entra igual.
+ */
+export async function accesoSigueVivo(params: {
+  accesoId: string | undefined;
+  pacienteId: string;
+  turnoId?: string;
+  consultaId?: string;
+}): Promise<boolean> {
+  if (!params.accesoId) return false;
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("accesos_link")
+      .select("paciente_id, turno_id, consulta_id, expira_at, revocado_at")
+      .eq("id", params.accesoId)
+      .maybeSingle();
+    if (!data) return false;
+    if (data.revocado_at) return false;
+    if (new Date(data.expira_at).getTime() <= Date.now()) return false;
+    if (data.paciente_id !== params.pacienteId) return false;
+    if (params.turnoId && data.turno_id !== params.turnoId) return false;
+    if (params.consultaId && data.consulta_id !== params.consultaId) return false;
+    return true;
+  } catch (err) {
+    console.error("[accesos] No se pudo comprobar el acceso de la sesión:", err);
+    return false;
   }
 }

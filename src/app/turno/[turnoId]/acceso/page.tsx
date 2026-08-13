@@ -16,7 +16,9 @@ export const dynamic = "force-dynamic";
 // SOLO instancia institucional: en B2C es 404.
 
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { accesoSigueVivo, COOKIE_ACCESO } from "@/lib/institucional/accesos";
 import { esInstitucional } from "@/lib/instancia";
 import { getBrandingInstitucion } from "@/lib/institucional/config";
 import { pantallaDelTurno, instanteAR } from "@/lib/institucional/pantalla-turno";
@@ -73,6 +75,13 @@ export default async function AccesoTurnoPage({
     .eq("user_id", user.id)
     .maybeSingle();
   if (!paciente) return inactivo;
+
+  // El enlace que abrió esta sesión tiene que seguir vivo Y ser el de ESTE
+  // turno. Sin este chequeo, la sesión minteada era la del paciente entero:
+  // sobrevivía a la revocación (teléfono robado), sobrevivía al vencimiento del
+  // token, y servía para cualquier otro turno suyo. Ver `accesoSigueVivo`.
+  const accesoId = (await cookies()).get(COOKIE_ACCESO)?.value;
+  if (!(await accesoSigueVivo({ accesoId, pacienteId: paciente.id, turnoId }))) return inactivo;
 
   const { data: turno } = await supabase
     .from("turnos")
