@@ -114,6 +114,35 @@ export function pesos(centavos: number): string {
 }
 
 /**
+ * De dónde salen las líneas de la factura de un período.
+ *
+ * ── POR QUÉ NO ES SIEMPRE EL RANGO DE FECHAS ─────────────────────────────────
+ * Un mes SELLADO ya se facturó, y `CRONS_META['metering-cerrar-mes']` promete
+ * que "el detalle que se le pasa a la institución no cambia nunca más". Si la
+ * factura se siguiera armando por rango de `fecha_ar`, cualquier fila que
+ * apareciera después del cierre —un encuentro que entró por un webhook muy
+ * tardío— se sumaría sola a un mes ya facturado, sin sello, sin auditoría y sin
+ * figurar en /admin/periodos (que lista por `facturado_periodo`). Los dos
+ * números contractuales, otra vez, divergiendo en silencio.
+ *
+ * Con el mes sellado, la factura sale del SELLO: es exactamente la foto que se
+ * congeló. Un mes en curso —o uno que todavía no se cerró— sale del rango de
+ * fechas, que es lo único que hay.
+ *
+ * Las filas que llegan tarde no se pierden: quedan sin sellar y /admin/periodos
+ * las muestra aparte, marcadas, para que las decida un humano.
+ */
+export type FiltroFacturacion =
+  | { modo: "sellado"; periodo: string }
+  | { modo: "en_vivo"; desde: string; hasta: string };
+
+export function filtroDeFacturacion(periodo: string, sellado: boolean): FiltroFacturacion {
+  if (sellado) return { modo: "sellado", periodo };
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  return { modo: "en_vivo", desde, hasta };
+}
+
+/**
  * Todo lo facturable del período, línea por línea.
  *
  * `detalle: false` (default del KPI) devuelve solo el conteo y el total —
@@ -130,6 +159,11 @@ export function pesos(centavos: number): string {
  * TIRA si la base falla: una factura vacía por un timeout se ve exactamente
  * igual que un mes sin actividad, y esa confusión se paga discutiendo con el
  * cliente.
+ *
+ * ── DE DÓNDE SALEN LAS FILAS ─────────────────────────────────────────────────
+ * De `filtroDeFacturacion`: el sello si el mes ya se cerró, el rango de fechas
+ * si sigue abierto. El KPI y el CSV usan el mismo filtro, así que no pueden
+ * decir cosas distintas sobre el mismo mes.
  */
 export async function facturacionDePeriodo(
   periodo: string,
@@ -138,17 +172,18 @@ export async function facturacionDePeriodo(
   const admin = createAdminClient();
   const config = await getConfigInstitucion();
   const precio = Number(config.precio_consulta_centavos);
-  const { desde, hasta } = rangoDePeriodo(periodo);
+  const filtro = filtroDeFacturacion(periodo, await periodoEstaSellado(periodo));
 
   if (!opciones?.detalle) {
-    const consultas = await contarExacto(`facturación de ${periodo}`, () =>
-      admin
+    const consultas = await contarExacto(`facturación de ${periodo}`, () => {
+      const q = admin
         .from("encuentros_metering")
         .select("id", { count: "exact", head: true })
-        .eq("clasificacion", "facturable")
-        .gte("fecha_ar", desde)
-        .lte("fecha_ar", hasta)
-    );
+        .eq("clasificacion", "facturable");
+      return filtro.modo === "sellado"
+        ? q.eq("facturado_periodo", filtro.periodo)
+        : q.gte("fecha_ar", filtro.desde).lte("fecha_ar", filtro.hasta);
+    });
     return {
       periodo,
       consultas,
@@ -161,20 +196,26 @@ export async function facturacionDePeriodo(
 
   const filas = await leerTodo<Record<string, unknown>>(
     `detalle de facturación de ${periodo}`,
-    (dsd, hst) =>
-      admin
+    (dsd, hst) => {
+      const q = admin
         .from("encuentros_metering")
         .select(
           "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos, precio_centavos"
         )
-        .eq("clasificacion", "facturable")
-        .gte("fecha_ar", desde)
-        .lte("fecha_ar", hasta)
-        // `fecha_ar` sola no es un orden total (hay muchas por día): sin el
-        // desempate por `id`, paginar por rango duplicaría filas y saltearía otras.
-        .order("fecha_ar", { ascending: true })
-        .order("id", { ascending: true })
-        .range(dsd, hst)
+        .eq("clasificacion", "facturable");
+      const acotada =
+        filtro.modo === "sellado"
+          ? q.eq("facturado_periodo", filtro.periodo)
+          : q.gte("fecha_ar", filtro.desde).lte("fecha_ar", filtro.hasta);
+      return (
+        acotada
+          // `fecha_ar` sola no es un orden total (hay muchas por día): sin el
+          // desempate por `id`, paginar por rango duplicaría filas y saltearía otras.
+          .order("fecha_ar", { ascending: true })
+          .order("id", { ascending: true })
+          .range(dsd, hst)
+      );
+    }
   );
   const consultas = filas.length;
   // El total sale de los precios CONGELADOS en las filas, nunca del vigente:

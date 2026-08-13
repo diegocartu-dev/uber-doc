@@ -19,6 +19,7 @@ import {
   corteDePeriodo,
   mesTerminado,
   periodoASellar,
+  filtroDeFacturacion,
   pesos,
   facturacionACSV,
   type Facturacion,
@@ -238,6 +239,31 @@ function cuerpoDe(nombre: string): string {
   assert.notEqual(fin, -1, `no se encontró el final de ${nombre}`);
   return FUENTE.slice(inicio, fin);
 }
+
+test("factura · un mes SELLADO se lee del sello, no del rango de fechas", () => {
+  // El mes ya se facturó: la factura tiene que ser exactamente la foto que se
+  // congeló. Si siguiera saliendo del rango de `fecha_ar`, una fila que apareció
+  // DESPUÉS del cierre (webhook muy tardío) se sumaría sola a una factura ya
+  // emitida — sin sello, sin auditoría y sin figurar en /admin/periodos.
+  assert.deepEqual(filtroDeFacturacion("2026-10", true), { modo: "sellado", periodo: "2026-10" });
+});
+
+test("factura · un mes todavía abierto se lee del rango, que es lo único que hay", () => {
+  assert.deepEqual(filtroDeFacturacion("2026-11", false), {
+    modo: "en_vivo",
+    desde: "2026-11-01",
+    hasta: "2026-11-30",
+  });
+});
+
+test("factura · el KPI y el CSV usan el MISMO filtro", () => {
+  // No es un detalle: los dos salen de `facturacionDePeriodo`, y la
+  // verificación obvia del runbook ("el CSV suma lo mismo que el panel") daría
+  // OK con los dos mal si cada uno acotara por su lado.
+  const detalle = cuerpoDe("facturacionDePeriodo");
+  const usos = detalle.match(/filtro\.modo === "sellado"/g) ?? [];
+  assert.equal(usos.length, 2, "el conteo del KPI y el detalle del CSV, los dos");
+});
 
 test("sello · congela el MES ENTERO, no solo lo facturable", () => {
   const sello = cuerpoDe("sellarPeriodo");
