@@ -216,8 +216,20 @@
 @media (max-width: 900px) {
   .pnl .kpis { grid-template-columns: repeat(2, 1fr); }
   .pnl .dosc { grid-template-columns: 1fr; }
-  .pnl .fila, .pnl .enc-fila { grid-template-columns: minmax(0, 1fr) 96px 104px; row-gap: 6px; }
-  .pnl .fila .cupo-barra, .pnl .fila .motores, .pnl .enc-fila > .oculta-mobile { display: none; }
+
+  /* Las dos tablas NO se reacomodan: se deslizan.
+     Antes bajaban a 3 columnas dejando 4 hijos visibles en `.fila` (el badge
+     "Estado" se iba a una segunda fila, debajo del nombre) y 5 en `.enc-fila`,
+     porque la clase `oculta-mobile` que el CSS escondía no estaba aplicada a
+     ningún elemento: "Resultado" y "Documentación" quedaban desalineados. Y
+     esconder columnas tampoco servía: en la tab Consultas, esas dos SON la
+     pantalla.
+     Desktop-only de verdad, entonces — con scroll horizontal adentro de la
+     card, que no rompe la grilla ni esconde datos. El `min-width` va en los
+     hijos directos para que el encabezado y el pie se deslicen alineados con
+     las filas. */
+  .pnl .b-tabla, .pnl .enc { overflow-x: auto; }
+  .pnl .b-tabla > *, .pnl .enc > * { min-width: 720px; }
   .pnl .fila-tr { height: auto; padding-top: 10px; padding-bottom: 10px; }
 }
 
