@@ -176,7 +176,19 @@ export default function ResumenSemanalVista({
             </div>
           ))}
         </div>
-        <div className="lectura">{lecturaDelChart(resumen.porMotor, resumen.facturables)}</div>
+        {/* El "sin asignar" del §6.6 ("120 − 98 == 22"): se calculaba en cada
+            carga con una query propia y no lo mostraba ningún componente. El
+            mock no le da una card —sus cuatro KPIs son otros— pero su propio
+            encabezado dice que los números tienen que cerrar: 120 slots = 87
+            facturables + 9 + 2 ausencias + 22 sin asignar. Acá, en la lectura
+            del gráfico, cierra sin tocar la grilla de KPIs. */}
+        <div className="lectura">
+          {lecturaDelChart(resumen.porMotor, resumen.facturables)}
+          {resumen.sinAsignar > 0 &&
+            ` Además, ${resumen.sinAsignar} turno${resumen.sinAsignar === 1 ? "" : "s"} de agenda que ya ${
+              resumen.sinAsignar === 1 ? "transcurrió" : "transcurrieron"
+            } no ${resumen.sinAsignar === 1 ? "fue asignado" : "fueron asignados"}.`}
+        </div>
       </section>
 
       {/* ── cumplimiento del acuerdo ── */}
