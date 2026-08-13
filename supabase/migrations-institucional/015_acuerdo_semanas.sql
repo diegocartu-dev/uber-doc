@@ -54,6 +54,53 @@ CREATE INDEX idx_acuerdo_semanas_semana ON acuerdo_semanas (semana_ar, medico_id
 -- leer ni el suyo ni, mucho menos, el de un colega.
 ALTER TABLE acuerdo_semanas ENABLE ROW LEVEL SECURITY;
 
+-- ── INMUTABILIDAD DE LA SEMANA CERRADA ───────────────────────────────────────
+-- Misma promesa que la 014 y, hasta acá, sin nada que la sostuviera: el único
+-- guard era un `filter(f => !f.sellada)` en JS, y el escritor es un
+-- `upsert(..., { onConflict: 'medico_id,semana_ar' })` — el patrón que
+-- justamente pisa. El guard de la lib protege del código que ya conocemos; este
+-- trigger protege del que venga después.
+--
+-- El ÚNICO UPDATE admitido sobre una fila cerrada es REABRIRLA
+-- (`SET estado = 'abierta'`) y nada más en el mismo UPDATE. Sin esa segunda
+-- mitad, "corregir los minutos y de paso dejarla cerrada" pasaría derecho, que
+-- es exactamente lo que el sello previene. Corregir una semana cerrada se hace
+-- en dos pasos, deliberadamente, y queda constancia de los dos.
+CREATE OR REPLACE FUNCTION acuerdo_semanas_cerrada_inmutable()
+RETURNS TRIGGER AS $$
+DECLARE
+  candidato acuerdo_semanas%ROWTYPE;
+BEGIN
+  IF OLD.estado <> 'cerrada' THEN
+    RETURN NEW;
+  END IF;
+  candidato := NEW;
+  candidato.estado     := OLD.estado;       -- neutraliza el único campo editable
+  candidato.updated_at := OLD.updated_at;   -- el reloj puede acompañar la reapertura
+  IF NEW.estado = 'cerrada' OR candidato IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'acuerdo_semanas: la semana % del profesional % está cerrada. Para corregirla, primero reabrila en un UPDATE aparte (SET estado = ''abierta'') y dejá constancia.', OLD.semana_ar, OLD.medico_id;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_acuerdo_semanas_cerrada
+  BEFORE UPDATE ON acuerdo_semanas
+  FOR EACH ROW EXECUTE FUNCTION acuerdo_semanas_cerrada_inmutable();
+
+-- Borrar una semana cerrada es lo mismo que editarla, pero peor.
+CREATE OR REPLACE FUNCTION acuerdo_semanas_cerrada_no_borra()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.estado = 'cerrada' THEN
+    RAISE EXCEPTION 'acuerdo_semanas: la semana % del profesional % está cerrada y no se puede borrar.', OLD.semana_ar, OLD.medico_id;
+  END IF;
+  RETURN OLD;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_acuerdo_semanas_cerrada_delete
+  BEFORE DELETE ON acuerdo_semanas
+  FOR EACH ROW EXECUTE FUNCTION acuerdo_semanas_cerrada_no_borra();
+
 -- ── acuerdos_servicio: verificación, no creación ─────────────────────────────
 -- La tabla del contrato individual ya nace en 003_asignacion.sql. Si esta
 -- migración se aplicara sobre una base donde 003 no corrió, el cálculo de la
