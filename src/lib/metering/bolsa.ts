@@ -279,8 +279,37 @@ interface SemanaSellada {
   estado: string;
 }
 
-/** Estados de turno que DESCUENTAN de la disposición (§6.4). */
-const ESTADOS_QUE_DESCUENTAN = new Set(["ausente_medico", "cancelado_medico"]);
+/**
+ * Qué hace CADA estado de `turnos` con la bolsa de horas. Es exhaustivo a
+ * propósito (hallazgo S2 del gate #405): la versión anterior era
+ * `descuenta ? "descuenta" : "cuenta"`, o sea que un estado nuevo —o uno viejo
+ * que nadie recordaba— entraba SUMANDO horas de cumplimiento sin que nadie lo
+ * decidiera. En una tabla que sostiene un acuerdo contractual, el default no
+ * puede ser "cuenta a favor del profesional".
+ *
+ * La lista sale del CHECK vivo de `turnos`
+ * (`supabase/migrations/20260512_mp_fase2.sql`).
+ */
+const APORTE_POR_ESTADO: Record<string, "cuenta" | "descuenta" | "ignora"> = {
+  // CUENTAN — la hora estuvo puesta a disposición, se haya usado o no.
+  disponible: "cuenta",
+  reservado_pendiente: "cuenta", // no ocurre en la instancia (no hay checkout), pero si ocurriera, la hora se puso
+  confirmado: "cuenta",
+  en_espera: "cuenta",
+  en_curso: "cuenta",
+  completado: "cuenta",
+  ausente_paciente: "cuenta", // faltó el paciente: el profesional estaba
+  cancelado_paciente: "cuenta",
+  // El turno movido: el hueco existió igual. La deduplicación por `clave` evita
+  // el doble conteo cuando el horario vuelve a la oferta como fila nueva.
+  reprogramado: "cuenta",
+  // DESCUENTAN — la ausencia o la baja las decidió el profesional.
+  ausente_medico: "descuenta",
+  cancelado_medico: "descuenta",
+  // NEUTROS — la agenda la dio de baja la INSTITUCIÓN (ver abajo).
+  bloqueado: "ignora",
+  bloqueado_sin_cobro: "ignora",
+};
 
 /**
  * Qué hace un slot con la bolsa de horas, según su estado.
@@ -301,10 +330,25 @@ const ESTADOS_QUE_DESCUENTAN = new Set(["ausente_medico", "cancelado_medico"]);
  * ⚠ Es una decisión de producto tomada por omisión hasta que Diego la
  * confirme: hoy el número lo definía el silencio de la regla, ahora lo define
  * una línea con nombre y un test.
+ *
+ * ── UN ESTADO DESCONOCIDO ES UN ERROR, NO UN "CUENTA" ────────────────────────
+ * Si mañana aparece un estado que esta tabla no contempla, esta función TIRA.
+ * Es incómodo y es lo correcto: el caller (`cumplimientoDeSemana`) ya propaga
+ * los errores, y la alternativa —seguir de largo sumando— es que una semana se
+ * selle con horas que nadie decidió acreditar, en una tabla inmutable, sobre un
+ * número que se le factura a la institución. Un panel que no abre se arregla
+ * en una hora; un sello mal puesto hay que levantarlo a mano y explicarlo.
  */
 export function aporteDelSlot(estado: string): "cuenta" | "descuenta" | "ignora" {
-  if (estado === "bloqueado") return "ignora";
-  return ESTADOS_QUE_DESCUENTAN.has(estado) ? "descuenta" : "cuenta";
+  const aporte = APORTE_POR_ESTADO[estado];
+  if (!aporte) {
+    throw new Error(
+      `Estado de turno desconocido para la bolsa de horas: "${estado}". ` +
+        `Agregalo a APORTE_POR_ESTADO en src/lib/metering/bolsa.ts decidiendo ` +
+        `explícitamente si cuenta, descuenta o es neutro — no hay default.`
+    );
+  }
+  return aporte;
 }
 
 /** "2026-10-20" + "16:30:00" → epoch ms en AR (offset fijo -03:00). */
@@ -581,8 +625,32 @@ export function totalDeBolsa(filas: CumplimientoProfesional[]): {
 }
 
 /**
- * Encuentros terminales de esa semana que TODAVÍA no tienen fila en el
- * contador. Es la precondición del sello.
+ * Estados de turno que NUNCA van a producir una fila del contador y tampoco
+ * son terminales. Son los bordes de `encuentrosSinClasificar` (M1 del gate
+ * #405) y hay que nombrarlos, porque tratarlos como "vivos" dejaría el sello
+ * bloqueado PARA SIEMPRE:
+ *   · `disponible` / `bloqueado` / `bloqueado_sin_cobro` — no tienen paciente,
+ *     así que el filtro de paciente ya los saca; están acá para que se lea la
+ *     lista completa en un solo lugar.
+ *   · `reprogramado` — sí tiene paciente y NO es terminal, pero es el rastro de
+ *     un turno que se movió: el encuentro real es el turno nuevo, y este no va
+ *     a cambiar de estado nunca más.
+ *
+ * `reservado_pendiente` NO está acá a propósito: en la instancia no existe
+ * (no hay checkout que esperar), y si apareciera, es un turno vivo de verdad.
+ */
+const TURNO_SIN_DESTINO = ["disponible", "bloqueado", "bloqueado_sin_cobro", "reprogramado"];
+
+export interface FaltantesDeSemana {
+  /** Terminales sin fila en el contador (el job no llegó). */
+  sin_fila: number;
+  /** Todavía vivos: van a producir fila DESPUÉS del sello si se sella ahora. */
+  vivos: number;
+  total: number;
+}
+
+/**
+ * Encuentros de esa semana que impiden sellarla. Es la precondición del sello.
  *
  * ── POR QUÉ EL SELLO NO PUEDE CORRER SIN ESTO ────────────────────────────────
  * `cerrarSemana` congela lo que el clasificador HAYA ALCANZADO A ESCRIBIR, y
@@ -594,22 +662,52 @@ export function totalDeBolsa(filas: CumplimientoProfesional[]): {
  *
  * Sellar tarde es barato. Sellar un número que todavía se está formando, no.
  *
+ * ── LOS VIVOS TAMBIÉN CUENTAN (I1 del gate #405) ─────────────────────────────
+ * La versión anterior miraba SOLO encuentros ya terminales, y por ese hueco se
+ * colaba el caso más caro: una consulta inmediata que quedó colgada el domingo
+ * a las 20:00 no es terminal el lunes a las 02:00 —la cierra `cerrar-huerfanas`
+ * el martes a las 3 AM—, así que el sello no la veía, se sellaba la semana sin
+ * ella, y cuando el martes aparecía su fila facturable el cumplimiento sellado
+ * ya no la podía incorporar. La factura la cobraba igual: los dos números
+ * contractuales, otra vez, divergiendo en silencio.
+ *
+ * Ahora un encuentro VIVO de la semana bloquea el sello igual que uno sin
+ * clasificar. Es más conservador a propósito: la respuesta correcta a "todavía
+ * está pasando algo de esa semana" es esperar, no congelar.
+ *
  * Solo se cuentan los encuentros que DEBERÍAN producir fila: con paciente y con
  * un motor válido. Un slot que nadie tomó o un canal desconocido no generan
  * fila por diseño, y contarlos dejaría el sello bloqueado para siempre.
  */
-export async function encuentrosSinClasificar(semanaAr: string): Promise<number> {
+export async function encuentrosSinClasificar(semanaAr: string): Promise<FaltantesDeSemana> {
   const admin = createAdminClient();
   const lunes = semanaAr;
   const domingo = domingoDeSemana(lunes);
   const MOTORES = ["acordado", "espontaneo", "ofrecido"];
+  const TERMINALES_TURNO = ESTADOS_TERMINALES_TURNO as unknown as string[];
+  const TERMINALES_CONSULTA = ESTADOS_TERMINALES_CONSULTA as unknown as string[];
 
-  const [turnos, consultas, filas] = await Promise.all([
+  const [turnos, turnosVivos, consultas, consultasVivas, filas] = await Promise.all([
     leerTodo<Record<string, unknown>>("turnos terminales de la semana", (desde, hasta) =>
       admin
         .from("turnos")
         .select("id")
-        .in("estado", ESTADOS_TERMINALES_TURNO as unknown as string[])
+        .in("estado", TERMINALES_TURNO)
+        .in("canal_origen", MOTORES)
+        .not("paciente_id", "is", null)
+        .gte("fecha", lunes)
+        .lte("fecha", domingo)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
+    // Vivos por COMPLEMENTO, no por lista blanca: un estado que no conozcamos
+    // bloquea el sello en vez de pasar de largo. Sellar es irreversible; la
+    // duda se resuelve esperando.
+    leerTodo<Record<string, unknown>>("turnos todavía vivos de la semana", (desde, hasta) =>
+      admin
+        .from("turnos")
+        .select("id, estado")
+        .not("estado", "in", `(${[...TERMINALES_TURNO, ...TURNO_SIN_DESTINO].join(",")})`)
         .in("canal_origen", MOTORES)
         .not("paciente_id", "is", null)
         .gte("fecha", lunes)
@@ -624,7 +722,18 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<number>
       admin
         .from("consultas")
         .select("id, asignada_at, created_at")
-        .in("estado", ESTADOS_TERMINALES_CONSULTA as unknown as string[])
+        .in("estado", TERMINALES_CONSULTA)
+        .in("canal_origen", MOTORES)
+        .gte("created_at", `${lunes}T00:00:00-03:00`)
+        .lte("created_at", `${domingo}T23:59:59.999-03:00`)
+        .order("id", { ascending: true })
+        .range(desde, hasta)
+    ),
+    leerTodo<Record<string, unknown>>("consultas todavía vivas de la semana", (desde, hasta) =>
+      admin
+        .from("consultas")
+        .select("id, asignada_at, created_at")
+        .not("estado", "in", `(${TERMINALES_CONSULTA.join(",")})`)
         .in("canal_origen", MOTORES)
         .gte("created_at", `${lunes}T00:00:00-03:00`)
         .lte("created_at", `${domingo}T23:59:59.999-03:00`)
@@ -641,15 +750,19 @@ export async function encuentrosSinClasificar(semanaAr: string): Promise<number>
     ),
   ]);
 
+  const deLaSemana = (c: Record<string, unknown>) =>
+    lunesDeSemanaAR((c.asignada_at as string | null) ?? (c.created_at as string)) === lunes;
+
   const conFila = new Set(filas.map((f) => `${f.tipo}|${f.recurso_id}`));
-  let faltan = 0;
-  for (const t of turnos) if (!conFila.has(`turno|${t.id}`)) faltan++;
+  let sinFila = 0;
+  for (const t of turnos) if (!conFila.has(`turno|${t.id}`)) sinFila++;
   for (const c of consultas) {
-    const iso = (c.asignada_at as string | null) ?? (c.created_at as string);
-    if (lunesDeSemanaAR(iso) !== lunes) continue;
-    if (!conFila.has(`consulta|${c.id}`)) faltan++;
+    if (!deLaSemana(c)) continue;
+    if (!conFila.has(`consulta|${c.id}`)) sinFila++;
   }
-  return faltan;
+
+  const vivos = turnosVivos.length + consultasVivas.filter(deLaSemana).length;
+  return { sin_fila: sinFila, vivos, total: sinFila + vivos };
 }
 
 export interface ResumenCierreSemana {
@@ -686,10 +799,12 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
   // Precondición: el contador terminó de contar esta semana. Si falta aunque
   // sea un encuentro, no se sella nada — un sello incompleto es inmutable.
   const faltan = await encuentrosSinClasificar(semanaAr);
-  if (faltan > 0) {
+  if (faltan.total > 0) {
     throw new Error(
-      `La semana ${semanaAr} tiene ${faltan} encuentro(s) terminales sin clasificar: no se sella. ` +
-        `Revisá el cron metering-clasificar y volvé a correr el cierre.`
+      `La semana ${semanaAr} todavía no se puede sellar: ${faltan.sin_fila} encuentro(s) terminales ` +
+        `sin clasificar y ${faltan.vivos} todavía en curso. Revisá el cron metering-clasificar ` +
+        `(y, si hay vivos, esperá a que cierren o a que los cierre cerrar-huerfanas) y volvé a ` +
+        `correr el cierre con POST /api/admin/institucional/cerrar-semana.`
     );
   }
 

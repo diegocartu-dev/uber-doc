@@ -276,7 +276,14 @@ export default function ResumenSemanalVista({
               </>
             )}
           </div>
-          {/* Descarga directa: es un archivo, no una acción con efectos. */}
+          {/* Es un link y no un form, pero NO es una descarga inocua: bajar el
+              detalle de un mes YA TERMINADO SELLA sus filas (`facturado_periodo`)
+              y a partir de ahí son inmutables por el trigger de la 014. El mes en
+              curso no se sella — se puede mirar cuantas veces haga falta.
+              El comentario que estaba acá decía lo contrario ("es un archivo, no
+              una acción con efectos"): quedó viejo cuando el sello se conectó, y
+              es justo la clase de comentario que hace que alguien mueva el botón
+              a un lugar más cómodo sin saber lo que dispara. */}
           <a className="btn-sec" href={`/api/panel/facturacion/csv?periodo=${periodo}`} download>
             Exportar CSV
           </a>
