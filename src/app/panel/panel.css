@@ -220,3 +220,11 @@
   .pnl .fila .cupo-barra, .pnl .fila .motores, .pnl .enc-fila > .oculta-mobile { display: none; }
   .pnl .fila-tr { height: auto; padding-top: 10px; padding-bottom: 10px; }
 }
+
+/* ── una sola identidad arriba ────────────────────────
+   El chrome del layout (InstitucionTheme) pinta la franja de 4px Y una banda
+   con el nombre de la institución. Esta pantalla trae su propio header con ese
+   mismo nombre, así que sin esto quedaban tres bloques apilados: franja, banda
+   y header. El mock tiene franja + header. La banda se apaga solo acá — las
+   pantallas del paciente no tienen header propio y la necesitan. */
+body:has(.pnl) .inst-banda { display: none; }
