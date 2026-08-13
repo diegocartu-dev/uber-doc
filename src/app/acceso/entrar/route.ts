@@ -55,6 +55,8 @@ import {
   permitirIntentoAcceso,
   destinoSeguro,
   hashToken,
+  segundosDeVida,
+  COOKIE_ACCESO,
 } from "@/lib/institucional/accesos";
 
 /**
@@ -146,11 +148,29 @@ export async function POST(request: NextRequest) {
   // 4. Destino + cookies. El response se arma ANTES del verifyOtp porque es el
   //    contenedor donde el cliente de Supabase escribe las cookies de sesión
   //    (mismo patrón que /auth/confirmar y impersonate-session).
+  // El fallback es el del PROPIO encuentro: `/mis-consultas` (el listado del
+  // B2C) dejó de existir en la instancia — es una de las pantallas con menú y
+  // branding Docto que la Capa A ahora bloquea.
   const destino = destinoSeguro(
     acceso.destino,
-    acceso.turnoId ? `/turno/${acceso.turnoId}/acceso` : "/mis-consultas"
+    acceso.turnoId
+      ? `/turno/${acceso.turnoId}/acceso`
+      : `/consulta/${acceso.consultaId}/confirmacion`
   );
   const response = NextResponse.redirect(`${origin}${destino}`, 303);
+
+  // Qué acceso originó esta sesión. Sin esta marca, el scoping del token
+  // (encuentro + vigencia + estado) se quedaba en la puerta: adentro quedaba
+  // la sesión completa del paciente, que sobrevivía a la revocación y al
+  // vencimiento del enlace. Las pantallas del paciente la comprueban en cada
+  // request (`accesoSigueVivo`). httpOnly: no la lee ni la escribe ningún JS.
+  response.cookies.set(COOKIE_ACCESO, acceso.id, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: segundosDeVida(acceso.expiraAt),
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
