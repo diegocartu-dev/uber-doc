@@ -43,6 +43,30 @@ Y ninguna de las cuatro toca el B2C: son de la base de la instancia.
 de más abajo no son opcionales: son la única prueba de que las defensas escritas
 frenan algo.
 
+## Modo demo (migración 025) — el SQL primero, igual que siempre
+
+La **025** trae el modo demo: las dos tablas de la reunión (`demo_sesiones`,
+`demo_participantes`) y las marcas de demostración sobre `medicos`, `pacientes`,
+`turnos`, `consultas` y `documentos`.
+
+| Migración | Qué se cae si el código llega antes |
+|---|---|
+| **025** | `/admin/demo` entero (la pantalla que se usa EN la reunión): sin las tablas, listar reuniones y cargar participantes fallan. Y lo más caro: sin la columna `es_demo`, un encuentro de demostración entra al contador contractual como servicio real, y el documento que firma un participante que no es médico **sale sin la marca de agua**. |
+
+Es **reentrante** (tablas, índices y triggers con `IF NOT EXISTS` / `DROP … IF
+EXISTS`) y no toca el B2C.
+
+**Lo que hay que verificar después de aplicarla**, además del checklist general:
+
+1. **Que la reunión no se lea desde el navegador.** `demo_participantes` guarda
+   nombre y celular de personas reales: con la anon key, un `select` sobre
+   `demo_sesiones` o `demo_participantes` tiene que dar **permission denied**
+   (mismo método que el checklist de REVOKE de abajo).
+2. **Que el trigger marque.** Crear un profesional de demo desde `/admin/demo`,
+   levantarle una agenda y comprobar con service role que sus `turnos` tienen
+   `es_demo = true`. Si salen en `false`, el trigger no quedó y la factura de la
+   institución va a contar la demo.
+
 ## Checklist post-aplicación: verificar los REVOKE de verdad
 
 Tres migraciones crean funciones `SECURITY DEFINER`, que corren con los permisos de su dueño y **no** con los de quien las llama. Las tres revocan el `EXECUTE` a `anon` y `authenticated`… y ese `REVOKE` es exactamente la clase de línea que se da por buena porque está escrita.
