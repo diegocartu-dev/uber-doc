@@ -15,7 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
 import { esInstitucional } from "@/lib/instancia";
 import { invalidarCacheConfigInstitucion } from "@/lib/institucional/config";
-import { BUCKET_ASSETS } from "@/lib/institucional/branding-pdf";
+import { BUCKET_ASSETS, invalidarCacheIsologo } from "@/lib/institucional/branding-pdf";
 
 async function guardAdminInstitucionalDocto(): Promise<string | null> {
   if (!esInstitucional()) return null; // en B2C estas actions no existen
@@ -254,6 +254,12 @@ export async function subirAssetInstitucion(
   }
 
   invalidarCacheConfigInstitucion();
+  // El cache del BUFFER es otro (branding-pdf.ts, 10 min) y se indexa por
+  // `path`. La ruta versionada de arriba ya hace que no acierte nunca, pero
+  // esta llamada es la que la función siempre prometió tener ("solo para tests
+  // y para el editor de /admin tras cambiar el asset") y no tenía: si mañana
+  // alguien vuelve a una ruta fija, el editor sigue haciendo lo correcto.
+  invalidarCacheIsologo();
   revalidatePath("/admin/institucion");
   return { ok: true, path };
 }
@@ -278,6 +284,7 @@ export async function quitarAssetInstitucion(
   }
 
   invalidarCacheConfigInstitucion();
+  invalidarCacheIsologo();
   revalidatePath("/admin/institucion");
   return { ok: true };
 }

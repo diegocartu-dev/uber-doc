@@ -35,7 +35,20 @@ export const BUCKET_ASSETS = "institucion-assets";
 const CACHE_ISOLOGO_MS = 10 * 60_000;
 let cacheIsologo: { path: string; buffer: Buffer | null; fetchedAt: number } | null = null;
 
-/** Solo para tests y para el editor de /admin tras cambiar el asset. */
+/**
+ * Solo para tests y para el editor de /admin tras cambiar el asset.
+ *
+ * ⚠ ALCANCE: vacía el cache de ESTE proceso, igual que
+ * `invalidarCacheConfigInstitucion()`. Los otros lambdas vencen solos a los 10
+ * minutos. Por eso `subirAssetInstitucion()` sube el archivo con una ruta
+ * VERSIONADA (`isologo_pdf-<ts>.png`) en vez de pisar la anterior: como el
+ * cache se indexa por `path`, una ruta nueva no acierta en ningún lambda y el
+ * isologo nuevo sale desde el primer documento. Reemplazar el ARCHIVO dejando
+ * la misma ruta —el caso "cambiaron el logo"— serviría el buffer viejo hasta
+ * 10 minutos, y los documentos emitidos en esa ventana saldrían con el
+ * logotipo anterior. También se cachea el FALLO, así que un isologo recién
+ * arreglado tardaría lo mismo en aparecer.
+ */
 export function invalidarCacheIsologo(): void {
   cacheIsologo = null;
 }
