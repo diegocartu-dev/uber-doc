@@ -49,6 +49,14 @@ export interface ConfigInstitucion {
   ci_ventana_fin: string;
   slot_duracion_min: number;
   especialidades: string[];
+  // Ciclo de vida del link de acceso (migración 011 — spec §5.4 / R19). Son
+  // POLÍTICA de la institución, no constantes: los defaults de la tabla son la
+  // propuesta vigente (turno + 30 días; reenvío 1 cada 10 min, 5 por día;
+  // ventana de entrada 10 min antes). Se ajustan desde /admin/institucion.
+  vigencia_documentos_dias: number;
+  reenvio_cooldown_minutos: number;
+  reenvio_max_por_dia: number;
+  ventana_entrada_min: number;
   // Comunicaciones (server-only) — ContentSids Twilio por instancia
   // (migración 009; sin grant a authenticated: los lee solo el server).
   wa_plantillas: Record<string, string> | null;
@@ -89,6 +97,10 @@ export function soloBranding(config: ConfigInstitucion): BrandingInstitucion {
     ci_ventana_fin: config.ci_ventana_fin,
     slot_duracion_min: config.slot_duracion_min,
     especialidades: config.especialidades,
+    vigencia_documentos_dias: config.vigencia_documentos_dias,
+    reenvio_cooldown_minutos: config.reenvio_cooldown_minutos,
+    reenvio_max_por_dia: config.reenvio_max_por_dia,
+    ventana_entrada_min: config.ventana_entrada_min,
     updated_at: config.updated_at,
   };
 }
