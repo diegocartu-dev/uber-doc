@@ -96,7 +96,7 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-m
   -d '{"periodo":"2026-10"}'
 ```
 
-- **200** → `{ "periodo": "2026-10", "facturables": N, "selladas": N, "selladas_total": N, "ya_estaban": N }`.
+- **200** → `{ "periodo": "2026-10", "facturables": N, "selladas": N, "selladas_total": N, "ya_estaban": N, "tardias": N }`.
   - **`selladas_total`** es el universo congelado: **todas** las filas del mes,
     facturables y no facturables. El sello se le pone al mes entero — si solo se
     le pusiera a lo facturable, el resto seguiría siendo reescribible por el job
@@ -104,6 +104,10 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-m
     sobre un mes ya facturado) y quedaría fuera del alcance de la corrección
     auditada de R33.
   - **`facturables`** es el subconjunto que la factura cobra.
+  - **`tardias`** son las filas del mes **sin sello**. En un cierre normal es 0.
+    Si no lo es, son las que llegaron después del cierre: **no** están en la
+    factura emitida y **no** hay que sellarlas por SQL. Ver "La fila que llega
+    tarde", abajo.
 - **409** → la precondición no se cumple; el mensaje dice cuántos faltan y de
   qué tipo. Volver al paso 2.
 - **422** → falta `periodo`, no tiene formato `AAAA-MM`, **o el mes todavía no
@@ -112,6 +116,14 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-m
 
 **Es idempotente.** Correrlo dos veces sobre un mes ya cerrado no toca ninguna
 fila: `selladas` queda en 0 y `ya_estaban` muestra el total (`selladas_total`).
+
+> Hasta el 13/08 esta frase era **falsa** y el reintento era la operación más
+> peligrosa del runbook. El cierre no chequeaba si el mes ya estaba sellado, y el
+> UPDATE del sello apunta a las filas *sin* sello — que en un mes cerrado son
+> exactamente las que llegaron tarde. Un `POST` "por las dudas" agrandaba una
+> factura ya emitida, sin constancia en `metering_correcciones`: la puerta de R33
+> esquivada por al lado. Hoy el mes sellado se responde con su foto, `selladas: 0`
+> y el conteo de `tardias`, sin tocar la base.
 
 ## 4. Verificar
 

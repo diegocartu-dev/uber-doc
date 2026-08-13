@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  cerrarMes,
   periodoValido,
   rangoDePeriodo,
   nombreDePeriodo,
@@ -24,6 +25,7 @@ import {
   pesos,
   facturacionACSV,
   type Facturacion,
+  type PuertoCierreMes,
 } from "@/lib/metering/facturacion";
 import { etiquetaDia, lecturaDelChart } from "@/lib/metering/panel";
 
@@ -289,6 +291,116 @@ test("factura · el KPI y el CSV usan el MISMO filtro", () => {
   const detalle = cuerpoDe("facturacionDePeriodo");
   const usos = detalle.match(/filtro\.modo === "sellado"/g) ?? [];
   assert.equal(usos.length, 2, "el conteo del KPI y el detalle del CSV, los dos");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UN MES CERRADO NO SE VUELVE A CERRAR (el crítico del gate)
+// ─────────────────────────────────────────────────────────────────────────────
+// `sellarPeriodo` filtra `.is('facturado_periodo', null)`, que sobre un mes YA
+// sellado es exactamente el conjunto de las filas que llegaron tarde. Sin guard,
+// el segundo `cerrarMes` —un reintento "por las dudas" desde la ruta manual— las
+// sellaba y las metía en una factura emitida, sin constancia de R33.
+//
+// Se prueba con una base de mentira detrás del puerto, que respeta las mismas
+// reglas que las queries reales: sellar toca SOLO lo que está sin sello, y la
+// factura de un mes sellado sale del sello (no del rango de fechas).
+
+interface FilaFalsa {
+  fecha_ar: string;
+  facturable: boolean;
+  sello: string | null;
+}
+
+function baseFalsa(filas: FilaFalsa[]) {
+  const llamadas = { sellar: 0, faltantes: 0 };
+  const delMes = (periodo: string) => filas.filter((f) => f.fecha_ar.slice(0, 7) === periodo);
+  const conSello = (periodo: string) => filas.filter((f) => f.sello === periodo);
+  const puerto: PuertoCierreMes = {
+    estaSellado: async (periodo) => conSello(periodo).length > 0,
+    selladas: async (periodo) => conSello(periodo).length,
+    sinSellar: async (periodo) => delMes(periodo).filter((f) => f.sello === null).length,
+    sellar: async (periodo) => {
+      llamadas.sellar++;
+      const nuevas = delMes(periodo).filter((f) => f.sello === null);
+      for (const f of nuevas) f.sello = periodo;
+      return nuevas.length;
+    },
+    // `filtroDeFacturacion` en dos líneas: sellado → del sello; abierto → del rango.
+    facturables: async (periodo) => {
+      const universo = conSello(periodo).length > 0 ? conSello(periodo) : delMes(periodo);
+      return universo.filter((f) => f.facturable).length;
+    },
+    faltantes: async () => {
+      llamadas.faltantes++;
+      return { sin_fila: 0, vivos: 0, total: 0 };
+    },
+  };
+  return { puerto, llamadas, filas };
+}
+
+const DIA_2_DE_NOVIEMBRE = ar("2026-11-02T04:00:00-03:00");
+
+test("cierre · el primer cierre sella el mes entero y factura lo facturable", async () => {
+  const base = baseFalsa([
+    { fecha_ar: "2026-10-05", facturable: true, sello: null },
+    { fecha_ar: "2026-10-20", facturable: true, sello: null },
+    { fecha_ar: "2026-10-31", facturable: false, sello: null }, // una ausencia
+  ]);
+  const r = await cerrarMes("2026-10", DIA_2_DE_NOVIEMBRE, base.puerto);
+  assert.equal(r.selladas, 3, "el sello es del mes entero, no solo de lo facturable");
+  assert.equal(r.selladas_total, 3);
+  assert.equal(r.facturables, 2);
+  assert.equal(r.ya_estaban, 0);
+  assert.equal(r.tardias, 0);
+});
+
+test("cierre · la fila que llega DESPUÉS del cierre no la sella un segundo cierre", async () => {
+  const base = baseFalsa([
+    { fecha_ar: "2026-10-05", facturable: true, sello: null },
+    { fecha_ar: "2026-10-20", facturable: true, sello: null },
+    { fecha_ar: "2026-10-31", facturable: false, sello: null },
+  ]);
+  const primero = await cerrarMes("2026-10", DIA_2_DE_NOVIEMBRE, base.puerto);
+
+  // Un webhook muy tardío escribe una consulta de octubre… en noviembre.
+  base.filas.push({ fecha_ar: "2026-10-29", facturable: true, sello: null });
+
+  const segundo = await cerrarMes("2026-10", ar("2026-11-08T04:00:00-03:00"), base.puerto);
+
+  assert.equal(segundo.selladas, 0, "no toca ninguna fila");
+  assert.equal(base.llamadas.sellar, 1, "el UPDATE ni se intenta la segunda vez");
+  assert.equal(segundo.ya_estaban, 3);
+  assert.equal(segundo.tardias, 1, "la fila tardía se INFORMA, no se sella");
+  assert.equal(
+    segundo.facturables,
+    primero.facturables,
+    "la factura emitida no se mueve: sigue diciendo 2"
+  );
+  assert.equal(
+    base.filas.find((f) => f.fecha_ar === "2026-10-29")?.sello,
+    null,
+    "la tardía sigue sin sello: fuera de la factura, visible en /admin/periodos"
+  );
+});
+
+test("cierre · un mes ya cerrado ni siquiera evalúa la precondición del contador", async () => {
+  // Si la evaluara, un encuentro tardío todavía vivo convertiría un reintento
+  // inocente en un 409 sobre un mes que ya está cerrado hace semanas.
+  const base = baseFalsa([{ fecha_ar: "2026-10-05", facturable: true, sello: "2026-10" }]);
+  const r = await cerrarMes("2026-10", DIA_2_DE_NOVIEMBRE, base.puerto);
+  assert.equal(base.llamadas.faltantes, 0);
+  assert.equal(base.llamadas.sellar, 0);
+  assert.equal(r.selladas, 0);
+  assert.equal(r.ya_estaban, 1);
+});
+
+test("cierre · un mes en curso no se cierra ni con la base vacía", async () => {
+  const base = baseFalsa([]);
+  await assert.rejects(
+    () => cerrarMes("2026-11", DIA_2_DE_NOVIEMBRE, base.puerto),
+    /TODAVÍA NO TERMINÓ/
+  );
+  assert.equal(base.llamadas.sellar, 0);
 });
 
 test("sello · congela el MES ENTERO, no solo lo facturable", () => {

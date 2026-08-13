@@ -19,7 +19,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { contarExacto, leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
-import { encuentrosSinClasificarEnRango } from "@/lib/metering/bolsa";
+import { encuentrosSinClasificarEnRango, type Faltantes } from "@/lib/metering/bolsa";
 import type { Motor } from "@/lib/metering/clasificar";
 
 export interface LineaFacturacion {
@@ -317,7 +317,51 @@ export interface ResumenCierreMes {
   selladas_total: number;
   /** Ya venían selladas (corrida repetida): la idempotencia, visible. */
   ya_estaban: number;
+  /**
+   * Filas del mes SIN sello. En un cierre normal es 0; en un mes ya cerrado son
+   * las que llegaron DESPUÉS del cierre.
+   *
+   * Va en la respuesta a propósito: el operador que corre el cierre a mano tiene
+   * que enterarse de que existen POR ACÁ, y no descubrirlas cuando la factura no
+   * le cuadre. Si no las nombrara, el único camino que le queda es sellarlas por
+   * SQL — que es exactamente lo que la respuesta de este endpoint tiene que
+   * evitar que se le ocurra. Qué hacer con ellas: el runbook mensual, sección
+   * "La fila que llega tarde".
+   */
+  tardias: number;
 }
+
+/**
+ * Todo lo que `cerrarMes` toca de la base, en una sola superficie.
+ *
+ * ── POR QUÉ NO LLAMA A LAS FUNCIONES DIRECTO ─────────────────────────────────
+ * Porque la garantía que hay que fijar con un test es una SECUENCIA sobre la
+ * base —sellar, que aparezca una fila tardía, volver a cerrar y que la factura
+ * no se mueva—, y esa secuencia no se puede escribir contra Postgres desde el
+ * runner unitario. Con el puerto, el test pone una base de mentira que respeta
+ * las mismas reglas que los filtros de las queries (`sellar` solo toca lo que
+ * está sin sello; la factura de un mes sellado sale del sello) y verifica la
+ * secuencia entera.
+ *
+ * El default es la implementación real, así que ningún caller cambia.
+ */
+export interface PuertoCierreMes {
+  estaSellado(periodo: string): Promise<boolean>;
+  selladas(periodo: string): Promise<number>;
+  sinSellar(periodo: string): Promise<number>;
+  sellar(periodo: string): Promise<number>;
+  facturables(periodo: string): Promise<number>;
+  faltantes(desdeAr: string, hastaAr: string): Promise<Faltantes>;
+}
+
+export const PUERTO_CIERRE_MES: PuertoCierreMes = {
+  estaSellado: (periodo) => periodoEstaSellado(periodo),
+  selladas: (periodo) => filasSelladas(periodo),
+  sinSellar: (periodo) => filasSinSellar(periodo),
+  sellar: (periodo) => sellarPeriodo(periodo),
+  facturables: (periodo) => facturacionDePeriodo(periodo).then((f) => f.consultas),
+  faltantes: (desdeAr, hastaAr) => encuentrosSinClasificarEnRango(desdeAr, hastaAr),
+};
 
 /**
  * Cierra un mes: sella TODAS sus filas (facturables y no facturables — ver
@@ -340,10 +384,31 @@ export interface ResumenCierreMes {
  * la corrida diaria del cron, mientras que un sello incompleto hay que
  * levantarlo fila por fila con la auditoría de la 021 encima.
  *
- * Idempotente: si vuelve a correr sobre un mes ya sellado, `sellarPeriodo` no
- * toca ninguna fila y el resumen lo dice (`selladas: 0`).
+ * ── IDEMPOTENTE DE VERDAD: UN MES CERRADO NO SE VUELVE A CERRAR ──────────────
+ * Antes se apoyaba en que `sellarPeriodo` filtra `.is('facturado_periodo',
+ * null)`… que es EXACTAMENTE el conjunto de las filas tardías. O sea que la
+ * segunda corrida sobre un mes ya cerrado no era una no-operación: sellaba lo
+ * que había llegado después del cierre y lo metía en una factura ya emitida,
+ * sin constancia en `metering_correcciones` y sin que nadie lo pidiera. La
+ * puerta de R33 quedaba esquivada por al lado, y la promesa del runbook
+ * ("correrlo dos veces no toca ninguna fila") era falsa. El cron nunca lo
+ * disparó —`mesesPendientesDeSellar` saltea los meses sellados—, pero
+ * `POST /api/admin/institucional/cerrar-mes` llama acá directo, así que
+ * alcanzaba con que un admin de Docto reintentara "por las dudas".
+ *
+ * Ahora el mes sellado se responde con su foto y `selladas: 0`, sin tocar la
+ * base y sin evaluar siquiera la precondición del contador (que sobre un mes
+ * cerrado podría abortar por un encuentro tardío y convertir un reintento
+ * inocente en un 409 confuso).
+ *
+ * Las tardías no se esconden: viajan contadas en `tardias`, para que quien
+ * corre el cierre sepa que existen y las resuelva por donde corresponde.
  */
-export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<ResumenCierreMes> {
+export async function cerrarMes(
+  periodo: string,
+  ahoraMs = Date.now(),
+  puerto: PuertoCierreMes = PUERTO_CIERRE_MES
+): Promise<ResumenCierreMes> {
   if (!periodoValido(periodo)) {
     throw new Error(`Período inválido: "${periodo}" (formato AAAA-MM).`);
   }
@@ -355,8 +420,24 @@ export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<
     );
   }
 
+  if (await puerto.estaSellado(periodo)) {
+    const [selladas_total, facturables, tardias] = await Promise.all([
+      puerto.selladas(periodo),
+      puerto.facturables(periodo),
+      puerto.sinSellar(periodo),
+    ]);
+    return {
+      periodo,
+      facturables,
+      selladas: 0,
+      selladas_total,
+      ya_estaban: selladas_total,
+      tardias,
+    };
+  }
+
   const { desde, hasta } = rangoDePeriodo(periodo);
-  const faltan = await encuentrosSinClasificarEnRango(desde, hasta);
+  const faltan = await puerto.faltantes(desde, hasta);
   if (faltan.total > 0) {
     throw new Error(
       `El mes ${periodo} todavía no se puede cerrar: ${faltan.sin_fila} encuentro(s) terminales ` +
@@ -366,10 +447,14 @@ export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<
     );
   }
 
-  const selladas = await sellarPeriodo(periodo);
-  const [selladas_total, facturables] = await Promise.all([
-    filasSelladas(periodo),
-    facturacionDePeriodo(periodo).then((f) => f.consultas),
+  const selladas = await puerto.sellar(periodo);
+  const [selladas_total, facturables, tardias] = await Promise.all([
+    puerto.selladas(periodo),
+    puerto.facturables(periodo),
+    // Normalmente 0. Si no lo es, una fila entró al contador MIENTRAS corría el
+    // cierre: mejor que la respuesta lo diga a que aparezca sola en la próxima
+    // auditoría del período.
+    puerto.sinSellar(periodo),
   ]);
   return {
     periodo,
@@ -380,6 +465,7 @@ export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<
     // `facturables` mezclaba dos conjuntos distintos y, con el sello puesto en
     // todas las filas, daba negativo en cuanto el mes tenía una ausencia.
     ya_estaban: Math.max(0, selladas_total - selladas),
+    tardias,
   };
 }
 
@@ -422,6 +508,12 @@ export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<
  *
  * `.is('facturado_periodo', null)` es importante: sin eso el UPDATE tocaría las
  * filas ya selladas y el trigger, correctamente, lo rechazaría entero.
+ *
+ * ⚠ Y por eso mismo esta función NO es la idempotencia del cierre: sobre un mes
+ * YA cerrado, ese filtro selecciona justo las filas que llegaron después: las
+ * sellaría y las metería en una factura emitida. Quien decide que un mes
+ * cerrado no se vuelve a cerrar es `cerrarMes`. Llamar a `sellarPeriodo` desde
+ * cualquier otro lado sin ese guard reabre el agujero.
  */
 export async function sellarPeriodo(periodo: string): Promise<number> {
   const admin = createAdminClient();
