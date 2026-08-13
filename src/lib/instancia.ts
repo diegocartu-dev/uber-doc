@@ -52,18 +52,15 @@ export function esInstitucionalClient(): boolean {
 // NO están acá, a propósito, dos que a primera vista pintarían:
 //   · `/dashboard` — es la casa del PROFESIONAL en la instancia (turnos en
 //     espera, agenda del día). Bloquearla dejaría al médico sin dónde trabajar.
-//   · `/consulta`  — el destino de la CI institucional sigue siendo
-//     `/consulta/[id]/confirmacion` (el clon del B2C, pendiente de la pantalla
-//     propia). Bloquearla apagaría la consulta inmediata.
-// Las dos quedan registradas como pendientes: la primera necesita un gate por
-// ROL, no por ruta; la segunda se cierra cuando la CI tenga su pantalla.
-//
-// ⚠ CONSECUENCIA ACEPTADA: la pantalla de cierre de la CI (que hoy es el clon
-// del B2C) tiene links a `/documentos` y `/mis-consultas` que ahora dan 404.
-// Es el precio de cortar la superficie navegable hasta que la CI tenga su
-// pantalla propia — la misma que ya figuraba como pendiente de esta etapa. En
-// el TURNO, que es el caso de la demo, no falta nada: los documentos se listan
-// dentro de la pantalla del paciente (estado E).
+//     Queda pendiente: necesita un gate por ROL, no por ruta.
+//   · `/consulta`  — ahí VIVE la consulta inmediata institucional:
+//     `/consulta/[id]/acceso` es la pantalla propia del paciente (Etapa 4) y la
+//     sala de video cuelga del mismo prefijo. Bloquearlo apagaría la CI. Lo que
+//     sí quedó cerrado: `/consulta/[id]/confirmacion`, el clon del B2C, rebota
+//     a la pantalla propia (`destinoConfirmacionCI`), así que ya nadie aterriza
+//     en una pantalla con logo de Docto, copy de pagos y links a `/documentos`
+//     y `/mis-consultas` que en la instancia dan 404. La "consecuencia
+//     aceptada" que figuraba acá ya no existe.
 //
 // La lista vive acá y no en el middleware porque es POLÍTICA del modo, no
 // ruteo — y porque así se puede recorrer desde un test sin levantar el
