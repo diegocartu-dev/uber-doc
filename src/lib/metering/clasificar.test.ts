@@ -369,9 +369,14 @@ test("bolsa · la tabla de aportes es EXHAUSTIVA: un estado desconocido revienta
     assert.doesNotThrow(() => aporteDelSlot(estado), `falta decidir qué hace "${estado}"`);
   }
 
-  // El turno movido cuenta: el hueco existió igual, y el doble conteo con el
-  // horario re-ofrecido lo evita la deduplicación por `clave` de calcularBolsa.
-  assert.equal(aporteDelSlot("reprogramado"), "cuenta");
+  // El turno MOVIDO es neutro. Era "cuenta" ("el hueco existió igual"), cierto
+  // cuando el hueco lo mueve la institución — pero el motor masivo escribe
+  // `reprogramado` en el caso contrario: el profesional avisó que NO atiende
+  // ese día. Acreditárselo convertía un descuento en un crédito. Y el encuentro
+  // real es el turno nuevo, que ya le cuenta a quien lo recibe: si además
+  // contara en el origen, la misma hora se acreditaría a dos profesionales
+  // distintos (la dedup por `clave` no lo agarra: la clave lleva el medicoId).
+  assert.equal(aporteDelSlot("reprogramado"), "ignora");
   // La baja de agenda que decide la INSTITUCIÓN es neutra, con cobro o sin él.
   assert.equal(aporteDelSlot("bloqueado_sin_cobro"), "ignora");
 });

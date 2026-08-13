@@ -78,6 +78,58 @@ export type ResultadoReprogramar =
  * turnos otorgados. Importar la equivocada desde una pantalla de médico o de
  * admin no lo detectaba el tipado: las dos reciben strings.
  */
+/**
+ * Marca el DÍA de un profesional que avisó que no puede atender: sus slots que
+ * quedaron libres pasan de `disponible` a `cancelado_medico`.
+ *
+ * ── POR QUÉ ES PARTE DEL MOTOR Y NO UN DETALLE ───────────────────────────────
+ * Sin esto, de los turnos del profesional del martes los que se movieron quedan
+ * `reprogramado` y los que nadie tomó siguen `disponible` — y `disponible`
+ * CUENTA como hora puesta a disposición. O sea que el martes entero le entraba
+ * al número contractual que se le factura a la institución, el mismo día en que
+ * el profesional dijo que no iba a atender. Por el camino viejo (cancelar la
+ * agenda) ese día caía en `cancelado_medico` y descontaba.
+ *
+ * `cancelado_medico` y no `bloqueado_sin_cobro` porque la baja la decidió ÉL:
+ * `bloqueado*` está reservado para cuando la agenda la da de baja la
+ * INSTITUCIÓN, y por eso es neutro.
+ *
+ * Idempotente: solo toca lo que sigue en `disponible`. Los turnos ya movidos,
+ * los que están con paciente y los ya cancelados no se tocan.
+ */
+export async function marcarDiaSinAtencionDelProfesional(params: {
+  medicoId: string;
+  fecha: string;
+}): Promise<{ ok: boolean; marcados: number }> {
+  if (!esInstitucional()) return { ok: false, marcados: 0 };
+  const { medicoId, fecha } = params;
+  if (!UUID_RE.test(medicoId) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return { ok: false, marcados: 0 };
+  }
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("turnos")
+    .update({ estado: "cancelado_medico" })
+    .eq("medico_id", medicoId)
+    .eq("fecha", fecha)
+    .eq("estado", "disponible")
+    .in("canal_origen", ["acordado", "ofrecido"])
+    .select("id");
+  if (error) {
+    // No se revierte nada: los turnos ya se movieron y los pacientes ya fueron
+    // avisados. Se grita para que alguien mire el día — el costo de no hacerlo
+    // es que ese día le acredite horas a quien no atendió.
+    console.error(
+      "[reprogramar] NO se pudo marcar el día sin atención:",
+      medicoId,
+      fecha,
+      error.message
+    );
+    return { ok: false, marcados: 0 };
+  }
+  return { ok: true, marcados: data?.length ?? 0 };
+}
+
 export async function reprogramarTurnoInstitucional(params: {
   turnoAnteriorId: string;
   turnoNuevoId: string;

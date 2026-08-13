@@ -300,15 +300,32 @@ const APORTE_POR_ESTADO: Record<string, "cuenta" | "descuenta" | "ignora"> = {
   completado: "cuenta",
   ausente_paciente: "cuenta", // faltó el paciente: el profesional estaba
   cancelado_paciente: "cuenta",
-  // El turno movido: el hueco existió igual. La deduplicación por `clave` evita
-  // el doble conteo cuando el horario vuelve a la oferta como fila nueva.
-  reprogramado: "cuenta",
   // DESCUENTAN — la ausencia o la baja las decidió el profesional.
   ausente_medico: "descuenta",
   cancelado_medico: "descuenta",
   // NEUTROS — la agenda la dio de baja la INSTITUCIÓN (ver abajo).
   bloqueado: "ignora",
   bloqueado_sin_cobro: "ignora",
+  // El turno MOVIDO. Era "cuenta" con el argumento "el hueco existió igual", y
+  // eso es cierto cuando el hueco lo mueve la institución — pero el motor que
+  // estrena esta etapa escribe `reprogramado` en el caso CONTRARIO: el
+  // profesional avisó que NO va a atender ese día. Acreditárselo convertía
+  // sistemáticamente un descuento en un crédito, que es justo lo que el
+  // hallazgo S2 quiso evitar ("el default no puede ser cuenta a favor del
+  // profesional").
+  //
+  // Neutro es lo correcto en las DOS direcciones, y no hace falta preguntar por
+  // el motivo: el encuentro real es el turno NUEVO, que le cuenta a quien lo
+  // recibe. Si además contara en el origen, la misma hora de agenda se
+  // acreditaría dos veces, a dos profesionales distintos — la deduplicación por
+  // `clave` no lo agarra, porque la clave lleva el medicoId adentro.
+  //
+  // Lo que sí hacía falta y no existía: que el día del profesional que no
+  // atiende quede MARCADO. Sus slots libres seguían en `disponible` ("cuenta"),
+  // así que el martes entero entraba como horas puestas a disposición. Eso lo
+  // resuelve `marcarDiaSinAtencionDelProfesional()` (src/lib/otorgador/
+  // reprogramar.ts), que los pasa a `cancelado_medico` — que descuenta.
+  reprogramado: "ignora",
 };
 
 /**
