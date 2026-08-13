@@ -159,7 +159,14 @@ export function reconstruirReloj(eventos: EventoPresencia[], cierreISO: string |
 
   const abiertos = { medico: new Set<string>(), paciente: new Set<string>() };
   const intervalos: { desde: string; hasta: string }[] = [];
-  let segundos = 0;
+  // Se acumula en MILISEGUNDOS y se redondea UNA vez, al final. Redondear por
+  // intervalo perdía hasta un segundo por tramo, y una consulta con
+  // reconexiones (lo normal en un celular) se parte en varios: dos tramos de
+  // 30,9 s son 61,8 s reales y daban 60; uno de 29,9 más otro de 30,9 son 60,8 s
+  // y daban 59 — o sea `no_facturable_corta`. El umbral es exacto e inclusivo,
+  // así que cada segundo perdido por redondeo es una consulta atendida que no
+  // se factura.
+  let msJuntos = 0;
   let ambosDesde: number | null = null;
   let medicoPrimerJoin: string | null = null;
   let pacientePrimerJoin: string | null = null;
@@ -167,8 +174,7 @@ export function reconstruirReloj(eventos: EventoPresencia[], cierreISO: string |
 
   const cerrar = (hastaMs: number) => {
     if (ambosDesde === null) return;
-    const delta = Math.max(0, hastaMs - ambosDesde);
-    segundos += Math.floor(delta / 1000);
+    msJuntos += Math.max(0, hastaMs - ambosDesde);
     intervalos.push({
       desde: new Date(ambosDesde).toISOString(),
       hasta: new Date(hastaMs).toISOString(),
@@ -208,7 +214,7 @@ export function reconstruirReloj(eventos: EventoPresencia[], cierreISO: string |
   return {
     medicoPrimerJoin,
     pacientePrimerJoin,
-    segundosAmbosEnSala: segundos,
+    segundosAmbosEnSala: Math.floor(msJuntos / 1000),
     intervalos,
   };
 }
