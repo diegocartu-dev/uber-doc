@@ -399,6 +399,28 @@ const DIA_MS = 24 * 3600_000;
 export const LIMITE_POR_CORRIDA = 500;
 
 /**
+ * ¿El job puede tocar esta fila que ya existe? (spec §6.6, borde "override
+ * `falla_tecnica` no pisado")
+ *
+ * Es EL guard que corre en producción. El `overrideManual` de `clasificar()` es
+ * la otra mitad de la misma regla —la que va a usar el /admin interno cuando
+ * exista—, pero lo que hoy protege a una falla técnica declarada por un humano
+ * es esta pregunta, y por eso está acá afuera y testeada.
+ *
+ * Devuelve POR QUÉ es intocable, no un booleano: el resumen del cron cuenta las
+ * dos causas por separado y son cosas distintas — una fila sellada ya se
+ * facturó, una manual la decidió una persona.
+ */
+export function motivoIntocable(fila: {
+  clasificacion_origen?: unknown;
+  facturado_periodo?: unknown;
+}): "sellada" | "manual" | null {
+  if (fila.facturado_periodo) return "sellada";
+  if (fila.clasificacion_origen === "manual_admin") return "manual";
+  return null;
+}
+
+/**
  * El job. Barre encuentros terminales recientes, arma su fila y la upsertea.
  *
  * Idempotente por `UNIQUE(tipo, recurso_id)`: correrlo diez veces seguidas da
@@ -535,10 +557,11 @@ export async function correrMeteringClasificar(opciones?: {
   const clasificadoAt = new Map<string, number>();
   for (const f of existentes) {
     const clave = `${f.tipo}|${f.recurso_id}`;
-    if (f.facturado_periodo) {
+    const motivo = motivoIntocable(f);
+    if (motivo === "sellada") {
       intocables.add(clave);
       resumen.salteados_sellados++;
-    } else if (f.clasificacion_origen === "manual_admin") {
+    } else if (motivo === "manual") {
       intocables.add(clave);
       resumen.salteados_manual++;
     } else {

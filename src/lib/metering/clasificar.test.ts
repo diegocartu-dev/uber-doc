@@ -27,6 +27,7 @@ import {
   componerFila,
   yaSePuedeClasificar,
   motorDeCanal,
+  motivoIntocable,
   SEGUNDOS_FACTURABLE,
   type Clasificacion,
   type EncuentroCandidato,
@@ -537,6 +538,27 @@ test("borde · el override 'falla_tecnica' gana sobre un encuentro de 10 minutos
     overrideManual: "falla_tecnica",
   });
   assert.equal(c, "falla_tecnica");
+});
+
+// El `overrideManual` de arriba es la mitad de la regla que todavía no tiene
+// caller (la va a usar el /admin interno). La que SÍ corre en producción es
+// esta: el job pregunta fila por fila si puede tocarla. Sin este test, la
+// protección que de verdad defiende la declaración de un humano no tenía
+// ninguna — y su modo de falla es mudo: el job pisa la fila y sigue.
+test("borde · el job NO toca una fila que fijó un humano, ni una ya facturada", () => {
+  assert.equal(motivoIntocable({ clasificacion_origen: "manual_admin" }), "manual");
+  assert.equal(motivoIntocable({ facturado_periodo: "2026-10" }), "sellada");
+  // Sellada gana sobre manual: las dos frenan, pero el resumen del cron las
+  // cuenta por separado y una fila facturada es la razón más fuerte.
+  assert.equal(
+    motivoIntocable({ clasificacion_origen: "manual_admin", facturado_periodo: "2026-10" }),
+    "sellada"
+  );
+});
+
+test("borde · una fila común del job SÍ se reclasifica (el webhook puede llegar tarde)", () => {
+  assert.equal(motivoIntocable({ clasificacion_origen: "job", facturado_periodo: null }), null);
+  assert.equal(motivoIntocable({}), null);
 });
 
 test("borde · una ausencia declarada gana sobre el reloj", () => {
