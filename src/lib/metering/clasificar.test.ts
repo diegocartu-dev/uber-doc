@@ -53,9 +53,14 @@ import {
   correrDias,
   diaARdeConsulta,
   cerrarSemana,
+  cumplimientoDeSemana,
+  cumplimientoSaleDeLoSellado,
+  filasDeLoSellado,
+  totalDeBolsa,
   semanasDeLaCorrida,
   type CumplimientoProfesional,
   type PuertoCierreSemana,
+  type PuertoSemanaSellada,
 } from "@/lib/metering/bolsa";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1095,6 +1100,116 @@ test("cierre semanal · la semana EN CURSO no se cierra ni con el padrón vacío
     /TODAVÍA NO TERMINÓ/
   );
   assert.equal(base.marcas.size, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL PANEL DE UNA SEMANA CERRADA NO SE MUEVE (la otra mitad de la 024)
+// ─────────────────────────────────────────────────────────────────────────────
+// `cerrarSemana` ya no vuelve sobre una semana cerrada, pero el PANEL la
+// calculaba igual: su universo era "el padrón de HOY ∪ los sellados", así que
+// un profesional dado de alta DESPUÉS del cierre estrenaba una fila viva —con
+// sus horas comprometidas enteras y cero cumplidas— en una semana que la
+// institución ya había leído. En la semana cerrada en CERO el efecto era
+// completo: cero filas antes del alta, una de 10 h después. Nadie toca plata,
+// pero el KPI de arriba (`totalDeBolsa` suma las filas listadas) cambiaba solo
+// entre dos visitas al mismo panel.
+//
+// Se prueba contra la función REAL, con el puerto de las lecturas del sello: la
+// rama en vivo ni se toca (si se tocara, el fake no alcanzaría y el test
+// fallaría por intentar hablar con Supabase, que es la señal correcta).
+
+/** Sello de `acuerdo_semanas` como lo devuelve la base. */
+function sello(medicoId: string, minutosCumplidos = 600) {
+  return {
+    medico_id: medicoId,
+    horas_comprometidas: 10,
+    minutos_cumplidos: minutosCumplidos,
+    desglose_motores: {
+      turnos: minutosCumplidos,
+      ci: 0,
+      motores: { acordado: minutosCumplidos, espontaneo: 0, ofrecido: 0 },
+    },
+    estado: "cerrada",
+  };
+}
+
+/** El padrón de HOY, que puede tener gente que entró después del cierre. */
+function puertoDelPanel(params: {
+  marcada: boolean;
+  sellos: ReturnType<typeof sello>[];
+  padron: string[];
+}): PuertoSemanaSellada {
+  return {
+    marcada: async () => params.marcada,
+    sellos: async () => params.sellos,
+    // El panel busca los nombres de los ids que le pidan; el padrón de hoy los
+    // tiene a todos (los sellados que ya se fueron también se resuelven).
+    perfiles: async (ids) =>
+      ids.map((id) => ({ id, nombre: `Profesional ${id}`, especialidad: "Prueba" })),
+  };
+}
+
+test("panel · la semana cerrada EN CERO no le abre fila a quien entró después", async () => {
+  // El caso reproducido: semana MARCADA cerrada, cero filas selladas, y un alta
+  // posterior al cierre. Antes devolvía [{ sellada: false, minutosComprometidos: 600 }].
+  const filas = await cumplimientoDeSemana({
+    semanaAr: LUNES,
+    ahoraMs: LUNES_SIGUIENTE,
+    puerto: puertoDelPanel({ marcada: true, sellos: [], padron: ["m1"] }),
+  });
+  assert.deepEqual(filas, [], "la semana cerrada en cero se muestra en cero, siempre");
+});
+
+test("panel · la semana cerrada muestra lo sellado y NADA más", async () => {
+  const filas = await cumplimientoDeSemana({
+    semanaAr: LUNES,
+    ahoraMs: LUNES_SIGUIENTE,
+    puerto: puertoDelPanel({
+      marcada: true,
+      sellos: [sello("m1", 600), sello("m2", 300)],
+      padron: ["m1", "m2", "m3"], // m3 entró DESPUÉS del cierre
+    }),
+  });
+  assert.deepEqual(
+    filas.map((f) => f.medicoId),
+    ["m1", "m2"],
+    "el que entró después del cierre no aparece"
+  );
+  assert.ok(
+    filas.every((f) => f.sellada),
+    "ninguna fila de una semana cerrada se recalcula"
+  );
+  assert.equal(filas[0].minutosCumplidos, 600);
+  assert.equal(filas[0].badge, "Cumplido");
+  assert.equal(filas[1].minutosCumplidos, 300);
+  assert.equal(filas[1].badge, "Incompleto");
+  // El KPI de arriba suma las filas listadas: es el número que no se puede mover.
+  assert.deepEqual(totalDeBolsa(filas), {
+    minutosCumplidos: 900,
+    minutosComprometidos: 1200,
+    porcentaje: 75,
+  });
+});
+
+test("panel · una semana cerrada ANTES de la 024 (sellos sin marca) también es cerrada", () => {
+  // Transición: "cerrada" es la marca O las filas selladas, igual que en
+  // `semanaEstaCerrada`. Si solo mirara la marca, el panel de esas semanas
+  // volvería a agregarle filas vivas a lo ya sellado.
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: false, sellos: 3 }), true);
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: true, sellos: 0 }), true);
+  // Y la semana abierta se sigue calculando al vuelo, que es todo el panel de
+  // la semana en curso.
+  assert.equal(cumplimientoSaleDeLoSellado({ marcada: false, sellos: 0 }), false);
+});
+
+test("panel · el sello sin ficha del profesional NO desaparece de la tabla", () => {
+  // El minuto sellado sostiene un acuerdo: si la ficha ya no está, se pierde el
+  // nombre, nunca la fila.
+  const filas = filasDeLoSellado([sello("m9", 120)], new Map());
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].medicoId, "m9");
+  assert.equal(filas[0].minutosCumplidos, 120);
+  assert.deepEqual(filas[0].motores, { acordado: 120, espontaneo: 0, ofrecido: 0 });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -295,7 +295,7 @@ export interface CumplimientoProfesional {
 }
 
 /** Fila de `acuerdo_semanas` tal como la lee el panel (el sello de esa semana). */
-interface SemanaSellada {
+export interface SemanaSellada {
   medico_id: string;
   horas_comprometidas: number | string;
   minutos_cumplidos: number | string;
@@ -400,11 +400,145 @@ function msAR(fecha: string, hora: string | null): number {
 
 const MOTORES_VACIOS = (): Record<Motor, number> => ({ acordado: 0, espontaneo: 0, ofrecido: 0 });
 
+/** Un profesional del piloto, como lo muestra la tabla del panel. */
+export interface PerfilDeProfesional {
+  id: string;
+  nombre: string;
+  especialidad: string;
+}
+
+/** "Dra." + "Nombre Apellido" → el nombre que va en la tabla. */
+function perfilDeFila(m: Record<string, unknown>): PerfilDeProfesional {
+  return {
+    id: m.id as string,
+    nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
+    especialidad: (m.especialidad as string | null) ?? "",
+  };
+}
+
+/**
+ * Lo que el panel necesita saber ANTES de decidir si una semana se lee del sello
+ * o se calcula al vuelo. Puerto con default real, igual que `PuertoCierreSemana`
+ * y por el mismo motivo: la garantía que hay que fijar con un test —una semana
+ * MARCADA cerrada en cero, un alta posterior, y que el panel siga mostrando la
+ * misma foto— no se puede escribir contra Postgres desde el runner unitario.
+ */
+export interface PuertoSemanaSellada {
+  /** ¿Tiene la marca explícita de cierre? (la 024) */
+  marcada(semanaAr: string): Promise<boolean>;
+  /** Las filas selladas de esa semana en `acuerdo_semanas`. */
+  sellos(semanaAr: string): Promise<SemanaSellada[]>;
+  /** Nombre y especialidad de esos profesionales, estén o no en el padrón de hoy. */
+  perfiles(ids: string[]): Promise<PerfilDeProfesional[]>;
+}
+
+export const PUERTO_SEMANA_SELLADA: PuertoSemanaSellada = {
+  marcada: (semanaAr) => semanaMarcadaCerrada(semanaAr),
+  sellos: (semanaAr) => {
+    const admin = createAdminClient();
+    return leerTodo<SemanaSellada>("sellos de la semana", (desde, hasta) =>
+      admin
+        .from("acuerdo_semanas")
+        .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
+        .eq("semana_ar", semanaAr)
+        .eq("estado", "cerrada")
+        .order("medico_id", { ascending: true })
+        .range(desde, hasta)
+    );
+  },
+  perfiles: async (ids) => {
+    if (ids.length === 0) return [];
+    const admin = createAdminClient();
+    const filas = await leerTodoEnLotes<Record<string, unknown>>(
+      "profesionales con la semana sellada",
+      ids,
+      (lote, desde, hasta) =>
+        admin
+          .from("medicos")
+          .select("id, nombre_completo, titulo, especialidad")
+          .in("id", lote)
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+    );
+    return filas.map(perfilDeFila);
+  },
+};
+
+/**
+ * ¿El cumplimiento de esta semana sale de lo SELLADO, o se calcula al vuelo?
+ *
+ * ── EL KPI DE UNA SEMANA CERRADA NO SE PUEDE MOVER SOLO ──────────────────────
+ * Es la misma promesa de la 015 y de la 024, del lado del PANEL. `cerrarSemana`
+ * ya no vuelve sobre una semana cerrada, pero el panel la calculaba igual: el
+ * universo era "el padrón de HOY ∪ los sellados", así que todo profesional que
+ * entró DESPUÉS del cierre estrenaba una fila viva —con sus horas comprometidas
+ * enteras y cero cumplidas— en una semana que la institución ya había leído. En
+ * la semana cerrada EN CERO —la del padrón vacío, que es justo la que la 024
+ * existe para poder afirmar— el efecto era completo: cero filas antes del alta,
+ * una fila de 10 h después.
+ *
+ * Nadie tocó plata, pero el número de arriba (`totalDeBolsa` suma las filas
+ * listadas) cambiaba solo entre dos visitas al mismo panel, que es exactamente
+ * lo que la foto viene a impedir (R30/R31: la semana cerrada no cambia).
+ *
+ * "Cerrada" es la MARCA o las filas selladas — la misma condición que
+ * `semanaEstaCerrada`, y por el mismo motivo (las semanas cerradas antes de la
+ * 024 no tienen marca). Si la semana está cerrada, el universo es el que existía
+ * AL CIERRE: los sellos. No el padrón de hoy.
+ */
+export function cumplimientoSaleDeLoSellado(params: {
+  marcada: boolean;
+  sellos: number;
+}): boolean {
+  return params.marcada || params.sellos > 0;
+}
+
+/**
+ * Las filas del panel para una semana CERRADA: una por sello, con los números
+ * tal como se sellaron. No se recalcula nada — para eso se selló.
+ *
+ * El perfil (nombre y especialidad) sí se lee de hoy: es una etiqueta, no un
+ * número del acuerdo. Al que ya no está en el padrón se lo busca igual; si su
+ * ficha desapareció, la fila queda sin nombre pero NO desaparece: el minuto
+ * sellado tiene que seguir contando.
+ */
+export function filasDeLoSellado(
+  sellos: SemanaSellada[],
+  perfiles: Map<string, PerfilDeProfesional>
+): CumplimientoProfesional[] {
+  return sellos
+    .map((sello) => {
+      const desglose = sello.desglose_motores ?? {};
+      const perfil = perfiles.get(sello.medico_id);
+      const minutosComprometidos = Math.round(Number(sello.horas_comprometidas) * 60);
+      const minutosCumplidos = Number(sello.minutos_cumplidos);
+      return {
+        medicoId: sello.medico_id,
+        nombre: perfil?.nombre ?? "",
+        especialidad: perfil?.especialidad ?? "",
+        horasComprometidas: Number(sello.horas_comprometidas),
+        minutosComprometidos,
+        minutosCumplidos,
+        minutosTurnos: desglose.turnos ?? 0,
+        minutosCI: desglose.ci ?? 0,
+        porcentaje:
+          minutosComprometidos > 0
+            ? Math.round((minutosCumplidos / minutosComprometidos) * 100)
+            : 0,
+        motores: desglose.motores ?? MOTORES_VACIOS(),
+        badge: badgeCumplimiento(minutosCumplidos, minutosComprometidos, true),
+        sellada: true,
+      };
+    })
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
 /**
  * Cumplimiento de TODOS los profesionales del piloto en esa semana.
  *
  * Semana cerrada → se leen los números sellados en `acuerdo_semanas` (no se
- * recalculan: para eso se sellaron). Semana abierta → se calcula al vuelo, que
+ * recalculan: para eso se sellaron), y el universo es el que existía AL CIERRE
+ * (ver `cumplimientoSaleDeLoSellado`). Semana abierta → se calcula al vuelo, que
  * con 30 profesionales cuesta cuatro queries.
  *
  * Orden ALFABÉTICO, como manda el mock: el panel informa, no arma un ranking.
@@ -419,34 +553,34 @@ const MOTORES_VACIOS = (): Record<Motor, number> => ({ acordado: 0, espontaneo: 
 export async function cumplimientoDeSemana(params: {
   semanaAr: string;
   ahoraMs?: number;
+  puerto?: PuertoSemanaSellada;
 }): Promise<CumplimientoProfesional[]> {
-  const admin = createAdminClient();
-  const config = await getConfigInstitucion();
   const ahoraMs = params.ahoraMs ?? Date.now();
   const lunes = params.semanaAr;
   const domingo = domingoDeSemana(lunes);
+  const puerto = params.puerto ?? PUERTO_SEMANA_SELLADA;
 
-  // ── 1) Los sellos de esta semana ───────────────────────────────────────────
-  // Van PRIMERO y sin filtrar por el padrón de hoy, porque son la mitad del
-  // universo. Antes se leían con `.in('medico_id', ids)` sobre el padrón vivo:
-  // el profesional que dejaba el piloto (o cuya especialidad salía del config)
-  // desaparecía de una semana YA CERRADA, y como el KPI de cumplimiento suma
-  // sobre las filas listadas, el 98 % de octubre cambiaba solo. Justo lo que la
-  // 015 promete que no puede pasar: "lo que la institución vio el lunes tiene
-  // que seguir diciendo lo mismo en diciembre".
-  const selladas = await leerTodo<SemanaSellada>("sellos de la semana", (desde, hasta) =>
-    admin
-      .from("acuerdo_semanas")
-      .select("medico_id, horas_comprometidas, minutos_cumplidos, desglose_motores, estado")
-      .eq("semana_ar", lunes)
-      .eq("estado", "cerrada")
-      .order("medico_id", { ascending: true })
-      .range(desde, hasta)
-  );
-  const selladaPorMedico = new Map<string, SemanaSellada>();
-  for (const s of selladas) selladaPorMedico.set(s.medico_id, s);
+  // ── 1) ¿Esta semana YA ESTÁ CERRADA? ──────────────────────────────────────
+  // Va PRIMERO, y los sellos se leen sin filtrar por el padrón de hoy porque
+  // son el universo entero. Antes se leían con `.in('medico_id', ids)` sobre el
+  // padrón vivo: el profesional que dejaba el piloto (o cuya especialidad salía
+  // del config) desaparecía de una semana YA CERRADA, y como el KPI suma sobre
+  // las filas listadas, el 98 % de octubre cambiaba solo. Justo lo que la 015
+  // promete que no puede pasar: "lo que la institución vio el lunes tiene que
+  // seguir diciendo lo mismo en diciembre".
+  const [marcada, sellos] = await Promise.all([puerto.marcada(lunes), puerto.sellos(lunes)]);
+  if (cumplimientoSaleDeLoSellado({ marcada, sellos: sellos.length })) {
+    const perfiles = await puerto.perfiles(sellos.map((s) => s.medico_id));
+    return filasDeLoSellado(sellos, new Map(perfiles.map((p) => [p.id, p])));
+  }
 
-  // ── 2) El universo: el padrón de HOY ∪ los que tienen sello esa semana ─────
+  // A partir de acá, la semana está ABIERTA: no hay ningún sello que respetar y
+  // todo sale del cálculo en vivo. El config y el cliente se leen recién ahora
+  // porque la semana cerrada no depende de nada de hoy.
+  const admin = createAdminClient();
+  const config = await getConfigInstitucion();
+
+  // ── 2) El universo: el padrón de HOY ──────────────────────────────────────
   const medicos = await leerTodo<Record<string, unknown>>(
     "padrón de profesionales del piloto",
     (desde, hasta) =>
@@ -458,27 +592,8 @@ export async function cumplimientoDeSemana(params: {
         .order("id", { ascending: true })
         .range(desde, hasta)
   );
-  const enElPadron = new Set(medicos.map((m) => m.id as string));
-  // A los sellados que ya no están en el padrón se les busca el nombre igual:
-  // su fila tiene que seguir en la tabla, con el número que se selló.
-  const selladosFuera = [...selladaPorMedico.keys()].filter((id) => !enElPadron.has(id));
-  const medicosFuera = await leerTodoEnLotes<Record<string, unknown>>(
-    "profesionales con semana sellada fuera del padrón",
-    selladosFuera,
-    (lote, desde, hasta) =>
-      admin
-        .from("medicos")
-        .select("id, nombre_completo, titulo, especialidad")
-        .in("id", lote)
-        .order("id", { ascending: true })
-        .range(desde, hasta)
-  );
 
-  const universo = [...medicos, ...medicosFuera].map((m) => ({
-    id: m.id as string,
-    nombre: `${((m.titulo as string | null) ?? "").trim()} ${((m.nombre_completo as string | null) ?? "").trim()}`.trim(),
-    especialidad: (m.especialidad as string | null) ?? "",
-  }));
+  const universo = medicos.map(perfilDeFila);
   if (universo.length === 0) return [];
   const ids = universo.map((m) => m.id);
 
@@ -595,35 +710,12 @@ export async function cumplimientoDeSemana(params: {
   }
 
   // ── 6) Componer ────────────────────────────────────────────────────────────
+  // Todas las filas salen del cálculo en vivo: si hubiera un solo sello, esta
+  // función ya habría vuelto por la rama de arriba.
   const cerrada = semanaTerminada(lunes, ahoraMs);
   const filas: CumplimientoProfesional[] = universo.map((m) => {
     const horas = horasPorMedico.get(m.id) ?? Number(config.acuerdo_horas_semana_default);
     const motores = motoresPorMedico.get(m.id) ?? MOTORES_VACIOS();
-    const sello = selladaPorMedico.get(m.id);
-
-    if (sello) {
-      const desglose = (sello.desglose_motores ?? {}) as {
-        turnos?: number;
-        ci?: number;
-        motores?: Record<Motor, number>;
-      };
-      const minutosComprometidos = Math.round(Number(sello.horas_comprometidas) * 60);
-      const minutosCumplidos = Number(sello.minutos_cumplidos);
-      return {
-        medicoId: m.id,
-        nombre: m.nombre,
-        especialidad: m.especialidad,
-        horasComprometidas: Number(sello.horas_comprometidas),
-        minutosComprometidos,
-        minutosCumplidos,
-        minutosTurnos: desglose.turnos ?? 0,
-        minutosCI: desglose.ci ?? 0,
-        porcentaje: minutosComprometidos > 0 ? Math.round((minutosCumplidos / minutosComprometidos) * 100) : 0,
-        motores: desglose.motores ?? motores,
-        badge: badgeCumplimiento(minutosCumplidos, minutosComprometidos, true),
-        sellada: true,
-      };
-    }
 
     const bolsa = calcularBolsa({
       duracionSlotMin: config.slot_duracion_min,
