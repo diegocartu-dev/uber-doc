@@ -348,6 +348,32 @@ test("bolsa · un slot que la institución bloqueó no suma ni descuenta", () =>
   assert.equal(aporteDelSlot("cancelado_medico"), "descuenta");
 });
 
+test("bolsa · la tabla de aportes es EXHAUSTIVA: un estado desconocido revienta", () => {
+  // Hallazgo S2 del gate #405. Antes el default era "cuenta": un estado nuevo
+  // —o uno viejo que nadie recordaba— entraba SUMANDO horas de cumplimiento
+  // sin que nadie lo decidiera, en una tabla que se sella y no se recalcula.
+  // Ahora el default no existe.
+  assert.throws(() => aporteDelSlot("modo_guardia"), /Estado de turno desconocido/);
+  assert.throws(() => aporteDelSlot(""), /Estado de turno desconocido/);
+
+  // Y los estados que SÍ existen están todos, con su decisión escrita: la
+  // lista sale del CHECK vivo de `turnos`.
+  const DEL_CHECK = [
+    "disponible", "reservado_pendiente", "confirmado", "en_espera", "en_curso",
+    "completado", "ausente_paciente", "ausente_medico", "cancelado_paciente",
+    "cancelado_medico", "reprogramado", "bloqueado", "bloqueado_sin_cobro",
+  ];
+  for (const estado of DEL_CHECK) {
+    assert.doesNotThrow(() => aporteDelSlot(estado), `falta decidir qué hace "${estado}"`);
+  }
+
+  // El turno movido cuenta: el hueco existió igual, y el doble conteo con el
+  // horario re-ofrecido lo evita la deduplicación por `clave` de calcularBolsa.
+  assert.equal(aporteDelSlot("reprogramado"), "cuenta");
+  // La baja de agenda que decide la INSTITUCIÓN es neutra, con cobro o sin él.
+  assert.equal(aporteDelSlot("bloqueado_sin_cobro"), "ignora");
+});
+
 test("bolsa · una CI atendida DENTRO de una franja propia ya transcurrida no suma dos veces", () => {
   const inicio = Date.parse(instante(0, "09:00"));
   const r = calcularBolsa({
@@ -609,6 +635,37 @@ test("borde · el job NO toca una fila que fijó un humano, ni una ya facturada"
     motivoIntocable({ clasificacion_origen: "manual_admin", facturado_periodo: "2026-10" }),
     "sellada"
   );
+});
+
+test("cinturón · componerFila se niega a componer el reemplazo de una fila intocable", () => {
+  // Hallazgo S5 del gate #405. El filtro de `intocables` del job es el tirante;
+  // esto es el cinturón, para el caller que venga después (un backfill, un
+  // /admin, un script de corrección) y no lo replique. Sin esto, esa fila sale
+  // compuesta con `clasificacion_origen: 'job'`, lista para pisar la
+  // declaración de un humano o una fila ya facturada.
+  const encuentro = {
+    tipo: "turno" as const,
+    id: "00000000-0000-4000-8000-000000000997",
+    estado: "completado",
+    canal_origen: "acordado",
+    medico_id: "m",
+    paciente_id: "p",
+    ocurridoISO: instante(0, "10:00"),
+    cierreISO: instante(0, "10:15"),
+  };
+  const base = {
+    encuentro,
+    eventos: [],
+    documentosEmitidos: 1,
+    especialidad: null,
+    precioCentavos: PRECIO_CONSULTA_CENTAVOS,
+  };
+  assert.equal(componerFila({ ...base, filaPrevia: { clasificacion_origen: "manual_admin" } }), null);
+  assert.equal(componerFila({ ...base, filaPrevia: { facturado_periodo: "2026-10" } }), null);
+  // Una fila común del job sí se recompone: el webhook puede llegar tarde.
+  assert.ok(componerFila({ ...base, filaPrevia: { clasificacion_origen: "job" } }));
+  assert.ok(componerFila({ ...base, filaPrevia: null }));
+  assert.ok(componerFila(base));
 });
 
 test("borde · una fila común del job SÍ se reclasifica (el webhook puede llegar tarde)", () => {

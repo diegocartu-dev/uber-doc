@@ -61,3 +61,142 @@ WHERE n.nspname = 'public'
 ```
 
 Si alguna da `true` en `anon` o `authenticated`, volver a correr el `REVOKE` de la migración correspondiente y **verificar de nuevo** — no alcanza con re-ejecutarlo.
+
+## Checklist post-aplicación: atacar los triggers de inmutabilidad
+
+Mismo principio que los REVOKE de arriba, aplicado a la otra defensa del
+contador: **un trigger escrito no es un trigger que frena**. Las migraciones
+014, 015, 017 y 019 protegen lo que ya se facturó y lo que ya se selló, y esa
+protección es lo único que sostiene la frase que se le dice al cliente — *"la
+factura de octubre va a decir lo mismo en diciembre"*.
+
+Se verifica **atacándola**, en la base de la instancia, con el SQL Editor
+(service role / dueño). El resultado esperado de cada ataque es un **error**.
+
+> Correr esto **antes** de que la instancia tenga tráfico real, o sobre filas
+> sintéticas creadas para el ataque. Los pasos de preparación insertan una fila
+> de prueba y la borran al final.
+
+### Preparación
+
+```sql
+-- Fila sintética: ids que no existen en ninguna otra tabla del piloto.
+INSERT INTO encuentros_metering (
+  tipo, recurso_id, motor, medico_id, paciente_id, especialidad,
+  semana_ar, fecha_ar, segundos_ambos_en_sala, documentos_emitidos,
+  precio_centavos, clasificacion
+)
+SELECT 'turno', gen_random_uuid(), 'acordado', m.id, gen_random_uuid(), 'Prueba',
+       DATE '2000-01-03', DATE '2000-01-03', 120, 1, 100000, 'facturable'
+FROM medicos m LIMIT 1
+RETURNING id;
+-- Guardar el id devuelto: abajo va como :fila.
+```
+
+### Ataque 1 — editar una fila ya facturada (014)
+
+```sql
+UPDATE encuentros_metering SET facturado_periodo = '2000-01' WHERE id = :fila;  -- sella, OK
+UPDATE encuentros_metering SET clasificacion = 'no_facturable_corta' WHERE id = :fila;
+```
+
+**Esperado:** `la fila … ya fue facturada en el período 2000-01 — está sellada`.
+Un `UPDATE 1` acá significa que el trigger no está: la factura de un mes cerrado
+se puede reescribir.
+
+### Ataque 2 — corregir y re-sellar en el mismo UPDATE (014)
+
+```sql
+UPDATE encuentros_metering
+   SET clasificacion = 'no_facturable_corta', facturado_periodo = '2000-02'
+ WHERE id = :fila;
+```
+
+**Esperado:** el mismo error. Es la mitad que se agregó a propósito: sin ella,
+"corregir y de paso re-sellar en otro período" pasaba derecho.
+
+### Ataque 3 — borrar una fila facturada (014)
+
+```sql
+DELETE FROM encuentros_metering WHERE id = :fila;
+```
+
+**Esperado:** `está facturada (2000-01) y no se puede borrar`.
+
+### Ataque 4 — el job pisando una clasificación humana (017 + 019)
+
+```sql
+UPDATE encuentros_metering SET facturado_periodo = NULL WHERE id = :fila;  -- levantar el sello
+UPDATE encuentros_metering
+   SET clasificacion = 'falla_tecnica', clasificacion_origen = 'manual_admin',
+       clasificacion_motivo = 'prueba', precio_centavos = 100000
+ WHERE id = :fila;
+
+-- Ahora el job "reclasifica" y de paso trae el precio nuevo:
+UPDATE encuentros_metering
+   SET clasificacion = 'facturable', clasificacion_origen = 'job', precio_centavos = 999999
+ WHERE id = :fila;
+
+SELECT clasificacion, clasificacion_origen, precio_centavos
+  FROM encuentros_metering WHERE id = :fila;
+```
+
+**Esperado:** `falla_tecnica` / `manual_admin` / `100000`. El UPDATE **pasa** (el
+reloj y los documentos sí se pueden refrescar), pero los campos de la DECISIÓN y
+el precio vuelven a los del humano. Si sale `facturable` / `job` / `999999`, la
+017 o la 019 no están aplicadas.
+
+### Ataque 5 — vaciar la tabla (019)
+
+```sql
+TRUNCATE encuentros_metering;
+TRUNCATE acuerdo_semanas;
+```
+
+**Esperado en los dos:** `no se puede vaciar con TRUNCATE: sostiene facturación
+ya emitida y cumplimiento sellado`.
+
+Este es el ataque más importante de la lista, porque es el más creíble: nadie
+escribe un UPDATE malicioso, pero `TRUNCATE` es literalmente lo que se tipea
+para "limpiar y volver a correr el job" en un ambiente que uno cree que es de
+prueba. `TRUNCATE` **no dispara los triggers de fila**: sin la 019, se lleva
+puesta toda la inmutabilidad de las 014 y 015 sin que ni un trigger se entere.
+
+Verificar además que el permiso está sacado:
+
+```sql
+SELECT grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name IN ('encuentros_metering','acuerdo_semanas')
+  AND privilege_type = 'TRUNCATE';
+-- Esperado: ninguna fila para anon / authenticated / service_role.
+```
+
+### Ataque 6 — editar una semana ya cerrada (015)
+
+```sql
+INSERT INTO acuerdo_semanas (medico_id, semana_ar, horas_comprometidas, minutos_cumplidos, estado, cerrada_at)
+SELECT m.id, DATE '2000-01-03', 1, 60, 'cerrada', now() FROM medicos m LIMIT 1;
+
+UPDATE acuerdo_semanas SET minutos_cumplidos = 999 WHERE semana_ar = DATE '2000-01-03';
+DELETE FROM acuerdo_semanas WHERE semana_ar = DATE '2000-01-03';
+```
+
+**Esperado:** los dos rebotan (`la semana … está cerrada`). Para limpiar la fila
+de prueba hay que reabrirla primero — que es exactamente el procedimiento de dos
+pasos que el trigger obliga:
+
+```sql
+UPDATE acuerdo_semanas SET estado = 'abierta' WHERE semana_ar = DATE '2000-01-03';
+DELETE FROM acuerdo_semanas WHERE semana_ar = DATE '2000-01-03';
+```
+
+### Limpieza
+
+```sql
+UPDATE encuentros_metering SET facturado_periodo = NULL WHERE id = :fila;
+DELETE FROM encuentros_metering WHERE id = :fila;
+```
+
+**Cualquier ataque que NO devuelva error es un hallazgo**, y se anota en el
+registro de provisión de la instancia junto con los REVOKE de arriba.

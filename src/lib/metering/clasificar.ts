@@ -364,9 +364,22 @@ export function componerFila(params: {
    * tardío no puede cambiarle el precio a un encuentro de un mes anterior.
    */
   precioCentavos: number;
+  /**
+   * La fila que YA existe para este encuentro, si existe. Es el CINTURÓN (S5
+   * del gate #405): el tirante es el filtro de `intocables` allá arriba en el
+   * job, pero esta función es pública y no tenía forma de saber que estaba a
+   * punto de componer el reemplazo de una fila sellada o fijada a mano. Un
+   * caller nuevo —un backfill, un /admin, un script de corrección— que la
+   * usara sin replicar el filtro produciría una fila con
+   * `clasificacion_origen: 'job'` lista para pisar una decisión humana.
+   *
+   * Con esto, componer esa fila devuelve `null` y no hay nada que upsertear.
+   */
+  filaPrevia?: { clasificacion_origen?: unknown; facturado_periodo?: unknown } | null;
   ahoraISO?: string;
 }): FilaMetering | null {
   const { encuentro } = params;
+  if (params.filaPrevia && motivoIntocable(params.filaPrevia)) return null;
   const motor = motorDeCanal(encuentro.canal_origen);
   if (!motor) return null; // dato roto: no se inventa un motor
 
@@ -575,8 +588,14 @@ export async function correrMeteringClasificar(opciones?: {
   const clasificadoAt = new Map<string, number>();
   /** Precio ya congelado en la fila: una reclasificación no lo puede mover. */
   const precioPrevio = new Map<string, number>();
+  /** La fila previa entera, para el cinturón de `componerFila` (S5). */
+  const previas = new Map<string, { clasificacion_origen?: unknown; facturado_periodo?: unknown }>();
   for (const f of existentes) {
     const clave = `${f.tipo}|${f.recurso_id}`;
+    previas.set(clave, {
+      clasificacion_origen: f.clasificacion_origen,
+      facturado_periodo: f.facturado_periodo,
+    });
     if (typeof f.precio_centavos === "number") precioPrevio.set(clave, f.precio_centavos);
     const motivo = motivoIntocable(f);
     if (motivo === "sellada") {
@@ -728,9 +747,14 @@ export async function correrMeteringClasificar(opciones?: {
       documentosEmitidos: docsPorRecurso.get(clave) ?? 0,
       especialidad: especialidadPorMedico.get(encuentro.medico_id) ?? null,
       precioCentavos: precioPrevio.get(clave) ?? precioVigente,
+      filaPrevia: previas.get(clave) ?? null,
       ahoraISO,
     });
     if (!fila) {
+      // Acá solo puede ser el motor roto: los intocables se filtraron arriba y
+      // el cinturón de `componerFila` es redundante por diseño. Si algún día
+      // este contador empieza a subir sin datos rotos, el que sobra es el
+      // filtro de arriba, no el cinturón.
       resumen.sin_motor++;
       continue;
     }
