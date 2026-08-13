@@ -268,13 +268,20 @@ export interface ResumenCierreMes {
   facturables: number;
   /** Cuántas selló ESTA corrida. */
   selladas: number;
+  /**
+   * Filas del mes con el sello puesto, de TODAS las clasificaciones. Es el
+   * universo congelado, y por eso es el número con el que se mide la
+   * idempotencia — no `facturables`, que es un subconjunto.
+   */
+  selladas_total: number;
   /** Ya venían selladas (corrida repetida): la idempotencia, visible. */
   ya_estaban: number;
 }
 
 /**
- * Cierra un mes: sella sus filas facturables. Es lo que corre el cron del día 1
- * y lo que se puede volver a correr a mano si ese día falló.
+ * Cierra un mes: sella TODAS sus filas (facturables y no facturables — ver
+ * `sellarPeriodo`). Es lo que corre el cron del día 1 y lo que se puede volver
+ * a correr a mano si ese día falló.
  *
  * ── LAS DOS PRECONDICIONES, Y POR QUÉ ABORTA EN VEZ DE SELLAR ────────────────
  * 1. El mes TERMINÓ. Sellar un mes en curso congelaría medio mes como si fuera
@@ -317,21 +324,53 @@ export async function cerrarMes(periodo: string, ahoraMs = Date.now()): Promise<
   }
 
   const selladas = await sellarPeriodo(periodo);
-  const facturables = (await facturacionDePeriodo(periodo)).consultas;
-  return { periodo, facturables, selladas, ya_estaban: Math.max(0, facturables - selladas) };
+  const [selladas_total, facturables] = await Promise.all([
+    filasSelladas(periodo),
+    facturacionDePeriodo(periodo).then((f) => f.consultas),
+  ]);
+  return {
+    periodo,
+    facturables,
+    selladas,
+    selladas_total,
+    // Contra el universo SELLADO, no contra las facturables: comparar contra
+    // `facturables` mezclaba dos conjuntos distintos y, con el sello puesto en
+    // todas las filas, daba negativo en cuanto el mes tenía una ausencia.
+    ya_estaban: Math.max(0, selladas_total - selladas),
+  };
 }
 
 /**
- * SELLA el período: marca `facturado_periodo` en las filas facturables que
+ * SELLA el período: marca `facturado_periodo` en TODAS las filas del mes que
  * todavía no lo tienen. Devuelve cuántas selló.
  *
- * ── QUÉ CONGELA Y QUÉ NO ─────────────────────────────────────────────────────
- * A partir del sello, esas filas son inmutables por el trigger de la 014: ni el
- * job ni un backfill ni un /admin nuevo pueden cambiarles la clasificación o el
- * reloj. Lo que NO hace es cerrar el período: si un encuentro de octubre
- * aparece recién en noviembre (un webhook muy tardío), se inserta y se factura
- * — insertar no está bloqueado, y esconder una atención que ocurrió sería peor
- * que sumarla tarde.
+ * ── POR QUÉ TODAS Y NO SOLO LAS FACTURABLES ──────────────────────────────────
+ * Sellaba solo `clasificacion = 'facturable'`, y ahí el "mes congelado" era
+ * media verdad. Las otras filas del mes —`no_facturable_corta`, las dos
+ * ausencias, `falla_tecnica`— quedaban con `facturado_periodo` NULL, o sea:
+ *
+ *   · `motivoIntocable()` devolvía null y el job las seguía reescribiendo
+ *     durante los 14 días de su ventana. Y su regla es
+ *     `segundos >= 60 || documentos > 0 → facturable`: bastaba que la receta se
+ *     guardara tarde (el guardado del profesional es fire-and-forget) o que
+ *     llegara un evento de presencia atrasado de LiveKit para que una consulta
+ *     del 31 clasificada "corta" pasara a facturable el 3 de noviembre. El CSV
+ *     de un mes ya facturado sumaba una consulta, sin sello y sin auditoría.
+ *   · y esas mismas filas eran INALCANZABLES por la puerta de R33: la RPC de la
+ *     021 aborta si la fila no está sellada, así que la corrección más típica
+ *     —"esto se marcó como ausencia y en realidad se atendió"— no se podía
+ *     hacer desde /admin/periodos. La puerta corregía en un solo sentido.
+ *
+ * Sellar el mes entero cierra las dos mitades: lo congelado es el mes, y toda
+ * corrección (en cualquier dirección) pasa por la puerta auditada.
+ *
+ * ── QUÉ SIGUE SIN HACER ──────────────────────────────────────────────────────
+ * No cierra el período contra INSERTs: si un encuentro de octubre aparece
+ * recién en noviembre (un webhook muy tardío), su fila se inserta sin sello
+ * —insertar no está bloqueado, y esconder una atención que ocurrió sería peor
+ * que perderla. Esa fila NO entra a la factura ya emitida (ver
+ * `facturacionDePeriodo`) y se muestra aparte en /admin/periodos, marcada como
+ * llegada después del cierre, para que la decida un humano.
  *
  * Sin esta función, toda la maquinaria de inmutabilidad de la 014 estaba
  * construida y desconectada: NADIE escribía `facturado_periodo`, así que el
@@ -347,12 +386,27 @@ export async function sellarPeriodo(periodo: string): Promise<number> {
   const { count, error } = await admin
     .from("encuentros_metering")
     .update({ facturado_periodo: periodo }, { count: "exact" })
-    .eq("clasificacion", "facturable")
     .gte("fecha_ar", desde)
     .lte("fecha_ar", hasta)
     .is("facturado_periodo", null);
   if (error) throw new Error(`No se pudo sellar el período ${periodo}: ${error.message}`);
   return count ?? 0;
+}
+
+/** Cuántas filas quedaron selladas en ese período (todas las clasificaciones). */
+export async function filasSelladas(periodo: string): Promise<number> {
+  const admin = createAdminClient();
+  return contarExacto(`filas selladas de ${periodo}`, () =>
+    admin
+      .from("encuentros_metering")
+      .select("id", { count: "exact", head: true })
+      .eq("facturado_periodo", periodo)
+  );
+}
+
+/** ¿Ese mes ya está sellado? (tiene al menos una fila con el sello puesto) */
+export async function periodoEstaSellado(periodo: string): Promise<boolean> {
+  return (await filasSelladas(periodo)) > 0;
 }
 
 /**

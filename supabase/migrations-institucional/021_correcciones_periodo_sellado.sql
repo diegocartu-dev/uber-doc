@@ -31,6 +31,24 @@
 -- exactamente lo que la regla pide.
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 0. LOS ÍNDICES DEL SELLO
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Desde que el sello se le pone al MES ENTERO (y no solo a lo facturable), tres
+-- lecturas preguntan por `facturado_periodo` y ninguna tenía índice: la factura
+-- de un mes ya cerrado, el listado de /admin/periodos y el barrido de meses que
+-- quedaron sin sellar. La 014 solo indexó `(fecha_ar) WHERE facturable`.
+
+CREATE INDEX idx_encuentros_metering_facturado
+  ON encuentros_metering (facturado_periodo, fecha_ar)
+  WHERE facturado_periodo IS NOT NULL;
+
+-- El complemento: "¿queda algo del mes X sin sellar?" — la pregunta del cron de
+-- cierre y de las filas que llegaron después del cierre.
+CREATE INDEX idx_encuentros_metering_sin_sellar
+  ON encuentros_metering (fecha_ar)
+  WHERE facturado_periodo IS NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 1. EL REGISTRO
 -- ─────────────────────────────────────────────────────────────────────────────
 

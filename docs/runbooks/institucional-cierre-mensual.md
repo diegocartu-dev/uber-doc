@@ -78,7 +78,14 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-m
   -d '{"periodo":"2026-10"}'
 ```
 
-- **200** → `{ "periodo": "2026-10", "facturables": N, "selladas": N, "ya_estaban": N }`.
+- **200** → `{ "periodo": "2026-10", "facturables": N, "selladas": N, "selladas_total": N, "ya_estaban": N }`.
+  - **`selladas_total`** es el universo congelado: **todas** las filas del mes,
+    facturables y no facturables. El sello se le pone al mes entero — si solo se
+    le pusiera a lo facturable, el resto seguiría siendo reescribible por el job
+    (una consulta "corta" con una receta que llega tarde pasaría a facturable
+    sobre un mes ya facturado) y quedaría fuera del alcance de la corrección
+    auditada de R33.
+  - **`facturables`** es el subconjunto que la factura cobra.
 - **409** → la precondición no se cumple; el mensaje dice cuántos faltan y de
   qué tipo. Volver al paso 2.
 - **422** → falta `periodo`, no tiene formato `AAAA-MM`, **o el mes todavía no
@@ -86,7 +93,7 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-m
   irreversible.
 
 **Es idempotente.** Correrlo dos veces sobre un mes ya cerrado no toca ninguna
-fila: `selladas` queda en 0 y `ya_estaban` muestra el total.
+fila: `selladas` queda en 0 y `ya_estaban` muestra el total (`selladas_total`).
 
 ## 4. Verificar
 

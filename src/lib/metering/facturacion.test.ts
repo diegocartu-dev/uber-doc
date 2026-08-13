@@ -8,6 +8,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   periodoValido,
   rangoDePeriodo,
@@ -209,4 +211,42 @@ test("el mes en curso NUNCA es el que se cierra", () => {
   assert.equal(aSellar, "2026-10");
   assert.equal(mesTerminado(aSellar, ahora), true, "el que se sella siempre terminó");
   assert.equal(mesTerminado("2026-11", ahora), false, "el mes en curso, jamás");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUÉ ALCANZA EL SELLO — leído del código, porque es un UPDATE
+// ─────────────────────────────────────────────────────────────────────────────
+// Estos dos tests miran el FUENTE de `facturacion.ts` en vez de llamar a la
+// función, por el mismo motivo que los tests de la 021 leen el `.sql`: la regla
+// no vive en una decisión pura que se pueda invocar, vive en los filtros de una
+// query contra Postgres. Un test que llamara a `sellarPeriodo` con una base
+// falsa probaría la base falsa.
+//
+// Lo que pinchan es un bug real y silencioso: el sello marcaba SOLO
+// `clasificacion = 'facturable'`, así que el resto del mes quedaba sin sellar
+// —reescribible por el job durante 14 días e inalcanzable por la puerta de
+// R33—, y una consulta "corta" del 31 podía volverse facturable el 3 del mes
+// siguiente sobre una factura ya emitida.
+
+const FUENTE = readFileSync(join(process.cwd(), "src/lib/metering/facturacion.ts"), "utf8");
+
+/** El cuerpo de una función exportada de este archivo, hasta el `\n}` de cierre. */
+function cuerpoDe(nombre: string): string {
+  const inicio = FUENTE.indexOf(`export async function ${nombre}(`);
+  assert.notEqual(inicio, -1, `no se encontró ${nombre} en facturacion.ts`);
+  const fin = FUENTE.indexOf("\n}", inicio);
+  assert.notEqual(fin, -1, `no se encontró el final de ${nombre}`);
+  return FUENTE.slice(inicio, fin);
+}
+
+test("sello · congela el MES ENTERO, no solo lo facturable", () => {
+  const sello = cuerpoDe("sellarPeriodo");
+  assert.ok(
+    !/\.eq\(\s*["']clasificacion["']/.test(sello),
+    "el sello no puede filtrar por clasificación: lo que no sella queda reescribible por el job y fuera de la puerta de R33"
+  );
+  // Y sigue siendo el mes calendario completo, e idempotente.
+  assert.match(sello, /\.gte\(\s*["']fecha_ar["'],\s*desde\s*\)/);
+  assert.match(sello, /\.lte\(\s*["']fecha_ar["'],\s*hasta\s*\)/);
+  assert.match(sello, /\.is\(\s*["']facturado_periodo["'],\s*null\s*\)/);
 });
