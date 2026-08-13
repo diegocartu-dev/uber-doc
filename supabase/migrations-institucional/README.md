@@ -107,6 +107,25 @@ Se verifica **atacándola**, en la base de la instancia, con el SQL Editor
 
 ### Preparación
 
+> ⚠ **El `INSERT … SELECT … FROM medicos LIMIT 1` inserta CERO filas si todavía
+> no hay ningún profesional cargado**, y lo hace **en silencio**: `INSERT 0` no
+> es un error. En una instancia recién provisionada —que es exactamente cuándo
+> se corre este checklist— eso deja todos los ataques siguientes sin fila que
+> atacar, y como el resultado esperado de casi todos es *un error*, la ausencia
+> de la fila se confunde con la defensa funcionando. Se verificaría un checklist
+> entero contra la nada. Por eso el primer paso ahora **falla ruidosamente**.
+
+```sql
+-- 0) Que haya al menos un profesional. Si no, no se puede insertar la fila
+--    sintética (`medico_id` tiene FK a `medicos`) y todo lo de abajo mide aire.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM medicos) THEN
+    RAISE EXCEPTION 'No hay ningún profesional en `medicos`: la preparación del checklist insertaría 0 filas EN SILENCIO y los ataques siguientes no probarían nada. Dar de alta un profesional del piloto (o uno de prueba) y volver a empezar.';
+  END IF;
+END $$;
+```
+
 ```sql
 -- Dos filas sintéticas: ids que no existen en ninguna otra tabla del piloto.
 -- La primera es la víctima de casi todos los ataques (:fila); la segunda existe
@@ -123,6 +142,14 @@ RETURNING id;
 -- Guardar el id devuelto: abajo va como :fila.
 
 -- Repetir el mismo INSERT para la segunda fila y guardar su id como :vecina.
+```
+
+**Antes de seguir, confirmar que las dos filas existen.** Un `RETURNING` sin
+resultado es fácil de pasar por alto en el SQL Editor:
+
+```sql
+SELECT count(*) FROM encuentros_metering WHERE fecha_ar = DATE '2000-01-03';
+-- Esperado: 2. Cualquier otro número = volver a la preparación, no seguir.
 ```
 
 Además hacen falta dos `user_id` reales de `admin_users`, que se reemplazan en
@@ -232,6 +259,27 @@ DELETE FROM encuentros_metering WHERE id = :fila;
 **Esperado:** `está facturada (2000-01) y no se puede borrar`.
 
 ### Ataque 7 — vaciar la tabla (019)
+
+> 🛑 **ESTE ATAQUE ES DESTRUCTIVO SI LA 019 NO ESTÁ APLICADA.** Los otros
+> ataques, si la defensa falta, dejan una fila sintética mal; este **vacía las
+> dos tablas del contador** — la facturación ya emitida y el cumplimiento
+> sellado, que no tienen desde dónde reconstruirse. Y `TRUNCATE` no dispara los
+> triggers de fila, así que nada más lo va a frenar.
+>
+> **Confirmar primero que el trigger y el REVOKE están puestos.** Si esta
+> consulta no devuelve las dos filas, **no correr el TRUNCATE**: aplicar la 019
+> y volver.
+
+```sql
+SELECT c.relname AS tabla, t.tgname AS trigger
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+WHERE t.tgname IN ('trg_encuentros_metering_no_truncate', 'trg_acuerdo_semanas_no_truncate');
+-- Esperado: DOS filas (encuentros_metering y acuerdo_semanas).
+-- Cero o una = la 019 no está (o está a medias): NO seguir.
+```
+
+Recién con esas dos filas a la vista:
 
 ```sql
 TRUNCATE encuentros_metering;
