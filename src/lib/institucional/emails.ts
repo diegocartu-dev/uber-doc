@@ -173,23 +173,41 @@ export async function mailTurnoReprogramadoPaciente(params: {
   return enviar(params.to, `Tu turno cambió de horario — ${config.nombre}`, html);
 }
 
+/**
+ * El profesional que RECIBE turnos.
+ *
+ * `turnos` viene en plural porque el motor masivo mueve el día entero de otro
+ * profesional y a este le pueden caer tres de una vez. Antes salía un mail por
+ * turno diciendo "se agregó un turno": tres mails casi idénticos por algo que
+ * pasó una sola vez.
+ */
 export async function mailTurnoReprogramadoMedicoRecibe(params: {
   to: string;
   nombreMedico: string;
-  fechaLabel: string;
-  hora: string;
+  turnos: { fechaLabel: string; hora: string }[];
   linkAgenda: string;
 }): Promise<boolean> {
   const config = await getConfigInstitucion();
+  const n = params.turnos.length;
+  const titulo = n === 1 ? "Se agregó un turno a tu agenda" : `Se agregaron ${n} turnos a tu agenda`;
+  const lista = params.turnos
+    .map((t) => P(`<b>${t.fechaLabel} — ${t.hora} hs</b>`))
+    .join("");
   const html = wrapInstitucional(
     config.nombre,
-    "Se agregó un turno a tu agenda",
-    P(`Hola, ${params.nombreMedico}. ${config.nombre} reasignó un turno a tu agenda:`) +
-      P(`<b>${params.fechaLabel} — ${params.hora} hs</b>`) +
+    titulo,
+    P(
+      `Hola, ${params.nombreMedico}. ${config.nombre} reasignó ${n === 1 ? "un turno" : `${n} turnos`} a tu agenda:`
+    ) +
+      lista +
       boton("Ver tu agenda", params.linkAgenda) +
-      P("El turno ya figura como confirmado.")
+      P(n === 1 ? "El turno ya figura como confirmado." : "Ya figuran como confirmados.")
   );
-  return enviar(params.to, `Turno reasignado — ${config.nombre}`, html);
+  return enviar(
+    params.to,
+    `${n === 1 ? "Turno reasignado" : `${n} turnos reasignados`} — ${config.nombre}`,
+    html
+  );
 }
 
 export async function mailTurnoReprogramadoMedicoLibera(params: {

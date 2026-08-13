@@ -18,19 +18,21 @@
 // mensaje viejo, tiene que ver "este enlace ya no está activo", no entrar a un
 // turno que ya no es suyo.
 //
-// ── LO QUE FALTA (TODO — spec §4.6) ──────────────────────────────────────────
-// La REPROGRAMACIÓN MASIVA (el caso de Nova: "el Dr. X no puede atender el
-// martes") son dos fases sobre esta misma función:
-//   · `dry_run: true` → plan: turnos afectados del profesional en el rango +
-//     candidato por turno con la MISMA priorización de §4.4 (`priorizarOferta`
-//     de src/lib/otorgador/oferta.ts — no se reimplementa el criterio).
-//   · confirmación → por turno, esta función; los turnos sin candidato se
-//     devuelven marcados "gestión manual" (la fila naranja del mock 05, que es
-//     una feature: Nova entrega lo irresoluble con destino claro).
-// Falta también el endpoint `POST /api/otorgador/reprogramar` que las exponga
-// y la UI del otorgador que las dispare. El aviso al profesional que RECIBE
-// turnos debería agruparse por profesional en la masiva (la plantilla
-// `reprogramacion_medico` ya habla de "N turnos" por eso).
+// ── LA REPROGRAMACIÓN MASIVA (spec §4.6) — YA EXISTE ─────────────────────────
+// El caso de Nova ("el Dr. X no puede atender el martes") son dos fases sobre
+// esta misma función, expuestas por `POST /api/otorgador/reprogramar-masivo`:
+//   · `dry_run: true` → el plan (`planReprogramacionMasiva`), con la MISMA
+//     priorización de §4.4 — no se reimplementa el criterio de equidad.
+//   · confirmación → por turno, esta función. Los turnos sin candidato dejan su
+//     fila `gestion_manual` (`registrarGestionManual`): la fila naranja del
+//     mock 05 es una feature, y ahora además queda auditada.
+//   · cierre → `marcarDiaSinAtencionDelProfesional`, para que el día que el
+//     profesional no atiende no le acredite horas en la bolsa.
+//
+// El aviso al profesional que RECIBE turnos se AGRUPA (la plantilla
+// `reprogramacion_medico` habla de "N turnos" por eso): la ejecución pide
+// `agruparAvisoMedico: true` y el caller manda UN mensaje al final con el
+// total real, vía `avisarReprogramacionAgrupadaMedico`.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
@@ -67,17 +69,6 @@ export type ResultadoReprogramar =
     }
   | { ok: false; codigo: ErrorReprogramacion; error: string };
 
-/**
- * ── POR QUÉ EL NOMBRE LARGO ──────────────────────────────────────────────────
- * El repo YA exporta `reprogramarTurno` desde `src/lib/cancelaciones.ts`, y es
- * otra cosa: la reprogramación del B2C, la que hace el PACIENTE, con crédito y
- * política de reembolso. Esta es la del operador institucional moviendo un
- * turno entre slots. No hay error de compilación porque son módulos distintos,
- * pero el autocompletado ofrecía las dos con el mismo nombre y semánticas
- * opuestas — y el B2C tiene la regla explícita de que el médico NO reprograma
- * turnos otorgados. Importar la equivocada desde una pantalla de médico o de
- * admin no lo detectaba el tipado: las dos reciben strings.
- */
 /**
  * Marca el DÍA de un profesional que avisó que no puede atender: sus slots que
  * quedaron libres pasan de `disponible` a `cancelado_medico`.
@@ -194,12 +185,29 @@ export async function registrarGestionManual(params: {
   return { ok: true };
 }
 
+/**
+ * ── POR QUÉ EL NOMBRE LARGO ──────────────────────────────────────────────────
+ * El repo YA exporta `reprogramarTurno` desde `src/lib/cancelaciones.ts`, y es
+ * otra cosa: la reprogramación del B2C, la que hace el PACIENTE, con crédito y
+ * política de reembolso. Esta es la del operador institucional moviendo un
+ * turno entre slots. No hay error de compilación porque son módulos distintos,
+ * pero el autocompletado ofrecía las dos con el mismo nombre y semánticas
+ * opuestas — y el B2C tiene la regla explícita de que el médico NO reprograma
+ * turnos otorgados. Importar la equivocada desde una pantalla de médico o de
+ * admin no lo detectaba el tipado: las dos reciben strings.
+ */
 export async function reprogramarTurnoInstitucional(params: {
   turnoAnteriorId: string;
   turnoNuevoId: string;
   operadorId: string;
   via: "panel" | "api";
   motivo?: string;
+  /**
+   * true = el aviso al profesional que RECIBE lo manda el caller, agrupado.
+   * Lo usa el motor masivo: sin esto, la profesional que recibe tres pacientes
+   * recibía tres mensajes diciendo "se agregó 1 turno".
+   */
+  agruparAvisoMedico?: boolean;
 }): Promise<ResultadoReprogramar> {
   if (!esInstitucional()) {
     return { ok: false, codigo: "validacion", error: "No disponible." };
@@ -464,6 +472,7 @@ export async function reprogramarTurnoInstitucional(params: {
     turnoNuevo: { id: turnoNuevoId, fecha: nuevo.fecha, hora_inicio: nuevo.hora_inicio ?? "" },
     turnoAnterior: { fecha: anterior.fecha, hora_inicio: anterior.hora_inicio ?? "" },
     medicoAnterior,
+    agruparAvisoMedico: params.agruparAvisoMedico,
   });
   await registrarAvisosEnAsignacion(asignacionId, avisos);
 
