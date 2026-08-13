@@ -34,7 +34,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { acuerdoSemanalDelMedico } from "@/lib/otorgador/oferta";
+import { acuerdoSemanalDelMedico, VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
 import { revocarAccesosDe } from "@/lib/institucional/accesos";
 import {
   avisarReprogramacionTurno,
@@ -159,6 +159,39 @@ export async function reprogramarTurnoInstitucional(params: {
       ok: false,
       codigo: "acuerdo_completo",
       error: `El profesional ya completó su acuerdo de esta semana (${acuerdo.asignados} de ${acuerdo.acuerdo}). Elegí otro horario.`,
+    };
+  }
+
+  // ── VENTANA DE ASIGNACIÓN (T-5), re-validada acá ─────────────────────────
+  // `asignarTurno` ya lo hace con el comentario "la oferta ya lo filtró, pero
+  // la pantalla pudo quedar abierta un rato". Acá el hueco entre el filtro y el
+  // UPDATE es MUCHO más grande: en la masiva el plan se arma con `armarOferta`
+  // (T-5 al momento del plan), el operador revisa una tabla de 4-8 filas, y
+  // recién después la pantalla ejecuta los ítems de a UNO en serie, cada uno
+  // con su ida y vuelta de WhatsApp o mail. Y el reparto prefiere el MISMO DÍA,
+  // o sea los horarios más cercanos al ahora.
+  //
+  // El escenario: propuesta armada 16:50 con un slot de 17:00, el operador
+  // confirma 16:58, el tercer ítem ejecuta 17:03 → el paciente recibía un
+  // WhatsApp con un turno que ya había arrancado. El `.eq('estado','disponible')`
+  // no dice nada sobre la hora.
+  //
+  // El turno VIEJO, en cambio, NO tiene que ser futuro y es a propósito:
+  // `en_espera` ocurre a la hora del turno, y un `confirmado` que ya pasó —el
+  // paciente no apareció y el cron todavía no lo resolvió— es justamente lo que
+  // el call center quiere mover. Lo que importa es que el destino sea futuro.
+  const horaNueva = (nuevo.hora_inicio ?? "").slice(0, 8);
+  const inicioNuevoMs = new Date(
+    `${nuevo.fecha}T${horaNueva.length === 5 ? horaNueva + ":00" : horaNueva}-03:00`
+  ).getTime();
+  if (
+    Number.isNaN(inicioNuevoMs) ||
+    inicioNuevoMs <= Date.now() + VENTANA_ASIGNACION_MIN * 60_000
+  ) {
+    return {
+      ok: false,
+      codigo: "conflicto_slot",
+      error: "Ese horario ya cerró (menos de 5 minutos). Elegí otro.",
     };
   }
 
