@@ -43,6 +43,10 @@ const ESPERADOS: Record<string, number> = {
   // "no aplica" en la primera línea, pero LATE igual — así que el watchdog lo
   // vigila en los dos lados sin ninguna excepción por modo.
   "metering-clasificar": 10,
+  // Semanal: el margen del watchdog se mide en minutos, así que 7 días + 1 h
+  // de tolerancia. Sin esta fila, el cierre del acuerdo podría dejar de
+  // ejecutarse durante meses y nadie se enteraría.
+  "acuerdo-cerrar-semana": 7 * 24 * 60 + 60,
   uptime: 1,
 };
 
