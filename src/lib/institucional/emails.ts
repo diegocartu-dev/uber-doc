@@ -138,3 +138,77 @@ export async function mailCIAsignadaMedico(params: {
   );
   return enviar(params.to, `Paciente esperando — ${config.nombre}`, html);
 }
+
+export async function mailTurnoReprogramadoPaciente(params: {
+  to: string;
+  nombrePaciente: string;
+  fechaAnterior: string;
+  horaAnterior: string;
+  fechaLabel: string;
+  hora: string;
+  medicoNombre: string;
+  especialidad: string;
+  link: string;
+}): Promise<boolean> {
+  const config = await getConfigInstitucion();
+  const html = wrapInstitucional(
+    config.nombre,
+    "Reprogramamos tu turno",
+    P(`Hola, ${params.nombrePaciente}.`) +
+      P(`Tu turno del ${params.fechaAnterior} a las ${params.horaAnterior} fue reprogramado.`) +
+      P(
+        `<b>Nuevo turno: ${params.fechaLabel} — ${params.hora} hs</b><br/><b>${params.medicoNombre} — ${params.especialidad}</b>`
+      ) +
+      // El enlace es NUEVO: el anterior ya no sirve. Decirlo evita que el
+      // paciente insista con el mensaje viejo y crea que el sistema falla.
+      P("Entrá con este enlace — el anterior ya no funciona:") +
+      boton("Entrar a tu consulta", params.link) +
+      P(
+        config.telefono_ayuda
+          ? `Si el nuevo horario no te sirve, llamanos al ${config.telefono_ayuda}.`
+          : ""
+      ) +
+      P("No necesitás usuario ni contraseña.")
+  );
+  return enviar(params.to, `Tu turno cambió de horario — ${config.nombre}`, html);
+}
+
+export async function mailTurnoReprogramadoMedicoRecibe(params: {
+  to: string;
+  nombreMedico: string;
+  fechaLabel: string;
+  hora: string;
+  linkAgenda: string;
+}): Promise<boolean> {
+  const config = await getConfigInstitucion();
+  const html = wrapInstitucional(
+    config.nombre,
+    "Se agregó un turno a tu agenda",
+    P(`Hola, ${params.nombreMedico}. ${config.nombre} reasignó un turno a tu agenda:`) +
+      P(`<b>${params.fechaLabel} — ${params.hora} hs</b>`) +
+      boton("Ver tu agenda", params.linkAgenda) +
+      P("El turno ya figura como confirmado.")
+  );
+  return enviar(params.to, `Turno reasignado — ${config.nombre}`, html);
+}
+
+export async function mailTurnoReprogramadoMedicoLibera(params: {
+  to: string;
+  nombreMedico: string;
+  fechaLabel: string;
+  hora: string;
+  linkAgenda: string;
+}): Promise<boolean> {
+  const config = await getConfigInstitucion();
+  const html = wrapInstitucional(
+    config.nombre,
+    "Un turno salió de tu agenda",
+    P(`Hola, ${params.nombreMedico}. ${config.nombre} reprogramó este turno con otro profesional:`) +
+      P(`<b>${params.fechaLabel} — ${params.hora} hs</b>`) +
+      // Hecho, no reproche: el profesional se entera de lo que pasó con SU
+      // agenda sin que se le insinúe que hizo algo mal.
+      P("Ya no tenés que atenderlo. Te avisamos para que no lo esperes.") +
+      boton("Ver tu agenda", params.linkAgenda)
+  );
+  return enviar(params.to, `Turno reprogramado — ${config.nombre}`, html);
+}
