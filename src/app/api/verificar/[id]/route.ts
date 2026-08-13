@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificarFirma } from "@/lib/firma/receta";
 import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documento";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { documentoEsDemo } from "@/lib/institucional/demo";
 import { formatNombreMedico } from "@/lib/utils/texto";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
@@ -92,9 +93,17 @@ export async function GET(
       const doc = await verificarDocumento(id);
 
       if (doc.estado !== "no_encontrado") {
+        // ¿Salió de una cuenta de demostración? El papel ya lo dice con su
+        // marca de agua; la página pública tiene que decir lo mismo, porque es
+        // acá donde va a mirar el que recibe el documento y duda. Se resuelve
+        // con service role en una query aparte (la columna solo existe en la
+        // base de la instancia) y el campo VIAJA SOLO CUANDO ES VERDADERO: en
+        // el B2C la respuesta sale idéntica, sin una clave de más.
+        const demostracion = await documentoEsDemo(id);
         return {
           estado: doc.estado,
           verificada: doc.estado === "verificada",
+          ...(demostracion ? { demostracion: true as const } : {}),
           alterada: doc.estado === "alterada",
           firmado_at: doc.datos?.firmado_at,
           // Fecha de EMISIÓN. Va siempre, no solo en el sellado diferido: la
@@ -155,6 +164,11 @@ export async function GET(
 type RespuestaVerificacion = {
   estado: EstadoVerificacion | "error";
   verificada: boolean;
+  /**
+   * Documento emitido por una cuenta de DEMOSTRACIÓN (modo demo institucional).
+   * Solo aparece cuando es `true`: en el B2C la respuesta no cambia en nada.
+   */
+  demostracion?: true;
   alterada?: boolean;
   /** Instante REAL del sello criptográfico. Nunca una fecha anterior a la real. */
   firmado_at?: string;

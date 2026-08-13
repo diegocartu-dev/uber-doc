@@ -43,7 +43,7 @@ export async function GET(
   try {
     // Marca blanca del documento (spec §7). En B2C devuelve `undefined` sin
     // tocar nada y el papel sale idéntico al de siempre.
-    const pdfBuffer = await generarRecetaPDF(armado.documento, await brandingParaPDF());
+    const pdfBuffer = await generarRecetaPDF(armado.documento, await brandingParaPDF(armado.documento.id));
 
     return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,

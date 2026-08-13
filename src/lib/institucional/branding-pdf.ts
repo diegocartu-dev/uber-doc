@@ -26,6 +26,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { getConfigInstitucion, type ConfigInstitucion } from "@/lib/institucional/config";
+import { documentoEsDemo } from "@/lib/institucional/demo";
 import type { BrandingPDF } from "@/lib/pdf/receta";
 
 /** Bucket de los assets de marca de la instancia (migración 018). */
@@ -108,7 +109,7 @@ export function accentEfectivo(
  * La marca blanca del documento, lista para `generarRecetaPDF(doc, branding)`.
  * `undefined` = sin marca institucional → el papel del B2C, intacto.
  */
-export async function brandingParaPDF(): Promise<BrandingPDF | undefined> {
+export async function brandingParaPDF(documentoId?: string): Promise<BrandingPDF | undefined> {
   if (!esInstitucional()) return undefined;
   try {
     const config = await getConfigInstitucion();
@@ -118,6 +119,13 @@ export async function brandingParaPDF(): Promise<BrandingPDF | undefined> {
       isologoBuffer: await bajarIsologo(config.pdf_isologo_path),
       accent: accentEfectivo(config),
       efectorTexto: config.pdf_efector_texto ?? "",
+      // La marca de demostración se decide ACÁ, en el mismo lugar que el resto
+      // del papel, y por el mismo motivo por el que este módulo existe: hay dos
+      // callers que emiten el MISMO documento (la descarga del paciente y la de
+      // la institución). Si cada uno resolviera la marca por su cuenta, tarde o
+      // temprano uno sale marcado y el otro no — y es el mismo papel, con el
+      // mismo id, que alguien puede llegar a comparar.
+      demo: await documentoEsDemo(documentoId),
     };
   } catch (err) {
     console.error("[institucional/branding-pdf] Sin branding para el documento:", err);
