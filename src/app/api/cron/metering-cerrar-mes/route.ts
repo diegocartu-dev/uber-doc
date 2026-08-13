@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { withCron } from "@/lib/cron-guard";
 import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
-import { cerrarMes, periodoASellar } from "@/lib/metering/facturacion";
+import { cerrarMes, mesesPendientesDeSellar, type ResumenCierreMes } from "@/lib/metering/facturacion";
 
 /**
- * Cron del día 1 a las 02:00 ART — CIERRA EL MES QUE TERMINÓ (R31).
+ * Cron diario de las 04:00 ART — CIERRA TODO MES TERMINADO QUE SIGA ABIERTO (R31).
  *
  * "El mes se cierra solo, el último día a las 24:00. Nadie tiene que cerrar
  * nada a mano." El corte de datos es el mes calendario completo (hasta las
@@ -13,47 +13,91 @@ import { cerrarMes, periodoASellar } from "@/lib/metering/facturacion";
  * los últimos encuentros: una consulta que termina 23:55 se clasifica pasada la
  * medianoche. La foto siempre es del mes; lo que se demora es el revelado.
  *
- * ── POR QUÉ 02:00 Y NO 00:05 ────────────────────────────────────────────────
- * Mismo motivo que el cierre semanal, que corre a la misma hora los lunes: un
- * encuentro se clasifica recién 15 minutos después de su cierre y el job corre
- * cada 10, así que lo que cerró 23:55 entra a `encuentros_metering` a las
- * 00:15-00:20. Sellar a las 00:05 lo dejaría afuera del mes que sí lo cobra.
+ * ── POR QUÉ CORRE TODOS LOS DÍAS Y NO SOLO EL 1 ─────────────────────────────
+ * Corría `0 5 1 * *` y cerraba SIEMPRE el mes anterior, sin volver nunca sobre
+ * el que faltó. Dos agujeros, los dos rutinarios:
  *
- * (Los crons de Vercel se programan en UTC: `0 5 1 * *` = 02:00 ART del día 1.)
+ *   · El día 1 falla más seguido de lo que parece. La precondición cuenta como
+ *     "vivo" cualquier encuentro no terminal del mes, y una CI que el
+ *     profesional abrió a las 22:30 del 31 y nunca cerró sigue viva a la
+ *     madrugada: `cerrar-huerfanas` corre a las 00:00 ART y solo cierra
+ *     consultas con más de 4 h de `en_curso_at`, así que a esa hora todavía no
+ *     la toca. El cierre abortaba —bien— pero después nadie reintentaba.
+ *   · Y si el mail rojo de `withCron` se perdía (spam, vacaciones), el mes
+ *     quedaba sin sellar indefinidamente y en silencio: el watchdog vigila el
+ *     latido, y el cron latía.
+ *
+ * Corriendo todos los días, ese mismo mes se cierra solo el día 2: a las 00:00
+ * `cerrar-huerfanas` cierra la CI colgada (ya tiene más de 4 h), el clasificador
+ * la escribe dentro de los 15 minutos siguientes, y a las 04:00 el barrido
+ * encuentra el mes pendiente y lo sella. Sin intervención humana, que es lo que
+ * pide R31.
+ *
+ * ── POR QUÉ 04:00 ───────────────────────────────────────────────────────────
+ * Después de `cerrar-huerfanas` (00:00 ART), que es lo único que terminaliza
+ * una consulta que quedó abierta, y con margen de sobra para que el
+ * clasificador —que espera 15 min tras el cierre y corre cada 10— escriba su
+ * fila. Sellar antes del barrido es sellar a ciegas.
+ *
+ * (Los crons de Vercel se programan en UTC: `0 7 * * *` = 04:00 ART.)
  *
  * ── SI FALTA ALGO, NO SELLA: ABORTA Y AVISA ─────────────────────────────────
  * La precondición es la misma del cierre semanal, extendida al rango del mes:
  * si queda un encuentro terminal sin clasificar —o uno TODAVÍA VIVO del último
- * día— `cerrarMes` se niega. El 500 llega al mail de `withCron` con el período
- * adentro, que es lo que hace falta para pedir la corrida manual
- * (`POST /api/admin/institucional/cerrar-mes`). Una foto incompleta sellada es
- * inmutable; una foto que sale tres horas tarde, no es nada.
+ * día— `cerrarMes` se niega. Ese mes queda en la lista y se reintenta mañana; y
+ * mientras tanto el 500 llega al mail de `withCron` con el período y el motivo
+ * adentro. Una foto incompleta sellada es inmutable; una foto que sale un día
+ * tarde, no es nada.
  *
- * Idempotente: si vuelve a correr sobre un mes ya sellado, no toca ninguna fila.
+ * Idempotente: si no hay ningún mes pendiente —el caso de 29 días de cada 30—
+ * no toca nada y responde en dos queries.
  *
  * SOLO instancia institucional: en el B2C corta en la primera línea.
  */
 
 export const maxDuration = 60;
 
+/**
+ * Meses que sella como mucho una corrida. Techo de tiempo, no de alcance: lo
+ * que sobra se sella mañana. En régimen la lista tiene 0 o 1.
+ */
+const MAX_POR_CORRIDA = 3;
+
 async function handler() {
   const corte = cortarSiB2C("metering-cerrar-mes");
   if (corte) return corte;
 
-  const periodo = periodoASellar();
+  let pendientes: string[];
   try {
-    const resumen = await cerrarMes(periodo);
-    console.log("[cron/metering-cerrar-mes]", JSON.stringify(resumen));
-    return NextResponse.json(resumen);
+    pendientes = await mesesPendientesDeSellar();
   } catch (err) {
-    // Precondición incumplida o lectura fallida: las dos son un 500 a
-    // propósito. El cron cierra SIEMPRE el mes anterior y no vuelve nunca sobre
-    // el que faltó, así que un "no pude" silencioso dejaría el mes sin sellar
-    // para siempre y con el watchdog en verde.
     const detalle = err instanceof Error ? err.message : String(err);
-    console.error("[cron/metering-cerrar-mes] No se pudo cerrar", periodo, detalle);
-    return NextResponse.json({ periodo, error: detalle }, { status: 500 });
+    console.error("[cron/metering-cerrar-mes] No se pudo leer qué meses faltan:", detalle);
+    return NextResponse.json({ error: detalle }, { status: 500 });
   }
+
+  const aCerrar = pendientes.slice(0, MAX_POR_CORRIDA);
+  const cerrados: ResumenCierreMes[] = [];
+  const fallados: { periodo: string; error: string }[] = [];
+
+  for (const periodo of aCerrar) {
+    try {
+      cerrados.push(await cerrarMes(periodo));
+    } catch (err) {
+      // Precondición incumplida o lectura fallida. No corta el barrido: un mes
+      // trabado no puede impedir que se cierre otro que sí está listo.
+      const detalle = err instanceof Error ? err.message : String(err);
+      console.error("[cron/metering-cerrar-mes] No se pudo cerrar", periodo, detalle);
+      fallados.push({ periodo, error: detalle });
+    }
+  }
+
+  const payload = { pendientes, cerrados, fallados };
+  console.log("[cron/metering-cerrar-mes]", JSON.stringify(payload));
+
+  // 500 a propósito: lo que no se pudo cerrar se reintenta mañana, pero el mail
+  // sale hoy con el mes y el motivo adentro. Un "no pude" en 200 es invisible.
+  return NextResponse.json(payload, { status: fallados.length > 0 ? 500 : 200 });
 }
 
 export const GET = withCron("metering-cerrar-mes", handler);

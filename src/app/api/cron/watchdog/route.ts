@@ -43,7 +43,7 @@ const ESPERADOS: Record<string, number> = {
   // "no aplica" en la primera línea, pero LATE igual — así que el watchdog lo
   // vigila en los dos lados sin ninguna excepción por modo.
   "metering-clasificar": 10,
-  // Semanal (lunes 02:00 ART). Sin esta fila, el cierre del acuerdo podría
+  // Semanal (lunes 04:00 ART). Sin esta fila, el cierre del acuerdo podría
   // dejar de ejecutarse durante meses y nadie se enteraría.
   //
   // ⚠ EL MARGEN REAL: el umbral no es el intervalo, es `1,5 × intervalo + 30
@@ -57,16 +57,13 @@ const ESPERADOS: Record<string, number> = {
   // puede correr a mano después. Bajarlo exigiría un umbral por cron en la
   // fórmula compartida, que le movería el margen a los 20 crons del B2C.
   "acuerdo-cerrar-semana": 7 * 24 * 60,
-  // Mensual (día 1, 02:00 ART). Se declara con el mes MÁS LARGO (31 días) a
-  // propósito: el umbral es `1,5 × intervalo + 30 min`, así que declarar 30
-  // días no adelantaría el aviso de manera útil y sí acercaría el margen a un
-  // enero-marzo legítimo. Con 31 el aviso llega ~46 días después de la última
-  // corrida — tarde para enterarse por acá, igual que en el semanal: lo que
-  // cubre el watchdog es "Vercel dejó de invocarlo", porque una corrida que
-  // FALLA (incluida la precondición incumplida) ya avisa sola por `withCron`.
-  // El cierre de un mes se puede correr a mano después con
-  // POST /api/admin/institucional/cerrar-mes.
-  "metering-cerrar-mes": 31 * 24 * 60,
+  // El cierre de la facturación corre TODOS LOS DÍAS a las 04:00 ART, aunque
+  // solo tenga trabajo el día 1: es su propio reintento (el día 1 aborta
+  // legítimamente cuando quedó una consulta viva del 31, y antes nadie volvía a
+  // pasar). Al ser diario, el umbral vuelve a ser útil: `1,5 × 1440 + 30` ≈ 1,5
+  // días, así que "Vercel dejó de invocarlo" se avisa dentro del mismo mes y no
+  // a los ~46 días como cuando se declaraba mensual.
+  "metering-cerrar-mes": 24 * 60,
   uptime: 1,
 };
 

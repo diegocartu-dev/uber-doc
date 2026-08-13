@@ -755,7 +755,7 @@ export type FaltantesDeSemana = Faltantes;
  * ── LOS VIVOS TAMBIÉN CUENTAN (I1 del gate #405) ─────────────────────────────
  * La versión anterior miraba SOLO encuentros ya terminales, y por ese hueco se
  * colaba el caso más caro: una consulta inmediata que quedó colgada el domingo
- * a la noche no es terminal el lunes a las 02:00 —cuando corre el cron del
+ * a la noche no es terminal el lunes a la madrugada —cuando corre el cron del
  * cierre—, así que el sello no la veía, se sellaba la semana sin ella, y cuando
  * después aparecía su fila facturable el cumplimiento sellado ya no la podía
  * incorporar. La factura la cobraba igual: los dos números contractuales, otra

@@ -50,16 +50,18 @@ Respuesta:
   estuvo caído, o la ventana de 14 días quedó corta tras un atraso largo.
 - **`vivos`** — encuentros de esa semana que **siguen abiertos**. El caso real
   que motivó el chequeo: una consulta inmediata que quedó colgada el domingo a
-  la noche no es terminal el lunes a las 02:00, cuando corre el cron del cierre,
-  así que se sellaba la semana sin ella y después la factura la cobraba igual.
+  la noche no es terminal el lunes a la madrugada, cuando corre el cron del
+  cierre, así que se sellaba la semana sin ella y después la factura la cobraba
+  igual.
   Los dos números contractuales, divergiendo en silencio.
 
-  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 5 * * 1`
-  (lunes 02:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
-  todos los días** — no "el martes a las 3 AM". Para una CI que arrancó el
-  domingo a las 20:00, el umbral de 4 h de ese cron se cumple a las 00:00 del
-  lunes y la cierra esa misma madrugada; el caso que sobrevive al lunes 02:00 es
-  el de una CI que arrancó más tarde. Ante la duda, mirar el cron crudo en
+  **Los crons se programan en UTC.** `acuerdo-cerrar-semana` es `0 7 * * 1`
+  (lunes 04:00 ART) y `cerrar-huerfanas` es `0 3 * * *`, o sea **00:00 ART,
+  todos los días** — no "el martes a las 3 AM". El orden importa: el sello corre
+  **después** del barrido, nunca antes. Para una CI que arrancó el domingo a las
+  20:00, el umbral de 4 h de `cerrar-huerfanas` se cumple a las 00:00 del lunes
+  y la cierra esa misma madrugada; el caso que sobrevive es el de una CI que
+  arrancó después de las 20:00. Ante la duda, mirar el cron crudo en
   `vercel.json` y convertir a ART (UTC−3), no la memoria.
 
 ## 2. Destrabar lo que falte

@@ -18,7 +18,7 @@ atrás para cuando el cierre automático no pudo.
 |---|---|---|
 | Qué congela | El **cumplimiento** (horas del acuerdo) | La **facturación** (consultas facturables) |
 | Dónde | `acuerdo_semanas` | `encuentros_metering.facturado_periodo` |
-| Cuándo | Lunes 02:00 ART | Día 1, 02:00 ART |
+| Cuándo | Lunes 04:00 ART | Todos los días 04:00 ART (solo tiene trabajo cuando terminó un mes) |
 | Cron | `acuerdo-cerrar-semana` | `metering-cerrar-mes` |
 
 Son dos medidores distintos y no se mezclan (R13). Comparten una sola cosa: la
@@ -33,6 +33,21 @@ día 1, porque una consulta que termina 23:55 se clasifica pasada la medianoche
 (el contador espera 15 minutos tras el cierre y corre cada 10).
 
 **La foto siempre es del mes; lo que se demora es el revelado.**
+
+### Si el día 1 no se puede, se reintenta al día siguiente
+
+El cron corre **todos los días** a las 04:00 ART y sella **cualquier mes
+terminado que siga abierto**, no solo el anterior. Esto no es paranoia: el caso
+normal de aborto es una consulta que el profesional abrió a las 22:30 del 31 y
+nunca cerró. `cerrar-huerfanas` (00:00 ART) solo cierra las que llevan más de
+4 h abiertas, así que a la madrugada del día 1 esa CI sigue viva y bloquea el
+sello — con razón. Al día siguiente ya está cerrada y clasificada, y el mes se
+sella solo.
+
+Un mes **ya sellado** nunca vuelve a la lista, aunque tenga filas sin sello:
+esas son las que llegaron después del cierre, y sellarlas ahora las metería a
+una factura ya emitida por la puerta de atrás. Se ven marcadas en
+`/admin/periodos`.
 
 ## Quién puede correrlo
 
@@ -57,9 +72,12 @@ curl -s "https://<host-de-la-instancia>/api/admin/institucional/cerrar-mes?perio
 - **`sin_fila`** — encuentros ya terminales que el clasificador todavía no
   escribió en `encuentros_metering`.
 - **`vivos`** — encuentros del mes que **siguen abiertos**. El caso que importa:
-  la consulta que quedó colgada el 31 a las 23:50 no es terminal a las 02:00 del
-  día 1. Si se sellara igual, su fila aparecería después —facturable— sobre un
-  mes ya congelado.
+  la consulta que quedó colgada el 31 a las 22:30 no es terminal en la
+  madrugada del día 1 (`cerrar-huerfanas` corre a las 00:00 ART y solo cierra
+  las que llevan más de 4 h abiertas). Si se sellara igual, su fila aparecería
+  después —facturable— sobre un mes ya congelado. **No hace falta hacer nada:**
+  el cron vuelve a intentarlo a las 04:00 del día siguiente, cuando el barrido
+  ya la cerró, y ahí sella el mes solo.
 
 ## 2. Destrabar lo que falte
 

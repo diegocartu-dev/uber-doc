@@ -20,6 +20,7 @@ import {
   mesTerminado,
   periodoASellar,
   filtroDeFacturacion,
+  mesesTerminadosHaciaAtras,
   pesos,
   facturacionACSV,
   type Facturacion,
@@ -239,6 +240,31 @@ function cuerpoDe(nombre: string): string {
   assert.notEqual(fin, -1, `no se encontró el final de ${nombre}`);
   return FUENTE.slice(inicio, fin);
 }
+
+test("barrido · los candidatos van del más VIEJO al más nuevo, y el más nuevo es el que toca hoy", () => {
+  // El orden importa: si un mes viejo quedó sin sellar, se cierra antes que el
+  // reciente (el techo por corrida recorta desde el final).
+  const meses = mesesTerminadosHaciaAtras(ar("2026-11-01T04:00:00-03:00"), 4);
+  assert.deepEqual(meses, ["2026-07", "2026-08", "2026-09", "2026-10"]);
+  assert.equal(meses[meses.length - 1], periodoASellar(ar("2026-11-01T04:00:00-03:00")));
+});
+
+test("barrido · el mes en curso NUNCA es candidato, ni el día 1 ni el 28", () => {
+  for (const dia of ["2026-11-01T04:00:00-03:00", "2026-11-28T04:00:00-03:00"]) {
+    assert.ok(
+      !mesesTerminadosHaciaAtras(ar(dia), 13).includes("2026-11"),
+      `${dia}: noviembre está en curso`
+    );
+  }
+});
+
+test("barrido · cruza el año sin inventar un mes 00", () => {
+  assert.deepEqual(mesesTerminadosHaciaAtras(ar("2027-01-01T04:00:00-03:00"), 3), [
+    "2026-10",
+    "2026-11",
+    "2026-12",
+  ]);
+});
 
 test("factura · un mes SELLADO se lee del sello, no del rango de fechas", () => {
   // El mes ya se facturó: la factura tiene que ser exactamente la foto que se

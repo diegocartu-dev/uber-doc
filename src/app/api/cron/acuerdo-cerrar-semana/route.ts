@@ -4,7 +4,7 @@ import { cortarSiB2C } from "@/lib/institucional/crons-institucionales";
 import { cerrarSemana, semanaASellar } from "@/lib/metering/bolsa";
 
 /**
- * Cron de los lunes 02:00 ART — SELLA LA SEMANA QUE TERMINÓ (spec §6.4).
+ * Cron de los lunes 04:00 ART — SELLA LA SEMANA QUE TERMINÓ (spec §6.4).
  *
  * La semana en curso se calcula al vuelo cada vez que alguien abre el panel.
  * La semana que pasó, no: se congela acá. No es una optimización — es la
@@ -12,13 +12,19 @@ import { cerrarSemana, semanaASellar } from "@/lib/metering/bolsa";
  * lo mismo en diciembre, aunque después alguien edite una agenda vieja o un
  * webhook llegue tarde.
  *
- * ── POR QUÉ 02:00 Y NO 00:05 ────────────────────────────────────────────────
+ * ── POR QUÉ 04:00 Y NO 00:05 ────────────────────────────────────────────────
  * Porque a las 00:05 el contador todavía no terminó de contar el domingo: un
  * encuentro se clasifica recién 15 minutos después de su cierre y el job corre
  * cada 10, así que lo que cerró el domingo 23:55 entra a `encuentros_metering`
  * a las 00:15-00:20 — DESPUÉS del sello. Esos bloques quedaban fuera del
  * cumplimiento sellado para siempre, mientras la facturación (que lee la tabla
  * en vivo) sí los cobraba.
+ *
+ * Y 04:00 y no 02:00 porque a las 02:00 todavía no pasó el barrido: la CI que
+ * el profesional abrió el domingo a la noche y nunca cerró la termina
+ * `cerrar-huerfanas` (00:00 ART, con 4 h de antigüedad mínima), y hasta que no
+ * es terminal la precondición del sello la cuenta como viva y aborta. Sellar
+ * antes del barrido es abortar de gusto.
  *
  * El horario es la mitad barata del arreglo. La otra mitad está en
  * `cerrarSemana`, que se niega a sellar si queda un encuentro terminal de esa

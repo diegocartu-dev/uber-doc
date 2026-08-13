@@ -208,7 +208,7 @@ export const CRONS_META: Record<string, CronMeta> = {
       "los lunes a la madrugada congela cuántas horas cumplió cada profesional en la semana que terminó",
     impacto:
       "la semana pasada sigue mostrándose 'en curso' y sus números podrían moverse si cambia una agenda vieja",
-    cadencia: "los lunes a las 02:00",
+    cadencia: "los lunes a las 04:00",
     autoRecupera: false,
     accion:
       "Sí, avisá: el cierre de esa semana no se hace solo la semana que viene (el cron sella siempre la semana ANTERIOR a la de hoy). Abrí Claude Code y decime: \"corré el cierre semanal del acuerdo para la semana que faltó\".",
@@ -216,13 +216,13 @@ export const CRONS_META: Record<string, CronMeta> = {
   "metering-cerrar-mes": {
     nombre: "Cierre mensual de la facturación (institucional)",
     queHace:
-      "en la madrugada del día 1 congela la factura del mes que terminó, para que el detalle que se le pasa a la institución no cambie nunca más",
+      "congela la factura de todo mes terminado que siga abierto, para que el detalle que se le pasa a la institución no cambie nunca más",
     impacto:
       "el mes queda sin cerrar: la institución puede seguir mirándolo y descargándolo, pero sus números todavía se pueden mover",
-    cadencia: "el día 1 de cada mes a las 02:00",
-    autoRecupera: false,
+    cadencia: "todos los días a las 04:00 (solo tiene trabajo cuando terminó un mes)",
+    autoRecupera: true,
     accion:
-      "Sí, avisá: el cierre de ese mes no se hace solo el mes que viene (la tarea cierra siempre el mes ANTERIOR al de hoy). Abrí Claude Code y decime: \"corré el cierre mensual de la facturación para el mes que faltó\".",
+      "Puede esperar: la tarea vuelve a intentarlo mañana y cierra igual el mes que faltó. Si el mismo mes falla varios días seguidos, abrí Claude Code y decime: \"investigá el cierre mensual de la facturación\".",
   },
   watchdog: {
     nombre: "Guardián de tareas automáticas",

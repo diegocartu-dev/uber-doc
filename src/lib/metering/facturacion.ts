@@ -331,12 +331,14 @@ export interface ResumenCierreMes {
  *    (`encuentrosSinClasificar`), extendida al rango del mes: si queda un
  *    encuentro terminal sin clasificar, o uno TODAVÍA VIVO del último día, no
  *    se sella nada. El caso concreto: la consulta que quedó abierta el 31 a las
- *    23:50 no es terminal a las 02:00 del día 1; si se sellara igual, su fila
- *    aparecería después —facturable— sobre un mes ya congelado.
+ *    22:30 no es terminal en la madrugada del día 1 —`cerrar-huerfanas` corre a
+ *    las 00:00 ART y solo cierra las que llevan más de 4 h abiertas—; si se
+ *    sellara igual, su fila aparecería después —facturable— sobre un mes ya
+ *    congelado.
  *
- * Abortar es más barato que sellar mal: el mes se cierra unas horas más tarde
- * con la corrida manual, mientras que un sello incompleto hay que levantarlo
- * fila por fila con la auditoría de la 021 encima.
+ * Abortar es más barato que sellar mal: el mes se cierra al día siguiente, en
+ * la corrida diaria del cron, mientras que un sello incompleto hay que
+ * levantarlo fila por fila con la auditoría de la 021 encima.
  *
  * Idempotente: si vuelve a correr sobre un mes ya sellado, `sellarPeriodo` no
  * toca ninguna fila y el resumen lo dice (`selladas: 0`).
@@ -448,6 +450,76 @@ export async function filasSelladas(periodo: string): Promise<number> {
 /** ¿Ese mes ya está sellado? (tiene al menos una fila con el sello puesto) */
 export async function periodoEstaSellado(periodo: string): Promise<boolean> {
   return (await filasSelladas(periodo)) > 0;
+}
+
+/** Filas de ese mes que todavía no llevan sello. */
+export async function filasSinSellar(periodo: string): Promise<number> {
+  const admin = createAdminClient();
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  return contarExacto(`filas sin sellar de ${periodo}`, () =>
+    admin
+      .from("encuentros_metering")
+      .select("id", { count: "exact", head: true })
+      .gte("fecha_ar", desde)
+      .lte("fecha_ar", hasta)
+      .is("facturado_periodo", null)
+  );
+}
+
+/**
+ * Cuántos meses hacia atrás mira el barrido del cierre. 13 cubre un año entero
+ * de facturación más el mes en curso: si algo estuvo sin sellar más que eso, el
+ * problema ya no es que el cron no llegó.
+ */
+export const MESES_QUE_MIRA_EL_CIERRE = 13;
+
+/**
+ * Los meses ya terminados, del más VIEJO al más nuevo, empezando por el que le
+ * toca sellar al cron de hoy. Puro: es la lista de candidatos del barrido.
+ */
+export function mesesTerminadosHaciaAtras(
+  ahoraMs = Date.now(),
+  cuantos = MESES_QUE_MIRA_EL_CIERRE
+): string[] {
+  const ultimo = periodoASellar(ahoraMs);
+  const anio = Number(ultimo.slice(0, 4));
+  const mes = Number(ultimo.slice(5, 7));
+  const out: string[] = [];
+  for (let i = cuantos - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(anio, mes - 1 - i, 1));
+    out.push(d.toISOString().slice(0, 7));
+  }
+  return out;
+}
+
+/**
+ * Meses terminados que quedaron SIN CERRAR — lo que el cron tiene que sellar.
+ *
+ * ── POR QUÉ NO ALCANZA CON "EL MES ANTERIOR" ─────────────────────────────────
+ * El cron cerraba siempre el mes que acababa de terminar y no volvía nunca
+ * sobre el que faltó. Si el día 1 fallaba —el job de metering atrasado, una
+ * consulta viva del día 31, un deploy en el momento equivocado— la única señal
+ * en todo el sistema era UN mail rojo, y si ese mail se perdía el mes quedaba
+ * sin sellar de forma indefinida y silenciosa. El watchdog no ayudaba: vigila
+ * el latido, y el cron latía.
+ *
+ * ── POR QUÉ UN MES YA SELLADO NO VUELVE A LA LISTA ───────────────────────────
+ * Un mes cerrado puede tener filas sin sello: son las que llegaron DESPUÉS del
+ * cierre. Sellarlas ahora las metería a una factura ya emitida por la puerta de
+ * atrás, que es justo lo que el sello existe para impedir. Se muestran marcadas
+ * en /admin/periodos y las decide un humano.
+ */
+export async function mesesPendientesDeSellar(
+  ahoraMs = Date.now(),
+  cuantos = MESES_QUE_MIRA_EL_CIERRE
+): Promise<string[]> {
+  const pendientes: string[] = [];
+  for (const periodo of mesesTerminadosHaciaAtras(ahoraMs, cuantos)) {
+    if ((await filasSinSellar(periodo)) === 0) continue;
+    if (await periodoEstaSellado(periodo)) continue;
+    pendientes.push(periodo);
+  }
+  return pendientes;
 }
 
 /**
