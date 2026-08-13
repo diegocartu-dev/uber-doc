@@ -3,6 +3,19 @@
 *13/08/2026. Instancia institucional, rama `institucional/etapa-8`. Sin aplicar
 SQL, sin push. Complementa `2026-08-13-institucional-cierre-etapas-0-6.md`.*
 
+>  # 🛑 ORDEN DE DESPLIEGUE — PRIMERO EL SQL, DESPUÉS EL CÓDIGO
+>
+> **Las migraciones 021, 022, 023 y 024 se aplican a la base de la instancia
+> ANTES de desplegar este código.** No es una preferencia: el código de esta
+> etapa **falla cerrado** a propósito —si no puede leer si un período está
+> cerrado, tira, porque una lectura que falla en silencio haría que un período
+> cerrado se viera abierto y el barrido lo volviera a sellar—. Con el código
+> desplegado y el SQL sin aplicar, `/admin/periodos`, la card de facturación y
+> los dos crons de cierre responden **500**.
+>
+> Las cuatro son reentrantes. Runbooks y checklist de verificación:
+> `supabase/migrations-institucional/README.md`.
+
 La Etapa 8 implementó cuatro decisiones que Diego tomó el 13/08 sobre código ya
 mergeado: **R6 flexible** (el turno publicado se puede tomar aunque la semana
 esté cumplida), **R31/R32** (el mes se cierra solo; descargar es leer), **R33**
@@ -239,6 +252,80 @@ enunciado de la etapa:
 
 ---
 
+## Tercera ronda: los residuales del gate
+
+El verificador confirmó que el crítico (cerrar dos veces un mes cerrado) quedó
+cerrado, y dejó siete residuales. Esto es lo que se hizo con cada uno.
+
+### El mismo crítico seguía abierto del lado SEMANAL
+
+Con el padrón vacío, `cerrarSemana` no tenía ninguna fila que escribir en
+`acuerdo_semanas` y volvía sin dejar rastro: esa semana **nunca quedaba
+registrada como cerrada**. Seguía apareciendo pendiente al día siguiente, y el
+día que entraba un profesional al padrón el barrido la veía abierta y la sellaba
+**con él** — cumplimiento sellado sobre una semana que la institución ya había
+leído como "en curso". Es exactamente el hueco que la 023 cerró para el mes, por
+la puerta que le quedaba del lado semanal.
+
+Misma solución: **marca explícita** (`acuerdo_semanas_cerradas`, migración
+**024**, inmutable), orden sellar → marcar, "cerrada" = la marca **o** las filas
+selladas (transición para las semanas cerradas antes de la 024), y una semana ya
+cerrada devuelve enseguida sin recalcular ni evaluar la precondición del
+contador — la ruta manual llama a `cerrarSemana` directo. Lo que toca de la base
+pasa por un puerto con default real, que es lo que permite fijar la secuencia
+con un test: cerrar en cero, que entre alguien al padrón, volver a cerrar, y que
+la semana vieja no se le selle.
+
+### El barrido semanal se lo comían las más viejas
+
+`pendientes.slice(0, 2)` toma las DOS MÁS VIEJAS. Alcanza con que dos semanas
+viejas se traben para que monopolicen todas las corridas y la semana recién
+terminada —la única que alguien va a mirar el lunes— no se toque hasta que la
+ventana de ocho las expulse: seis semanas de atraso, con el watchdog en verde.
+
+La marca de la 024 destraba el caso más común (la semana sin padrón, que nunca
+llegaba a registrar sello), pero no los otros: la precondición del contador
+puede abortar indefinidamente por un encuentro que quedó mal. `semanasDeLaCorrida`
+reserva el último lugar de cada corrida para la pendiente más reciente.
+
+### El golden test de la regla de oro no mordía
+
+Recorría `CRONS_SOLO_INSTITUCIONALES` llamando al helper: eso verifica que el
+helper está bien, no que los crons lo **usen**. Un cuarto cron agregado a la
+lista sin la llamada en su `route.ts` pasaba en verde. Ahora el test lee los ocho
+`route.ts` y exige, por cada uno: que importe el helper del módulo correcto, que
+lo llame con su key, que **devuelva** el corte, y que no use el helper del otro
+lado. Verificado por mutación.
+
+### La extensión al B2C que nadie pidió, gateada
+
+`detalleDelCuerpo` hacía que los ~25 crons del B2C mandaran hasta 600 caracteres
+del cuerpo de la respuesta en el mail de alerta —varios devuelven listas con ids
+de consultas y de turnos—. Era la extensión de alcance nº 4 de la ronda
+anterior, y la única que tocaba producción del B2C. Queda gateada por
+`esInstitucional()`: el detalle se agrega solo en la instancia. En el B2C el mail
+vuelve a ser **exactamente** el de antes, verificado carácter por carácter contra
+el texto de `main` (el cambio, además del cuerpo, había convertido un espacio en
+un salto de línea).
+
+### Lo menor de esta ronda
+
+- **La 014 describía una regla que la 021 eliminó** ("el único UPDATE admitido
+  sobre una fila sellada es levantar el sello"). Quien leyera la 014 sola
+  aprendía lo contrario de lo que hace la base. Marcada como reemplazada, con la
+  regla vigente y el puntero a la 021.
+- **El checklist de ataques podía correrse contra la nada.** La preparación
+  insertaba **0 filas en silencio** en una instancia sin profesionales cargados
+  —que es justo cuándo se corre—, y como el resultado esperado de casi todos los
+  ataques es *un error*, la ausencia de la fila se confundía con la defensa
+  funcionando. Ahora falla ruidosamente. Y el ataque 7 (TRUNCATE), que es
+  **destructivo** si la 019 no está aplicada, exige confirmar los dos triggers
+  antes de correrse.
+- **El orden de despliegue**, arriba de todo: en este documento, en el README de
+  las migraciones y en los dos runbooks.
+
+---
+
 ## Qué queda abierto
 
 - **La fila que llega tarde no se factura sola.** Queda visible y marcada en
@@ -248,21 +335,29 @@ enunciado de la etapa:
   a propósito — inventar una regla de facturación sin que la decida Diego era
   peor que dejarla a la vista. **El procedimiento manual ya está escrito** en el
   runbook mensual ("La fila que llega tarde"), incluido lo que no hay que hacer.
-- **Las tres migraciones siguen sin aplicarse** (021, 022, 023). Nada de esto
-  está probado contra una base real: los tests leen el `.sql` y verifican que las
-  cláusulas están escritas, que es lo más cerca que se llega sin instancia. La
-  verificación del README —los `REVOKE` y los diez ataques— sigue pendiente y es
-  obligatoria post-aplicación. **Y el orden importa: primero el SQL, después el
-  deploy** (con la 023 sin aplicar, la facturación del panel tira 500).
-- **La marca de cierre convive con el sello de las filas.** "Cerrado" es la marca
-  **o** al menos una fila sellada, para que los meses cerrados antes de la 023 no
-  queden en el limbo. Es deuda de transición: cuando todos los meses vivos tengan
-  marca, la segunda mitad de la condición se puede sacar.
+- **Las cuatro migraciones siguen sin aplicarse** (021, 022, 023, 024). Nada de
+  esto está probado contra una base real: los tests leen el `.sql` y verifican
+  que las cláusulas están escritas, que es lo más cerca que se llega sin
+  instancia. La verificación del README —los `REVOKE` y los once ataques— sigue
+  pendiente y es obligatoria post-aplicación. **Y el orden importa: primero el
+  SQL, después el deploy** (ver el cartel del principio: con la 023 o la 024 sin
+  aplicar, la facturación del panel y los cierres tiran 500).
+- **La marca de cierre convive con el sello de las filas**, en las dos
+  ventanas. "Cerrado" es la marca **o** al menos una fila sellada, para que los
+  períodos cerrados antes de la 023 / la 024 no queden en el limbo. Es deuda de
+  transición: cuando todos los períodos vivos tengan marca, la segunda mitad de
+  la condición se puede sacar.
+- **El techo del barrido MENSUAL sigue siendo `slice(0, 3)`.** El mismo patrón
+  de hambre que se corrigió en el semanal existe ahí, más diluido (3 lugares
+  sobre 13 candidatos, y los meses trabados son raros). No se tocó para no
+  extender el alcance sin necesidad; si algún día un mes se traba de forma
+  permanente, la solución ya está escrita (`semanasDeLaCorrida` es genérica).
 - **La firma de una corrección no prueba quién la hizo**, solo que es un
   superadministrador activo (ver el bloque nuevo en la 021). Atarlo de verdad
   pide que la corrección viaje por una sesión autenticada en vez de service role.
 
 ## Verificación
 
-`npm run test:unit` (**320 casos**, incluido el golden de la regla de oro), `tsc`
-y `eslint` sobre lo tocado: verde. Un commit por hallazgo. Sin SQL aplicado.
+`npm run test:unit` (**341 casos**, incluido el golden de la regla de oro —que
+ahora lee los `route.ts`— y la secuencia completa de los dos cierres), `tsc` y
+`eslint` sobre lo tocado: verde. Un commit por hallazgo. Sin SQL aplicado.

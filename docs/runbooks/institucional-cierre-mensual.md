@@ -6,6 +6,21 @@
 > Origen: **R31-R33** de `06-reglas-operativas.md` (decisiones de Diego del
 > 13/08). Hermano del cierre semanal: `institucional-cierre-semanal.md`.
 
+> ## 🛑 Antes de nada: el SQL va ANTES que el deploy
+>
+> **Las migraciones 021, 022, 023 y 024 se aplican a la base de la instancia
+> ANTES de desplegar el código de la Etapa 8.** Nada de lo que dice este runbook
+> funciona al revés: el código falla cerrado a propósito —`periodoEstaSellado()`
+> lee `metering_periodos_cerrados` y **tira** si no puede, porque una lectura
+> que falla en silencio haría que un mes cerrado se viera abierto y el barrido
+> lo volviera a sellar—, así que con el código desplegado y el SQL sin aplicar
+> **`/admin/periodos` y el cron mensual responden 500**.
+>
+> Si este runbook se está abriendo porque el cierre falla con 500 y las
+> migraciones no están aplicadas: **la causa es esa**, no el contador. Aplicar
+> el SQL (son reentrantes) y verificar con el checklist de
+> `supabase/migrations-institucional/README.md`.
+
 ## Qué cambió, en una línea
 
 Antes el mes se sellaba **cuando alguien bajaba el CSV** desde `/panel`. Ya no:

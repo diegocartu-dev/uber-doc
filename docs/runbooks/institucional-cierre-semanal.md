@@ -11,11 +11,45 @@
 >
 > **Desde el 13/08 el cron sí vuelve.** Corre **todos los días a las 04:00 ART**
 > y sella **toda semana terminada que siga abierta** (hasta 8 hacia atrás, 2 por
-> corrida), igual que el cierre mensual. Este runbook queda para el caso que el
-> barrido no cubre: una semana **más vieja que eso**, o una que hay que sellar
-> ya, sin esperar a la madrugada. Una semana ya sellada **no** vuelve a la lista,
+> corrida: la más vieja pendiente y **siempre** la más reciente, para que una
+> semana trabada no se quede con toda la corrida), igual que el cierre mensual.
+> Este runbook queda para el caso que el barrido no cubre: una semana **más
+> vieja que eso**, o una que hay que sellar ya, sin esperar a la madrugada. Una semana ya sellada **no** vuelve a la lista,
 > aunque le falte algún profesional: los que entraron al padrón después del
 > cierre no se le agregan a un cumplimiento que la institución ya leyó.
+
+> ## 🛑 Antes de nada: el SQL va ANTES que el deploy
+>
+> **Las migraciones 021, 022, 023 y 024 se aplican a la base de la instancia
+> ANTES de desplegar el código de la Etapa 8.** La que le toca a este runbook es
+> la **024** (`acuerdo_semanas_cerradas`): `semanasPendientesDeSellar()` la lee y
+> **tira** si no puede —una lectura que falla en silencio haría que una semana
+> cerrada se viera abierta y el barrido volviera a sellarla—, así que con el
+> código desplegado y el SQL sin aplicar el cron `acuerdo-cerrar-semana`
+> responde **500 todos los días** (con su mail rojo) y la corrida manual
+> también. El panel de cumplimiento, que lee `acuerdo_semanas` directo, sigue
+> andando: por eso el síntoma es "el cierre falla" y no "se cayó el panel".
+>
+> Son reentrantes. Verificación: `supabase/migrations-institucional/README.md`.
+
+## La semana sin nadie en el padrón también se cierra
+
+Desde la **024** el cierre deja una **marca explícita** en
+`acuerdo_semanas_cerradas`, además de las filas de `acuerdo_semanas`. Existe por
+un caso concreto: con el padrón vacío —el piloto arrancando, una especialidad
+que salió del config— no hay ninguna fila que escribir, así que "cerrada en
+cero" y "nunca se cerró" se veían iguales. Esa semana volvía al barrido todos
+los días y, el día que entraba alguien al padrón, se sellaba **con él**:
+cumplimiento sellado sobre una semana que la institución ya había leído.
+
+Consecuencias prácticas para quien opera:
+
+- El diagnóstico (`GET`) informa **`cerrada`**. Una semana ya cerrada tiene
+  `sellable: false`, aunque no le falte nada: no hay nada que hacerle.
+- Correr el `POST` sobre una semana cerrada es **inofensivo**: devuelve su foto
+  con `sellados: 0` y no toca la base.
+- Las semanas que se cerraron **antes** de la 024 aparecen pendientes **una
+  vez**, reciben la marca en esa pasada (sin sellar nada) y no vuelven.
 
 ## Qué es el sello y por qué importa
 
@@ -46,13 +80,15 @@ curl -s "https://<host-de-la-instancia>/api/admin/institucional/cerrar-semana?se
 Respuesta:
 
 ```json
-{ "semana_ar": "2026-10-19", "sellable": true, "termino": true, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
+{ "semana_ar": "2026-10-19", "sellable": true, "termino": true, "cerrada": false, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
 ```
 
 - **`termino`** — si la semana ya cerró (pasó el domingo a medianoche AR). Una
   semana que **no terminó** nunca es sellable, por más que `faltantes` dé cero:
   "no falta nada" es trivialmente cierto en una semana que todavía no pasó.
-
+- **`cerrada`** — si esa semana ya se selló (marca de la 024 **o** filas
+  selladas). Una semana cerrada nunca es `sellable`: el `POST` sobre ella no
+  toca la base.
 - **`sin_fila`** — encuentros ya terminales que el clasificador todavía no
   escribió en `encuentros_metering`. Causa típica: el cron `metering-clasificar`
   estuvo caído, o la ventana de 14 días quedó corta tras un atraso largo.

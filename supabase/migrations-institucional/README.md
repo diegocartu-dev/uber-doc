@@ -2,6 +2,17 @@
 
 Estos `.sql` se aplican **SOLO en la base de una instancia institucional** (proyecto Supabase dedicado, deploy con `INSTITUCIONAL=true`), **encima** del schema B2C ya provisionado (las migraciones de `supabase/migrations/` + la migración de baseline — ver `scripts/institucional/README.md`). **Nunca corren en el B2C.**
 
+> # 🛑 PRIMERO EL SQL, DESPUÉS EL DEPLOY
+>
+> **Las migraciones 021, 022, 023 y 024 se aplican ANTES de desplegar el código
+> de la Etapa 8.** El código falla cerrado a propósito (no adivina: si no puede
+> leer si un período está cerrado, **tira**), y eso significa que con el código
+> desplegado y el SQL sin aplicar, `/admin/periodos`, la card de facturación, el
+> cierre mensual y el cierre semanal responden **500**.
+>
+> No es una preferencia de orden: es la diferencia entre "todavía no está" y
+> "está roto". Detalle por migración en la tabla de abajo.
+
 ## Env vars de la instancia (provisión)
 
 - **`INSTITUCIONAL=true`** — la fuente de verdad del modo (server, runtime). Todo gate de código sale de acá vía `src/lib/instancia.ts`: páginas, server actions, crons, capas A/B/C, y también el sidebar de `/admin` (que recibe el flag por **prop** desde el layout server — no lee ninguna env client).
@@ -20,12 +31,17 @@ Etapa 8:
 |---|---|
 | **021** | `/admin/periodos` entero: el combo de meses llama a la RPC `periodos_sellados()`, y el botón de corregir a `corregir_encuentro_sellado()`. Sin la migración, la primera es un 404 de PostgREST y la pantalla no abre. |
 | **022** | Nada — el trigger solo agrega una prohibición. Se puede aplicar después sin romper, pero mientras no esté, la puerta del INSERT sigue abierta. |
-| **023** | La **facturación** de cualquier mes: `periodoEstaSellado()` lee `metering_periodos_cerrados` y **tira** si no puede (a propósito: si esa lectura fallara en silencio, un mes cerrado se vería abierto y el barrido volvería a sellarlo). O sea que sin la 023 aplicada, la card de facturación del panel y el cierre mensual fallan. |
+| **023** | La **facturación** de cualquier mes: `periodoEstaSellado()` lee `metering_periodos_cerrados` y **tira** si no puede (a propósito: si esa lectura fallara en silencio, un mes cerrado se vería abierto y el barrido volvería a sellarlo). O sea que sin la 023 aplicada, la card de facturación del panel y el cierre mensual fallan con 500. |
+| **024** | El **cierre semanal**, entero: `semanasPendientesDeSellar()` lee `acuerdo_semanas_cerradas` y **tira** por el mismo motivo. Sin ella, el cron `acuerdo-cerrar-semana` responde 500 todos los días (con su mail rojo) y la corrida manual también. El panel de cumplimiento, que lee `acuerdo_semanas` directo, sigue andando. |
 
-Las tres son **reentrantes**: si el SQL Editor corta a la mitad, se vuelve a
+Las cuatro son **reentrantes**: si el SQL Editor corta a la mitad, se vuelve a
 pegar el archivo entero sin miedo.
 
-Y ninguna de las tres toca el B2C: son de la base de la instancia.
+Y ninguna de las cuatro toca el B2C: son de la base de la instancia.
+
+**Después de aplicarlas, verificar** — el checklist de REVOKE y los once ataques
+de más abajo no son opcionales: son la única prueba de que las defensas escritas
+frenan algo.
 
 ## Checklist post-aplicación: verificar los REVOKE de verdad
 
@@ -87,9 +103,9 @@ Si alguna da `true` en `anon` o `authenticated`, volver a correr el `REVOKE` de 
 
 Mismo principio que los REVOKE de arriba, aplicado a la otra defensa del
 contador: **un trigger escrito no es un trigger que frena**. Las migraciones
-014, 015, 017, 019, 021, 022 y 023 protegen lo que ya se facturó y lo que ya se
-selló, y esa protección es lo único que sostiene la frase que se le dice al
-cliente — *"la factura de octubre va a decir lo mismo en diciembre"*.
+014, 015, 017, 019, 021, 022, 023 y 024 protegen lo que ya se facturó y lo que
+ya se selló, y esa protección es lo único que sostiene la frase que se le dice
+al cliente — *"la factura de octubre va a decir lo mismo en diciembre"*.
 
 Se verifica **atacándola**, en la base de la instancia, con el SQL Editor
 (service role / dueño). El resultado esperado de cada ataque es un **error**.
@@ -428,6 +444,28 @@ TRUNCATE metering_periodos_cerrados;
 reabre ni se borra` / `no se puede vaciar con TRUNCATE`). Si se pudieran editar,
 "cerrado" volvería a ser una opinión y un mes que cerró en cero podría volver a
 cerrarse con lo que llegó después.
+
+### Ataque 11 — reabrir una semana cerrada (024)
+
+El espejo del anterior, del lado del cumplimiento. Importa por el mismo caso: la
+semana que se cierra **sin nadie en el padrón** no deja ninguna fila en
+`acuerdo_semanas`, así que la marca es lo único que la registra como cerrada.
+
+```sql
+INSERT INTO acuerdo_semanas_cerradas (semana_ar, profesionales, sellados)
+VALUES (DATE '2000-01-03', 0, 0);
+
+UPDATE acuerdo_semanas_cerradas SET sellados = 999 WHERE semana_ar = DATE '2000-01-03';
+DELETE FROM acuerdo_semanas_cerradas WHERE semana_ar = DATE '2000-01-03';
+TRUNCATE acuerdo_semanas_cerradas;
+```
+
+**Esperado:** el `INSERT` pasa; los otros tres rebotan (`una semana cerrada no
+se reabre ni se borra` / `no se puede vaciar con TRUNCATE`).
+
+La fila queda: **no se puede borrar, y así tiene que ser.** Si se quiere una
+instancia sin esa marca de prueba, se desactiva el trigger a mano igual que en
+la limpieza de abajo — la fricción es deliberada.
 
 ### Limpieza
 
