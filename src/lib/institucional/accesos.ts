@@ -68,20 +68,16 @@ export async function crearAccesoLink(params: {
   const ancla = params.encuentroMs && !Number.isNaN(params.encuentroMs) ? params.encuentroMs : Date.now();
   const expiraAt = new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
 
-  // Un token vivo por (paciente, encuentro): revocar los previos del recurso.
-  const revocacion = admin
-    .from("accesos_link")
-    .update({ revocado_at: new Date().toISOString() })
-    .eq("paciente_id", params.pacienteId)
-    .is("revocado_at", null);
-  const { error: errRevocar } = params.turnoId
-    ? await revocacion.eq("turno_id", params.turnoId)
-    : await revocacion.eq("consulta_id", params.consultaId!);
-  if (errRevocar) {
-    console.error("[accesos] No se pudieron revocar tokens previos:", errRevocar.message);
-    // Se sigue igual: el token nuevo es el que viaja; el viejo vence solo.
-  }
-
+  // ── PRIMERO INSERTAR, DESPUÉS REVOCAR ──────────────────────────────────────
+  // El orden era el inverso: se revocaban los tokens vivos y recién ahí se
+  // insertaba el nuevo. Si el insert fallaba (constraint, blip de PostgREST),
+  // esta función devolvía null y el paciente quedaba con CERO enlaces vivos:
+  // perdió el que tenía y no recibió ninguno. Era la mitad cara de la operación
+  // ejecutándose después de la barata e irreversible.
+  //
+  // Al revés, el peor caso es que convivan dos tokens vivos unos milisegundos
+  // (o hasta que alguien mire los logs, si la revocación falla) — visible,
+  // arreglable, y ninguno de los dos lleva a un lugar equivocado.
   const { data, error } = await admin
     .from("accesos_link")
     .insert({
@@ -101,6 +97,22 @@ export async function crearAccesoLink(params: {
   if (error || !data) {
     console.error("[accesos] No se pudo emitir el acceso:", error?.message);
     return null;
+  }
+
+  // Un token vivo por (paciente, encuentro): revocar los previos del recurso,
+  // todos menos el que se acaba de emitir.
+  const revocacion = admin
+    .from("accesos_link")
+    .update({ revocado_at: new Date().toISOString() })
+    .eq("paciente_id", params.pacienteId)
+    .is("revocado_at", null)
+    .neq("id", data.id);
+  const { error: errRevocar } = params.turnoId
+    ? await revocacion.eq("turno_id", params.turnoId)
+    : await revocacion.eq("consulta_id", params.consultaId!);
+  if (errRevocar) {
+    console.error("[accesos] No se pudieron revocar tokens previos:", errRevocar.message);
+    // Se sigue igual: el token nuevo es el que viaja; el viejo vence solo.
   }
 
   const dominio = config.dominio.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
