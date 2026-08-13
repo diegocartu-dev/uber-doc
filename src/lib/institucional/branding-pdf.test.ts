@@ -3,7 +3,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accentEfectivo } from "@/lib/institucional/branding-pdf";
+import { accentEfectivo, brandingParaPDF } from "@/lib/institucional/branding-pdf";
+import { invalidarCacheConfigInstitucion } from "@/lib/institucional/config";
 import { accentDe } from "@/lib/pdf/receta";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,4 +29,80 @@ test("el acento efectivo llega entero al generador: el papel del ministerio NO s
   const accent = accentEfectivo({ pdf_accent: null, color_primary: "#4A3F8C" });
   assert.equal(accentDe({ nombre: "X", efectorTexto: "", accent }), "#4A3F8C");
   assert.notEqual(accentDe({ nombre: "X", efectorTexto: "", accent }), "#378ADD");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL GATE POR MODO — la mitad de la regla de oro que el golden del PDF no fija
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// El golden de `receta-golden.test.ts` fija el GENERADOR: `generarRecetaPDF(doc)`
+// sin branding sale byte a byte igual. Pero no fija el GATE, y el gate es lo
+// que decide si el B2C pasa por acá: `brandingParaPDF()` promete devolver
+// `undefined` en B2C SIN TOCAR LA DB NI EL STORAGE, y eso no lo probaba nadie.
+// `regla-de-oro.test.ts` recorre los crons, el callback y el middleware — no
+// incluye ninguna pieza de las Etapas 5-6.
+//
+// Sin esto, un `esInstitucional()` invertido acá haría que el B2C intente bajar
+// un isologo de un bucket que no existe en CADA descarga de receta, y el golden
+// seguiría verde.
+//
+// El instrumento es un espía sobre `globalThis.fetch`: supabase-js sale a la
+// red por ahí, así que "cero llamadas" es la prueba literal de "no tocó la DB
+// ni el Storage" — el mismo criterio que el sprint ya usó con el callback
+// ("cero llamadas a la DB").
+
+async function conEspiaDeRed<T>(fn: () => Promise<T>): Promise<{ valor: T; llamadas: number }> {
+  const original = globalThis.fetch;
+  let llamadas = 0;
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    llamadas++;
+    void args;
+    throw new Error("red bloqueada en el test");
+  }) as typeof fetch;
+  try {
+    return { valor: await fn(), llamadas };
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+test("B2C: brandingParaPDF devuelve undefined SIN tocar la DB ni el Storage", async () => {
+  const antes = process.env.INSTITUCIONAL;
+  delete process.env.INSTITUCIONAL;
+  invalidarCacheConfigInstitucion();
+  try {
+    const { valor, llamadas } = await conEspiaDeRed(() => brandingParaPDF());
+    assert.equal(valor, undefined, "el B2C recibió branding: el gate está al revés");
+    assert.equal(llamadas, 0, "el B2C salió a la red: el gate no corta antes de la config");
+  } finally {
+    if (antes === undefined) delete process.env.INSTITUCIONAL;
+    else process.env.INSTITUCIONAL = antes;
+    invalidarCacheConfigInstitucion();
+  }
+});
+
+test("el espía de red detecta de verdad: en modo institucional SÍ sale a buscar la config", async () => {
+  // Sin esta mitad, el test de arriba pasaría igual con un espía roto.
+  const antesModo = process.env.INSTITUCIONAL;
+  const antesUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const antesKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.INSTITUCIONAL = "true";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://instancia-de-test.example";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "clave-de-test";
+  invalidarCacheConfigInstitucion();
+  try {
+    const { valor, llamadas } = await conEspiaDeRed(() => brandingParaPDF());
+    assert.ok(llamadas > 0, "el modo institucional no consultó la config");
+    // La red falla ⇒ falla blanda a propósito: el paciente recibe su receta con
+    // la marca de Docto antes que un 500 en la cara.
+    assert.equal(valor, undefined);
+  } finally {
+    if (antesModo === undefined) delete process.env.INSTITUCIONAL;
+    else process.env.INSTITUCIONAL = antesModo;
+    if (antesUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = antesUrl;
+    if (antesKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = antesKey;
+    invalidarCacheConfigInstitucion();
+  }
 });
