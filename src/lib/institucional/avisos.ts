@@ -53,6 +53,28 @@ export interface AvisosAsignacion {
   acceso_url: string | null;
 }
 
+/**
+ * Un aviso al paciente SIN enlace no se manda.
+ *
+ * El código hacía `acceso?.url ?? base`: si la emisión del token fallaba, el
+ * mensaje salía igual con el dominio pelado adentro. Para un paciente de alta
+ * provisionada, la raíz del sitio es un login sin contraseña — un callejón. Y
+ * como el proveedor entregaba el mensaje, el resultado quedaba en `ok: true` y
+ * la auditoría decía "avisado OK": el fallo era invisible por los dos lados.
+ *
+ * Ahora no sale nada y se reporta `ok: false`, que es lo que la Etapa 2 ya
+ * había aprendido con el caso del paciente sin canal: el otorgador tiene que
+ * VER que ese aviso no salió, en la pantalla y en la auditoría.
+ */
+function avisoSinEnlace(
+  canal: "whatsapp" | "mail",
+  destino: string,
+  contexto: string
+): ResultadoAviso {
+  console.error(`[avisos] ${contexto}: no se emitió el acceso-link, no se manda nada al paciente.`);
+  return { canal, destino, ok: false };
+}
+
 const DIAS_LARGOS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 /** "martes 20/10" — el formato de las plantillas aprobadas. */
@@ -140,11 +162,19 @@ export async function avisarAsignacionTurno(
             : null,
       encuentroMs: new Date(`${params.turno.fecha}T${hora8}-03:00`).getTime(),
     });
-    const link = acceso?.url ?? base;
-    resultado.acceso_url = acceso?.url ?? null;
+    const link = acceso?.url ?? null;
+    resultado.acceso_url = link;
+    const destinoPaciente =
+      canalPaciente === "whatsapp"
+        ? (celPaciente as string)
+        : canalPaciente === "mail"
+          ? (params.paciente.email as string)
+          : null;
 
     if (canalPaciente) {
-      if (canalPaciente === "whatsapp") {
+      if (!link) {
+        resultado.paciente = avisoSinEnlace(canalPaciente, destinoPaciente as string, "Turno asignado");
+      } else if (canalPaciente === "whatsapp") {
         const sid = config.wa_plantillas?.turno_asignado;
         const ok = sid
           ? await enviarTwilio(celPaciente as string, sid, {
@@ -259,11 +289,19 @@ export async function avisarAsignacionCI(
             ? (params.paciente.email as string)
             : null,
     });
-    const link = acceso?.url ?? base;
-    resultado.acceso_url = acceso?.url ?? null;
+    const link = acceso?.url ?? null;
+    resultado.acceso_url = link;
+    const destinoPaciente =
+      canalPaciente === "whatsapp"
+        ? (celPaciente as string)
+        : canalPaciente === "mail"
+          ? (params.paciente.email as string)
+          : null;
 
     if (canalPaciente) {
-      if (canalPaciente === "whatsapp") {
+      if (!link) {
+        resultado.paciente = avisoSinEnlace(canalPaciente, destinoPaciente as string, "CI asignada");
+      } else if (canalPaciente === "whatsapp") {
         const sid = config.wa_plantillas?.ci_asignada;
         const ok = sid
           ? await enviarTwilio(celPaciente as string, sid, {
@@ -416,10 +454,25 @@ export async function avisarReprogramacionTurno(
             : null,
       encuentroMs: new Date(`${params.turnoNuevo.fecha}T${hora8}-03:00`).getTime(),
     });
-    const link = acceso?.url ?? base;
-    resultado.acceso_url = acceso?.url ?? null;
+    const link = acceso?.url ?? null;
+    resultado.acceso_url = link;
+    const destinoPaciente =
+      canalPaciente === "whatsapp"
+        ? (celPaciente as string)
+        : canalPaciente === "mail"
+          ? (params.paciente.email as string)
+          : null;
 
-    if (canalPaciente === "whatsapp") {
+    // Ojo con el encadenado: `reprogramarTurno` ya revocó el token del turno
+    // viejo. Si acá se mandara un mensaje sin token nuevo, el paciente quedaría
+    // sin el enlace de antes Y con un aviso que no lleva a ningún lado.
+    if (canalPaciente && !link) {
+      resultado.paciente = avisoSinEnlace(
+        canalPaciente,
+        destinoPaciente as string,
+        "Turno reprogramado"
+      );
+    } else if (canalPaciente === "whatsapp" && link) {
       const sid = config.wa_plantillas?.reprogramacion;
       const ok = sid
         ? await enviarTwilio(celPaciente as string, sid, {
@@ -449,7 +502,7 @@ export async function avisarReprogramacionTurno(
         });
         resultado.paciente = { canal: "mail", destino: params.paciente.email, ok: okMail };
       }
-    } else if (canalPaciente === "mail") {
+    } else if (canalPaciente === "mail" && link) {
       const ok = await mailTurnoReprogramadoPaciente({
         to: params.paciente.email as string,
         nombrePaciente: primerNombre(params.paciente.nombre),
