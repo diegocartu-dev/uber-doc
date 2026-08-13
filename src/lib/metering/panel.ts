@@ -113,6 +113,11 @@ export async function resumenDeSemana(params: {
   let facturables = 0;
   let ausenciasPaciente = 0;
   let ausenciasProfesional = 0;
+  // El numerador de "atendieron X de Y" se cuenta CONTRA EL MISMO UNIVERSO que
+  // el denominador. Sin esto, un profesional que atendió el lunes y quedó
+  // pausado el jueves (o cuya especialidad salió del config) entraba arriba y
+  // no abajo: el panel mostraba "31 de 30" en la portada de la demo.
+  const delPiloto = new Set(cumplimiento.map((c) => c.medicoId));
   const atendieron = new Set<string>();
   const ausentismoPorEspecialidad = new Map<string, number>();
 
@@ -121,7 +126,7 @@ export async function resumenDeSemana(params: {
     if (clasificacion === "facturable") {
       facturables++;
       porMotor[f.motor as Motor]++;
-      atendieron.add(f.medico_id as string);
+      if (delPiloto.has(f.medico_id as string)) atendieron.add(f.medico_id as string);
       const dia = chartPorDia.get(f.fecha_ar as string);
       if (dia) {
         dia[f.motor as Motor]++;
