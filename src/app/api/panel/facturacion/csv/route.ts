@@ -31,9 +31,15 @@ import {
  *
  * Ahora el mes se cierra SOLO, con el cron `metering-cerrar-mes` (R31): corte
  * de datos al último instante del mes, sello en la madrugada del día 1, y si
- * queda algo sin clasificar aborta y avisa en vez de sellar una foto
- * incompleta. La corrida manual —si el automático falló— es
- * `POST /api/admin/institucional/cerrar-mes`, de admin de Docto.
+ * queda algo sin clasificar aborta, avisa y reintenta al día siguiente en vez
+ * de sellar una foto incompleta. La corrida manual —si hiciera falta
+ * adelantarla— es `POST /api/admin/institucional/cerrar-mes`, de admin de
+ * Docto.
+ *
+ * Y una vez sellado, lo que baja de acá NO se mueve más: `facturacionDePeriodo`
+ * arma la factura de un mes cerrado desde el sello, no desde el rango de
+ * fechas, así que una fila que aparezca después no se le suma sola a un mes ya
+ * facturado.
  *
  * SOLO instancia institucional: en B2C es 404.
  */
