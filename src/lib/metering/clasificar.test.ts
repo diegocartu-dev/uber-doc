@@ -496,6 +496,21 @@ test("semana · terminada = pasó el domingo a medianoche AR, no antes", () => {
   assert.equal(semanaTerminada(LUNES, Date.parse("2026-10-26T00:30:00-03:00")), true);
 });
 
+test("semana · la EN CURSO y las FUTURAS no están terminadas: son las que no se pueden sellar", () => {
+  // Es la precondición cero de `cerrarSemana` y el 422 del endpoint manual.
+  // `encuentrosSinClasificar` NO la cubre: un martes a la noche da total=0
+  // porque no hay nada vivo, y `cumplimientoDeSemana` solo cuenta lo
+  // transcurrido — se sellaría un día y medio como si fuera la semana entera,
+  // en una tabla inmutable, sobre el número que se le factura a la institución.
+  const martesALaNoche = Date.parse("2026-10-20T23:00:00-03:00");
+  assert.equal(semanaTerminada(LUNES, martesALaNoche), false, "la semana EN CURSO");
+  assert.equal(semanaTerminada("2026-10-26", martesALaNoche), false, "la semana que viene");
+  assert.equal(semanaTerminada("2026-11-30", martesALaNoche), false, "un lunes lejano");
+  // Y la anterior sí, que es la que el runbook manda sellar.
+  assert.equal(semanaTerminada("2026-10-12", martesALaNoche), true);
+  assert.equal(semanaASellar(martesALaNoche), "2026-10-12");
+});
+
 test("semana · el cron del lunes sella la que acaba de terminar, no la que arranca", () => {
   // Lunes 26 a las 02:00 ART (el horario del cron): la semana a sellar es la
   // del 19. Corría a las 00:05, antes de que el contador terminara de clasificar

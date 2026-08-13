@@ -38,8 +38,12 @@ curl -s "https://<host-de-la-instancia>/api/admin/institucional/cerrar-semana?se
 Respuesta:
 
 ```json
-{ "semana_ar": "2026-10-19", "sellable": true, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
+{ "semana_ar": "2026-10-19", "sellable": true, "termino": true, "faltantes": { "sin_fila": 0, "vivos": 0, "total": 0 } }
 ```
+
+- **`termino`** — si la semana ya cerró (pasó el domingo a medianoche AR). Una
+  semana que **no terminó** nunca es sellable, por más que `faltantes` dé cero:
+  "no falta nada" es trivialmente cierto en una semana que todavía no pasó.
 
 - **`sin_fila`** — encuentros ya terminales que el clasificador todavía no
   escribió en `encuentros_metering`. Causa típica: el cron `metering-clasificar`
@@ -70,9 +74,19 @@ curl -s -X POST "https://<host-de-la-instancia>/api/admin/institucional/cerrar-s
 - **200** → `{ "semana_ar": "...", "profesionales": N, "sellados": N, "ya_estaban": N, "errores": 0 }`.
 - **409** → la precondición no se cumple; el mensaje dice cuántos faltan y de
   qué tipo. Volver al paso 2.
-- **422** → falta `semana` o no es un lunes. **El endpoint no adivina la semana
-  en un POST**: el resultado es irreversible y la semana que se sella se dice
-  siempre, explícitamente.
+- **422** → falta `semana`, no es un lunes, **o la semana todavía no terminó**.
+  **El endpoint no adivina la semana en un POST**: el resultado es irreversible
+  y la semana que se sella se dice siempre, explícitamente.
+
+> **Por qué el 422 de "todavía no terminó" es el más importante.** Es el único
+> error de tipeo que el resto de las precondiciones no atrapa. Con el lunes de
+> **esta** semana (o uno futuro), `faltantes` da cero —no hay nada vivo— y
+> `cumplimientoDeSemana` cuenta solo lo transcurrido: se sellaría el
+> cumplimiento de un día y medio, o de cero, como si fuera la semana entera. Y
+> el sello es inmutable: después el cron lo cuenta como `ya_estaban` y no
+> recalcula nunca, así que el panel muestra "Cerrada" con badges definitivos
+> —incluido "Incompleto"— sobre un número que nunca se midió. Corregirlo es
+> reabrir filas a mano por SQL.
 
 **Es idempotente.** Correrlo dos veces sobre una semana ya sellada no recalcula
 nada: `ya_estaban` sube y `sellados` queda en 0. El primer número es el que

@@ -796,6 +796,30 @@ export async function cerrarSemana(semanaAr: string, ahoraMs = Date.now()): Prom
     errores: 0,
   };
 
+  // ── PRECONDICIÓN CERO: la semana TERMINÓ ───────────────────────────────────
+  // Antes no hacía falta chequearlo porque el único caller era el cron, que
+  // pasa siempre `semanaASellar()`. Con la corrida manual de I2 la puerta se
+  // abrió, y la precondición de abajo NO la cubre: `encuentrosSinClasificar`
+  // de una semana futura —o de la de hoy un martes a la mañana— da total=0 sin
+  // problema, porque todavía no hay nada vivo. Y `cumplimientoDeSemana` solo
+  // cuenta lo TRANSCURRIDO, así que se sellaría el cumplimiento de un día y
+  // medio (o de cero) como si fuera la semana entera. Después `cerrarSemana`
+  // saltea para siempre las filas ya `sellada` y el trigger de la 015 las hace
+  // inmutables: un dedo que tipea el lunes de esta semana en vez del de la
+  // anterior le factura a la institución el 20 % de las horas, y hay que
+  // reabrir a mano por SQL.
+  //
+  // Es cinturón: el endpoint ya rechaza con 422 antes de llegar acá. Los
+  // tirantes van igual porque el que sella es este.
+  if (!semanaTerminada(semanaAr, ahoraMs)) {
+    throw new Error(
+      `La semana ${semanaAr} TODAVÍA NO TERMINÓ: no se puede sellar. Un sello es ` +
+        `inmutable y el cumplimiento se calcula solo sobre lo transcurrido, así que ` +
+        `sellarla ahora congelaría un número parcial para siempre. La última semana ` +
+        `terminada es ${semanaASellar(ahoraMs)}.`
+    );
+  }
+
   // Precondición: el contador terminó de contar esta semana. Si falta aunque
   // sea un encuentro, no se sella nada — un sello incompleto es inmutable.
   const faltan = await encuentrosSinClasificar(semanaAr);
