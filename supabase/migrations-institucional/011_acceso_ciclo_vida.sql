@@ -25,7 +25,10 @@ ALTER TABLE institucion_config
   -- 144 mensajes por día al mismo celular siguen entrando en la regla).
   ADD COLUMN IF NOT EXISTS reenvio_max_por_dia int NOT NULL DEFAULT 5
     CHECK (reenvio_max_por_dia BETWEEN 1 AND 100),
-  -- 03-spec §2.3 estado B: "ventana abierta = 10 min antes → fin del turno".
+  -- 03-spec §2.3 estado B: la puerta abre 10 min antes del turno. NO cierra al
+  -- final: llegar tarde —o que el profesional se demore— no puede dejar al
+  -- paciente afuera. El que resuelve el turno abandonado es el cron de
+  -- vencidos, a los ~20 min de gracia, no esta pantalla.
   ADD COLUMN IF NOT EXISTS ventana_entrada_min int NOT NULL DEFAULT 10
     CHECK (ventana_entrada_min BETWEEN 0 AND 240);
 
@@ -47,8 +50,17 @@ GRANT SELECT (
 -- WhatsApp es público de hecho: cualquiera que lo tenga puede martillarlo.
 --
 -- Un bucket por CLAVE, no una fila por intento: se pisa en el lugar y no crece
--- sin control. La clave es sha256(ip + token_hash) — ni la IP ni el token
--- quedan en claro en la base (el token pelado no se guarda NUNCA, ni acá).
+-- sin control. Las claves son sha256 — ni la IP ni el token quedan en claro en
+-- la base (el token pelado no se guarda NUNCA, ni acá). Hay DOS familias, con
+-- trabajos distintos (ver accesos.ts):
+--   · sha256("enlace|" + ip + "|" + token_hash) — techo al martilleo de UN
+--     enlace. Se escribe SOLO después de validar el token: si se escribiera
+--     antes, cada request con basura estrenaría fila y la tabla crecería con
+--     un INSERT por request, que es exactamente lo contrario de lo que dice el
+--     párrafo de arriba.
+--   · sha256("ip|" + ip) — techo al que BARRE tokens, contando FALLOS. Un
+--     paciente de verdad nunca falla, así que ni con media provincia detrás de
+--     la misma IP de la operadora se deja a nadie afuera.
 CREATE TABLE IF NOT EXISTS accesos_intentos (
   clave          text PRIMARY KEY,
   ventana_inicio timestamptz NOT NULL DEFAULT now(),
@@ -56,7 +68,9 @@ CREATE TABLE IF NOT EXISTS accesos_intentos (
   updated_at     timestamptz NOT NULL DEFAULT now()
 );
 
--- Barrido de buckets viejos (los limpia el propio código, de a poco).
+-- Barrido de buckets viejos: lo hace `tocarBucket` en accesos.ts, en una de
+-- cada cincuenta llamadas, borrando todo lo que no se toca hace un día. Este
+-- índice es el que hace barato ese DELETE.
 CREATE INDEX IF NOT EXISTS idx_accesos_intentos_updated ON accesos_intentos (updated_at);
 
 -- RLS activo SIN policies + sin GRANT a los roles de PostgREST: solo service
