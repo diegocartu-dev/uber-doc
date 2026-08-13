@@ -23,7 +23,7 @@ import { getConfigInstitucion, soloBranding } from "@/lib/institucional/config";
 import { semanaDeHoy } from "@/lib/metering/bolsa";
 import { fechaAR } from "@/lib/insights/fechas";
 import { resumenDeSemana, encuentrosDeSemana } from "@/lib/metering/panel";
-import { facturacionDePeriodo, periodoDeHoy } from "@/lib/metering/facturacion";
+import { corteDePeriodo, facturacionDePeriodo, periodoDeSemana } from "@/lib/metering/facturacion";
 import ResumenSemanalVista from "./ResumenSemanal";
 import TabConsultas from "./TabConsultas";
 import "./panel.css";
@@ -73,7 +73,11 @@ export default async function PanelPage({
 
   const config = await getConfigInstitucion();
   const branding = soloBranding(config);
-  const periodo = periodoDeHoy();
+  // El período ACOMPAÑA a la semana que se está mirando. Estaba clavado en el
+  // mes de hoy: el 1 de noviembre, la administración que entraba a facturar
+  // octubre veía "Noviembre — 0 consultas facturables" y un botón que bajaba un
+  // CSV vacío; el de octubre solo se alcanzaba tipeando `?periodo=` a mano.
+  const periodo = periodoDeSemana(semanaAr);
 
   // El resumen se pide siempre (los KPIs son el encabezado del panel); el
   // detalle de consultas, solo cuando esa tab está abierta.
@@ -93,8 +97,11 @@ export default async function PanelPage({
 
   // `fechaAR()` y no `new Date()` acá: el reloj vive en el helper del repo (y
   // la regla de pureza de React no quiere ver un Date.now() en el render).
-  const hoy = fechaAR();
-  const hastaLabel = `al ${hoy.slice(8, 10)}/${hoy.slice(5, 7)}`;
+  // El corte es hoy mientras el mes esté en curso, y el último día del mes
+  // cuando ya terminó: "Octubre — 311 consultas facturables al 25/10" no puede
+  // decir "al 13/11" porque alguien lo abrió en noviembre.
+  const corte = corteDePeriodo(periodo, fechaAR());
+  const hastaLabel = `al ${corte.slice(8, 10)}/${corte.slice(5, 7)}`;
 
   return (
     <div className="pnl">

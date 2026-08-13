@@ -13,6 +13,8 @@ import {
   rangoDePeriodo,
   nombreDePeriodo,
   periodoDeHoy,
+  periodoDeSemana,
+  corteDePeriodo,
   pesos,
   facturacionACSV,
   type Facturacion,
@@ -77,6 +79,21 @@ test("período · el de hoy se corta en hora argentina, no en UTC", () => {
   // 31/10 a las 22:00 ART todavía es octubre (en UTC ya sería el 1/11).
   assert.equal(periodoDeHoy(Date.parse("2026-10-31T22:00:00-03:00")), "2026-10");
   assert.equal(periodoDeHoy(Date.parse("2026-11-01T00:30:00-03:00")), "2026-11");
+});
+
+test("período · el de la card sale de la SEMANA que se está mirando, no de hoy", () => {
+  assert.equal(periodoDeSemana("2026-10-19"), "2026-10");
+  // Una semana a caballo de dos meses se factura donde empezó.
+  assert.equal(periodoDeSemana("2026-10-26"), "2026-10");
+  assert.equal(periodoDeSemana("2026-11-02"), "2026-11");
+});
+
+test("período · el corte es hoy si el mes está en curso, y el fin de mes si ya pasó", () => {
+  assert.equal(corteDePeriodo("2026-10", "2026-10-25"), "2026-10-25");
+  // El 13 de noviembre, octubre sigue cortando el 31 de octubre.
+  assert.equal(corteDePeriodo("2026-10", "2026-11-13"), "2026-10-31");
+  // Un mes que todavía no empezó no corta "ayer".
+  assert.equal(corteDePeriodo("2026-12", "2026-11-13"), "2026-12-01");
 });
 
 test("CSV · una coma en un nombre no parte la fila", () => {
