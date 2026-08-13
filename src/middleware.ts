@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { updateSession } from "@/lib/supabase/middleware";
-import { esInstitucional } from "@/lib/instancia";
+import { bloqueaRutaInstitucional } from "@/lib/instancia";
 
 const BETA_COOKIE = "docto_beta_access";
 const ACTIVITY_COOKIE = "docto_last_activity";
@@ -47,28 +47,11 @@ const TIMEOUT_EXEMPT_PREFIXES = [
 const BETA_PROTECTED: string[] = [];
 
 // ── Modo institucional — Capa A (la puerta) ──────────────────────────────────
-// Rutas del B2C que NO existen en una instancia institucional: registro
-// abierto (el alta es provisionada), marketplace/clínica pública, triage,
-// arrepentimiento (no hay consumo pagado) e insights (mide plata de MP; el
-// panel institucional es otro). Patrón calcado de BETA_PROTECTED/passesBetaGuard.
-// REGLA DE ORO: en B2C (INSTITUCIONAL sin setear o ≠ "true") este bloque no
-// evalúa nada — el gate por env corta primero.
-const INSTITUCIONAL_BLOCKED = [
-  "/auth/register",
-  "/auth/registro-medico",
-  "/clinica",
-  "/dr",
-  "/medicos",
-  "/triage",
-  "/arrepentimiento",
-  "/insights",
-];
-
-function institucionalBloquea(pathname: string): boolean {
-  return INSTITUCIONAL_BLOCKED.some(
-    (p) => pathname === p || pathname.startsWith(p + "/")
-  );
-}
+// La lista de rutas que no existen en una instancia institucional y el gate por
+// modo viven en @/lib/instancia (`bloqueaRutaInstitucional`): son política del
+// modo, no ruteo, y ahí se pueden testear sin levantar el middleware.
+// REGLA DE ORO: en B2C (INSTITUCIONAL sin setear o ≠ "true") el gate corta
+// primero y no se evalúa ni una ruta de la lista.
 
 function isBetaProtected(pathname: string): boolean {
   return BETA_PROTECTED.some(
@@ -100,7 +83,7 @@ export async function middleware(request: NextRequest) {
   // 0. Modo institucional (Capa A): estas rutas no existen en la instancia.
   //    El gate por env va PRIMERO: con el flag apagado, el hot path del B2C
   //    no evalúa ni una línea de este bloque.
-  if (esInstitucional() && institucionalBloquea(request.nextUrl.pathname)) {
+  if (bloqueaRutaInstitucional(request.nextUrl.pathname)) {
     return new NextResponse(null, { status: 404 });
   }
 

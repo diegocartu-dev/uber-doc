@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
-import { esInstitucional } from "@/lib/instancia";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import { decrypt } from "@/lib/mp-crypto";
 import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
 import { logWarn } from "@/lib/logger";
@@ -63,10 +63,9 @@ type CuentaMp = {
 
 async function handler() {
   // Modo institucional: no aplica (Capa C) — nadie conecta cuentas de MP.
-  if (esInstitucional()) {
-    console.log("[verificar-cuentas-mp] modo institucional: no aplica");
-    return NextResponse.json({ ok: true, mensaje: "modo institucional: no aplica" });
-  }
+  // En B2C devuelve null y el cron sigue igual (ver capa-c.ts).
+  const noAplica = cortarSiInstitucional("verificar-cuentas-mp");
+  if (noAplica) return noAplica;
 
   const admin = createAdminClient();
 

@@ -38,6 +38,56 @@ export function esInstitucionalClient(): boolean {
   return process.env.NEXT_PUBLIC_INSTITUCIONAL === "true";
 }
 
+// ── Capa A (la puerta): rutas del B2C que NO existen en la instancia ─────────
+// Registro abierto (el alta es provisionada), marketplace/clínica pública,
+// triage, arrepentimiento (no hay consumo pagado) e insights (mide plata de
+// MP; el panel institucional es otro).
+//
+// La lista vive acá y no en el middleware porque es POLÍTICA del modo, no
+// ruteo — y porque así se puede recorrer desde un test sin levantar el
+// middleware entero.
+const INSTITUCIONAL_BLOCKED = [
+  "/auth/register",
+  "/auth/registro-medico",
+  "/clinica",
+  "/dr",
+  "/medicos",
+  "/triage",
+  "/arrepentimiento",
+  "/insights",
+];
+
+/**
+ * ¿El modo institucional bloquea esta ruta? (404)
+ *
+ * EL GATE VA PRIMERO, antes de mirar la lista: en B2C esto devuelve false sin
+ * recorrer nada — el hot path del middleware del B2C no evalúa ni una ruta.
+ */
+export function bloqueaRutaInstitucional(pathname: string): boolean {
+  if (!esInstitucional()) return false;
+  return INSTITUCIONAL_BLOCKED.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+/**
+ * ¿Hay plata que devolver? (spec institucional §6.3, gate #401)
+ *
+ * En B2C: sí, si hay un pago registrado — la rama de refund de siempre.
+ * En la instancia: NUNCA. El paciente no pagó nada; `pago_id` debería ser NULL
+ * siempre y el gate por modo es cinturón y tirantes — si un dato sucio trajera
+ * un pago_id, ejecutar el refund encolaría devoluciones imposibles contra
+ * cuentas de Mercado Pago que en esa base no existen.
+ *
+ * Es una función y no un `pago_id && !esInstitucional()` suelto porque la
+ * pregunta se hace en dos lugares (el plazo de la CI y la ausencia del
+ * profesional en un turno) y las dos respuestas tienen que ser LA MISMA.
+ *
+ * Devuelve un type guard para que adentro del `if` el `pago_id` siga siendo un
+ * string y no haya que repetir el chequeo de null.
+ */
+export function correspondeRefund(pagoId: string | null | undefined): pagoId is string {
+  return !!pagoId && !esInstitucional();
+}
+
 /**
  * ¿Se le puede crear la ficha de paciente a un usuario que acaba de confirmar
  * su mail / volver de OAuth? (spec institucional §5.3)
