@@ -59,6 +59,7 @@ export default function ResumenSemanalVista({
   facturacion,
   periodo,
   hastaLabel,
+  semanaTope,
 }: {
   resumen: ResumenSemanal;
   duracionSlotMin: number;
@@ -67,6 +68,8 @@ export default function ResumenSemanalVista({
   periodo: string;
   /** "al 25/10" — hasta qué día llega el conteo del período. */
   hastaLabel: string;
+  /** Última semana navegable (la de hoy): más adelante no hay nada que informar. */
+  semanaTope: string;
 }) {
   const maxDia = Math.max(1, ...resumen.chart.map((d) => d.total));
   const alto = (n: number) => Math.round((n / maxDia) * 118);
@@ -80,9 +83,19 @@ export default function ResumenSemanalVista({
           <Flecha hacia="izq" />
         </a>
         <span className="semana-titulo tnum">Semana del {etiquetaSemana(resumen.semanaAr)}</span>
-        <a className="semana-btn" href={`/panel?semana=${semanaSiguiente(resumen.semanaAr)}`} aria-label="Semana siguiente">
-          <Flecha hacia="der" />
-        </a>
+        {/* Sin tope se podía navegar a diciembre de 2027: todos los KPIs en 0,
+            la tabla entera en "Sin actividad" y el chip "En curso" sobre una
+            semana que no empezó. El estilo de flecha apagada ya existía en el
+            CSS y no lo usaba nadie. */}
+        {semanaSiguiente(resumen.semanaAr) <= semanaTope ? (
+          <a className="semana-btn" href={`/panel?semana=${semanaSiguiente(resumen.semanaAr)}`} aria-label="Semana siguiente">
+            <Flecha hacia="der" />
+          </a>
+        ) : (
+          <span className="semana-btn" aria-disabled="true" aria-label="Semana siguiente">
+            <Flecha hacia="der" />
+          </span>
+        )}
         {!resumen.cerrada && <span className="badge b-ama">En curso</span>}
       </div>
 
