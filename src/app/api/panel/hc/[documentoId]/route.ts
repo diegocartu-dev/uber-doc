@@ -41,12 +41,8 @@ export async function GET(
   const { documentoId } = await params;
   const admin = createAdminClient();
 
-  const armado = await armarDocumentoParaPDF(admin, documentoId);
-  if (!armado.ok) {
-    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
-  }
-
-  // Contexto del encuentro para la auditoría (y para el nombre del archivo).
+  // Contexto del encuentro: para la auditoría, para el nombre del archivo y —
+  // sobre todo— para el gate de PERTENENCIA de acá abajo.
   const { data: fila } = await admin
     .from("documentos")
     .select("consulta_id, turno_id")
@@ -54,6 +50,37 @@ export async function GET(
     .maybeSingle();
   const tipoEncuentro = fila?.turno_id ? "turno" : fila?.consulta_id ? "consulta" : null;
   const recursoId = (fila?.turno_id as string | null) ?? (fila?.consulta_id as string | null) ?? null;
+
+  // ── EL GATE DE PERTENENCIA ──────────────────────────────────────────────────
+  // El chequeo de arriba es de ROL: dice que quien pide es la administración de
+  // una institución. Este dice que el documento es DE ESTA institución. Sin él,
+  // el endpoint sirve cualquier documento de la base por id con service role —
+  // que es exactamente lo que advierte el encabezado de `documento-desde-db.ts`.
+  // Hoy, con una sola instancia dedicada, es casi lo mismo en la práctica; con
+  // la marca blanca multi-institución que ya está en el plan, es cruce de
+  // historias clínicas entre padrones. Una query, y el tema queda cerrado antes
+  // de que exista la segunda institución.
+  if (!tipoEncuentro || !recursoId) {
+    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
+  }
+  const { data: delPadron, error: errPadron } = await admin
+    .from("encuentros_metering")
+    .select("id")
+    .eq("tipo", tipoEncuentro)
+    .eq("recurso_id", recursoId)
+    .maybeSingle();
+  if (errPadron) {
+    console.error("[panel/hc] No se pudo verificar el encuentro:", errPadron.message);
+    return NextResponse.json({ error: "No se pudo verificar el documento" }, { status: 500 });
+  }
+  if (!delPadron) {
+    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
+  }
+
+  const armado = await armarDocumentoParaPDF(admin, documentoId);
+  if (!armado.ok) {
+    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
+  }
 
   // La auditoría se escribe ANTES de servir el archivo: si falla el registro,
   // no se entrega. Es lo contrario a fire-and-forget, y a propósito — una
