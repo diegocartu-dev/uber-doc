@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import EsperaVideo from "./EsperaVideo";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
+import { esInstitucional } from "@/lib/instancia";
 
 export default async function ConfirmacionPagoPage({
   params,
@@ -11,6 +12,17 @@ export default async function ConfirmacionPagoPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: consultaId } = await params;
+
+  // MODO INSTITUCIONAL: esta pantalla es del B2C —logo de Docto, copy de pagos,
+  // links a /documentos y /mis-consultas que en la instancia dan 404— y el
+  // paciente institucional tiene la suya. Los links viejos que ya salieron por
+  // WhatsApp siguen apuntando acá, así que el redirect se queda: es la puerta
+  // de atrás que evita que alguien aterrice en la pantalla equivocada.
+  // En B2C esta línea no evalúa nada.
+  if (esInstitucional()) {
+    redirect(`/consulta/${consultaId}/acceso`);
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
