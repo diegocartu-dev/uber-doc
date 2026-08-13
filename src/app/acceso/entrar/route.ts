@@ -50,6 +50,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { esPostDelMismoSitio } from "@/lib/institucional/origen";
+import { destinoDemoPaciente, marcarParticipanteEntro } from "@/lib/institucional/demo";
 import {
   validarTokenAcceso,
   registrarUsoAcceso,
@@ -126,20 +127,41 @@ export async function POST(request: NextRequest) {
     return aInvalido(origin, true);
   }
 
-  // 3. Del paciente del padrón al usuario de auth. Sin `user_id` no hay a quién
+  // 3. Del sujeto del acceso al usuario de auth. Sin `user_id` no hay a quién
   //    loguear (un alta a medias): se trata como link que no sirve.
+  //
+  //    Dos sujetos posibles (migración 026): el PACIENTE del padrón, que es el
+  //    caso de siempre, y el PROFESIONAL invitado a una demo. El mecanismo es
+  //    exactamente el mismo —esa es la gracia de haber extendido la tabla y no
+  //    haber inventado una segunda puerta—: cambia de qué fila sale el user_id
+  //    y a dónde aterriza.
   const admin = createAdminClient();
-  const { data: paciente } = await admin
-    .from("pacientes")
-    .select("user_id")
-    .eq("id", acceso.pacienteId)
-    .maybeSingle();
-  if (!paciente?.user_id) {
-    console.error("[acceso] Acceso válido apuntando a un paciente sin cuenta auth");
-    return aInvalido(origin, true);
+  let userId: string | null = null;
+  if (acceso.medicoId) {
+    const { data: medico } = await admin
+      .from("medicos")
+      .select("user_id")
+      .eq("id", acceso.medicoId)
+      .maybeSingle();
+    userId = (medico?.user_id as string | null) ?? null;
+    if (!userId) {
+      console.error("[acceso] Acceso válido apuntando a un profesional sin cuenta auth");
+      return aInvalido(origin, true);
+    }
+  } else {
+    const { data: paciente } = await admin
+      .from("pacientes")
+      .select("user_id")
+      .eq("id", acceso.pacienteId!)
+      .maybeSingle();
+    userId = (paciente?.user_id as string | null) ?? null;
+    if (!userId) {
+      console.error("[acceso] Acceso válido apuntando a un paciente sin cuenta auth");
+      return aInvalido(origin, true);
+    }
   }
 
-  const { data: userData, error: errUser } = await admin.auth.admin.getUserById(paciente.user_id);
+  const { data: userData, error: errUser } = await admin.auth.admin.getUserById(userId);
   const email = userData?.user?.email;
   if (errUser || !email) {
     console.error("[acceso] No se pudo resolver el usuario del paciente:", errUser?.message);
@@ -164,12 +186,28 @@ export async function POST(request: NextRequest) {
   // El fallback es el del PROPIO encuentro: `/mis-consultas` (el listado del
   // B2C) dejó de existir en la instancia — es una de las pantallas con menú y
   // branding Docto que la Capa A ahora bloquea.
-  const destino = destinoSeguro(
-    acceso.destino,
-    acceso.turnoId
-      ? `/turno/${acceso.turnoId}/acceso`
-      : `/consulta/${acceso.consultaId}/confirmacion`
-  );
+  //
+  // El acceso de una DEMO sin encuentro se resuelve acá y no al emitirse: en la
+  // reunión el QR se proyecta ANTES de que el call center asigne el turno, así
+  // que el destino congelado en la fila apuntaría para siempre a la pantalla de
+  // espera. El profesional invitado va a su dashboard, que es su lugar de
+  // trabajo de siempre.
+  let fallback: string;
+  if (acceso.medicoId) {
+    fallback = "/dashboard";
+  } else if (acceso.esDemo && !acceso.turnoId && !acceso.consultaId) {
+    fallback = await destinoDemoPaciente({ pacienteId: acceso.pacienteId!, userId });
+  } else if (acceso.turnoId) {
+    fallback = `/turno/${acceso.turnoId}/acceso`;
+  } else {
+    fallback = `/consulta/${acceso.consultaId}/confirmacion`;
+  }
+  // El `destino` guardado manda salvo en los accesos sin encuentro, donde es
+  // justamente lo que no se puede saber de antemano.
+  const destino =
+    acceso.esDemo && !acceso.turnoId && !acceso.consultaId
+      ? fallback
+      : destinoSeguro(acceso.destino, fallback);
   const response = NextResponse.redirect(`${origin}${destino}`, 303);
 
   // Qué acceso originó esta sesión. Sin esta marca, el scoping del token
@@ -215,6 +253,10 @@ export async function POST(request: NextRequest) {
   // Telemetría del link (cuántas veces se usó, última vez). Se espera a
   // propósito: es una sola escritura y el redirect no se nota más lento.
   await registrarUsoAcceso(acceso.id);
+
+  // El semáforo de la pantalla de la reunión: "entró". Best-effort — que esto
+  // falle no puede dejar afuera a nadie.
+  if (acceso.esDemo) await marcarParticipanteEntro(acceso.id);
 
   return response;
 }

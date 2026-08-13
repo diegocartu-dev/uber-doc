@@ -236,6 +236,56 @@ export async function marcarParticipanteEntro(accesoId: string): Promise<void> {
   }
 }
 
+// ─── A dónde entra el participante ───────────────────────────────────────────
+
+/** Pantalla de espera del paciente de demo mientras no le asignaron nada. */
+export const ESPERA_DEMO = "/acceso/espera";
+
+/**
+ * El destino del enlace de un paciente de la demo, resuelto EN EL MOMENTO en
+ * que toca "Entrar" y no cuando se emitió el enlace.
+ *
+ * Es la diferencia entre el orden real de una reunión y el del producto: en el
+ * producto, el turno existe antes que el enlace (el aviso sale de la
+ * asignación). En la reunión es al revés — Diego carga al participante y
+ * proyecta su QR, y recién después el call center le asigna el turno. Si el
+ * destino se congelara al emitir, el enlace apuntaría para siempre a una
+ * pantalla de espera.
+ *
+ * Prioridad: la consulta inmediata primero (es "ahora"), después el turno más
+ * cercano. Sin nada, la pantalla de espera, que se refresca sola.
+ */
+export async function destinoDemoPaciente(params: {
+  pacienteId: string; // pacientes.id
+  userId: string; // auth.users.id — consultas.paciente_id (asimetría §3)
+}): Promise<string> {
+  if (!esInstitucional()) return ESPERA_DEMO;
+  try {
+    const admin = createAdminClient();
+    const { data: consultas } = await admin
+      .from("consultas")
+      .select("id")
+      .eq("paciente_id", params.userId)
+      .in("estado", ["pagada", "en_curso"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (consultas && consultas.length > 0) return `/consulta/${consultas[0].id}/acceso`;
+
+    const { data: turnos } = await admin
+      .from("turnos")
+      .select("id, fecha, hora_inicio")
+      .eq("paciente_id", params.pacienteId)
+      .in("estado", ["confirmado", "en_espera", "en_curso"])
+      .order("fecha", { ascending: true })
+      .order("hora_inicio", { ascending: true })
+      .limit(1);
+    if (turnos && turnos.length > 0) return `/turno/${turnos[0].id}/acceso`;
+  } catch (err) {
+    console.error("[demo] No se pudo resolver el destino del paciente:", err);
+  }
+  return ESPERA_DEMO;
+}
+
 // ─── La marca de demostración sobre el producto ──────────────────────────────
 
 /**

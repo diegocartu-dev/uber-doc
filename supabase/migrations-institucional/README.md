@@ -52,9 +52,15 @@ La **025** trae el modo demo: las dos tablas de la reunión (`demo_sesiones`,
 | Migración | Qué se cae si el código llega antes |
 |---|---|
 | **025** | `/admin/demo` entero (la pantalla que se usa EN la reunión): sin las tablas, listar reuniones y cargar participantes fallan. Y lo más caro: sin la columna `es_demo`, un encuentro de demostración entra al contador contractual como servicio real, y el documento que firma un participante que no es médico **sale sin la marca de agua**. |
+| **026** | El **enlace del profesional invitado** y el del paciente de demo: sin `accesos_link.medico_id`, emitirlos falla, y con el CHECK viejo (`turno XOR consulta`) un enlace sin encuentro **no se puede insertar**. O sea: la reunión se queda sin la única forma de que los participantes entren. |
 
-Es **reentrante** (tablas, índices y triggers con `IF NOT EXISTS` / `DROP … IF
-EXISTS`) y no toca el B2C.
+Las dos son **reentrantes** y no tocan el B2C.
+
+⚠ La **026** aborta a propósito si no encuentra los constraints que espera por
+nombre (`accesos_link_un_recurso`, `accesos_link_origen_check`). Es el mismo
+cuidado de la 003: si el `DROP … IF EXISTS` fuera un no-op silencioso, la tabla
+quedaría con dos reglas contradictorias sobre el mismo campo y **ningún** enlace
+de demo se podría emitir — con el fallo apareciendo recién en la reunión.
 
 **Lo que hay que verificar después de aplicarla**, además del checklist general:
 
