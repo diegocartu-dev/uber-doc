@@ -43,10 +43,20 @@ const ESPERADOS: Record<string, number> = {
   // "no aplica" en la primera línea, pero LATE igual — así que el watchdog lo
   // vigila en los dos lados sin ninguna excepción por modo.
   "metering-clasificar": 10,
-  // Semanal: el margen del watchdog se mide en minutos, así que 7 días + 1 h
-  // de tolerancia. Sin esta fila, el cierre del acuerdo podría dejar de
-  // ejecutarse durante meses y nadie se enteraría.
-  "acuerdo-cerrar-semana": 7 * 24 * 60 + 60,
+  // Semanal (lunes 02:00 ART). Sin esta fila, el cierre del acuerdo podría
+  // dejar de ejecutarse durante meses y nadie se enteraría.
+  //
+  // ⚠ EL MARGEN REAL: el umbral no es el intervalo, es `1,5 × intervalo + 30
+  // min`. Para un cron semanal eso da ~10,6 días, o sea que un lunes perdido se
+  // avisa ~3,5 días después. Está anotado porque el número que alguien va a
+  // leer para decidir si el margen alcanza es este, no el de la columna.
+  //
+  // Se acepta a propósito: una corrida que FALLA ya avisa sola por `withCron`
+  // (500 → mail), así que lo único que cubre el watchdog acá es "Vercel dejó de
+  // invocarlo", y para eso 3,5 días no es tarde — el cierre de una semana se
+  // puede correr a mano después. Bajarlo exigiría un umbral por cron en la
+  // fórmula compartida, que le movería el margen a los 20 crons del B2C.
+  "acuerdo-cerrar-semana": 7 * 24 * 60,
   uptime: 1,
 };
 
