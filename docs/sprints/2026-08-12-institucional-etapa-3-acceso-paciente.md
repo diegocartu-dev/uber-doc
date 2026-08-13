@@ -21,7 +21,7 @@ usuario, sin contraseña, sin descargar nada (R18).
    solo layout, sin menú y sin salidas de navegación.
 3. **El reenvío** — `/acceso/reenviar`, para que "este enlace ya no está activo"
    no sea un callejón.
-4. **La reprogramación** — `reprogramarTurno()`: apaga el link viejo antes de
+4. **La reprogramación** — `reprogramarTurnoInstitucional()`: apaga el link viejo antes de
    mandar el nuevo.
 
 ## Las cinco decisiones que conviene recordar

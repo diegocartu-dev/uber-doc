@@ -459,9 +459,9 @@ export async function avisarReprogramacionTurno(
           ? (params.paciente.email as string)
           : null;
 
-    // Ojo con el encadenado: `reprogramarTurno` ya revocó el token del turno
-    // viejo. Si acá se mandara un mensaje sin token nuevo, el paciente quedaría
-    // sin el enlace de antes Y con un aviso que no lleva a ningún lado.
+    // Ojo con el encadenado: `reprogramarTurnoInstitucional` ya revocó el del
+    // turno viejo. Si acá se mandara un mensaje sin token nuevo, el paciente
+    // quedaría sin el enlace de antes Y con un aviso que no lleva a ningún lado.
     if (canalPaciente && !link) {
       resultado.paciente = avisoSinEnlace(
         canalPaciente,

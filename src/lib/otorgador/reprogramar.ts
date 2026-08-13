@@ -65,7 +65,18 @@ export type ResultadoReprogramar =
     }
   | { ok: false; codigo: ErrorReprogramacion; error: string };
 
-export async function reprogramarTurno(params: {
+/**
+ * ── POR QUÉ EL NOMBRE LARGO ──────────────────────────────────────────────────
+ * El repo YA exporta `reprogramarTurno` desde `src/lib/cancelaciones.ts`, y es
+ * otra cosa: la reprogramación del B2C, la que hace el PACIENTE, con crédito y
+ * política de reembolso. Esta es la del operador institucional moviendo un
+ * turno entre slots. No hay error de compilación porque son módulos distintos,
+ * pero el autocompletado ofrecía las dos con el mismo nombre y semánticas
+ * opuestas — y el B2C tiene la regla explícita de que el médico NO reprograma
+ * turnos otorgados. Importar la equivocada desde una pantalla de médico o de
+ * admin no lo detectaba el tipado: las dos reciben strings.
+ */
+export async function reprogramarTurnoInstitucional(params: {
   turnoAnteriorId: string;
   turnoNuevoId: string;
   operadorId: string;
