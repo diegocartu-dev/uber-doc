@@ -22,7 +22,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   documentoEsDemo,
-  medicosDemo,
   destinoDemoPaciente,
   crearSesionDemo,
   listarSesionesDemo,
@@ -65,13 +64,6 @@ test("B2C: el PDF no le pregunta a la base si el documento es de demostración",
   const { valor, llamadas } = await conEspiaDeRed(() => documentoEsDemo(DOC));
   assert.equal(valor, false, "el B2C marcaría un documento como demo: el gate está al revés");
   assert.equal(llamadas, 0, "el B2C salió a la red por la marca de demo");
-});
-
-test("B2C: ningún reporte se pone a buscar profesionales de demostración", async () => {
-  sinModoInstitucional();
-  const { valor, llamadas } = await conEspiaDeRed(() => medicosDemo());
-  assert.equal(valor.size, 0);
-  assert.equal(llamadas, 0);
 });
 
 test("B2C: resolver el destino de un paciente de demo no toca la base", async () => {

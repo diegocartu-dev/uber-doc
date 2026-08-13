@@ -589,6 +589,19 @@ export async function cumplimientoDeSemana(params: {
         .select("id, nombre_completo, titulo, especialidad")
         .eq("estado_registro", "aprobado")
         .in("especialidad", config.especialidades)
+        // El profesional de una reunión de demostración cumple las dos
+        // condiciones de arriba (nace `aprobado` y con especialidad del
+        // piloto), así que sin este filtro entraba al padrón del panel con
+        // acuerdo por default y cero minutos: la institución veía "ausentismo y
+        // cumplimiento de un profesional que no existe", que es exactamente lo
+        // que el encabezado de la migración 025 promete que no pasa. La 025
+        // protegió la factura; el padrón del panel se arma por esta otra vía.
+        //
+        // Y hay un segundo filo: si la semana se sellara con esa fila,
+        // `sellarSemana` la escribiría en `acuerdo_semanas` y después "limpiar
+        // reunión" la borraría — moviendo hacia atrás un número que la
+        // institución ya leyó, justo lo que la 015 promete que no puede pasar.
+        .is("demo_sesion_id", null)
         .order("id", { ascending: true })
         .range(desde, hasta)
   );

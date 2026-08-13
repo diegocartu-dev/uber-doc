@@ -426,7 +426,20 @@ export async function armarOferta(especialidad: string): Promise<
     .from("medicos")
     .select("id, nombre_completo, titulo, especialidad, disponible, disponible_desde_at")
     .eq("estado_registro", "aprobado")
-    .eq("especialidad", especialidad);
+    .eq("especialidad", especialidad)
+    // ── LOS DE LA REUNIÓN NO ESTÁN EN LA OFERTA (migración 025) ──────────────
+    // El profesional de una demo nace `aprobado` y con una especialidad DEL
+    // PILOTO, a propósito: fuera de esa lista sería invisible y la demo no
+    // existiría. O sea que sin este filtro entra por la misma puerta que un
+    // profesional real, y el call center —humano o IA— lo ve idéntico. Peor:
+    // como el relleno del escenario NO escribe en `asignaciones`, cuenta cero
+    // asignados y el reparto parejo lo pone PRIMERO de su categoría.
+    //
+    // Que eso pase UNA vez alcanza para atender a un vecino del padrón con
+    // alguien no matriculado, emitirle un papel que dice "SIN VALIDEZ LEGAL",
+    // dejar el servicio fuera del contador contractual y, al limpiar la
+    // reunión, borrarle la historia clínica.
+    .is("demo_sesion_id", null);
   if (errMedicos) {
     console.error("[otorgador/oferta] Error leyendo médicos:", errMedicos.message);
     return { ok: false, error: "No se pudo leer la oferta. Probá de nuevo." };
@@ -533,6 +546,11 @@ export async function especialidadesConCI(): Promise<{
       .select("id, especialidad")
       .eq("estado_registro", "aprobado")
       .eq("disponible", true)
+      // Mismo filtro que `armarOferta`, y por el mismo motivo: el guion pide
+      // que el participante se ponga `disponible` en vivo. Sin esto, el chip
+      // "CI activa ahora" de esa especialidad se prende para la operación real
+      // durante toda la reunión.
+      .is("demo_sesion_id", null)
       .in("especialidad", config.especialidades);
     if (activos && activos.length > 0) {
       const ocupados = await medicosEnCurso(activos.map((m) => m.id));

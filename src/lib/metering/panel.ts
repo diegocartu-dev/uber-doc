@@ -168,6 +168,11 @@ export async function resumenDeSemana(params: {
         .gte("fecha", lunes)
         .lte("fecha", domingo)
         .in("canal_origen", ["acordado", "ofrecido"])
+        // La escenografía de una reunión no es oferta que la provincia dejó sin
+        // cubrir: `prepararEscenario` levanta decenas de slots por profesional
+        // invitado y, en cuanto pasan, todos se contarían como "slots que nadie
+        // tomó". El KPI es de la institución; la demo no lo ensucia.
+        .not("es_demo", "is", true)
         .order("id", { ascending: true })
         .range(desde, hasta)
   );

@@ -321,23 +321,3 @@ export async function documentoEsDemo(documentoId: string | null | undefined): P
     return false;
   }
 }
-
-/** Ids de los profesionales de demostración (para excluirlos de un reporte). */
-export async function medicosDemo(): Promise<Set<string>> {
-  if (!esInstitucional()) return new Set();
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("medicos")
-      .select("id")
-      .not("demo_sesion_id", "is", null);
-    if (error) {
-      console.error("[demo] No se pudieron listar los profesionales de demo:", error.message);
-      return new Set();
-    }
-    return new Set((data ?? []).map((m) => m.id as string));
-  } catch (err) {
-    console.error("[demo] medicosDemo falló:", err);
-    return new Set();
-  }
-}
