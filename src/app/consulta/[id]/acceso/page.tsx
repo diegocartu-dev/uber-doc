@@ -25,7 +25,7 @@ import { pantallaDeLaConsulta } from "@/lib/institucional/pantalla-consulta";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { LinkInactivo } from "@/components/institucional/PantallaPaciente";
 import { metadataPacienteInstitucional } from "@/lib/institucional/metadata";
-import { yaEntroALaSala } from "./actions";
+import { yaEntroALaSala } from "./sala";
 import AccesoConsultaClient from "./AccesoConsultaClient";
 
 // La pestaña dice el nombre de la institución, no el del marketplace.

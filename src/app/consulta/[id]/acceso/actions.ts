@@ -18,7 +18,6 @@
 // SOLO instancia institucional: en B2C esta action no hace nada.
 
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { registrarEntradaSala } from "@/lib/sala-espera";
 import { pushAlMedico } from "@/lib/push";
@@ -78,22 +77,4 @@ export async function entrarAConsultaInmediata(
   }).catch(() => {});
 
   return { ok: true };
-}
-
-/** ¿Ya hay una entrada registrada de este paciente en esta consulta? */
-export async function yaEntroALaSala(consultaId: string): Promise<boolean> {
-  if (!esInstitucional()) return false;
-  try {
-    const admin = createAdminClient();
-    const { data } = await admin
-      .from("sala_espera_entradas")
-      .select("id")
-      .eq("consulta_id", consultaId)
-      .limit(1);
-    return (data?.length ?? 0) > 0;
-  } catch {
-    // Ante la duda, se muestra el botón de entrar: repetir la entrada es
-    // idempotente y barato; esconderlo dejaría al paciente sin cómo entrar.
-    return false;
-  }
 }
