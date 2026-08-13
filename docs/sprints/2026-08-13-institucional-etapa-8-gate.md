@@ -326,6 +326,52 @@ un salto de línea).
 
 ---
 
+## Cuarta ronda: los dos residuales del cierre semanal
+
+El verificador confirmó los cierres de la tercera ronda y dejó dos residuales,
+los dos del lado semanal.
+
+### El panel de una semana cerrada se movía solo
+
+`cerrarSemana` ya no vuelve sobre una semana cerrada, pero el **panel** la
+calculaba igual: su universo era *"el padrón de HOY ∪ los sellados"*, así que
+todo profesional dado de alta **después** del cierre estrenaba una fila viva
+—con sus horas comprometidas enteras y cero cumplidas— en una semana que la
+institución ya había leído. En la semana cerrada **en cero** —la del padrón
+vacío, justo la que la 024 existe para poder afirmar— el efecto era completo:
+cero filas antes del alta, una de 10 h después.
+
+No mueve plata. Mueve el KPI: `totalDeBolsa` suma las filas listadas, así que el
+porcentaje de arriba cambiaba solo entre dos visitas al mismo panel — que es
+exactamente lo que la foto viene a impedir (R30/R31: la semana cerrada no
+cambia).
+
+Ahora, si la semana está cerrada —la marca de la 024 **o** al menos una fila
+sellada, la misma condición que `semanaEstaCerrada`—, el cumplimiento sale de lo
+**sellado** y el universo es el que existía al cierre. La rama en vivo ni se
+evalúa: no lee el padrón, ni el config, ni las cuatro tablas del cálculo. Las
+lecturas del sello pasan por un puerto con default real, que es lo que permite
+fijar el caso contra la función real y no contra una imitación.
+
+### Con las dos puntas trabadas, el medio no se intentaba nunca
+
+Reservar el último lugar de la corrida para la más reciente arregló la punta
+nueva y dejó **el mismo hambre una fila más abajo**. Con `max = 2` y dos
+pendientes trabadas de forma permanente —la más vieja y la más reciente— la
+corrida es siempre `[la vieja rota, la reciente rota]`, y las del medio no se
+intentan **nunca**: esperan a que la ventana de ocho las expulse, unas ocho
+semanas de atraso sobre semanas que sí se podían sellar. Reproducido por el
+verificador: con la primera y la última trabadas, seis corridas no sellaron
+nada.
+
+El cupo que queda después de la reserva ahora **rota**: cada corrida arranca un
+lugar más adelante en la lista de viejas, así que toda pendiente se intenta al
+menos una vez cada `viejas.length` corridas, esté trabada la que esté. Sin
+guardar en ninguna tabla qué se intentó ayer — el índice sale del día
+(`corridaDelBarrido`). Con `corrida = 0` el reparto es idéntico al anterior.
+
+---
+
 ## Qué queda abierto
 
 - **La fila que llega tarde no se factura sola.** Queda visible y marcada en
@@ -355,9 +401,61 @@ un salto de línea).
 - **La firma de una corrección no prueba quién la hizo**, solo que es un
   superadministrador activo (ver el bloque nuevo en la 021). Atarlo de verdad
   pide que la corrección viaje por una sesión autenticada en vez de service role.
+- **El golden de la regla de oro sigue siendo un test de FORMA** (deuda anotada,
+  no implementada — ver abajo).
+
+---
+
+## Deuda: el golden de la regla de oro mira la forma, no lo que pasa
+
+La tercera ronda lo mejoró —antes recorría `CRONS_SOLO_INSTITUCIONALES` llamando
+al helper, o sea que verificaba el helper y no que los crons lo usaran; ahora lee
+los ocho `route.ts`—, pero lo que hace es **buscar texto con expresiones
+regulares**: que el archivo importe el helper del módulo correcto, que lo llame
+con su key y que devuelva el corte. Eso deja dos huecos que el gate no ve:
+
+1. **La posición no se verifica.** Un `cortarSiB2C` colocado *después* de trabajo
+   con efectos —una lectura, un `upsert`, un mail— pasa el test igual: el texto
+   está y el corte se devuelve, pero en el B2C el cron ya hizo el daño antes de
+   cortar. La regla de oro dice "con el flag apagado, idéntico"; el test de hoy
+   solo dice "en algún lugar del archivo hay un corte".
+2. **Un cron institucional nuevo que nadie agregue a la lista no se revisa.** El
+   test recorre `CRONS_SOLO_INSTITUCIONALES`: lo que no está en la lista no
+   existe para él. El día que la instancia sume un cuarto cron y alguien olvide
+   la línea de la lista, el archivo entra a producción sin gate y sin que nada se
+   ponga rojo — que es el mismo tipo de agujero que el test vino a cerrar, un
+   nivel más arriba.
+
+**Cómo endurecerlo, en orden de costo** (no se hizo acá para no extender el
+alcance de una ronda de residuales; ninguna de las tres es urgente porque hoy los
+ocho `route.ts` cortan en la primera línea y están verificados a mano):
+
+- **(a) Exigir que el corte sea lo PRIMERO del handler.** Sigue siendo forma,
+  pero cierra el hueco caro: que entre el `async function handler()` y la línea
+  del corte no haya ningún `await`, ni un `.from(`, ni un `createAdminClient()`.
+  Es una regex más, con el texto entre las dos posiciones como evidencia del
+  fallo.
+- **(b) Descubrir los crons del disco en vez de leer una lista.** Recorrer
+  `src/app/api/cron/*/route.ts` y exigir que **cada** uno esté declarado en
+  exactamente una de las tres categorías: Capa C, solo-institucional, o "corre en
+  los dos lados" (una tercera lista explícita, hoy inexistente). Un cron nuevo sin
+  clasificar rompe el test hasta que alguien decida de qué lado está. Es la única
+  forma de que "lo que no está en la lista" deje de ser un punto ciego.
+- **(c) Probar el comportamiento y no el texto.** Importar el `route.ts`, llamar
+  a su `GET` con `INSTITUCIONAL` apagado y un `createAdminClient` stubbeado que
+  falle ante cualquier query, y exigir cero llamadas. Es lo único que prueba de
+  verdad "no hizo nada". Cuesta más (el runner unitario no importa un route de
+  Next tal cual: hay que hacer inyectable el cliente de Supabase, o mover el
+  handler a un módulo aparte que el route envuelva), y es el candidato natural si
+  algún día un cron de estos hace algo más pesado que leer.
 
 ## Verificación
 
-`npm run test:unit` (**341 casos**, incluido el golden de la regla de oro —que
-ahora lee los `route.ts`— y la secuencia completa de los dos cierres), `tsc` y
-`eslint` sobre lo tocado: verde. Un commit por hallazgo. Sin SQL aplicado.
+`npm run test:unit` (**347 casos**, incluido el golden de la regla de oro —que
+ahora lee los `route.ts`—, la secuencia completa de los dos cierres, el panel de
+una semana cerrada y el barrido con dos semanas trabadas), `tsc` y `eslint` sobre
+lo tocado: verde. Un commit por hallazgo. Sin SQL aplicado.
+
+Los dos residuales de la cuarta ronda se verificaron **por mutación**: sacándole
+la marca a `cumplimientoSaleDeLoSellado` y fijando la rotación en cero, los tres
+tests nuevos se ponen rojos y el resto sigue verde.
