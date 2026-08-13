@@ -103,6 +103,18 @@ test("CSV · una coma en un nombre no parte la fila", () => {
   assert.ok(filas[2].includes('"Con ""comillas"""'));
 });
 
+test("CSV · un nombre que arranca con = no se ejecuta como fórmula en Excel", () => {
+  const f = facturacion();
+  f.lineas[0].profesional = "=HYPERLINK(\"http://ejemplo\",\"click\")";
+  f.lineas[1].especialidad = "+49";
+  const filas = facturacionACSV(f).split("\r\n");
+  // El apóstrofo adelante: Excel lo abre como texto, no como fórmula.
+  assert.ok(filas[1].includes("'=HYPERLINK"));
+  assert.ok(filas[2].includes("'+49"));
+  // Los números siguen siendo números: el total no se rompe.
+  assert.equal(filas[filas.length - 2].split(";")[8], "30000.00");
+});
+
 test("CSV · el total coincide con las líneas y va al final", () => {
   const csv = facturacionACSV(facturacion());
   const filas = csv.trim().split("\r\n");
