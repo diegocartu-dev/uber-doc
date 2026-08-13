@@ -204,11 +204,15 @@ export default function PeriodosClient({ periodo, periodos, encuentros, historia
             lineHeight: 1.5,
           }}
         >
+          {/* Una sola expresión por frase: partir el plural en dos llaves entre
+              líneas mete un espacio de JSX en el medio y se leía "llegó aron". */}
           <b style={{ color: "#D85A30" }}>
-            {tarde.length} consulta{tarde.length === 1 ? "" : "s"} de este mes llegó
-            {tarde.length === 1 ? "" : "aron"} después del cierre.
+            {tarde.length === 1
+              ? "1 consulta de este mes llegó después del cierre."
+              : `${tarde.length} consultas de este mes llegaron después del cierre.`}
           </b>{" "}
-          Aparecieron en el contador cuando el mes ya estaba sellado, así que{" "}
+          {tarde.length === 1 ? "Apareció" : "Aparecieron"} en el contador cuando el mes ya
+          estaba sellado, así que{" "}
           <b>no entraron a la factura que se emitió</b> y no están congeladas. Tampoco se
           pueden corregir desde acá: la puerta auditada es solo para filas selladas. Si
           corresponde cobrarlas, se decide a mano y se factura aparte.
