@@ -25,7 +25,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { getConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, type ConfigInstitucion } from "@/lib/institucional/config";
 import type { BrandingPDF } from "@/lib/pdf/receta";
 
 /** Bucket de los assets de marca de la instancia (migración 018). */
@@ -66,6 +66,32 @@ async function bajarIsologo(path: string | null): Promise<Buffer | null> {
 }
 
 /**
+ * El acento EFECTIVO del papel institucional.
+ *
+ * `pdf_accent` es opcional a propósito: existe para el caso en que el color del
+ * chrome no funcione impreso (un violeta muy claro sobre papel blanco, por
+ * ejemplo). Cuando está vacío —que es el caso normal, y el único posible hasta
+ * que alguien lo complete en /admin— el acento del documento es el PRIMARIO DE
+ * LA INSTITUCIÓN, no el azul de Docto.
+ *
+ * Esto es lo que la migración 001 declara como contrato desde el día uno
+ * (`pdf_accent text, -- default efectivo: color_primary`) y no estaba
+ * implementado en ningún lado: con `pdf_accent` en NULL, `accentDe()` caía a
+ * `COLORS.accent` = #378ADD y el papel del ministerio salía con los labels, la
+ * línea del header y los marcadores "1. Rp/" pintados del azul de marca de
+ * Docto. Justo la filtración que la marca blanca existe para evitar, y en la
+ * dirección que importa legalmente.
+ *
+ * Es una función pura y exportada para poder testearla sin DB.
+ */
+export function accentEfectivo(
+  config: Pick<ConfigInstitucion, "pdf_accent" | "color_primary">
+): string {
+  const elegido = (config.pdf_accent ?? "").trim();
+  return elegido || config.color_primary;
+}
+
+/**
  * La marca blanca del documento, lista para `generarRecetaPDF(doc, branding)`.
  * `undefined` = sin marca institucional → el papel del B2C, intacto.
  */
@@ -77,7 +103,7 @@ export async function brandingParaPDF(): Promise<BrandingPDF | undefined> {
       nombre: config.nombre,
       subnombre: config.subnombre,
       isologoBuffer: await bajarIsologo(config.pdf_isologo_path),
-      accent: config.pdf_accent,
+      accent: accentEfectivo(config),
       efectorTexto: config.pdf_efector_texto ?? "",
     };
   } catch (err) {
