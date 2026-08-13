@@ -260,9 +260,14 @@ export function textoCierre(params: {
     `${pacientes === 1 ? "1 paciente" : `los ${pacientes} pacientes`} y a ` +
     `${profesionales === 1 ? "1 profesional" : `los ${profesionales} profesionales`}.`;
   if (manuales.length === 0) return base;
+  // "en el turnero" era una promesa que nadie cumplía: el turnero no pinta
+  // ninguna marca. Lo que sí existe es la fila en `asignaciones` que deja
+  // `registrarGestionManual()`, o sea que lo irresoluble queda AUDITADO — que
+  // era la mitad que faltaba de la promesa del mock. Mientras el turnero no lo
+  // pinte, el copy no lo afirma.
   const quienes =
     manuales.length === 1
-      ? `${manuales[0]} quedó marcado`
-      : `${manuales.slice(0, -1).join(", ")} y ${manuales[manuales.length - 1]} quedaron marcados`;
-  return `${base} ${quienes} para gestión manual en el turnero.`;
+      ? `${manuales[0]} quedó`
+      : `${manuales.slice(0, -1).join(", ")} y ${manuales[manuales.length - 1]} quedaron`;
+  return `${base} ${quienes} para gestión manual del call center: los dejé registrados.`;
 }

@@ -231,6 +231,33 @@ export default function Nova() {
         }
       }
 
+      // ── Lo irresoluble queda REGISTRADO, no solo pintado ─────────────────
+      // Los ítems sin propuesta y los que el operador desmarcó se filtraban de
+      // `aMover` y ahí terminaba todo: ninguna llamada, ninguna escritura. El
+      // turno seguía en `confirmado` con el profesional que acaba de avisar que
+      // no va a atender, indistinguible de cualquier otro turno sano, y cerrada
+      // la pestaña el rastro desaparecía.
+      const paraElCallCenter = burbuja.plan.items
+        .filter((i) => !i.propuesta || burbuja.excluidos.includes(i.turno_id))
+        .map((i) => ({
+          turno_id: i.turno_id,
+          motivo: i.propuesta ? "excluido_por_operador" : "sin_lugar",
+        }));
+      if (paraElCallCenter.length > 0) {
+        try {
+          await fetch("/api/otorgador/reprogramar-masivo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              gestion_manual: paraElCallCenter,
+              motivo: `Reprogramación del ${burbuja.plan.fecha_label} de ${burbuja.plan.medico.nombre}`,
+            }),
+          });
+        } catch {
+          // Queda en el log del server; no voltea una corrida ya avisada.
+        }
+      }
+
       // ── El día del profesional queda MARCADO ─────────────────────────────
       // Los slots suyos de ese día que nadie tomó siguen en `disponible`, y
       // `disponible` cuenta como hora puesta a disposición en la bolsa: el día

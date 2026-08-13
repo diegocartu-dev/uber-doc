@@ -130,6 +130,70 @@ export async function marcarDiaSinAtencionDelProfesional(params: {
   return { ok: true, marcados: data?.length ?? 0 };
 }
 
+/**
+ * Deja rastro de un turno que la reprogramación NO pudo resolver.
+ *
+ * ── POR QUÉ HACE FALTA ───────────────────────────────────────────────────────
+ * La fila naranja de la propuesta ("Sin lugar esta semana — queda para gestión
+ * manual del call center") y los ítems que el operador desmarca eran VISIBLES
+ * pero no AUDITADOS: no disparaban ninguna llamada ni ninguna escritura. El
+ * turno seguía en `confirmado` con el profesional que acaba de avisar que no va
+ * a atender, indistinguible de cualquier otro turno sano — y cerrada la
+ * pestaña, el único rastro de que ese paciente quedó colgado desaparecía.
+ *
+ * No cambia el estado del turno a propósito: sigue siendo un turno vivo con su
+ * paciente, y quien lo resuelve es una persona llamando por teléfono. Lo que
+ * cambia es que ahora QUEDA ESCRITO quién quedó colgado, cuándo y por qué.
+ *
+ * `accion='gestion_manual'` no mueve el reparto de equidad (delta 0).
+ */
+export async function registrarGestionManual(params: {
+  turnoId: string;
+  operadorId: string;
+  via: "panel" | "api";
+  motivo: "sin_lugar" | "excluido_por_operador";
+  detalle?: string;
+}): Promise<{ ok: boolean }> {
+  if (!esInstitucional()) return { ok: false };
+  const { turnoId, operadorId, via } = params;
+  if (!UUID_RE.test(turnoId)) return { ok: false };
+
+  const admin = createAdminClient();
+  const { data: turno } = await admin
+    .from("turnos")
+    .select("id, fecha, hora_inicio, estado, paciente_id, medico_id")
+    .eq("id", turnoId)
+    .maybeSingle();
+  if (!turno || !turno.paciente_id) {
+    console.error("[reprogramar] gestión manual sobre un turno sin paciente:", turnoId);
+    return { ok: false };
+  }
+
+  const { error } = await admin.from("asignaciones").insert({
+    operador_id: operadorId,
+    tipo: "turno",
+    recurso_id: turnoId,
+    paciente_id: turno.paciente_id,
+    medico_id: turno.medico_id,
+    accion: "gestion_manual",
+    via,
+    detalle: {
+      motivo: params.motivo,
+      nota: params.detalle ?? null,
+      turno: {
+        fecha: turno.fecha,
+        hora: (turno.hora_inicio ?? "").slice(0, 5),
+        estado: turno.estado,
+      },
+    },
+  });
+  if (error) {
+    console.error("[reprogramar] NO se pudo registrar la gestión manual:", turnoId, error.message);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
 export async function reprogramarTurnoInstitucional(params: {
   turnoAnteriorId: string;
   turnoNuevoId: string;

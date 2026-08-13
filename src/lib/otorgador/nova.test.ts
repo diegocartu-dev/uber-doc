@@ -160,7 +160,10 @@ test("el cierre nombra lo que quedó para gestión manual", () => {
     manuales: ["Paciente Sintético"],
   });
   assert.match(t, /^Listo\. Reasigné 3 turnos y avisé a los 3 pacientes y a los 2 profesionales\./);
-  assert.match(t, /Paciente Sintético quedó marcado para gestión manual en el turnero\.$/);
+  assert.match(t, /Paciente Sintético quedó para gestión manual del call center: los dejé registrados\.$/);
+  // Nova NO promete una marca en el turnero: el turnero no pinta ninguna. Lo
+  // que existe es la fila de `asignaciones` que deja `registrarGestionManual`.
+  assert.doesNotMatch(t, /turnero/);
 });
 
 test("el cierre en singular no queda escrito como un robot", () => {
