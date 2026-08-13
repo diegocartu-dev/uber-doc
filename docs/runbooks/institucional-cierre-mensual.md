@@ -44,10 +44,19 @@ nunca cerró. `cerrar-huerfanas` (00:00 ART) solo cierra las que llevan más de
 sello — con razón. Al día siguiente ya está cerrada y clasificada, y el mes se
 sella solo.
 
-Un mes **ya sellado** nunca vuelve a la lista, aunque tenga filas sin sello:
+Un mes **ya cerrado** nunca vuelve a la lista, aunque tenga filas sin sello:
 esas son las que llegaron después del cierre, y sellarlas ahora las metería a
 una factura ya emitida por la puerta de atrás. Se ven marcadas en
 `/admin/periodos`.
+
+**"Cerrado" es un hecho registrado, no una cuenta de filas.** Cada cierre deja
+una fila en `metering_periodos_cerrados` (migración 023). Antes se infería de
+"tiene al menos una fila sellada", y eso dejaba afuera el **mes con cero
+encuentros**: se veía igual que uno que nunca se cerró, así que el día que
+aparecía una consulta tardía de ese mes el barrido lo tomaba como abierto y la
+sellaba — entraba a la factura de un mes ya cerrado en cero. Un mes vacío ahora
+se cierra como cualquier otro y queda dicho. La marca es inmutable: un mes
+cerrado no se reabre.
 
 ## Quién puede correrlo
 

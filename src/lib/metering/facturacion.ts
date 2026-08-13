@@ -352,6 +352,7 @@ export interface PuertoCierreMes {
   sellar(periodo: string): Promise<number>;
   facturables(periodo: string): Promise<number>;
   faltantes(desdeAr: string, hastaAr: string): Promise<Faltantes>;
+  marcar(periodo: string, filasSelladas: number, facturables: number): Promise<void>;
 }
 
 export const PUERTO_CIERRE_MES: PuertoCierreMes = {
@@ -361,6 +362,8 @@ export const PUERTO_CIERRE_MES: PuertoCierreMes = {
   sellar: (periodo) => sellarPeriodo(periodo),
   facturables: (periodo) => facturacionDePeriodo(periodo).then((f) => f.consultas),
   faltantes: (desdeAr, hastaAr) => encuentrosSinClasificarEnRango(desdeAr, hastaAr),
+  marcar: (periodo, filasSelladas, facturables) =>
+    marcarPeriodoCerrado(periodo, filasSelladas, facturables),
 };
 
 /**
@@ -426,6 +429,10 @@ export async function cerrarMes(
       puerto.facturables(periodo),
       puerto.sinSellar(periodo),
     ]);
+    // Un mes que quedó sellado ANTES de que existiera la marca (o sellado a mano
+    // por SQL) la recibe acá, en la primera pasada del barrido. Si no, el mes
+    // volvería al barrido todos los días para siempre.
+    await puerto.marcar(periodo, selladas_total, facturables);
     return {
       periodo,
       facturables,
@@ -456,6 +463,12 @@ export async function cerrarMes(
     // auditoría del período.
     puerto.sinSellar(periodo),
   ]);
+  // La marca va DESPUÉS del sello, siempre. Al revés —marcar y después sellar—
+  // un fallo en el medio dejaría un mes "cerrado" con sus filas sin sellar, y la
+  // factura, que en un mes cerrado sale del sello, saldría vacía teniendo
+  // encuentros. Si falla la marca, en cambio, no se pierde nada: el mes sigue
+  // cerrado por sus filas y el barrido de mañana escribe la marca.
+  await puerto.marcar(periodo, selladas_total, facturables);
   return {
     periodo,
     facturables,
@@ -539,9 +552,78 @@ export async function filasSelladas(periodo: string): Promise<number> {
   );
 }
 
-/** ¿Ese mes ya está sellado? (tiene al menos una fila con el sello puesto) */
+/**
+ * ¿Ese mes ya se cerró?
+ *
+ * Dos fuentes, y hacen falta las dos:
+ *   · la MARCA explícita de `metering_periodos_cerrados` (la 023), y
+ *   · el sello en las filas, que es lo único que había antes.
+ *
+ * ── POR QUÉ NO ALCANZA CON CONTAR FILAS SELLADAS ─────────────────────────────
+ * Un mes con CERO encuentros —el piloto arrancando, un mes de receso— no tiene
+ * ninguna fila sellada, así que "cerrado" y "nunca se cerró" se veían iguales. Y
+ * la diferencia importa el día que aparece UNA fila de ese mes: sin marca, el
+ * mes parece abierto, el cierre la sella y esa consulta entra a la factura de un
+ * mes que ya se cerró en cero. Es el crítico del gate por la única puerta que le
+ * quedaba.
+ *
+ * ── POR QUÉ TAMPOCO ALCANZA CON LA MARCA ─────────────────────────────────────
+ * Porque los meses que se cerraron ANTES de que la 023 existiera no la tienen, y
+ * porque un sello puesto a mano por SQL tampoco. La marca se agrega, no
+ * reemplaza: cualquiera de las dos alcanza para decir "cerrado", y el barrido se
+ * encarga de que un mes sellado sin marca la reciba en su próxima pasada.
+ */
 export async function periodoEstaSellado(periodo: string): Promise<boolean> {
-  return (await filasSelladas(periodo)) > 0;
+  const [marcado, selladas] = await Promise.all([
+    periodoMarcadoCerrado(periodo),
+    filasSelladas(periodo),
+  ]);
+  return marcado || selladas > 0;
+}
+
+/** ¿Tiene la marca explícita de cierre? (la 023) */
+export async function periodoMarcadoCerrado(periodo: string): Promise<boolean> {
+  return (await periodosMarcadosCerrados([periodo])).has(periodo);
+}
+
+/** Cuáles de esos meses ya tienen marca de cierre. Una sola lectura. */
+export async function periodosMarcadosCerrados(periodos: string[]): Promise<Set<string>> {
+  if (periodos.length === 0) return new Set();
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("metering_periodos_cerrados")
+    .select("periodo")
+    .in("periodo", periodos);
+  // TIRA: si esta lectura fallara en silencio, un mes cerrado se vería abierto y
+  // el barrido volvería a sellarlo — que es exactamente lo que la marca existe
+  // para impedir.
+  if (error) {
+    throw new Error(`No se pudo leer qué períodos están cerrados: ${error.message}`);
+  }
+  return new Set((data ?? []).map((f) => f.periodo as string));
+}
+
+/**
+ * Deja la marca de cierre del mes. Idempotente: si ya estaba, no hace nada
+ * (la fila es inmutable — la 023 rechaza cualquier UPDATE).
+ *
+ * Se llama SIEMPRE después de sellar, nunca antes: la factura de un mes cerrado
+ * sale del sello, así que un mes marcado cuyas filas no se sellaron facturaría
+ * cero teniendo encuentros.
+ */
+export async function marcarPeriodoCerrado(
+  periodo: string,
+  filas_selladas: number,
+  facturables: number
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("metering_periodos_cerrados")
+    .insert({ periodo, filas_selladas, facturables });
+  // 23505 = ya estaba marcado. No es un error: es la idempotencia.
+  if (error && error.code !== "23505") {
+    throw new Error(`No se pudo marcar el período ${periodo} como cerrado: ${error.message}`);
+  }
 }
 
 /** Filas de ese mes que todavía no llevan sello. */
@@ -595,23 +677,31 @@ export function mesesTerminadosHaciaAtras(
  * sin sellar de forma indefinida y silenciosa. El watchdog no ayudaba: vigila
  * el latido, y el cron latía.
  *
- * ── POR QUÉ UN MES YA SELLADO NO VUELVE A LA LISTA ───────────────────────────
+ * ── POR QUÉ UN MES YA CERRADO NO VUELVE A LA LISTA ───────────────────────────
  * Un mes cerrado puede tener filas sin sello: son las que llegaron DESPUÉS del
  * cierre. Sellarlas ahora las metería a una factura ya emitida por la puerta de
  * atrás, que es justo lo que el sello existe para impedir. Se muestran marcadas
  * en /admin/periodos y las decide un humano.
+ *
+ * ── Y POR QUÉ LA LISTA SALE DE LA MARCA, NO DE LAS FILAS ─────────────────────
+ * Antes el filtro era "no tiene filas sin sellar" + "no tiene filas selladas",
+ * o sea que un mes con CERO encuentros se salteaba por la primera condición y
+ * nunca se cerraba. Mientras no llegara nada, daba igual; el día que aparecía
+ * una fila tardía de ese mes, el barrido lo veía abierto y la sellaba — la
+ * consulta entraba a la factura de un mes que ya se había cerrado en cero.
+ *
+ * Con la marca de la 023, "cerrado" es un hecho registrado y el mes vacío se
+ * cierra como cualquier otro. Los meses que ya estaban sellados sin marca
+ * aparecen una vez, reciben la marca en `cerrarMes` (que devuelve enseguida sin
+ * tocar nada) y no vuelven.
  */
 export async function mesesPendientesDeSellar(
   ahoraMs = Date.now(),
   cuantos = MESES_QUE_MIRA_EL_CIERRE
 ): Promise<string[]> {
-  const pendientes: string[] = [];
-  for (const periodo of mesesTerminadosHaciaAtras(ahoraMs, cuantos)) {
-    if ((await filasSinSellar(periodo)) === 0) continue;
-    if (await periodoEstaSellado(periodo)) continue;
-    pendientes.push(periodo);
-  }
-  return pendientes;
+  const candidatos = mesesTerminadosHaciaAtras(ahoraMs, cuantos);
+  const cerrados = await periodosMarcadosCerrados(candidatos);
+  return candidatos.filter((periodo) => !cerrados.has(periodo));
 }
 
 /**

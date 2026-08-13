@@ -313,10 +313,15 @@ interface FilaFalsa {
 
 function baseFalsa(filas: FilaFalsa[]) {
   const llamadas = { sellar: 0, faltantes: 0 };
+  /** `metering_periodos_cerrados` (la 023), en un Set. */
+  const marcas = new Set<string>();
   const delMes = (periodo: string) => filas.filter((f) => f.fecha_ar.slice(0, 7) === periodo);
   const conSello = (periodo: string) => filas.filter((f) => f.sello === periodo);
   const puerto: PuertoCierreMes = {
-    estaSellado: async (periodo) => conSello(periodo).length > 0,
+    marcar: async (periodo) => {
+      marcas.add(periodo);
+    },
+    estaSellado: async (periodo) => marcas.has(periodo) || conSello(periodo).length > 0,
     selladas: async (periodo) => conSello(periodo).length,
     sinSellar: async (periodo) => delMes(periodo).filter((f) => f.sello === null).length,
     sellar: async (periodo) => {
@@ -325,9 +330,13 @@ function baseFalsa(filas: FilaFalsa[]) {
       for (const f of nuevas) f.sello = periodo;
       return nuevas.length;
     },
-    // `filtroDeFacturacion` en dos líneas: sellado → del sello; abierto → del rango.
+    // `filtroDeFacturacion` en dos líneas: mes CERRADO → la factura sale del
+    // sello; mes abierto → del rango de fechas. Y "cerrado" es lo mismo que en
+    // `periodoEstaSellado`: la marca o el sello de las filas — si acá se mirara
+    // solo el sello, un mes cerrado en cero facturaría las tardías.
     facturables: async (periodo) => {
-      const universo = conSello(periodo).length > 0 ? conSello(periodo) : delMes(periodo);
+      const cerrado = marcas.has(periodo) || conSello(periodo).length > 0;
+      const universo = cerrado ? conSello(periodo) : delMes(periodo);
       return universo.filter((f) => f.facturable).length;
     },
     faltantes: async () => {
@@ -335,7 +344,7 @@ function baseFalsa(filas: FilaFalsa[]) {
       return { sin_fila: 0, vivos: 0, total: 0 };
     },
   };
-  return { puerto, llamadas, filas };
+  return { puerto, llamadas, filas, marcas };
 }
 
 const DIA_2_DE_NOVIEMBRE = ar("2026-11-02T04:00:00-03:00");
@@ -394,6 +403,43 @@ test("cierre · un mes ya cerrado ni siquiera evalúa la precondición del conta
   assert.equal(r.ya_estaban, 1);
 });
 
+test("cierre · un mes con CERO encuentros queda cerrado igual, y se nota", async () => {
+  // Sin marca explícita, "cerrado en cero" y "nunca se cerró" se ven iguales:
+  // no hay ninguna fila sellada que contar. El día que llega una consulta
+  // tardía de ese mes, el barrido lo ve abierto y la sella — entra a la factura
+  // de un mes ya cerrado. Es el crítico del gate por la puerta del mes vacío.
+  const base = baseFalsa([]);
+  const r = await cerrarMes("2026-10", DIA_2_DE_NOVIEMBRE, base.puerto);
+  assert.equal(r.selladas, 0);
+  assert.equal(r.facturables, 0);
+  assert.ok(base.marcas.has("2026-10"), "el mes vacío queda MARCADO como cerrado");
+
+  // Un mes después aparece una consulta de octubre.
+  base.filas.push({ fecha_ar: "2026-10-15", facturable: true, sello: null });
+  const segundo = await cerrarMes("2026-10", ar("2026-12-01T04:00:00-03:00"), base.puerto);
+
+  assert.equal(base.llamadas.sellar, 1, "el segundo cierre no vuelve a sellar");
+  assert.equal(segundo.tardias, 1, "la consulta tardía se informa…");
+  assert.equal(segundo.facturables, 0, "…y la factura de octubre sigue en cero");
+  assert.equal(base.filas[0].sello, null);
+});
+
+test("cierre · si el sello falla, el mes NO queda marcado como cerrado", async () => {
+  // El orden es sellar → marcar, y no al revés. Un mes marcado cuyas filas no se
+  // sellaron facturaría CERO teniendo encuentros: la factura de un mes cerrado
+  // sale del sello. Al revés no se pierde nada — el mes sigue cerrado por sus
+  // filas y la marca la escribe el barrido de mañana.
+  const base = baseFalsa([{ fecha_ar: "2026-10-05", facturable: true, sello: null }]);
+  const puerto = {
+    ...base.puerto,
+    sellar: async () => {
+      throw new Error("timeout de la base");
+    },
+  };
+  await assert.rejects(() => cerrarMes("2026-10", DIA_2_DE_NOVIEMBRE, puerto), /timeout/);
+  assert.equal(base.marcas.size, 0, "ningún mes marcado sin su sello puesto");
+});
+
 test("cierre · un mes en curso no se cierra ni con la base vacía", async () => {
   const base = baseFalsa([]);
   await assert.rejects(
@@ -401,6 +447,30 @@ test("cierre · un mes en curso no se cierra ni con la base vacía", async () =>
     /TODAVÍA NO TERMINÓ/
   );
   assert.equal(base.llamadas.sellar, 0);
+});
+
+const SQL_023 = readFileSync(
+  join(process.cwd(), "supabase/migrations-institucional/023_periodos_cerrados.sql"),
+  "utf8"
+);
+
+test("023 · un mes cerrado no se reabre ni se borra", () => {
+  // Si la marca se pudiera editar o borrar, "cerrado" volvería a ser una
+  // opinión — y con ella volvería el mes vacío que se cierra dos veces.
+  assert.match(SQL_023, /BEFORE UPDATE ON metering_periodos_cerrados/);
+  assert.match(SQL_023, /BEFORE DELETE ON metering_periodos_cerrados/);
+  assert.match(SQL_023, /BEFORE TRUNCATE ON metering_periodos_cerrados/);
+  assert.match(
+    SQL_023,
+    /REVOKE TRUNCATE ON metering_periodos_cerrados FROM anon, authenticated, service_role/
+  );
+  assert.match(SQL_023, /ENABLE ROW LEVEL SECURITY/);
+});
+
+test("023 · es reentrante: volver a aplicarla no rompe nada", () => {
+  assert.match(SQL_023, /CREATE TABLE IF NOT EXISTS metering_periodos_cerrados/);
+  const triggers = SQL_023.match(/DROP TRIGGER IF EXISTS/g) ?? [];
+  assert.equal(triggers.length, 3, "los tres triggers se dropean antes de crearse");
 });
 
 test("sello · congela el MES ENTERO, no solo lo facturable", () => {
