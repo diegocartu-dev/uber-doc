@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
 import { esInstitucional } from "@/lib/instancia";
 import { invalidarCacheConfigInstitucion } from "@/lib/institucional/config";
+import { BUCKET_ASSETS } from "@/lib/institucional/branding-pdf";
 
 async function guardAdminInstitucionalDocto(): Promise<string | null> {
   if (!esInstitucional()) return null; // en B2C estas actions no existen
@@ -155,6 +156,127 @@ export async function guardarConfigInstitucion(
 
   // El cache de 60 s de getConfigInstitucion() no puede servir config vieja
   // recién guardada (aplica a ESTE proceso; otros lambdas vencen solos).
+  invalidarCacheConfigInstitucion();
+  revalidatePath("/admin/institucion");
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOS ASSETS DE MARCA — isologo del PDF y logo del chrome
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// ── POR QUÉ ESTO TIENE QUE EXISTIR ───────────────────────────────────────────
+// El isologo del encabezado del documento institucional era INALCANZABLE:
+// `pdf_isologo_path` y `logo_path` no estaban en el upsert y no había pantalla
+// de subida. La migración 018 afirmaba "la subida la hace el /admin interno de
+// Docto" y esa UI no existía — o sea que la única forma de poner el logotipo
+// del ministerio arriba de una receta era un UPDATE a mano contra la base de
+// la instancia.
+//
+// ── POR QUÉ SE RASTERIZA ─────────────────────────────────────────────────────
+// `pdf.image()` de pdfkit entiende PNG y JPEG y TIRA con un SVG. El isologo
+// oficial de un organismo es casi siempre SVG: el formato más probable era
+// justo el que no funciona, y la falla era muda (catch vacío + cache de 10
+// min). Acá se acepta el SVG —que es lo que el admin va a tener a mano— y se
+// convierte a PNG con `sharp` ANTES de subir. Al bucket llega siempre un PNG.
+
+/** Lo que el admin puede subir. El bucket, en cambio, solo guarda PNG. */
+const MIME_ACEPTADOS = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const MAX_ASSET_BYTES = 2 * 1024 * 1024; // el mismo techo que el bucket (018)
+
+/** Columna de `institucion_config` que guarda cada asset. */
+const ASSETS = {
+  isologo_pdf: {
+    columna: "pdf_isologo_path",
+    // Se dibuja con fit [120, 40]: 4× de alto alcanza y sobra para imprimir.
+    caja: { ancho: 480, alto: 160 },
+  },
+  logo_chrome: { columna: "logo_path", caja: { ancho: 640, alto: 200 } },
+} as const;
+
+export type AssetInstitucion = keyof typeof ASSETS;
+
+export async function subirAssetInstitucion(
+  cual: AssetInstitucion,
+  form: FormData
+): Promise<{ ok: boolean; error?: string; path?: string }> {
+  const uid = await guardAdminInstitucionalDocto();
+  if (!uid) return { ok: false, error: "No autorizado" };
+  const spec = ASSETS[cual];
+  if (!spec) return { ok: false, error: "Asset desconocido." };
+
+  const archivo = form.get("archivo");
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { ok: false, error: "Elegí un archivo." };
+  }
+  if (archivo.size > MAX_ASSET_BYTES) {
+    return { ok: false, error: "El archivo pesa más de 2 MB. Un logotipo no debería." };
+  }
+  if (!MIME_ACEPTADOS.includes(archivo.type)) {
+    return { ok: false, error: "Formato no soportado. Subí un PNG, JPG, WEBP o SVG." };
+  }
+
+  let png: Buffer;
+  try {
+    const sharp = (await import("sharp")).default;
+    // `density` alto: sin esto un SVG se rasteriza a 72 dpi y el isologo sale
+    // borroso en el papel, que es peor que no tenerlo.
+    png = await sharp(Buffer.from(await archivo.arrayBuffer()), { density: 300 })
+      .resize({ width: spec.caja.ancho, height: spec.caja.alto, fit: "inside" })
+      .png()
+      .toBuffer();
+  } catch (err) {
+    console.error("[admin/institucion] No se pudo convertir el asset:", cual, err);
+    return { ok: false, error: "No se pudo leer la imagen. Probá con otro archivo." };
+  }
+
+  // Ruta con VERSIÓN en el nombre: reemplazar el archivo dejando la misma ruta
+  // haría que `bajarIsologo()` sirviera el buffer viejo hasta 10 minutos por
+  // lambda, y los documentos emitidos en esa ventana saldrían con el logotipo
+  // anterior. Con ruta nueva, la config cambia y el cache no acierta jamás.
+  const path = `${cual}-${Date.now()}.png`;
+  const admin = createAdminClient();
+  const { error: errSubida } = await admin.storage
+    .from(BUCKET_ASSETS)
+    .upload(path, png, { contentType: "image/png", upsert: true });
+  if (errSubida) {
+    console.error("[admin/institucion] Error subiendo el asset:", cual, errSubida);
+    return { ok: false, error: "No se pudo subir el archivo. Probá de nuevo." };
+  }
+
+  const { error: errDb } = await admin
+    .from("institucion_config")
+    .update({ [spec.columna]: path, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  if (errDb) {
+    console.error("[admin/institucion] Asset subido pero NO referenciado:", cual, errDb);
+    return { ok: false, error: "Se subió el archivo pero no se pudo guardar. Probá de nuevo." };
+  }
+
+  invalidarCacheConfigInstitucion();
+  revalidatePath("/admin/institucion");
+  return { ok: true, path };
+}
+
+/** Saca el asset del documento (el archivo queda en el bucket, huérfano). */
+export async function quitarAssetInstitucion(
+  cual: AssetInstitucion
+): Promise<{ ok: boolean; error?: string }> {
+  const uid = await guardAdminInstitucionalDocto();
+  if (!uid) return { ok: false, error: "No autorizado" };
+  const spec = ASSETS[cual];
+  if (!spec) return { ok: false, error: "Asset desconocido." };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("institucion_config")
+    .update({ [spec.columna]: null, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  if (error) {
+    console.error("[admin/institucion] Error quitando el asset:", cual, error);
+    return { ok: false, error: "No se pudo quitar. Probá de nuevo." };
+  }
+
   invalidarCacheConfigInstitucion();
   revalidatePath("/admin/institucion");
   return { ok: true };

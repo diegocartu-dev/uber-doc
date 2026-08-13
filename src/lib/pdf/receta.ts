@@ -430,9 +430,19 @@ function renderHeader(
       try {
         pdf.image(branding.isologoBuffer, MARGIN.left, topY, { fit: [120, 40] });
         textoX = MARGIN.left + 132;
-      } catch {
-        // Isologo ilegible (formato raro, archivo cortado): la marca sale en
-        // texto. Un documento clínico no se cae por una imagen.
+      } catch (err) {
+        // Isologo ilegible (formato raro, archivo cortado, un SVG): la marca
+        // sale en texto. Un documento clínico no se cae por una imagen.
+        //
+        // PERO SE GRITA. Este catch estuvo vacío y el modo de falla era el
+        // peor posible: se sube el archivo, el PDF sale sin marca gráfica, y
+        // no queda rastro en ningún log — encima con el buffer cacheado 10
+        // minutos por lambda, así que el síntoma es intermitente. Que el
+        // documento no se caiga es una decisión; que nadie se entere, no.
+        console.error(
+          "[pdf/receta] El isologo institucional no se pudo dibujar: el documento sale con la marca en texto.",
+          err
+        );
       }
     }
 

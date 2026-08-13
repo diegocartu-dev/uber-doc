@@ -6,9 +6,15 @@
 // 4/8). Pantalla de Docto: el acento es el azul de acción, NUNCA --inst-*
 // (identidad ≠ interacción).
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ConfigInstitucion } from "@/lib/institucional/config";
-import { guardarConfigInstitucion, type ConfigInstitucionInput } from "./actions";
+import {
+  guardarConfigInstitucion,
+  subirAssetInstitucion,
+  quitarAssetInstitucion,
+  type AssetInstitucion,
+  type ConfigInstitucionInput,
+} from "./actions";
 
 // Mismo placeholder que el DEFAULT de la migración 001 (⚠ placeholder legal:
 // la redacción final la definen el CEO y el abogado). Solo se usa al
@@ -73,6 +79,129 @@ function Campo({
       {children}
       {hint && <p style={{ marginTop: 4, fontSize: 12, color: "#9CA3AF" }}>{hint}</p>}
     </div>
+  );
+}
+
+/**
+ * Subida de un asset de marca (isologo del PDF / logo del chrome).
+ *
+ * Va SEPARADA del "Guardar" del resto de la config, y a propósito: subir un
+ * archivo no es lo mismo que editar un campo — se sube, se convierte a PNG en
+ * el server y se referencia en la misma acción. Meterlo en el submit general
+ * obligaría a re-subir el archivo cada vez que alguien cambia una hora.
+ *
+ * No es un <form> anidado (sería HTML inválido adentro del form grande): es un
+ * input de archivo y dos botones type="button".
+ */
+function AssetCampo({
+  cual,
+  titulo,
+  hint,
+  pathActual,
+}: {
+  cual: AssetInstitucion;
+  titulo: string;
+  hint: string;
+  pathActual: string | null;
+}) {
+  const [path, setPath] = useState(pathActual);
+  const [ocupado, setOcupado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const url = path ? `${base}/storage/v1/object/public/institucion-assets/${path}` : null;
+
+  async function subir(archivo: File) {
+    setOcupado(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("archivo", archivo);
+      const res = await subirAssetInstitucion(cual, form);
+      if (res.ok) setPath(res.path ?? null);
+      else setError(res.error ?? "No se pudo subir.");
+    } finally {
+      setOcupado(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function quitar() {
+    setOcupado(true);
+    setError(null);
+    try {
+      const res = await quitarAssetInstitucion(cual);
+      if (res.ok) setPath(null);
+      else setError(res.error ?? "No se pudo quitar.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <Campo titulo={titulo} hint={hint}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span
+          style={{
+            width: 132,
+            height: 52,
+            borderRadius: 8,
+            border: "1px solid #E5E7EB",
+            background: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}
+        >
+          {url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt="" style={{ maxWidth: "100%", maxHeight: "100%" }} />
+          ) : (
+            <span style={{ fontSize: 12, color: "#9CA3AF" }}>Sin imagen</span>
+          )}
+        </span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          disabled={ocupado}
+          onChange={(e) => {
+            const archivo = e.target.files?.[0];
+            if (archivo) void subir(archivo);
+          }}
+          style={{ fontSize: 13, color: "#374151" }}
+        />
+        {path && (
+          <button
+            type="button"
+            onClick={() => void quitar()}
+            disabled={ocupado}
+            style={{
+              height: 40,
+              padding: "0 14px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#E24B4A",
+              background: "transparent",
+              border: "1px solid #E24B4A",
+              borderRadius: 8,
+              cursor: ocupado ? "default" : "pointer",
+            }}
+          >
+            Quitar
+          </button>
+        )}
+      </div>
+      {ocupado && <p style={{ marginTop: 6, fontSize: 12, color: "#9CA3AF" }}>Subiendo…</p>}
+      {error && (
+        <p role="alert" style={{ marginTop: 6, fontSize: 12, color: "#E24B4A" }}>
+          {error}
+        </p>
+      )}
+    </Campo>
   );
 }
 
@@ -203,6 +332,14 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
               {colorCampo("color_primary_dark", "Color oscuro")}
               {colorCampo("color_primary_soft", "Color suave")}
             </div>
+            {inicial && (
+              <AssetCampo
+                cual="logo_chrome"
+                titulo="Logo de las pantallas"
+                hint="Todavía ninguna pantalla lo pinta (el panel y el turnero siguen con el hueco del mock). Se puede dejar cargado para cuando lo hagan."
+                pathActual={inicial.logo_path}
+              />
+            )}
           </div>
         </section>
 
@@ -213,6 +350,16 @@ export default function ConfigInstitucionForm({ inicial }: { inicial: ConfigInst
             se sube más abajo, al bucket institucion-assets. */}
         <section style={card}>
           <h2 style={{ ...label, fontSize: 12, color: "#374151", marginBottom: 16 }}>Documentos</h2>
+          {inicial && (
+            <div style={{ marginBottom: 16 }}>
+              <AssetCampo
+                cual="isologo_pdf"
+                titulo="Isologo del encabezado"
+                hint="Sale arriba a la izquierda de la receta, la orden y el certificado. PNG, JPG, WEBP o SVG — el SVG se convierte solo. Máx. 2 MB."
+                pathActual={inicial.pdf_isologo_path}
+              />
+            </div>
+          )}
           <div style={{ marginBottom: 16 }}>
             {colorCampo("pdf_accent", "Acento de los documentos", {
               hint: "Opcional. Vacío = el color primario de la institución. Solo se completa si ese color no funciona impreso.",
