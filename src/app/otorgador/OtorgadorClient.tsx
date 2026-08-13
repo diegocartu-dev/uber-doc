@@ -435,13 +435,18 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     const esCI = p.categoria === "ci_activa";
     const estaExpandido = expandido === p.medico_id;
     const ciSeleccionada = esCI && sel?.tipo === "ci";
-    const clase = `prof${estaExpandido ? " exp" : ""}${ciSeleccionada ? " sel-ci" : ""}${p.acuerdo_completo ? " lleno-sem" : ""}`;
+    // `no-elegible` NO es sinónimo de `lleno-sem`: con R6 flexible el acuerdo
+    // completo se puede elegir igual. Lo único que queda sin nada que ofrecer es
+    // el acuerdo completo con la agenda vacía, y esa fila tiene que dejar de
+    // comportarse como un botón (cursor, hover y lectores de pantalla).
+    const clase = `prof${estaExpandido ? " exp" : ""}${ciSeleccionada ? " sel-ci" : ""}${p.acuerdo_completo ? " lleno-sem" : ""}${p.seleccionable ? "" : " no-elegible"}`;
 
     return (
       <div className={clase} key={p.medico_id}>
         <div
           className="prof-fila"
           role="button"
+          aria-disabled={!p.seleccionable}
           tabIndex={p.seleccionable ? 0 : -1}
           onClick={() => (esCI ? clickFilaCI(p) : clickFilaTurno(p))}
           onKeyDown={(e) => {
