@@ -218,3 +218,21 @@ test("preparar el escenario comprueba que el profesional sea de ESA reunión", (
       "slots como demo de forma irreversible y después la limpieza se los borra"
   );
 });
+
+test("la marca de demostración del papel no depende de que el branding se pueda armar", () => {
+  const archivo = fuente("src/lib/institucional/branding-pdf.ts");
+  const codigo = archivo.slice(archivo.indexOf("export async function brandingParaPDF"));
+  const iDemo = codigo.indexOf("const demo = await documentoEsDemo(documentoId)");
+  const iTry = codigo.indexOf("try {");
+  assert.ok(iDemo > 0, "brandingParaPDF dejó de resolver la marca de demostración");
+  assert.ok(
+    iDemo < iTry,
+    "la marca de demostración volvió adentro del try: un blip bajando el isologo del " +
+      "Storage devuelve undefined y el papel firmado en una reunión sale limpio"
+  );
+  assert.match(
+    codigo,
+    /if \(demo\) return \{ nombre: "", efectorTexto: "", demo: true \}/,
+    "el catch dejó de conservar la marca de demostración"
+  );
+});

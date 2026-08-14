@@ -299,9 +299,19 @@ export async function destinoDemoPaciente(params: {
  * corre con el cliente RLS contra una base donde la columna NO existe— rompería
  * la generación de TODOS los PDF del B2C.
  *
- * Fail-safe hacia el lado seguro: ante cualquier error responde `true` SOLO si
- * la base lo dice; un error devuelve `false` y el documento sale sin marca…
- * pero eso no puede pasar en el B2C, donde el gate de modo corta antes.
+ * ── QUÉ PASA ANTE UN ERROR, Y POR QUÉ ────────────────────────────────────────
+ * Devuelve `false`, o sea que el documento saldría sin marca. NO es un
+ * "fail-safe hacia el lado seguro" —el lado seguro de esta pregunta es marcar de
+ * más— y decía serlo: se corrige el texto, no la decisión, porque la decisión es
+ * la correcta y la razón es asimétrica. Marcar de menos afecta a los documentos
+ * de UNA reunión de venta, que dura horas y en la que además está el equipo
+ * mirando. Marcar de más, ante un blip de la base, le estampa "SIN VALIDEZ
+ * LEGAL" a la receta de un paciente real de la provincia, que la lleva a una
+ * farmacia y se la rechazan.
+ *
+ * Lo que sí se arregló es el camino por el que esto pasaba DE VERDAD: no un
+ * error de esta query (un SELECT por PK con service role), sino la falla blanda
+ * de `brandingParaPDF`, que se tragaba la marca junto con el isologo. Ver allá.
  */
 export async function documentoEsDemo(documentoId: string | null | undefined): Promise<boolean> {
   if (!esInstitucional() || !documentoId) return false;
