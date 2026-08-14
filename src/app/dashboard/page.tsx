@@ -31,6 +31,7 @@ import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
+import { esInstitucional } from "@/lib/instancia";
 import { isAdmin } from "@/lib/admin-auth";
 import { resolverRolInstitucional, rutaOperador } from "@/lib/auth/rol-institucional";
 import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
@@ -469,7 +470,6 @@ export default async function DashboardPage({
     // Modo institucional: el requisito de MP se apaga por env (spec §9 Capa B)
     // — sin esto el banner "Conectá Mercado Pago" apuntaría a un OAuth que
     // devuelve 404. En B2C, esInstitucional() es false: idéntico.
-    const { esInstitucional } = await import("@/lib/instancia");
     mpConectado = esInstitucional() || !!mpRes.data;
     firmaConfigurada = !!firmaRes.data;
   }
@@ -613,6 +613,10 @@ export default async function DashboardPage({
         ocultoClinica={medico.oculto_clinica}
         visibleConsultorioParticular={medico.visible_consultorio_particular ?? true}
         perfilCompleto={perfilCompletoReal}
+        // Modo institucional: el bloque de canales del B2C no va (ver
+        // DisponibilidadMedico). El flag viaja por PROP desde este server
+        // component — nunca por env client (regla del README institucional).
+        institucional={esInstitucional()}
       />
     );
 

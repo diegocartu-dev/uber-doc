@@ -16,6 +16,17 @@ type Props = {
   ocultoClinica: boolean;
   visibleConsultorioParticular: boolean;
   perfilCompleto?: boolean;
+  /**
+   * Instancia institucional: el bloque de canales NO se muestra.
+   *
+   * Es el momento del guion en que el profesional se pone disponible delante del
+   * ministro, y lo que aparecía en la pantalla proyectada era el vocabulario del
+   * B2C: "Clínica Virtual — Aparecés en el listado público" y "Consultorio
+   * Particular". Ni la clínica ni el listado ni el consultorio particular
+   * existen en la instancia de una provincia, donde quien reparte los pacientes
+   * es el call center. Mismo patrón que ya se usó para Nova.
+   */
+  institucional?: boolean;
 };
 
 function calcularCapacidad(desde: string, hasta: string, duracion: number): number {
@@ -36,6 +47,7 @@ export default function DisponibilidadMedico({
   ocultoClinica,
   visibleConsultorioParticular,
   perfilCompleto = true,
+  institucional = false,
 }: Props) {
   const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
@@ -58,7 +70,8 @@ export default function DisponibilidadMedico({
   const capacidad = duracion && desde && hasta ? calcularCapacidad(desde, hasta, duracion) : 0;
 
   // Validación: al menos un canal seleccionado si está activo
-  const sinCanal = activo && !bloqueado && !visibleClinica && !visibleConsultorio;
+  // Sin bloque de canales no hay canal que elegir: el aviso no aplica.
+  const sinCanal = !institucional && activo && !bloqueado && !visibleClinica && !visibleConsultorio;
 
   // Auto-desactivar CI solo cuando hay un turno en_curso
   useEffect(() => {
@@ -239,8 +252,9 @@ export default function DisponibilidadMedico({
         </div>
       )}
 
-      {/* ── Checkboxes de canales (solo visibles si toggle ON) ── */}
-      {activo && !bloqueado && (
+      {/* ── Checkboxes de canales (solo visibles si toggle ON, y nunca en la
+             instancia institucional — ver la prop `institucional`) ── */}
+      {activo && !bloqueado && !institucional && (
         <div className="px-5 pb-3 space-y-2">
           <label className="flex items-center gap-3 cursor-pointer py-1">
             <input

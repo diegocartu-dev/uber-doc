@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
 import { esInstitucional } from "@/lib/instancia";
+import { getConfigInstitucion } from "@/lib/institucional/config";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { waitUntil } from "@vercel/functions";
 import {
@@ -20,7 +21,11 @@ function fechaLegible(fechaISO: string): string {
 }
 
 // Descripción legible para la confirmación de crear_disponibilidad (rango + recurrencia).
-function describirCrearDisponibilidad(t: Record<string, unknown>): string {
+function describirCrearDisponibilidad(
+  t: Record<string, unknown>,
+  /** Duración de slot que manda la institución (R10). `null` en B2C. */
+  slotInstitucional?: number | null
+): string {
   // En la instancia institucional los dos canales del B2C se mapean a UN motor:
   // "turno ofrecido" — el horario que publica el profesional (spec §4.7,
   // `crearAgendaModelo`). Nombrar acá "Clínica Virtual" sería mostrarle al
@@ -31,8 +36,23 @@ function describirCrearDisponibilidad(t: Record<string, unknown>): string {
     : t.canal_origen === "clinica_virtual"
       ? "Clínica Virtual"
       : "Consultorio Particular";
-  const precioTxt = typeof t.precio === "number" && t.precio > 0 ? ` a $${(t.precio as number).toLocaleString("es-AR")}` : "";
-  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${t.duracion} min${precioTxt}`;
+
+  // ── LA CONFIRMACIÓN TIENE QUE DECIR LO QUE VA A PASAR ─────────────────────
+  // El canal ya estaba gateado; la duración y el precio de la MISMA frase, no.
+  // Secuencia real: Nova proponía "cada 30 min", el profesional tocaba Confirmar,
+  // y `/api/nova/confirmar` pisaba la duración con la del config y respondía "los
+  // hice de 20 minutos, que es la duración que define la institución". Confirmó
+  // una cosa y le hicieron otra, en pantalla y proyectado.
+  //
+  // Con el precio es peor: `crearAgendaModelo` fuerza `precio = 0` porque en la
+  // institución el paciente no paga NUNCA (R2), así que cualquier cifra en la
+  // confirmación es una promesa que el sistema no va a cumplir.
+  const duracion = slotInstitucional ?? t.duracion;
+  const precioTxt =
+    !slotInstitucional && typeof t.precio === "number" && t.precio > 0
+      ? ` a $${(t.precio as number).toLocaleString("es-AR")}`
+      : "";
+  const horario = `de ${t.hora_inicio} a ${t.hora_fin} cada ${duracion} min${precioTxt}`;
   const desde = t.fecha_desde as string;
   const hasta = t.fecha_hasta as string;
   const dias = Array.isArray(t.dias_semana) ? (t.dias_semana as string[]) : [];
@@ -508,10 +528,26 @@ export async function POST(req: NextRequest) {
         .join(" | ");
     }
 
+    // La duración que manda la INSTITUCIÓN (R10). Se lee una vez por request y
+    // viaja a la confirmación: es lo que `/api/nova/confirmar` va a aplicar, así
+    // que es lo que la confirmación tiene que decir. `null` en B2C.
+    const slotInstitucional = esInstitucional()
+      ? await getConfigInstitucion()
+          .then((c) => c.slot_duracion_min)
+          .catch(() => null)
+      : null;
+
     // Bloque ESTÁTICO (cacheable): personalidad + reglas. GENÉRICO — sin datos del
     // médico — para que el prefijo (este bloque + tools) sea idéntico entre todos
     // los médicos y dispare cache-hit global de Anthropic. El nombre y el contexto
     // van en el bloque dinámico de abajo.
+    // Las dos reglas que en una institución son al revés que en el B2C. Se
+    // inyectan en el bloque cacheado (dentro de una instancia es constante, así
+    // que el cache-hit se mantiene) porque son reglas, no datos del médico.
+    const reglasInstitucion = esInstitucional()
+      ? `- DURACIÓN: la define la INSTITUCIÓN, no el profesional${slotInstitucional ? ` (${slotInstitucional} minutos)` : ""}. Si el médico pide otra, se la creás con la de la institución y se lo decís ANTES de confirmar, no después.
+- PRECIO: en esta institución el paciente NO PAGA NUNCA. No preguntás por el precio, no lo mencionás y no lo ponés en la confirmación.`
+      : "";
     const systemStatic = `Sos Nova, la asistente personal del médico dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
 
 IDENTIDAD Y TONO
@@ -565,6 +601,7 @@ Antes de crear, necesitás: el rango de fechas (un día, o desde/hasta), los dí
 - Interpretás el rango con naturalidad: "todo junio" → del 1 al 30 de junio. "todos los miércoles de junio" → rango del mes con dias_semana=['miercoles']. "el 5 de 8 a 12" → un solo día. "lunes a viernes" → esos cinco días. Si te falta una fecha clave o es ambigua, preguntás con mostrar_opciones.
 - Una sola llamada a crear_disponibilidad crea TODO el rango de una. No existe crear día por día.
 - PRECIO: si el médico menciona un valor para esa agenda (ej: "los domingos cobro más caro", "esta agenda a 30 mil"), pasalo en el campo precio. Si no menciona nada, omitilo y se usa su precio configurado. Podés contarle el precio en la confirmación.
+${reglasInstitucion}
 
 CONFLICTOS DE AGENDA
 El sistema valida los conflictos al crear, así que nunca generás una doble reserva. Vos solo tenés que contarle bien al médico lo que pasó:
@@ -718,7 +755,7 @@ Próximos 45 días (resumen): ${proximosResumen}`;
                   // Herramienta destructiva: el texto ya se emitió vía streaming.
                   // Solo emitir evento de confirmación para la UI.
                   const accionDescripcion: Record<string, string> = {
-                    crear_disponibilidad: describirCrearDisponibilidad(toolInput),
+                    crear_disponibilidad: describirCrearDisponibilidad(toolInput, slotInstitucional),
                     bloquear_periodo: describirBloquearPeriodo(toolInput),
                     cancelar_turno: toolInput.paciente_nombre
                       ? `Cancelar turno de ${toolInput.paciente_nombre} el ${toolInput.fecha ? fechaLegible(toolInput.fecha as string) : "?"} a las ${toolInput.hora ?? "?"}`
