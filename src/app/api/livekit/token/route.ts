@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AccessToken } from "livekit-server-sdk";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
@@ -19,6 +20,16 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+
+  // ── LA PUERTA DEL PARTICIPANTE INVITADO ───────────────────────────────────
+  // Esta es la que más se nota en una sala: el que fotografió el QR proyectado
+  // ENTRA A LA VIDEOLLAMADA. Revocar su enlace cierra su sesión, pero el access
+  // token que su teléfono ya tiene sigue sirviendo cerca de una hora — y este
+  // endpoint solo pide una sesión válida para acuñar el token de LiveKit.
+  // En B2C no ejecuta nada: el gate por modo corta adentro del helper antes de
+  // tocar la base, y para cualquiera sin `demo_sesion_id` devuelve `null`.
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   const { consultaId, tipo = "consulta" } = await req.json();
   if (!consultaId) return NextResponse.json({ error: "Falta consultaId." }, { status: 400 });

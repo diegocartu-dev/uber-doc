@@ -434,6 +434,12 @@ const APIS_CON_DATO_CLINICO = [
   "src/app/api/historial-inline/route.ts",
   // Entrega URLs firmadas de 4 horas a los estudios subidos.
   "src/app/api/consulta/estudios/route.ts",
+  // Acuña el token de LiveKit: sin esto, quien fotografió el QR ENTRA A LA
+  // VIDEOLLAMADA — la más visible de todas dentro de una sala.
+  "src/app/api/livekit/token/route.ts",
+  // SELLA electrónicamente (ESCRIBE, y `firma_logs` es append-only: lo que se
+  // firma acá no lo borra ni "limpiar reunión").
+  "src/app/api/documentos/firmar/route.ts",
 ];
 
 test("el enlace revocado también cierra las APIs que sirven datos clínicos", () => {
