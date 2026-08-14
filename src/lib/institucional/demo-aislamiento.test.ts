@@ -423,6 +423,31 @@ test("la puerta de la API mira a los DOS sujetos, no solo al profesional", () =>
   );
 });
 
+test("emitir un enlace nuevo SIEMPRE se pregunta, aunque figure como invitado", () => {
+  // `marcarParticipanteEntro` es best-effort (nunca lanza, nunca frena el
+  // minteo), así que "Invitado" no prueba que la persona no haya entrado.
+  // Confirmar solo cuando el semáforo dice que entró echaba en silencio a quien
+  // entró y no quedó anotado — justo el caso de la pantalla recargada, que es
+  // cuando "Ver QR" cae solo en este camino.
+  const codigo = fuente("src/app/admin/demo/DemoClient.tsx");
+  const i = codigo.indexOf("function pedirEnlaceNuevo");
+  const j = codigo.indexOf("function regenerar", i);
+  assert.ok(i > 0 && j > i, "cambió la forma de DemoClient: revisá este test");
+  const cuerpo = codigo.slice(i, j);
+  assert.ok(
+    !/estado !== "invitado"/.test(cuerpo),
+    "volvió el atajo: con el semáforo en 'Invitado' se emite un enlace nuevo sin preguntar"
+  );
+  assert.match(cuerpo, /setConfirmarRegenerar\(/, "dejó de pedir confirmación");
+
+  const iWa = codigo.indexOf("function pedirWhatsApp");
+  const cuerpoWa = codigo.slice(iWa, codigo.indexOf("function mandarWhatsApp", iWa));
+  assert.ok(
+    !/estado !== "invitado"/.test(cuerpoWa),
+    "WhatsApp emite un enlace nuevo igual que Regenerar: tiene que preguntar siempre"
+  );
+});
+
 test("preparar el escenario comprueba que el profesional sea de ESA reunión", () => {
   const codigo = fuente("src/lib/institucional/demo-escenario.ts");
   assert.match(

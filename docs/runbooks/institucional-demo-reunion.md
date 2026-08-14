@@ -74,14 +74,18 @@ Son **dos botones distintos** y hacen cosas opuestas:
 | Botón | Qué hace |
 |---|---|
 | **Ver QR** | Vuelve a proyectar el **mismo** enlace. No toca la base y no echa a nadie. |
-| **Regenerar** | Emite un enlace **nuevo**: el anterior deja de funcionar y **quien haya entrado con él queda afuera en el acto**. Pide confirmación si el participante ya entró. |
+| **Regenerar** | Emite un enlace **nuevo**: el anterior deja de funcionar y **quien haya entrado con él queda afuera en el acto**. Pide confirmación **siempre**. |
 | **WhatsApp** | Manda un enlace **nuevo**, así que echa igual que "Regenerar". Misma confirmación. |
 
 "Ver QR" funciona mientras la pantalla siga abierta: en la base vive solo el
 sha256 del token, así que el enlace pelado existe una sola vez, en la respuesta
 que lo creó. **Si recargás la página, el QR anterior ya no se puede volver a
-mostrar** y la única salida es regenerar — con el precio que eso tiene. Conviene
-no recargar `/admin/demo` durante la reunión.
+mostrar** —no hay dónde leerlo— y "Ver QR" pasa a ofrecerte emitir uno nuevo.
+Cuando eso pasa, **te lo pregunta**: aunque el semáforo diga "Invitado". Esa
+marca la escribe un proceso best-effort que nunca frena la entrada, así que una
+persona que entró perfectamente puede seguir figurando como invitada — y antes
+la echábamos en silencio. Igual conviene no recargar `/admin/demo` durante la
+reunión.
 
 El enlace **vence a las 12 horas** (`HORAS_ACCESO_DEMO`). Cubre el día de la
 reunión con margen y no cubre el día siguiente.

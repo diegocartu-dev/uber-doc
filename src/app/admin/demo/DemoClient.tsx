@@ -231,9 +231,9 @@ export default function DemoClient({
    * si esta pantalla ya emitió su enlace, lo vuelve a proyectar tal cual.
    *
    * Si no lo tiene (se recargó la página, lo cargó otra persona), no hay forma
-   * de reconstruirlo —en la base vive solo el sha256— y la única salida es
-   * emitir uno nuevo. Eso ya NO pasa en silencio: se pide confirmación cuando el
-   * participante está adentro, con el precio dicho.
+   * de reconstruirlo: en la base vive SOLO el sha256 del token, así que no
+   * existe —ni puede existir— un camino de "leerlo del server". La única salida
+   * es emitir uno nuevo, y eso echa a quien esté adentro.
    */
   function verQR(p: ParticipanteDemo) {
     limpiarMensajes();
@@ -245,15 +245,24 @@ export default function DemoClient({
     pedirEnlaceNuevo(p);
   }
 
-  /** El camino explícito: emitir uno nuevo, que apaga el anterior. */
+  /**
+   * El camino explícito: emitir uno nuevo, que apaga el anterior.
+   *
+   * ── SIEMPRE PREGUNTA, Y NO SOLO CUANDO EL SEMÁFORO DICE QUE ENTRÓ ──────────
+   * Esto confirmaba únicamente si `estado !== "invitado"`. Pero ese estado lo
+   * escribe `marcarParticipanteEntro`, que es BEST-EFFORT: nunca lanza y nunca
+   * puede frenar el minteo de la sesión, así que un participante que entró
+   * perfectamente puede seguir figurando "invitado". Con la pantalla recargada
+   * —que es cuando este camino se dispara solo, desde "Ver QR"— la combinación
+   * era: Diego toca Ver QR para proyectarlo, el sistema emite uno nuevo sin
+   * preguntar, y la persona que ya estaba adentro queda afuera en silencio,
+   * con su teléfono en la mano y delante de todos.
+   *
+   * Preguntar de más cuesta un click. No preguntar cuesta la escena.
+   */
   function pedirEnlaceNuevo(p: ParticipanteDemo) {
     limpiarMensajes();
-    if (p.estado !== "invitado") {
-      // Ya entró (o está atendiendo): emitir uno nuevo lo deja afuera en el acto.
-      setConfirmarRegenerar({ participante: p, via: "qr" });
-      return;
-    }
-    regenerar(p.id);
+    setConfirmarRegenerar({ participante: p, via: "qr" });
   }
 
   function regenerar(participanteId: string) {
@@ -274,11 +283,7 @@ export default function DemoClient({
    */
   function pedirWhatsApp(p: ParticipanteDemo) {
     limpiarMensajes();
-    if (p.estado !== "invitado") {
-      setConfirmarRegenerar({ participante: p, via: "whatsapp" });
-      return;
-    }
-    mandarWhatsApp(p.id);
+    setConfirmarRegenerar({ participante: p, via: "whatsapp" });
   }
 
   function mandarWhatsApp(participanteId: string) {
@@ -742,10 +747,12 @@ export default function DemoClient({
                 : "¿Emitir un enlace nuevo?"}
             </h2>
             <p style={{ fontSize: 14, color: "#4B5563", margin: "0 0 20px" }}>
-              {confirmarRegenerar.participante.nombre} ya entró con el enlace anterior. Si emitís uno nuevo, el
-              anterior deja de funcionar y esa persona queda afuera en el acto — con su teléfono en
-              la mano, delante de todos. Hacelo solo si el QR se escaneó desde el teléfono
-              equivocado o si perdiste el enlace.
+              {confirmarRegenerar.participante.estado === "invitado"
+                ? `Si ${confirmarRegenerar.participante.nombre} ya escaneó el QR anterior, el enlace nuevo lo deja afuera en el acto — la pantalla dice "Invitado", pero esa marca se escribe best-effort y puede no haberse anotado.`
+                : `${confirmarRegenerar.participante.nombre} ya entró con el enlace anterior. Si emitís uno nuevo, el anterior deja de funcionar y esa persona queda afuera en el acto — con su teléfono en la mano, delante de todos.`}{" "}
+              Hacelo solo si el QR se escaneó desde el teléfono equivocado o si perdiste el enlace
+              (por ejemplo, si recargaste esta pantalla: el enlace vive una sola vez, en la
+              respuesta que lo creó, y de la base no se puede recuperar).
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btnSec} onClick={() => setConfirmarRegenerar(null)}>
