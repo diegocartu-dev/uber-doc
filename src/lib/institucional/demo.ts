@@ -228,7 +228,67 @@ export async function participantesDeSesion(sesionId: string): Promise<Participa
     console.error("[demo] No se pudieron listar los participantes:", error.message);
     return [];
   }
-  return (data ?? []) as ParticipanteDemo[];
+  const filas = (data ?? []) as ParticipanteDemo[];
+  return conEstadoAtendiendo(filas);
+}
+
+/**
+ * Sube a `atendiendo` a los que están adentro de un encuentro en curso.
+ *
+ * ── POR QUÉ SE DERIVA Y NO SE GUARDA ─────────────────────────────────────────
+ * Lo dice la propia migración 025: "atendiendo — está en un encuentro (lo deriva
+ * la pantalla, no se guarda acá)". El CHECK admitía el valor y el chip verde
+ * estaba listo en la pantalla… pero nadie lo derivaba: `marcarParticipanteEntro`
+ * es lo único que escribe estado, y solo hace invitado → entro. En la reunión,
+ * el semáforo de Diego se quedaba en "Entró" para todos, incluso con la
+ * videollamada en curso — justo la pieza que le dice de un vistazo si el
+ * circuito arrancó.
+ *
+ * Best-effort: si la lectura falla, se devuelven los estados crudos. Un semáforo
+ * que no late es lo que había; uno que rompe la pantalla de la reunión es peor.
+ */
+async function conEstadoAtendiendo(filas: ParticipanteDemo[]): Promise<ParticipanteDemo[]> {
+  const medicoIds = filas.map((p) => p.medico_id).filter((x): x is string => !!x);
+  const pacienteIds = filas.map((p) => p.paciente_id).filter((x): x is string => !!x);
+  const userIds = filas.map((p) => p.user_id).filter((x): x is string => !!x);
+  if (medicoIds.length === 0 && pacienteIds.length === 0) return filas;
+
+  const enCurso = { medicos: new Set<string>(), pacientes: new Set<string>(), usuarios: new Set<string>() };
+  try {
+    const admin = createAdminClient();
+    // ⚠ ASIMETRÍA HEREDADA DEL B2C: `turnos.paciente_id` apunta a `pacientes.id`
+    // y `consultas.paciente_id`, a `auth.users.id`. Las dos consultas de abajo
+    // existen por eso y no por gusto (mismo motivo que el trigger de la 025).
+    const [ct, cc, tt, tp] = await Promise.all([
+      medicoIds.length
+        ? admin.from("consultas").select("medico_id").eq("estado", "en_curso").in("medico_id", medicoIds)
+        : Promise.resolve({ data: [] as { medico_id: string }[] }),
+      userIds.length
+        ? admin.from("consultas").select("paciente_id").eq("estado", "en_curso").in("paciente_id", userIds)
+        : Promise.resolve({ data: [] as { paciente_id: string }[] }),
+      medicoIds.length
+        ? admin.from("turnos").select("medico_id").eq("estado", "en_curso").in("medico_id", medicoIds)
+        : Promise.resolve({ data: [] as { medico_id: string }[] }),
+      pacienteIds.length
+        ? admin.from("turnos").select("paciente_id").eq("estado", "en_curso").in("paciente_id", pacienteIds)
+        : Promise.resolve({ data: [] as { paciente_id: string }[] }),
+    ]);
+    for (const f of ct.data ?? []) enCurso.medicos.add(f.medico_id as string);
+    for (const f of tt.data ?? []) enCurso.medicos.add(f.medico_id as string);
+    for (const f of cc.data ?? []) enCurso.usuarios.add(f.paciente_id as string);
+    for (const f of tp.data ?? []) enCurso.pacientes.add(f.paciente_id as string);
+  } catch (err) {
+    console.error("[demo] No se pudo derivar quién está atendiendo:", err);
+    return filas;
+  }
+
+  return filas.map((p) => {
+    const adentro =
+      (p.medico_id && enCurso.medicos.has(p.medico_id)) ||
+      (p.paciente_id && enCurso.pacientes.has(p.paciente_id)) ||
+      (p.user_id && enCurso.usuarios.has(p.user_id));
+    return adentro ? { ...p, estado: "atendiendo" as const } : p;
+  });
 }
 
 /**
