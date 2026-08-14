@@ -41,6 +41,27 @@ function fuente(ruta: string): string {
 }
 
 /**
+ * El cuerpo de UNA función: desde su declaración hasta la siguiente declaración
+ * de nivel superior del archivo.
+ *
+ * ⚠️ POR QUÉ ESTE HELPER EXISTE (y por qué hay que usarlo SIEMPRE que se busque
+ * algo "adentro de tal función"): las aserciones de este archivo son `indexOf`
+ * sobre texto, y un `indexOf` sobre el archivo ENTERO encuentra la ocurrencia de
+ * CUALQUIER función. Pasó de verdad: `reprogramar.ts` sumó un segundo
+ * `mundosIncompatibles(` en `registrarGestionManual` —que está más arriba que
+ * `reprogramarTurnoInstitucional`— y la aserción "el guard va antes del UPDATE"
+ * se volvió una tautología. Borrando el guard crítico, la suite entera seguía en
+ * verde. Un test que no se pone rojo cuando el agujero se abre no cuida nada.
+ */
+function cuerpoDe(codigo: string, declaracion: string): string {
+  const i = codigo.indexOf(declaracion);
+  assert.ok(i >= 0, `ya no está \`${declaracion}\`: revisá este test`);
+  const resto = codigo.slice(i + declaracion.length);
+  const siguiente = resto.match(/^(?:export\s+)?(?:async\s+)?function\s/m);
+  return declaracion + (siguiente ? resto.slice(0, siguiente.index) : resto);
+}
+
+/**
  * Los bloques de query que arrancan en `.from("<tabla>")` y terminan en el
  * primer `;` — que es donde termina el encadenamiento de PostgREST.
  */
@@ -90,11 +111,20 @@ test("asignar exige que el paciente y el profesional sean del mismo mundo", () =
   // Los TRES caminos que escriben un `paciente_id` en un encuentro. `reprogramar`
   // faltaba, y por eso este test daba verde con la puerta abierta: su único guard
   // era `estado_registro !== 'aprobado'` y el profesional de demo nace aprobado.
-  for (const archivo of ["asignar-turno", "asignar-ci", "reprogramar"]) {
+  // Se busca adentro de la FUNCIÓN que escribe, nunca en el archivo entero:
+  // `reprogramar.ts` tiene otro `mundosIncompatibles(` más arriba (la gestión
+  // manual), y con la búsqueda global esta aserción pasaba igual aunque la
+  // puerta crítica no existiera.
+  const PUERTAS: [string, string][] = [
+    ["src/lib/otorgador/asignar-turno.ts", "export async function asignarTurno"],
+    ["src/lib/otorgador/asignar-ci.ts", "export async function asignarCI"],
+    ["src/lib/otorgador/reprogramar.ts", "export async function reprogramarTurnoInstitucional"],
+  ];
+  for (const [ruta, declaracion] of PUERTAS) {
     assert.match(
-      fuente(`src/lib/otorgador/${archivo}.ts`),
+      cuerpoDe(fuente(ruta), declaracion),
       /mundosIncompatibles\(/,
-      `${archivo} dejó de comprobar el mundo antes de escribir la asignación`
+      `${declaracion} dejó de comprobar el mundo antes de escribir la asignación`
     );
   }
 });
@@ -102,10 +132,24 @@ test("asignar exige que el paciente y el profesional sean del mismo mundo", () =
 test("la reprogramación comprueba el mundo ANTES de tomar el horario nuevo", () => {
   // Comprobarlo después del UPDATE no sirve de nada: el turno ya quedaría con el
   // paciente adentro y el trigger de la 025 ya le habría estampado `es_demo`.
-  const codigo = fuente("src/lib/otorgador/reprogramar.ts");
-  const guard = codigo.indexOf("mundosIncompatibles(");
-  const update = codigo.indexOf('estado: "confirmado"');
-  assert.ok(guard > 0 && update > 0, "cambió la forma de reprogramar.ts: revisá este test");
+  //
+  // ⚠️ Se recorta la función ANTES de buscar. Con `indexOf` sobre el archivo
+  // entero, la primera ocurrencia de `mundosIncompatibles(` pasó a ser la de
+  // `registrarGestionManual` —que está más arriba— y la comparación quedó
+  // siempre verdadera: borrando el guard de ESTA función la suite daba verde con
+  // el agujero abierto.
+  const cuerpo = cuerpoDe(
+    fuente("src/lib/otorgador/reprogramar.ts"),
+    "export async function reprogramarTurnoInstitucional"
+  );
+  const guard = cuerpo.indexOf("mundosIncompatibles(");
+  const update = cuerpo.indexOf('estado: "confirmado"');
+  assert.ok(
+    guard > 0,
+    "reprogramarTurnoInstitucional dejó de comprobar el mundo: un POST con el turno de un " +
+      "paciente real y un slot del participante lo deja atendido por alguien no matriculado"
+  );
+  assert.ok(update > 0, "cambió la forma de reprogramar.ts: revisá este test");
   assert.ok(guard < update, "el guard de mundos quedó DESPUÉS del UPDATE que toma el horario");
 });
 
@@ -321,14 +365,16 @@ test("el enlace de una reunión vence en horas, no en la retención de documento
 });
 
 test("regenerar el QR echa al que ya había entrado con el anterior", () => {
+  // El corte de antes era un COMENTARIO ("// ─── Limpiar la reunión"), y
+  // `fuente()` borra los comentarios: el `indexOf` devolvía -1 y el cuerpo era
+  // todo el resto del archivo, limpieza incluida.
   const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
-  const i = codigo.indexOf("export async function regenerarEnlace");
-  assert.ok(i > 0, "cambió la forma de regenerarEnlace: revisá este test");
-  const cuerpo = codigo.slice(i, codigo.indexOf("// ─── Limpiar la reunión", i));
+  const cuerpo = cuerpoDe(codigo, "export async function regenerarEnlace");
   const revoca = cuerpo.indexOf("revocarAccesosDeSujeto");
   const acuna = cuerpo.indexOf("crearAccesoLink");
   assert.ok(revoca > 0, "regenerar el QR volvió a revocar solo el token: la sesión que ese " +
     "token minteó se renueva sola y no se echa a nadie");
+  assert.ok(acuna > 0, "regenerarEnlace dejó de acuñar un enlace: revisá este test");
   assert.ok(revoca < acuna, "se revoca DESPUÉS de acuñar: mata el enlace recién emitido");
 });
 
@@ -411,9 +457,7 @@ test("la puerta de la API mira a los DOS sujetos, no solo al profesional", () =>
   // se proyecta en la misma pared. Mirando solo `medicos`, el mismo agujero
   // quedaba abierto del otro lado.
   const codigo = fuente("src/lib/institucional/demo-puerta.ts");
-  const i = codigo.indexOf("export async function sujetoDemoSigueHabilitado");
-  assert.ok(i > 0, "desapareció sujetoDemoSigueHabilitado: revisá este test");
-  const cuerpo = codigo.slice(i, codigo.indexOf("export async function respuestaSiAccesoDemoMuerto", i));
+  const cuerpo = cuerpoDe(codigo, "export async function sujetoDemoSigueHabilitado");
   assert.match(cuerpo, /\.from\("medicos"\)/, "la puerta de la API dejó de mirar al profesional");
   assert.match(cuerpo, /\.from\("pacientes"\)/, "la puerta de la API dejó de mirar al paciente");
   assert.match(
@@ -431,11 +475,7 @@ test("las dos fases sueltas de la reprogramación masiva también miran los mund
   // fila legitima un estado que no debería existir y el call center llama.
   const codigo = fuente("src/lib/otorgador/reprogramar.ts");
 
-  const iCerrar = codigo.indexOf("export async function marcarDiaSinAtencionDelProfesional");
-  const iGestion = codigo.indexOf("export async function registrarGestionManual");
-  assert.ok(iCerrar > 0 && iGestion > iCerrar, "cambió la forma de reprogramar.ts: revisá este test");
-
-  const cuerpoCerrar = codigo.slice(iCerrar, iGestion);
+  const cuerpoCerrar = cuerpoDe(codigo, "export async function marcarDiaSinAtencionDelProfesional");
   assert.match(
     cuerpoCerrar,
     /\.eq\("es_demo", esDemo\)/,
@@ -443,7 +483,10 @@ test("las dos fases sueltas de la reprogramación masiva también miran los mund
       "participante de una reunión puede cancelar slots reales de esa misma ficha, y al revés"
   );
 
-  const cuerpoGestion = codigo.slice(iGestion);
+  // `slice(iGestion)` llegaba hasta el FINAL del archivo, o sea que el
+  // `mundosIncompatibles(` de `reprogramarTurnoInstitucional` —que está más
+  // abajo— hacía pasar esta aserción sola.
+  const cuerpoGestion = cuerpoDe(codigo, "export async function registrarGestionManual");
   assert.match(
     cuerpoGestion,
     /mundosIncompatibles\(/,
@@ -462,9 +505,10 @@ test("el texto que el participante escribió a mano no sobrevive en los retenido
     /borrarContenidoClinicoRetenido\(retenidosIds, problemas\)/,
     "la limpieza dejó de borrar el contenido clínico de los documentos retenidos"
   );
-  const i = codigo.indexOf("async function borrarContenidoClinicoRetenido");
-  assert.ok(i > 0, "desapareció borrarContenidoClinicoRetenido: revisá este test");
-  const cuerpo = codigo.slice(i, i + 900);
+  // Ventana de 900 caracteres antes: si la función crecía, las columnas de más
+  // abajo se buscaban en el aire (y si encogía, se buscaban en la función
+  // siguiente). El recorte va por declaración.
+  const cuerpo = cuerpoDe(codigo, "async function borrarContenidoClinicoRetenido");
   for (const columna of ["contenido", "diagnostico", "tratamiento"]) {
     assert.match(
       cuerpo,
