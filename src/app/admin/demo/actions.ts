@@ -25,6 +25,7 @@ import {
   limpiarSesionDemo,
 } from "@/lib/institucional/demo-invitacion";
 import { prepararEscenario, rangoEscenarioPorDefecto } from "@/lib/institucional/demo-escenario";
+import { reintentarClavesDemo } from "@/lib/institucional/demo-profesional";
 
 async function guardAdminInstitucionalDocto(): Promise<string | null> {
   if (!esInstitucional()) return null; // en B2C estas actions no existen
@@ -50,6 +51,8 @@ export interface EnlaceListo {
   participante: ParticipanteDemo;
   url: string;
   qr: string; // data URI
+  /** `false` = el alta no pudo dejarle claves de firma (se avisa en la pantalla). */
+  firmaLista?: boolean;
   /** Resultado del envío por WhatsApp, si se pidió. */
   whatsapp?: { ok: boolean; detalle: string };
 }
@@ -109,6 +112,7 @@ export async function cargarParticipante(input: {
       participante: res.invitacion.participante,
       url: res.invitacion.url,
       qr: await qrDataUri(res.invitacion.url),
+      firmaLista: res.invitacion.firmaLista,
     },
   };
 }
@@ -194,6 +198,24 @@ export async function enviarPorWhatsApp(participanteId: string): Promise<Respues
       },
     },
   };
+}
+
+/**
+ * Reintenta las claves de firma de un profesional de la reunión.
+ *
+ * El botón que faltaba: sin claves, la Escena 4 (receta firmada + QR de
+ * verificación funcionando) muestra un documento sin sello y la página pública
+ * en ámbar. Antes el fallo solo vivía en los logs de Vercel.
+ */
+export async function reintentarFirma(
+  medicoId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const uid = await guardAdminInstitucionalDocto();
+  if (!uid) return { ok: false, error: "No autorizado" };
+
+  const res = await reintentarClavesDemo(medicoId);
+  revalidatePath("/admin/demo");
+  return res;
 }
 
 // ─── Limpiar ─────────────────────────────────────────────────────────────────

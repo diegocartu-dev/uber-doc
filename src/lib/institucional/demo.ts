@@ -346,6 +346,39 @@ export async function documentoEsDemo(documentoId: string | null | undefined): P
   }
 }
 
+/**
+ * De estos profesionales de la reunión, ¿cuáles NO tienen claves de firma?
+ *
+ * Es lo que la pantalla necesita para poder decirlo ANTES de la Escena 4: sin
+ * claves, `firmarDocumentoPorSesion` corta con "Médico sin claves de firma
+ * activas", el documento queda sin `firma_digital` y `/verificar/{id}` muestra
+ * el ámbar "documento sin sello electrónico" — proyectado, encima del cartel de
+ * demostración.
+ */
+export async function medicosSinFirma(medicoIds: string[]): Promise<Set<string>> {
+  const sinFirma = new Set(medicoIds);
+  if (!esInstitucional() || medicoIds.length === 0) return new Set();
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("medico_claves")
+      .select("medico_id")
+      .in("medico_id", medicoIds)
+      .eq("activa", true);
+    if (error) {
+      console.error("[demo] No se pudo leer qué profesionales tienen firma:", error.message);
+      // Ante la duda NO se acusa: un chip rojo falso en la pantalla de la
+      // reunión manda a Diego a resolver un problema que no existe.
+      return new Set();
+    }
+    for (const fila of data ?? []) sinFirma.delete(fila.medico_id as string);
+    return sinFirma;
+  } catch (err) {
+    console.error("[demo] medicosSinFirma falló:", err);
+    return new Set();
+  }
+}
+
 // ─── El profesional invitado, después de haber entrado ───────────────────────
 
 /**

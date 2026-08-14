@@ -15,7 +15,7 @@ import { esInstitucional } from "@/lib/instancia";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin-auth";
 import { getConfigInstitucion } from "@/lib/institucional/config";
-import { listarSesionesDemo, participantesDeSesion } from "@/lib/institucional/demo";
+import { listarSesionesDemo, medicosSinFirma, participantesDeSesion } from "@/lib/institucional/demo";
 import DemoClient from "./DemoClient";
 
 export default async function DemoPage({
@@ -41,6 +41,15 @@ export default async function DemoPage({
 
   const participantes = elegida ? await participantesDeSesion(elegida.id) : [];
 
+  // Quién quedó SIN claves de firma. Es la única pieza del alta cuya falla no se
+  // veía en ninguna pantalla: el profesional entra, atiende, documenta… y recién
+  // en la Escena 4 el papel sale sin sello y la verificación pública en ámbar.
+  const sinFirma = [
+    ...(await medicosSinFirma(
+      participantes.map((p) => p.medico_id).filter((id): id is string => !!id)
+    )),
+  ];
+
   return (
     <DemoClient
       institucion={config.nombre}
@@ -51,6 +60,7 @@ export default async function DemoPage({
       sesiones={sesiones}
       sesionElegida={elegida}
       participantes={participantes}
+      sinFirma={sinFirma}
     />
   );
 }

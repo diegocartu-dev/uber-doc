@@ -114,6 +114,11 @@ async function provisionarPacienteDemo(params: {
 export interface Invitacion {
   participante: ParticipanteDemo;
   /**
+   * `false` SOLO cuando el alta del profesional no pudo dejarle claves de firma.
+   * `undefined` para un paciente (no firma nada).
+   */
+  firmaLista?: boolean;
+  /**
    * URL con el token PELADO. Viaja UNA vez, hasta la pantalla que la pinta como
    * QR. Nunca se persiste (en la base va el sha256) y nunca se loguea.
    */
@@ -152,6 +157,7 @@ export async function invitarParticipante(params: {
   let medicoId: string | null = null;
   let pacienteId: string | null = null;
   let userId: string;
+  let firmaLista: boolean | undefined;
 
   if (datos.rol === "profesional") {
     const res = await provisionarProfesionalDemo({
@@ -162,6 +168,7 @@ export async function invitarParticipante(params: {
     if (!res.ok) return { ok: false, error: res.error };
     medicoId = res.profesional.medicoId;
     userId = res.profesional.userId;
+    firmaLista = res.profesional.clavesOk;
   } else {
     const res = await provisionarPacienteDemo({ sesionId: params.sesionId, datos });
     if (!res.ok) return { ok: false, error: res.error };
@@ -221,7 +228,7 @@ export async function invitarParticipante(params: {
 
   return {
     ok: true,
-    invitacion: { participante: participante as ParticipanteDemo, url: acceso.url },
+    invitacion: { participante: participante as ParticipanteDemo, url: acceso.url, firmaLista },
   };
 }
 

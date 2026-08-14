@@ -40,6 +40,16 @@ export interface ProfesionalDemoCreado {
   medicoId: string;
   userId: string;
   especialidad: string;
+  /**
+   * ¿Quedaron las claves de firma?
+   *
+   * Viaja hasta la pantalla a propósito. Sin esto, el único registro de que la
+   * firma no se pudo provisionar era una línea en los logs de Vercel: la
+   * invitación devolvía `ok`, el QR se mostraba igual, y el fallo aparecía
+   * recién en la Escena 4 —"Médico sin claves de firma activas"— con el
+   * documento sin sello y la página de verificación en ámbar, proyectada.
+   */
+  clavesOk: boolean;
 }
 
 export type ResultadoProfesionalDemo =
@@ -157,16 +167,41 @@ export async function provisionarProfesionalDemo(params: {
   // verificación diría "documento sin sello electrónico" — justo la pantalla
   // que la demo quiere mostrar funcionando. Que firme una cuenta de
   // demostración no es un problema: el papel entero está marcado como tal.
+  let clavesOk = true;
   try {
     await provisionarClaves(fila.id);
   } catch (err) {
     console.error("[demo] No se pudieron provisionar las claves de firma:", err);
     // No se aborta el alta: el profesional puede atender igual y documentar; lo
-    // que pierde es el sello. Queda en el log, fuerte.
+    // que pierde es el sello. Pero el fallo SALE de acá y se pinta en la fila
+    // del participante, con un botón para reintentar: es la única pieza del alta
+    // cuya falla no se veía en ninguna pantalla.
+    clavesOk = false;
   }
 
   return {
     ok: true,
-    profesional: { medicoId: fila.id, userId: creado.user.id, especialidad },
+    profesional: { medicoId: fila.id, userId: creado.user.id, especialidad, clavesOk },
   };
+}
+
+/**
+ * Vuelve a intentar las claves de firma de un profesional de la demo.
+ *
+ * El botón "Reintentar firma" de la pantalla de la reunión. Idempotente: si ya
+ * las tiene, `provisionarClaves` no duplica nada.
+ */
+export async function reintentarClavesDemo(
+  medicoId: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!esInstitucional()) {
+    return { ok: false, error: "El modo demo solo existe en la instancia institucional." };
+  }
+  try {
+    await provisionarClaves(medicoId);
+    return { ok: true };
+  } catch (err) {
+    console.error("[demo] Reintento de claves de firma fallado:", err);
+    return { ok: false, error: "Siguen sin salir las claves de firma. Mirá los logs." };
+  }
 }

@@ -22,6 +22,7 @@ import {
   mostrarQR,
   enviarPorWhatsApp,
   limpiarReunion,
+  reintentarFirma,
   prepararEscenarioDemo,
   type EnlaceListo,
 } from "./actions";
@@ -98,6 +99,7 @@ export default function DemoClient({
   sesiones,
   sesionElegida,
   participantes,
+  sinFirma,
 }: {
   institucion: string;
   especialidades: string[];
@@ -105,6 +107,8 @@ export default function DemoClient({
   sesiones: SesionDemo[];
   sesionElegida: SesionDemo | null;
   participantes: ParticipanteDemo[];
+  /** `medicos.id` de los profesionales que quedaron sin claves de firma. */
+  sinFirma: string[];
 }) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
@@ -223,6 +227,16 @@ export default function DemoClient({
     } catch {
       setError("El navegador no dejó copiar. Mostrá el QR.");
     }
+  }
+
+  function arreglarFirma(medicoId: string) {
+    limpiarMensajes();
+    startTransition(async () => {
+      const res = await reintentarFirma(medicoId);
+      if (res.ok) setAviso("Listo: ese profesional ya puede firmar.");
+      else setError(res.error ?? "No se pudieron crear las claves de firma.");
+      router.refresh();
+    });
   }
 
   function limpiar() {
@@ -495,6 +509,12 @@ export default function DemoClient({
                   </button>
                 )}
               </div>
+              {enlace.firmaLista === false && (
+                <p style={{ fontSize: 13, color: "#8A2E2D", margin: "12px 0 0", fontWeight: 500 }}>
+                  Quedó sin claves de firma: sus documentos van a salir sin sello. Usá “Reintentar
+                  firma” en la lista de abajo antes de la escena de la receta.
+                </p>
+              )}
               <p style={{ fontSize: 12, color: "#9CA3AF", margin: "12px 0 0" }}>
                 Este enlace es de un solo participante. Si volvés a generarlo, el anterior deja de
                 funcionar.
@@ -542,7 +562,25 @@ export default function DemoClient({
                     {p.rol === "profesional" ? "Profesional" : "Paciente"}
                   </span>
                   <span style={{ color: estado.color, width: 100 }}>{estado.texto}</span>
+                  {p.medico_id && sinFirma.includes(p.medico_id) && (
+                    <span
+                      style={{ color: ROJO, fontSize: 13, whiteSpace: "nowrap" }}
+                      title="Sin claves de firma: sus documentos salen sin sello y la verificación pública queda en ámbar"
+                    >
+                      sin firma
+                    </span>
+                  )}
                   <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    {p.medico_id && sinFirma.includes(p.medico_id) && (
+                      <button
+                        type="button"
+                        style={btnPeligro}
+                        disabled={pendiente}
+                        onClick={() => arreglarFirma(p.medico_id as string)}
+                      >
+                        Reintentar firma
+                      </button>
+                    )}
                     {p.rol === "profesional" && p.medico_id && (
                       <button
                         type="button"
