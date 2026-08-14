@@ -22,6 +22,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   documentoEsDemo,
+  emailDemo,
+  esAliasDemo,
   destinoDemoPaciente,
   crearSesionDemo,
   listarSesionesDemo,
@@ -155,4 +157,33 @@ test("un encuentro sin marca NO se factura: pasa solo lo que la base afirma", ()
   // de reuniones, no.
   assert.equal(sinEncuentrosDemo([{ es_demo: undefined }]).length, 0);
   assert.equal(sinEncuentrosDemo([{}]).length, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL ALIAS NO ENTREGABLE — el que hace asignable a un participante sin celular
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("el alias de una cuenta de demostración se reconoce y no se le escribe", () => {
+  // Vive en `pacientes.email` para que el call center pueda asignarle un turno a
+  // quien entró sin celular (el guard del otorgador exige `telefono || email`, y
+  // sin ninguno de los dos el botón queda deshabilitado y el participante entra,
+  // ve "ya estás adentro" y nadie le puede dar nada). Pero su subdominio no
+  // tiene MX: mandarle un mail es un rebote y una línea de "aviso enviado" que
+  // miente.
+  const alias = emailDemo("a1b2c3d4", "salud.gob.ar");
+  assert.match(alias, /^demo-a1b2c3d4@demo\.salud\.gob\.ar$/);
+  assert.equal(esAliasDemo(alias), true);
+});
+
+test("el mail de una persona real NO se confunde con un alias de demostración", () => {
+  for (const real of [
+    "ana@gmail.com",
+    "demo@salud.gob.ar",
+    "demo-persona@salud.gob.ar",
+    "algo@demo.otracosa.com",
+    null,
+    "",
+  ]) {
+    assert.equal(esAliasDemo(real), false, `${real} se leyó como alias de demostración`);
+  }
 });

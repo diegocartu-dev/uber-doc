@@ -425,6 +425,7 @@ async function crearPacienteRelleno(
     .insert({
       user_id: user.user.id,
       nombre_completo: nombreRelleno(indice),
+      email, // alias no entregable, igual que el del participante
       demo_sesion_id: sesionId,
       es_cuenta_test: true,
       provisionado_via: "panel",

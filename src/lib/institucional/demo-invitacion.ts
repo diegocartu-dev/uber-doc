@@ -73,6 +73,18 @@ async function provisionarPacienteDemo(params: {
       dni: params.datos.dni,
       fecha_nacimiento: params.datos.fecha_nacimiento,
       telefono: params.datos.celular,
+      // ── EL ALIAS NO ENTREGABLE VA A LA FICHA, A PROPÓSITO ─────────────────
+      // El celular del participante es OPCIONAL (el camino garantizado es el QR
+      // proyectado, y la pantalla se lo promete: "sin celular entra igual"),
+      // pero el call center exige `telefono || email` para poder asignarle algo
+      // — sin ninguno de los dos, el botón de asignar queda deshabilitado y el
+      // participante entra, ve "ya estás adentro", y nadie le puede dar un
+      // turno hasta que alguien tipee un teléfono en vivo.
+      //
+      // El alias satisface ese guard sin inventarle un celular a nadie, y no
+      // sale un solo mail: el subdominio `demo.` no tiene MX, y además los
+      // avisos lo reconocen y ni lo intentan (ver `esAliasDemo`).
+      email,
       demo_sesion_id: params.sesionId,
       es_cuenta_test: true,
       provisionado_via: "panel",

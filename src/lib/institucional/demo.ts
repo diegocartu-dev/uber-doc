@@ -151,6 +151,19 @@ export function emailDemo(sufijo: string, dominioInstancia: string): string {
   return `demo-${sufijo}@demo.${dominio}`;
 }
 
+/**
+ * ¿Este mail es el alias no entregable de una cuenta de demostración?
+ *
+ * Existe porque ese alias se guarda en `pacientes.email` —es lo que hace que el
+ * call center pueda asignarle un turno a un participante que entró sin celular
+ * (el guard del otorgador exige `telefono || email`)— y NO tiene que usarse
+ * jamás como canal de envío: el subdominio `demo.` no tiene MX, así que un mail
+ * ahí es un rebote garantizado. El enlace de la reunión viaja por QR.
+ */
+export function esAliasDemo(email: string | null | undefined): boolean {
+  return /^demo-[0-9a-f]+@demo\./i.test((email ?? "").trim());
+}
+
 /** Nombre por defecto de una reunión nueva: la fecha argentina, sin PII. */
 export function nombreSesionPorDefecto(ahora: Date = new Date()): string {
   const ar = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));

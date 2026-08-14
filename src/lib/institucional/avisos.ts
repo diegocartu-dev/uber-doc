@@ -22,6 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
 import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { enviarTwilio, twilioConfigurado, normalizarTelefonoAR } from "@/lib/whatsapp";
+import { esAliasDemo } from "@/lib/institucional/demo";
 import { crearAccesoLink } from "@/lib/institucional/accesos";
 import {
   mailTurnoAsignadoPaciente,
@@ -78,6 +79,20 @@ function avisoSinEnlace(
 const DIAS_LARGOS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 /** "martes 20/10" — el formato de las plantillas aprobadas. */
+/**
+ * El mail al que SÍ se le puede escribir.
+ *
+ * El alias de una cuenta de demostración no lo es: vive en `pacientes.email`
+ * para que el call center pueda asignarle un turno a un participante que entró
+ * sin celular (el guard del otorgador exige `telefono || email`), pero su
+ * subdominio no tiene MX y el enlace de la reunión viaja por QR. Mandarle un
+ * mail es un rebote garantizado y una línea de "aviso enviado" que miente.
+ */
+function mailEntregable(email: string | null | undefined): string | null {
+  const e = (email ?? "").trim();
+  return e && !esAliasDemo(e) ? e : null;
+}
+
 export function fechaLabelAR(fecha: string): string {
   const d = new Date(fecha + "T12:00:00");
   return `${DIAS_LARGOS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
@@ -132,8 +147,9 @@ export async function avisarAsignacionTurno(
 
     // ── Paciente: link-sesión + WhatsApp → mail ──
     const celPaciente = normalizarTelefonoAR(params.paciente.celular);
+    const mailPaciente = mailEntregable(params.paciente.email);
     const canalPaciente: "whatsapp" | "mail" | null =
-      waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
+      waOn && celPaciente ? "whatsapp" : mailPaciente ? "mail" : null;
 
     // El acceso se emite SIEMPRE (con o sin canal automático — ver el comentario
     // de AvisosAsignacion): la asignación ya ocurrió y el token es del paciente.
@@ -154,7 +170,7 @@ export async function avisarAsignacionTurno(
         canalPaciente === "whatsapp"
           ? (celPaciente as string)
           : canalPaciente === "mail"
-            ? (params.paciente.email as string)
+            ? (mailPaciente as string)
             : null,
       encuentroMs: new Date(`${params.turno.fecha}T${hora8}-03:00`).getTime(),
     });
@@ -164,7 +180,7 @@ export async function avisarAsignacionTurno(
       canalPaciente === "whatsapp"
         ? (celPaciente as string)
         : canalPaciente === "mail"
-          ? (params.paciente.email as string)
+          ? (mailPaciente as string)
           : null;
 
     if (canalPaciente) {
@@ -186,9 +202,9 @@ export async function avisarAsignacionTurno(
           : false;
         resultado.paciente = { canal: "whatsapp", destino: celPaciente as string, ok };
         // WhatsApp falló y hay mail → fallback.
-        if (!ok && params.paciente.email) {
+        if (!ok && mailPaciente) {
           const okMail = await mailTurnoAsignadoPaciente({
-            to: params.paciente.email,
+            to: mailPaciente,
             nombrePaciente: primerNombre(params.paciente.nombre),
             fechaLabel,
             hora,
@@ -196,11 +212,11 @@ export async function avisarAsignacionTurno(
             especialidad: params.medico.especialidad,
             link,
           });
-          resultado.paciente = { canal: "mail", destino: params.paciente.email, ok: okMail };
+          resultado.paciente = { canal: "mail", destino: mailPaciente, ok: okMail };
         }
       } else {
         const ok = await mailTurnoAsignadoPaciente({
-          to: params.paciente.email as string,
+          to: mailPaciente as string,
           nombrePaciente: primerNombre(params.paciente.nombre),
           fechaLabel,
           hora,
@@ -208,7 +224,7 @@ export async function avisarAsignacionTurno(
           especialidad: params.medico.especialidad,
           link,
         });
-        resultado.paciente = { canal: "mail", destino: params.paciente.email as string, ok };
+        resultado.paciente = { canal: "mail", destino: mailPaciente as string, ok };
       }
     }
 
@@ -267,8 +283,9 @@ export async function avisarAsignacionCI(
     const base = `https://${dominioLimpio(config.dominio)}`;
 
     const celPaciente = normalizarTelefonoAR(params.paciente.celular);
+    const mailPaciente = mailEntregable(params.paciente.email);
     const canalPaciente: "whatsapp" | "mail" | null =
-      waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
+      waOn && celPaciente ? "whatsapp" : mailPaciente ? "mail" : null;
 
     // El acceso se emite SIEMPRE (con o sin canal automático — ver el comentario
     // de AvisosAsignacion): la asignación ya ocurrió y el token es del paciente.
@@ -285,7 +302,7 @@ export async function avisarAsignacionCI(
         canalPaciente === "whatsapp"
           ? (celPaciente as string)
           : canalPaciente === "mail"
-            ? (params.paciente.email as string)
+            ? (mailPaciente as string)
             : null,
     });
     const link = acceso?.url ?? null;
@@ -294,7 +311,7 @@ export async function avisarAsignacionCI(
       canalPaciente === "whatsapp"
         ? (celPaciente as string)
         : canalPaciente === "mail"
-          ? (params.paciente.email as string)
+          ? (mailPaciente as string)
           : null;
 
     if (canalPaciente) {
@@ -313,25 +330,25 @@ export async function avisarAsignacionCI(
             })
           : false;
         resultado.paciente = { canal: "whatsapp", destino: celPaciente as string, ok };
-        if (!ok && params.paciente.email) {
+        if (!ok && mailPaciente) {
           const okMail = await mailCIAsignadaPaciente({
-            to: params.paciente.email,
+            to: mailPaciente,
             nombrePaciente: primerNombre(params.paciente.nombre),
             medicoNombre: params.medico.nombre,
             especialidad: params.medico.especialidad,
             link,
           });
-          resultado.paciente = { canal: "mail", destino: params.paciente.email, ok: okMail };
+          resultado.paciente = { canal: "mail", destino: mailPaciente, ok: okMail };
         }
       } else {
         const ok = await mailCIAsignadaPaciente({
-          to: params.paciente.email as string,
+          to: mailPaciente as string,
           nombrePaciente: primerNombre(params.paciente.nombre),
           medicoNombre: params.medico.nombre,
           especialidad: params.medico.especialidad,
           link,
         });
-        resultado.paciente = { canal: "mail", destino: params.paciente.email as string, ok };
+        resultado.paciente = { canal: "mail", destino: mailPaciente as string, ok };
       }
     }
 
@@ -507,8 +524,9 @@ export async function avisarReprogramacionTurno(
     const horaAnterior = params.turnoAnterior.hora_inicio.slice(0, 5);
 
     const celPaciente = normalizarTelefonoAR(params.paciente.celular);
+    const mailPaciente = mailEntregable(params.paciente.email);
     const canalPaciente: "whatsapp" | "mail" | null =
-      waOn && celPaciente ? "whatsapp" : params.paciente.email ? "mail" : null;
+      waOn && celPaciente ? "whatsapp" : mailPaciente ? "mail" : null;
 
     // Token NUEVO — siempre, haya o no canal por donde mandarlo (misma lección
     // de la Etapa 2: sin esto, un paciente sin canal quedaba reprogramado y sin
@@ -528,7 +546,7 @@ export async function avisarReprogramacionTurno(
         canalPaciente === "whatsapp"
           ? (celPaciente as string)
           : canalPaciente === "mail"
-            ? (params.paciente.email as string)
+            ? (mailPaciente as string)
             : null,
       encuentroMs: new Date(`${params.turnoNuevo.fecha}T${hora8}-03:00`).getTime(),
     });
@@ -538,7 +556,7 @@ export async function avisarReprogramacionTurno(
       canalPaciente === "whatsapp"
         ? (celPaciente as string)
         : canalPaciente === "mail"
-          ? (params.paciente.email as string)
+          ? (mailPaciente as string)
           : null;
 
     // Ojo con el encadenado: `reprogramarTurnoInstitucional` ya revocó el del
@@ -566,9 +584,9 @@ export async function avisarReprogramacionTurno(
           })
         : false;
       resultado.paciente = { canal: "whatsapp", destino: celPaciente as string, ok };
-      if (!ok && params.paciente.email) {
+      if (!ok && mailPaciente) {
         const okMail = await mailTurnoReprogramadoPaciente({
-          to: params.paciente.email,
+          to: mailPaciente,
           nombrePaciente: primerNombre(params.paciente.nombre),
           fechaAnterior,
           horaAnterior,
@@ -578,11 +596,11 @@ export async function avisarReprogramacionTurno(
           especialidad: params.medico.especialidad,
           link,
         });
-        resultado.paciente = { canal: "mail", destino: params.paciente.email, ok: okMail };
+        resultado.paciente = { canal: "mail", destino: mailPaciente, ok: okMail };
       }
     } else if (canalPaciente === "mail" && link) {
       const ok = await mailTurnoReprogramadoPaciente({
-        to: params.paciente.email as string,
+        to: mailPaciente as string,
         nombrePaciente: primerNombre(params.paciente.nombre),
         fechaAnterior,
         horaAnterior,
@@ -592,7 +610,7 @@ export async function avisarReprogramacionTurno(
         especialidad: params.medico.especialidad,
         link,
       });
-      resultado.paciente = { canal: "mail", destino: params.paciente.email as string, ok };
+      resultado.paciente = { canal: "mail", destino: mailPaciente as string, ok };
     }
 
     // ── El profesional que RECIBE el turno ──
