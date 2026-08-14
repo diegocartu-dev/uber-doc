@@ -154,11 +154,17 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
 
   const sinCanal = !!paciente && !paciente.celular && !paciente.email;
 
-  // Especialidades al montar
+  // Especialidades al montar Y cada vez que cambia el paciente.
+  //
+  // El paciente decide el MUNDO de la oferta (padrón real o reunión de
+  // demostración — ver oferta.ts), y el chip "CI activa ahora" sale del mismo
+  // lado. Sin recargarlos al fijar el paciente, el toggle que el participante
+  // de la reunión prende en vivo no encendería ningún chip.
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetch("/api/otorgador/especialidades");
+        const qs = paciente ? `?paciente_id=${encodeURIComponent(paciente.id)}` : "";
+        const r = await fetch(`/api/otorgador/especialidades${qs}`);
         if (!r.ok) return;
         const data = await r.json();
         setChips(data.especialidades ?? []);
@@ -167,7 +173,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
         /* la pantalla sigue; los chips quedan vacíos */
       }
     })();
-  }, []);
+  }, [paciente]);
 
   // Autofocus inicial
   useEffect(() => {
@@ -237,7 +243,13 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     setCargandoOferta(true);
     setErrorOferta(null);
     try {
-      const r = await fetch(`/api/otorgador/oferta?especialidad=${encodeURIComponent(esp)}`);
+      // El paciente viaja: es lo que decide si la oferta es la del padrón real o
+      // la de una reunión de demostración (ver oferta.ts). El bloque 1 se
+      // completa antes que el 2, así que acá siempre está.
+      const dePaciente = paciente ? `&paciente_id=${encodeURIComponent(paciente.id)}` : "";
+      const r = await fetch(
+        `/api/otorgador/oferta?especialidad=${encodeURIComponent(esp)}${dePaciente}`
+      );
       if (!r.ok) {
         let msj = "No se pudo leer la oferta. Probá de nuevo.";
         try {
@@ -257,7 +269,7 @@ export default function OtorgadorClient({ instNombre, instSubnombre, operadorNom
     } finally {
       setCargandoOferta(false);
     }
-  }, []);
+  }, [paciente]);
 
   function elegirEspecialidad(esp: string) {
     setEspecialidad(esp);

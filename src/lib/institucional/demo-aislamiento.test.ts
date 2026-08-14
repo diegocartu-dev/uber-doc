@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { HORAS_ACCESO_DEMO } from "@/lib/institucional/accesos";
+import { mundosIncompatibles } from "@/lib/otorgador/asignar-turno";
 
 /**
  * El archivo SIN comentarios. Hace falta: los comentarios de este repo tienen
@@ -57,16 +58,40 @@ function queriesDe(codigo: string, tabla: string): string[] {
   return bloques;
 }
 
-test("la oferta del call center nunca incluye a un profesional de demostración", () => {
+test("la oferta del call center nunca cruza los dos mundos", () => {
   const codigo = fuente("src/lib/otorgador/oferta.ts");
   const queries = queriesDe(codigo, "medicos");
   assert.ok(queries.length >= 2, "cambió la forma de oferta.ts: revisá este test");
   for (const q of queries) {
     assert.match(
       q,
-      /\.is\("demo_sesion_id", null\)/,
-      "un SELECT de médicos de la oferta perdió el filtro de demostración: " +
-        "el participante de una reunión vuelve a ser candidato para un paciente real"
+      /mundo\s*\n?\s*\)/,
+      "un SELECT de médicos de la oferta dejó de pasar por `acotarAlMundo`: el participante " +
+        "de una reunión vuelve a ser candidato para un paciente real (y con cero asignados, " +
+        "o sea PRIMERO de la lista)"
+    );
+  }
+  assert.match(
+    codigo,
+    /demoSesionId[\s\S]{0,80}filtro\.eq\("demo_sesion_id", demoSesionId\)[\s\S]{0,40}filtro\.is\("demo_sesion_id", null\)/,
+    "acotarAlMundo dejó de separar los dos mundos"
+  );
+});
+
+test("asignar exige que el paciente y el profesional sean del mismo mundo", () => {
+  // La oferta separa los mundos, pero es el filtro de UNA pantalla y esta API
+  // tiene clientes que no pasan por ninguna: un operador IA, Nova, un curl.
+  assert.equal(mundosIncompatibles(null, null), null);
+  assert.equal(mundosIncompatibles("reunion-1", "reunion-1"), null);
+  assert.ok(mundosIncompatibles(null, "reunion-1"), "un paciente real con un profesional de demo");
+  assert.ok(mundosIncompatibles("reunion-1", null), "un paciente de demo con un profesional real");
+  assert.ok(mundosIncompatibles("reunion-1", "reunion-2"), "dos reuniones distintas");
+
+  for (const archivo of ["asignar-turno", "asignar-ci"]) {
+    assert.match(
+      fuente(`src/lib/otorgador/${archivo}.ts`),
+      /mundosIncompatibles\(/,
+      `${archivo} dejó de comprobar el mundo antes de escribir la asignación`
     );
   }
 });

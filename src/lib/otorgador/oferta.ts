@@ -407,39 +407,105 @@ function nombreConTitulo(nombre: string | null, titulo: string | null): string {
   return t ? `${t} ${n}` : n;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EL AISLAMIENTO DE LA DEMO — dos mundos que no se cruzan
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// El profesional de una reunión de demostración nace `aprobado` y con una
+// especialidad DEL PILOTO, a propósito: fuera de esa lista sería invisible y no
+// habría demo. La contracara es que entra por la misma puerta que un profesional
+// real — y como el relleno del escenario no escribe en `asignaciones`, cuenta
+// cero asignados y el reparto parejo lo pone PRIMERO de su categoría.
+//
+// Que eso pase UNA vez alcanza para que un vecino del padrón sea atendido por
+// alguien no matriculado, reciba un papel que dice "SIN VALIDEZ LEGAL", el
+// servicio quede fuera del contador contractual, y su historia clínica se borre
+// cuando alguien toque "limpiar reunión".
+//
+// Pero excluirlos a secas rompe la demo entera: la escena del call center ES
+// asignarle un turno al participante. Así que no se excluye: se AÍSLA. La oferta
+// tiene un mundo por vez, y cuál sale de quién es el paciente:
+//
+//   · paciente del padrón real  → SOLO profesionales sin `demo_sesion_id`;
+//   · paciente de una reunión   → SOLO profesionales de ESA misma reunión.
+//
+// Y el aislamiento no depende de que la pantalla mande el parámetro correcto:
+// `asignarTurno` y `asignarCI` vuelven a comprobar la pertenencia antes de
+// escribir (ahí está el guard que de verdad manda).
+
+/** El filtro de mundo, aplicado a un SELECT de `medicos`. Uno solo, dos usos. */
+interface FiltroDeMedicos {
+  eq(columna: string, valor: string): FiltroDeMedicos;
+  is(columna: string, valor: null): FiltroDeMedicos;
+}
+export function acotarAlMundo<Q>(q: Q, demoSesionId: string | null): Q {
+  // El cast es a propósito: atar el genérico a la forma del builder de PostgREST
+  // hace que TypeScript intente resolver sus tipos recursivos y se rinda
+  // ("Type instantiation is excessively deep"). Lo que importa se comprueba en
+  // el uso, y son dos líneas.
+  const filtro = q as unknown as FiltroDeMedicos;
+  const acotada = demoSesionId
+    ? filtro.eq("demo_sesion_id", demoSesionId)
+    : filtro.is("demo_sesion_id", null);
+  return acotada as unknown as Q;
+}
+
+/**
+ * ¿De qué mundo es este paciente? `null` = el real.
+ *
+ * Lectura con service role y en query aparte, por el mismo motivo de siempre:
+ * `demo_sesion_id` es una columna sin GRANT para `authenticated`.
+ */
+export async function mundoDelPaciente(pacienteId?: string | null): Promise<string | null> {
+  if (!pacienteId) return null;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("pacientes")
+    .select("demo_sesion_id")
+    .eq("id", pacienteId)
+    .maybeSingle();
+  if (error) {
+    // Fail-safe hacia el mundo real: ante la duda, el participante de la reunión
+    // NO aparece. Se pierde una demo; no se pierde un paciente.
+    console.error("[otorgador/oferta] No se pudo leer el mundo del paciente:", error.message);
+    return null;
+  }
+  return (data?.demo_sesion_id as string | null) ?? null;
+}
+
 /**
  * Arma la oferta priorizada de UNA especialidad — el GET /api/otorgador/oferta.
  * Todo con service role (la vía de asignación no pasa por RLS; los guards son
  * de aplicación — spec §4.3).
  */
-export async function armarOferta(especialidad: string): Promise<
-  | { ok: true; oferta: OfertaEspecialidad }
-  | { ok: false; error: string }
-> {
+export async function armarOferta(
+  especialidad: string,
+  /**
+   * De quién es esta oferta. Sin esto, es la del padrón real (ver
+   * "EL AISLAMIENTO DE LA DEMO" arriba). `demoSesionId` es la vía directa para
+   * los callers que no tienen paciente a mano (la reprogramación masiva).
+   */
+  opciones?: { pacienteId?: string | null; demoSesionId?: string | null }
+): Promise<{ ok: true; oferta: OfertaEspecialidad } | { ok: false; error: string }> {
   const config = await getConfigInstitucion();
   if (!config.especialidades.includes(especialidad)) {
     return { ok: false, error: "Especialidad fuera del piloto de esta institución." };
   }
 
+  const mundo =
+    opciones?.demoSesionId !== undefined
+      ? opciones.demoSesionId
+      : await mundoDelPaciente(opciones?.pacienteId);
+
   const admin = createAdminClient();
-  const { data: medicos, error: errMedicos } = await admin
-    .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad, disponible, disponible_desde_at")
-    .eq("estado_registro", "aprobado")
-    .eq("especialidad", especialidad)
-    // ── LOS DE LA REUNIÓN NO ESTÁN EN LA OFERTA (migración 025) ──────────────
-    // El profesional de una demo nace `aprobado` y con una especialidad DEL
-    // PILOTO, a propósito: fuera de esa lista sería invisible y la demo no
-    // existiría. O sea que sin este filtro entra por la misma puerta que un
-    // profesional real, y el call center —humano o IA— lo ve idéntico. Peor:
-    // como el relleno del escenario NO escribe en `asignaciones`, cuenta cero
-    // asignados y el reparto parejo lo pone PRIMERO de su categoría.
-    //
-    // Que eso pase UNA vez alcanza para atender a un vecino del padrón con
-    // alguien no matriculado, emitirle un papel que dice "SIN VALIDEZ LEGAL",
-    // dejar el servicio fuera del contador contractual y, al limpiar la
-    // reunión, borrarle la historia clínica.
-    .is("demo_sesion_id", null);
+  const { data: medicos, error: errMedicos } = await acotarAlMundo(
+    admin
+      .from("medicos")
+      .select("id, nombre_completo, titulo, especialidad, disponible, disponible_desde_at")
+      .eq("estado_registro", "aprobado")
+      .eq("especialidad", especialidad),
+    mundo
+  );
   if (errMedicos) {
     console.error("[otorgador/oferta] Error leyendo médicos:", errMedicos.message);
     return { ok: false, error: "No se pudo leer la oferta. Probá de nuevo." };
@@ -530,7 +596,9 @@ export async function armarOferta(especialidad: string): Promise<
  * Flags de CI activa por especialidad (chips del bloque 2 — spec §4.3,
  * GET /api/otorgador/especialidades).
  */
-export async function especialidadesConCI(): Promise<{
+export async function especialidadesConCI(opciones?: {
+  pacienteId?: string | null;
+}): Promise<{
   ventana_ci: string;
   ci_abierta_ahora: boolean;
   especialidades: { nombre: string; ci_activa_ahora: boolean }[];
@@ -540,18 +608,22 @@ export async function especialidadesConCI(): Promise<{
 
   const conCI = new Set<string>();
   if (ciAbierta && config.especialidades.length > 0) {
+    const mundo = await mundoDelPaciente(opciones?.pacienteId);
     const admin = createAdminClient();
-    const { data: activos } = await admin
-      .from("medicos")
-      .select("id, especialidad")
-      .eq("estado_registro", "aprobado")
-      .eq("disponible", true)
-      // Mismo filtro que `armarOferta`, y por el mismo motivo: el guion pide
-      // que el participante se ponga `disponible` en vivo. Sin esto, el chip
-      // "CI activa ahora" de esa especialidad se prende para la operación real
-      // durante toda la reunión.
-      .is("demo_sesion_id", null)
-      .in("especialidad", config.especialidades);
+    // Mismo mundo que `armarOferta`, y por el mismo motivo: el guion pide que el
+    // participante se ponga `disponible` EN VIVO. Sin el aislamiento, ese toggle
+    // prendía el chip "CI activa ahora" de esa especialidad para la operación
+    // real durante toda la reunión — y sin el paciente, el chip de la demo no se
+    // prendía nunca.
+    const { data: activos } = await acotarAlMundo(
+      admin
+        .from("medicos")
+        .select("id, especialidad")
+        .eq("estado_registro", "aprobado")
+        .eq("disponible", true)
+        .in("especialidad", config.especialidades),
+      mundo
+    );
     if (activos && activos.length > 0) {
       const ocupados = await medicosEnCurso(activos.map((m) => m.id));
       for (const m of activos) {
