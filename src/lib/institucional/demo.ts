@@ -436,19 +436,33 @@ export const NOMBRE_UTILERIA = {
  * `construirIdentidadDocumento` —que en el B2C corre contra una base donde no
  * existe— rompería la firma de TODOS los documentos del B2C.
  *
- * Ante un error devuelve `false` en las dos. Es la decisión asimétrica de
- * siempre, pero al revés que en `documentoEsDemo`: acá "de más" significaría
- * congelar el nombre de un profesional REAL como "Profesional de demostración"
- * dentro de un documento firmado que no se puede corregir — un daño permanente
- * sobre un papel válido. "De menos" deja el nombre de un participante en un
- * registro de una reunión, que es lo que ya pasaba y lo que la limpieza reporta.
+ * ── ANTE UN ERROR DE LECTURA: `null`, Y LA FIRMA SE ABORTA ───────────────────
+ * Esto devolvía `{medico:false, paciente:false}` ante cualquier error, con el
+ * argumento de que responder "sí" de más congelaría el nombre de un profesional
+ * REAL como "Profesional de demostración" adentro de un papel válido.
+ *
+ * El argumento estaba bien planteado y la conclusión mal: las dos respuestas
+ * inventadas son daños permanentes, así que la salida no era elegir una sino no
+ * inventar ninguna. Reproducido interceptando el SELECT: el snapshot quedaba con
+ * el nombre real del participante y su DNI, congelados para siempre en una fila
+ * que no se puede borrar y que sirve una página pública — y el incidente entero
+ * vivía en un `console.error` que nadie mira.
+ *
+ * `null` significa "no se pudo saber", y el caller de la firma
+ * (`construirIdentidadDocumento`) ya sabe qué hacer con eso: devuelve `null` y
+ * NO se firma. El trade-off es explícito y es el correcto para PII: es mejor no
+ * emitir un documento —el profesional reintenta y se emite treinta segundos
+ * después— que emitir uno con datos personales que después no hay forma de
+ * sacar.
+ *
+ * En B2C el gate de modo corta antes de tocar la base y esto NUNCA devuelve
+ * `null`: el camino de la firma del B2C es byte a byte el de siempre.
  */
 export async function cuentasDeDemostracion(params: {
   medicoId?: string | null;
   pacienteId?: string | null;
-}): Promise<{ medico: boolean; paciente: boolean }> {
-  const nada = { medico: false, paciente: false };
-  if (!esInstitucional()) return nada;
+}): Promise<{ medico: boolean; paciente: boolean } | null> {
+  if (!esInstitucional()) return { medico: false, paciente: false };
   try {
     const admin = createAdminClient();
     const [m, p] = await Promise.all([
@@ -459,15 +473,31 @@ export async function cuentasDeDemostracion(params: {
         ? admin.from("pacientes").select("demo_sesion_id").eq("id", params.pacienteId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
     ]);
-    if (m.error) console.error("[demo] No se pudo leer el mundo del profesional:", m.error.message);
-    if (p.error) console.error("[demo] No se pudo leer el mundo del paciente:", p.error.message);
+    if (m.error || p.error) {
+      // El rastro accionable: dice qué se abortó, sobre qué ficha y por qué, con
+      // ids y ningún nombre (el repo es público y los logs también se leen).
+      console.error(
+        "[demo][FIRMA-ABORTADA] No se pudo determinar si las fichas son de demostración; " +
+          "no se firma para no congelar datos personales:",
+        JSON.stringify({
+          medico_id: params.medicoId ?? null,
+          paciente_id: params.pacienteId ?? null,
+          error_medico: m.error?.message ?? null,
+          error_paciente: p.error?.message ?? null,
+        })
+      );
+      return null;
+    }
     return {
       medico: Boolean((m.data as { demo_sesion_id?: string | null } | null)?.demo_sesion_id),
       paciente: Boolean((p.data as { demo_sesion_id?: string | null } | null)?.demo_sesion_id),
     };
   } catch (err) {
-    console.error("[demo] cuentasDeDemostracion falló:", err);
-    return nada;
+    console.error(
+      "[demo][FIRMA-ABORTADA] cuentasDeDemostracion falló; no se firma:",
+      err instanceof Error ? err.message : String(err)
+    );
+    return null;
   }
 }
 

@@ -229,15 +229,14 @@ test("el sello de un documento de demostración no lleva el nombre de nadie", ()
     /medico_nombre: demo\.medico \? NOMBRE_UTILERIA\.profesional/,
     "el snapshot volvió a congelar el nombre real del profesional de una reunión"
   );
+  // Del paciente ya no se elige campo por campo qué se anonimiza: se elige el
+  // BLOQUE entero. Elegir campo por campo fue exactamente cómo se quedaron
+  // adentro del sello la fecha de nacimiento y el sexo reales. El contenido de
+  // cada campo lo recorre `src/lib/firma/identidad-demo.test.ts`.
   assert.match(
     codigo,
-    /paciente_nombre: demo\.paciente \? NOMBRE_UTILERIA\.paciente/,
-    "el snapshot volvió a congelar el nombre real del paciente de una reunión"
-  );
-  assert.match(
-    codigo,
-    /paciente_dni: demo\.paciente \? ""/,
-    "el snapshot volvió a congelar el DNI real del participante"
+    /\.\.\.\(demo\.paciente\s*\n?\s*\?\s*pacienteCongeladoParaDemo\(\)/,
+    "el snapshot volvió a congelar datos reales del paciente de una reunión"
   );
 });
 

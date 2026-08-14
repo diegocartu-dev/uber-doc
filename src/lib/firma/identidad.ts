@@ -148,7 +148,16 @@ export async function construirIdentidadDocumento(
   // El criterio pasa a ser uno solo y sin excepciones: de una cuenta de
   // demostración NO se congela ningún dato personal del paciente. Ver
   // `pacienteCongeladoParaDemo`.
+  //
+  // ── Y SI NO SE PUEDE SABER, NO SE FIRMA ──────────────────────────────────
+  // `null` = la lectura del mundo falló. No hay respuesta segura por defecto:
+  // "no es demo" congela el nombre y el DNI reales del participante para
+  // siempre, y "es demo" le pone nombre de utilería al papel válido de un
+  // profesional real. Se aborta, que es lo único reversible — el caller ya
+  // trata `null` como "no se pudo congelar la identidad" y el profesional
+  // reintenta.
   const demo = await cuentasDeDemostracion({ medicoId, pacienteId });
+  if (!demo) return null;
 
   // Misma resolución de obra social que el PDF (FK → nombre; "otra"; texto libre).
   let obraSocialNombre: string | null = textoONull(paciente.obra_social);
