@@ -365,19 +365,82 @@ async function borrarDocumentosUnoPorUno(
     return;
   }
   let porFirma = 0;
+  const retenidosIds: string[] = [];
   for (const fila of data ?? []) {
     const { error: errFila } = await admin.from("documentos").delete().eq("id", fila.id as string);
     if (!errFila) continue;
-    if (errFila.code === FK_VIOLATION) porFirma++;
-    else problemas.push(`documentos.${columna}: ${errFila.message}`);
+    if (errFila.code === FK_VIOLATION) {
+      porFirma++;
+      retenidosIds.push(fila.id as string);
+    } else problemas.push(`documentos.${columna}: ${errFila.message}`);
   }
   if (porFirma > 0) {
+    const borrado = await borrarContenidoClinicoRetenido(retenidosIds, problemas);
     retenidos.push(
       `${porFirma} documento(s) firmado(s) quedaron en la base: los retiene su registro de firma, ` +
         `que es append-only. No llevan el nombre de nadie (el sello se emitió con nombre de utilería) ` +
-        `y su página de verificación pública dice que son de demostración.`
+        `y su página de verificación pública dice que son de demostración.` +
+        (borrado
+          ? ` Lo que el participante escribió a mano adentro de esos documentos (indicaciones, ` +
+            `diagnóstico, tratamiento) SÍ se borró: es texto libre y podía llevar el nombre de ` +
+            `cualquiera. Como el sello cubre ese texto, la página de verificación de esos ` +
+            `documentos ahora dice "alterado" — es la verdad y es el precio correcto.`
+          : "")
     );
   }
+}
+
+/**
+ * Le saca a un documento RETENIDO el texto clínico que el participante escribió
+ * a mano.
+ *
+ * ── POR QUÉ, SI EL SELLO NO LLEVA NOMBRES ────────────────────────────────────
+ * Porque el sello es una cosa y `documentos.contenido` es otra. El snapshot de
+ * identidad se emite con nombre de utilería desde el principio, pero el cuerpo
+ * del documento es lo que la persona TIPEÓ en el workspace delante de la sala:
+ * si en una indicación escribió el nombre del ministro, ese nombre queda en la
+ * base de la provincia para siempre, porque la fila no se puede borrar.
+ *
+ * Solo corre sobre los documentos que el DELETE NO pudo llevarse (23503). Los
+ * que se borran no necesitan esto, y los que quedan ya no le sirven a nadie: la
+ * reunión terminó.
+ *
+ * ── LA CONSECUENCIA, DICHA ───────────────────────────────────────────────────
+ * El hash de la firma cubre el contenido, así que al vaciarlo la verificación
+ * pública de ESE documento pasa a decir "alterado". Es literalmente lo que pasó
+ * —lo alteramos nosotros, a propósito, para sacar datos de personas— y es un
+ * papel que ya venía marcado "SIN VALIDEZ LEGAL" de punta a punta. Entre una
+ * página que dice "alterado" sobre un papel de demostración y el nombre de un
+ * tercero guardado para siempre, no hay duda.
+ *
+ * Se escribe un texto y no `null`: no sabemos si alguna de esas columnas es NOT
+ * NULL en la instancia, y un placeholder funciona con las dos.
+ */
+const TEXTO_BORRADO = "(borrado al cerrar la reunión de demostración)";
+
+async function borrarContenidoClinicoRetenido(
+  ids: string[],
+  problemas: string[]
+): Promise<boolean> {
+  if (ids.length === 0) return false;
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("documentos")
+    .update({
+      contenido: TEXTO_BORRADO,
+      diagnostico: TEXTO_BORRADO,
+      tratamiento: TEXTO_BORRADO,
+    })
+    .in("id", ids);
+  if (error) {
+    problemas.push(
+      `No se pudo borrar el contenido clínico de ${ids.length} documento(s) retenido(s): ` +
+        `${error.message}. Ese texto lo escribió el participante a mano y puede llevar el nombre ` +
+        `de un tercero: reintentá la limpieza.`
+    );
+    return false;
+  }
+  return true;
 }
 
 export interface ResultadoLimpieza {

@@ -121,11 +121,29 @@ consultas y documentos que hayan generado.
 - **La ficha del profesional**, si firmó algo: sobrevive **anonimizada** (sin
   nombre, sin celular) y fuera de la oferta del call center.
 
-**Ninguna de esas dos cosas lleva el nombre de nadie.** El sello y el log se
-emiten desde el principio con nombre de utilería ("Profesional de demostración",
-"Paciente de demostración"), sin DNI, sin CUIL y sin la IP ni el navegador del
+**El sello no lleva el nombre de nadie.** Se emite desde el principio con nombre
+de utilería ("Profesional de demostración", "Paciente de demostración"), sin DNI,
+sin CUIL, **sin fecha de nacimiento, sin sexo**, y sin la IP ni el navegador del
 participante — y `/verificar` de un documento de demostración no muestra
 identidad ninguna. Lo que no se escribe no hay que anonimizarlo después.
+
+**Pero el cuerpo del documento es otra cosa, y hay que decirlo con todas las
+letras.** `documentos.contenido` (y el diagnóstico y el tratamiento) es lo que el
+participante **tipeó a mano** en el workspace, delante de la sala. Si en una
+indicación escribió el nombre del ministro, ese nombre es texto libre que ninguna
+anonimización de identidad toca. La limpieza **lo borra** de los documentos
+retenidos — los que el DELETE no se pudo llevar.
+
+Eso tiene una consecuencia visible: **la firma cubre ese texto**, así que al
+vaciarlo la página `/verificar` de esos documentos pasa a decir **"alterado"**.
+Es literalmente lo que pasó (lo alteramos nosotros, para sacar datos de personas)
+sobre un papel que ya venía marcado "SIN VALIDEZ LEGAL". Si en la reunión alguien
+guardó el link de verificación de su receta de demo y lo abre la semana que
+viene, va a ver eso. **No es un error: es el precio de no dejar el nombre de un
+tercero en la base de la provincia para siempre.**
+
+> Si querés mostrar la página de verificación **en verde** después de la reunión,
+> hacelo **antes** de tocar "Limpiar reunión".
 
 La pantalla lista al final exactamente qué quedó. Si algo falló de verdad, la
 reunión **no** se marca como cerrada y el botón sigue disponible para reintentar.

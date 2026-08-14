@@ -423,6 +423,36 @@ test("la puerta de la API mira a los DOS sujetos, no solo al profesional", () =>
   );
 });
 
+test("el texto que el participante escribió a mano no sobrevive en los retenidos", () => {
+  // El sello nunca llevó nombres, pero `documentos.contenido` es lo que la
+  // persona TIPEÓ en el workspace delante de la sala. Si escribió el nombre de
+  // un tercero, ese nombre quedaba en la base para siempre: la fila retenida
+  // por `firma_logs` no se puede borrar.
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  assert.match(
+    codigo,
+    /borrarContenidoClinicoRetenido\(retenidosIds, problemas\)/,
+    "la limpieza dejó de borrar el contenido clínico de los documentos retenidos"
+  );
+  const i = codigo.indexOf("async function borrarContenidoClinicoRetenido");
+  assert.ok(i > 0, "desapareció borrarContenidoClinicoRetenido: revisá este test");
+  const cuerpo = codigo.slice(i, i + 900);
+  for (const columna of ["contenido", "diagnostico", "tratamiento"]) {
+    assert.match(
+      cuerpo,
+      new RegExp(`${columna}: TEXTO_BORRADO`),
+      `\`documentos.${columna}\` es texto libre del participante y volvió a quedarse en la base`
+    );
+  }
+  // Y la consecuencia se DICE: al vaciar el contenido, el sello deja de
+  // verificar. Un "reunión limpia" que no lo aclare es una sorpresa esperando.
+  assert.match(
+    fuente("src/app/admin/demo/DemoClient.tsx"),
+    /alterado/,
+    "el diálogo de limpiar reunión dejó de avisar que la verificación pasa a decir 'alterado'"
+  );
+});
+
 test("emitir un enlace nuevo SIEMPRE se pregunta, aunque figure como invitado", () => {
   // `marcarParticipanteEntro` es best-effort (nunca lanza, nunca frena el
   // minteo), así que "Invitado" no prueba que la persona no haya entrado.

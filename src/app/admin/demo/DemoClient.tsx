@@ -811,6 +811,20 @@ export default function DemoClient({
               sello se emite con nombre de utilería. La ficha del profesional también queda,
               anonimizada y fuera de la oferta. Abajo te decimos exactamente qué quedó.
             </p>
+            {/* ── EL TEXTO QUE ESCRIBIÓ LA PERSONA, DICHO APARTE ────────────
+                El párrafo de arriba habla del SELLO, que nunca llevó nombres.
+                Pero el cuerpo del documento es lo que el participante tipeó en
+                el workspace delante de la sala, y ahí puede haber escrito el
+                nombre de cualquiera. Eso sí se borra, y borrarlo tiene una
+                consecuencia visible que Diego tiene que conocer antes. */}
+            <p style={{ fontSize: 13, color: "#8A2E2D", margin: "0 0 20px" }}>
+              Lo que el participante <strong>escribió a mano</strong> en esos documentos
+              (indicaciones, diagnóstico, tratamiento) sí se borra, porque es texto libre y puede
+              llevar el nombre de cualquiera. Como el sello cubre ese texto, la página de
+              verificación de esos documentos va a pasar a decir <strong>“alterado”</strong>. Es
+              la verdad —lo alteramos nosotros para sacar datos de personas— sobre un papel que ya
+              decía “SIN VALIDEZ LEGAL”.
+            </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btnSec} onClick={() => setConfirmarLimpieza(false)}>
                 Cancelar
