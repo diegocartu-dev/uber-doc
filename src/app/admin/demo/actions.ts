@@ -118,13 +118,20 @@ export async function cargarParticipante(input: {
 }
 
 /**
- * Vuelve a mostrar el QR de alguien que ya está cargado.
+ * EMITE UN ENLACE NUEVO para alguien que ya está cargado. No es "volver a
+ * mostrar el QR": revoca el anterior y CIERRA LA SESIÓN que ese anterior haya
+ * minteado, así que si el participante ya entró, lo deja afuera en el acto.
  *
- * Emite un enlace NUEVO, revoca el anterior Y CIERRA LA SESIÓN que ese anterior
- * haya minteado: es lo que hay que hacer si el QR se escaneó desde el teléfono
- * equivocado (revocar el token solo no echa a nadie —la sesión se renueva sola
- * por refresh token—, que es lo que este comentario afirmaba y no era cierto).
- * En el caso normal (se cerró la pestaña) da exactamente lo mismo.
+ * Es lo correcto cuando el QR se escaneó desde el teléfono equivocado — y era
+ * exactamente lo incorrecto atado al botón "Ver QR", que es lo que Diego toca
+ * para mostrarle a la audiencia cómo se hace. En la pantalla ahora son dos
+ * botones distintos y este cuelga del rotulado "Regenerar", con confirmación
+ * cuando el participante está adentro.
+ *
+ * No existe un camino de "mostrar el vigente" del lado del server, y no puede
+ * existir: en la base vive solo el sha256 del token. El enlace pelado se ve UNA
+ * vez, en la respuesta que lo creó — la pantalla lo recuerda para volver a
+ * proyectarlo sin emitir nada.
  */
 export async function mostrarQR(participanteId: string): Promise<RespuestaAccion> {
   const uid = await guardAdminInstitucionalDocto();

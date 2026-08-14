@@ -123,6 +123,26 @@ export default function DemoClient({
   const [masDatos, setMasDatos] = useState(false);
 
   const [enlace, setEnlace] = useState<EnlaceListo | null>(null);
+  /**
+   * Los enlaces que ESTA pantalla ya emitió, por participante.
+   *
+   * ── POR QUÉ HACE FALTA ─────────────────────────────────────────────────────
+   * En la base vive solo el sha256 del token: el enlace pelado existe UNA vez,
+   * en la respuesta que lo creó. Sin esta memoria, "Ver QR" no tenía forma de
+   * volver a mostrar el enlace vigente y lo único que sabía hacer era emitir uno
+   * nuevo — o sea echar al participante que ya estaba adentro. En la sala eso
+   * pasaba así: la persona entra, Diego toca "Ver QR" para mostrarle a la
+   * audiencia cómo se hace, y la deja afuera con la pantalla proyectada.
+   */
+  const [emitidos, setEmitidos] = useState<Record<string, EnlaceListo>>({});
+  /**
+   * El pedido de emitir un enlace NUEVO que está esperando confirmación. Lleva
+   * el canal adentro: los dos caminos (mostrar el QR nuevo o mandarlo por
+   * WhatsApp) emiten uno nuevo y echan al que entró, pero terminan distinto.
+   */
+  const [confirmarRegenerar, setConfirmarRegenerar] = useState<
+    { participante: ParticipanteDemo; via: "qr" | "whatsapp" } | null
+  >(null);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
   const [copiado, setCopiado] = useState(false);
@@ -170,7 +190,7 @@ export default function DemoClient({
         setError(res.error);
         return;
       }
-      setEnlace(res.enlace);
+      recordar(res.enlace);
       setNombre("");
       setCelular("");
       setDni("");
@@ -195,17 +215,69 @@ export default function DemoClient({
     });
   }
 
-  function verQR(participanteId: string) {
+  /** Guarda el enlace recién emitido y lo pone en pantalla. */
+  function recordar(nuevo: EnlaceListo) {
+    setEmitidos((previos) => ({ ...previos, [nuevo.participante.id]: nuevo }));
+    setEnlace(nuevo);
+  }
+
+  /**
+   * MOSTRAR el QUE YA TIENE. No emite nada, no toca la base y no echa a nadie:
+   * si esta pantalla ya emitió su enlace, lo vuelve a proyectar tal cual.
+   *
+   * Si no lo tiene (se recargó la página, lo cargó otra persona), no hay forma
+   * de reconstruirlo —en la base vive solo el sha256— y la única salida es
+   * emitir uno nuevo. Eso ya NO pasa en silencio: se pide confirmación cuando el
+   * participante está adentro, con el precio dicho.
+   */
+  function verQR(p: ParticipanteDemo) {
+    limpiarMensajes();
+    const guardado = emitidos[p.id];
+    if (guardado) {
+      setEnlace(guardado);
+      return;
+    }
+    pedirEnlaceNuevo(p);
+  }
+
+  /** El camino explícito: emitir uno nuevo, que apaga el anterior. */
+  function pedirEnlaceNuevo(p: ParticipanteDemo) {
+    limpiarMensajes();
+    if (p.estado !== "invitado") {
+      // Ya entró (o está atendiendo): emitir uno nuevo lo deja afuera en el acto.
+      setConfirmarRegenerar({ participante: p, via: "qr" });
+      return;
+    }
+    regenerar(p.id);
+  }
+
+  function regenerar(participanteId: string) {
+    setConfirmarRegenerar(null);
     limpiarMensajes();
     startTransition(async () => {
       const res = await mostrarQR(participanteId);
       if (!res.ok) setError(res.error);
-      else setEnlace(res.enlace);
+      else recordar(res.enlace);
       router.refresh();
     });
   }
 
+  /**
+   * WhatsApp emite un enlace nuevo por diseño (el token no vuelve a viajar del
+   * navegador al server), así que echa al que ya entró igual que "Regenerar" —
+   * y por eso pide la misma confirmación.
+   */
+  function pedirWhatsApp(p: ParticipanteDemo) {
+    limpiarMensajes();
+    if (p.estado !== "invitado") {
+      setConfirmarRegenerar({ participante: p, via: "whatsapp" });
+      return;
+    }
+    mandarWhatsApp(p.id);
+  }
+
   function mandarWhatsApp(participanteId: string) {
+    setConfirmarRegenerar(null);
     limpiarMensajes();
     startTransition(async () => {
       const res = await enviarPorWhatsApp(participanteId);
@@ -213,7 +285,7 @@ export default function DemoClient({
         setError(res.error);
         return;
       }
-      setEnlace(res.enlace);
+      recordar(res.enlace);
       setAviso(res.enlace.whatsapp?.detalle ?? "");
       router.refresh();
     });
@@ -503,7 +575,8 @@ export default function DemoClient({
                     type="button"
                     style={btnSec}
                     disabled={pendiente}
-                    onClick={() => mandarWhatsApp(enlace.participante.id)}
+                    title="Le manda un enlace NUEVO: el que está en pantalla deja de funcionar"
+                    onClick={() => pedirWhatsApp(enlace.participante)}
                   >
                     Mandar por WhatsApp
                   </button>
@@ -516,8 +589,8 @@ export default function DemoClient({
                 </p>
               )}
               <p style={{ fontSize: 12, color: "#9CA3AF", margin: "12px 0 0" }}>
-                Este enlace es de un solo participante y vence hoy. Si volvés a generarlo, el
-                anterior deja de funcionar y se cierra la sesión que hubiera abierto.
+                Este enlace es de un solo participante y vence hoy. “Ver QR” vuelve a mostrar este
+                mismo; “Regenerar” emite uno nuevo y deja afuera a quien haya entrado con éste.
               </p>
             </div>
           )}
@@ -592,15 +665,29 @@ export default function DemoClient({
                         Preparar agenda
                       </button>
                     )}
-                    <button type="button" style={btnSec} disabled={pendiente} onClick={() => verQR(p.id)}>
+                    <button type="button" style={btnSec} disabled={pendiente} onClick={() => verQR(p)}>
                       Ver QR
+                    </button>
+                    {/* Emitir uno nuevo es OTRA acción, y se llama por su nombre:
+                        apaga el anterior y cierra la sesión que ese anterior
+                        haya abierto. Antes esto vivía escondido adentro de "Ver
+                        QR" y dejaba al participante afuera sin avisar. */}
+                    <button
+                      type="button"
+                      style={btnPeligro}
+                      disabled={pendiente}
+                      title="Emite un enlace nuevo: el anterior deja de funcionar y quien haya entrado con él queda afuera"
+                      onClick={() => pedirEnlaceNuevo(p)}
+                    >
+                      Regenerar
                     </button>
                     {hayPlantillaWhatsApp && p.celular && (
                       <button
                         type="button"
                         style={btnSec}
                         disabled={pendiente}
-                        onClick={() => mandarWhatsApp(p.id)}
+                        title="Le manda un enlace NUEVO por WhatsApp: el anterior deja de funcionar"
+                        onClick={() => pedirWhatsApp(p)}
                       >
                         WhatsApp
                       </button>
@@ -612,6 +699,55 @@ export default function DemoClient({
           </div>
         )}
       </section>
+
+      {/* ── Confirmación de "regenerar" (dialog React, nunca window.confirm) ──
+          El participante ya está adentro: emitir un enlace nuevo lo deja afuera
+          en el acto, con la pantalla proyectada. Se pregunta. */}
+      {confirmarRegenerar && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(16,24,40,.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 24,
+          }}
+        >
+          <div style={{ ...card, padding: 24, maxWidth: 460 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 600, color: "#111827", margin: "0 0 8px" }}>
+              {confirmarRegenerar.via === "whatsapp"
+                ? "¿Mandarle un enlace nuevo por WhatsApp?"
+                : "¿Emitir un enlace nuevo?"}
+            </h2>
+            <p style={{ fontSize: 14, color: "#4B5563", margin: "0 0 20px" }}>
+              {confirmarRegenerar.participante.nombre} ya entró con el enlace anterior. Si emitís uno nuevo, el
+              anterior deja de funcionar y esa persona queda afuera en el acto — con su teléfono en
+              la mano, delante de todos. Hacelo solo si el QR se escaneó desde el teléfono
+              equivocado o si perdiste el enlace.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" style={btnSec} onClick={() => setConfirmarRegenerar(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                style={{ ...btnPeligro, height: 48, padding: "0 20px", fontSize: 14 }}
+                disabled={pendiente}
+                onClick={() =>
+                  confirmarRegenerar.via === "whatsapp"
+                    ? mandarWhatsApp(confirmarRegenerar.participante.id)
+                    : regenerar(confirmarRegenerar.participante.id)
+                }
+              >
+                {confirmarRegenerar.via === "whatsapp" ? "Sí, mandar uno nuevo" : "Sí, emitir uno nuevo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Confirmación de limpieza (dialog React, nunca window.confirm) ── */}
       {confirmarLimpieza && sesionElegida && (
