@@ -253,7 +253,9 @@ export async function prepararEscenarioDemo(input: {
   });
 
   revalidatePath("/admin/demo");
-  const resumen = `${res.turnosCreados} turnos creados · ${res.turnosOcupados} ya ocupados por pacientes de utilería.`;
+  const resumen =
+    `${res.turnosCreados} turnos creados · ${res.turnosOcupados} ya ocupados por pacientes de utilería` +
+    (res.respaldoCreado ? " · profesional de respaldo listo (para la escena de reprogramar)." : ".");
   if (!res.ok) {
     return { ok: false, error: "No se pudo dejar la agenda lista.", notas: res.notas };
   }

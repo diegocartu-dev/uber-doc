@@ -30,7 +30,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { crearAgendaModelo, type Franja } from "@/lib/agenda/crear-agenda";
+import { dentroVentanaCI } from "@/lib/otorgador/oferta";
 import { emailDemo } from "@/lib/institucional/demo";
+import { provisionarProfesionalDemo } from "@/lib/institucional/demo-profesional";
 import { randomBytes } from "crypto";
 
 // ─── Parte pura (testeable sin DB) ───────────────────────────────────────────
@@ -58,19 +60,28 @@ export function hoyAR(ahora: Date = new Date()): string {
 }
 
 /**
- * El rango del escenario: del 20 al 30 de agosto, que es lo que pide el guion.
+ * El rango del escenario: HOY hasta el 30 de agosto, que es lo que pide el
+ * guion más lo que necesita la pantalla del call center.
  *
- * Con dos cuidados que no son adorno:
- *   · nunca arranca en el pasado — un slot de ayer no lo puede asignar nadie y
- *     solo ensucia la agenda que se va a proyectar;
- *   · si esas fechas ya pasaron enteras (la reunión se corrió a septiembre),
- *     cae a los próximos diez días. Es preferible una demo con turnos que una
- *     demo fiel a una fecha que quedó vieja.
+ * ── POR QUÉ ARRANCA HOY Y NO EL 20 ───────────────────────────────────────────
+ * Arrancaba el 20 de agosto, y con eso la Escena 1 no existía. `armarOferta`
+ * solo lee slots de la SEMANA AR CORRIENTE (`hoy` a `domingoDeSemanaAR()`), así
+ * que con una reunión el 13 la intersección con el 20-30 era CERO. Y no es que
+ * el profesional se viera "sin horarios": `priorizarOferta` descarta la fila
+ * entera cuando no hay CI, no hay slots y el acuerdo no está completo — o sea
+ * que el participante no figuraba en la lista, y la pantalla del otorgador se
+ * proyectaba vacía.
+ *
+ * Arrancando hoy, el tramo del guion sigue estando (la agenda llega hasta el 30)
+ * y además hay oferta esta semana, que es la que el call center puede asignar.
+ *
+ * Y si esas fechas ya pasaron enteras (la reunión se corrió a septiembre), cae a
+ * los próximos diez días: es preferible una demo con turnos que una demo fiel a
+ * una fecha que quedó vieja.
  */
 export function rangoEscenarioPorDefecto(ahora: Date = new Date()): { desde: string; hasta: string } {
   const hoy = hoyAR(ahora);
   const anio = Number(hoy.slice(0, 4));
-  const inicioAgosto = `${anio}-08-20`;
   const finAgosto = `${anio}-08-30`;
 
   if (hoy > finAgosto) {
@@ -79,7 +90,7 @@ export function rangoEscenarioPorDefecto(ahora: Date = new Date()): { desde: str
     fin.setDate(fin.getDate() + 10);
     return { desde: hoy, hasta: iso(fin) };
   }
-  return { desde: hoy > inicioAgosto ? hoy : inicioAgosto, hasta: finAgosto };
+  return { desde: hoy, hasta: finAgosto };
 }
 
 /**
@@ -110,10 +121,65 @@ export function franjaDeAhora(
   return { hora_inicio: hhmm(inicio), hora_fin: hhmm(fin) };
 }
 
+/** "HH:MM" → minutos desde la medianoche. */
+function aMinutos(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+function aHHMM(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+}
+
+/**
+ * El primer hueco REAL de la franja de ahora, descontando lo que la agenda
+ * principal ya ocupa hoy.
+ *
+ * ── POR QUÉ HACE FALTA ───────────────────────────────────────────────────────
+ * Ahora que el escenario arranca HOY, la agenda principal ya cubre 09:00-12:00 y
+ * 15:00-18:00. Una reunión a las 13:10 pedía la franja 13:30-16:30, que se pisa
+ * con la de la tarde: `crearAgendaModelo` cortaba por `conflicto_agenda` y NO
+ * creaba NADA — ni siquiera el tramo 13:30-15:00, que estaba libre. Y la nota
+ * que se le mostraba a Diego decía "Ya había turnos de hoy a esta hora: quedan
+ * los que estaban", que es falso: a las 13:30 no había nada, el próximo slot era
+ * a las 15:00. Se descubría con el otorgador ya proyectado.
+ *
+ * Devuelve `null` si no queda ningún tramo de al menos `minimoMin`.
+ */
+export function huecoDeHoy(
+  candidata: { hora_inicio: string; hora_fin: string } | null,
+  ocupadas: { hora_inicio: string; hora_fin: string }[],
+  minimoMin: number
+): { hora_inicio: string; hora_fin: string } | null {
+  if (!candidata) return null;
+  const orden = [...ocupadas]
+    .map((o) => ({ desde: aMinutos(o.hora_inicio), hasta: aMinutos(o.hora_fin) }))
+    .sort((a, b) => a.desde - b.desde);
+
+  let cursor = aMinutos(candidata.hora_inicio);
+  const fin = aMinutos(candidata.hora_fin);
+  for (const o of orden) {
+    if (o.hasta <= cursor) continue;
+    if (o.desde >= fin) break;
+    if (o.desde - cursor >= minimoMin) {
+      return { hora_inicio: aHHMM(cursor), hora_fin: aHHMM(Math.min(o.desde, fin)) };
+    }
+    cursor = Math.max(cursor, o.hasta);
+  }
+  if (fin - cursor >= minimoMin) return { hora_inicio: aHHMM(cursor), hora_fin: aHHMM(fin) };
+  return null;
+}
+
 /** Nombres del relleno: obviamente sintéticos, para que nadie los lea como reales. */
 export function nombreRelleno(i: number): string {
   return `Paciente de demostración ${i}`;
 }
+
+/**
+ * El profesional que existe solo para que la reprogramación tenga destino. No es
+ * un participante: no lleva datos de ninguna persona y no recibe enlace.
+ */
+export const NOMBRE_RESPALDO = "Profesional de demostración (respaldo)";
 
 // ─── Preparación real ────────────────────────────────────────────────────────
 
@@ -122,6 +188,8 @@ export interface ResumenEscenario {
   turnosCreados: number;
   turnosOcupados: number;
   pacientesRelleno: number;
+  /** Se creó el profesional de respaldo (el destino de la reprogramación). */
+  respaldoCreado: boolean;
   /** Lo que no se pudo hacer, dicho en criollo. Vacío = quedó todo listo. */
   notas: string[];
 }
@@ -146,6 +214,7 @@ export async function prepararEscenario(params: {
     turnosCreados: 0,
     turnosOcupados: 0,
     pacientesRelleno: 0,
+    respaldoCreado: false,
     notas: [],
   };
   if (!esInstitucional()) {
@@ -179,7 +248,7 @@ export async function prepararEscenario(params: {
   // con que quien lo toca es de confianza. Una query, y se acabó.
   const { data: ficha, error: errFicha } = await admin
     .from("medicos")
-    .select("id, demo_sesion_id")
+    .select("id, demo_sesion_id, especialidad")
     .eq("id", params.medicoId)
     .maybeSingle();
   if (errFicha) {
@@ -224,17 +293,31 @@ export async function prepararEscenario(params: {
   }
 
   // 2. La franja de HOY, para que el call center pueda asignar "para ahora".
-  const ahora = franjaDeAhora(new Date(), config.ci_ventana_fin.slice(0, 5));
   const hoy = hoyAR();
+  const diaSemana = new Date(hoy + "T12:00:00").getDay();
+  // Lo que la agenda principal YA cubre hoy: hay que descontarlo o el pedido se
+  // pisa con ella y no se crea nada (ver `huecoDeHoy`).
+  const yaCubiertoHoy =
+    hoy >= desde && hoy <= hasta && diaSemana >= 1 && diaSemana <= 5
+      ? [FRANJA_MANANA, FRANJA_TARDE]
+      : [];
+  const candidata = franjaDeAhora(new Date(), config.ci_ventana_fin.slice(0, 5));
+  const ahora = huecoDeHoy(candidata, yaCubiertoHoy, config.slot_duracion_min);
+
   if (!ahora) {
+    // Dos motivos distintos, y a Diego le sirve saber cuál: "es tarde" se
+    // resuelve moviendo la escena a otro día; "la agenda ya lo cubre" significa
+    // que la escena SÍ se puede hacer, con los turnos que ya están.
     resumen.notas.push(
-      "Ya es tarde para abrir turnos de hoy: la escena del call center va a necesitar una asignación de otro día."
+      candidata
+        ? `La agenda de hoy ya cubre esa hora (${FRANJA_MANANA.hora_inicio}–${FRANJA_MANANA.hora_fin} y ` +
+            `${FRANJA_TARDE.hora_inicio}–${FRANJA_TARDE.hora_fin}): el call center asigna sobre esos turnos.`
+        : "Ya es tarde para abrir turnos de hoy: la escena del call center va a necesitar una asignación de otro día."
     );
   } else {
-    const diaSemana = new Date(hoy + "T12:00:00").getDay();
     const agendaHoy = await crearAgendaModelo(admin, {
       medicoId: params.medicoId,
-      nombre: `Demostración — hoy ${hoy}`,
+      nombre: `Demostración — hoy ${hoy} ${ahora.hora_inicio}`,
       fecha_inicio: hoy,
       fecha_fin: hoy,
       duracion_turno: config.slot_duracion_min,
@@ -244,11 +327,27 @@ export async function prepararEscenario(params: {
     });
     if (agendaHoy.ok) {
       resumen.turnosCreados += agendaHoy.turnosCreados;
+      // La nota dice QUÉ franja quedó, no una frase genérica: es lo que Diego
+      // mira antes de proyectar el otorgador.
+      resumen.notas.push(`Turnos de hoy listos: de ${ahora.hora_inicio} a ${ahora.hora_fin}.`);
     } else if (agendaHoy.motivo === "conflicto_agenda") {
-      resumen.notas.push("Ya había turnos de hoy a esta hora: quedan los que estaban.");
+      resumen.notas.push(
+        `Ya había turnos de hoy entre ${ahora.hora_inicio} y ${ahora.hora_fin}: quedan los que estaban.`
+      );
     } else {
       resumen.notas.push(`Turnos de hoy: ${agendaHoy.mensaje}`);
     }
+  }
+
+  // La OTRA mitad de "para ahora": la consulta inmediata. Si la ventana de CI de
+  // la institución ya cerró, el participante puede prender el toggle todo lo que
+  // quiera y el chip no se enciende — y el escenario no lo avisaba.
+  if (!dentroVentanaCI(config)) {
+    resumen.notas.push(
+      `La ventana de consulta inmediata (${config.ci_ventana_inicio.slice(0, 5)}–` +
+        `${config.ci_ventana_fin.slice(0, 5)}) está cerrada a esta hora: el toggle "disponible" ` +
+        `no va a encender ningún chip en el call center.`
+    );
   }
 
   // 3. El relleno. Pacientes SINTÉTICOS —nombre de utilería, sin DNI inventado—
@@ -294,6 +393,9 @@ export async function prepararEscenario(params: {
     }
   }
 
+  // 4. El profesional de RESPALDO: el destino de la reprogramación.
+  await asegurarRespaldo(params.sesionId, ficha.especialidad as string, desde, hasta, config.slot_duracion_min, resumen);
+
   resumen.ok = resumen.turnosCreados > 0 || resumen.turnosOcupados > 0;
   if (!resumen.ok && resumen.notas.length === 0) {
     resumen.notas.push("No quedó ningún turno nuevo: revisá el rango de fechas.");
@@ -337,4 +439,77 @@ async function crearPacienteRelleno(
     return null;
   }
   return data.id;
+}
+
+/**
+ * Se asegura de que la reunión tenga a DÓNDE reprogramar.
+ *
+ * ── POR QUÉ ──────────────────────────────────────────────────────────────────
+ * La Escena 7 es Nova reprogramando un día entero. `reprogramarMasivo` busca
+ * candidatos en la oferta y DESCARTA al propio profesional (`p.medico_id ===
+ * medicoId → return`). Si Diego invitó a uno solo —el caso normal, y el que
+ * pide el guion— no hay ningún candidato: "no hay a quién reasignar", en vivo,
+ * en la escena que se presenta como el salto tecnológico.
+ *
+ * El respaldo es un profesional de la MISMA reunión (así vive en el mismo mundo
+ * de la oferta y no toca al padrón real), con agenda espejo y sin celular: no es
+ * un participante, no recibe enlace, y se va con "limpiar reunión" como todo lo
+ * demás. Se crea UNO solo: si la reunión ya tiene dos profesionales, no hace
+ * falta.
+ */
+async function asegurarRespaldo(
+  sesionId: string,
+  especialidad: string,
+  desde: string,
+  hasta: string,
+  duracion: number,
+  resumen: ResumenEscenario
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: deLaReunion, error } = await admin
+    .from("medicos")
+    .select("id")
+    .eq("demo_sesion_id", sesionId)
+    .eq("especialidad", especialidad);
+  if (error) {
+    resumen.notas.push("No se pudo comprobar si hay un profesional de respaldo para reprogramar.");
+    return;
+  }
+  if ((deLaReunion ?? []).length >= 2) return;
+
+  const creado = await provisionarProfesionalDemo({
+    sesionId,
+    datos: {
+      nombre: NOMBRE_RESPALDO,
+      celular: null,
+      rol: "profesional",
+      dni: null,
+      fecha_nacimiento: null,
+      especialidad,
+    },
+    titulo: null,
+  });
+  if (!creado.ok) {
+    resumen.notas.push(
+      "No se pudo crear el profesional de respaldo: la escena de reprogramar no va a tener a quién reasignar."
+    );
+    return;
+  }
+
+  const agenda = await crearAgendaModelo(admin, {
+    medicoId: creado.profesional.medicoId,
+    nombre: `Demostración — respaldo ${desde} a ${hasta}`,
+    fecha_inicio: desde,
+    fecha_fin: hasta,
+    duracion_turno: duracion,
+    precio: 0,
+    franjas: franjasEscenario(),
+    canal_origen: "acordado",
+  });
+  if (agenda.ok) {
+    resumen.turnosCreados += agenda.turnosCreados;
+    resumen.respaldoCreado = true;
+  } else {
+    resumen.notas.push("El profesional de respaldo quedó sin agenda: revisá antes de la escena de reprogramar.");
+  }
 }
