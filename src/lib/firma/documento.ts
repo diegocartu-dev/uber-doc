@@ -45,6 +45,7 @@ import {
   type IdentidadDocumento,
 } from "./identidad";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { cuentasDeDemostracion, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 
 // Consistente con el flujo de receta (OTP_EXPIRY_MS).
 const OTP_VENTANA_MS = 5 * 60 * 1000;
@@ -291,8 +292,18 @@ async function sellarDocumento(
     return { ok: false, error: "El documento ya fue firmado o cambió de estado" };
   }
 
+  // ── EL DISPOSITIVO DEL PARTICIPANTE TAMPOCO QUEDA GUARDADO ────────────────
+  // `ip` y `user_agent` son el sustrato de no-repudio de un profesional REAL: de
+  // ahí sale la atribución si algún día hay que defender una firma. En una
+  // reunión de venta no hay nada que defender —el papel dice "SIN VALIDEZ
+  // LEGAL"— y en cambio son el teléfono y la red de una persona que vino a una
+  // reunión, guardados en una tabla que no se puede borrar.
+  const demoFirmante = (await cuentasDeDemostracion({ medicoId: doc.medico_id })).medico;
+
   const logResult = await insertarFirmaLog({
     ...log,
+    ip: demoFirmante ? null : log.ip,
+    user_agent: demoFirmante ? null : log.user_agent,
     documento_id: doc.id,
     receta_id: null,
     medico_id: doc.medico_id,
@@ -1072,6 +1083,13 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
 
   if (!medico) return { medico_id: medicoId, snapshot_incompleto: true };
 
+  // El profesional de una REUNIÓN DE DEMOSTRACIÓN no deja su nombre acá.
+  // `firma_logs` es append-only por trigger: esta fila no se puede borrar nunca,
+  // ni siquiera con "limpiar reunión", así que un nombre real escrito acá es
+  // permanente. Mismo criterio (y mismo texto) que el snapshot de identidad del
+  // documento — ver `NOMBRE_UTILERIA`.
+  const esDemo = (await cuentasDeDemostracion({ medicoId })).medico;
+
   // Aceptación de T&C del médico: es donde consta que su click constituye su
   // firma electrónica. HOY NO EXISTE — verificado en producción 07/08/2026:
   // `aceptaciones_legales` solo tiene filas `datos_sensibles` (1.108), ningún
@@ -1123,7 +1141,8 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
   return {
     medico_id: medico.id,
     user_id: medico.user_id ?? null,
-    nombre_completo: medico.nombre_completo ?? null,
+    nombre_completo: esDemo ? NOMBRE_UTILERIA.profesional : (medico.nombre_completo ?? null),
+    demostracion: esDemo || undefined,
     especialidad: medico.especialidad ?? null,
     tipo_matricula: medico.tipo_matricula ?? null,
     numero_matricula: medico.numero_matricula ?? null,

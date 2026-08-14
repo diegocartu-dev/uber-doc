@@ -182,6 +182,73 @@ test('"limpiar reunión" nunca borra por médico a secas: exige la marca de demo
   );
 });
 
+test("el sello de un documento de demostración no lleva el nombre de nadie", () => {
+  // La raíz del problema: el snapshot de identidad es INMUTABLE (entra al hash),
+  // lo sirve `/verificar/{id}` —pública y sin auth— y la limpieza no lo puede
+  // tocar porque `firma_logs` retiene por FK al documento. Lo que no se escribe
+  // no hay que anonimizarlo después.
+  const codigo = fuente("src/lib/firma/identidad.ts");
+  assert.match(
+    codigo,
+    /medico_nombre: demo\.medico \? NOMBRE_UTILERIA\.profesional/,
+    "el snapshot volvió a congelar el nombre real del profesional de una reunión"
+  );
+  assert.match(
+    codigo,
+    /paciente_nombre: demo\.paciente \? NOMBRE_UTILERIA\.paciente/,
+    "el snapshot volvió a congelar el nombre real del paciente de una reunión"
+  );
+  assert.match(
+    codigo,
+    /paciente_dni: demo\.paciente \? ""/,
+    "el snapshot volvió a congelar el DNI real del participante"
+  );
+});
+
+test("el registro de firma tampoco guarda a la persona ni su dispositivo", () => {
+  // `firma_logs` es append-only por trigger: lo que se escribe ahí es para
+  // siempre, incluso después de "limpiar reunión".
+  const codigo = fuente("src/lib/firma/documento.ts");
+  assert.match(
+    codigo,
+    /nombre_completo: esDemo \? NOMBRE_UTILERIA\.profesional/,
+    "el snapshot del firmante volvió a guardar el nombre real del participante"
+  );
+  assert.match(
+    codigo,
+    /ip: demoFirmante \? null : log\.ip/,
+    "el log de firma volvió a guardar la IP del participante de una reunión"
+  );
+});
+
+test("la página pública no muestra la identidad de un documento de demostración", () => {
+  const codigo = fuente("src/app/api/verificar/[id]/route.ts");
+  assert.match(
+    codigo,
+    /medico: demostracion[\s\S]{0,120}NOMBRE_UTILERIA\.profesional/,
+    "/verificar volvió a exponer al firmante de un documento de demostración: esa página " +
+      "es pública, sin auth, y su UUID quedó impreso en el papel proyectado"
+  );
+});
+
+test("la limpieza borra los documentos fila por fila, no de un saque", () => {
+  // Un DELETE con `.in()` es UNA sentencia: el 23503 del documento firmado
+  // abortaba la sentencia entera y sobrevivían también la evolución y la orden,
+  // que ni firma tienen.
+  const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
+  assert.match(
+    codigo,
+    /if \(paso\.tabla === "documentos"\) \{[\s\S]{0,120}borrarDocumentosUnoPorUno/,
+    "los documentos volvieron al DELETE con .in(): un solo documento firmado se lleva puesto " +
+      "el borrado entero"
+  );
+  assert.match(
+    codigo,
+    /from\("documentos"\)\.delete\(\)\.eq\("id"/,
+    "borrarDocumentosUnoPorUno dejó de borrar por id"
+  );
+});
+
 test("la limpieza no intenta borrar evidencia de firma", () => {
   const codigo = fuente("src/lib/institucional/demo-invitacion.ts");
   for (const tabla of ["recetas", "firma_logs", "otp_firma", "medico_claves"]) {

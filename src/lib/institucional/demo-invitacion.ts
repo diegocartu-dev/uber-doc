@@ -22,6 +22,7 @@ import {
   emailDemo,
   validarParticipante,
   ESPERA_DEMO,
+  NOMBRE_UTILERIA,
   type DatosParticipante,
   type DatosParticipanteRaw,
   type ParticipanteDemo,
@@ -336,6 +337,49 @@ function borrable(tabla: string, problemas: string[]): boolean {
   return false;
 }
 
+/**
+ * Borra documentos de la reunión UNO POR UNO, y no con un `.in()`.
+ *
+ * ── POR QUÉ ──────────────────────────────────────────────────────────────────
+ * Un DELETE con `.in()` es UNA sentencia: si una sola de las filas está retenida
+ * por `firma_logs.documento_id` (append-only, sin ON DELETE), Postgres devuelve
+ * 23503 y ABORTA LA SENTENCIA ENTERA. O sea que el documento firmado —el único
+ * que de verdad no se puede borrar— se llevaba puestos a todos los demás: la
+ * evolución y la orden, que ni firma tienen, sobrevivían con el nombre y el
+ * contenido clínico de la demostración adentro.
+ *
+ * Fila por fila, cada 23503 retiene solo a su propia fila y todo lo demás se va.
+ * Son unos pocos documentos por reunión: el costo es irrelevante al lado de
+ * dejar historia clínica de utilería colgada en la base de la provincia.
+ */
+async function borrarDocumentosUnoPorUno(
+  columna: string,
+  ids: string[],
+  retenidos: string[],
+  problemas: string[]
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("documentos").select("id").in(columna, ids);
+  if (error) {
+    problemas.push(`documentos.${columna}: ${error.message}`);
+    return;
+  }
+  let porFirma = 0;
+  for (const fila of data ?? []) {
+    const { error: errFila } = await admin.from("documentos").delete().eq("id", fila.id as string);
+    if (!errFila) continue;
+    if (errFila.code === FK_VIOLATION) porFirma++;
+    else problemas.push(`documentos.${columna}: ${errFila.message}`);
+  }
+  if (porFirma > 0) {
+    retenidos.push(
+      `${porFirma} documento(s) firmado(s) quedaron en la base: los retiene su registro de firma, ` +
+        `que es append-only. No llevan el nombre de nadie (el sello se emitió con nombre de utilería) ` +
+        `y su página de verificación pública dice que son de demostración.`
+    );
+  }
+}
+
 export interface ResultadoLimpieza {
   ok: boolean;
   /**
@@ -354,11 +398,15 @@ export interface ResultadoLimpieza {
   participantes: number;
 }
 
-/** Texto con el que se reemplaza el nombre de una persona real. */
-const NOMBRE_ANONIMO = {
-  profesional: "Participante de demostración",
-  paciente: "Paciente de demostración",
-} as const;
+/**
+ * Texto con el que se reemplaza el nombre de una persona real.
+ *
+ * Es el MISMO juego de nombres que se congela de entrada en los registros
+ * inmutables (`NOMBRE_UTILERIA`): si la ficha sobrevive y el documento firmado
+ * también, los dos tienen que decir lo mismo. Dos textos distintos para el mismo
+ * hecho invitan a preguntarse si son dos personas.
+ */
+const NOMBRE_ANONIMO = NOMBRE_UTILERIA;
 
 /**
  * Borra todo lo que la reunión creó, y nada más.
@@ -505,6 +553,10 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   for (const paso of porEncuentro) {
     if (!borrable(paso.tabla, problemas)) continue;
     if (paso.ids.length === 0) continue;
+    if (paso.tabla === "documentos") {
+      await borrarDocumentosUnoPorUno(paso.columna, paso.ids, retenidos, problemas);
+      continue;
+    }
     const { error } = await admin.from(paso.tabla).delete().in(paso.columna, paso.ids);
     anotar(`${paso.tabla}.${paso.columna}`, error);
   }
@@ -537,6 +589,10 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   for (const paso of porSujeto) {
     if (!borrable(paso.tabla, problemas)) continue;
     if (paso.ids.length === 0) continue;
+    if (paso.tabla === "documentos") {
+      await borrarDocumentosUnoPorUno(paso.columna, paso.ids, retenidos, problemas);
+      continue;
+    }
     const { error } = await admin.from(paso.tabla).delete().in(paso.columna, paso.ids);
     anotar(`${paso.tabla}.${paso.columna}`, error);
   }

@@ -633,10 +633,21 @@ export default function DemoClient({
             </h2>
             <p style={{ fontSize: 14, color: "#4B5563", margin: "0 0 20px" }}>
               Se borran los {participantes.length} participantes con sus datos, y los turnos,
-              consultas y documentos que hayan generado. Si alguno firmó una receta, esa evidencia
-              no se puede borrar (es append-only por ley): su ficha queda pero sin nombre ni
-              celular, y te lo decimos abajo. No se toca nada más de {institucion}. Esto no se
-              puede deshacer.
+              consultas y documentos que hayan generado. No se toca nada más de {institucion}.
+              Esto no se puede deshacer.
+            </p>
+            {/* ── LO QUE QUEDA, DICHO ANTES DE APRETAR ─────────────────────
+                Este párrafo decía "su ficha queda pero sin nombre ni celular" y
+                se detenía ahí, como si lo único retenido fuera la ficha. Lo que
+                de verdad sobrevive es más: el documento firmado y su registro de
+                firma, que son append-only y no se pueden borrar. Diego lo tiene
+                que saber ANTES de decir "reunión limpia" delante de alguien. */}
+            <p style={{ fontSize: 13, color: "#8A2E2D", margin: "0 0 20px" }}>
+              Lo que NO se va: si alguien firmó un documento, ese documento y su registro de firma
+              quedan en la base para siempre (son append-only por ley) y su página de verificación
+              sigue en línea, diciendo que es de demostración. No llevan el nombre de nadie: el
+              sello se emite con nombre de utilería. La ficha del profesional también queda,
+              anonimizada y fuera de la oferta. Abajo te decimos exactamente qué quedó.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btnSec} onClick={() => setConfirmarLimpieza(false)}>

@@ -407,6 +407,71 @@ export async function documentoEsDemo(documentoId: string | null | undefined): P
 }
 
 /**
+ * Nombres de utilería que se congelan en TODO registro inmutable de la demo:
+ * el snapshot de identidad del documento firmado y el log de no-repudio.
+ *
+ * ── POR QUÉ ACÁ Y NO EN LA LIMPIEZA ──────────────────────────────────────────
+ * Porque esos dos registros NO SE PUEDEN LIMPIAR. `firma_logs` es append-only
+ * por trigger, y mientras esa fila exista retiene por FK al `documento` que la
+ * originó: el DELETE de la limpieza rebota con 23503. O sea que el nombre real
+ * del participante que jugó a ser médico se quedaba para siempre adentro de
+ * `documentos.firma_digital.identidad.medico_nombre` — y ese campo es el que
+ * sirve `/verificar/{id}`, una página PÚBLICA Y SIN AUTH, con el mismo UUID que
+ * quedó impreso en el papel proyectado y adentro del QR que la sala fotografió.
+ *
+ * Lo que no se escribe no hay que anonimizarlo después. El participante sigue
+ * viendo su nombre en la pantalla (las tablas vivas no se tocan); lo que se
+ * congela con nombre de utilería es únicamente lo inmutable.
+ */
+export const NOMBRE_UTILERIA = {
+  profesional: "Profesional de demostración",
+  paciente: "Paciente de demostración",
+} as const;
+
+/**
+ * ¿Estas fichas son de una cuenta de demostración?
+ *
+ * Service role y query aparte, por el motivo de siempre: `demo_sesion_id` es una
+ * columna que SOLO existe en la base de la instancia, y sumarla al SELECT de
+ * `construirIdentidadDocumento` —que en el B2C corre contra una base donde no
+ * existe— rompería la firma de TODOS los documentos del B2C.
+ *
+ * Ante un error devuelve `false` en las dos. Es la decisión asimétrica de
+ * siempre, pero al revés que en `documentoEsDemo`: acá "de más" significaría
+ * congelar el nombre de un profesional REAL como "Profesional de demostración"
+ * dentro de un documento firmado que no se puede corregir — un daño permanente
+ * sobre un papel válido. "De menos" deja el nombre de un participante en un
+ * registro de una reunión, que es lo que ya pasaba y lo que la limpieza reporta.
+ */
+export async function cuentasDeDemostracion(params: {
+  medicoId?: string | null;
+  pacienteId?: string | null;
+}): Promise<{ medico: boolean; paciente: boolean }> {
+  const nada = { medico: false, paciente: false };
+  if (!esInstitucional()) return nada;
+  try {
+    const admin = createAdminClient();
+    const [m, p] = await Promise.all([
+      params.medicoId
+        ? admin.from("medicos").select("demo_sesion_id").eq("id", params.medicoId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      params.pacienteId
+        ? admin.from("pacientes").select("demo_sesion_id").eq("id", params.pacienteId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    if (m.error) console.error("[demo] No se pudo leer el mundo del profesional:", m.error.message);
+    if (p.error) console.error("[demo] No se pudo leer el mundo del paciente:", p.error.message);
+    return {
+      medico: Boolean((m.data as { demo_sesion_id?: string | null } | null)?.demo_sesion_id),
+      paciente: Boolean((p.data as { demo_sesion_id?: string | null } | null)?.demo_sesion_id),
+    };
+  } catch (err) {
+    console.error("[demo] cuentasDeDemostracion falló:", err);
+    return nada;
+  }
+}
+
+/**
  * De estos profesionales de la reunión, ¿cuáles NO tienen claves de firma?
  *
  * Es lo que la pantalla necesita para poder decirlo ANTES de la Escena 4: sin

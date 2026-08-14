@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificarFirma } from "@/lib/firma/receta";
 import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documento";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { documentoEsDemo } from "@/lib/institucional/demo";
+import { documentoEsDemo, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 import { formatNombreMedico } from "@/lib/utils/texto";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
@@ -119,7 +119,20 @@ export async function GET(
           // Firmante congelado en la firma cuando existe: si el médico se
           // cambió el nombre después, el papel y esta página tienen que decir
           // lo mismo. Sin sello (históricos) se cae a la fila viva de `medicos`.
-          medico: doc.firmante ?? (await datosMinimosMedico(doc.medico_id)),
+          //
+          // Con la marca de demostración, ninguna identidad sale de acá. El
+          // sello ya se emite con nombre de utilería (ver `identidad.ts`), así
+          // que esto es el cinturón: cubre los caminos SIN snapshot congelado
+          // —un documento sin sello cae a la fila viva de `medicos`, que hasta
+          // que alguien limpie la reunión tiene el nombre real del participante—
+          // y esta página es pública, sin auth y para siempre.
+          medico: demostracion
+            ? {
+                nombre: NOMBRE_UTILERIA.profesional,
+                especialidad: "Cuenta de demostración",
+                matricula: "Sin matrícula",
+              }
+            : (doc.firmante ?? (await datosMinimosMedico(doc.medico_id))),
         };
       }
 

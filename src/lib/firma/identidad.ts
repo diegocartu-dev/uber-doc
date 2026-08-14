@@ -29,6 +29,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cuilDePaciente } from "@/lib/cuil";
+import { cuentasDeDemostracion, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 
 /**
  * Subconjunto EXACTO de `DocumentoPDF` (src/lib/pdf/receta.ts) que sale impreso
@@ -115,6 +116,25 @@ export async function construirIdentidadDocumento(
 
   if (!medico || !paciente) return null;
 
+  // ── LA REUNIÓN DE DEMOSTRACIÓN NO DEJA NOMBRES ADENTRO DEL SELLO ──────────
+  // Este snapshot es INMUTABLE por diseño (entra al hash) y lo sirve
+  // `/verificar/{id}`, una página pública y sin auth. La limpieza de la reunión
+  // no lo puede tocar: `firma_logs` es append-only y retiene por FK al documento,
+  // así que el DELETE rebota y la fila sobrevive para siempre — con el nombre
+  // real del participante adentro, publicado bajo el mismo UUID que quedó
+  // impreso en el papel proyectado y en el QR que la sala fotografió.
+  //
+  // Se corta en la raíz: si la cuenta es de demostración, lo que se congela es
+  // un nombre de utilería. El participante sigue viendo su nombre en la pantalla
+  // (las tablas vivas no cambian) y el papel ya lleva su marca de agua
+  // "DEMOSTRACIÓN — SIN VALIDEZ LEGAL".
+  //
+  // El DNI y el CUIL del paciente se van por lo mismo: son el dato más sensible
+  // de los que el panel deja cargar, y su único motivo de existir era que el
+  // papel no se viera pobre proyectado. Un papel de demostración se puede ver
+  // pobre; un DNI real no se puede quedar en una fila que no se puede borrar.
+  const demo = await cuentasDeDemostracion({ medicoId, pacienteId });
+
   // Misma resolución de obra social que el PDF (FK → nombre; "otra"; texto libre).
   let obraSocialNombre: string | null = textoONull(paciente.obra_social);
   if (paciente.obra_social_id) {
@@ -130,21 +150,21 @@ export async function construirIdentidadDocumento(
 
   return {
     v: 2,
-    medico_nombre: texto(medico.nombre_completo),
-    medico_titulo: texto(medico.titulo),
+    medico_nombre: demo.medico ? NOMBRE_UTILERIA.profesional : texto(medico.nombre_completo),
+    medico_titulo: demo.medico ? "" : texto(medico.titulo),
     medico_especialidad: texto(medico.especialidad),
     medico_matricula: `${texto(medico.tipo_matricula)} ${texto(medico.numero_matricula)}`.trim(),
     medico_domicilio: texto(medico.domicilio_consultorio) || texto(medico.domicilio),
     medico_firma_manuscrita_path: textoONull(medico.firma_manuscrita_url),
-    paciente_nombre: texto(paciente.nombre_completo),
-    paciente_dni: texto(paciente.dni),
+    paciente_nombre: demo.paciente ? NOMBRE_UTILERIA.paciente : texto(paciente.nombre_completo),
+    paciente_dni: demo.paciente ? "" : texto(paciente.dni),
     // El CUIL guardado si lo hay; si no, derivado de DNI + sexo. La columna
     // `cuil` solo se llenaba en dos momentos del alta, así que un paciente que
     // llegó por cualquier otro camino quedaba sin CUIL para siempre aunque
     // tuviéramos los datos para calcularlo. Derivarlo acá hace que el documento
     // salga completo igual. Si no alcanza para derivarlo queda "" y el PDF
     // imprime el bloque del paciente con nombre + DNI, que es válido.
-    paciente_cuil: cuilDePaciente(paciente),
+    paciente_cuil: demo.paciente ? "" : cuilDePaciente(paciente),
     paciente_sexo_dni: textoONull(paciente.sexo_dni),
     paciente_fecha_nacimiento: textoONull(paciente.fecha_nacimiento),
     paciente_tiene_cobertura: paciente.tiene_cobertura === true,
