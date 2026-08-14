@@ -516,8 +516,8 @@ export default function DemoClient({
                 </p>
               )}
               <p style={{ fontSize: 12, color: "#9CA3AF", margin: "12px 0 0" }}>
-                Este enlace es de un solo participante. Si volvés a generarlo, el anterior deja de
-                funcionar.
+                Este enlace es de un solo participante y vence hoy. Si volvés a generarlo, el
+                anterior deja de funcionar y se cierra la sesión que hubiera abierto.
               </p>
             </div>
           )}
@@ -586,7 +586,7 @@ export default function DemoClient({
                         type="button"
                         style={btnSec}
                         disabled={pendiente}
-                        title="Turnos del 20 al 30 de agosto, una franja de hoy para el call center, y algunos horarios ya ocupados"
+                        title="Turnos desde hoy hasta el 30 de agosto (la ventana que mira el call center), una franja libre de hoy, algunos horarios ya ocupados y un profesional de respaldo para reprogramar"
                         onClick={() => prepararAgenda(p.medico_id as string)}
                       >
                         Preparar agenda
@@ -633,8 +633,10 @@ export default function DemoClient({
             </h2>
             <p style={{ fontSize: 14, color: "#4B5563", margin: "0 0 20px" }}>
               Se borran los {participantes.length} participantes con sus datos, y los turnos,
-              consultas y documentos que hayan generado. No se toca nada más de {institucion}.
-              Esto no se puede deshacer.
+              consultas y documentos que hayan generado. Si alguno firmó una receta, esa evidencia
+              no se puede borrar (es append-only por ley): su ficha queda pero sin nombre ni
+              celular, y te lo decimos abajo. No se toca nada más de {institucion}. Esto no se
+              puede deshacer.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btnSec} onClick={() => setConfirmarLimpieza(false)}>

@@ -177,7 +177,7 @@ test("el alias de una cuenta de demostración se reconoce y no se le escribe", (
 
 test("el mail de una persona real NO se confunde con un alias de demostración", () => {
   for (const real of [
-    "ana@gmail.com",
+    "persona@ejemplo.com",
     "demo@salud.gob.ar",
     "demo-persona@salud.gob.ar",
     "algo@demo.otracosa.com",
