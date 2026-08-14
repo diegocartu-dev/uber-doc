@@ -87,13 +87,26 @@ test("asignar exige que el paciente y el profesional sean del mismo mundo", () =
   assert.ok(mundosIncompatibles("reunion-1", null), "un paciente de demo con un profesional real");
   assert.ok(mundosIncompatibles("reunion-1", "reunion-2"), "dos reuniones distintas");
 
-  for (const archivo of ["asignar-turno", "asignar-ci"]) {
+  // Los TRES caminos que escriben un `paciente_id` en un encuentro. `reprogramar`
+  // faltaba, y por eso este test daba verde con la puerta abierta: su único guard
+  // era `estado_registro !== 'aprobado'` y el profesional de demo nace aprobado.
+  for (const archivo of ["asignar-turno", "asignar-ci", "reprogramar"]) {
     assert.match(
       fuente(`src/lib/otorgador/${archivo}.ts`),
       /mundosIncompatibles\(/,
       `${archivo} dejó de comprobar el mundo antes de escribir la asignación`
     );
   }
+});
+
+test("la reprogramación comprueba el mundo ANTES de tomar el horario nuevo", () => {
+  // Comprobarlo después del UPDATE no sirve de nada: el turno ya quedaría con el
+  // paciente adentro y el trigger de la 025 ya le habría estampado `es_demo`.
+  const codigo = fuente("src/lib/otorgador/reprogramar.ts");
+  const guard = codigo.indexOf("mundosIncompatibles(");
+  const update = codigo.indexOf('estado: "confirmado"');
+  assert.ok(guard > 0 && update > 0, "cambió la forma de reprogramar.ts: revisá este test");
+  assert.ok(guard < update, "el guard de mundos quedó DESPUÉS del UPDATE que toma el horario");
 });
 
 test("el padrón del panel de cumplimiento excluye a los profesionales de demostración", () => {

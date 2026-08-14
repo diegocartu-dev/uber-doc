@@ -36,7 +36,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { VENTANA_ASIGNACION_MIN } from "@/lib/otorgador/oferta";
+import { VENTANA_ASIGNACION_MIN, mundoDelPaciente } from "@/lib/otorgador/oferta";
+import { mundosIncompatibles } from "@/lib/otorgador/asignar-turno";
 import { revocarAccesosDe } from "@/lib/institucional/accesos";
 import {
   avisarReprogramacionTurno,
@@ -264,11 +265,67 @@ export async function reprogramarTurnoInstitucional(params: {
   // 'disponible' remanentes y no debe recibir pacientes.
   const { data: medicoNuevo } = await admin
     .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad, estado_registro")
+    .select("id, nombre_completo, titulo, especialidad, estado_registro, demo_sesion_id")
     .eq("id", nuevo.medico_id)
     .maybeSingle();
   if (!medicoNuevo || medicoNuevo.estado_registro !== "aprobado") {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
+  }
+
+  // ── LA TERCERA PUERTA: acá también se escribe un paciente_id en un turno ──
+  // `asignarTurno` y `asignarCI` comprueban que el paciente y el profesional
+  // sean del MISMO mundo; esta función escribe exactamente lo mismo y no lo
+  // comprobaba. El único filtro era `estado_registro !== 'aprobado'` — y el
+  // profesional de una reunión de demostración nace, justamente, `aprobado`.
+  //
+  // O sea que un POST a /api/otorgador/reprogramar-masivo con el turno de un
+  // vecino real y un slot del participante lo dejaba atendido por alguien no
+  // matriculado, con el trigger de la 025 estampándole `es_demo` de forma
+  // IRREVERSIBLE al encuentro: fuera del contador contractual para siempre, y
+  // borrado —con su historia clínica adentro— la próxima vez que alguien toque
+  // "limpiar reunión". El guard `ajenos` de la limpieza no lo salvaba: para
+  // cuando corre, el trigger ya puso la marca.
+  const mundoPaciente = await mundoDelPaciente(anterior.paciente_id);
+  const cruce = mundosIncompatibles(
+    mundoPaciente,
+    (medicoNuevo.demo_sesion_id as string | null) ?? null
+  );
+  if (cruce) return { ok: false, codigo: "validacion", error: cruce };
+
+  // ── ¿Y POR QUÉ NO SE EXIGE QUE EL ÍTEM VENGA DEL PLAN? (decisión) ────────
+  // Porque el plan del `dry_run` no se persiste, y persistirlo cambiaría la
+  // naturaleza del endpoint: hoy la fase 2 es idempotente por ítem y sin estado,
+  // y la spec dice explícitamente que Nova, la pantalla y un operador IA con API
+  // key son CALLERS IGUALES — ninguno tiene que pedir permiso a un plan previo
+  // para mover UN turno. Un plan guardado además envejece mal: entre el dry_run
+  // y la confirmación los slots se ocupan, y la fase 2 terminaría rechazando
+  // movimientos legítimos con un "ese ítem no estaba en el plan" que el operador
+  // no puede accionar.
+  //
+  // Lo que sí tiene que ser cierto se comprueba ACÁ, sobre la fila real y en el
+  // instante de escribir: mismo mundo (arriba), profesional habilitado, canal de
+  // la institución, ventana T−5, misma especialidad (abajo) y el lock optimista
+  // contra `estado='disponible'`. Es una defensa más fuerte que la procedencia,
+  // porque no depende de que el caller haya pasado por ninguna pantalla.
+  //
+  // La especialidad: el plan solo propone candidatos de la MISMA (sale de
+  // `armarOferta(especialidad)`), pero la fase 2 aceptaba cualquier par — un
+  // paciente de cardiología podía terminar con un dermatólogo, sin que nada lo
+  // dijera. Se compara defensivamente: si a alguna de las dos fichas le falta el
+  // dato, no se bloquea (no se inventa un rechazo sobre un campo vacío).
+  const { data: medicoPrevio } = await admin
+    .from("medicos")
+    .select("id, nombre_completo, especialidad")
+    .eq("id", anterior.medico_id)
+    .maybeSingle();
+  const espPrevia = ((medicoPrevio?.especialidad as string | null) ?? "").trim();
+  const espNueva = ((medicoNuevo.especialidad as string | null) ?? "").trim();
+  if (espPrevia && espNueva && espPrevia !== espNueva) {
+    return {
+      ok: false,
+      codigo: "validacion",
+      error: `Ese horario es de ${espNueva} y el turno era de ${espPrevia}: la reprogramación no cambia de especialidad.`,
+    };
   }
 
   // ── R6 ES FLEXIBLE (Diego, 13/08): el acuerdo completo NO frena acá ───────
@@ -443,15 +500,15 @@ export async function reprogramarTurnoInstitucional(params: {
   }
 
   const nombreMedico = `${(medicoNuevo.titulo ?? "").trim()} ${(medicoNuevo.nombre_completo ?? "").trim()}`.trim();
-  let medicoAnterior: { id: string; nombre: string } | null = null;
-  if (anterior.medico_id !== nuevo.medico_id) {
-    const { data: previo } = await admin
-      .from("medicos")
-      .select("nombre_completo")
-      .eq("id", anterior.medico_id)
-      .maybeSingle();
-    medicoAnterior = { id: anterior.medico_id, nombre: previo?.nombre_completo ?? "" };
-  }
+  // La ficha del que pierde el paciente ya se leyó arriba (para comparar
+  // especialidades): no se vuelve a pedir.
+  const medicoAnterior: { id: string; nombre: string } | null =
+    anterior.medico_id !== nuevo.medico_id
+      ? {
+          id: anterior.medico_id,
+          nombre: ((medicoPrevio?.nombre_completo as string | null) ?? "").trim(),
+        }
+      : null;
 
   const avisos = await avisarReprogramacionTurno({
     paciente: {
