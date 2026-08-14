@@ -8,6 +8,13 @@
 // calculara por su cuenta, tarde o temprano diría un número distinto al de la
 // factura y esa discusión la perdemos siempre.
 //
+// Corolario de eso (y no una excepción): los KPI filtran `es_demo = false`
+// EXACTAMENTE como lo hace `facturacion.ts`. Una consulta de una reunión de
+// venta no le pasó a la provincia, y para las que la firma retiene la limpieza
+// no las borra nunca — el número quedaría inflado para siempre. El detalle de la
+// tab "Consultas" sí las lista, con un chip que dice qué son: ahí es donde se
+// muestra, en la reunión, la consulta que se acaba de hacer.
+//
 // La única cifra que NO sale del contador es la de los slots sin asignar: esa
 // se cuenta contra la OFERTA de agenda (`turnos`), porque un slot que nadie
 // tomó no genera fila en el contador — preguntarle a la factura qué NO pasó no
@@ -104,6 +111,15 @@ export async function resumenDeSemana(params: {
         .from("encuentros_metering")
         .select("tipo, recurso_id, motor, medico_id, especialidad, fecha_ar, clasificacion")
         .eq("semana_ar", lunes)
+        // ── LOS NÚMEROS DE ARRIBA SON DE LA PROVINCIA, NO DE LA REUNIÓN ────
+        // Estos son los KPI que el panel presenta como lo que pasó: consultas
+        // facturables, el chart por motor, "atendieron X de Y", el ausentismo.
+        // Una consulta de una reunión de venta no pasó — y para los encuentros
+        // que la firma retiene, la mentira es PERMANENTE (la limpieza no los
+        // borra). El detalle de la tab "Consultas" sí las muestra, con su chip:
+        // ver `encuentrosDeSemana`. La escena 6 se cuenta ahí, que es donde se
+        // señala la consulta que se acaba de hacer.
+        .eq("es_demo", false)
         .order("id", { ascending: true })
         .range(desde, hasta)
     ),
@@ -238,6 +254,12 @@ export interface EncuentroDelPanel {
   clasificacion: string;
   minutos: number;
   documentos: { id: string; tipo: string; fecha: string }[];
+  /**
+   * Salió de una reunión de demostración. La fila SE MUESTRA —es la escena 6:
+   * "el panel refleja lo que acaba de pasar"— pero con un chip inequívoco, y no
+   * entra en ningún KPI ni en la factura.
+   */
+  esDemo: boolean;
 }
 
 /** El nombre del paciente de un encuentro, con la asimetría del B2C resuelta. */
@@ -302,7 +324,7 @@ export async function encuentrosDeSemana(params: {
     admin
       .from("encuentros_metering")
       .select(
-        "tipo, recurso_id, motor, medico_id, paciente_id, especialidad, fecha_ar, clasificacion, segundos_ambos_en_sala"
+        "tipo, recurso_id, motor, medico_id, paciente_id, especialidad, fecha_ar, clasificacion, segundos_ambos_en_sala, es_demo"
       )
       .eq("semana_ar", params.semanaAr)
       .order("fecha_ar", { ascending: false })
@@ -395,6 +417,7 @@ export async function encuentrosDeSemana(params: {
     clasificacion: f.clasificacion as string,
     minutos: Math.round(Number(f.segundos_ambos_en_sala ?? 0) / 60),
     documentos: docsPorRecurso.get(`${f.tipo}|${f.recurso_id}`) ?? [],
+    esDemo: f.es_demo === true,
   }));
   return { encuentros, total, limite };
 }

@@ -138,6 +138,42 @@ test("los slots de la escenografía no se cuentan como oferta que nadie tomó", 
   }
 });
 
+test("los KPI del panel de la provincia no cuentan las consultas de una reunión", () => {
+  // Entre la reunión y la limpieza, el panel REAL mostraba consultas que no
+  // existieron; y para los encuentros que la firma retiene —que la limpieza no
+  // borra— la mentira era permanente.
+  const codigo = fuente("src/lib/metering/panel.ts");
+  const kpi = queriesDe(codigo, "encuentros_metering").filter((q) => q.includes("clasificacion"));
+  assert.ok(kpi.length >= 1, "cambió la forma de panel.ts: revisá este test");
+  assert.match(
+    kpi[0],
+    /\.eq\("es_demo", false\)/,
+    "el resumen semanal del panel volvió a contar las consultas de una reunión de venta"
+  );
+});
+
+test("el detalle del panel muestra la consulta de la demo, pero marcada", () => {
+  // Excluirla del listado rompería la escena 6 ("el panel refleja lo que acaba
+  // de pasar"). Mostrarla sin marca es lo que hacía que el panel mintiera.
+  const codigo = fuente("src/lib/metering/panel.ts");
+  assert.match(
+    codigo,
+    /segundos_ambos_en_sala, es_demo/,
+    "el detalle de la tab Consultas dejó de leer la marca de demostración"
+  );
+  assert.match(
+    codigo,
+    /esDemo: f\.es_demo === true/,
+    "las filas del detalle dejaron de viajar con la marca: la pantalla no puede pintar el chip"
+  );
+  assert.match(
+    fuente("src/app/panel/TabConsultas.tsx"),
+    /e\.esDemo &&[\s\S]{0,200}Demostración/,
+    "la tab Consultas dejó de pintar el chip: una consulta de una reunión de venta vuelve a " +
+      "verse igual que una de la provincia"
+  );
+});
+
 test("la facturación no lee una sola fila del contador sin excluir la demostración", () => {
   const codigo = fuente("src/lib/metering/facturacion.ts");
   const queries = queriesDe(codigo, "encuentros_metering");
