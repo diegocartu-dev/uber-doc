@@ -148,11 +148,19 @@ export default function DemoClient({
   const [copiado, setCopiado] = useState(false);
   const [confirmarLimpieza, setConfirmarLimpieza] = useState(false);
   const [problemas, setProblemas] = useState<string[]>([]);
+  /**
+   * Lo que va a fallar EN VIVO si nadie lo mira: la ventana de consulta inmediata
+   * cerrada, o que ya no queden turnos de hoy. Va en su propia card ROJA, y no
+   * mezclado en la lista verde de "agenda lista" — que es donde vivía y donde no
+   * lo leía nadie.
+   */
+  const [alertas, setAlertas] = useState<string[]>([]);
 
   function limpiarMensajes() {
     setError("");
     setAviso("");
     setProblemas([]);
+    setAlertas([]);
   }
 
   function crearReunion() {
@@ -204,13 +212,10 @@ export default function DemoClient({
     limpiarMensajes();
     startTransition(async () => {
       const res = await prepararEscenarioDemo({ sesionId: sesionElegida.id, medicoId });
-      if (!res.ok) {
-        setError(res.error ?? "No se pudo dejar la agenda lista.");
-        setProblemas(res.notas ?? []);
-      } else {
-        setAviso(`Agenda lista: ${res.resumen}`);
-        setProblemas(res.notas ?? []);
-      }
+      setProblemas(res.notas ?? []);
+      setAlertas(res.alertas ?? []);
+      if (!res.ok) setError(res.error ?? "No se pudo dejar la agenda lista.");
+      else setAviso(`Agenda lista: ${res.resumen}`);
       router.refresh();
     });
   }
@@ -383,6 +388,20 @@ export default function DemoClient({
         )}
       </section>
 
+      {alertas.length > 0 && (
+        <div
+          style={{ ...card, padding: 16, marginBottom: 20, borderColor: ROJO, background: "#FDECEC" }}
+        >
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#8A2E2D" }}>
+            Ojo antes de empezar
+          </p>
+          <ul style={{ margin: "8px 0 0 18px", fontSize: 13, color: "#8A2E2D" }}>
+            {alertas.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && (
         <div
           style={{ ...card, padding: 16, marginBottom: 20, borderColor: ROJO, background: "#FDECEC" }}
@@ -659,7 +678,7 @@ export default function DemoClient({
                         type="button"
                         style={btnSec}
                         disabled={pendiente}
-                        title="Turnos desde hoy hasta el 30 de agosto (la ventana que mira el call center), una franja libre de hoy, algunos horarios ya ocupados y un profesional de respaldo para reprogramar"
+                        title="Turnos desde hoy hasta el 30 de agosto (la ventana que mira el call center), en UNA sola mitad del día: la otra queda libre para que Nova tenga dónde crear. Además, algunos horarios ya ocupados y un profesional de respaldo para reprogramar. Tocarlo dos veces no duplica nada."
                         onClick={() => prepararAgenda(p.medico_id as string)}
                       >
                         Preparar agenda

@@ -7,6 +7,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   rangoEscenarioPorDefecto,
   franjaDeAhora,
@@ -14,9 +16,21 @@ import {
   nombreRelleno,
   hoyAR,
   huecoDeHoy,
+  mitadDelEscenario,
+  bandaOcupada,
+  bandaLibre,
+  esFinDeSemana,
   FRANJA_MANANA,
   FRANJA_TARDE,
+  NOMBRE_RESPALDO,
 } from "@/lib/institucional/demo-escenario";
+
+/** El archivo sin comentarios: lo mismo que hace `demo-aislamiento.test.ts`. */
+function fuente(ruta: string): string {
+  return readFileSync(resolve(process.cwd(), ruta), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // El rango del guion
@@ -115,13 +129,51 @@ test("si ya no queda tiempo útil, no inventa una franja de un minuto", () => {
 // Las franjas del guion y el relleno
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("mañana y tarde, de lunes a viernes", () => {
-  const franjas = franjasEscenario();
-  assert.equal(franjas.length, 10);
-  assert.deepEqual([...new Set(franjas.map((f) => f.dia_semana))], [1, 2, 3, 4, 5]);
-  for (const f of franjas) {
-    assert.ok(f.hora_inicio < f.hora_fin);
+test("el escenario ocupa UNA banda y deja la otra entera libre", () => {
+  // Ocupaba las dos, y `crearAgendaModelo` rechaza cualquier agenda que se pise
+  // con turnos disponibles: el participante le pedía a Nova "abrime de 9 a 12" y
+  // Nova le contestaba que ya tenía una agenda que se pisa. Delante del ministro.
+  for (const mitad of ["mañana", "tarde"] as const) {
+    const franjas = franjasEscenario(mitad);
+    assert.equal(franjas.length, 5, `${mitad}: tiene que ser una banda por día hábil`);
+    assert.deepEqual([...new Set(franjas.map((f) => f.dia_semana))], [1, 2, 3, 4, 5]);
+    const ocupada = bandaOcupada(mitad);
+    const libre = bandaLibre(mitad);
+    for (const f of franjas) {
+      assert.equal(f.hora_inicio, ocupada.hora_inicio);
+      assert.equal(f.hora_fin, ocupada.hora_fin);
+      // La banda libre NO puede quedar tocada por ninguna franja del escenario:
+      // es el lugar donde Nova va a crear.
+      assert.ok(
+        f.hora_fin <= libre.hora_inicio || f.hora_inicio >= libre.hora_fin,
+        `${mitad}: el escenario se metió en la banda que tenía que dejar libre`
+      );
+    }
   }
+});
+
+test("la banda que se llena es la mitad del día en la que ocurre la reunión", () => {
+  // Si fuera fija, la mitad de las reuniones caería del lado vacío y el call
+  // center no tendría un solo turno cerca de la hora para asignar "para ahora".
+  assert.equal(mitadDelEscenario(new Date("2026-08-21T10:00:00-03:00")), "mañana");
+  assert.equal(mitadDelEscenario(new Date("2026-08-21T16:00:00-03:00")), "tarde");
+  assert.equal(bandaOcupada("mañana"), FRANJA_MANANA);
+  assert.equal(bandaLibre("mañana"), FRANJA_TARDE);
+  assert.equal(bandaOcupada("tarde"), FRANJA_TARDE);
+  assert.equal(bandaLibre("tarde"), FRANJA_MANANA);
+});
+
+test("una reunión de sábado no se queda con una sola ventana", () => {
+  // `armarOferta` solo mira la semana AR corriente: un sábado, la ventana es
+  // sábado y domingo. Con franjas de lunes a viernes eso daba CERO slots y toda
+  // la escena del call center colgaba de la franja improvisada de "ahora".
+  assert.ok(esFinDeSemana("2026-08-22"), "22/08/2026 es sábado");
+  assert.ok(esFinDeSemana("2026-08-23"), "23/08/2026 es domingo");
+  assert.equal(esFinDeSemana("2026-08-21"), false);
+
+  const conFinde = franjasEscenario("tarde", true);
+  assert.equal(conFinde.length, 7);
+  assert.deepEqual([...new Set(conFinde.map((f) => f.dia_semana))], [1, 2, 3, 4, 5, 6, 7]);
 });
 
 test("los pacientes de relleno se leen como lo que son", () => {
@@ -165,4 +217,48 @@ test("un hueco más chico que un turno no es un hueco", () => {
 
 test("sin franja candidata no hay hueco", () => {
   assert.equal(huecoDeHoy(null, AGENDA_HOY, 20), null);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El andamio de la escena no se proyecta como andamio
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("el profesional de respaldo se llama de forma presentable", () => {
+  // Esa fila aparece en la pantalla del call center, al lado del participante y
+  // delante de la sala. "(respaldo)" es jerga nuestra: leerla proyectada es ver
+  // el truco.
+  assert.equal(/respaldo/i.test(NOMBRE_RESPALDO), false, "el nombre volvió a decir 'respaldo'");
+  assert.match(NOMBRE_RESPALDO, /demostración/i);
+});
+
+test("el respaldo se publica por el motor OFRECIDO, para no salir primero", () => {
+  // `priorizarOferta` ordena por categoría antes que por reparto parejo: con
+  // 'acordado' y cero asignaciones, el andamio empataba con el participante y el
+  // desempate quedaba en el orden alfabético — podía salir PRIMERO justo cuando
+  // Diego muestra cómo el call center elige al participante.
+  const codigo = fuente("src/lib/institucional/demo-escenario.ts");
+  const i = codigo.indexOf("respaldo ${desde} a ${hasta}");
+  assert.ok(i > 0, "cambió la forma de asegurarRespaldo: revisá este test");
+  assert.match(
+    codigo.slice(i, i + 400),
+    /canal_origen: "ofrecido"/,
+    "el respaldo volvió a publicarse como 'acordado' y puede encabezar la oferta"
+  );
+});
+
+test("preparar el escenario dos veces no llena el padrón de pacientes de utilería", () => {
+  // El botón se toca dos veces siempre: se prepara a la mañana, se ajusta antes
+  // de empezar, y alguien lo aprieta de nuevo por las dudas. Cada corrida creaba
+  // cuatro cuentas auth y cuatro fichas NUEVAS en el padrón de la provincia.
+  const codigo = fuente("src/lib/institucional/demo-escenario.ts");
+  assert.match(
+    codigo,
+    /const faltan = cuantos - sentados/,
+    "el relleno dejó de contar lo que ya estaba puesto: vuelve a crear pacientes en cada corrida"
+  );
+  assert.match(
+    codigo,
+    /reciclables\.shift\(\)/,
+    "el relleno dejó de reutilizar los pacientes de utilería que ya existían"
+  );
 });

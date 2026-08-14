@@ -257,20 +257,29 @@ export async function limpiarReunion(sesionId: string): Promise<{
 // ─── El escenario ────────────────────────────────────────────────────────────
 
 /**
- * Deja la agenda del profesional lista para el guion: turnos acordados del 20
- * al 30 de agosto, una franja de HOY para que el call center pueda asignar
- * "para ahora", y unos pocos pacientes de utilería sentados para que la grilla
- * no se proyecte vacía.
+ * Deja la agenda del profesional lista para el guion: turnos acordados desde hoy
+ * hasta el 30 de agosto en UNA sola mitad del día —la otra queda libre para que
+ * Nova tenga dónde crear—, una franja de HOY para que el call center pueda
+ * asignar "para ahora", y unos pocos pacientes de utilería sentados para que la
+ * grilla no se proyecte vacía.
  *
  * Se corre después de invitarlo y antes de que empiece la reunión. Volver a
- * correrlo no duplica nada.
+ * correrlo no duplica nada: ni la agenda, ni los pacientes de utilería, ni el
+ * profesional de respaldo.
  */
 export async function prepararEscenarioDemo(input: {
   sesionId: string;
   medicoId: string;
   desde?: string;
   hasta?: string;
-}): Promise<{ ok: boolean; error?: string; resumen?: string; notas?: string[] }> {
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  resumen?: string;
+  notas?: string[];
+  /** Lo que va a fallar EN VIVO si nadie lo mira. La pantalla lo pinta en rojo. */
+  alertas?: string[];
+}> {
   const uid = await guardAdminInstitucionalDocto();
   if (!uid) return { ok: false, error: "No autorizado" };
 
@@ -286,9 +295,14 @@ export async function prepararEscenarioDemo(input: {
     `${res.turnosCreados} turnos creados · ${res.turnosOcupados} ya ocupados por pacientes de utilería` +
     (res.respaldoCreado ? " · profesional de respaldo listo (para la escena de reprogramar)." : ".");
   if (!res.ok) {
-    return { ok: false, error: "No se pudo dejar la agenda lista.", notas: res.notas };
+    return {
+      ok: false,
+      error: "No se pudo dejar la agenda lista.",
+      notas: res.notas,
+      alertas: res.alertas,
+    };
   }
-  return { ok: true, resumen, notas: res.notas };
+  return { ok: true, resumen, notas: res.notas, alertas: res.alertas };
 }
 
 /** El rango que la pantalla muestra por defecto (el del guion, sin fechas viejas). */

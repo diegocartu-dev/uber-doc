@@ -9,10 +9,13 @@
 // puede hacer.
 //
 // Entonces el escenario deja puesto lo que la institución ya habría hecho:
-// turnos ACORDADOS del 20 al 30 de agosto (los levanta la institución, R4),
-// con franjas de mañana y de tarde y la duración que manda el config (R10), y
-// unos pocos pacientes ya sentados en algunos horarios para que la agenda se
-// vea viva.
+// turnos ACORDADOS desde hoy hasta el 30 de agosto (los levanta la institución,
+// R4), con la duración que manda el config (R10), y unos pocos pacientes ya
+// sentados en algunos horarios para que la agenda se vea viva.
+//
+// Ocupa UNA SOLA mitad del día —la mitad en la que ocurre la reunión— y deja la
+// otra entera libre. No es estética: es lo que le da a Nova un lugar donde crear
+// una agenda sin chocarse con la que ya está. Ver `mitadDelEscenario`.
 //
 // ── POR QUÉ LOS PACIENTES DE RELLENO SE SIENTAN A MANO Y NO POR EL OTORGADOR ──
 // Porque `asignarTurno` escribe una fila en `asignaciones`, y esa tabla es el
@@ -37,17 +40,70 @@ import { randomBytes } from "crypto";
 
 // ─── Parte pura (testeable sin DB) ───────────────────────────────────────────
 
-/** Mañana y tarde, de lunes a viernes — la agenda típica de un efector. */
+/** Las dos bandas del día de un efector. */
 export const FRANJA_MANANA = { hora_inicio: "09:00", hora_fin: "12:00" };
 export const FRANJA_TARDE = { hora_inicio: "15:00", hora_fin: "18:00" };
 
-export function franjasEscenario(): Franja[] {
-  const franjas: Franja[] = [];
-  for (let dia = 1; dia <= 5; dia++) {
-    franjas.push({ dia_semana: dia, ...FRANJA_MANANA });
-    franjas.push({ dia_semana: dia, ...FRANJA_TARDE });
-  }
-  return franjas;
+export type MitadDelDia = "mañana" | "tarde";
+
+/**
+ * ── LA ESCENA DE NOVA NECESITA UN LUGAR VACÍO ────────────────────────────────
+ * El escenario ocupaba las DOS bandas, de lunes a viernes. Y `crearAgendaModelo`
+ * rechaza cualquier agenda que se pise con turnos disponibles ya existentes (R1,
+ * y está bien: nadie atiende dos cosas a la vez). O sea que cuando el
+ * participante le pedía a Nova lo más natural del mundo —"abrime lunes a viernes
+ * de 9 a 12"— Nova le contestaba que ya tenía una agenda que se pisa. Delante del
+ * ministro, en la escena que se presenta como el salto tecnológico.
+ *
+ * Desde acá el escenario ocupa UNA SOLA banda y deja la otra entera libre, todos
+ * los días del rango. Nova siempre tiene dónde crear.
+ *
+ * ── POR QUÉ LA BANDA SE ELIGE Y NO ES FIJA ───────────────────────────────────
+ * Porque la otra escena que no se puede caer es la del call center asignando "un
+ * turno para ahora", y para eso tiene que haber slots CERCA DE LA HORA DE LA
+ * REUNIÓN. Con una banda fija, la mitad de las reuniones caía del lado vacío: a
+ * las 10 de la mañana con la tarde ocupada no hay un solo turno hoy, y a las 4 de
+ * la tarde con la mañana ocupada, tampoco.
+ *
+ * Entonces se ocupa la mitad del día en la que la reunión efectivamente ocurre, y
+ * se reserva la otra. La pantalla dice cuál quedó libre antes de que empiece.
+ */
+export function mitadDelEscenario(ahora: Date = new Date()): MitadDelDia {
+  const ar = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  return ar.getHours() < 13 ? "mañana" : "tarde";
+}
+
+/** La banda que el escenario llena de turnos. */
+export function bandaOcupada(mitad: MitadDelDia): { hora_inicio: string; hora_fin: string } {
+  return mitad === "mañana" ? FRANJA_MANANA : FRANJA_TARDE;
+}
+
+/** La banda que queda LIBRE para que Nova tenga dónde crear. */
+export function bandaLibre(mitad: MitadDelDia): { hora_inicio: string; hora_fin: string } {
+  return mitad === "mañana" ? FRANJA_TARDE : FRANJA_MANANA;
+}
+
+/** ¿Sábado o domingo (hora argentina)? */
+export function esFinDeSemana(fechaAr: string): boolean {
+  const d = new Date(fechaAr + "T12:00:00").getDay();
+  return d === 0 || d === 6;
+}
+
+/**
+ * Las franjas del escenario: UNA banda, de lunes a viernes.
+ *
+ * `incluirFinDeSemana` existe porque `armarOferta` solo mira la SEMANA AR
+ * CORRIENTE (hoy → domingo): una reunión un sábado tenía como ventana el sábado y
+ * el domingo, y con franjas de lunes a viernes eso daba CERO slots. Toda la
+ * escena del call center quedaba colgada de la franja improvisada de "ahora".
+ */
+export function franjasEscenario(
+  mitad: MitadDelDia = "mañana",
+  incluirFinDeSemana = false
+): Franja[] {
+  const banda = bandaOcupada(mitad);
+  const dias = incluirFinDeSemana ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
+  return dias.map((dia) => ({ dia_semana: dia, ...banda }));
 }
 
 function iso(d: Date): string {
@@ -178,8 +234,15 @@ export function nombreRelleno(i: number): string {
 /**
  * El profesional que existe solo para que la reprogramación tenga destino. No es
  * un participante: no lleva datos de ninguna persona y no recibe enlace.
+ *
+ * ── SE PROYECTA, ASÍ QUE SE LLAMA COMO SE PUEDE LEER ─────────────────────────
+ * Se llamaba "Profesional de demostración (respaldo)". Esa fila aparece en la
+ * pantalla del call center, al lado del participante y delante de la sala:
+ * "(respaldo)" es jerga nuestra —el andamio de la escena— y leerla proyectada es
+ * ver el truco. El nombre queda igual de honesto sin el paréntesis, y en línea
+ * con los pacientes de utilería ("Paciente de demostración N").
  */
-export const NOMBRE_RESPALDO = "Profesional de demostración (respaldo)";
+export const NOMBRE_RESPALDO = "Profesional de demostración";
 
 // ─── Preparación real ────────────────────────────────────────────────────────
 
@@ -190,8 +253,18 @@ export interface ResumenEscenario {
   pacientesRelleno: number;
   /** Se creó el profesional de respaldo (el destino de la reprogramación). */
   respaldoCreado: boolean;
-  /** Lo que no se pudo hacer, dicho en criollo. Vacío = quedó todo listo. */
+  /** Lo que quedó puesto, dicho en criollo. Información, no problema. */
   notas: string[];
+  /**
+   * Lo que va a FALLAR EN VIVO si nadie lo mira. Se pinta en rojo y aparte.
+   *
+   * Vivía mezclado en `notas`, que la pantalla pinta en verde cuando el
+   * escenario sale bien: "la ventana de consulta inmediata está cerrada" —o sea
+   * "el toggle disponible no va a encender ningún chip"— se leía como una nota
+   * informativa al lado de "agenda lista". Son las dos cosas que hacen que una
+   * escena no ocurra.
+   */
+  alertas: string[];
 }
 
 /**
@@ -216,6 +289,7 @@ export async function prepararEscenario(params: {
     pacientesRelleno: 0,
     respaldoCreado: false,
     notas: [],
+    alertas: [],
   };
   if (!esInstitucional()) {
     resumen.notas.push("El modo demo solo existe en la instancia institucional.");
@@ -271,6 +345,14 @@ export async function prepararEscenario(params: {
   const desde = params.desde || rango.desde;
   const hasta = params.hasta || rango.hasta;
 
+  const hoy = hoyAR();
+  // La mitad del día donde ocurre la reunión se llena; la otra queda libre para
+  // que Nova tenga dónde crear. Y si la reunión cae un fin de semana, el sábado y
+  // el domingo entran a la agenda: son los únicos días que `armarOferta` ve.
+  const mitad = mitadDelEscenario();
+  const finDeSemana = esFinDeSemana(hoy);
+  const libre = bandaLibre(mitad);
+
   // 1. La agenda del guion: turnos ACORDADOS (los levanta la institución).
   const agenda = await crearAgendaModelo(admin, {
     medicoId: params.medicoId,
@@ -279,7 +361,7 @@ export async function prepararEscenario(params: {
     fecha_fin: hasta,
     duracion_turno: config.slot_duracion_min,
     precio: 0, // el paciente no paga nunca (R2)
-    franjas: franjasEscenario(),
+    franjas: franjasEscenario(mitad, finDeSemana),
     canal_origen: "acordado",
   });
   if (agenda.ok) {
@@ -292,28 +374,39 @@ export async function prepararEscenario(params: {
     );
   }
 
+  // La banda libre se DICE, y se dice primero: es lo que Diego tiene que saber
+  // antes de que el participante le hable a Nova.
+  resumen.notas.push(
+    `Nova tiene libre de ${libre.hora_inicio} a ${libre.hora_fin}, todos los días del rango: ` +
+      `pedile ESA franja ("abrime de ${libre.hora_inicio} a ${libre.hora_fin}"). La otra mitad ` +
+      `del día ya está llena de turnos y se pisaría.`
+  );
+
   // 2. La franja de HOY, para que el call center pueda asignar "para ahora".
-  const hoy = hoyAR();
   const diaSemana = new Date(hoy + "T12:00:00").getDay();
-  // Lo que la agenda principal YA cubre hoy: hay que descontarlo o el pedido se
-  // pisa con ella y no se crea nada (ver `huecoDeHoy`).
-  const yaCubiertoHoy =
-    hoy >= desde && hoy <= hasta && diaSemana >= 1 && diaSemana <= 5
-      ? [FRANJA_MANANA, FRANJA_TARDE]
-      : [];
+  // Las DOS bandas se descuentan, y no solo la que tiene turnos: la ocupada
+  // porque el pedido se pisaría con ella y no se crearía nada (ver `huecoDeHoy`),
+  // y la libre porque es de Nova — un bloque improvisado ahí adentro volvería a
+  // dejarla sin lugar donde crear, que es el bug que esto resuelve.
   const candidata = franjaDeAhora(new Date(), config.ci_ventana_fin.slice(0, 5));
-  const ahora = huecoDeHoy(candidata, yaCubiertoHoy, config.slot_duracion_min);
+  const ahora = huecoDeHoy(candidata, [FRANJA_MANANA, FRANJA_TARDE], config.slot_duracion_min);
 
   if (!ahora) {
     // Dos motivos distintos, y a Diego le sirve saber cuál: "es tarde" se
     // resuelve moviendo la escena a otro día; "la agenda ya lo cubre" significa
     // que la escena SÍ se puede hacer, con los turnos que ya están.
-    resumen.notas.push(
-      candidata
-        ? `La agenda de hoy ya cubre esa hora (${FRANJA_MANANA.hora_inicio}–${FRANJA_MANANA.hora_fin} y ` +
-            `${FRANJA_TARDE.hora_inicio}–${FRANJA_TARDE.hora_fin}): el call center asigna sobre esos turnos.`
-        : "Ya es tarde para abrir turnos de hoy: la escena del call center va a necesitar una asignación de otro día."
-    );
+    const cubierta = bandaOcupada(mitad);
+    if (candidata) {
+      resumen.notas.push(
+        `La agenda de hoy ya cubre esa hora (${cubierta.hora_inicio}–${cubierta.hora_fin}): ` +
+          `el call center asigna sobre esos turnos.`
+      );
+    } else {
+      resumen.alertas.push(
+        "Ya es tarde para abrir turnos de hoy: el call center NO va a poder asignar 'para ahora'. " +
+          "Esa escena necesita una asignación de otro día."
+      );
+    }
   } else {
     const agendaHoy = await crearAgendaModelo(admin, {
       medicoId: params.medicoId,
@@ -343,62 +436,143 @@ export async function prepararEscenario(params: {
   // la institución ya cerró, el participante puede prender el toggle todo lo que
   // quiera y el chip no se enciende — y el escenario no lo avisaba.
   if (!dentroVentanaCI(config)) {
-    resumen.notas.push(
+    resumen.alertas.push(
       `La ventana de consulta inmediata (${config.ci_ventana_inicio.slice(0, 5)}–` +
-        `${config.ci_ventana_fin.slice(0, 5)}) está cerrada a esta hora: el toggle "disponible" ` +
-        `no va a encender ningún chip en el call center.`
+        `${config.ci_ventana_fin.slice(0, 5)}) está CERRADA a esta hora: el toggle "disponible" ` +
+        `no va a encender ningún chip en el call center. Esa escena no se puede hacer ahora.`
     );
   }
 
   // 3. El relleno. Pacientes SINTÉTICOS —nombre de utilería, sin DNI inventado—
   //    sentados en algunos horarios del rango, para que la agenda que se
   //    proyecta no sea una grilla vacía.
+  //
+  // ── IDEMPOTENTE, PORQUE ESTE BOTÓN SE TOCA DOS VECES ──────────────────────
+  // La agenda ya lo era (`crearAgendaModelo` frena por choque de horarios y se
+  // reporta como nota) y el respaldo también. El relleno NO: cada corrida creaba
+  // cuatro cuentas `auth` y cuatro fichas de paciente NUEVAS. Y el botón se toca
+  // dos veces siempre — se prepara a la mañana, se ajusta antes de empezar, y
+  // alguien lo aprieta de nuevo "por las dudas". A la tercera había doce
+  // pacientes de utilería en el padrón de la provincia y una agenda proyectada
+  // que ya no se parecía a un piloto.
+  //
+  // Ahora se cuenta lo que ESTA reunión ya tiene sentado con este profesional y
+  // se completa la diferencia, reutilizando primero a los de utilería que ya
+  // existen y quedaron libres.
   const cuantos = Math.max(0, Math.min(params.relleno ?? 4, 10));
   if (cuantos > 0) {
-    const { data: libres } = await admin
-      .from("turnos")
-      .select("id, fecha, hora_inicio")
-      .eq("medico_id", params.medicoId)
-      .eq("estado", "disponible")
-      .gt("fecha", hoy) // los de hoy se dejan libres: son los del call center
-      .order("fecha", { ascending: true })
-      .order("hora_inicio", { ascending: true })
-      .limit(cuantos * 3);
+    const { data: dePapel } = await admin
+      .from("pacientes")
+      .select("id, provisionado_detalle")
+      .eq("demo_sesion_id", params.sesionId)
+      .order("created_at", { ascending: true });
+    // El filtro va en JS y no en la query: `provisionado_detalle` es jsonb y un
+    // `.contains()` acá dependería de un operador de PostgREST que nadie más de
+    // este archivo usa. Son unas pocas filas por reunión.
+    const utileria = (dePapel ?? [])
+      .filter((p) => (p.provisionado_detalle as { relleno?: boolean } | null)?.relleno === true)
+      .map((p) => p.id as string);
 
-    // Uno cada tres, para que se vean huecos entre los ocupados (una agenda
-    // llena de punta a punta tampoco es lo que muestra un piloto).
-    const elegidos = (libres ?? []).filter((_, i) => i % 3 === 0).slice(0, cuantos);
+    const { data: yaSentados } = utileria.length
+      ? await admin
+          .from("turnos")
+          .select("id, paciente_id")
+          .eq("medico_id", params.medicoId)
+          .eq("estado", "confirmado")
+          .in("paciente_id", utileria)
+      : { data: [] as { id: string; paciente_id: string }[] };
+    const sentados = (yaSentados ?? []).length;
+    const ocupados = new Set((yaSentados ?? []).map((t) => t.paciente_id as string));
+    const faltan = cuantos - sentados;
 
-    for (let i = 0; i < elegidos.length; i++) {
-      const paciente = await crearPacienteRelleno(params.sesionId, config.dominio, i + 1);
-      if (!paciente) {
-        resumen.notas.push("No se pudo crear alguno de los pacientes de relleno.");
-        continue;
-      }
-      resumen.pacientesRelleno++;
-      const { error } = await admin
+    if (faltan <= 0) {
+      resumen.notas.push(
+        `Los ${sentados} horarios de utilería ya estaban puestos: no se creó ningún paciente nuevo.`
+      );
+    } else {
+      const { data: libresParaSentar } = await admin
         .from("turnos")
-        .update({
-          paciente_id: paciente,
-          estado: "confirmado",
-          asignada_at: new Date().toISOString(),
-        })
-        .eq("id", elegidos[i].id)
-        .eq("estado", "disponible"); // no pisar algo que se acaba de asignar de verdad
-      if (error) {
-        resumen.notas.push(`No se pudo sentar a un paciente de relleno: ${error.message}`);
-      } else {
-        resumen.turnosOcupados++;
+        .select("id, fecha, hora_inicio")
+        .eq("medico_id", params.medicoId)
+        .eq("estado", "disponible")
+        .gt("fecha", hoy) // los de hoy se dejan libres: son los del call center
+        .order("fecha", { ascending: true })
+        .order("hora_inicio", { ascending: true })
+        .limit(faltan * 3);
+
+      // Uno cada tres, para que se vean huecos entre los ocupados (una agenda
+      // llena de punta a punta tampoco es lo que muestra un piloto).
+      const elegidos = (libresParaSentar ?? []).filter((_, i) => i % 3 === 0).slice(0, faltan);
+      // Los de utilería que ya existen y no están sentados con este profesional:
+      // se reciclan antes de crear una cuenta más.
+      const reciclables = utileria.filter((id) => !ocupados.has(id));
+
+      for (let i = 0; i < elegidos.length; i++) {
+        let paciente = reciclables.shift() ?? null;
+        if (!paciente) {
+          // El índice sigue después de los que ya existen para que dos corridas
+          // no dejen dos "Paciente de demostración 1" en la misma grilla.
+          paciente = await crearPacienteRelleno(
+            params.sesionId,
+            config.dominio,
+            utileria.length + i + 1
+          );
+          if (!paciente) {
+            resumen.notas.push("No se pudo crear alguno de los pacientes de relleno.");
+            continue;
+          }
+          resumen.pacientesRelleno++;
+        }
+        const { error } = await admin
+          .from("turnos")
+          .update({
+            paciente_id: paciente,
+            estado: "confirmado",
+            asignada_at: new Date().toISOString(),
+          })
+          .eq("id", elegidos[i].id)
+          .eq("estado", "disponible"); // no pisar algo que se acaba de asignar de verdad
+        if (error) {
+          resumen.notas.push(`No se pudo sentar a un paciente de relleno: ${error.message}`);
+        } else {
+          resumen.turnosOcupados++;
+        }
       }
     }
   }
 
   // 4. El profesional de RESPALDO: el destino de la reprogramación.
-  await asegurarRespaldo(params.sesionId, ficha.especialidad as string, desde, hasta, config.slot_duracion_min, resumen);
+  await asegurarRespaldo({
+    sesionId: params.sesionId,
+    especialidad: ficha.especialidad as string,
+    desde,
+    hasta,
+    duracion: config.slot_duracion_min,
+    mitad,
+    finDeSemana,
+    resumen,
+  });
 
-  resumen.ok = resumen.turnosCreados > 0 || resumen.turnosOcupados > 0;
-  if (!resumen.ok && resumen.notas.length === 0) {
-    resumen.notas.push("No quedó ningún turno nuevo: revisá el rango de fechas.");
+  // ── "OK" ES QUE LA AGENDA EXISTA, NO QUE SE HAYA CREADO AHORA ─────────────
+  // Era `turnosCreados > 0 || turnosOcupados > 0`, o sea que la SEGUNDA corrida
+  // —la que no crea nada porque ya estaba todo puesto, que es exactamente lo que
+  // se busca— se reportaba como "No se pudo dejar la agenda lista", en rojo,
+  // sobre un escenario impecable. Lo que hay que responder es si el profesional
+  // tiene turnos en el rango.
+  const { count, error: errCuenta } = await admin
+    .from("turnos")
+    .select("id", { count: "exact", head: true })
+    .eq("medico_id", params.medicoId)
+    .gte("fecha", desde)
+    .lte("fecha", hasta);
+  if (errCuenta) {
+    // No se pudo comprobar: se cae al criterio viejo antes que mentir.
+    resumen.ok = resumen.turnosCreados > 0 || resumen.turnosOcupados > 0;
+  } else {
+    resumen.ok = (count ?? 0) > 0;
+  }
+  if (!resumen.ok && resumen.notas.length === 0 && resumen.alertas.length === 0) {
+    resumen.alertas.push("No quedó ningún turno en el rango: revisá las fechas.");
   }
   return resumen;
 }
@@ -458,14 +632,17 @@ async function crearPacienteRelleno(
  * demás. Se crea UNO solo: si la reunión ya tiene dos profesionales, no hace
  * falta.
  */
-async function asegurarRespaldo(
-  sesionId: string,
-  especialidad: string,
-  desde: string,
-  hasta: string,
-  duracion: number,
-  resumen: ResumenEscenario
-): Promise<void> {
+async function asegurarRespaldo(params: {
+  sesionId: string;
+  especialidad: string;
+  desde: string;
+  hasta: string;
+  duracion: number;
+  mitad: MitadDelDia;
+  finDeSemana: boolean;
+  resumen: ResumenEscenario;
+}): Promise<void> {
+  const { sesionId, especialidad, desde, hasta, duracion, resumen } = params;
   const admin = createAdminClient();
   const { data: deLaReunion, error } = await admin
     .from("medicos")
@@ -504,8 +681,19 @@ async function asegurarRespaldo(
     fecha_fin: hasta,
     duracion_turno: duracion,
     precio: 0,
-    franjas: franjasEscenario(),
-    canal_origen: "acordado",
+    // Misma banda que el participante (la reprogramación prefiere el MISMO DÍA,
+    // así que los horarios tienen que solaparse) pero por el motor OFRECIDO.
+    //
+    // ── POR QUÉ OFRECIDO Y NO ACORDADO ────────────────────────────────────────
+    // `priorizarOferta` ordena por categoría antes que por reparto parejo: CI
+    // activa > acordado > ofrecido. Con acordado y cero asignaciones, el respaldo
+    // empataba con el participante y el desempate quedaba en el orden alfabético
+    // — o sea que el andamio de la escena podía salir PRIMERO en la pantalla del
+    // call center, justo cuando Diego muestra cómo se elige al participante.
+    // Ofrecido lo deja siempre debajo, sin sacarlo de la oferta: la
+    // reprogramación lo sigue encontrando, que es para lo único que existe.
+    franjas: franjasEscenario(params.mitad, params.finDeSemana),
+    canal_origen: "ofrecido",
   });
   if (agenda.ok) {
     resumen.turnosCreados += agenda.turnosCreados;
