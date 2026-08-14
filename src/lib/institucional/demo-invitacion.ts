@@ -751,13 +751,32 @@ async function anonimizarSobrevivientes(
     );
   }
 
+  // ── SE VACÍA LA FICHA ENTERA, NO LOS CAMPOS DEL ALTA ─────────────────────
+  // El alta de un paciente de demostración escribe cuatro campos (nombre, DNI,
+  // fecha de nacimiento, celular), pero la ficha NO se queda con esos cuatro: en
+  // la reunión el participante pasa por "Tu información médica" y por el modal
+  // de datos, y ahí tipea sexo, CUIL y su cobertura — obra social, plan y número
+  // de afiliado. Son datos reales de una persona real, sobre su salud, en la
+  // base de la provincia. Anonimizar solo lo que el alta escribió los dejaba
+  // intactos.
+  //
+  // El CUIL va con el DNI o no va: se deriva del DNI y el sexo, así que dejarlo
+  // es dejar el documento escrito de otra forma.
   const { data: pacientes, error: errP } = await admin
     .from("pacientes")
     .update({
       nombre_completo: NOMBRE_ANONIMO.paciente,
       telefono: null,
       dni: null,
+      cuil: null,
       fecha_nacimiento: null,
+      sexo_dni: null,
+      tiene_cobertura: false,
+      obra_social: null,
+      obra_social_id: null,
+      obra_social_otra: null,
+      nro_afiliado: null,
+      plan_obra_social: null,
     })
     .eq("demo_sesion_id", sesionId)
     .select("id");
@@ -765,7 +784,7 @@ async function anonimizarSobrevivientes(
   else if ((pacientes ?? []).length > 0) {
     retenidos.push(
       `${pacientes!.length} ficha(s) de paciente quedaron en la base y se anonimizaron: ` +
-        `sin nombre, sin celular y sin DNI.`
+        `sin nombre, sin celular, sin DNI y sin los datos de cobertura que se hayan cargado.`
     );
   }
 }

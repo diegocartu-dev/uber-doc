@@ -77,6 +77,22 @@ export function diaSemanaDe(fecha: string): number {
  * Función pura: es lo que se puede probar sin base, y es donde vive el único
  * razonamiento no trivial (un lunes con 6 turnos de 20' de 09:00 a 11:00 tiene
  * que contarse como "lunes 09:00-11:00", no como seis líneas en el prompt).
+ *
+ * ── SE FUSIONA POR DÍA DE SEMANA SOBRE TODO EL RANGO (decisión, no descuido) ─
+ * O sea que UN lunes ocupado marca TODOS los lunes, y el recorte le saca esa
+ * banda a la franja semanal entera. Parece que recorta de más — y no: es
+ * exactamente el criterio con el que `crearAgendaModelo` acepta o rechaza.
+ *
+ * Una agenda modelo es UNA franja semanal aplicada a UN rango de fechas, y sus
+ * dos frenos (el duro por turnos con paciente y el R1 por agendas que se pisan)
+ * miran fecha por fecha y rechazan el modelo ENTERO —sin crear nada— en cuanto
+ * UNA sola fecha choca. No existe "creo el modelo salvo el lunes 17": si un
+ * lunes del rango está ocupado a las 10, la franja "lunes 09:00-12:00" no se
+ * puede crear, punto. Fusionar por día de semana es lo que hace que lo que
+ * queda después del recorte SÍ se pueda crear.
+ *
+ * El día que la agenda modelo acepte excepciones por fecha, esto tiene que
+ * bajar a granularidad de fecha con ella.
  */
 export function fusionarBandas(
   filas: { fecha: string; hora_inicio: string; hora_fin: string; canal_origen?: string | null }[]
@@ -255,7 +271,8 @@ export function fraseRecorteParcial(choques: Choque[]): string {
 // ─── La lectura (solo instancia institucional) ────────────────────────────────
 
 /**
- * Las bandas que el profesional ya tiene ocupadas en el rango, fusionadas.
+ * Las bandas que el profesional ya tiene ocupadas en el rango, fusionadas por
+ * día de semana (el porqué de esa fusión está en `fusionarBandas`).
  *
  * Service role: se lee `turnos` sin depender del cliente RLS del request (lo
  * llaman tanto el chat de Nova como el confirmador, que ya corre con admin).
