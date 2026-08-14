@@ -48,15 +48,22 @@ necesita turnos **cerca de la hora de la reunión** para poder asignar "para
 ahora", y esos turnos tienen que existir en la mitad del día en la que la
 reunión efectivamente ocurre.
 
-**Consecuencia práctica, para la escena de Nova:** el participante le tiene que
-pedir a Nova la banda **libre**. La pantalla la dice con todas las letras después
-de preparar la agenda, y es la que hay que soplarle:
+**Ya no hace falta soplarle nada al participante.** Nova recibe en su contexto
+qué franjas tiene ocupadas ese profesional y de dónde salieron, y el confirmador
+recorta el pedido contra eso antes de mandarlo. O sea que los tres pedidos
+funcionan:
 
-> *"Nova, abrime de 15 a 18 de lunes a viernes."*
+| Lo que pide el participante | Qué pasa |
+|---|---|
+| La banda **libre** ("abrime de 15 a 18") | Se crea, como siempre. |
+| La banda **llena** ("abrime de 9 a 12") | No se crea —nadie atiende dos cosas a la vez— pero la respuesta ofrece el hueco real: *"de 9 a 12 ya tiene los turnos de la institución; le puedo abrir de 12 a 20, ¿va?"*. |
+| **Las dos juntas** ("de 9 a 12 y también de 15 a 18") | Se crea la mitad libre y se dice qué quedó afuera y por qué. Antes fallaba entero, en las dos configuraciones del escenario. |
 
-Si le pide la banda que ya está llena, Nova va a contestar —con razón— que ya
-tiene una agenda que se pisa: nadie atiende dos cosas a la vez, y esa regla
-también vale para la institución.
+La pantalla igual dice cuál es la banda libre después de preparar la agenda: sirve
+para saber qué esperar, no para tener que dictárselo a nadie.
+
+Fijado por `src/lib/institucional/agenda-ocupada.test.ts`, que corre los tres
+pedidos contra `crearAgendaModelo` de verdad.
 
 ---
 

@@ -138,7 +138,60 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ exito: false, mensaje: "No reconocí los días de la semana." }, { status: 400 });
       }
 
-      const franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
+      let franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
+
+      // ── EL PEDIDO SE RECORTA CONTRA LO QUE YA ESTÁ PUESTO (institucional) ──
+      // `crearAgendaModelo` rechaza ENTERA cualquier agenda que se pise con
+      // turnos existentes. En una demo eso significa que el pedido más natural
+      // del mundo —"lunes a viernes de 9 a 12 y también de 15 a 18"— falla, sin
+      // importar cuál de las dos bandas haya llenado el escenario, porque
+      // siempre se pisa con una.
+      //
+      // El contexto de Nova ahora dice qué está ocupado (ver
+      // `agenda-ocupada.ts`), pero eso es una instrucción a un modelo: puede
+      // no hacerle caso. Esto es el backstop determinístico — se le saca al
+      // pedido la parte ocupada y se crea la libre, o se explica qué banda sí
+      // se puede abrir. Nadie tiene que soplarle nada al participante.
+      //
+      // GATEADO POR MODO: en B2C no ejecuta una línea y el médico del
+      // marketplace sigue recibiendo el rechazo duro de siempre, que es lo que
+      // su pantalla espera.
+      let recorteParcial = "";
+      if (esInstitucional()) {
+        const { getConfigInstitucion } = await import("@/lib/institucional/config");
+        const {
+          bandasOcupadasDelProfesional,
+          recortarFranjas,
+          huecosDelDia,
+          frasePedidoTodoOcupado,
+          fraseRecorteParcial,
+        } = await import("@/lib/institucional/agenda-ocupada");
+        const configInst = await getConfigInstitucion();
+        const ocupadas = await bandasOcupadasDelProfesional({
+          medicoId: medicoDbId,
+          desde: fecha_desde,
+          hasta: fecha_hasta,
+        });
+        const recorte = recortarFranjas(franjas, ocupadas, duracionMinutos);
+        if (recorte.libres.length === 0 && recorte.choques.length > 0) {
+          // Todo lo pedido estaba ocupado: en vez del "hay un conflicto" pelado
+          // de la API, se ofrece el hueco real del primer día que pidió.
+          const huecos = huecosDelDia(
+            ocupadas,
+            franjas[0].dia_semana,
+            { inicio: configInst.ci_ventana_inicio.slice(0, 5), fin: configInst.ci_ventana_fin.slice(0, 5) },
+            duracionMinutos
+          );
+          return NextResponse.json({
+            exito: false,
+            mensaje: frasePedidoTodoOcupado(recorte.choques, huecos),
+          });
+        }
+        if (recorte.choques.length > 0) {
+          franjas = recorte.libres;
+          recorteParcial = fraseRecorteParcial(recorte.choques);
+        }
+      }
 
       // Idempotencia PRECISA: solo bloquea si ya existe una agenda Nova idéntica
       // (mismo rango + canal + franjas exactas). Así "miércoles de junio" y
@@ -196,6 +249,9 @@ export async function POST(req: NextRequest) {
       }
 
       let mensaje = `Listo, creé ${resultado.turnosCreados} turno${resultado.turnosCreados !== 1 ? "s" : ""} en ${resultado.dias} día${resultado.dias !== 1 ? "s" : ""}.`;
+      // Lo que quedó afuera se DICE, en la misma respuesta y sin que el médico
+      // tenga que preguntarlo. Un recorte silencioso es peor que un rechazo.
+      mensaje += recorteParcial;
       if (duracionPisada) {
         mensaje += ` Los hice de ${duracionMinutos} minutos, que es la duración que define la institución.`;
       }

@@ -5,6 +5,10 @@ import { getFlag } from "@/lib/feature-flags";
 import { esInstitucional } from "@/lib/instancia";
 import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 import { getConfigInstitucion } from "@/lib/institucional/config";
+import {
+  bandasOcupadasDelProfesional,
+  describirOcupadas,
+} from "@/lib/institucional/agenda-ocupada";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { waitUntil } from "@vercel/functions";
 import {
@@ -551,6 +555,18 @@ export async function POST(req: NextRequest) {
           .catch(() => null)
       : null;
 
+    // ── QUÉ TIENE OCUPADO, PARA QUE NOVA NO PIDA LO IMPOSIBLE ────────────────
+    // `crearAgendaModelo` rechaza toda agenda que se pise en horario con turnos
+    // que ya existen. Nova no lo sabía: su contexto llevaba la duración y el
+    // precio y nada más, así que armaba el pedido a ciegas y la API se lo
+    // rechazaba — en una reunión, eso se ve como la asistente fallando en vivo.
+    // Con esto puede hacer lo que haría una persona: proponer la banda libre.
+    // En B2C devuelve `[]` sin tocar la base y el bloque no se imprime.
+    const bandasOcupadas = esInstitucional()
+      ? await bandasOcupadasDelProfesional({ medicoId: medicoDbId, desde: hoy, hasta: fechaLimite })
+      : [];
+    const ocupadoResumen = esInstitucional() ? describirOcupadas(bandasOcupadas) : "";
+
     // Bloque ESTÁTICO (cacheable): personalidad + reglas. GENÉRICO — sin datos del
     // médico — para que el prefijo (este bloque + tools) sea idéntico entre todos
     // los médicos y dispare cache-hit global de Anthropic. El nombre y el contexto
@@ -560,7 +576,8 @@ export async function POST(req: NextRequest) {
     // que el cache-hit se mantiene) porque son reglas, no datos del médico.
     const reglasInstitucion = esInstitucional()
       ? `- DURACIÓN: la define la INSTITUCIÓN, no el profesional${slotInstitucional ? ` (${slotInstitucional} minutos)` : ""}. Si el médico pide otra, se la creás con la de la institución y se lo decís ANTES de confirmar, no después.
-- PRECIO: en esta institución el paciente NO PAGA NUNCA. No preguntás por el precio, no lo mencionás y no lo ponés en la confirmación.`
+- PRECIO: en esta institución el paciente NO PAGA NUNCA. No preguntás por el precio, no lo mencionás y no lo ponés en la confirmación.
+- LO QUE YA TIENE PUESTO: en el contexto de abajo, "Franjas ya ocupadas" dice las bandas horarias que este profesional YA tiene con turnos y de dónde salieron. Nadie atiende dos cosas a la vez: una agenda nueva que se pise con eso no se puede crear. Si lo que te piden se pisa, NO lo mandás igual — creás SOLO la parte que está libre y en la misma respuesta decís qué quedó afuera, por qué, y qué banda sí le podés abrir. Ejemplo: "De 9 a 12 ya tiene los turnos de la institución; le abro de 12 a 15, ¿va?". Nunca contestás solamente que hay un conflicto: eso deja al médico sin salida.`
       : "";
     const systemStatic = `Sos Nova, la asistente personal del médico dentro de Docto. No sos un chatbot genérico — sos su asistente de confianza dentro de la plataforma de telemedicina.
 
@@ -671,7 +688,7 @@ Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles hoy: ${slotsResumen}
-Próximos 45 días (resumen): ${proximosResumen}`;
+Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}`;
 
     // --- Claude API con streaming ---
 
