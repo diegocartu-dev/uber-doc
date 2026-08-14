@@ -50,8 +50,14 @@ jobs:
           echo "Waiting for Vercel preview for commit $PR_SHA..."
 
           for i in $(seq 1 30); do
-            DEPLOY_ID=$(gh api "repos/$GH_REPO/deployments?sha=$PR_SHA&environment=Preview" \
-              --jq '.[0].id // empty' 2>/dev/null)
+            # El repo tiene DOS proyectos Vercel conectados (el marketplace y la
+            # instancia institucional), así que Vercel desambigua los entornos:
+            # ya no existe "Preview" a secas, sino "Preview - uber-doc" y
+            # "Preview - instancia-institucional". Buscamos el del marketplace,
+            # que es contra el que corren estos tests; el de la instancia se
+            # cancela por Ignored Build Step y nunca tiene environment_url.
+            DEPLOY_ID=$(gh api "repos/$GH_REPO/deployments?sha=$PR_SHA" \
+              --jq '[.[] | select(.environment | startswith("Preview")) | select(.environment | test("instancia") | not)] | .[0].id // empty' 2>/dev/null)
 
             if [ -n "$DEPLOY_ID" ]; then
               STATUS=$(gh api "repos/$GH_REPO/deployments/$DEPLOY_ID/statuses" \
