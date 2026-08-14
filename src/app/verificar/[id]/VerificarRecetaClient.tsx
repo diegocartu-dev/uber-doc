@@ -16,6 +16,8 @@ type VerificacionResponse = {
   algoritmo?: string;
   hash?: string;
   motivo?: string;
+  /** El documento salió de una cuenta de DEMOSTRACIÓN (modo demo institucional). */
+  demostracion?: boolean;
   medico?: {
     nombre: string;
     especialidad: string;
@@ -50,6 +52,36 @@ function formatHoraAR(iso?: string): string {
     hour12: false,
     timeZone: "America/Argentina/Buenos_Aires",
   });
+}
+
+/**
+ * AVISO DE DEMOSTRACIÓN — la otra mitad de la marca de agua del PDF.
+ *
+ * El papel de una demo se ve completo a propósito (es lo que se está
+ * mostrando), y su QR funciona de verdad. Entonces esta página es exactamente
+ * donde alguien que recibió ese papel va a venir a preguntar si vale — una
+ * farmacia, un empleador, el propio participante al día siguiente. Si acá
+ * dijera "documento verificado" a secas, la verificación estaría certificando
+ * lo que la marca de agua niega.
+ *
+ * Va ARRIBA de todo y en rojo: la respuesta a "¿esto vale?" no puede estar al
+ * final, entre la letra chica.
+ */
+function AvisoDemostracion() {
+  return (
+    <div
+      className="mb-4 rounded-xl p-4"
+      style={{ background: "#FDECEC", border: "1px solid #E24B4A" }}
+    >
+      <p className="text-sm font-semibold" style={{ color: "#B03A39" }}>
+        Documento de demostración — sin validez legal
+      </p>
+      <p className="mt-1 text-sm" style={{ color: "#8A2E2D" }}>
+        Se generó en una prueba del sistema, con una cuenta de demostración. No es una
+        prescripción ni un certificado médico: no debe dispensarse ni presentarse ante nadie.
+      </p>
+    </div>
+  );
 }
 
 export default function VerificarRecetaClient({ recetaId }: { recetaId: string }) {
@@ -111,6 +143,12 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   }, [recetaId]);
 
   // ─── Cargando ──────────────────────────────────────────────────────
+  // El aviso se arma una vez y se pinta como PRIMER hijo de cada tarjeta de
+  // resultado: no importa si el documento verificó bien, si le falta el sello o
+  // si está alterado — lo primero que hay que saber de un papel de demo es que
+  // es de demo.
+  const avisoDemo = data?.demostracion ? <AvisoDemostracion /> : null;
+
   if (estado === "cargando") {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
@@ -162,6 +200,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   if (estado === "sin_sello") {
     return (
       <div className="rounded-2xl bg-white p-8 shadow-sm" style={{ border: "1px solid #BA7517" }}>
+        {avisoDemo}
         <div className="text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#BA7517]/10">
             <FileText className="h-7 w-7 text-[#BA7517]" />
@@ -200,6 +239,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   if (estado === "alterada") {
     return (
       <div className="rounded-2xl bg-[#E24B4A]/5 p-8 text-center shadow-sm" style={{ border: "1px solid #E24B4A" }}>
+        {avisoDemo}
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#E24B4A]/10">
           <AlertTriangle className="h-7 w-7 text-[#E24B4A]" />
         </div>
@@ -236,6 +276,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   if (estado === "invalida") {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm" style={{ border: "1px solid #D85A30" }}>
+        {avisoDemo}
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#D85A30]/10">
           <ShieldX className="h-7 w-7 text-[#D85A30]" />
         </div>
@@ -258,6 +299,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
 
   return (
     <div className="rounded-2xl bg-white p-8 shadow-sm" style={{ border: "1px solid #1D9E75" }}>
+      {avisoDemo}
       {/* Badge verificada */}
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#1D9E75]/10">

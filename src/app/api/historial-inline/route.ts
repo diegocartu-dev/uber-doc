@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { idsSinDocumentacion } from "@/lib/atenciones-sin-documentar";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 export async function GET(req: NextRequest) {
   const medicoId = req.nextUrl.searchParams.get("medicoId");
@@ -12,6 +13,12 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // La puerta del participante de una reunión (ver `demo-puerta.ts`): con el
+  // access token todavía vivo, quien fotografió el QR proyectado seguía leyendo
+  // esto. En B2C el helper corta por el gate de modo y no ejecuta nada.
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   const { data: medico } = await supabase
     .from("medicos").select("id").eq("user_id", user.id).single();

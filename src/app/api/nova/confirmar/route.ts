@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
 import { crearAgendaModelo } from "@/lib/agenda/crear-agenda";
+import { esInstitucional } from "@/lib/instancia";
+import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +28,19 @@ export async function POST(req: NextRequest) {
     if (!user || user.id !== medico_id) {
       return NextResponse.json(
         { exito: false, mensaje: "No autenticado" },
+        { status: 401 }
+      );
+    }
+
+    // ── LA PUERTA DEL PROFESIONAL INVITADO ────────────────────────────────
+    // Nova ESCRIBE (crea agendas, bloquea períodos) y lee la agenda de la
+    // institución. El enlace de una reunión se proyecta en una pared: revocarlo
+    // cierra la sesión, pero el access token que el navegador ya tiene sigue
+    // sirviendo cerca de una hora. Sin esto, el que fotografió el QR seguía
+    // pudiendo pedirle cosas a Nova después de que lo echaran.
+    if (!(await profesionalSigueHabilitado())) {
+      return NextResponse.json(
+        { exito: false, mensaje: "Este acceso ya no está activo." },
         { status: 401 }
       );
     }
@@ -66,8 +81,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ exito: false, mensaje: "Canal inválido" }, { status: 400 });
       }
 
-      // Duración: la del payload o, si no vino, la del perfil del médico
-      const duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
+      // Duración: la del payload o, si no vino, la del perfil del médico.
+      //
+      // ── MODO INSTITUCIONAL: LA DURACIÓN NO SE NEGOCIA (R10) ────────────────
+      // La define la INSTITUCIÓN, no el profesional, y `crearAgendaModelo`
+      // RECHAZA cualquier otra. Sin este gate, un profesional que le dice a
+      // Nova "abrime turnos de media hora" —o la propia Nova infiriendo una
+      // duración del lenguaje natural— recibía un "en esta institución la
+      // consulta es de N minutos" en vez de su agenda. En una demo, eso es la
+      // escena de Nova fallando en vivo. Se fuerza al número del config y se
+      // avisa en el mensaje de éxito.
+      //
+      // En B2C `esInstitucional()` es false y esto no ejecuta nada.
+      let duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
+      let duracionPisada = false;
+      if (esInstitucional()) {
+        const { getConfigInstitucion } = await import("@/lib/institucional/config");
+        const configInst = await getConfigInstitucion();
+        duracionPisada = duracionMinutos !== configInst.slot_duracion_min;
+        duracionMinutos = configInst.slot_duracion_min;
+      }
       // Precio: el de ESTA agenda si el médico lo indicó; si no, su precio default.
       // Validación de rango: el precio lo provee el LLM desde lenguaje natural y se
       // cobra real al paciente vía MP → topamos contra valores absurdos (Roberto CRÍTICO-2).
@@ -105,7 +138,60 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ exito: false, mensaje: "No reconocí los días de la semana." }, { status: 400 });
       }
 
-      const franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
+      let franjas = diasNum.map((dia_semana) => ({ dia_semana, hora_inicio, hora_fin }));
+
+      // ── EL PEDIDO SE RECORTA CONTRA LO QUE YA ESTÁ PUESTO (institucional) ──
+      // `crearAgendaModelo` rechaza ENTERA cualquier agenda que se pise con
+      // turnos existentes. En una demo eso significa que el pedido más natural
+      // del mundo —"lunes a viernes de 9 a 12 y también de 15 a 18"— falla, sin
+      // importar cuál de las dos bandas haya llenado el escenario, porque
+      // siempre se pisa con una.
+      //
+      // El contexto de Nova ahora dice qué está ocupado (ver
+      // `agenda-ocupada.ts`), pero eso es una instrucción a un modelo: puede
+      // no hacerle caso. Esto es el backstop determinístico — se le saca al
+      // pedido la parte ocupada y se crea la libre, o se explica qué banda sí
+      // se puede abrir. Nadie tiene que soplarle nada al participante.
+      //
+      // GATEADO POR MODO: en B2C no ejecuta una línea y el médico del
+      // marketplace sigue recibiendo el rechazo duro de siempre, que es lo que
+      // su pantalla espera.
+      let recorteParcial = "";
+      if (esInstitucional()) {
+        const { getConfigInstitucion } = await import("@/lib/institucional/config");
+        const {
+          bandasOcupadasDelProfesional,
+          recortarFranjas,
+          huecosDelDia,
+          frasePedidoTodoOcupado,
+          fraseRecorteParcial,
+        } = await import("@/lib/institucional/agenda-ocupada");
+        const configInst = await getConfigInstitucion();
+        const ocupadas = await bandasOcupadasDelProfesional({
+          medicoId: medicoDbId,
+          desde: fecha_desde,
+          hasta: fecha_hasta,
+        });
+        const recorte = recortarFranjas(franjas, ocupadas, duracionMinutos);
+        if (recorte.libres.length === 0 && recorte.choques.length > 0) {
+          // Todo lo pedido estaba ocupado: en vez del "hay un conflicto" pelado
+          // de la API, se ofrece el hueco real del primer día que pidió.
+          const huecos = huecosDelDia(
+            ocupadas,
+            franjas[0].dia_semana,
+            { inicio: configInst.ci_ventana_inicio.slice(0, 5), fin: configInst.ci_ventana_fin.slice(0, 5) },
+            duracionMinutos
+          );
+          return NextResponse.json({
+            exito: false,
+            mensaje: frasePedidoTodoOcupado(recorte.choques, huecos),
+          });
+        }
+        if (recorte.choques.length > 0) {
+          franjas = recorte.libres;
+          recorteParcial = fraseRecorteParcial(recorte.choques);
+        }
+      }
 
       // Idempotencia PRECISA: solo bloquea si ya existe una agenda Nova idéntica
       // (mismo rango + canal + franjas exactas). Así "miércoles de junio" y
@@ -163,6 +249,12 @@ export async function POST(req: NextRequest) {
       }
 
       let mensaje = `Listo, creé ${resultado.turnosCreados} turno${resultado.turnosCreados !== 1 ? "s" : ""} en ${resultado.dias} día${resultado.dias !== 1 ? "s" : ""}.`;
+      // Lo que quedó afuera se DICE, en la misma respuesta y sin que el médico
+      // tenga que preguntarlo. Un recorte silencioso es peor que un rechazo.
+      mensaje += recorteParcial;
+      if (duracionPisada) {
+        mensaje += ` Los hice de ${duracionMinutos} minutos, que es la duración que define la institución.`;
+      }
       if (resultado.agendasViejasBloqueadas > 0) {
         mensaje += ` Tenías una agenda anterior en esos días: bloqueé ${resultado.agendasViejasBloqueadas} turno${resultado.agendasViejasBloqueadas !== 1 ? "s" : ""} vacío${resultado.agendasViejasBloqueadas !== 1 ? "s" : ""} para no encimar. Revisala si querés.`;
       }

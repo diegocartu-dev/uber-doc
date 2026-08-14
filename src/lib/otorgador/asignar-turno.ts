@@ -30,6 +30,33 @@ export interface PacienteAsignacion {
   nombre: string;
   celular: string | null;
   email: string | null;
+  /** De qué reunión de demostración es. `null` = paciente del padrón real. */
+  demoSesionId: string | null;
+}
+
+/**
+ * El guard que de verdad manda: un paciente y un profesional tienen que ser del
+ * MISMO mundo.
+ *
+ * La oferta ya los separa (ver `acotarAlMundo` en oferta.ts), pero eso es un
+ * filtro de una pantalla y esta API tiene clientes que no pasan por ninguna
+ * pantalla — un operador IA, Nova, un `curl`. Sin este chequeo, un `paciente_id`
+ * real con un `turno_id` del participante de la reunión escribe la asignación
+ * igual, y a partir de ahí no hay vuelta: el trigger de la 025 marca el
+ * encuentro como demo para siempre, el papel sale con "SIN VALIDEZ LEGAL", y
+ * "limpiar reunión" se lo lleva puesto.
+ *
+ * `null` = pueden. String = el motivo de por qué no.
+ */
+export function mundosIncompatibles(
+  demoPaciente: string | null,
+  demoMedico: string | null
+): string | null {
+  if (demoPaciente === demoMedico) return null;
+  if (demoMedico) {
+    return "Ese profesional es de una reunión de demostración: no puede atender a un paciente del padrón.";
+  }
+  return "Ese paciente es de una reunión de demostración: solo lo puede atender un profesional de esa misma reunión.";
 }
 
 export type ErrorAsignacion =
@@ -62,7 +89,7 @@ export async function cargarPacienteParaAsignar(
   const admin = createAdminClient();
   const { data: p, error } = await admin
     .from("pacientes")
-    .select("id, user_id, nombre_completo, telefono, email")
+    .select("id, user_id, nombre_completo, telefono, email, demo_sesion_id")
     .eq("id", pacienteId)
     .maybeSingle();
   if (error) {
@@ -87,6 +114,7 @@ export async function cargarPacienteParaAsignar(
       nombre: p.nombre_completo ?? "",
       celular: p.telefono ?? null,
       email: p.email ?? null,
+      demoSesionId: (p.demo_sesion_id as string | null) ?? null,
     },
   };
 }
@@ -157,7 +185,7 @@ export async function asignarTurno(params: {
   // asignable por API — asignar-ci ya exigía 'aprobado', acá faltaba.
   const { data: medico, error: errMedico } = await admin
     .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad, estado_registro")
+    .select("id, nombre_completo, titulo, especialidad, estado_registro, demo_sesion_id")
     .eq("id", turno.medico_id)
     .maybeSingle();
   if (errMedico) {
@@ -167,6 +195,13 @@ export async function asignarTurno(params: {
   if (!medico || medico.estado_registro !== "aprobado") {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
   }
+
+  // Los dos mundos no se cruzan. Ver `mundosIncompatibles`.
+  const cruce = mundosIncompatibles(
+    paciente.demoSesionId,
+    (medico.demo_sesion_id as string | null) ?? null
+  );
+  if (cruce) return { ok: false, codigo: "validacion", error: cruce };
 
   // ── R6 ES FLEXIBLE: EL SLOT LIBRE MANDA (Diego, 13/08) ────────────────────
   // Acá vivía un guard duro: acuerdo semanal completo → 409 `acuerdo_completo`.

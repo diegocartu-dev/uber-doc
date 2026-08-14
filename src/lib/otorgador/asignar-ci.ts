@@ -25,6 +25,7 @@ import {
 } from "@/lib/institucional/avisos";
 import {
   cargarPacienteParaAsignar,
+  mundosIncompatibles,
   pacienteConEncuentroActivo,
   type ErrorAsignacion,
   type PacienteAsignacion,
@@ -88,7 +89,7 @@ export async function asignarCI(params: {
   // Guards del médico: disponible (toggle prendido) y SIN encuentro en curso.
   const { data: medico, error: errMedico } = await admin
     .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad, disponible, estado_registro")
+    .select("id, nombre_completo, titulo, especialidad, disponible, estado_registro, demo_sesion_id")
     .eq("id", medicoId)
     .maybeSingle();
   if (errMedico) {
@@ -98,6 +99,13 @@ export async function asignarCI(params: {
   if (!medico || medico.estado_registro !== "aprobado") {
     return { ok: false, codigo: "no_encontrado", error: "Ese profesional no está habilitado." };
   }
+
+  // Los dos mundos no se cruzan (mismo guard que asignar-turno).
+  const cruce = mundosIncompatibles(
+    paciente.demoSesionId,
+    (medico.demo_sesion_id as string | null) ?? null
+  );
+  if (cruce) return { ok: false, codigo: "validacion", error: cruce };
   if (!medico.disponible) {
     return {
       ok: false,

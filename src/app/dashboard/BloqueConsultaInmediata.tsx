@@ -16,6 +16,8 @@ type Props = {
   ocultoClinica: boolean;
   visibleConsultorioParticular: boolean;
   perfilCompleto?: boolean;
+  /** Instancia institucional: sin los canales del marketplace. */
+  institucional?: boolean;
 };
 
 const titleClass = "text-[13px] font-semibold tracking-wide text-gray-900 uppercase";
@@ -31,6 +33,7 @@ export default function BloqueConsultaInmediata({
   ocultoClinica,
   visibleConsultorioParticular,
   perfilCompleto = true,
+  institucional = false,
 }: Props) {
   const { disponible, turnosActivosHoy } = useDashboardMedico();
 
@@ -69,6 +72,7 @@ export default function BloqueConsultaInmediata({
           ocultoClinica={ocultoClinica}
           visibleConsultorioParticular={visibleConsultorioParticular}
           perfilCompleto={perfilCompleto}
+          institucional={institucional}
         />
       </div>
 

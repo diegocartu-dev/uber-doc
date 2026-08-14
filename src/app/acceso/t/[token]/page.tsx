@@ -52,7 +52,8 @@ interface Encabezado {
  * Nunca lanza — sin datos, el intersticial sale genérico y el botón sigue vivo.
  */
 async function encabezadoDelAcceso(acceso: {
-  pacienteId: string;
+  pacienteId: string | null;
+  medicoId: string | null;
   turnoId: string | null;
   consultaId: string | null;
 }): Promise<Encabezado> {
@@ -64,12 +65,40 @@ async function encabezadoDelAcceso(acceso: {
   };
   try {
     const admin = createAdminClient();
+
+    // Sujeto PROFESIONAL (migración 026): su intersticial no habla de un turno
+    // —no tiene— sino de lo que va a encontrar del otro lado.
+    if (acceso.medicoId) {
+      const { data: medico } = await admin
+        .from("medicos")
+        .select("nombre_completo, titulo, especialidad")
+        .eq("id", acceso.medicoId)
+        .maybeSingle();
+      return {
+        saludo: primerNombre(medico?.nombre_completo),
+        titulo: "Tu espacio de trabajo",
+        cuando: medico?.especialidad ?? null,
+        profesional: "",
+      };
+    }
+
     const { data: paciente } = await admin
       .from("pacientes")
       .select("nombre_completo")
-      .eq("id", acceso.pacienteId)
+      .eq("id", acceso.pacienteId!)
       .maybeSingle();
     const saludo = primerNombre(paciente?.nombre_completo);
+
+    // Paciente con enlace emitido antes de que le asignen el encuentro (demo):
+    // se lo saluda y se le dice qué va a pasar, sin inventar una fecha.
+    if (!acceso.turnoId && !acceso.consultaId) {
+      return {
+        saludo,
+        titulo: "Tu consulta médica",
+        cuando: null,
+        profesional: "",
+      };
+    }
 
     const encuentro = acceso.turnoId
       ? await admin

@@ -118,7 +118,7 @@ export async function planReprogramacionMasiva(params: {
 
   const { data: medico, error: errMedico } = await admin
     .from("medicos")
-    .select("id, nombre_completo, titulo, especialidad, estado_registro")
+    .select("id, nombre_completo, titulo, especialidad, estado_registro, demo_sesion_id")
     .eq("id", medicoId)
     .maybeSingle();
   if (errMedico) {
@@ -167,7 +167,14 @@ export async function planReprogramacionMasiva(params: {
   // Si la oferta no se puede leer, el plan NO sale con todo en "gestión
   // manual": eso se vería igual que "no hay lugar en toda la semana" y el call
   // center llamaría a cuatro pacientes al pedo. Un error se dice.
-  const oferta = await armarOferta(especialidad);
+  // Los candidatos salen del MISMO mundo que el profesional que se está
+  // reprogramando: el suyo. Sin esto, reprogramar la agenda de un participante
+  // de la reunión buscaba reemplazo entre los profesionales reales de la
+  // provincia (y al revés, un profesional real podía recibir a los pacientes de
+  // utilería de una demo). Ver `acotarAlMundo` en oferta.ts.
+  const oferta = await armarOferta(especialidad, {
+    demoSesionId: (medico.demo_sesion_id as string | null) ?? null,
+  });
   if (!oferta.ok) {
     return { ok: false, codigo: "interno", error: oferta.error };
   }

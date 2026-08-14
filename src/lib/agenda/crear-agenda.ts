@@ -153,7 +153,7 @@ export async function crearAgendaModelo(
     const [medicoInstRes, clavesRes] = await Promise.all([
       adminGate
         .from("medicos")
-        .select("id, firma_manuscrita_url")
+        .select("id, firma_manuscrita_url, demo_sesion_id")
         .eq("id", medicoId)
         .maybeSingle(),
       adminGate.from("medico_claves").select("id").eq("medico_id", medicoId).maybeSingle(),
@@ -161,7 +161,14 @@ export async function crearAgendaModelo(
     if (medicoInstRes.error || !medicoInstRes.data) {
       return { ok: false, motivo: "validacion", mensaje: "No se pudo verificar el perfil del profesional. Probá de nuevo." };
     }
-    if (!medicoInstRes.data.firma_manuscrita_url || !clavesRes.data) {
+    // Cuenta de DEMOSTRACIÓN (migración 025): exenta del gate de firma, por el
+    // mismo motivo por el que `es_cuenta_test` exime del perfil completo y de
+    // REFEPS en el B2C — el participante de una reunión no es un profesional
+    // matriculado y no puede cumplir un requisito pensado para uno. La firma
+    // existe para sostener el pie del documento; el documento de una demo NO se
+    // sostiene: se marca "SIN VALIDEZ LEGAL" de punta a punta.
+    const esDemo = medicoInstRes.data.demo_sesion_id != null;
+    if (!esDemo && (!medicoInstRes.data.firma_manuscrita_url || !clavesRes.data)) {
       return {
         ok: false,
         motivo: "validacion",

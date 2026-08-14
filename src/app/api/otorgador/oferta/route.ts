@@ -19,8 +19,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Falta la especialidad." }, { status: 422 });
   }
 
+  // De quién es esta oferta. Decide el MUNDO: con un paciente del padrón real,
+  // los profesionales de una reunión de demostración no figuran; con un paciente
+  // de una reunión, figuran SOLO los de esa misma reunión (ver oferta.ts).
+  const pacienteId = (req.nextUrl.searchParams.get("paciente_id") ?? "").trim() || null;
+
   try {
-    const res = await armarOferta(especialidad);
+    const res = await armarOferta(especialidad, { pacienteId });
     if (!res.ok) return NextResponse.json({ error: res.error }, { status: 422 });
     return NextResponse.json(res.oferta);
   } catch (err) {

@@ -150,3 +150,60 @@ test("el texto del efector es dato de config: sin él, el pie no inventa nada", 
   assert.notEqual(huellaPDF(sinEfector), huellaPDF(conEfector));
   assert.equal(paginasDePDF(sinEfector), 1);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARCA DE DEMOSTRACIÓN — el papel de la reunión no se puede confundir
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// En una demo, el que firma es un participante que no es médico matriculado. El
+// documento tiene que verse entero (es lo que se está mostrando) y ser
+// imposible de confundir con uno real. Las huellas de arriba ya prueban la
+// mitad que más importa: SIN branding —o sea, en todo el B2C— el papel no
+// cambió ni un byte, así que la marca no puede aparecer donde no corresponde.
+// Lo de acá abajo prueba la otra mitad.
+
+test("con `demo`, el papel CAMBIA respecto del mismo documento institucional", async () => {
+  for (const f of FIXTURES) {
+    const normal = await generarRecetaPDF(f.doc, BRANDING_SINTETICO);
+    const demo = await generarRecetaPDF(f.doc, { ...BRANDING_SINTETICO, demo: true });
+    assert.notEqual(
+      huellaPDF(demo),
+      huellaPDF(normal),
+      `la marca de demostración no cambió nada en ${f.nombre}: el gate quedó muerto`
+    );
+  }
+});
+
+test("la marca de agua se dibuja translúcida, no tapa el QR ni el barcode", async () => {
+  // El QR y el barcode son las dos cosas del papel que una MÁQUINA tiene que
+  // poder leer. Una marca opaca encima los inutilizaría, y eso no lo detecta
+  // ningún test de "cambió el hash".
+  const demo = await generarRecetaPDF(FIXTURES[0].doc, { ...BRANDING_SINTETICO, demo: true });
+  const crudo = demo.toString("latin1");
+  assert.match(crudo, /\/ca 0\.11/, "la marca de agua tiene que ir con opacidad baja");
+  // Y la opacidad vuelve a 1: si quedara pisada, todo lo dibujado después
+  // saldría fantasma.
+  assert.match(crudo, /\/ca 1\b/);
+});
+
+test("el papel de demostración sigue entrando en UNA página, hasta en el caso apretado", async () => {
+  // El caso apretado es la receta de tres medicamentos con la Sección C larga
+  // del abogado: si la leyenda de demo no estuviera en el presupuesto de alto
+  // del pie, el número de receta y el barcode se irían a una página 2 —
+  // dibujados en coordenadas absolutas, o sea fuera del borde.
+  for (const f of FIXTURES) {
+    const pdf = await generarRecetaPDF(f.doc, {
+      ...BRANDING_SINTETICO,
+      demo: true,
+      efectorTexto: EFECTOR_LEGAL_LARGO,
+    });
+    assert.equal(paginasDePDF(pdf), 1, `${f.nombre} se partió en dos con la marca de demostración`);
+  }
+});
+
+test("`demo` es opt-in: el documento institucional normal no lleva ninguna marca", async () => {
+  const normal = await generarRecetaPDF(FIXTURES[0].doc, BRANDING_SINTETICO);
+  assert.equal(/\/ca 0\.11/.test(normal.toString("latin1")), false);
+  const explicito = await generarRecetaPDF(FIXTURES[0].doc, { ...BRANDING_SINTETICO, demo: false });
+  assert.equal(huellaPDF(explicito), huellaPDF(normal));
+});

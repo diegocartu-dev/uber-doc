@@ -45,6 +45,7 @@ import {
   type IdentidadDocumento,
 } from "./identidad";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { cuentasDeDemostracion, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 
 // Consistente con el flujo de receta (OTP_EXPIRY_MS).
 const OTP_VENTANA_MS = 5 * 60 * 1000;
@@ -257,6 +258,27 @@ async function sellarDocumento(
 ): Promise<FirmaResult> {
   const supabase = createAdminClient();
 
+  // ── EL DISPOSITIVO DEL PARTICIPANTE TAMPOCO QUEDA GUARDADO ────────────────
+  // `ip` y `user_agent` son el sustrato de no-repudio de un profesional REAL: de
+  // ahí sale la atribución si algún día hay que defender una firma. En una
+  // reunión de venta no hay nada que defender —el papel dice "SIN VALIDEZ
+  // LEGAL"— y en cambio son el teléfono y la red de una persona que vino a una
+  // reunión, guardados en una tabla que no se puede borrar.
+  //
+  // Se pregunta ACÁ ARRIBA, antes de escribir nada: si la lectura falla
+  // (`null` = no se pudo saber de qué mundo es), se corta sin haber tocado el
+  // documento. Preguntarlo después del UPDATE obligaba a elegir entre revertir
+  // o inventar una respuesta, y las dos respuestas inventadas dejan un daño
+  // permanente en una tabla append-only.
+  const demo = await cuentasDeDemostracion({ medicoId: doc.medico_id });
+  if (!demo) {
+    return {
+      ok: false,
+      error: "No se pudo verificar el origen de la cuenta. Probá de nuevo en unos segundos.",
+    };
+  }
+  const demoFirmante = demo.medico;
+
   const hash = hashSHA256(canonicalJSON(contenidoFirmable(doc, identidad)));
   const clavePrivada = desencriptarClavePrivada(claves.clave_privada_enc);
   const firma = firmar(hash, clavePrivada);
@@ -293,6 +315,8 @@ async function sellarDocumento(
 
   const logResult = await insertarFirmaLog({
     ...log,
+    ip: demoFirmante ? null : log.ip,
+    user_agent: demoFirmante ? null : log.user_agent,
     documento_id: doc.id,
     receta_id: null,
     medico_id: doc.medico_id,
@@ -405,6 +429,11 @@ export async function firmarDocumento(
   }
 
   const firmante = await snapshotFirmante(medicoId);
+  if (!firmante) {
+    // No se pudo determinar de qué mundo es la ficha. Ver `snapshotFirmante`:
+    // el nombre que se escriba acá no se puede corregir nunca.
+    return { ok: false, error: "No se pudo registrar el firmante. Probá de nuevo en unos segundos." };
+  }
   const contexto = await contextoDocumento(doc, {
     consulta_id: doc.consulta_id,
     turno_id: doc.turno_id,
@@ -494,6 +523,11 @@ export async function firmarDocumentoPorSesion(
   }
 
   const firmante = await snapshotFirmante(medicoId);
+  if (!firmante) {
+    // No se pudo determinar de qué mundo es la ficha. Ver `snapshotFirmante`:
+    // el nombre que se escriba acá no se puede corregir nunca.
+    return { ok: false, error: "No se pudo registrar el firmante. Probá de nuevo en unos segundos." };
+  }
   const contexto = await contextoDocumento(doc, {
     consulta_id: doc.consulta_id,
     turno_id: doc.turno_id,
@@ -662,6 +696,12 @@ async function evaluarInterna(documentoId: string): Promise<EvaluacionInterna> {
   }
 
   const firmante = await snapshotFirmante(doc.medico_id);
+  if (!firmante) {
+    // Misma convención que `pacienteEsDePrueba`: sellar es irreversible, así que
+    // ante la duda se LANZA y el backfill lo anota como `error_sellado` con el
+    // detalle, en vez de sellar con un firmante que no sabemos cómo registrar.
+    throw new Error("No se pudo armar el snapshot del firmante");
+  }
 
   if (firmante.es_cuenta_test === true) {
     return {
@@ -995,6 +1035,9 @@ export async function firmarDocumentoPorRescate(
   }
 
   const firmante = await snapshotFirmante(medicoId);
+  if (!firmante) {
+    return { ok: false, error: "No se pudo registrar el firmante. Probá de nuevo en unos segundos." };
+  }
 
   // Mismo gate de estado del firmante que el camino por sesión: la firma se
   // atribuye a la matrícula, y un profesional rechazado o suspendido no sigue
@@ -1057,8 +1100,15 @@ export async function firmarDocumentoPorRescate(
  * Snapshot del firmante al instante de firmar. NO es una FK: la matrícula, las
  * jurisdicciones y el estado REFEPS cambian, y la defensa necesita el estado
  * que existía cuando se firmó.
+ *
+ * Devuelve `null` si no se pudo determinar de qué mundo es la ficha (solo puede
+ * pasar en la instancia institucional). El caller NO debe firmar: acá se decide
+ * si el nombre que queda escrito para siempre en `firma_logs` es el real o el
+ * de utilería, y las dos respuestas inventadas son daños permanentes — el nombre
+ * de un participante en una fila que no se puede borrar, o "Profesional de
+ * demostración" adentro de la defensa de una firma válida.
  */
-async function snapshotFirmante(medicoId: string): Promise<Record<string, unknown>> {
+async function snapshotFirmante(medicoId: string): Promise<Record<string, unknown> | null> {
   const supabase = createAdminClient();
 
   // Service role: `medicos` tiene columnas sin GRANT para authenticated.
@@ -1071,6 +1121,15 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
     .single();
 
   if (!medico) return { medico_id: medicoId, snapshot_incompleto: true };
+
+  // El profesional de una REUNIÓN DE DEMOSTRACIÓN no deja su nombre acá.
+  // `firma_logs` es append-only por trigger: esta fila no se puede borrar nunca,
+  // ni siquiera con "limpiar reunión", así que un nombre real escrito acá es
+  // permanente. Mismo criterio (y mismo texto) que el snapshot de identidad del
+  // documento — ver `NOMBRE_UTILERIA`.
+  const mundo = await cuentasDeDemostracion({ medicoId });
+  if (!mundo) return null;
+  const esDemo = mundo.medico;
 
   // Aceptación de T&C del médico: es donde consta que su click constituye su
   // firma electrónica. HOY NO EXISTE — verificado en producción 07/08/2026:
@@ -1123,7 +1182,8 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
   return {
     medico_id: medico.id,
     user_id: medico.user_id ?? null,
-    nombre_completo: medico.nombre_completo ?? null,
+    nombre_completo: esDemo ? NOMBRE_UTILERIA.profesional : (medico.nombre_completo ?? null),
+    demostracion: esDemo || undefined,
     especialidad: medico.especialidad ?? null,
     tipo_matricula: medico.tipo_matricula ?? null,
     numero_matricula: medico.numero_matricula ?? null,

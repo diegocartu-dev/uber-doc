@@ -29,6 +29,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cuilDePaciente } from "@/lib/cuil";
+import { cuentasDeDemostracion, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 
 /**
  * Subconjunto EXACTO de `DocumentoPDF` (src/lib/pdf/receta.ts) que sale impreso
@@ -115,6 +116,49 @@ export async function construirIdentidadDocumento(
 
   if (!medico || !paciente) return null;
 
+  // ── LA REUNIÓN DE DEMOSTRACIÓN NO DEJA NOMBRES ADENTRO DEL SELLO ──────────
+  // Este snapshot es INMUTABLE por diseño (entra al hash) y lo sirve
+  // `/verificar/{id}`, una página pública y sin auth. La limpieza de la reunión
+  // no lo puede tocar: `firma_logs` es append-only y retiene por FK al documento,
+  // así que el DELETE rebota y la fila sobrevive para siempre — con el nombre
+  // real del participante adentro, publicado bajo el mismo UUID que quedó
+  // impreso en el papel proyectado y en el QR que la sala fotografió.
+  //
+  // Se corta en la raíz: si la cuenta es de demostración, lo que se congela es
+  // un nombre de utilería. El participante sigue viendo su nombre en la pantalla
+  // (las tablas vivas no cambian) y el papel ya lleva su marca de agua
+  // "DEMOSTRACIÓN — SIN VALIDEZ LEGAL".
+  //
+  // El DNI y el CUIL del paciente se van por lo mismo: son el dato más sensible
+  // de los que el panel deja cargar, y su único motivo de existir era que el
+  // papel no se viera pobre proyectado. Un papel de demostración se puede ver
+  // pobre; un DNI real no se puede quedar en una fila que no se puede borrar.
+  //
+  // ── Y CON ELLOS SE VA TODO EL BLOQUE DEL PACIENTE ────────────────────────
+  // La primera versión de esto anonimizó el nombre, el DNI y el CUIL, y dejó
+  // congelados la FECHA DE NACIMIENTO y el SEXO reales. Eso no es un residuo
+  // menor: fecha de nacimiento + sexo es dato de salud identificante, entra al
+  // hash, vive en `documentos.firma_digital.identidad`, sobrevive a "limpiar
+  // reunión" (lo retiene `firma_logs` por FK) y se publica bajo el mismo UUID
+  // que quedó impreso en el papel y adentro del QR que la sala fotografió.
+  // Peor todavía: la limpieza SÍ borra `pacientes.fecha_nacimiento` de la fila
+  // viva, así que el dato terminaba existiendo ÚNICAMENTE donde no se puede
+  // borrar.
+  //
+  // El criterio pasa a ser uno solo y sin excepciones: de una cuenta de
+  // demostración NO se congela ningún dato personal del paciente. Ver
+  // `pacienteCongeladoParaDemo`.
+  //
+  // ── Y SI NO SE PUEDE SABER, NO SE FIRMA ──────────────────────────────────
+  // `null` = la lectura del mundo falló. No hay respuesta segura por defecto:
+  // "no es demo" congela el nombre y el DNI reales del participante para
+  // siempre, y "es demo" le pone nombre de utilería al papel válido de un
+  // profesional real. Se aborta, que es lo único reversible — el caller ya
+  // trata `null` como "no se pudo congelar la identidad" y el profesional
+  // reintenta.
+  const demo = await cuentasDeDemostracion({ medicoId, pacienteId });
+  if (!demo) return null;
+
   // Misma resolución de obra social que el PDF (FK → nombre; "otra"; texto libre).
   let obraSocialNombre: string | null = textoONull(paciente.obra_social);
   if (paciente.obra_social_id) {
@@ -130,12 +174,69 @@ export async function construirIdentidadDocumento(
 
   return {
     v: 2,
-    medico_nombre: texto(medico.nombre_completo),
-    medico_titulo: texto(medico.titulo),
+    medico_nombre: demo.medico ? NOMBRE_UTILERIA.profesional : texto(medico.nombre_completo),
+    medico_titulo: demo.medico ? "" : texto(medico.titulo),
     medico_especialidad: texto(medico.especialidad),
     medico_matricula: `${texto(medico.tipo_matricula)} ${texto(medico.numero_matricula)}`.trim(),
     medico_domicilio: texto(medico.domicilio_consultorio) || texto(medico.domicilio),
     medico_firma_manuscrita_path: textoONull(medico.firma_manuscrita_url),
+    ...(demo.paciente
+      ? pacienteCongeladoParaDemo()
+      : pacienteCongeladoReal(paciente, obraSocialNombre)),
+  };
+}
+
+/** El juego de campos del paciente que entra al sello, sin el resto del snapshot. */
+export type IdentidadPaciente = Pick<
+  IdentidadDocumento,
+  | "paciente_nombre"
+  | "paciente_dni"
+  | "paciente_cuil"
+  | "paciente_sexo_dni"
+  | "paciente_fecha_nacimiento"
+  | "paciente_tiene_cobertura"
+  | "paciente_obra_social"
+  | "paciente_nro_afiliado"
+  | "paciente_plan_obra_social"
+>;
+
+/**
+ * Lo que se congela del paciente de una REUNIÓN DE DEMOSTRACIÓN: nada suyo.
+ *
+ * Es una función y no un objeto suelto para que un test la pueda recorrer campo
+ * por campo y exigir que TODOS estén vacíos — la forma de que agregar un campo
+ * nuevo al snapshot sin pensarlo se ponga rojo antes del merge, en vez de
+ * aparecer meses después adentro de una fila que no se puede borrar.
+ */
+export function pacienteCongeladoParaDemo(): IdentidadPaciente {
+  return {
+    paciente_nombre: NOMBRE_UTILERIA.paciente,
+    paciente_dni: "",
+    paciente_cuil: "",
+    paciente_sexo_dni: null,
+    paciente_fecha_nacimiento: null,
+    paciente_tiene_cobertura: false,
+    paciente_obra_social: null,
+    paciente_nro_afiliado: null,
+    paciente_plan_obra_social: null,
+  };
+}
+
+/** Lo que se congela del paciente REAL: exactamente lo que el PDF imprime. */
+export function pacienteCongeladoReal(
+  paciente: {
+    nombre_completo?: unknown;
+    dni?: string | null;
+    cuil?: string | null;
+    sexo_dni?: string | null;
+    fecha_nacimiento?: unknown;
+    tiene_cobertura?: unknown;
+    nro_afiliado?: unknown;
+    plan_obra_social?: unknown;
+  },
+  obraSocialNombre: string | null
+): IdentidadPaciente {
+  return {
     paciente_nombre: texto(paciente.nombre_completo),
     paciente_dni: texto(paciente.dni),
     // El CUIL guardado si lo hay; si no, derivado de DNI + sexo. La columna

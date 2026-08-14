@@ -21,6 +21,25 @@ import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config"
 import { turnoMuerto } from "@/lib/institucional/pantalla-turno";
 
 const DIA_MS = 24 * 3600_000;
+const HORA_MS = 3600_000;
+
+/**
+ * Vigencia del enlace de una REUNIÓN DE DEMOSTRACIÓN. Horas, no días.
+ *
+ * El resto de los enlaces vence a los `vigencia_documentos_dias` del config
+ * (30 por default), y ese número es política de RETENCIÓN DE DOCUMENTOS del
+ * paciente: cuántos días puede volver a buscar su receta. Aplicárselo al enlace
+ * del profesional invitado era darle un mes de vida a un acceso sin usuario ni
+ * contraseña, multi-uso y sin segundo factor, que aterriza directo en el
+ * dashboard clínico con pacientes e historia clínica — desde un QR que se
+ * proyectó en la pared de una sala de reuniones y que muy probablemente quedó en
+ * fotos y en la grabación del encuentro.
+ *
+ * 12 horas cubre el día de la reunión con margen (se prepara a la mañana, se
+ * hace a la tarde) y no cubre el día siguiente. Si hace falta más, se regenera
+ * el QR desde el panel, que además echa al que ya había entrado.
+ */
+export const HORAS_ACCESO_DEMO = 12;
 
 export interface AccesoEmitido {
   url: string; // https://<dominio>/acceso/t/<token>
@@ -33,7 +52,13 @@ export function hashToken(token: string): string {
 }
 
 export async function crearAccesoLink(params: {
-  pacienteId: string; // pacientes.id
+  /** `pacientes.id`. Exactamente uno de los dos sujetos (migración 026). */
+  pacienteId?: string;
+  /**
+   * `medicos.id` — el PROFESIONAL invitado a una demo (migración 026). Su
+   * acceso no lleva encuentro: aterriza en su dashboard, listo para atender.
+   */
+  medicoId?: string;
   turnoId?: string;
   consultaId?: string;
   destino: string; // path de aterrizaje post-login
@@ -53,10 +78,27 @@ export async function crearAccesoLink(params: {
    * que puede venir SIN operador: lo pidió el paciente desde la pantalla
    * pública, no lo emitió nadie del call center.
    */
-  origen?: "asignacion" | "reenvio_paciente" | "reprogramacion";
+  origen?: "asignacion" | "reenvio_paciente" | "reprogramacion" | "demo";
+  /**
+   * Acceso de una REUNIÓN DE DEMOSTRACIÓN (migración 025/026). Es lo único que
+   * habilita un enlace sin encuentro para un paciente: en la operación real,
+   * un acceso siempre está atado a un turno o a una consulta, y eso no cambia.
+   */
+  esDemo?: boolean;
 }): Promise<AccesoEmitido | null> {
-  if (!params.turnoId === !params.consultaId) {
-    // exactamente uno (CHECK accesos_link_un_recurso)
+  // Exactamente un sujeto (CHECK accesos_link_un_sujeto).
+  if (!params.pacienteId === !params.medicoId) {
+    console.error("[accesos] crearAccesoLink: se necesita pacienteId XOR medicoId");
+    return null;
+  }
+  // Y el recurso, según el sujeto (CHECK accesos_link_recurso_coherente). Se
+  // comprueba acá además de en la base para que un caller equivocado falle con
+  // un mensaje que se entiende, no con un error de constraint pelado.
+  if (params.medicoId && (params.turnoId || params.consultaId)) {
+    console.error("[accesos] crearAccesoLink: el acceso del profesional no lleva encuentro");
+    return null;
+  }
+  if (params.pacienteId && !params.esDemo && !params.turnoId === !params.consultaId) {
     console.error("[accesos] crearAccesoLink: se necesita turnoId XOR consultaId");
     return null;
   }
@@ -67,7 +109,12 @@ export async function crearAccesoLink(params: {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const ancla = params.encuentroMs && !Number.isNaN(params.encuentroMs) ? params.encuentroMs : Date.now();
-  const expiraAt = new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
+  // La demo tiene su propio reloj y NO el de la retención de documentos: ver
+  // `HORAS_ACCESO_DEMO`. Va primero para que no dependa del config de nadie.
+  const expiraAt =
+    params.origen === "demo"
+      ? new Date(Date.now() + HORAS_ACCESO_DEMO * HORA_MS).toISOString()
+      : new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
 
   // ── PRIMERO INSERTAR, DESPUÉS REVOCAR ──────────────────────────────────────
   // El orden era el inverso: se revocaban los tokens vivos y recién ahí se
@@ -82,7 +129,9 @@ export async function crearAccesoLink(params: {
   const { data, error } = await admin
     .from("accesos_link")
     .insert({
-      paciente_id: params.pacienteId,
+      paciente_id: params.pacienteId ?? null,
+      medico_id: params.medicoId ?? null,
+      es_demo: params.esDemo ?? false,
       turno_id: params.turnoId ?? null,
       consulta_id: params.consultaId ?? null,
       token_hash: tokenHash,
@@ -100,17 +149,22 @@ export async function crearAccesoLink(params: {
     return null;
   }
 
-  // Un token vivo por (paciente, encuentro): revocar los previos del recurso,
-  // todos menos el que se acaba de emitir.
+  // Un token vivo por (sujeto, encuentro): revocar los previos del mismo
+  // recurso, todos menos el que se acaba de emitir. Para los accesos SIN
+  // encuentro (profesional invitado, paciente de demo antes de que le asignen
+  // el turno) el "recurso" es el sujeto entero: emitir uno nuevo apaga el
+  // anterior, que es justo lo que se espera al re-generar un QR en la reunión.
   const revocacion = admin
     .from("accesos_link")
     .update({ revocado_at: new Date().toISOString() })
-    .eq("paciente_id", params.pacienteId)
+    .eq(params.medicoId ? "medico_id" : "paciente_id", params.medicoId ?? params.pacienteId!)
     .is("revocado_at", null)
     .neq("id", data.id);
   const { error: errRevocar } = params.turnoId
     ? await revocacion.eq("turno_id", params.turnoId)
-    : await revocacion.eq("consulta_id", params.consultaId!);
+    : params.consultaId
+      ? await revocacion.eq("consulta_id", params.consultaId)
+      : await revocacion.is("turno_id", null).is("consulta_id", null);
   if (errRevocar) {
     console.error("[accesos] No se pudieron revocar tokens previos:", errRevocar.message);
     // Se sigue igual: el token nuevo es el que viaja; el viejo vence solo.
@@ -142,9 +196,14 @@ export type MotivoAccesoInvalido =
 
 export interface AccesoValido {
   id: string;
-  pacienteId: string; // pacientes.id
+  /** `pacientes.id` — null cuando el sujeto es un profesional (migración 026). */
+  pacienteId: string | null;
+  /** `medicos.id` — null cuando el sujeto es un paciente. */
+  medicoId: string | null;
   turnoId: string | null;
   consultaId: string | null;
+  /** Acceso de una reunión de demostración: puede no tener encuentro todavía. */
+  esDemo: boolean;
   destino: string; // path de aterrizaje (siempre relativo — se valida al usarlo)
   expiraAt: string;
 }
@@ -186,7 +245,7 @@ export async function validarTokenAcceso(token: string): Promise<ResultadoValida
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("accesos_link")
-    .select("id, paciente_id, turno_id, consulta_id, destino, expira_at, revocado_at")
+    .select("id, paciente_id, medico_id, es_demo, turno_id, consulta_id, destino, expira_at, revocado_at")
     .eq("token_hash", hashToken(token))
     .maybeSingle();
 
@@ -198,6 +257,18 @@ export async function validarTokenAcceso(token: string): Promise<ResultadoValida
   if (!data) return { ok: false, motivo: "no_existe" };
   if (data.revocado_at) return { ok: false, motivo: "revocado" };
   if (new Date(data.expira_at).getTime() <= Date.now()) return { ok: false, motivo: "vencido" };
+
+  // Sujeto PROFESIONAL (migración 026): no hay encuentro que mirar, pero sí una
+  // ficha. Si el profesional dejó de existir —la reunión se limpió— el enlace
+  // muere con él, sin dejar un token que mintea la sesión de un fantasma.
+  if (data.medico_id) {
+    const { data: medico } = await admin
+      .from("medicos")
+      .select("id, dado_de_baja")
+      .eq("id", data.medico_id)
+      .maybeSingle();
+    if (!medico || medico.dado_de_baja) return { ok: false, motivo: "encuentro_terminado" };
+  }
 
   // Vigencia por ESTADO del encuentro, además de por fecha (R19).
   if (data.turno_id) {
@@ -217,6 +288,8 @@ export async function validarTokenAcceso(token: string): Promise<ResultadoValida
     acceso: {
       id: data.id,
       pacienteId: data.paciente_id,
+      medicoId: data.medico_id ?? null,
+      esDemo: data.es_demo === true,
       turnoId: data.turno_id,
       consultaId: data.consulta_id,
       destino: data.destino,
@@ -438,21 +511,75 @@ const MOTIVOS_DE_SEGURIDAD = new Set(["manual", "cambio_contacto"]);
  * paciente miran en CADA request y que se apaga en el mismo instante que el
  * token.
  */
+async function cerrarSesionesDeUsuarios(userIds: (string | null | undefined)[]): Promise<void> {
+  const unicos = [...new Set(userIds.filter((u): u is string => !!u))];
+  if (unicos.length === 0) return;
+  const admin = createAdminClient();
+  for (const userId of unicos) {
+    const { error } = await admin.rpc("cerrar_sesiones_de_usuario", { p_user_id: userId });
+    if (error) {
+      console.error("[accesos] No se pudo cerrar la sesión:", error.message);
+    }
+  }
+}
+
 async function cerrarSesionesDe(pacienteIds: string[]): Promise<void> {
   const unicos = [...new Set(pacienteIds.filter(Boolean))];
   if (unicos.length === 0) return;
   try {
     const admin = createAdminClient();
     const { data: pacientes } = await admin.from("pacientes").select("user_id").in("id", unicos);
-    for (const p of pacientes ?? []) {
-      if (!p.user_id) continue;
-      const { error } = await admin.rpc("cerrar_sesiones_de_usuario", { p_user_id: p.user_id });
-      if (error) {
-        console.error("[accesos] No se pudo cerrar la sesión del paciente:", error.message);
-      }
-    }
+    await cerrarSesionesDeUsuarios((pacientes ?? []).map((p) => p.user_id as string | null));
   } catch (err) {
     console.error("[accesos] cerrarSesionesDe falló:", err);
+  }
+}
+
+/**
+ * Apaga TODOS los enlaces de un SUJETO —un profesional o un paciente de la
+ * demo— y cierra las sesiones que esos enlaces hayan minteado.
+ *
+ * Es la mitad de seguridad de "limpiar reunión": sin esto, el participante que
+ * se va de la sala se queda con un enlace vivo en el teléfono y una sesión
+ * abierta contra la instancia de la provincia. Por eso siempre cierra sesiones
+ * (a diferencia de `revocarAccesosDe`, donde depende del motivo): acá no hay
+ * ningún caso en que revocar signifique otra cosa que "esta persona ya no entra".
+ *
+ * Nunca lanza. Devuelve cuántos enlaces apagó.
+ */
+export async function revocarAccesosDeSujeto(params: {
+  medicoId?: string;
+  pacienteId?: string;
+}): Promise<number> {
+  if (!params.medicoId && !params.pacienteId) return 0;
+  try {
+    const admin = createAdminClient();
+    const query = admin
+      .from("accesos_link")
+      .update({ revocado_at: new Date().toISOString() })
+      .is("revocado_at", null);
+    const { data, error } = params.medicoId
+      ? await query.eq("medico_id", params.medicoId).select("id")
+      : await query.eq("paciente_id", params.pacienteId!).select("id");
+    if (error) {
+      console.error("[accesos] No se pudieron revocar los enlaces del sujeto:", error.message);
+      return 0;
+    }
+
+    if (params.medicoId) {
+      const { data: medico } = await admin
+        .from("medicos")
+        .select("user_id")
+        .eq("id", params.medicoId)
+        .maybeSingle();
+      await cerrarSesionesDeUsuarios([medico?.user_id as string | null]);
+    } else {
+      await cerrarSesionesDe([params.pacienteId!]);
+    }
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("[accesos] revocarAccesosDeSujeto falló:", err);
+    return 0;
   }
 }
 
@@ -535,22 +662,56 @@ export function segundosDeVida(expiraAt: string): number {
  */
 export async function accesoSigueVivo(params: {
   accesoId: string | undefined;
-  pacienteId: string;
+  /** `pacientes.id`. Exactamente uno de los dos sujetos, igual que al emitir. */
+  pacienteId?: string;
+  /**
+   * `medicos.id` — el PROFESIONAL invitado a una demo (migración 026).
+   *
+   * Faltaba, y con él faltaba la mitad entera de la defensa de ese lado:
+   * `/acceso/entrar` setea la cookie para los DOS sujetos, pero acá se comparaba
+   * `data.paciente_id !== params.pacienteId`, que para una fila con `medico_id`
+   * es `null !== <id>` → siempre false → el acceso "seguía vivo" pasara lo que
+   * pasara. El comentario de `cerrarSesionesDeUsuarios` promete esta mitad para
+   * cubrir la hora en la que el access token todavía se puede usar; para el
+   * profesional no existía.
+   */
+  medicoId?: string;
   turnoId?: string;
   consultaId?: string;
 }): Promise<boolean> {
   if (!params.accesoId) return false;
+  if (!params.pacienteId === !params.medicoId) return false; // exactamente uno
   try {
     const admin = createAdminClient();
     const { data } = await admin
       .from("accesos_link")
-      .select("paciente_id, turno_id, consulta_id, expira_at, revocado_at")
+      .select("paciente_id, medico_id, turno_id, consulta_id, es_demo, expira_at, revocado_at")
       .eq("id", params.accesoId)
       .maybeSingle();
     if (!data) return false;
     if (data.revocado_at) return false;
     if (new Date(data.expira_at).getTime() <= Date.now()) return false;
+    if (params.medicoId) {
+      // El acceso del profesional no lleva encuentro nunca (CHECK
+      // accesos_link_recurso_coherente): con el sujeto correcto ya está dicho
+      // todo.
+      return data.medico_id === params.medicoId;
+    }
     if (data.paciente_id !== params.pacienteId) return false;
+
+    // ── EL ÚNICO ENSANCHE, Y ESTÁ ACOTADO A LA DEMO ────────────────────────
+    // Un acceso de reunión se emite ANTES de que exista el encuentro (ese es el
+    // orden del guion: primero el QR, después el call center asigna). Como no
+    // tiene turno ni consulta, exigirle que coincida con el encuentro que se
+    // está abriendo lo dejaría afuera de su propio turno.
+    //
+    // El permiso sigue siendo del MISMO paciente —la comprobación de arriba no
+    // se toca— y solo alcanza a filas `es_demo`, que en la operación real no
+    // pueden existir sin recurso (CHECK accesos_link_recurso_coherente). Un
+    // acceso institucional de verdad sigue atado a SU encuentro y a ningún otro.
+    const sinRecurso = data.turno_id === null && data.consulta_id === null;
+    if (data.es_demo === true && sinRecurso) return true;
+
     if (params.turnoId && data.turno_id !== params.turnoId) return false;
     if (params.consultaId && data.consulta_id !== params.consultaId) return false;
     return true;

@@ -25,7 +25,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { getConfigInstitucion, type ConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, dominioLimpio, type ConfigInstitucion } from "@/lib/institucional/config";
+import { documentoEsDemo } from "@/lib/institucional/demo";
 import type { BrandingPDF } from "@/lib/pdf/receta";
 
 /** Bucket de los assets de marca de la instancia (migración 018). */
@@ -108,8 +109,29 @@ export function accentEfectivo(
  * La marca blanca del documento, lista para `generarRecetaPDF(doc, branding)`.
  * `undefined` = sin marca institucional → el papel del B2C, intacto.
  */
-export async function brandingParaPDF(): Promise<BrandingPDF | undefined> {
+export async function brandingParaPDF(documentoId?: string): Promise<BrandingPDF | undefined> {
   if (!esInstitucional()) return undefined;
+
+  // ── LA MARCA DE DEMOSTRACIÓN SE RESUELVE FUERA DEL TRY ────────────────────
+  // Estaba adentro, junto a `getConfigInstitucion()` y a la bajada del isologo
+  // del Storage. O sea que la falla blanda que este módulo tiene A PROPÓSITO
+  // —preferir un papel sin marca institucional antes que un 500 en la cara de
+  // alguien que necesita su receta— se tragaba también la marca de
+  // demostración: un blip leyendo un PNG del Storage y el papel firmado por una
+  // cuenta de demo salía LIMPIO, sin marca de agua y sin leyenda al pie.
+  //
+  // Las dos cosas no son del mismo orden. Que el documento salga con la marca de
+  // Docto en vez de la del ministerio es feo. Que salga sin la única señal que
+  // impide que un papel firmado en una sala de reuniones termine en un mostrador
+  // de farmacia, no es feo: es el riesgo que el modo demo existe para evitar.
+  //
+  // Se decide ACÁ, en el mismo lugar que el resto del papel, por el mismo motivo
+  // por el que este módulo existe: hay dos callers que emiten el MISMO documento
+  // (la descarga del paciente y la de la institución). Si cada uno resolviera la
+  // marca por su cuenta, tarde o temprano uno sale marcado y el otro no — y es
+  // el mismo papel, con el mismo id, que alguien puede llegar a comparar.
+  const demo = await documentoEsDemo(documentoId);
+
   try {
     const config = await getConfigInstitucion();
     return {
@@ -118,9 +140,19 @@ export async function brandingParaPDF(): Promise<BrandingPDF | undefined> {
       isologoBuffer: await bajarIsologo(config.pdf_isologo_path),
       accent: accentEfectivo(config),
       efectorTexto: config.pdf_efector_texto ?? "",
+      demo,
+      // El QR del documento, al dominio de la INSTITUCIÓN. Era lo único del
+      // papel que no pasaba por la marca blanca: salía de `NEXT_PUBLIC_SITE_URL`
+      // y, si el deploy de la instancia no la tiene apuntando a su propio
+      // dominio, apuntaba al B2C — otra base, donde ese `documentos.id` no
+      // existe. El QR proyectado en la reunión daría "documento no encontrado".
+      verificarBaseUrl: `https://${dominioLimpio(config.dominio)}`,
     };
   } catch (err) {
     console.error("[institucional/branding-pdf] Sin branding para el documento:", err);
+    // Sin marca institucional, pero CON la de demostración si corresponde: el
+    // generador dibuja la marca de agua y la leyenda con esto solo.
+    if (demo) return { nombre: "", efectorTexto: "", demo: true };
     return undefined;
   }
 }

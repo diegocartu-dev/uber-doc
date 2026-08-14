@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificarFirma } from "@/lib/firma/receta";
 import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documento";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { documentoEsDemo, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 import { formatNombreMedico } from "@/lib/utils/texto";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
@@ -92,9 +93,17 @@ export async function GET(
       const doc = await verificarDocumento(id);
 
       if (doc.estado !== "no_encontrado") {
+        // ¿Salió de una cuenta de demostración? El papel ya lo dice con su
+        // marca de agua; la página pública tiene que decir lo mismo, porque es
+        // acá donde va a mirar el que recibe el documento y duda. Se resuelve
+        // con service role en una query aparte (la columna solo existe en la
+        // base de la instancia) y el campo VIAJA SOLO CUANDO ES VERDADERO: en
+        // el B2C la respuesta sale idéntica, sin una clave de más.
+        const demostracion = await documentoEsDemo(id);
         return {
           estado: doc.estado,
           verificada: doc.estado === "verificada",
+          ...(demostracion ? { demostracion: true as const } : {}),
           alterada: doc.estado === "alterada",
           firmado_at: doc.datos?.firmado_at,
           // Fecha de EMISIÓN. Va siempre, no solo en el sellado diferido: la
@@ -110,7 +119,20 @@ export async function GET(
           // Firmante congelado en la firma cuando existe: si el médico se
           // cambió el nombre después, el papel y esta página tienen que decir
           // lo mismo. Sin sello (históricos) se cae a la fila viva de `medicos`.
-          medico: doc.firmante ?? (await datosMinimosMedico(doc.medico_id)),
+          //
+          // Con la marca de demostración, ninguna identidad sale de acá. El
+          // sello ya se emite con nombre de utilería (ver `identidad.ts`), así
+          // que esto es el cinturón: cubre los caminos SIN snapshot congelado
+          // —un documento sin sello cae a la fila viva de `medicos`, que hasta
+          // que alguien limpie la reunión tiene el nombre real del participante—
+          // y esta página es pública, sin auth y para siempre.
+          medico: demostracion
+            ? {
+                nombre: NOMBRE_UTILERIA.profesional,
+                especialidad: "Cuenta de demostración",
+                matricula: "Sin matrícula",
+              }
+            : (doc.firmante ?? (await datosMinimosMedico(doc.medico_id))),
         };
       }
 
@@ -155,6 +177,11 @@ export async function GET(
 type RespuestaVerificacion = {
   estado: EstadoVerificacion | "error";
   verificada: boolean;
+  /**
+   * Documento emitido por una cuenta de DEMOSTRACIÓN (modo demo institucional).
+   * Solo aparece cuando es `true`: en el B2C la respuesta no cambia en nada.
+   */
+  demostracion?: true;
   alterada?: boolean;
   /** Instante REAL del sello criptográfico. Nunca una fecha anterior a la real. */
   firmado_at?: string;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 const SIGNED_URL_EXPIRY = 4 * 60 * 60; // 4 hours
 
@@ -11,6 +12,12 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
+
+    // La puerta del participante de una reunión (ver `demo-puerta.ts`): con el
+    // access token todavía vivo, quien fotografió el QR proyectado seguía leyendo
+    // esto. En B2C el helper corta por el gate de modo y no ejecuta nada.
+    const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+    if (accesoMuerto) return accesoMuerto;
 
     const consultaId = request.nextUrl.searchParams.get("consultaId");
     if (!consultaId) {

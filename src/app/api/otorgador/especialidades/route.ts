@@ -13,8 +13,13 @@ export async function GET(req: NextRequest) {
   const identidad = await identificarOperador(req);
   if (!identidad) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // El chip "CI activa ahora" también es por mundo: sin el paciente, el toggle
+  // que el participante prende en vivo no encendería ningún chip, y el que
+  // prende un profesional real encendería el de la demo.
+  const pacienteId = (req.nextUrl.searchParams.get("paciente_id") ?? "").trim() || null;
+
   try {
-    return NextResponse.json(await especialidadesConCI());
+    return NextResponse.json(await especialidadesConCI({ pacienteId }));
   } catch (err) {
     console.error("[otorgador/especialidades]", err);
     return NextResponse.json({ error: "No se pudo leer la configuración." }, { status: 500 });

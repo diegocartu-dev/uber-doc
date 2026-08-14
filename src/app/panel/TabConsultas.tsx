@@ -74,7 +74,18 @@ export default function TabConsultas({
           <div className="enc-fila enc-tr" key={`${e.tipo}-${e.recursoId}`}>
             <span className="celda tnum">{diaCorto(e.fechaAr)}</span>
             <div className="prof-quien">
-              <div className="prof-nombre">{e.profesional}</div>
+              <div className="prof-nombre">
+                {e.profesional}
+                {/* La fila de una reunión de venta se muestra —es la escena 6—
+                    pero jamás sin decir qué es: no entra en ningún KPI de
+                    arriba ni en la factura, y si nadie la marca, el panel de la
+                    provincia estaría contando una consulta que no ocurrió. */}
+                {e.esDemo && (
+                  <span className="badge b-ama" style={{ marginLeft: 8 }}>
+                    Demostración
+                  </span>
+                )}
+              </div>
               <div className="prof-esp">
                 {e.especialidad ?? ""} · {e.tipo === "turno" ? "Turno" : "Consulta inmediata"}
               </div>

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import { armarDocumentoParaPDF } from "@/lib/pdf/documento-desde-db";
 import { brandingParaPDF } from "@/lib/institucional/branding-pdf";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 /**
  * El PDF de un documento clínico, para su paciente o para el profesional que
@@ -33,6 +34,16 @@ export async function GET(
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  // ── LA PUERTA DEL PARTICIPANTE DE UNA REUNIÓN ─────────────────────────────
+  // Este endpoint sirve el documento clínico entero, y el gate es el cliente
+  // RLS — que para la sesión del participante dice que sí, porque la sesión es
+  // suya. Revocar su enlace cierra la sesión, pero el access token que el
+  // teléfono ya tiene sigue sirviendo cerca de una hora: sin esto, quien
+  // fotografió el QR proyectado seguía bajando papeles durante toda esa hora.
+  // En B2C no ejecuta nada (gate por modo adentro del helper).
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
+
   const armado = await armarDocumentoParaPDF(supabase, documentoId);
   if (!armado.ok) {
     return armado.motivo === "no_encontrado"
@@ -43,7 +54,7 @@ export async function GET(
   try {
     // Marca blanca del documento (spec §7). En B2C devuelve `undefined` sin
     // tocar nada y el papel sale idéntico al de siempre.
-    const pdfBuffer = await generarRecetaPDF(armado.documento, await brandingParaPDF());
+    const pdfBuffer = await generarRecetaPDF(armado.documento, await brandingParaPDF(armado.documento.id));
 
     return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,

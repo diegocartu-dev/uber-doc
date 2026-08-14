@@ -20,7 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { contarExacto, leerTodo, leerTodoEnLotes } from "@/lib/metering/db";
 import { encuentrosSinClasificarEnRango, type Faltantes } from "@/lib/metering/bolsa";
-import type { Motor } from "@/lib/metering/clasificar";
+import { sinEncuentrosDemo, type Motor } from "@/lib/metering/clasificar";
 
 export interface LineaFacturacion {
   fecha_ar: string;
@@ -179,7 +179,8 @@ export async function facturacionDePeriodo(
       const q = admin
         .from("encuentros_metering")
         .select("id", { count: "exact", head: true })
-        .eq("clasificacion", "facturable");
+        .eq("clasificacion", "facturable")
+        .eq("es_demo", false);
       return filtro.modo === "sellado"
         ? q.eq("facturado_periodo", filtro.periodo)
         : q.gte("fecha_ar", filtro.desde).lte("fecha_ar", filtro.hasta);
@@ -194,15 +195,16 @@ export async function facturacionDePeriodo(
     };
   }
 
-  const filas = await leerTodo<Record<string, unknown>>(
+  const crudas = await leerTodo<Record<string, unknown>>(
     `detalle de facturación de ${periodo}`,
     (dsd, hst) => {
       const q = admin
         .from("encuentros_metering")
         .select(
-          "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos, precio_centavos"
+          "fecha_ar, tipo, recurso_id, motor, especialidad, medico_id, segundos_ambos_en_sala, documentos_emitidos, precio_centavos, es_demo"
         )
-        .eq("clasificacion", "facturable");
+        .eq("clasificacion", "facturable")
+        .eq("es_demo", false);
       const acotada =
         filtro.modo === "sellado"
           ? q.eq("facturado_periodo", filtro.periodo)
@@ -217,6 +219,13 @@ export async function facturacionDePeriodo(
       );
     }
   );
+  // ── CINTURÓN: lo de una reunión de venta no se factura, ni por error ──────
+  // El tirante es el `.eq("es_demo", false)` de la query de arriba. Este es el
+  // cinturón en memoria, y existe porque de todo lo que hace este módulo la
+  // factura es lo único que sale del sistema y llega a un ministerio. El helper
+  // pasa SOLO lo que la base afirma que NO es demo: si la columna no viajara en
+  // el SELECT, la línea no se cobra. De los dos errores, se elige el barato.
+  const filas = sinEncuentrosDemo(crudas as ({ es_demo?: boolean } & Record<string, unknown>)[]);
   const consultas = filas.length;
   // El total sale de los precios CONGELADOS en las filas, nunca del vigente:
   // así el CSV de un mes ya facturado sigue dando el mismo número cuando el
@@ -536,6 +545,7 @@ export async function sellarPeriodo(periodo: string): Promise<number> {
     .update({ facturado_periodo: periodo }, { count: "exact" })
     .gte("fecha_ar", desde)
     .lte("fecha_ar", hasta)
+    .eq("es_demo", false)
     .is("facturado_periodo", null);
   if (error) throw new Error(`No se pudo sellar el período ${periodo}: ${error.message}`);
   return count ?? 0;
@@ -548,6 +558,7 @@ export async function filasSelladas(periodo: string): Promise<number> {
     admin
       .from("encuentros_metering")
       .select("id", { count: "exact", head: true })
+      .eq("es_demo", false)
       .eq("facturado_periodo", periodo)
   );
 }
@@ -636,6 +647,7 @@ export async function filasSinSellar(periodo: string): Promise<number> {
       .select("id", { count: "exact", head: true })
       .gte("fecha_ar", desde)
       .lte("fecha_ar", hasta)
+      .eq("es_demo", false)
       .is("facturado_periodo", null)
   );
 }

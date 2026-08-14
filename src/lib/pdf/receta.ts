@@ -71,6 +71,33 @@ export type BrandingPDF = {
   accent?: string | null;
   /** Texto de la Sección C — efector tecnológico (`pdf_efector_texto`). */
   efectorTexto: string;
+  /**
+   * DOCUMENTO DE DEMOSTRACIÓN (modo demo, migración 025).
+   *
+   * En la reunión de venta, el que firma es un participante que NO es médico
+   * matriculado. El documento tiene que verse completo —formato, QR que
+   * funciona, firma, pie— porque eso es lo que se está mostrando; y tiene que
+   * ser inequívocamente imposible de confundir con uno real, porque un papel
+   * firmado en una sala de reuniones no puede terminar en una farmacia.
+   *
+   * Con esto en `true` el papel suma DOS marcas, y ninguna se puede quitar
+   * recortando: la de agua en diagonal, que cruza el contenido, y la leyenda
+   * del pie, que viaja con el texto.
+   */
+  demo?: boolean;
+  /**
+   * Base pública de verificación del documento (`https://<dominio>`).
+   *
+   * Es la ÚNICA parte del papel que no pasaba por la marca blanca: el isologo,
+   * el acento y el pie salían del config de la institución, y el QR salía de
+   * `NEXT_PUBLIC_SITE_URL` — que si el deploy de la instancia no la tiene
+   * apuntando a su propio dominio, es docto.com.ar. O sea otra base, donde ese
+   * `documentos.id` no existe: el QR proyectado en la reunión llevaría a
+   * "documento no encontrado", escaneado desde el teléfono de un ministro.
+   *
+   * Vacío o ausente → la env de siempre. En B2C es siempre eso.
+   */
+  verificarBaseUrl?: string | null;
 };
 
 export type FirmaDigitalPDF = {
@@ -97,6 +124,18 @@ const COLORS = {
 const VERIFICAR_BASE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://docto.com.ar"
 ).replace(/\/+$/, "");
+
+/**
+ * La base que sale IMPRESA y codificada en el QR.
+ *
+ * Con branding institucional manda el dominio de la instancia; sin él, la env de
+ * siempre. Pura y exportada: es la línea que decide si el QR de la demo lleva a
+ * la página de verificación de la provincia o a un 404 del B2C.
+ */
+export function baseDeVerificacion(branding?: BrandingPDF | null): string {
+  const propia = (branding?.verificarBaseUrl ?? "").trim().replace(/\/+$/, "");
+  return propia || VERIFICAR_BASE_URL;
+}
 
 const MARGIN = { top: 36, right: 50, bottom: 10, left: 50 };
 const PAGE_WIDTH = 595.28; // A4
@@ -168,6 +207,52 @@ export function accentDe(branding?: BrandingPDF | null): string {
 
 /** Tipografía y cuerpo de la Sección C — una sola fuente de verdad. */
 const SECCION_C = { fuente: "Inter", cuerpo: 6.5, gapAntes: 4, gapDespues: 5, colchon: 4 } as const;
+
+// ─── Marca de DEMOSTRACIÓN ───────────────────────────────────────────────────
+// El texto vive acá, una sola vez, para que la marca de agua y la leyenda del
+// pie no puedan divergir. `LEYENDA_DEMO` es la que se lee; `AGUA_DEMO` es la que
+// se ve de lejos.
+const AGUA_DEMO = "DEMOSTRACIÓN — SIN VALIDEZ LEGAL";
+const LEYENDA_DEMO =
+  "DOCUMENTO DE DEMOSTRACIÓN — SIN VALIDEZ LEGAL. Emitido por una cuenta de prueba: no debe dispensarse ni presentarse ante nadie.";
+const DEMO = { fuente: "Inter-SemiBold", cuerpo: 7, gapAntes: 4, colchon: 3 } as const;
+/** Rojo del design system para lo que impide la acción (#E24B4A). */
+const COLOR_DEMO = "#E24B4A";
+
+/**
+ * Alto que hay que reservarle a la leyenda de demostración en el pie. Mismo
+ * criterio que `altoSeccionC`: se MIDE con pdfkit, no se estima — el texto es
+ * largo a propósito y un presupuesto adivinado partiría el documento en dos,
+ * dejando el barcode que escanea la farmacia dibujado fuera de la página.
+ *
+ * Devuelve 0 sin marca de demo: el papel de siempre no se mueve ni un punto.
+ */
+function altoLeyendaDemo(pdf: PDFKit.PDFDocument, branding?: BrandingPDF | null): number {
+  if (!branding?.demo) return 0;
+  pdf.font(DEMO.fuente).fontSize(DEMO.cuerpo);
+  return DEMO.gapAntes + pdf.heightOfString(LEYENDA_DEMO, { width: CONTENT_WIDTH, align: "center" }) + DEMO.colchon;
+}
+
+/**
+ * La marca de agua en diagonal. Se dibuja AL FINAL, encima de todo, porque una
+ * marca que quedara debajo del contenido se podría tapar con un bloque de texto
+ * largo — y porque así cruza también las cajas con fondo gris.
+ *
+ * Va con opacidad baja y en un solo color: tiene que leerse a un metro de
+ * distancia sin comerse el QR ni el barcode, que son las dos cosas del papel
+ * que una máquina tiene que poder leer.
+ */
+function renderMarcaDemostracion(pdf: PDFKit.PDFDocument) {
+  const cx = PAGE_WIDTH / 2;
+  const cy = PAGE_HEIGHT / 2;
+  pdf.save();
+  pdf.rotate(-38, { origin: [cx, cy] });
+  pdf.opacity(0.11);
+  pdf.font("Inter-Bold").fontSize(31).fillColor(COLOR_DEMO);
+  pdf.text(AGUA_DEMO, cx - 340, cy - 22, { width: 680, align: "center", lineBreak: false });
+  pdf.opacity(1);
+  pdf.restore();
+}
 
 /**
  * Cuánto alto hay que reservarle a la Sección C del pie (efector tecnológico).
@@ -368,7 +453,8 @@ export async function generarRecetaPDF(
       // Con branding, el pie suma la Sección C (efector tecnológico), y su
       // alto se MIDE — no se estima. El umbral de salto de página cuelga de
       // `footerTopY`, así que se recalcula solo.
-      const footerHeight = (esReceta ? 125 : 95) + altoSeccionC(pdf, branding);
+      const footerHeight =
+        (esReceta ? 125 : 95) + altoSeccionC(pdf, branding) + altoLeyendaDemo(pdf, branding);
       const footerTopY = PAGE_HEIGHT - MARGIN.bottom - footerHeight;
 
       // Si el contenido ya pasó de donde debería ir la firma, agregar página
@@ -392,6 +478,9 @@ export async function generarRecetaPDF(
         const nroReceta = generarNumeroReceta(doc.id, doc.created_at);
         await renderBarcodeReceta(pdf, nroReceta);
       }
+
+      // ─── MARCA DE AGUA DE DEMOSTRACIÓN — lo último, encima de todo ──
+      if (branding?.demo) renderMarcaDemostracion(pdf);
 
       pdf.end();
     } catch (err) {
@@ -844,8 +933,9 @@ async function renderSelloFirma(
   const selloX = MARGIN.left;
   const selloY = footerTopY - selloHeight - 10;
 
-  // QR code → /verificar/{documento_id}
-  const verificarUrl = `${VERIFICAR_BASE_URL}/verificar/${firma.verificar_id}`;
+  // QR code → /verificar/{documento_id}, en el dominio de quien emite el papel.
+  const base = baseDeVerificacion(branding);
+  const verificarUrl = `${base}/verificar/${firma.verificar_id}`;
 
   try {
     const qrBuffer = await generarQRCodePNG(verificarUrl);
@@ -876,7 +966,7 @@ async function renderSelloFirma(
     // pintarla con el color del ministerio la haría leer como tal.
     pdf.font("Inter").fontSize(6).fillColor(branding ? COLORS.secondary : COLORS.accent);
     pdf.text(
-      `${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
+      `${base.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
       selloX + 8,
       selloY + 22,
       { width: 180 }
@@ -960,7 +1050,7 @@ function renderFooter(
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
       `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre, doc.medico_titulo)} en los términos del art. 5 de la Ley 25.506.\n` +
-        `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
+        `Verificá este documento escaneando el código QR o en ${baseDeVerificacion(branding).replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
@@ -1045,6 +1135,17 @@ function renderFooter(
     MARGIN.left, y,
     { width: CONTENT_WIDTH, align: "center" }
   );
+
+  // ─── Leyenda de DEMOSTRACIÓN (solo cuentas de demo) ───────────────────
+  // Va ARRIBA de la Sección C y no al final del todo: el efector tecnológico
+  // es letra chica de identificación, y esto es una advertencia. Si alguien
+  // recorta el papel por abajo (pasa: se corta el barcode para pegarlo en una
+  // planilla), lo que tiene que sobrevivir es la advertencia.
+  if (branding?.demo) {
+    y = pdf.y + DEMO.gapAntes;
+    pdf.font(DEMO.fuente).fontSize(DEMO.cuerpo).fillColor(COLOR_DEMO);
+    pdf.text(LEYENDA_DEMO, MARGIN.left, y, { width: CONTENT_WIDTH, align: "center" });
+  }
 
   // ─── Sección C — EFECTOR TECNOLÓGICO (solo documento institucional) ───
   // Acá abajo vive la marca de Docto en el papel de la institución: arriba está

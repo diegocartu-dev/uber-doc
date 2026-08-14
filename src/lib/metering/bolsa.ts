@@ -589,6 +589,19 @@ export async function cumplimientoDeSemana(params: {
         .select("id, nombre_completo, titulo, especialidad")
         .eq("estado_registro", "aprobado")
         .in("especialidad", config.especialidades)
+        // El profesional de una reunión de demostración cumple las dos
+        // condiciones de arriba (nace `aprobado` y con especialidad del
+        // piloto), así que sin este filtro entraba al padrón del panel con
+        // acuerdo por default y cero minutos: la institución veía "ausentismo y
+        // cumplimiento de un profesional que no existe", que es exactamente lo
+        // que el encabezado de la migración 025 promete que no pasa. La 025
+        // protegió la factura; el padrón del panel se arma por esta otra vía.
+        //
+        // Y hay un segundo filo: si la semana se sellara con esa fila,
+        // `sellarSemana` la escribiría en `acuerdo_semanas` y después "limpiar
+        // reunión" la borraría — moviendo hacia atrás un número que la
+        // institución ya leyó, justo lo que la 015 promete que no puede pasar.
+        .is("demo_sesion_id", null)
         .order("id", { ascending: true })
         .range(desde, hasta)
   );
@@ -880,6 +893,19 @@ export type FaltantesDeSemana = Faltantes;
  * Solo se cuentan los encuentros que DEBERÍAN producir fila: con paciente y con
  * un motor válido. Un slot que nadie tomó o un canal desconocido no generan
  * fila por diseño, y contarlos dejaría el sello bloqueado para siempre.
+ *
+ * ── POR QUÉ ACÁ NO HAY NINGÚN FILTRO DE DEMOSTRACIÓN ─────────────────────────
+ * Porque el contador tampoco lo tiene: desde la 027 un encuentro de demo SÍ
+ * recibe fila en `encuentros_metering`, marcada, y quien la excluye es la
+ * facturación. Las dos mitades tienen que usar el MISMO predicado o vuelven a
+ * divergir — y ya divergieron una vez, con el peor resultado posible: el
+ * clasificador salteaba los encuentros de demo y esta precondición los seguía
+ * esperando, así que un solo paciente de utilería en estado terminal (los deja
+ * el cron de turnos vencidos) trababa el sello semanal y el cierre mensual de la
+ * institución de forma indefinida, con el error acusando a un cron sano.
+ *
+ * Si algún día el contador vuelve a saltear filas, este filtro tiene que
+ * saltearlas igual, el mismo día y en el mismo commit.
  */
 export async function encuentrosSinClasificar(semanaAr: string): Promise<Faltantes> {
   return encuentrosSinClasificarEnRango(semanaAr, domingoDeSemana(semanaAr));

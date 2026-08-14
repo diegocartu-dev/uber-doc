@@ -31,6 +31,7 @@ import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
+import { esInstitucional } from "@/lib/instancia";
 import { isAdmin } from "@/lib/admin-auth";
 import { resolverRolInstitucional, rutaOperador } from "@/lib/auth/rol-institucional";
 import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
@@ -269,6 +270,25 @@ export default async function DashboardPage({
       throw new Error("No se pudo cargar el perfil del médico. Reintentá en unos segundos.");
     }
 
+    // ── El profesional invitado a una REUNIÓN DE DEMOSTRACIÓN ──────────────
+    // Su llave no es una contraseña: es un enlace temporal que se proyecta en
+    // una pared. Revocarlo (regenerar el QR, limpiar la reunión) tiene que
+    // echarlo también de la sesión que ese enlace ya minteó — si no, alguien que
+    // fotografió el QR se queda adentro del dashboard clínico, con lista de
+    // pacientes e historia clínica, hasta que a alguien se le ocurra mirar.
+    //
+    // Gate ADENTRO del helper y en una query aparte: con INSTITUCIONAL apagado
+    // devuelve `true` sin tocar la base, y para cualquier profesional que no sea
+    // de demostración también (un profesional real no tiene esta cookie).
+    // `demo_sesion_id` NO se puede sumar al SELECT de arriba: en el B2C esa
+    // columna no existe y PostgREST falla la query entera.
+    const { profesionalDemoSigueAdentro } = await import("@/lib/institucional/demo");
+    const { COOKIE_ACCESO } = await import("@/lib/institucional/accesos");
+    const accesoDemo = (await (await import("next/headers")).cookies()).get(COOKIE_ACCESO)?.value;
+    if (!(await profesionalDemoSigueAdentro({ medicoId: medico.id, accesoId: accesoDemo }))) {
+      redirect("/acceso/invalido");
+    }
+
     if (data) {
       async function fetchPacientes(ids: string[]) {
         if (ids.length === 0) return new Map<string, { id: string; nombre: string; nacimiento: string | null }>();
@@ -450,7 +470,6 @@ export default async function DashboardPage({
     // Modo institucional: el requisito de MP se apaga por env (spec §9 Capa B)
     // — sin esto el banner "Conectá Mercado Pago" apuntaría a un OAuth que
     // devuelve 404. En B2C, esInstitucional() es false: idéntico.
-    const { esInstitucional } = await import("@/lib/instancia");
     mpConectado = esInstitucional() || !!mpRes.data;
     firmaConfigurada = !!firmaRes.data;
   }
@@ -594,6 +613,10 @@ export default async function DashboardPage({
         ocultoClinica={medico.oculto_clinica}
         visibleConsultorioParticular={medico.visible_consultorio_particular ?? true}
         perfilCompleto={perfilCompletoReal}
+        // Modo institucional: el bloque de canales del B2C no va (ver
+        // DisponibilidadMedico). El flag viaja por PROP desde este server
+        // component — nunca por env client (regla del README institucional).
+        institucional={esInstitucional()}
       />
     );
 

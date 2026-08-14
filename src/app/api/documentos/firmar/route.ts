@@ -25,6 +25,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { firmarDocumentoPorSesion, TIPOS_FIRMABLES } from "@/lib/firma/documento";
 import { provisionarClaves, tieneClaves } from "@/lib/firma/claves";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 // Techo defensivo: una consulta emite como mucho 4 documentos (receta,
 // indicaciones, certificado, orden).
@@ -58,6 +59,15 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado" }, { status: 401 });
   }
+
+  // ── LA PUERTA DEL PARTICIPANTE INVITADO ───────────────────────────────────
+  // Este endpoint SELLA: con el enlace ya revocado y el access token todavía
+  // vivo (cerca de una hora), quien fotografió el QR proyectado seguía firmando
+  // electrónicamente todo lo que hubiera emitido dentro de `VENTANA_FIRMA_MS`.
+  // Y lo que entra a `firma_logs` es append-only: no se borra ni limpiando la
+  // reunión. En B2C es no-op (gate por modo adentro del helper).
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   // Solo columnas con GRANT para authenticated (ver regla de grants en CLAUDE.md).
   const { data: medico } = await supabase
