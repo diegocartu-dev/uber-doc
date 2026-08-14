@@ -368,6 +368,61 @@ test("el enlace revocado cierra TODAS las pantallas del profesional, no solo el 
   }
 });
 
+/**
+ * Las APIs que sirven o entregan contenido clínico, y que un access token vivo
+ * alcanza SIN pasar por ninguna pantalla. Es la lista que hace verdadera la
+ * promesa del módulo: la puerta no está en el layout, está donde se sirve el
+ * dato. Sumar una ruta de esta clase implica sumarla acá.
+ */
+const APIS_CON_DATO_CLINICO = [
+  // El papel entero, con el gate puesto en el cliente RLS — que para la sesión
+  // del participante dice que sí, porque la sesión es suya.
+  "src/app/api/documentos/[id]/pdf/route.ts",
+  // Historia clínica de la institución, con service role.
+  "src/app/api/panel/hc/[documentoId]/route.ts",
+  // Provisiona claves de firma del profesional (ESCRIBE).
+  "src/app/api/firma/configurar/route.ts",
+  // Cancela una consulta con service role (ESCRIBE).
+  "src/app/api/consultas/cancelar-solicitud/route.ts",
+  // El timeline de atenciones del profesional.
+  "src/app/api/historial-inline/route.ts",
+  // Entrega URLs firmadas de 4 horas a los estudios subidos.
+  "src/app/api/consulta/estudios/route.ts",
+];
+
+test("el enlace revocado también cierra las APIs que sirven datos clínicos", () => {
+  // El agujero que quedaba: el guard estaba en las PANTALLAS y en la API que
+  // escribe (Nova), pero `GET /api/documentos/{id}/pdf` no necesita pantallas.
+  // Con el access token vivo —cerca de una hora después de revocar, o sea
+  // exactamente la ventana que el fix dice tapar— quien fotografió el QR seguía
+  // bajando documentos y HC por API.
+  for (const ruta of APIS_CON_DATO_CLINICO) {
+    assert.match(
+      fuente(ruta),
+      /respuestaSiAccesoDemoMuerto\(\)/,
+      `${ruta} dejó de mirar si el acceso de la reunión sigue vivo: con el token todavía ` +
+        `válido, el que fotografió el QR proyectado vuelve a poder leer esto`
+    );
+  }
+});
+
+test("la puerta de la API mira a los DOS sujetos, no solo al profesional", () => {
+  // El enlace de una reunión se emite igual para el que entra como paciente y
+  // se proyecta en la misma pared. Mirando solo `medicos`, el mismo agujero
+  // quedaba abierto del otro lado.
+  const codigo = fuente("src/lib/institucional/demo-puerta.ts");
+  const i = codigo.indexOf("export async function sujetoDemoSigueHabilitado");
+  assert.ok(i > 0, "desapareció sujetoDemoSigueHabilitado: revisá este test");
+  const cuerpo = codigo.slice(i, codigo.indexOf("export async function respuestaSiAccesoDemoMuerto", i));
+  assert.match(cuerpo, /\.from\("medicos"\)/, "la puerta de la API dejó de mirar al profesional");
+  assert.match(cuerpo, /\.from\("pacientes"\)/, "la puerta de la API dejó de mirar al paciente");
+  assert.match(
+    cuerpo,
+    /accesoSigueVivo\(\{ accesoId, pacienteId: paciente\.id \}\)/,
+    "la puerta de la API dejó de comprobar el acceso del participante-paciente"
+  );
+});
+
 test("preparar el escenario comprueba que el profesional sea de ESA reunión", () => {
   const codigo = fuente("src/lib/institucional/demo-escenario.ts");
   assert.match(

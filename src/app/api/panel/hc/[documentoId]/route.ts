@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generarRecetaPDF } from "@/lib/pdf/receta";
 import { armarDocumentoParaPDF } from "@/lib/pdf/documento-desde-db";
 import { brandingParaPDF } from "@/lib/institucional/branding-pdf";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 /**
  * Descarga de un documento clínico POR LA INSTITUCIÓN (escena 5 de la demo:
@@ -38,6 +39,15 @@ export async function GET(
   if (!sesion) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
+
+  // ── LA PUERTA DEL PARTICIPANTE, TAMBIÉN ACÁ ───────────────────────────────
+  // Hoy el gate de rol de arriba ya deja afuera a un participante de una
+  // reunión: no tiene fila en `operadores`. Pero esta ruta baja historia
+  // clínica de la institución con SERVICE ROLE, y hacerla depender de que
+  // `operadores` nunca contenga un sujeto de demostración es apoyarse en algo
+  // que no está escrito en ningún lado. Cuesta una llamada y deja de depender.
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   const { documentoId } = await params;
   const admin = createAdminClient();

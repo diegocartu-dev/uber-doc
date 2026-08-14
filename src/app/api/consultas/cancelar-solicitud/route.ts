@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo } from "@/lib/logger";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 
 // Cancelación de una solicitud de CI por el PROPIO paciente, antes de que haya
 // plata en juego (caso Lucas 04/08: esperó más de una hora una aceptación que
@@ -15,6 +16,12 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
+
+  // La puerta del participante de una reunión: esta ruta CANCELA una consulta
+  // con el service role, y el enlace que la abrió se proyectó en una pared. En
+  // B2C no ejecuta nada (gate por modo adentro del helper).
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   let body: { consultaId?: string };
   try {

@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { provisionarClaves, tieneClaves } from "@/lib/firma/claves";
+import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
+
+// ── LA PUERTA DEL PROFESIONAL INVITADO ──────────────────────────────────────
+// Estas dos rutas son del profesional y una de ellas ESCRIBE: provisiona (o
+// re-provisiona) sus claves de firma. Revocar el enlace de una reunión cierra
+// la sesión, pero el access token que el teléfono ya tiene sirve cerca de una
+// hora más. En B2C el helper corta por el gate de modo y no ejecuta nada.
 
 export async function GET() {
   const supabase = await createClient();
@@ -9,6 +16,9 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
+
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   const { data: medico } = await supabase
     .from("medicos")
@@ -31,6 +41,9 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
+
+  const accesoMuerto = await respuestaSiAccesoDemoMuerto();
+  if (accesoMuerto) return accesoMuerto;
 
   const { data: medico } = await supabase
     .from("medicos")
