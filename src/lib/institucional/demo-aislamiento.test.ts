@@ -423,6 +423,34 @@ test("la puerta de la API mira a los DOS sujetos, no solo al profesional", () =>
   );
 });
 
+test("las dos fases sueltas de la reprogramación masiva también miran los mundos", () => {
+  // FASE 3 (`cerrar_dia`) es la única fase que CANCELA slots, y aceptaba
+  // cualquier medico_id: un POST apuntado al profesional equivocado le cierra
+  // el día entero de agenda. FASE 2b escribe una fila de auditoría con el par
+  // paciente/profesional del turno — si ese par ya cruza los dos mundos, la
+  // fila legitima un estado que no debería existir y el call center llama.
+  const codigo = fuente("src/lib/otorgador/reprogramar.ts");
+
+  const iCerrar = codigo.indexOf("export async function marcarDiaSinAtencionDelProfesional");
+  const iGestion = codigo.indexOf("export async function registrarGestionManual");
+  assert.ok(iCerrar > 0 && iGestion > iCerrar, "cambió la forma de reprogramar.ts: revisá este test");
+
+  const cuerpoCerrar = codigo.slice(iCerrar, iGestion);
+  assert.match(
+    cuerpoCerrar,
+    /\.eq\("es_demo", esDemo\)/,
+    "cerrar el día volvió a tocar turnos de cualquier mundo: un cierre pedido para el " +
+      "participante de una reunión puede cancelar slots reales de esa misma ficha, y al revés"
+  );
+
+  const cuerpoGestion = codigo.slice(iGestion);
+  assert.match(
+    cuerpoGestion,
+    /mundosIncompatibles\(/,
+    "la gestión manual volvió a registrar cualquier turno, incluso uno que cruza los dos mundos"
+  );
+});
+
 test("el texto que el participante escribió a mano no sobrevive en los retenidos", () => {
   // El sello nunca llevó nombres, pero `documentos.contenido` es lo que la
   // persona TIPEÓ en el workspace delante de la sala. Si escribió el nombre de

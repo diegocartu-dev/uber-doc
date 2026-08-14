@@ -87,6 +87,23 @@ export type ResultadoReprogramar =
  *
  * Idempotente: solo toca lo que sigue en `disponible`. Los turnos ya movidos,
  * los que están con paciente y los ya cancelados no se tocan.
+ *
+ * ── EL CHEQUEO DE MUNDO (Etapa 9) ────────────────────────────────────────────
+ * Esto aceptaba cualquier `medico_id`, y es la única fase de la reprogramación
+ * masiva que CANCELA slots. Un POST apuntado al profesional equivocado le cierra
+ * el día entero de agenda, y eso no se deshace desde ninguna pantalla.
+ *
+ * El guard que corresponde es el mismo que usan las tres puertas de asignación:
+ * los dos mundos no se cruzan. Acá se aplica sobre lo que se toca — un cierre
+ * pedido para el participante de una reunión solo puede tocar turnos `es_demo`,
+ * y el de un profesional real solo puede tocar turnos que NO lo son. Cuesta una
+ * lectura y cierra el caso que la limpieza ya advierte con el contador `ajenos`:
+ * escenografía y agenda real conviviendo en la misma ficha.
+ *
+ * Lo que este chequeo NO puede evitar, y hay que decirlo: un operador
+ * autorizado cerrándole el día a un profesional real está haciendo su trabajo, y
+ * ningún guard distingue eso de un error de tipeo. Contra eso está el `marcados`
+ * que se devuelve —la pantalla dice cuántos cerró— y la fila de auditoría.
  */
 export async function marcarDiaSinAtencionDelProfesional(params: {
   medicoId: string;
@@ -98,12 +115,29 @@ export async function marcarDiaSinAtencionDelProfesional(params: {
     return { ok: false, marcados: 0 };
   }
   const admin = createAdminClient();
+
+  const { data: medico, error: errMedico } = await admin
+    .from("medicos")
+    .select("id, demo_sesion_id")
+    .eq("id", medicoId)
+    .maybeSingle();
+  if (errMedico || !medico) {
+    console.error(
+      "[reprogramar] cerrar día: no se pudo leer el profesional:",
+      medicoId,
+      errMedico?.message ?? "no existe"
+    );
+    return { ok: false, marcados: 0 };
+  }
+  const esDemo = (medico as { demo_sesion_id: string | null }).demo_sesion_id != null;
+
   const { data, error } = await admin
     .from("turnos")
     .update({ estado: "cancelado_medico" })
     .eq("medico_id", medicoId)
     .eq("fecha", fecha)
     .eq("estado", "disponible")
+    .eq("es_demo", esDemo)
     .in("canal_origen", ["acordado", "ofrecido"])
     .select("id");
   if (error) {
@@ -137,6 +171,16 @@ export async function marcarDiaSinAtencionDelProfesional(params: {
  * cambia es que ahora QUEDA ESCRITO quién quedó colgado, cuándo y por qué.
  *
  * `accion='gestion_manual'` no mueve el reparto de equidad (delta 0).
+ *
+ * ── EL CHEQUEO DE MUNDO (Etapa 9) ────────────────────────────────────────────
+ * Esta función escribe una fila de `asignaciones` con `paciente_id` y
+ * `medico_id` sacados del turno, y aceptaba cualquier `turno_id`. No inventa el
+ * par —lo copia— pero sí lo DEJA ESCRITO: un turno que ya cruza los dos mundos
+ * (un paciente del padrón con el profesional de una reunión, el estado que las
+ * tres puertas de asignación existen para impedir) recibía acá su fila de
+ * auditoría como si fuera un caso normal, y el call center lo iba a llamar por
+ * teléfono. Si el par está cruzado, no se registra: se grita, que es lo que
+ * corresponde ante un estado que no debería existir.
  */
 export async function registrarGestionManual(params: {
   turnoId: string;
@@ -157,6 +201,21 @@ export async function registrarGestionManual(params: {
     .maybeSingle();
   if (!turno || !turno.paciente_id) {
     console.error("[reprogramar] gestión manual sobre un turno sin paciente:", turnoId);
+    return { ok: false };
+  }
+
+  // Los dos mundos no se cruzan — mismo guard que las tres puertas de asignación.
+  const { data: medicoDelTurno } = await admin
+    .from("medicos")
+    .select("demo_sesion_id")
+    .eq("id", turno.medico_id)
+    .maybeSingle();
+  const cruce = mundosIncompatibles(
+    await mundoDelPaciente(turno.paciente_id as string),
+    ((medicoDelTurno as { demo_sesion_id?: string | null } | null)?.demo_sesion_id ?? null)
+  );
+  if (cruce) {
+    console.error("[reprogramar] gestión manual sobre un turno que cruza los dos mundos:", turnoId);
     return { ok: false };
   }
 
