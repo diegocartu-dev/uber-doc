@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accentEfectivo, brandingParaPDF } from "@/lib/institucional/branding-pdf";
 import { invalidarCacheConfigInstitucion } from "@/lib/institucional/config";
-import { accentDe } from "@/lib/pdf/receta";
+import { accentDe, baseDeVerificacion } from "@/lib/pdf/receta";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EL ACENTO DEL DOCUMENTO — sin `pdf_accent`, manda el primario de la
@@ -105,4 +105,45 @@ test("el espía de red detecta de verdad: en modo institucional SÍ sale a busca
     else process.env.SUPABASE_SERVICE_ROLE_KEY = antesKey;
     invalidarCacheConfigInstitucion();
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL QR DEL DOCUMENTO — al dominio de quien emite el papel
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("con branding institucional, el QR apunta al dominio de la instancia", () => {
+  // Era la única parte del papel que no pasaba por la marca blanca: el isologo,
+  // el acento y el pie salían del config, y el QR de `NEXT_PUBLIC_SITE_URL`. Si
+  // el deploy de la instancia no la tiene apuntando a su propio dominio, ese QR
+  // lleva al B2C — otra base, donde el id del documento no existe — y lo que se
+  // proyecta en la reunión es un "documento no encontrado".
+  assert.equal(
+    baseDeVerificacion({
+      nombre: "Ministerio",
+      efectorTexto: "",
+      verificarBaseUrl: "https://salud.gob.ar",
+    }),
+    "https://salud.gob.ar"
+  );
+  assert.equal(
+    baseDeVerificacion({
+      nombre: "Ministerio",
+      efectorTexto: "",
+      verificarBaseUrl: "https://salud.gob.ar/",
+    }),
+    "https://salud.gob.ar",
+    "una barra final duplicaría la de /verificar"
+  );
+});
+
+test("sin branding, el QR sigue saliendo como siempre (B2C intacto)", () => {
+  const deSiempre = baseDeVerificacion(undefined);
+  assert.ok(deSiempre.startsWith("http"));
+  assert.equal(baseDeVerificacion(null), deSiempre);
+  assert.equal(baseDeVerificacion({ nombre: "X", efectorTexto: "" }), deSiempre);
+  assert.equal(
+    baseDeVerificacion({ nombre: "X", efectorTexto: "", verificarBaseUrl: "  " }),
+    deSiempre,
+    "un dominio en blanco no puede dejar el papel sin URL de verificación"
+  );
 });

@@ -25,7 +25,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { getConfigInstitucion, type ConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, dominioLimpio, type ConfigInstitucion } from "@/lib/institucional/config";
 import { documentoEsDemo } from "@/lib/institucional/demo";
 import type { BrandingPDF } from "@/lib/pdf/receta";
 
@@ -141,6 +141,12 @@ export async function brandingParaPDF(documentoId?: string): Promise<BrandingPDF
       accent: accentEfectivo(config),
       efectorTexto: config.pdf_efector_texto ?? "",
       demo,
+      // El QR del documento, al dominio de la INSTITUCIÓN. Era lo único del
+      // papel que no pasaba por la marca blanca: salía de `NEXT_PUBLIC_SITE_URL`
+      // y, si el deploy de la instancia no la tiene apuntando a su propio
+      // dominio, apuntaba al B2C — otra base, donde ese `documentos.id` no
+      // existe. El QR proyectado en la reunión daría "documento no encontrado".
+      verificarBaseUrl: `https://${dominioLimpio(config.dominio)}`,
     };
   } catch (err) {
     console.error("[institucional/branding-pdf] Sin branding para el documento:", err);

@@ -85,6 +85,19 @@ export type BrandingPDF = {
    * del pie, que viaja con el texto.
    */
   demo?: boolean;
+  /**
+   * Base pública de verificación del documento (`https://<dominio>`).
+   *
+   * Es la ÚNICA parte del papel que no pasaba por la marca blanca: el isologo,
+   * el acento y el pie salían del config de la institución, y el QR salía de
+   * `NEXT_PUBLIC_SITE_URL` — que si el deploy de la instancia no la tiene
+   * apuntando a su propio dominio, es docto.com.ar. O sea otra base, donde ese
+   * `documentos.id` no existe: el QR proyectado en la reunión llevaría a
+   * "documento no encontrado", escaneado desde el teléfono de un ministro.
+   *
+   * Vacío o ausente → la env de siempre. En B2C es siempre eso.
+   */
+  verificarBaseUrl?: string | null;
 };
 
 export type FirmaDigitalPDF = {
@@ -111,6 +124,18 @@ const COLORS = {
 const VERIFICAR_BASE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://docto.com.ar"
 ).replace(/\/+$/, "");
+
+/**
+ * La base que sale IMPRESA y codificada en el QR.
+ *
+ * Con branding institucional manda el dominio de la instancia; sin él, la env de
+ * siempre. Pura y exportada: es la línea que decide si el QR de la demo lleva a
+ * la página de verificación de la provincia o a un 404 del B2C.
+ */
+export function baseDeVerificacion(branding?: BrandingPDF | null): string {
+  const propia = (branding?.verificarBaseUrl ?? "").trim().replace(/\/+$/, "");
+  return propia || VERIFICAR_BASE_URL;
+}
 
 const MARGIN = { top: 36, right: 50, bottom: 10, left: 50 };
 const PAGE_WIDTH = 595.28; // A4
@@ -908,8 +933,9 @@ async function renderSelloFirma(
   const selloX = MARGIN.left;
   const selloY = footerTopY - selloHeight - 10;
 
-  // QR code → /verificar/{documento_id}
-  const verificarUrl = `${VERIFICAR_BASE_URL}/verificar/${firma.verificar_id}`;
+  // QR code → /verificar/{documento_id}, en el dominio de quien emite el papel.
+  const base = baseDeVerificacion(branding);
+  const verificarUrl = `${base}/verificar/${firma.verificar_id}`;
 
   try {
     const qrBuffer = await generarQRCodePNG(verificarUrl);
@@ -940,7 +966,7 @@ async function renderSelloFirma(
     // pintarla con el color del ministerio la haría leer como tal.
     pdf.font("Inter").fontSize(6).fillColor(branding ? COLORS.secondary : COLORS.accent);
     pdf.text(
-      `${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
+      `${base.replace(/^https?:\/\//, "")}/verificar/${firma.verificar_id}`,
       selloX + 8,
       selloY + 22,
       { width: 180 }
@@ -1024,7 +1050,7 @@ function renderFooter(
     pdf.font("Inter").fontSize(8).fillColor(COLORS.primary);
     pdf.text(
       `Firmado electrónicamente por ${formatNombreMedico(doc.medico_nombre, doc.medico_titulo)} en los términos del art. 5 de la Ley 25.506.\n` +
-        `Verificá este documento escaneando el código QR o en ${VERIFICAR_BASE_URL.replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
+        `Verificá este documento escaneando el código QR o en ${baseDeVerificacion(branding).replace(/^https?:\/\//, "")}/verificar/${doc.firma.verificar_id}`,
       MARGIN.left, y,
       { width: CONTENT_WIDTH, align: "center" }
     );
