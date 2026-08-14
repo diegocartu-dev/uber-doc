@@ -349,6 +349,26 @@ test("la cookie del acceso también acota la sesión del profesional", () => {
   );
 });
 
+test("el enlace revocado cierra TODAS las pantallas del profesional, no solo el dashboard", () => {
+  // Con el JWT todavía vivo (cerca de una hora después de revocar), el que
+  // fotografió el QR seguía entrando a la agenda, a "mis pacientes" y al
+  // workspace de una consulta — historia clínica de la institución.
+  assert.match(
+    fuente("src/app/medico/layout.tsx"),
+    /exigirProfesionalHabilitado\(\)/,
+    "el layout de /medico dejó de mirar si el acceso de la reunión sigue vivo: la agenda, " +
+      "mis pacientes y el workspace vuelven a quedar abiertos"
+  );
+  // Nova además ESCRIBE: crea agendas y bloquea períodos.
+  for (const ruta of ["chat", "confirmar", "tts"]) {
+    assert.match(
+      fuente(`src/app/api/nova/${ruta}/route.ts`),
+      /profesionalSigueHabilitado\(\)/,
+      `/api/nova/${ruta} dejó de mirar si el acceso de la reunión sigue vivo`
+    );
+  }
+});
+
 test("preparar el escenario comprueba que el profesional sea de ESA reunión", () => {
   const codigo = fuente("src/lib/institucional/demo-escenario.ts");
   assert.match(

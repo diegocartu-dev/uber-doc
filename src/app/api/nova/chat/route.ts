@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getFlag } from "@/lib/feature-flags";
 import { esInstitucional } from "@/lib/instancia";
+import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 import { getConfigInstitucion } from "@/lib/institucional/config";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { waitUntil } from "@vercel/functions";
@@ -382,6 +383,19 @@ export async function POST(req: NextRequest) {
     if (!user || user.id !== medico_id) {
       return new Response(
         JSON.stringify({ error: "No autenticado" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── LA PUERTA DEL PROFESIONAL INVITADO ────────────────────────────────
+    // Nova ESCRIBE (crea agendas, bloquea períodos) y lee la agenda de la
+    // institución. El enlace de una reunión se proyecta en una pared: revocarlo
+    // cierra la sesión, pero el access token que el navegador ya tiene sigue
+    // sirviendo cerca de una hora. Sin esto, el que fotografió el QR seguía
+    // pudiendo pedirle cosas a Nova después de que lo echaran.
+    if (!(await profesionalSigueHabilitado())) {
+      return new Response(
+        JSON.stringify({ error: "Este acceso ya no está activo." }),
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
     }

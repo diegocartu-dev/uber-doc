@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@/lib/supabase/server";
 import { getFlag } from "@/lib/feature-flags";
+import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,19 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return new Response(
         JSON.stringify({ error: "No autorizado" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── LA PUERTA DEL PROFESIONAL INVITADO ────────────────────────────────
+    // Nova ESCRIBE (crea agendas, bloquea períodos) y lee la agenda de la
+    // institución. El enlace de una reunión se proyecta en una pared: revocarlo
+    // cierra la sesión, pero el access token que el navegador ya tiene sigue
+    // sirviendo cerca de una hora. Sin esto, el que fotografió el QR seguía
+    // pudiendo pedirle cosas a Nova después de que lo echaran.
+    if (!(await profesionalSigueHabilitado())) {
+      return new Response(
+        JSON.stringify({ error: "Este acceso ya no está activo." }),
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
     }

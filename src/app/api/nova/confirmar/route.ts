@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
 import { crearAgendaModelo } from "@/lib/agenda/crear-agenda";
 import { esInstitucional } from "@/lib/instancia";
+import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +28,19 @@ export async function POST(req: NextRequest) {
     if (!user || user.id !== medico_id) {
       return NextResponse.json(
         { exito: false, mensaje: "No autenticado" },
+        { status: 401 }
+      );
+    }
+
+    // ── LA PUERTA DEL PROFESIONAL INVITADO ────────────────────────────────
+    // Nova ESCRIBE (crea agendas, bloquea períodos) y lee la agenda de la
+    // institución. El enlace de una reunión se proyecta en una pared: revocarlo
+    // cierra la sesión, pero el access token que el navegador ya tiene sigue
+    // sirviendo cerca de una hora. Sin esto, el que fotografió el QR seguía
+    // pudiendo pedirle cosas a Nova después de que lo echaran.
+    if (!(await profesionalSigueHabilitado())) {
+      return NextResponse.json(
+        { exito: false, mensaje: "Este acceso ya no está activo." },
         { status: 401 }
       );
     }
