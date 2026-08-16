@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { avisarContadoresCambiaron } from "../AdminShell";
 import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock, CreditCard } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -120,15 +121,19 @@ export default function MedicosClient({
           )
         );
         setMensaje({ texto: `${accion.charAt(0).toUpperCase() + accion.slice(1)} exitoso`, tipo: "ok" });
-        // El contador rojo del menú (Médicos • N) vive en el LAYOUT, que es un server
-
-        // component: la lista se actualiza sola por estado local, pero el badge quedaba
-
-        // con el número viejo hasta recargar la página entera (Diego aprobó a la última
-
-        // pendiente y siguió viendo "1"). router.refresh() re-renderiza el layout.
-
+        // Los dos avisos son distintos y hacen falta los dos:
+        //
+        // 1. `router.refresh()` vuelve a pedirle la LISTA al servidor.
+        // 2. `avisarContadoresCambiaron()` pone al día el globito rojo del menú.
+        //
+        // El globito vive en el layout, que es un server component, y no se
+        // actualizaba solo: el admin aprobaba al último médico pendiente, la lista
+        // quedaba vacía y el menú seguía diciendo "1" hasta recargar el sitio
+        // entero. Se había confiado en que `router.refresh()` alcanzara para
+        // re-renderizar el layout (PR #362) y no alcanzó — por eso ahora el globito
+        // se entera por este aviso y pregunta él mismo.
         router.refresh();
+        avisarContadoresCambiaron();
       } else {
         setMensaje({ texto: data.error || "Error", tipo: "error" });
       }
