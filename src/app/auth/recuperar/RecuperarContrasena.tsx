@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Stethoscope, MailCheck } from "lucide-react";
+import { esInstitucionalClient } from "@/lib/instancia";
 import { createClient } from "@/lib/supabase/client";
 import LoadingButton from "@/components/ui/LoadingButton";
 
@@ -25,8 +26,16 @@ export default function RecuperarContrasena({ motivoLinkInvalido }: { motivoLink
     setError(null);
 
     const supabase = createClient();
+    // Destino del link del mail. En B2C queda EXACTAMENTE el de siempre: "www"
+    // explícito, porque el apex 307ea y el redirect se come el fragmento con el
+    // token (misma lección que los webhooks al apex, 13/07) — y ojo que
+    // NEXT_PUBLIC_SITE_URL del B2C apunta al apex, así que NO sirve acá.
+    // En una instancia institucional el dominio es otro y sale del entorno.
+    const base = esInstitucionalClient()
+      ? (process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin)
+      : "https://www.docto.com.ar";
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: "https://www.docto.com.ar/auth/callback?next=/auth/nueva-contrasena",
+      redirectTo: base + "/auth/callback?next=/auth/nueva-contrasena",
     });
 
     if (error) {
