@@ -84,7 +84,15 @@ export async function POST(request: NextRequest) {
   // 0. Anti login-CSRF: esta route ESCRIBE cookies de sesión sin leer ninguna,
   //    así que SameSite no la protege. Ver src/lib/institucional/origen.ts.
   if (!esPostDelMismoSitio(request)) {
-    console.warn("[acceso] POST de minteo rechazado: no salió de nuestra landing");
+    // Qué mandó el navegador, para poder diagnosticar un rechazo sin adivinar.
+    // Son headers de transporte (no PII) y solo se escriben cuando ya se rechazó.
+    console.warn(
+      "[acceso] POST de minteo rechazado: no salió de nuestra landing" +
+        " · origin=" + (request.headers.get("origin") ?? "(ausente)") +
+        " · sec-fetch-site=" + (request.headers.get("sec-fetch-site") ?? "(ausente)") +
+        " · x-forwarded-host=" + (request.headers.get("x-forwarded-host") ?? "(ausente)") +
+        " · host=" + (request.headers.get("host") ?? "(ausente)")
+    );
     return new NextResponse(null, { status: 403 });
   }
 

@@ -33,8 +33,26 @@ export function esPostDelMismoSitio(request: NextRequest): boolean {
 
   const origin = request.headers.get("origin");
   if (!origin) return true; // header ausente: no se castiga al navegador viejo
+
+  // Con qué comparamos el Origin. `request.url` NO sirve solo: detrás del proxy
+  // de Vercel el host de esa URL puede ser el del deployment (…-hash.vercel.app)
+  // y no el dominio por el que entró la persona — y entonces un POST legítimo
+  // de nuestra propia landing se rechaza. El host real llega en los headers que
+  // pone el proxy; `request.url` queda como último recurso.
+  const hostProxy =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+
+  const aceptados = new Set<string>();
+  if (hostProxy) aceptados.add(`${proto}://${hostProxy}`);
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    aceptados.add(new URL(request.url).origin);
+  } catch {
+    /* request.url ilegible: quedan los headers del proxy */
+  }
+
+  try {
+    return aceptados.has(new URL(origin).origin);
   } catch {
     return false; // Origin ilegible = no es un navegador nuestro
   }
