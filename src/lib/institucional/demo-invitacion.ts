@@ -633,6 +633,14 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
   const medicoIds = filas.map((p) => p.medico_id as string | null).filter((x): x is string => !!x);
   const pacienteIds = filas.map((p) => p.paciente_id as string | null).filter((x): x is string => !!x);
   const userIds = filas.map((p) => p.user_id as string | null).filter((x): x is string => !!x);
+  // Por separado según el rol: `medico_paciente_perfil` se borra por
+  // `medico_user_id` y `consentimientos_informados` por el user del paciente.
+  const medicoUserIds = filas
+    .filter((p) => p.medico_id && p.user_id)
+    .map((p) => p.user_id as string);
+  const pacienteUserIds = filas
+    .filter((p) => p.paciente_id && p.user_id)
+    .map((p) => p.user_id as string);
 
   // ⚠ NO ALCANZA CON LOS PARTICIPANTES. El escenario precargado crea pacientes
   // de utilería (los que rellenan la agenda para que no se vea vacía) que NO
@@ -651,11 +659,13 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
       if (!medicoIds.includes(m.id as string)) medicoIds.push(m.id as string);
       const u = m.user_id as string | null;
       if (u && !userIds.includes(u)) userIds.push(u);
+      if (u && !medicoUserIds.includes(u)) medicoUserIds.push(u);
     }
     for (const pa of pacientesSesion ?? []) {
       if (!pacienteIds.includes(pa.id as string)) pacienteIds.push(pa.id as string);
       const u = pa.user_id as string | null;
       if (u && !userIds.includes(u)) userIds.push(u);
+      if (u && !pacienteUserIds.includes(u)) pacienteUserIds.push(u);
     }
   }
 
@@ -704,13 +714,14 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
 
   // 2. Todo lo que cuelga de un encuentro. Se borra ANTES que el encuentro.
   //    `recetas` NO está en esta lista: ver APPEND_ONLY.
+  // `descargas_hc` y `video_presencia` NO tienen turno_id/consulta_id: igual que
+  // el metering, apuntan al encuentro con (tipo, recurso_id). El primer borrado
+  // real de una reunión (18/08) falló entero por asumirles esas columnas.
   const porEncuentro: { tabla: string; columna: string; ids: string[] }[] = [
-    { tabla: "descargas_hc", columna: "turno_id", ids: turnoIds },
-    { tabla: "descargas_hc", columna: "consulta_id", ids: consultaIds },
+    { tabla: "descargas_hc", columna: "recurso_id", ids: [...turnoIds, ...consultaIds] },
     { tabla: "documentos", columna: "turno_id", ids: turnoIds },
     { tabla: "documentos", columna: "consulta_id", ids: consultaIds },
-    { tabla: "video_presencia", columna: "turno_id", ids: turnoIds },
-    { tabla: "video_presencia", columna: "consulta_id", ids: consultaIds },
+    { tabla: "video_presencia", columna: "recurso_id", ids: [...turnoIds, ...consultaIds] },
     { tabla: "sala_espera_entradas", columna: "turno_id", ids: turnoIds },
     { tabla: "sala_espera_entradas", columna: "consulta_id", ids: consultaIds },
     { tabla: "encuentros_metering", columna: "recurso_id", ids: [...turnoIds, ...consultaIds] },
@@ -743,7 +754,10 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     { tabla: "nova_mensajes", columna: "medico_id", ids: medicoIds },
     { tabla: "nova_conversaciones", columna: "medico_id", ids: medicoIds },
     { tabla: "nova_perfiles", columna: "medico_id", ids: medicoIds },
-    { tabla: "medico_paciente_perfil", columna: "medico_id", ids: medicoIds },
+    // El perfil médico-paciente se indexa por el USER del médico, no por su
+    // ficha (mismo bug de columnas asumidas que descargas_hc, mismo 18/08).
+    { tabla: "medico_paciente_perfil", columna: "medico_user_id", ids: medicoUserIds },
+    { tabla: "medico_paciente_perfil", columna: "paciente_id", ids: pacienteUserIds },
     { tabla: "notificaciones_medico", columna: "medico_id", ids: medicoIds },
     { tabla: "disponibilidad_log", columna: "medico_id", ids: medicoIds },
     { tabla: "acuerdos_servicio", columna: "medico_id", ids: medicoIds },
@@ -763,7 +777,18 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     anotar(`${paso.tabla}.${paso.columna}`, error);
   }
 
-  // 5. Las agendas (franjas antes que modelos).
+  // 5. Los encuentros. Los que tengan receta quedan retenidos por diseño.
+  //    ANTES que las agendas: `turnos.modelo_id` apunta al modelo, y borrar la
+  //    agenda con los turnos todavía vivos era un FK que la pantalla del 18/08
+  //    reportó como "lo retiene evidencia de firma" sin que hubiera ninguna.
+  if (turnoIds.length > 0) {
+    anotar("turnos", (await admin.from("turnos").delete().in("id", turnoIds)).error);
+  }
+  if (consultaIds.length > 0) {
+    anotar("consultas", (await admin.from("consultas").delete().in("id", consultaIds)).error);
+  }
+
+  // 6. Las agendas (franjas antes que modelos), ya sin turnos que las sostengan.
   if (medicoIds.length > 0) {
     const { data: modelos } = await admin.from("agenda_modelos").select("id").in("medico_id", medicoIds);
     const modeloIds = (modelos ?? []).map((m) => m.id as string);
@@ -771,14 +796,6 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
       anotar("agenda_franjas", (await admin.from("agenda_franjas").delete().in("modelo_id", modeloIds)).error);
       anotar("agenda_modelos", (await admin.from("agenda_modelos").delete().in("id", modeloIds)).error);
     }
-  }
-
-  // 6. Los encuentros. Los que tengan receta quedan retenidos por diseño.
-  if (turnoIds.length > 0) {
-    anotar("turnos", (await admin.from("turnos").delete().in("id", turnoIds)).error);
-  }
-  if (consultaIds.length > 0) {
-    anotar("consultas", (await admin.from("consultas").delete().in("id", consultaIds)).error);
   }
 
   // 7. Las fichas.
@@ -789,9 +806,23 @@ export async function limpiarSesionDemo(sesionId: string): Promise<ResultadoLimp
     anotar("pacientes", (await admin.from("pacientes").delete().in("id", pacienteIds)).error);
   }
 
-  // 8. Las cuentas auth. Van últimas y son las más frágiles (`aceptaciones_legales`
-  //    y compañía pueden retenerlas): si alguna no se va, se reporta y listo — es
-  //    una casilla no entregable de un subdominio sin MX, no un dato personal.
+  // 8. Las cuentas auth. Van últimas y son las más frágiles: primero se sueltan
+  //    las dos tablas que las retienen con FK sin acción (`aceptaciones_legales`
+  //    y `consentimientos_informados` — el "Database error deleting user" del
+  //    18/08 era esto). Si aun así alguna no se va, se reporta y listo — es una
+  //    casilla no entregable de un subdominio sin MX, no un dato personal.
+  if (userIds.length > 0) {
+    anotar(
+      "aceptaciones_legales",
+      (await admin.from("aceptaciones_legales").delete().in("user_id", userIds)).error
+    );
+  }
+  if (pacienteUserIds.length > 0) {
+    anotar(
+      "consentimientos_informados",
+      (await admin.from("consentimientos_informados").delete().in("paciente_id", pacienteUserIds)).error
+    );
+  }
   for (const userId of userIds) {
     const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) retenidos.push(`cuenta de acceso: ${error.message}`);
@@ -838,8 +869,10 @@ async function anonimizarSobrevivientes(
   const { data: medicos, error: errM } = await admin
     .from("medicos")
     .update({
+      // `titulo` es NOT NULL en la base: anónimo es el string vacío, no NULL
+      // (el NULL tiró abajo la anonimización ENTERA del 18/08).
       nombre_completo: NOMBRE_ANONIMO.profesional,
-      titulo: null,
+      titulo: "",
       celular_personal: null,
       telefono: null,
       disponible: false,
