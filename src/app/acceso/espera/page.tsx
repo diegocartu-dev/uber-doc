@@ -9,6 +9,15 @@ export const dynamic = "force-dynamic";
 // Se refresca sola y salta a su turno en cuanto aparece: nadie tiene que
 // decirle "volvé a tocar el enlace" delante del ministro.
 //
+// ── ACÁ NO VA EL TELÉFONO DE AYUDA (decisión Diego, 18/08) ──────────────────
+// Esta pantalla tenía "¿Algo no anda? Llamanos al …", y era exactamente al
+// revés: se pinta cuando TODO salió bien —el paciente entró sin usuario ni
+// contraseña y está esperando, que es lo normal— y encima justo debajo de la
+// frase que le pide calma. Ofrecer un teléfono ahí no ayuda: insinúa una falla
+// que no existe, y en una demo le mete la duda al que mira.
+// El teléfono sigue donde SÍ hay algo trabado: enlace inactivo, enlace vencido
+// y cierre sin los documentos que el paciente esperaba.
+//
 // SOLO instancia institucional: en B2C es 404.
 
 import { notFound, redirect } from "next/navigation";
@@ -60,16 +69,10 @@ export default async function EsperaPage() {
         {primerNombre(paciente.nombre_completo) && (
           <div className="pac-hola">Hola, {primerNombre(paciente.nombre_completo)}</div>
         )}
-        <div className="pac-titulo">Ya estás adentro.</div>
-        <p className="pac-parrafo-sec" style={{ marginBottom: 16 }}>
-          En cuanto {config.nombre} te asigne el profesional, esta pantalla se abre sola.
-          No hace falta que toques nada.
+        <div className="pac-titulo">Ya estás en sala de espera.</div>
+        <p className="pac-parrafo-sec">
+          Aguardá que el profesional inicie la consulta. No hace falta que toques nada.
         </p>
-        {config.telefono_ayuda ? (
-          <div className="pac-micro">
-            ¿Algo no anda? Llamanos al <span className="nw tnum">{config.telefono_ayuda}</span>.
-          </div>
-        ) : null}
       </div>
       <RefrescoSuave />
     </MarcoPaciente>
