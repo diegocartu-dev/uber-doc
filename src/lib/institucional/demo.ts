@@ -16,6 +16,7 @@
 // que se loguea desde acá va sin PII: ids y contadores, nunca nombres.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { esInstitucional } from "@/lib/instancia";
 import { normalizarTelefonoAR } from "@/lib/telefono";
 import { accesoSigueVivo } from "@/lib/institucional/accesos";
@@ -214,6 +215,54 @@ export async function listarSesionesDemo(limite = 20): Promise<SesionDemo[]> {
     return [];
   }
   return (data ?? []) as SesionDemo[];
+}
+
+/**
+ * El enlace de cada participante, para volver a dibujar su QR.
+ *
+ * Existe por la queja más justa que recibió esta pantalla (Diego, 18/08/2026):
+ * *"Escaneá el QR y viví. No entiendo por qué regenerar y todo eso."*
+ *
+ * Antes de la migración 029 la base guardaba solo el hash del token, así que el
+ * enlace vivía un instante —en la respuesta que lo creó— y recargar la pantalla
+ * lo perdía para siempre. La única salida era emitir otro, que dejaba afuera a
+ * quien ya había entrado: de ahí salían el botón "Regenerar", su diálogo de
+ * advertencia, y un operador obligado a entender el modelo de tokens.
+ *
+ * Con el token guardado (SOLO en filas de demo — lo exige un CHECK), "Ver QR"
+ * vuelve a ser lo que cualquiera espera: mostrar el mismo QR las veces que haga
+ * falta.
+ *
+ * Devuelve un mapa `acceso_id → url`. Los accesos revocados quedan afuera: si
+ * alguien fue sacado de la demo, su QR no se vuelve a mostrar.
+ */
+export async function enlacesDeSesion(
+  accesoIds: (string | null | undefined)[]
+): Promise<Record<string, string>> {
+  const ids = accesoIds.filter((id): id is string => !!id);
+  if (!esInstitucional() || ids.length === 0) return {};
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("accesos_link")
+    .select("id, token_demo, revocado_at")
+    .in("id", ids)
+    .is("revocado_at", null);
+  if (error) {
+    // Best-effort: sin enlaces la pantalla sigue siendo usable (se puede cargar
+    // gente); lo que se pierde es volver a mostrar un QR ya emitido.
+    console.error("[demo] No se pudieron leer los enlaces:", error.message);
+    return {};
+  }
+
+  const config = await getConfigInstitucion();
+  const base = `https://${dominioLimpio(config.dominio)}/acceso/t/`;
+  const mapa: Record<string, string> = {};
+  for (const fila of data ?? []) {
+    const token = fila.token_demo as string | null;
+    if (token) mapa[fila.id as string] = `${base}${token}`;
+  }
+  return mapa;
 }
 
 export async function participantesDeSesion(sesionId: string): Promise<ParticipanteDemo[]> {

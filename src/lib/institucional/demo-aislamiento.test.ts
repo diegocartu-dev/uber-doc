@@ -352,38 +352,28 @@ test("la reunión no se marca como cerrada si quedó algo por reintentar", () =>
   );
 });
 
-test("el enlace de una reunión vence con su propio reloj, no con la retención de documentos", () => {
-  // Actualizado el 17/08/2026: el reloj sigue siendo propio, pero ahora cuelga
-  // del DÍA DE LA REUNIÓN y no del momento de emisión (ver `vencimientoDemo`).
-  // Lo que este test protege es lo de siempre: que el enlace de demo NO herede
-  // `vigencia_documentos_dias` (30 días por default), que es política de
-  // retención de documentos del paciente y no el TTL de un acceso bearer al
-  // dashboard clínico que se proyecta en una pared.
+test("el enlace de una demo no hereda la retención de documentos del paciente", () => {
+  // Actualizado el 18/08/2026: el enlace de demo ya no vence (decisión de Diego,
+  // "se elimina con la demo o no"). Lo que este test sigue protegiendo es que la
+  // rama de demo NO caiga en `vigencia_documentos_dias`, que es política de
+  // retención de documentos del paciente y se calcula con el ancla del encuentro:
+  // aplicada a un profesional invitado —que no tiene encuentro— daría cualquier
+  // cosa, y encima ataría el QR de una demo a una decisión de negocio ajena.
   const codigo = fuente("src/lib/institucional/accesos.ts");
   assert.match(
     codigo,
     /params\.origen === "demo"[\s\S]{0,120}vencimientoDemo\(/,
-    "el origen demo dejó de pasar por `vencimientoDemo`: si cayó en la rama de " +
-      "`vigencia_documentos_dias`, el QR proyectado dura un mes"
+    "el origen demo dejó de pasar por `vencimientoDemo` y cayó en la rama de " +
+      "`vigencia_documentos_dias`"
   );
-  assert.ok(HORAS_ACCESO_DEMO <= 24, "el margen después de la reunión no puede pasar de un día");
 
-  // Y el comportamiento, que es lo que de verdad importa: pase lo que pase, un
-  // enlace de demo no puede acercarse a los 30 días.
-  const diaDeLaReunion = new Date(2026, 7, 25, 0, 0, 0).getTime();
+  // Y el comportamiento: el enlace de demo tiene que sobrevivir a cualquier
+  // preparación razonable. El que muere es el que se elimina, no el que espera.
   const emitido = new Date(2026, 7, 18, 22, 0, 0).getTime();
-  const vive = new Date(vencimientoDemo(diaDeLaReunion, emitido)).getTime() - emitido;
+  const vive = new Date(vencimientoDemo(emitido)).getTime() - emitido;
   assert.ok(
-    vive < 30 * 24 * 3600_000,
-    "un enlace de demo llegó a durar lo que la retención de documentos"
-  );
-
-  // El caso sin ancla tampoco puede quedar abierto.
-  const sinAncla = new Date(vencimientoDemo(undefined, emitido)).getTime() - emitido;
-  assert.equal(
-    sinAncla,
-    HORAS_ACCESO_DEMO * 3600_000,
-    "sin fecha de reunión el enlace tiene que caer al reloj de emisión, nunca quedar sin vencimiento"
+    vive > 20 * 365 * 24 * 3600_000,
+    "volvió a aparecer un reloj en el enlace de la demo"
   );
 });
 
@@ -554,28 +544,53 @@ test("el texto que el participante escribió a mano no sobrevive en los retenido
   );
 });
 
-test("emitir un enlace nuevo SIEMPRE se pregunta, aunque figure como invitado", () => {
-  // `marcarParticipanteEntro` es best-effort (nunca lanza, nunca frena el
-  // minteo), así que "Invitado" no prueba que la persona no haya entrado.
-  // Confirmar solo cuando el semáforo dice que entró echaba en silencio a quien
-  // entró y no quedó anotado — justo el caso de la pantalla recargada, que es
-  // cuando "Ver QR" cae solo en este camino.
-  const codigo = fuente("src/app/admin/demo/DemoClient.tsx");
-  const i = codigo.indexOf("function pedirEnlaceNuevo");
-  const j = codigo.indexOf("function regenerar", i);
-  assert.ok(i > 0 && j > i, "cambió la forma de DemoClient: revisá este test");
-  const cuerpo = codigo.slice(i, j);
-  assert.ok(
-    !/estado !== "invitado"/.test(cuerpo),
-    "volvió el atajo: con el semáforo en 'Invitado' se emite un enlace nuevo sin preguntar"
+test("mostrar el QR es una lectura: no puede emitir un enlace nuevo", () => {
+  // Reemplaza al test que exigía confirmación antes de regenerar (18/08/2026).
+  // Esa confirmación existía porque "Ver QR" emitía un enlace nuevo y dejaba
+  // afuera a quien ya había entrado. Con el token guardado (migración 029) el
+  // servidor devuelve el que ya existe, así que no hay nada que confirmar — y
+  // lo que hay que cuidar ahora es que no vuelva a emitir.
+  const acciones = fuente("src/app/admin/demo/actions.ts");
+  const cuerpo = cuerpoDe(acciones, "export async function mostrarQR");
+  assert.match(
+    cuerpo,
+    /enlaceDelParticipante\(/,
+    "mostrarQR volvió a emitir un enlace: proyectar el QR de alguien que ya entró " +
+      "lo deja afuera en el acto, con su teléfono en la mano y delante de todos"
   );
-  assert.match(cuerpo, /setConfirmarRegenerar\(/, "dejó de pedir confirmación");
+  assert.doesNotMatch(
+    cuerpo,
+    /regenerarEnlace\(/,
+    "mostrarQR llama a regenerarEnlace: eso apaga el enlace anterior"
+  );
+});
 
-  const iWa = codigo.indexOf("function pedirWhatsApp");
-  const cuerpoWa = codigo.slice(iWa, codigo.indexOf("function mandarWhatsApp", iWa));
-  assert.ok(
-    !/estado !== "invitado"/.test(cuerpoWa),
-    "WhatsApp emite un enlace nuevo igual que Regenerar: tiene que preguntar siempre"
+test("mandar por WhatsApp tampoco echa a quien ya entró", () => {
+  const acciones = fuente("src/app/admin/demo/actions.ts");
+  const cuerpo = cuerpoDe(acciones, "export async function enviarPorWhatsApp");
+  assert.doesNotMatch(
+    cuerpo,
+    /regenerarEnlace\(/,
+    "enviarPorWhatsApp volvió a emitir un enlace nuevo: el QR proyectado deja de servir " +
+      "y quien lo escaneó queda afuera"
+  );
+});
+
+test("la pantalla de la demo no tiene botón de regenerar ni diálogo de advertencia", () => {
+  // La queja que originó todo (Diego, 18/08/2026): "escaneá el QR y viví;
+  // el invitado existe o no". El botón rojo y su diálogo de seis renglones eran
+  // ingeniería derramada en la pantalla — explicaban el modelo de tokens a quien
+  // solo quería invitar a alguien.
+  const pantalla = fuente("src/app/admin/demo/DemoClient.tsx");
+  assert.doesNotMatch(
+    pantalla,
+    /confirmarRegenerar/,
+    "volvió el diálogo de confirmación de regenerar"
+  );
+  assert.doesNotMatch(
+    pantalla,
+    />\s*Regenerar\s*</,
+    "volvió el botón Regenerar a la pantalla de la demo"
   );
 });
 
