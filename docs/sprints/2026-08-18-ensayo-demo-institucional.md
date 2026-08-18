@@ -66,3 +66,82 @@ Las consultas de prueba quedaron como `completada` en el historial de la
 profesional de respaldo (la escena principal —profesional 1, su agenda y su
 franja para Nova— no se tocó). La disponibilidad de la profesional de respaldo
 volvió a OFF, su estado previo.
+
+---
+
+# Después de la reunión — dos fallas encontradas por Diego usándolo
+
+La reunión salió bien y el sistema aguantó de punta a punta. Aparecieron dos
+fallas, las dos del mismo tipo: código del B2C que en la instancia apunta a
+lugares que ahí no existen.
+
+## 1. "Eliminar demo" no borraba (PR #422)
+
+El primer borrado real de una reunión dejó siete errores en pantalla y la
+reunión sin cerrar. Cuatro causas:
+
+- `descargas_hc` y `video_presencia` no tienen `turno_id`/`consulta_id`: apuntan
+  al encuentro con `(tipo, recurso_id)`, como el metering.
+- `medico_paciente_perfil` se indexa por `medico_user_id`, no por `medico_id`.
+- Las agendas se borraban ANTES que los turnos, y `turnos.modelo_id` las
+  retenía: el FK se reportaba como "lo retiene evidencia de firma" sin que
+  hubiera ninguna firma de por medio.
+- La anonimización escribía `NULL` en `medicos.titulo`, que es NOT NULL: el
+  UPDATE moría entero y el sobreviviente quedaba CON su nombre — justo lo
+  contrario de lo que promete el módulo.
+
+Además, `aceptaciones_legales` y `consentimientos_informados` retenían las
+cuentas auth (el "Database error deleting user"): ahora se sueltan antes.
+
+Verificado apretando el botón en producción: las tres reuniones quedaron
+`limpia`.
+
+## 2. Al paciente se le abría una pantalla en blanco (PR #423)
+
+Al terminar la videollamada, el paciente toca "Ver mis documentos" y aparece
+una pantalla vacía; si vuelve atrás, los documentos están.
+
+`/documentos` está en `INSTITUCIONAL_BLOCKED` y el middleware la contesta con
+`new NextResponse(null, { status: 404 })`: **404 sin cuerpo**, que el navegador
+pinta en blanco. Medido en producción: `HTTP 404 · 0 bytes`. Los documentos del
+paciente institucional viven en SU pantalla, la del enlace, que ya los lista con
+sus PDFs — por eso al ir atrás aparecían.
+
+El destino ahora lo decide la page (server) con `rebotePaciente` y viaja como
+prop. El test nuevo (`pantallas-sin-links-muertos.test.ts`) encontró **dos links
+más de la misma clase, no reportados**: "Volver a mis consultas" (consulta
+cancelada) y **"Salir"** (pantalla de desconexión) apuntaban a `/mis-consultas`,
+también apagada. El segundo es el peor: se llega ahí justo cuando al paciente se
+le cortó la llamada.
+
+### Por qué hay un test que lee el código fuente
+
+Esta clase de bug no la ve el tipado, ni el lint, ni un test de render: el link
+está bien escrito, el tipo es `string` y en el B2C funciona. Solo se ve mirando
+el conjunto — qué rutas apaga el modo y qué rutas linkean las pantallas del
+paciente. El test hace exactamente eso y falla con el nombre del archivo y la
+ruta muerta. Comprobado que muerde: así aparecieron los dos de arriba.
+
+## Verificación E2E del fix (producción, navegadores reales)
+
+Demo de prueba aparte (para no tocar la de Diego): profesional + paciente
+cargados desde la pantalla de demo, CI asignada desde el call center,
+videollamada, cierre con diagnóstico y evolución. Entonces, como el paciente:
+
+- Botón "Ver mis documentos" → `href` = su pantalla, no `/documentos`.
+- Esa pantalla: **HTTP 200**, "Tu consulta terminó — Te dejaron documentación",
+  con el documento listado.
+- "Descargar" → **HTTP 200, 34.777 bytes, `%PDF-`**: un PDF de verdad.
+
+Después se borró la demo de prueba con el botón ya arreglado: reportó que el
+documento firmado queda (append-only, por ley) y que el texto escrito a mano
+adentro se borra. Comprobado en la base: `diagnostico` y `contenido` quedaron en
+`(borrado al cerrar la reunión de demostración)`.
+
+## Lo que queda anotado (no bloquea)
+
+- Un profesional recién creado en la demo no trae el toggle "Disponible para
+  consultas" hasta configurarse; para la prueba se habilitó por base. Conviene
+  revisar qué ve un profesional nuevo la primera vez que entra.
+- La pantalla de cierre del paciente sigue mostrando la barra "🩺 Docto" sobre
+  la banda de la institución: es marca blanca, y ahí Docto debería ir al pie.
