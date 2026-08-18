@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { rebotePaciente } from "@/lib/instancia";
 import SalaConsultaPaciente from "./SalaConsultaPaciente";
 
 export default async function SalaPage({
@@ -53,6 +54,14 @@ export default async function SalaPage({
       medicoTitulo={medico?.titulo ?? null}
       especialidad={consulta.especialidad}
       horaInicio={consulta.en_curso_at ?? consulta.created_at}
+      // En la instancia `/documentos` no existe (404 de cuerpo vacío): los
+      // documentos se leen en SU pantalla, la del enlace.
+      destinoDocumentos={rebotePaciente("/documentos", `/consulta/${consultaId}/acceso`)}
+      salida={{
+        href: rebotePaciente("/mis-consultas", `/consulta/${consultaId}/acceso`),
+        // En la instancia no hay una lista de consultas a la que volver.
+        texto: rebotePaciente("Volver a mis consultas", "Volver"),
+      }}
     />
   );
 }
