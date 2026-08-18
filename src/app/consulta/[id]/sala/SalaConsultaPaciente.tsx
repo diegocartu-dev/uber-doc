@@ -38,6 +38,26 @@ type Props = {
   especialidad: string;
   tipo?: "consulta" | "turno";
   horaInicio?: string | null;
+  /**
+   * A dónde manda "Ver mis documentos" al terminar la consulta.
+   *
+   * En el B2C es `/documentos`, la pantalla de siempre. En una instancia
+   * institucional esa ruta NO EXISTE —está en `INSTITUCIONAL_BLOCKED`— y el
+   * middleware la contesta con un 404 de cuerpo vacío: el paciente tocaba el
+   * botón y le aparecía una pantalla en blanco (reportado en la demo del
+   * 18/08). Sus documentos viven en SU pantalla, la del enlace, que ya los
+   * lista con sus PDFs. Por eso el destino lo decide la page (server) con
+   * `rebotePaciente` y no este componente, que es cliente.
+   */
+  destinoDocumentos?: string;
+  /**
+   * La salida de la sala cuando la consulta no terminó bien: la pantalla de
+   * "Consulta cancelada" y el "Salir" de la desconexión. Mismo problema que
+   * `destinoDocumentos`, otra ruta: `/mis-consultas` tampoco existe en la
+   * instancia. El texto viaja con el destino porque en la instancia el paciente
+   * no tiene una LISTA de consultas a la que volver: tiene UNA pantalla.
+   */
+  salida?: { href: string; texto: string };
 };
 
 // `nombreMedico` ya viene formateado con el título del médico. Lo necesitamos acá
@@ -305,6 +325,8 @@ export default function SalaConsultaPaciente({
   especialidad,
   tipo = "consulta",
   horaInicio,
+  destinoDocumentos = "/documentos",
+  salida = { href: "/mis-consultas", texto: "Volver a mis consultas" },
 }: Props) {
   // Nombre ya formateado con el título que eligió el médico. Una sola vez acá:
   // esta pantalla lo repite en cinco estados distintos.
@@ -654,13 +676,13 @@ export default function SalaConsultaPaciente({
                 Tu consulta con {nombreMedico} ha finalizado
               </p>
               <p className="mt-3 text-sm text-gray-500">
-                Tus recetas y documentos quedaron guardados en Mis documentos.
+                Tus recetas y documentos quedaron guardados.
               </p>
             </div>
 
             {/* Botón ver documentos */}
             <a
-              href="/documentos"
+              href={destinoDocumentos}
               className="mt-8 block w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
@@ -694,10 +716,10 @@ export default function SalaConsultaPaciente({
             </div>
             <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
             <p className="mt-2 text-gray-600">
-              En unos minutos vas a encontrar tus recetas y documentos en Mis documentos.
+              En unos minutos vas a encontrar acá tus recetas y documentos.
             </p>
             <a
-              href="/documentos"
+              href={destinoDocumentos}
               className="mt-8 inline-block w-full max-w-xs rounded-xl bg-[#378ADD] px-6 py-3.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
@@ -781,11 +803,11 @@ export default function SalaConsultaPaciente({
               La consulta con {nombreMedico} fue cancelada
             </p>
             <a
-              href="/mis-consultas"
+              href={salida.href}
               className="mt-8 inline-block rounded-xl border border-gray-300 px-8 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:scale-95 transition-all duration-100"
               style={{ minHeight: "44px" }}
             >
-              Volver a mis consultas
+              {salida.texto}
             </a>
           </div>
         </main>
@@ -852,7 +874,7 @@ export default function SalaConsultaPaciente({
               {reconectando ? "Reconectando…" : "Retomar llamada"}
             </button>
             <a
-              href="/mis-consultas"
+              href={salida.href}
               className="mt-3 inline-flex w-full items-center justify-center text-sm font-medium text-gray-500 hover:text-gray-700"
               style={{ minHeight: "44px", paddingTop: "10px", paddingBottom: "10px" }}
             >

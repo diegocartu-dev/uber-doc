@@ -69,6 +69,14 @@ export default async function SalaTurnoPage({
       medicoTitulo={medico?.titulo ?? null}
       especialidad={medico?.especialidad ?? ""}
       tipo="turno"
+      // En la instancia `/documentos` no existe (404 de cuerpo vacío): los
+      // documentos se leen en SU pantalla, la del enlace.
+      destinoDocumentos={rebotePaciente("/documentos", `/turno/${turnoId}/acceso`)}
+      salida={{
+        href: rebotePaciente("/mis-consultas", `/turno/${turnoId}/acceso`),
+        // En la instancia no hay una lista de consultas a la que volver.
+        texto: rebotePaciente("Volver a mis consultas", "Volver"),
+      }}
     />
   );
 }
