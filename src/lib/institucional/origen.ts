@@ -30,9 +30,25 @@ import type { NextRequest } from "next/server";
 export function esPostDelMismoSitio(request: NextRequest): boolean {
   const site = request.headers.get("sec-fetch-site");
   if (site === "cross-site") return false;
+  // El navegador AFIRMA que el pedido salió de nuestra propia página (o de una
+  // navegación directa). Ese header lo controla el navegador, una página no
+  // puede falsearlo: es la atestación más fuerte que tenemos, y alcanza. Sin
+  // este return, un `Origin` raro más abajo podía vetar a un navegador que
+  // estaba diciendo explícitamente "soy same-origin" — exactamente lo que pasó
+  // con Safari en navegación privada la noche previa a la demo (18/08/2026).
+  if (site) return true; // same-origin | same-site | none
 
   const origin = request.headers.get("origin");
   if (!origin) return true; // header ausente: no se castiga al navegador viejo
+
+  // `Origin: null` — la palabra "null", literal — es la serialización del
+  // "origen opaco": Safari en navegación privada y varios WebViews la mandan en
+  // form POSTs LEGÍTIMOS de la propia página. Acá ya se sabe que no hay
+  // `sec-fetch-site` (navegador viejo); rechazar "null" dejaba afuera al
+  // paciente del teléfono viejo en modo privado, que es justo a quien esta
+  // función promete dejar pasar. Un atacante moderno no llega acá: su navegador
+  // manda `sec-fetch-site: cross-site` y cayó en el primer return.
+  if (origin === "null") return true;
 
   // Con qué comparamos el Origin. `request.url` NO sirve solo: detrás del proxy
   // de Vercel el host de esa URL puede ser el del deployment (…-hash.vercel.app)
