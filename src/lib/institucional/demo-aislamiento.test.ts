@@ -25,7 +25,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { HORAS_ACCESO_DEMO } from "@/lib/institucional/accesos";
+import { HORAS_ACCESO_DEMO, vencimientoDemo } from "@/lib/institucional/accesos";
 import { mundosIncompatibles } from "@/lib/otorgador/asignar-turno";
 
 /**
@@ -352,16 +352,39 @@ test("la reunión no se marca como cerrada si quedó algo por reintentar", () =>
   );
 });
 
-test("el enlace de una reunión vence en horas, no en la retención de documentos", () => {
+test("el enlace de una reunión vence con su propio reloj, no con la retención de documentos", () => {
+  // Actualizado el 17/08/2026: el reloj sigue siendo propio, pero ahora cuelga
+  // del DÍA DE LA REUNIÓN y no del momento de emisión (ver `vencimientoDemo`).
+  // Lo que este test protege es lo de siempre: que el enlace de demo NO herede
+  // `vigencia_documentos_dias` (30 días por default), que es política de
+  // retención de documentos del paciente y no el TTL de un acceso bearer al
+  // dashboard clínico que se proyecta en una pared.
   const codigo = fuente("src/lib/institucional/accesos.ts");
   assert.match(
     codigo,
-    /params\.origen === "demo"[\s\S]{0,160}HORAS_ACCESO_DEMO \* HORA_MS/,
-    "el enlace de demo volvió a vencer con `vigencia_documentos_dias` (30 días por " +
-      "default): es política de retención de documentos del paciente, no el TTL de un " +
-      "acceso bearer al dashboard clínico que se proyecta en una pared"
+    /params\.origen === "demo"[\s\S]{0,120}vencimientoDemo\(/,
+    "el origen demo dejó de pasar por `vencimientoDemo`: si cayó en la rama de " +
+      "`vigencia_documentos_dias`, el QR proyectado dura un mes"
   );
-  assert.ok(HORAS_ACCESO_DEMO <= 24, "el enlace de la reunión no puede durar más de un día");
+  assert.ok(HORAS_ACCESO_DEMO <= 24, "el margen después de la reunión no puede pasar de un día");
+
+  // Y el comportamiento, que es lo que de verdad importa: pase lo que pase, un
+  // enlace de demo no puede acercarse a los 30 días.
+  const diaDeLaReunion = new Date(2026, 7, 25, 0, 0, 0).getTime();
+  const emitido = new Date(2026, 7, 18, 22, 0, 0).getTime();
+  const vive = new Date(vencimientoDemo(diaDeLaReunion, emitido)).getTime() - emitido;
+  assert.ok(
+    vive < 30 * 24 * 3600_000,
+    "un enlace de demo llegó a durar lo que la retención de documentos"
+  );
+
+  // El caso sin ancla tampoco puede quedar abierto.
+  const sinAncla = new Date(vencimientoDemo(undefined, emitido)).getTime() - emitido;
+  assert.equal(
+    sinAncla,
+    HORAS_ACCESO_DEMO * 3600_000,
+    "sin fecha de reunión el enlace tiene que caer al reloj de emisión, nunca quedar sin vencimiento"
+  );
 });
 
 test("regenerar el QR echa al que ya había entrado con el anterior", () => {

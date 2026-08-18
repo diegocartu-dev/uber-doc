@@ -130,6 +130,23 @@ export type ResultadoInvitacion =
   | { ok: true; invitacion: Invitacion }
   | { ok: false; error: string };
 
+/**
+ * Día de la reunión a las 00:00 (hora de Argentina) en ms — el ancla de la que
+ * cuelga la vigencia del enlace de demostración (ver `HORAS_ACCESO_DEMO`).
+ *
+ * `demo_sesiones.fecha` es un DATE pelado: "2026-08-25", sin zona. Interpretarlo
+ * con `new Date("2026-08-25")` lo lee como UTC y en Argentina eso cae a las 21
+ * del día ANTERIOR — un enlace que muere medio día antes de lo que dice la
+ * pantalla. Se arma a mano en hora local para que el día sea el que se ve.
+ */
+export function inicioDelDiaDeLaReunion(fecha: string | null | undefined): number | undefined {
+  if (!fecha) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha.trim());
+  if (!m) return undefined;
+  const ms = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 export async function invitarParticipante(params: {
   sesionId: string;
   raw: DatosParticipanteRaw;
@@ -147,7 +164,8 @@ export async function invitarParticipante(params: {
   const admin = createAdminClient();
   const { data: sesion } = await admin
     .from("demo_sesiones")
-    .select("id, cerrada_at")
+    // `fecha` ancla la vigencia del enlace (ver `inicioDelDiaDeLaReunion`).
+    .select("id, cerrada_at, fecha")
     .eq("id", params.sesionId)
     .maybeSingle();
   if (!sesion) return { ok: false, error: "Esa reunión no existe." };
@@ -193,6 +211,7 @@ export async function invitarParticipante(params: {
     // proyectado. El WhatsApp es un botón aparte, y solo si hay plantilla.
     canal: null,
     enviadoA: null,
+    reunionMs: inicioDelDiaDeLaReunion(sesion?.fecha as string | null | undefined),
   });
   if (!acceso) {
     return {
@@ -264,6 +283,15 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
     .maybeSingle();
   if (!p) return { ok: false, error: "Ese participante no existe." };
 
+  // La reunión a la que pertenece: su fecha es el ancla de la vigencia del
+  // enlace nuevo. Si no se pudiera leer, `crearAccesoLink` cae al reloj viejo
+  // (12 h desde la emisión) — nunca emite un token sin vencimiento.
+  const { data: sesionDelParticipante } = await admin
+    .from("demo_sesiones")
+    .select("id, fecha")
+    .eq("id", p.sesion_id as string)
+    .maybeSingle();
+
   // Ver el encabezado: revocar el token viejo no echa a quien ya entró con él.
   const medicoPrevio = (p.medico_id as string | null) ?? undefined;
   const pacientePrevio = (p.paciente_id as string | null) ?? undefined;
@@ -278,6 +306,7 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
     esDemo: true,
     canal: null,
     enviadoA: null,
+    reunionMs: inicioDelDiaDeLaReunion(sesionDelParticipante?.fecha as string | null | undefined),
   });
   if (!acceso) return { ok: false, error: "No se pudo emitir el enlace nuevo. Probá de nuevo." };
 
@@ -803,8 +832,22 @@ async function anonimizarSobrevivientes(
  * 24 h deja pasar la reunión más larga imaginable con margen, y es más que la
  * vigencia del enlace (`HORAS_ACCESO_DEMO`), así que cuando el barrido llega los
  * accesos ya estaban muertos: lo que limpia son los datos, no una puerta.
+ *
+ * Las 24 h se cuentan desde el DÍA DE LA REUNIÓN, no desde que se creó
+ * (corrección del 17/08/2026, hermana de la de `HORAS_ACCESO_DEMO`). Contadas
+ * desde la creación, una reunión armada con anticipación —una gira se planifica
+ * con días— se autoborraba ANTES de ocurrir: participantes, agenda y escenario,
+ * todo limpiado la víspera. El barrido existe para que no queden datos de gente
+ * real dando vueltas DESPUÉS de la reunión; contarlo desde antes lo convertía en
+ * un saboteador de la preparación.
+ *
+ * Una reunión sin fecha legible se sigue midiendo desde su creación: nunca queda
+ * abierta para siempre.
  */
 export const HORAS_REUNION_ABIERTA = 24;
+
+/** Un día en ms — el cierre del día de la reunión. */
+const DIA_EN_MS = 24 * 3600_000;
 
 export interface ResumenBarridoDemo {
   abiertas: number;
@@ -823,19 +866,30 @@ export async function cerrarReunionesVencidas(
   if (!esInstitucional()) return resumen;
 
   const admin = createAdminClient();
-  const corte = new Date(Date.now() - horas * 3600_000).toISOString();
+  const ahora = Date.now();
+  const corteCreacion = new Date(ahora - horas * 3600_000).toISOString();
   const { data, error } = await admin
     .from("demo_sesiones")
-    .select("id")
+    .select("id, fecha, created_at")
     .is("cerrada_at", null)
-    .lt("created_at", corte)
+    .lt("created_at", corteCreacion)
     .order("created_at", { ascending: true });
   if (error) {
     console.error("[demo] No se pudieron listar las reuniones vencidas:", error.message);
     return resumen;
   }
 
-  const vencidas = (data ?? []).map((s) => s.id as string);
+  // El filtro de arriba usa `created_at` sólo para no traerse la tabla entera:
+  // ninguna reunión vence antes de que pasen `horas` desde que se creó. Quién
+  // vence de verdad se decide acá, contra el DÍA DE LA REUNIÓN.
+  const vencidas = (data ?? [])
+    .filter((s) => {
+      const dia = inicioDelDiaDeLaReunion(s.fecha as string | null | undefined);
+      // Sin fecha legible: se mide desde la creación, como antes.
+      const desde = dia === undefined ? new Date(s.created_at as string).getTime() : dia + DIA_EN_MS;
+      return Number.isNaN(desde) ? true : ahora >= desde + horas * 3600_000;
+    })
+    .map((s) => s.id as string);
   resumen.abiertas = vencidas.length;
   for (const sesionId of vencidas) {
     const res = await limpiarSesionDemo(sesionId);

@@ -35,11 +35,43 @@ const HORA_MS = 3600_000;
  * proyectó en la pared de una sala de reuniones y que muy probablemente quedó en
  * fotos y en la grabación del encuentro.
  *
- * 12 horas cubre el día de la reunión con margen (se prepara a la mañana, se
- * hace a la tarde) y no cubre el día siguiente. Si hace falta más, se regenera
- * el QR desde el panel, que además echa al que ya había entrado.
+ * El reloj cuelga del DÍA DE LA REUNIÓN, no del momento en que se emitió el
+ * token — y esa distinción es la corrección del 17/08/2026. Antes eran 12 horas
+ * desde la emisión, y el efecto real no era limitar la exposición sino cortar la
+ * PREPARACIÓN: se carga a los participantes con anticipación, se prueba el
+ * circuito, y para cuando llega la reunión el QR ya está muerto. Peor todavía si
+ * la reunión es en otra fecha, que es el caso normal de una gira: el enlace
+ * nacía condenado. Quien lo padecía no era un extraño con una foto del QR —
+ * era el que estaba armando la demo.
+ *
+ * Anclado al día de la reunión, el enlace vive todo lo que haga falta ANTES
+ * (podés preparar con una semana de anticipación) y muere igual de rápido
+ * DESPUÉS, que es cuando el QR ya circuló proyectado y fotografiado. La
+ * exposición que importa se acota igual; la preparación deja de romperse.
+ *
+ * Sin fecha de reunión (o con una ilegible) se cae al comportamiento viejo:
+ * 12 horas desde la emisión. Nunca se emite un token sin vencimiento.
  */
 export const HORAS_ACCESO_DEMO = 12;
+
+/**
+ * Cuándo vence el enlace de una demostración.
+ *
+ * Pura y exportada a propósito: es la regla que decide si un QR llega vivo a la
+ * reunión, y probarla no puede depender de tener una base delante. `crearAccesoLink`
+ * la usa; `demo-vigencia-enlace.test.ts` la ejercita.
+ *
+ * @param reunionMs 00:00 del día de la reunión (ver `inicioDelDiaDeLaReunion`).
+ *   Ausente o ilegible: se cae al reloj viejo, `HORAS_ACCESO_DEMO` desde ahora.
+ *   Nunca devuelve un enlace sin vencimiento.
+ * @param ahoraMs inyectable para los tests; en producción, `Date.now()`.
+ */
+export function vencimientoDemo(reunionMs?: number, ahoraMs: number = Date.now()): string {
+  const anclaValida = typeof reunionMs === "number" && Number.isFinite(reunionMs);
+  // El día de la reunión termina 24 h después de su 00:00; el margen cuelga de ahí.
+  const desde = anclaValida ? reunionMs + DIA_MS : ahoraMs;
+  return new Date(desde + HORAS_ACCESO_DEMO * HORA_MS).toISOString();
+}
 
 export interface AccesoEmitido {
   url: string; // https://<dominio>/acceso/t/<token>
@@ -73,6 +105,12 @@ export async function crearAccesoLink(params: {
   enviadoA: string | null; // celular/mail al momento del envío (null = sin canal)
   /** Instante del encuentro (turno): ancla de la expiración. */
   encuentroMs?: number;
+  /**
+   * Día de la reunión de demostración a las 00:00, en ms. Ancla de la
+   * expiración cuando `origen === "demo"` (ver `HORAS_ACCESO_DEMO`). Ausente,
+   * el enlace vuelve a colgar del momento de emisión.
+   */
+  reunionMs?: number;
   /**
    * De dónde salió este token (migración 012). `reenvio_paciente` es el único
    * que puede venir SIN operador: lo pidió el paciente desde la pantalla
@@ -113,7 +151,7 @@ export async function crearAccesoLink(params: {
   // `HORAS_ACCESO_DEMO`. Va primero para que no dependa del config de nadie.
   const expiraAt =
     params.origen === "demo"
-      ? new Date(Date.now() + HORAS_ACCESO_DEMO * HORA_MS).toISOString()
+      ? vencimientoDemo(params.reunionMs)
       : new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
 
   // ── PRIMERO INSERTAR, DESPUÉS REVOCAR ──────────────────────────────────────
