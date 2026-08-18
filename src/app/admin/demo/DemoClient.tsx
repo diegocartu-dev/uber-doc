@@ -583,6 +583,17 @@ export default function DemoClient({
                   </button>
                 )}
               </div>
+              {enlace.agendaLista === true && (
+                <p style={{ fontSize: 13, color: "#1D9E75", margin: "12px 0 0", fontWeight: 500 }}>
+                  Agenda lista: ya tiene turnos cargados. No hay que preparar nada más.
+                </p>
+              )}
+              {enlace.agendaLista === false && (
+                <p style={{ fontSize: 13, color: "#8A2E2D", margin: "12px 0 0", fontWeight: 500 }}>
+                  La agenda no quedó armada. Usá “Preparar agenda” en la lista de abajo antes de
+                  la escena del turno.
+                </p>
+              )}
               {enlace.firmaLista === false && (
                 <p style={{ fontSize: 13, color: "#8A2E2D", margin: "12px 0 0", fontWeight: 500 }}>
                   Quedó sin claves de firma: sus documentos van a salir sin sello. Usá “Reintentar

@@ -111,7 +111,18 @@ export async function provisionarProfesionalDemo(params: {
   const { data: creado, error: errAuth } = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { origen: "demo", rol: "profesional" },
+    // `full_name` NO es decorativo: el dashboard saluda con
+    // `user.user_metadata.full_name || user.email`, así que sin esto el
+    // profesional de la demo aparecía en pantalla como
+    // "Dr. Demo-7c2003cf@demo.instancia-institucional.vercel.app" — el email
+    // interno, proyectado delante del cliente, en cada pantalla que lo saluda.
+    user_metadata: {
+      origen: "demo",
+      rol: "profesional",
+      full_name: [(params.titulo ?? "").trim(), params.datos.nombre.trim()]
+        .filter(Boolean)
+        .join(" "),
+    },
   });
   if (errAuth || !creado?.user) {
     console.error("[demo] createUser del profesional falló:", errAuth?.message);

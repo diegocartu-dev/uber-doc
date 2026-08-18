@@ -18,6 +18,7 @@ import { esInstitucional } from "@/lib/instancia";
 import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { crearAccesoLink, revocarAccesosDeSujeto } from "@/lib/institucional/accesos";
 import { provisionarProfesionalDemo } from "@/lib/institucional/demo-profesional";
+import { prepararEscenario } from "@/lib/institucional/demo-escenario";
 import {
   emailDemo,
   validarParticipante,
@@ -59,7 +60,9 @@ async function provisionarPacienteDemo(params: {
   const { data: creado, error: errAuth } = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { origen: "demo", rol: "paciente" },
+    // Mismo motivo que en el profesional: sin `full_name`, cualquier pantalla
+    // que salude cae al email interno de la cuenta de utilería.
+    user_metadata: { origen: "demo", rol: "paciente", full_name: params.datos.nombre.trim() },
   });
   if (errAuth || !creado?.user) {
     console.error("[demo] createUser del paciente falló:", errAuth?.message);
@@ -120,8 +123,15 @@ export interface Invitacion {
    */
   firmaLista?: boolean;
   /**
-   * URL con el token PELADO. Viaja UNA vez, hasta la pantalla que la pinta como
-   * QR. Nunca se persiste (en la base va el sha256) y nunca se loguea.
+   * `false` cuando el alta del profesional no pudo dejarle la agenda armada.
+   * `undefined` para un paciente (no tiene agenda). La agenda viene con el alta:
+   * un profesional sin agenda no sirve para nada en la demo.
+   */
+  agendaLista?: boolean;
+  /**
+   * URL con el token. En una demo se guarda además en claro (migración 029)
+   * para poder volver a dibujar el QR; en un acceso real, en la base va solo el
+   * sha256. Nunca se loguea.
    */
   url: string;
 }
@@ -228,9 +238,40 @@ export async function invitarParticipante(params: {
     };
   }
 
+  // ── LA AGENDA VIENE CON EL ALTA ────────────────────────────────────────────
+  // Antes esto era un segundo botón ("Preparar agenda") que había que tocar
+  // para CADA profesional. Diego, 18/08/2026: *"¿cuál es la función de invitar
+  // a un médico sin agenda y tener que hacer doble trabajo con todos?"*
+  //
+  // Ninguna: un profesional sin agenda no sirve para nada en la demo — el call
+  // center no tiene qué asignarle y la escena se cae. Si el alta ya sabe que es
+  // un profesional, la agenda es parte del alta.
+  //
+  // Best-effort a propósito: si la preparación falla, el profesional YA está
+  // creado y con su QR listo. Devolver un error acá haría perder el alta entera
+  // por un escenario que se puede rehacer. El fallo se informa y el botón manual
+  // sigue existiendo para reintentarlo.
+  let agendaLista = false;
+  if (medicoId) {
+    try {
+      const escenario = await prepararEscenario({ medicoId, sesionId: params.sesionId });
+      agendaLista = escenario.ok;
+      if (!escenario.ok) {
+        console.error("[demo] la agenda del profesional no quedó lista:", escenario.alertas);
+      }
+    } catch (err) {
+      console.error("[demo] prepararEscenario falló:", (err as Error).message);
+    }
+  }
+
   return {
     ok: true,
-    invitacion: { participante: participante as ParticipanteDemo, url: acceso.url, firmaLista },
+    invitacion: {
+      participante: participante as ParticipanteDemo,
+      url: acceso.url,
+      firmaLista,
+      agendaLista,
+    },
   };
 }
 
