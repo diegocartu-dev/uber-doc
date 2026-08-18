@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet, CalendarDays } from "lucide-react";
+import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet, CalendarDays, Building2 } from "lucide-react";
 import OnlineAhora from "./OnlineAhora";
 
 interface Props {
+  /**
+   * Estado del puente a la instancia institucional. `null` = no configurado en
+   * este deploy y el bloque no se dibuja: Docto no tiene por qué ofrecer una
+   * puerta a un sistema que no existe de su lado.
+   */
+  puente: { motivo: string | null } | null;
   metrics: {
     consultasHoy: number;
     medicosActivos: number;
@@ -23,7 +29,7 @@ interface Props {
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad }: Props) {
+export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad, puente }: Props) {
   const maxConsultas = Math.max(...diasSemana.map((d) => d.consultas), 1);
   // # de médicos distintos ofertando turnos (para el resumen "de una mirada")
   const medicosOfertando = new Set(turnosPorEspecialidad.flatMap((e) => e.medicos.map((m) => m.id))).size;
@@ -205,6 +211,63 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
           color={metrics.reembolsosPendientes > 0 ? "#E24B4A" : "#888780"}
         />
       </div>
+
+      {puente && <AccesoInstitucional motivo={puente.motivo} />}
+    </div>
+  );
+}
+
+/**
+ * La puerta a Docto Institucional.
+ *
+ * Va al final y separada del resto a propósito: no es una métrica de Docto ni
+ * una sección más del panel, es el acceso a OTRO producto. Meterla entre las
+ * tarjetas la volvería ruido para el uso diario del admin.
+ *
+ * Es un `<a>` y no un `<Link>` de Next, y eso no es un descuido: `Link`
+ * prefetchea al pasar el mouse por encima, y del otro lado esto no es una
+ * página sino una acción — cada visita fabrica un pasaje de un solo uso. Con
+ * prefetch, pasar el cursor quemaría pasajes en silencio y el que se usa al
+ * hacer clic podría llegar ya vencido.
+ */
+function AccesoInstitucional({ motivo }: { motivo: string | null }) {
+  const problema =
+    motivo === "instancia-no-responde"
+      ? "La instancia no respondió. Puede estar desplegando: probá de nuevo en un minuto."
+      : motivo === "sin-configurar"
+        ? "El acceso todavía no está configurado en este entorno."
+        : null;
+
+  return (
+    <div className="mt-8 border-t pt-6" style={{ borderColor: "#e5e7eb" }}>
+      <p className="text-xs font-medium text-gray-400">Otro producto</p>
+
+      {problema && (
+        <p
+          className="mt-3 rounded-lg px-3 py-2 text-xs"
+          style={{ backgroundColor: "#D85A3015", color: "#D85A30" }}
+          role="status"
+        >
+          {problema}
+        </p>
+      )}
+
+      <a
+        href="/api/admin/demo-institucional"
+        className="mt-3 flex items-center gap-4 rounded-xl bg-white p-4 transition hover:shadow-sm"
+        style={{ border: "1px solid #378ADD" }}
+      >
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: "#378ADD15" }}
+        >
+          <Building2 size={18} style={{ color: "#378ADD" }} strokeWidth={1.75} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Demo institucional</p>
+          <p className="text-xs text-gray-500">Entrás con esta misma sesión, sin otra contraseña</p>
+        </div>
+      </a>
     </div>
   );
 }

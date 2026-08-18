@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esInstitucional } from "@/lib/instancia";
 import DashboardAdminClient from "./DashboardAdminClient";
 import MobileControlCenter from "./MobileControlCenter";
 import { setsDeTest, esTest } from "@/lib/insights/filtro-test";
@@ -34,7 +35,7 @@ function en7dias() {
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ force?: string }>;
+  searchParams: Promise<{ force?: string; puente?: string }>;
 }) {
   const params = await searchParams;
   const headersList = await headers();
@@ -171,8 +172,18 @@ export default async function AdminDashboardPage({
     diasSemana.push({ fecha, consultas: total, completadas });
   }
 
+  // El puente a la instancia institucional solo se ofrece si ESTE deploy lo
+  // tiene configurado: sin las dos variables, el botón llevaría a un error.
+  const puente =
+    !esInstitucional() &&
+    !!process.env.INSTANCIA_INSTITUCIONAL_URL &&
+    (process.env.PUENTE_SUPERADMIN_SECRET ?? "").length >= 32
+      ? { motivo: (await searchParams).puente ?? null }
+      : null;
+
   return (
     <DashboardAdminClient
+      puente={puente}
       metrics={{
         consultasHoy: consultasHoyTotal,
         medicosActivos: medicosActivos ?? 0,
