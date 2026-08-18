@@ -15,7 +15,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
-import { getConfigInstitucion } from "@/lib/institucional/config";
+import { getConfigInstitucion, dominioLimpio } from "@/lib/institucional/config";
 import { crearAccesoLink, revocarAccesosDeSujeto } from "@/lib/institucional/accesos";
 import { provisionarProfesionalDemo } from "@/lib/institucional/demo-profesional";
 import {
@@ -130,23 +130,6 @@ export type ResultadoInvitacion =
   | { ok: true; invitacion: Invitacion }
   | { ok: false; error: string };
 
-/**
- * Día de la reunión a las 00:00 (hora de Argentina) en ms — el ancla de la que
- * cuelga la vigencia del enlace de demostración (ver `HORAS_ACCESO_DEMO`).
- *
- * `demo_sesiones.fecha` es un DATE pelado: "2026-08-25", sin zona. Interpretarlo
- * con `new Date("2026-08-25")` lo lee como UTC y en Argentina eso cae a las 21
- * del día ANTERIOR — un enlace que muere medio día antes de lo que dice la
- * pantalla. Se arma a mano en hora local para que el día sea el que se ve.
- */
-export function inicioDelDiaDeLaReunion(fecha: string | null | undefined): number | undefined {
-  if (!fecha) return undefined;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha.trim());
-  if (!m) return undefined;
-  const ms = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0).getTime();
-  return Number.isNaN(ms) ? undefined : ms;
-}
-
 export async function invitarParticipante(params: {
   sesionId: string;
   raw: DatosParticipanteRaw;
@@ -211,7 +194,6 @@ export async function invitarParticipante(params: {
     // proyectado. El WhatsApp es un botón aparte, y solo si hay plantilla.
     canal: null,
     enviadoA: null,
-    reunionMs: inicioDelDiaDeLaReunion(sesion?.fecha as string | null | undefined),
   });
   if (!acceso) {
     return {
@@ -253,6 +235,67 @@ export async function invitarParticipante(params: {
 }
 
 /**
+ * El enlace que YA TIENE el participante. Solo emite uno si no hay ninguno.
+ *
+ * Es la pieza que borra el enredo entero de esta pantalla. Antes, "Ver QR" y
+ * "Mandar por WhatsApp" llamaban los dos a `regenerarEnlace`, porque el token
+ * en claro no se guardaba en ningún lado: la única forma de volver a mostrar un
+ * QR era fabricar otro… y fabricar otro DEJA AFUERA a quien ya había entrado.
+ * De ahí salían el botón rojo "Regenerar", un diálogo de seis renglones
+ * explicándole al usuario el modelo de tokens, y la escena que Diego describió
+ * el 18/08/2026: *"escaneá el QR y viví; el invitado existe o no"*.
+ *
+ * Con la migración 029 el token de una demo se guarda y se puede volver a leer,
+ * así que mostrar el QR vuelve a ser una lectura y no una escritura. Nadie
+ * queda afuera por mirar.
+ *
+ * Emite uno nuevo en dos casos, los dos correctos: el participante todavía no
+ * tenía enlace, o el que tenía fue revocado (lo sacaron de la demo y lo vuelven
+ * a invitar).
+ */
+export async function enlaceDelParticipante(
+  participanteId: string
+): Promise<ResultadoInvitacion> {
+  if (!esInstitucional()) {
+    return { ok: false, error: "El modo demo solo existe en la instancia institucional." };
+  }
+  const admin = createAdminClient();
+
+  const { data: p } = await admin
+    .from("demo_participantes")
+    .select(
+      "id, sesion_id, nombre, celular, rol, estado, user_id, medico_id, paciente_id, acceso_id, entro_at, created_at"
+    )
+    .eq("id", participanteId)
+    .maybeSingle();
+  if (!p) return { ok: false, error: "Ese participante no existe." };
+
+  if (p.acceso_id) {
+    const { data: acceso } = await admin
+      .from("accesos_link")
+      .select("token_demo, revocado_at")
+      .eq("id", p.acceso_id as string)
+      .maybeSingle();
+
+    const token = acceso?.token_demo as string | null | undefined;
+    if (token && !acceso?.revocado_at) {
+      const config = await getConfigInstitucion();
+      return {
+        ok: true,
+        invitacion: {
+          participante: p as ParticipanteDemo,
+          url: `https://${dominioLimpio(config.dominio)}/acceso/t/${token}`,
+        },
+      };
+    }
+  }
+
+  // Sin enlace vivo: recién acá se emite, y emitir es lo correcto porque no hay
+  // ninguno a quien echar.
+  return regenerarEnlace(participanteId);
+}
+
+/**
  * Vuelve a acuñar el enlace de un participante que ya está cargado.
  *
  * Para el caso más probable de una reunión: alguien cerró la pestaña, se quedó
@@ -283,15 +326,6 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
     .maybeSingle();
   if (!p) return { ok: false, error: "Ese participante no existe." };
 
-  // La reunión a la que pertenece: su fecha es el ancla de la vigencia del
-  // enlace nuevo. Si no se pudiera leer, `crearAccesoLink` cae al reloj viejo
-  // (12 h desde la emisión) — nunca emite un token sin vencimiento.
-  const { data: sesionDelParticipante } = await admin
-    .from("demo_sesiones")
-    .select("id, fecha")
-    .eq("id", p.sesion_id as string)
-    .maybeSingle();
-
   // Ver el encabezado: revocar el token viejo no echa a quien ya entró con él.
   const medicoPrevio = (p.medico_id as string | null) ?? undefined;
   const pacientePrevio = (p.paciente_id as string | null) ?? undefined;
@@ -306,7 +340,6 @@ export async function regenerarEnlace(participanteId: string): Promise<Resultado
     esDemo: true,
     canal: null,
     enviadoA: null,
-    reunionMs: inicioDelDiaDeLaReunion(sesionDelParticipante?.fecha as string | null | undefined),
   });
   if (!acceso) return { ok: false, error: "No se pudo emitir el enlace nuevo. Probá de nuevo." };
 
@@ -833,21 +866,22 @@ async function anonimizarSobrevivientes(
  * vigencia del enlace (`HORAS_ACCESO_DEMO`), así que cuando el barrido llega los
  * accesos ya estaban muertos: lo que limpia son los datos, no una puerta.
  *
- * Las 24 h se cuentan desde el DÍA DE LA REUNIÓN, no desde que se creó
- * (corrección del 17/08/2026, hermana de la de `HORAS_ACCESO_DEMO`). Contadas
- * desde la creación, una reunión armada con anticipación —una gira se planifica
- * con días— se autoborraba ANTES de ocurrir: participantes, agenda y escenario,
- * todo limpiado la víspera. El barrido existe para que no queden datos de gente
- * real dando vueltas DESPUÉS de la reunión; contarlo desde antes lo convertía en
- * un saboteador de la preparación.
+ * ── ESTO NO ES UN VENCIMIENTO ────────────────────────────────────────────────
+ * Decisión de Diego (18/08/2026): la demo y sus accesos **no vencen**; se
+ * terminan cuando él toca **Eliminar demo**. Este barrido no es la puerta —
+ * es el señor de la limpieza.
  *
- * Una reunión sin fecha legible se sigue midiendo desde su creación: nunca queda
- * abierta para siempre.
+ * Existe por una obligación que no es de producto: una demo abandonada deja en
+ * la base de la provincia el nombre y el celular de personas reales que fueron
+ * a una presentación. Eso no puede quedar ahí para siempre porque nadie tocó un
+ * botón. Por eso el plazo es LARGO (30 días): tiene que ser imposible que le
+ * pise una preparación, y solo debe alcanzar a lo que quedó olvidado de verdad.
+ *
+ * La versión anterior contaba 24 h desde la CREACIÓN, y eso sí era un
+ * saboteador: una demo preparada con días de anticipación se autoborraba la
+ * víspera, con participantes, agenda y escenario adentro.
  */
-export const HORAS_REUNION_ABIERTA = 24;
-
-/** Un día en ms — el cierre del día de la reunión. */
-const DIA_EN_MS = 24 * 3600_000;
+export const HORAS_REUNION_ABIERTA = 24 * 30;
 
 export interface ResumenBarridoDemo {
   abiertas: number;
@@ -866,11 +900,10 @@ export async function cerrarReunionesVencidas(
   if (!esInstitucional()) return resumen;
 
   const admin = createAdminClient();
-  const ahora = Date.now();
-  const corteCreacion = new Date(ahora - horas * 3600_000).toISOString();
+  const corteCreacion = new Date(Date.now() - horas * 3600_000).toISOString();
   const { data, error } = await admin
     .from("demo_sesiones")
-    .select("id, fecha, created_at")
+    .select("id")
     .is("cerrada_at", null)
     .lt("created_at", corteCreacion)
     .order("created_at", { ascending: true });
@@ -879,17 +912,7 @@ export async function cerrarReunionesVencidas(
     return resumen;
   }
 
-  // El filtro de arriba usa `created_at` sólo para no traerse la tabla entera:
-  // ninguna reunión vence antes de que pasen `horas` desde que se creó. Quién
-  // vence de verdad se decide acá, contra el DÍA DE LA REUNIÓN.
-  const vencidas = (data ?? [])
-    .filter((s) => {
-      const dia = inicioDelDiaDeLaReunion(s.fecha as string | null | undefined);
-      // Sin fecha legible: se mide desde la creación, como antes.
-      const desde = dia === undefined ? new Date(s.created_at as string).getTime() : dia + DIA_EN_MS;
-      return Number.isNaN(desde) ? true : ahora >= desde + horas * 3600_000;
-    })
-    .map((s) => s.id as string);
+  const vencidas = (data ?? []).map((s) => s.id as string);
   resumen.abiertas = vencidas.length;
   for (const sesionId of vencidas) {
     const res = await limpiarSesionDemo(sesionId);

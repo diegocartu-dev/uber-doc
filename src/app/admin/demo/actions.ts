@@ -20,8 +20,8 @@ import { enviarTwilio, twilioConfigurado } from "@/lib/whatsapp";
 import { getFlag } from "@/lib/feature-flags";
 import { crearSesionDemo, type ParticipanteDemo } from "@/lib/institucional/demo";
 import {
+  enlaceDelParticipante,
   invitarParticipante,
-  regenerarEnlace,
   limpiarSesionDemo,
 } from "@/lib/institucional/demo-invitacion";
 import { prepararEscenario, rangoEscenarioPorDefecto } from "@/lib/institucional/demo-escenario";
@@ -137,7 +137,9 @@ export async function mostrarQR(participanteId: string): Promise<RespuestaAccion
   const uid = await guardAdminInstitucionalDocto();
   if (!uid) return { ok: false, error: "No autorizado" };
 
-  const res = await regenerarEnlace(participanteId);
+  // Mostrar el QR es una LECTURA: devuelve el enlace que ya tiene. Antes esto
+  // regeneraba, y regenerar echa a quien ya entró.
+  const res = await enlaceDelParticipante(participanteId);
   if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePath("/admin/demo");
@@ -176,7 +178,9 @@ export async function enviarPorWhatsApp(participanteId: string): Promise<Respues
     return { ok: false, error: "El canal de WhatsApp está apagado en esta instancia. Usá el QR." };
   }
 
-  const res = await regenerarEnlace(participanteId);
+  // Le manda el MISMO enlace que muestra el QR: mandar por WhatsApp no puede
+  // dejar afuera a quien ya escaneó.
+  const res = await enlaceDelParticipante(participanteId);
   if (!res.ok) return { ok: false, error: res.error };
   const { participante, url } = res.invitacion;
 

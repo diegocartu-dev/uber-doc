@@ -55,22 +55,29 @@ const HORA_MS = 3600_000;
 export const HORAS_ACCESO_DEMO = 12;
 
 /**
- * Cuándo vence el enlace de una demostración.
+ * Hasta cuándo vale el enlace de una demo funcional: **no vence**.
  *
- * Pura y exportada a propósito: es la regla que decide si un QR llega vivo a la
- * reunión, y probarla no puede depender de tener una base delante. `crearAccesoLink`
- * la usa; `demo-vigencia-enlace.test.ts` la ejercita.
+ * Decisión de Diego (17/08/2026), después de que dos relojes distintos le
+ * arruinaran la preparación en el mismo día: *"No vence!! se elimina con la demo
+ * o no."* La vida del acceso es la vida de la demo, y la única forma de cerrarlo
+ * es el botón **Eliminar demo**, que se lleva las cuentas, los datos y los
+ * accesos de una sola vez.
  *
- * @param reunionMs 00:00 del día de la reunión (ver `inicioDelDiaDeLaReunion`).
- *   Ausente o ilegible: se cae al reloj viejo, `HORAS_ACCESO_DEMO` desde ahora.
- *   Nunca devuelve un enlace sin vencimiento.
- * @param ahoraMs inyectable para los tests; en producción, `Date.now()`.
+ * Por qué es defendible: un enlace de demostración abre una cuenta de utilería,
+ * con pacientes inventados, que se borra entera al terminar. No hay historia
+ * clínica de nadie detrás. Un vencimiento acá no protegía a un paciente — solo
+ * apagaba el QR en medio del ensayo.
+ *
+ * La fecha lejana existe porque `expira_at` es NOT NULL y `validarTokenAcceso`
+ * la compara siempre: es más honesto poner una fecha que no llega nunca que
+ * agregarle a la validación un caso especial que alguien puede olvidar.
  */
-export function vencimientoDemo(reunionMs?: number, ahoraMs: number = Date.now()): string {
-  const anclaValida = typeof reunionMs === "number" && Number.isFinite(reunionMs);
-  // El día de la reunión termina 24 h después de su 00:00; el margen cuelga de ahí.
-  const desde = anclaValida ? reunionMs + DIA_MS : ahoraMs;
-  return new Date(desde + HORAS_ACCESO_DEMO * HORA_MS).toISOString();
+const ANIOS_DEMO = 100;
+
+export function vencimientoDemo(ahoraMs: number = Date.now()): string {
+  const d = new Date(ahoraMs);
+  d.setFullYear(d.getFullYear() + ANIOS_DEMO);
+  return d.toISOString();
 }
 
 export interface AccesoEmitido {
@@ -105,12 +112,6 @@ export async function crearAccesoLink(params: {
   enviadoA: string | null; // celular/mail al momento del envío (null = sin canal)
   /** Instante del encuentro (turno): ancla de la expiración. */
   encuentroMs?: number;
-  /**
-   * Día de la reunión de demostración a las 00:00, en ms. Ancla de la
-   * expiración cuando `origen === "demo"` (ver `HORAS_ACCESO_DEMO`). Ausente,
-   * el enlace vuelve a colgar del momento de emisión.
-   */
-  reunionMs?: number;
   /**
    * De dónde salió este token (migración 012). `reenvio_paciente` es el único
    * que puede venir SIN operador: lo pidió el paciente desde la pantalla
@@ -151,7 +152,7 @@ export async function crearAccesoLink(params: {
   // `HORAS_ACCESO_DEMO`. Va primero para que no dependa del config de nadie.
   const expiraAt =
     params.origen === "demo"
-      ? vencimientoDemo(params.reunionMs)
+      ? vencimientoDemo()
       : new Date(ancla + config.vigencia_documentos_dias * DIA_MS).toISOString();
 
   // ── PRIMERO INSERTAR, DESPUÉS REVOCAR ──────────────────────────────────────
@@ -164,6 +165,9 @@ export async function crearAccesoLink(params: {
   // Al revés, el peor caso es que convivan dos tokens vivos unos milisegundos
   // (o hasta que alguien mire los logs, si la revocación falla) — visible,
   // arreglable, y ninguno de los dos lleva a un lugar equivocado.
+  // El token en claro se guarda SOLO en demo: es lo que permite volver a
+  // mostrar el QR sin emitir otro ni echar a quien ya entró (migración 029).
+  // Para un paciente real esta columna queda en null y la base lo exige.
   const { data, error } = await admin
     .from("accesos_link")
     .insert({
@@ -173,6 +177,7 @@ export async function crearAccesoLink(params: {
       turno_id: params.turnoId ?? null,
       consulta_id: params.consultaId ?? null,
       token_hash: tokenHash,
+      token_demo: params.esDemo ? token : null,
       destino: params.destino,
       expira_at: expiraAt,
       creado_por: params.operadorId,
