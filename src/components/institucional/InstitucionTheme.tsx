@@ -11,10 +11,14 @@
 //      compartido de la Etapa 1; los headers por pantalla llegan con las
 //      pantallas (otorgador, panel) en etapas siguientes.
 //
-// ⚠ ENTREGABLE PARCIAL (registrado a propósito): la spec §2.1 pide "franja +
-// logo/nombre" y acá `logo_path` NO se renderiza todavía — el bucket
-// `institucion-assets` llega recién en la Etapa 5. Cuando exista, hay que
-// volver a ESTE componente (no solo al PDF) y sumar el logo junto al nombre.
+// El logo del chrome (`logo_path`) SÍ se renderiza desde el 18/08: era la deuda
+// que dejó anotada la Etapa 1 ("falta sumar el logo junto al nombre" cuando
+// existiera el bucket). El bucket `institucion-assets` ya existe y la pantalla
+// de /admin/institucion sube ahí el logotipo del cliente.
+//
+// Se cae con gracia: sin `logo_path` la banda queda como estaba —nombre y
+// subnombre— y no hay hueco ni imagen rota. Una instancia sin logo cargado es
+// lo NORMAL el primer día; que se vea mal por eso sería un bug propio.
 //
 // Frontera del theming (regla #1 del lenguaje aprobado): --inst-* es SOLO
 // identidad (franja, logo, acentos de PDF). El azul #378ADD sigue siendo la
@@ -37,6 +41,7 @@ export default async function InstitucionTheme() {
 
   let nombre: string;
   let subnombre: string | null;
+  let logoUrl: string | null;
   let primary: string;
   let primaryDark: string;
   let primarySoft: string;
@@ -45,6 +50,13 @@ export default async function InstitucionTheme() {
     const branding = await getBrandingInstitucion();
     nombre = branding.nombre;
     subnombre = branding.subnombre;
+    // El bucket es público (son logotipos, no datos): la URL se arma acá y no
+    // se firma nada. Sin `logo_path`, null → la banda no dibuja imagen.
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    logoUrl =
+      branding.logo_path && base
+        ? `${base}/storage/v1/object/public/institucion-assets/${branding.logo_path}`
+        : null;
     // Placeholder violeta de tokens.css como fallback si un hex está roto.
     primary = hexSeguro(branding.color_primary, "#4A3F8C");
     primaryDark = hexSeguro(branding.color_primary_dark, "#37306B");
@@ -110,6 +122,20 @@ export default async function InstitucionTheme() {
           borderBottom: "1px solid #E9EBEF",
         }}
       >
+        {logoUrl && (
+          // Sin next/image a propósito: es un asset de marca de altura fija,
+          // servido por el CDN de Storage, y en la banda que ve el paciente no
+          // queremos ni el optimizador en el medio ni un layout shift.
+          // `alt` vacío + aria-hidden: el nombre de la institución va al lado en
+          // texto, y un lector de pantalla que lea las dos cosas repite.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt=""
+            aria-hidden
+            style={{ height: 22, width: "auto", display: "block", alignSelf: "center" }}
+          />
+        )}
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--inst-primary-dark)" }}>
           {nombre}
         </span>
