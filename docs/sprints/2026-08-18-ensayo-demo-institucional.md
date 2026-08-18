@@ -140,8 +140,15 @@ adentro se borra. Comprobado en la base: `diagnostico` y `contenido` quedaron en
 
 ## Lo que queda anotado (no bloquea)
 
-- Un profesional recién creado en la demo no trae el toggle "Disponible para
-  consultas" hasta configurarse; para la prueba se habilitó por base. Conviene
-  revisar qué ve un profesional nuevo la primera vez que entra.
+- ~~Un profesional recién creado no trae el toggle "Disponible para
+  consultas"~~. **Falso, corregido el mismo día:** el toggle estaba donde
+  corresponde (bloque CONSULTA INMEDIATA del dashboard). Lo que falló fue el
+  selector del script de prueba, y el texto que capturé venía recortado antes de
+  llegar a ese bloque. Queda anotado el error y no el "hallazgo": un reporte de
+  bug que en realidad es una falla del instrumento manda a buscar un problema
+  que no existe.
 - La pantalla de cierre del paciente sigue mostrando la barra "🩺 Docto" sobre
   la banda de la institución: es marca blanca, y ahí Docto debería ir al pie.
+- `telefono_ayuda` sigue en el placeholder `0800-555-0000` y se ve en la
+  pantalla del paciente. Es una promesa (a qué número llama alguien que se
+  queda trabado), así que la decide Diego — no se cambió sola.
