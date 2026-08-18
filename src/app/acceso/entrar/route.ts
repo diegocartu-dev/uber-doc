@@ -93,7 +93,10 @@ export async function POST(request: NextRequest) {
         " · x-forwarded-host=" + (request.headers.get("x-forwarded-host") ?? "(ausente)") +
         " · host=" + (request.headers.get("host") ?? "(ausente)")
     );
-    return new NextResponse(null, { status: 403 });
+    // A una persona NUNCA se le devuelve una pantalla en blanco: el 403 pelado
+    // era exactamente eso (el form navega, la respuesta no tiene cuerpo). Se la
+    // manda a la pantalla de "enlace inválido", que explica y ofrece reintentar.
+    return aInvalido(origin, true);
   }
 
   let token = "";
