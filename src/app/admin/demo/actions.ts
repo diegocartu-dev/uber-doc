@@ -53,6 +53,8 @@ export interface EnlaceListo {
   qr: string; // data URI
   /** `false` = el alta no pudo dejarle claves de firma (se avisa en la pantalla). */
   firmaLista?: boolean;
+  /** La agenda quedó armada con el alta. `false` = hay que reintentarla. */
+  agendaLista?: boolean;
   /** Resultado del envío por WhatsApp, si se pidió. */
   whatsapp?: { ok: boolean; detalle: string };
 }
@@ -113,6 +115,7 @@ export async function cargarParticipante(input: {
       url: res.invitacion.url,
       qr: await qrDataUri(res.invitacion.url),
       firmaLista: res.invitacion.firmaLista,
+      agendaLista: res.invitacion.agendaLista,
     },
   };
 }
