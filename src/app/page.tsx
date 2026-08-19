@@ -213,7 +213,7 @@ export default async function Home({
           {/* Dos columnas */}
           <div className="landing-como-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48 }}>
             {/* COLUMNA IZQUIERDA — Consulta Inmediata */}
-            <div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 className="landing-pulse-badge"
                 style={{
@@ -263,7 +263,7 @@ export default async function Home({
                   lineHeight: 1.55,
                   color: "var(--color-text-secondary)",
                   margin: "0 0 24px",
-                  maxWidth: 460,
+                  maxWidth: 500,
                 }}
               >
                 Entrás, ves qué médicos están disponibles ahora y te conectás.
@@ -290,7 +290,7 @@ export default async function Home({
                 <ArrowRight size={15} />
               </Link>
 
-              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center" }}>
+              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center", alignSelf: "stretch", marginTop: "auto" }}>
                 <div style={{ transform: "scale(0.72)", transformOrigin: "top center" }}>
                   <PhoneMockupInmediata />
                 </div>
@@ -298,7 +298,7 @@ export default async function Home({
             </div>
 
             {/* COLUMNA DERECHA — Turnos Programados */}
-            <div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 style={{
                   display: "inline-flex",
@@ -326,7 +326,9 @@ export default async function Home({
                   margin: "0 0 14px",
                 }}
               >
-                Elegí tu médico, reservá tu horario.
+                Elegí tu médico,
+                <br />
+                reservá tu horario.
               </h2>
 
               <p
@@ -334,7 +336,8 @@ export default async function Home({
                   fontSize: 15,
                   lineHeight: 1.55,
                   color: "var(--color-text-secondary)",
-                  margin: "0 0 22px",
+                  margin: "0 0 24px",
+                  maxWidth: 500,
                 }}
               >
                 Buscá por especialidad o nombre, elegí el día y la hora que mejor te queda.
@@ -361,7 +364,7 @@ export default async function Home({
                 <ArrowRight size={15} />
               </Link>
 
-              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center" }}>
+              <div className="landing-phone-col" style={{ display: "flex", justifyContent: "center", alignSelf: "stretch", marginTop: "auto" }}>
                 <div style={{ transform: "scale(0.72)", transformOrigin: "top center" }}>
                   <PhoneMockupTurnos />
                 </div>
