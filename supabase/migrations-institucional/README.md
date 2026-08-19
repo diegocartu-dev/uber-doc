@@ -43,6 +43,29 @@ Y ninguna de las cuatro toca el B2C: son de la base de la instancia.
 de más abajo no son opcionales: son la única prueba de que las defensas escritas
 frenan algo.
 
+## Cambiar la marca de la instancia (030) — la base no alcanza sola
+
+La identidad del cliente vive entera en `institucion_config`: nombre,
+subnombre, logo, paleta, teléfono de ayuda. Ponerla y sacarla es escribir esa
+fila desde `/admin/institucion` — no hay una línea de código con el nombre de
+ninguna institución, y esa es la idea.
+
+Lo que **no** es obvio: **cambiar la marca en la base exige un deploy fresco**.
+El cache de `getConfigInstitucion()` dura 60 segundos y se vence solo, pero las
+pantallas que Next prerenderiza en build —el login y el chrome del panel— se
+llevan la marca **horneada en el HTML**. Medido: después de blanquear la fila,
+las pantallas del paciente (que se arman por request) cambiaron al instante,
+mientras que `/auth/login`, `/dashboard` y `/admin` seguían sirviendo el logo y
+los colores anteriores desde el CDN, con doce horas de `age` y
+`x-vercel-cache: HIT`. Sin redeploy queda media instancia con la identidad que
+uno justamente quería sacar.
+
+La **030** agrega `institucion_config_presets`: guardar el bloque de marca antes
+de blanquearlo, para poder restaurarlo con un `UPDATE` en vez de rearmarlo. El
+SQL de guardar y de restaurar está en la propia migración. Los archivos no se
+tocan nunca: quitar un asset sólo pone la columna en NULL y el logo se queda en
+el bucket `institucion-assets`.
+
 ## Modo demo (migraciones 025 a 027) — el SQL primero, igual que siempre
 
 La **025** trae el modo demo: las dos tablas de la reunión (`demo_sesiones`,
