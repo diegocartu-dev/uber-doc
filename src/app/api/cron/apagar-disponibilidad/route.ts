@@ -4,9 +4,11 @@ import { pushAlMedico } from "@/lib/push";
 import { withCron } from "@/lib/cron-guard";
 
 /**
- * Cron cada 30 min (decisión Diego 24/06/2026): apaga la disponibilidad de
- * Consulta Inmediata de cualquier médico que lleve más de 4 horas ENCENDIDO de
- * forma continua. Motivo: el toggle `disponible` no caduca solo — un médico que
+ * Cron cada 30 min: apaga la disponibilidad de Consulta Inmediata de cualquier
+ * médico que lleve más de HORAS_MAX_ENCENDIDO horas ENCENDIDO de forma continua.
+ * Eran 4 horas (decisión Diego 24/06/2026); pasaron a 3 el 20/08/2026, después
+ * de ver una solicitud entrar casi tres horas después de que la profesional se
+ * declarara disponible: el toggle seguía prendido y la persona ya no estaba. Motivo: el toggle `disponible` no caduca solo — un médico que
  * lo deja prendido y se va aparece "disponible ahora" en la cartilla del paciente
  * sin estar realmente frente a la pantalla (riesgo de no-show). Caso real: Carina
  * lo dejó prendido 6 días (18/06 → 24/06).
@@ -26,7 +28,7 @@ import { withCron } from "@/lib/cron-guard";
  * (push + mensaje interno) para que se reactive si sigue atendiendo.
  */
 
-const HORAS_MAX_ENCENDIDO = 4;
+const HORAS_MAX_ENCENDIDO = 3;
 const CONSULTA_ACTIVA = ["esperando", "aceptada", "en_curso"];
 
 async function handler(req: Request) {
@@ -114,7 +116,7 @@ async function handler(req: Request) {
     // Push best-effort.
     void pushAlMedico(m.id, {
       title: "Docto — te desactivamos de Consulta Inmediata",
-      body: "Estuviste 4h disponible. Si seguís atendiendo, reactivate desde tu panel.",
+      body: `Estuviste ${HORAS_MAX_ENCENDIDO}h disponible. Si seguís atendiendo, reactivate desde tu panel.`,
       url: "/dashboard",
       tag: `auto-apagado-${m.id}`,
     }).catch(() => {});

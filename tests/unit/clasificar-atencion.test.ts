@@ -253,3 +253,17 @@ test("un turno reembolsado sigue contando como pagado", () => {
   assert.equal(c.fuePagada, true);
   assert.equal(c.nivel, "consulta");
 });
+
+test("la solicitud que libera el sistema por plazo es una falla de oferta", () => {
+  // Cierra el ciclo con `lib/consultas/sin-respuesta.ts`: lo que escribe ese
+  // módulo tiene que caer en `sin_respuesta`, no en "el paciente se retiró".
+  // Si alguien cambia el motivo o el `resuelta_por`, este test lo caza.
+  const c = clasificarAtencion({
+    estado: "cancelada",
+    resuelta_por: "sistema",
+    resolucion_motivo: MOTIVO.SIN_RESPUESTA,
+  });
+  assert.equal(c.nivel, "intento");
+  assert.equal(c.desenlace, "sin_respuesta");
+  assert.equal(esConsulta({ estado: "cancelada", resuelta_por: "sistema" }), false);
+});
