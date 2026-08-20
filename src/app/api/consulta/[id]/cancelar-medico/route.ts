@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { ejecutarRefund } from "@/lib/cancelaciones";
+import { MOTIVO } from "@/lib/consultas/clasificar";
 
 export async function POST(
   req: NextRequest,
@@ -63,6 +64,9 @@ export async function POST(
     .update({
       estado: "cancelada",
       reintegro_estado: reintegroEstado,
+      resuelta_por: "medico",
+      resuelta_at: new Date().toISOString(),
+      resolucion_motivo: MOTIVO.CANCELO_PROFESIONAL,
     })
     .eq("id", consultaId)
     .eq("medico_id", medico.id);

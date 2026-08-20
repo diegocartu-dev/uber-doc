@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo } from "@/lib/logger";
 import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
+import { MOTIVO } from "@/lib/consultas/clasificar";
 
 // Cancelación de una solicitud de CI por el PROPIO paciente, antes de que haya
 // plata en juego (caso Lucas 04/08: esperó más de una hora una aceptación que
@@ -62,7 +63,14 @@ export async function POST(req: NextRequest) {
   // — por eso el filtro es explícito: NULL o distinto de approved.
   const { data: actualizada, error } = await admin
     .from("consultas")
-    .update({ estado: "cancelada" })
+    .update({
+      estado: "cancelada",
+      // Quién y por qué. Sin esto la fila queda como "cancelada" a secas y no
+      // hay forma de saber si el paciente se fue o si no lo atendió nadie.
+      resuelta_por: "paciente",
+      resuelta_at: new Date().toISOString(),
+      resolucion_motivo: MOTIVO.RETIRO_PACIENTE,
+    })
     .eq("id", consultaId)
     .in("estado", ["esperando", "aceptada"])
     .or("mp_status.is.null,mp_status.neq.approved")

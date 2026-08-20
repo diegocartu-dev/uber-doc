@@ -40,9 +40,15 @@ export async function aceptarConsulta(consultaId: string) {
     return { error: "Tenés una consulta esperando reconexión. Retomala o esperá a que se cierre antes de tomar otra." };
   }
 
+  // `aceptada_at` es el hito que separa un INTENTO de una CONSULTA (decisión de
+  // Diego, 19/08/2026). Hasta hoy solo se escribía el estado, y como `aceptada`
+  // es un estado de paso, al terminar la consulta no quedaba ni rastro de que
+  // un profesional se hubiera hecho cargo: la columna estaba vacía siempre.
+  // Sin esta línea es imposible distinguir "no la aceptó nadie" de "la aceptó y
+  // el paciente no pagó" — que es la diferencia entre una falla nuestra y ruido.
   const { error } = await supabase
     .from("consultas")
-    .update({ estado: "aceptada" })
+    .update({ estado: "aceptada", aceptada_at: new Date().toISOString() })
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
     .eq("estado", "esperando");
