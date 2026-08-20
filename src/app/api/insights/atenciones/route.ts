@@ -4,9 +4,21 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 import { esReservaViva, sinReservasAbandonadas } from "@/lib/insights/reservas";
+import {
+  clasificarAtencion,
+  clasificarTurno,
+  DESENLACE_LABEL,
+  type Clasificacion,
+} from "@/lib/consultas/clasificar";
 
 // Panel "Atenciones": una fila por atención REAL (no por slot de agenda), para
 // saber qué pasó — médico, paciente, tipo, estado, duración, cobro y documentos.
+//
+// LA ESCALERA (decisión de Diego, 19/08/2026): un pedido NO es una consulta
+// hasta que un profesional lo acepta; antes es un INTENTO. El KPI "Consultas"
+// cuenta solo lo aceptado, y los intentos se cuentan aparte — mezclarlos
+// escondía el número que importa: cuántos pedidos acepta un profesional.
+// Clasificación en `lib/consultas/clasificar.ts`; acá solo se lee.
 //
 // Claves del esquema (ver memoria project_esquema_atenciones_insights):
 //  - consultas/turnos.paciente_id es el USER_ID → joinear pacientes.user_id.
@@ -53,7 +65,9 @@ export async function GET(req: NextRequest) {
     await Promise.all([
       admin
         .from("consultas")
-        .select("id, medico_id, paciente_id, estado, especialidad, created_at, en_curso_at, completada_at, desconectado_at, monto, mp_status")
+        .select(
+          "id, medico_id, paciente_id, estado, especialidad, created_at, en_curso_at, completada_at, desconectado_at, monto, mp_status, aceptada_at, resuelta_por, resolucion_motivo, pago_id, sala_video_url",
+        )
         .gte("created_at", medianocheARenUTC(desde)),
       admin
         .from("turnos")
@@ -100,6 +114,10 @@ export async function GET(req: NextRequest) {
     canal: "clinica_virtual" | "consultorio_privado" | null;
     medico: string; paciente: string; provincia: string | null;
     estado: string; estadoLabel: string;
+    nivel: Clasificacion["nivel"]; desenlace: Clasificacion["desenlace"];
+    desenlaceLabel: string;
+    /** true = el desenlace se dedujo, no está registrado. Ver clasificar.ts. */
+    deducido: boolean;
     atendida: boolean; duracionMin: number | null;
     cobro: { pagado: boolean; monto: number | null } | null; docs: string[];
   };
@@ -108,12 +126,15 @@ export async function GET(req: NextRequest) {
   for (const c of consultas ?? []) {
     const sort = new Date(c.en_curso_at ?? c.created_at).getTime();
     const pac = pacDe(c.paciente_id);
+    const k = clasificarAtencion(c);
     atenciones.push({
       cuandoSort: sort, cuando: labelAR(sort), tipo: "CI", canal: null,
       medico: medMap.get(c.medico_id) ?? "—",
       paciente: pac?.nombre_completo ?? "—",
       provincia: pac?.provincia ?? null,
       estado: c.estado, estadoLabel: ESTADO_LABEL[c.estado] ?? c.estado,
+      nivel: k.nivel, desenlace: k.desenlace, desenlaceLabel: DESENLACE_LABEL[k.desenlace],
+      deducido: k.origenAceptacion !== "hito",
       atendida: ATENDIDA.has(c.estado),
       duracionMin: durMin(c.en_curso_at, c.completada_at ?? c.desconectado_at),
       cobro: cobroDe(c.mp_status, c.monto), docs: [...(docsCI.get(c.id) ?? [])],
@@ -122,6 +143,7 @@ export async function GET(req: NextRequest) {
   for (const t of turnos ?? []) {
     const sort = Date.parse(`${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`);
     const pac = pacDe(t.paciente_id);
+    const k = clasificarTurno(t);
     atenciones.push({
       cuandoSort: sort, cuando: labelAR(sort), tipo: "Turno",
       canal: (t.canal_origen as "clinica_virtual" | "consultorio_privado" | null) ?? "clinica_virtual",
@@ -129,6 +151,9 @@ export async function GET(req: NextRequest) {
       paciente: pac?.nombre_completo ?? "—",
       provincia: pac?.provincia ?? null,
       estado: t.estado, estadoLabel: ESTADO_LABEL[t.estado] ?? t.estado,
+      nivel: k.nivel, desenlace: k.desenlace, desenlaceLabel: DESENLACE_LABEL[k.desenlace],
+      // El turno no registra aceptación: su nivel se deduce del pago, siempre.
+      deducido: true,
       atendida: ATENDIDA.has(t.estado),
       duracionMin: durMin(t.en_curso_at, t.desconectado_at),
       cobro: cobroDe(t.mp_status, t.monto), docs: [...(docsTurno.get(t.id) ?? [])],
@@ -142,12 +167,27 @@ export async function GET(req: NextRequest) {
   // llegan: se filtraron arriba (ver lib/insights/reservas.ts).
   const reservandoAhora = turnos.filter(esReservaViva).length;
 
+  const consultasCuenta = atenciones.filter((a) => a.nivel === "consulta");
+  const intentosCuenta = atenciones.filter((a) => a.nivel === "intento");
+
   return NextResponse.json({
     dias,
     desde,
     atenciones,
     resumen: {
-      total: atenciones.length - reservandoAhora,
+      // "total" ahora cuenta SOLO consultas: lo que un profesional aceptó. El
+      // número baja respecto de antes a propósito — lo que se fue son los
+      // pedidos que nunca tuvieron a nadie del otro lado, que ahora se cuentan
+      // en `intentos` en vez de figurar como si hubieran sido atenciones.
+      total: consultasCuenta.length - reservandoAhora,
+      intentos: intentosCuenta.length,
+      /** De cada pedido, cuántos acepta un profesional. El termómetro de oferta. */
+      tasaAceptacion:
+        atenciones.length > 0
+          ? Math.round((consultasCuenta.length / atenciones.length) * 100)
+          : null,
+      /** Intentos que se cayeron por falta de oferta, no porque el paciente se fuera. */
+      sinRespuesta: atenciones.filter((a) => a.desenlace === "sin_respuesta").length,
       reservando: reservandoAhora,
       atendidas: atenciones.filter((a) => a.atendida).length,
       cobradas: atenciones.filter((a) => a.cobro?.pagado).length,

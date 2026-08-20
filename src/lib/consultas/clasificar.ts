@@ -191,6 +191,59 @@ export function clasificarAtencion(fila: FilaAtencion): Clasificacion {
   return { ...base, nivel: "consulta", desenlace: "sin_datos" };
 }
 
+/**
+ * La misma escalera, aplicada a un TURNO.
+ *
+ * Un turno no tiene "aceptación": el profesional publicó su agenda, o sea que
+ * ya aceptó de antemano a cualquiera que tome un lugar. Lo que separa el
+ * intento de la consulta acá es el PAGO — decisión de Diego del 10/08/2026,
+ * "el pago es fundacional para decir que este paciente consume este turno".
+ *
+ * Los estados de `turnos` ya distinguen quién dejó caer la atención
+ * (`cancelado_paciente` vs `cancelado_medico`, `ausente_*`), así que no hace
+ * falta deducirlo: se traduce.
+ *
+ * OJO: las reservas ABANDONADAS (retención vencida sin pago) no deberían llegar
+ * hasta acá — se filtran antes con `lib/insights/reservas.ts`, porque no son ni
+ * intentos: son las vueltas de un paciente indeciso.
+ */
+export function clasificarTurno(fila: FilaAtencion): Clasificacion {
+  const fuePagada = huboPago(fila);
+  // El turno no registra aceptación, y no hace falta inventarla: la agenda
+  // publicada ES la aceptación.
+  const base = {
+    fueAceptada: fuePagada,
+    fuePagada,
+    origenAceptacion: (fuePagada ? "inferido" : "no") as Clasificacion["origenAceptacion"],
+  };
+
+  // Sin pago no hay turno consumido: sigue siendo un intento.
+  if (!fuePagada) {
+    if (fila.estado === "reservado_pendiente") {
+      return { ...base, nivel: "intento", desenlace: "en_progreso" };
+    }
+    if (fila.estado === "cancelado_medico") {
+      return { ...base, nivel: "intento", desenlace: "sin_respuesta" };
+    }
+    return { ...base, nivel: "intento", desenlace: "retirado" };
+  }
+
+  switch (fila.estado) {
+    case "completado":
+      return { ...base, nivel: "consulta", desenlace: "atendida" };
+    case "ausente_medico":
+    case "cancelado_medico":
+      return { ...base, nivel: "consulta", desenlace: "medico_se_fue" };
+    case "ausente_paciente":
+    case "cancelado_paciente":
+      return { ...base, nivel: "consulta", desenlace: "paciente_se_fue" };
+    default:
+      // confirmado / en_espera / en_curso / reprogramado: pagado y todavía en
+      // camino. El reprogramado se resuelve en la fila del turno nuevo.
+      return { ...base, nivel: "consulta", desenlace: "en_progreso" };
+  }
+}
+
 /** Etiquetas para pantalla. */
 export const DESENLACE_LABEL: Record<Desenlace, string> = {
   sin_respuesta: "No la aceptó nadie",
