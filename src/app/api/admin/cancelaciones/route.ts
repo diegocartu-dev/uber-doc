@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin } from "@/lib/admin-auth";
+import { clasificarAtencion, DESENLACE_LABEL } from "@/lib/consultas/clasificar";
 
 type TipoCancelacion =
   | "cancelado_medico"
@@ -99,7 +100,7 @@ export async function GET(req: NextRequest) {
   // Fetch cancelled consultas
   let consultasQuery = admin
     .from("consultas")
-    .select("id, estado, created_at, medico_id, paciente_id, especialidad")
+    .select("id, estado, created_at, medico_id, paciente_id, especialidad, resuelta_por, resuelta_at, resolucion_motivo, aceptada_at, pago_id, mp_status, sala_video_url")
     .eq("estado", "cancelada")
     .gte("created_at", range.desde)
     .lte("created_at", range.hasta)
@@ -198,7 +199,10 @@ export async function GET(req: NextRequest) {
       medico: medMap.get(c.medico_id) ?? "—",
       paciente: pacMapUserId.get(c.paciente_id) ?? "Paciente",
       fecha: c.created_at,
-      motivo: null,
+      // Antes era `null` fijo: la columna "Motivo" del panel salía vacía para
+      // toda consulta inmediata. Ahora sale lo que registró quien la canceló, y
+      // para las filas viejas —que no tienen registro— el desenlace deducido.
+      motivo: c.resolucion_motivo ?? DESENLACE_LABEL[clasificarAtencion(c).desenlace],
       reembolso: null,
     });
   }

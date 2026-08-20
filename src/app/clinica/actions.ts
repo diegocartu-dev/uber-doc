@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { avisarMedicoAceptarWhatsApp } from "@/lib/whatsapp";
+import { MOTIVO } from "@/lib/consultas/clasificar";
 import { JURISDICCIONES } from "@/lib/jurisdicciones";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion";
@@ -258,7 +259,15 @@ export async function cambiarDeProfesional(
   // NULL en las impagas — por eso el filtro es explícito.
   const { data: cancelada } = await admin
     .from("consultas")
-    .update({ estado: "cancelada" })
+    .update({
+      estado: "cancelada",
+      // Se retiró, pero por un motivo distinto al de cancelar y ya: se fue con
+      // otro profesional. En el tablero los dos son "retirado" (no es una falla
+      // nuestra), y el motivo permite separarlos cuando haga falta.
+      resuelta_por: "paciente",
+      resuelta_at: new Date().toISOString(),
+      resolucion_motivo: MOTIVO.CAMBIO_PROFESIONAL,
+    })
     .eq("id", consultaAAbandonar)
     .in("estado", ["esperando", "aceptada"])
     .or("mp_status.is.null,mp_status.neq.approved")
