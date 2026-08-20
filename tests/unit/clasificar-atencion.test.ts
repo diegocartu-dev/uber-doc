@@ -12,6 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   clasificarAtencion,
+  clasificarTurno,
   esConsulta,
   esAtencionReal,
   MOTIVO,
@@ -206,4 +207,49 @@ test("las formas reales de una cancelación caen donde deben", () => {
   // Las que nadie aceptó ni siquiera llegan a ser consultas.
   const intentos = reales.filter((r) => !esConsulta(r.fila)).length;
   assert.equal(intentos, reales.length - 1);
+});
+
+// ── TURNOS ───────────────────────────────────────────────────────────────────
+// El turno no tiene aceptación: la agenda publicada ES la aceptación. Lo que
+// separa el intento de la consulta acá es el pago.
+
+test("turno sin pagar es un intento, no una consulta", () => {
+  const c = clasificarTurno({ estado: "reservado_pendiente" });
+  assert.equal(c.nivel, "intento");
+  assert.equal(c.desenlace, "en_progreso");
+});
+
+test("turno pagado y atendido es una consulta", () => {
+  const c = clasificarTurno({ estado: "completado", mp_status: "approved" });
+  assert.equal(c.nivel, "consulta");
+  assert.equal(c.desenlace, "atendida");
+});
+
+test("el turno ya distingue quién lo dejó caer: se traduce, no se deduce", () => {
+  const pago = { mp_status: "approved" };
+  assert.equal(clasificarTurno({ ...pago, estado: "ausente_paciente" }).desenlace, "paciente_se_fue");
+  assert.equal(clasificarTurno({ ...pago, estado: "ausente_medico" }).desenlace, "medico_se_fue");
+  assert.equal(clasificarTurno({ ...pago, estado: "cancelado_medico" }).desenlace, "medico_se_fue");
+  assert.equal(clasificarTurno({ ...pago, estado: "cancelado_paciente" }).desenlace, "paciente_se_fue");
+});
+
+test("turno que el profesional cancela antes de que se pague: falla nuestra, no del paciente", () => {
+  const c = clasificarTurno({ estado: "cancelado_medico" });
+  assert.equal(c.nivel, "intento");
+  assert.equal(c.desenlace, "sin_respuesta");
+});
+
+test("turno pagado y todavía en camino no se cuenta como fracaso", () => {
+  for (const estado of ["confirmado", "en_espera", "en_curso", "reprogramado"]) {
+    const c = clasificarTurno({ estado, mp_status: "approved" });
+    assert.equal(c.nivel, "consulta", estado);
+    assert.equal(c.desenlace, "en_progreso", estado);
+  }
+});
+
+test("un turno reembolsado sigue contando como pagado", () => {
+  // Mismo criterio que en las consultas: para devolver la plata, primero entró.
+  const c = clasificarTurno({ estado: "ausente_paciente", mp_status: "refunded" });
+  assert.equal(c.fuePagada, true);
+  assert.equal(c.nivel, "consulta");
 });

@@ -93,6 +93,36 @@ Reglas:
 - **La plata nunca se filtra:** ninguna de las dos exclusiones puede sacar una fila con `mp_status='approved'`, y todas las métricas de dinero filtran por `approved`. Delta de importes: cero.
 - **Deuda conocida:** el badge "N pendientes" de la agenda del médico (`src/app/medico/agenda/PanelDerecho.tsx`) sigue contando reservas muertas. No se tocó porque su query usa el cliente RLS y sumarle columnas tiene el riesgo de grants documentado arriba.
 
+## Un pedido NO es una consulta hasta que lo aceptan (decisión Diego, 19/08/2026)
+*"Sino es consulta, es Intento de consulta o Búsqueda."*
+
+La frontera entre un **intento** y una **consulta** es que **un profesional la acepte**. Antes de eso el paciente buscó y pidió, pero del otro lado todavía no hubo nadie. Contar los intentos como consultas mezcla la demanda con lo que efectivamente entregamos, y esconde el número que importa: **cuántos pedidos acepta un profesional** — el termómetro directo de la oferta.
+
+Aceptada, la consulta tiene dos caminos —paga o no paga— y si paga, tres desenlaces.
+
+```
+Búsqueda → Elección → Intento ──┬── nadie lo aceptó   (falla de OFERTA, nuestra)
+                                └── se retiró          (ruido normal del paciente)
+                     Consulta ──┬── abandono           (aceptada, sin pagar: se fue
+                                │                       o se cayó en el checkout de MP)
+                                └── pagada ──┬── atendida
+                                             ├── el profesional no sostuvo
+                                             └── el paciente no llegó
+```
+
+Fuente de verdad única: **`src/lib/consultas/clasificar.ts`** (`clasificarAtencion` para CI, `clasificarTurno` para turnos, `esConsulta` / `esAtencionReal` para KPIs). Todo reporte o filtro nuevo que necesite decir "esto fue una consulta" usa esos helpers, **nunca** una lista de estados escrita a mano.
+
+- **El hito es `aceptada_at`**, que escribe `aceptarConsulta`. Sin él no hay clasificación: `aceptada` es un estado de PASO y al terminar la consulta no queda rastro de que alguien se hiciera cargo.
+- **Toda cancelación registra `resuelta_por` + `resuelta_at` + `resolucion_motivo`.** Los tres caminos (el paciente se retira, el paciente se va con otro profesional, el profesional cancela) hacían `update({estado:'cancelada'})` a secas y el porqué se perdía.
+- **El turno no tiene aceptación**: la agenda publicada ES la aceptación. Ahí la frontera es el **pago** (coherente con "el pago es fundacional", 10/08). Sus estados ya distinguen quién dejó caer la atención, así que se traducen en vez de deducirse.
+- **Un reembolso cuenta como pago hecho**: para devolver la plata, primero entró. Tratar `refunded` como "no pagó" clasificaría una consulta cobrada y devuelta como abandono. El *ingreso* lo sigue midiendo `lib/insights/plata.ts`, que filtra solo por `approved`.
+- **Sin registro no se inventa un culpable**: una consulta paga y cancelada sin `resuelta_por` cae en `sin_datos`, no en "el paciente no llegó".
+- **Los estados NO cambian.** Hay ~20 archivos que los interpretan (guard de "una atención por vez", crons, pantallas del paciente y del profesional). La clasificación vive en columnas que se escriben ADEMÁS del estado y se computa al leer.
+
+**Límite del histórico:** las filas anteriores al 19/08/2026 no tienen el hito. Se infiere —el pago y la sala sólo existen después de aceptar, así que cualquiera prueba la aceptación— pero el caso inverso es indistinguible: sin pago ni sala, "no la aceptó nadie" y "la aceptó y no pagó" son la misma fila. Por eso la clasificación expone `origenAceptacion` y el tablero marca esos desenlaces como **deducidos**.
+
+**Consecuencia esperada:** el total de "consultas" BAJA respecto de lo que mostraba el tablero antes. Lo que se fue son los pedidos que nunca tuvieron a nadie del otro lado, que ahora se cuentan como intentos en vez de figurar como si hubieran sido atenciones.
+
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
 - Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.
