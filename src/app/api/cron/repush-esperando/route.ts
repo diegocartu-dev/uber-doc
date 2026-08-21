@@ -20,11 +20,32 @@ import { withCron } from "@/lib/cron-guard";
  * - Agrupado por médico: un solo push aunque haya N pacientes ("3 pacientes te
  *   esperan"), con tag estable → la notificación se reemplaza (suena de nuevo)
  *   en vez de apilarse.
+ * - TOPE DURO de recordatorios por paciente (Diego, 21/08/2026: "no podemos
+ *   mandar más de 2"). Ver abajo.
  */
 
 const PENDIENTES_CONSULTA = new Set(["esperando", "aceptada", "pagada"]);
 const PENDIENTES_TURNO = new Set(["en_espera"]);
 const EDAD_MINIMA_MIN = 8;
+
+/**
+ * Recordatorios máximos por entrada de sala. El aviso del momento de entrar no
+ * cuenta acá (lo manda `registrarEntradaSala`), así que el techo de mensajes por
+ * paciente es 1 + MAX_RECORDATORIOS.
+ *
+ * POR QUÉ HACE FALTA UN CONTADOR Y NO ALCANZA CON CERRAR LA ENTRADA A TIEMPO:
+ * este cron reinsiste mientras la fila siga abierta, y el plazo de la solicitud
+ * sin aceptar sólo acota UNO de los tres casos que cubre. Un turno con el
+ * paciente en sala, o una CI pagada sin video, pueden seguir vivos horas — y ahí
+ * el aviso volvía a encadenarse. El 18/08 una profesional recibió 17 mensajes
+ * entre las 22:09 y las 8:30 del día siguiente, uno cada ~40 minutos, madrugada
+ * incluida, por un paciente que hacía horas que no estaba. Con un tope, el peor
+ * caso posible pasa a ser dos.
+ *
+ * El contador vive en la fila de la sala de espera: nace y muere con la espera,
+ * así que no hay que limpiarlo aparte.
+ */
+const MAX_RECORDATORIOS = 2;
 
 async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");
@@ -36,7 +57,7 @@ async function handler(req: Request) {
 
   const { data: entradas, error } = await admin
     .from("sala_espera_entradas")
-    .select("id, medico_id, paciente_id, consulta_id, turno_id, entrada_en")
+    .select("id, medico_id, paciente_id, consulta_id, turno_id, entrada_en, recordatorios_enviados")
     .is("salida_en", null)
     .not("medico_id", "is", null);
 
@@ -67,8 +88,12 @@ async function handler(req: Request) {
   const ahora = Date.now();
 
   // Filtrar pendientes con edad mínima, agrupar por médico
-  type Pendiente = { pacienteId: string; minutos: number };
+  type Pendiente = { entradaId: string; pacienteId: string; minutos: number; recordatorios: number };
   const porMedico = new Map<string, Pendiente[]>();
+  // Esperas vivas a las que ya no se les manda nada: el tope se agotó. Se cuentan
+  // para que la corrida lo REPORTE — un cron que se calla sin decirlo se lee como
+  // "no había nada que avisar".
+  let silenciadasPorTope = 0;
 
   for (const e of entradas) {
     const minutos = Math.floor((ahora - new Date(e.entrada_en).getTime()) / 60000);
@@ -79,8 +104,14 @@ async function handler(req: Request) {
     const pendiente = (!!ec && PENDIENTES_CONSULTA.has(ec)) || (!!et && PENDIENTES_TURNO.has(et));
     if (!pendiente) continue;
 
+    const recordatorios = e.recordatorios_enviados ?? 0;
+    if (recordatorios >= MAX_RECORDATORIOS) {
+      silenciadasPorTope++;
+      continue;
+    }
+
     const arr = porMedico.get(e.medico_id) ?? [];
-    arr.push({ pacienteId: e.paciente_id, minutos });
+    arr.push({ entradaId: e.id, pacienteId: e.paciente_id, minutos, recordatorios });
     porMedico.set(e.medico_id, arr);
   }
 
@@ -119,9 +150,29 @@ async function handler(req: Request) {
       // Agregado de N pacientes: no hay UNA consulta a la que atribuirlo.
       { disparador: "cron_repush" }
     ).catch(() => {});
+
+    // Descontar el aviso en TODAS las filas que lo motivaron (el push es uno
+    // agregado por médico, pero molesta por cada paciente que lo disparó).
+    //
+    // Se descuenta aunque el push falle: el WhatsApp sale igual, y lo que este
+    // contador mide es "veces que le tocamos el teléfono", no entregas
+    // confirmadas. El UPDATE va condicionado al valor leído, así que dos
+    // corridas solapadas no gastan dos créditos por un solo mensaje.
+    for (const p of pendientes) {
+      await admin
+        .from("sala_espera_entradas")
+        .update({ recordatorios_enviados: p.recordatorios + 1 })
+        .eq("id", p.entradaId)
+        .eq("recordatorios_enviados", p.recordatorios);
+    }
   }
 
-  return NextResponse.json({ ok: true, recordatorios, medicosConPendientes: porMedico.size });
+  return NextResponse.json({
+    ok: true,
+    recordatorios,
+    medicosConPendientes: porMedico.size,
+    silenciadasPorTope,
+  });
 }
 
 export const GET = withCron("repush-esperando", handler);
