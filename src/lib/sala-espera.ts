@@ -38,7 +38,11 @@ export async function registrarEntradaSala(params: {
   // Aviso al médico por WhatsApp (respaldo del push) — el momento crítico: hay un
   // paciente en la sala. Único punto que cubre los 3 canales (CI, turno, consultorio
   // particular). Fire-and-forget + throttle interno; inerte sin flag/credenciales.
-  void avisarMedicoEsperandoWhatsApp(params.medicoId, "un paciente").catch(() => {});
+  void avisarMedicoEsperandoWhatsApp(params.medicoId, "un paciente", {
+    consultaId: params.consultaId ?? null,
+    turnoId: params.turnoId ?? null,
+    disparador: "entrada_sala",
+  }).catch(() => {});
 
   return data as string;
 }
