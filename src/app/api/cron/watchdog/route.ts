@@ -30,6 +30,12 @@ const ESPERADOS: Record<string, number> = {
   "repush-esperando": 10,
   "apagar-disponibilidad": 30,
   "validar-refeps-pendientes": 10,
+  // Faltaba: el cron que resuelve las CI vencidas —el que dispara reembolsos y
+  // el que libera al paciente cuyo pedido nadie aceptó— no estaba vigilado. Si
+  // Vercel dejaba de invocarlo, nadie se enteraba. Cada 3 min desde el 21/08:
+  // es el dueño del plazo de 10 minutos, y con el intervalo de 10 que tenía ese
+  // plazo se estiraba hasta 20.
+  "resolver-consultas-vencidas": 3,
   "resolver-turnos-vencidos": 10,
   "reconciliar-identidad": 10,
   "aviso-agenda-vencida": 1440,

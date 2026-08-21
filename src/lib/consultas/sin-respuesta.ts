@@ -1,4 +1,6 @@
-// Plazo de la solicitud que nadie acepta: 15 minutos (decisión Diego, 20/08/2026).
+// Plazo de la solicitud que nadie acepta: 10 minutos (Diego, 21/08/2026 — bajado
+// de los 15 originales del 20/08 al revisar un caso real: "el paciente no espera
+// toda la madrugada, se avisó una vez a los 10 minutos y listo").
 //
 // EL AGUJERO QUE TAPA ESTO
 //
@@ -30,13 +32,13 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
-import { pushAlPaciente } from "@/lib/push";
+import { pushAlMedico, pushAlPaciente } from "@/lib/push";
 import { logError, logInfo } from "@/lib/logger";
 import { MOTIVO } from "@/lib/consultas/clasificar";
 import { medicosOcupados } from "@/lib/consultas/resolver-vencidas";
 
 /** Minutos que esperamos a que un profesional acepte antes de liberar al paciente. */
-export const PLAZO_SIN_ACEPTAR_MIN = 15;
+export const PLAZO_SIN_ACEPTAR_MIN = 10;
 
 /**
  * Aviso al paciente. Solo llega si tiene push habilitado; el respaldo real es la
@@ -45,12 +47,14 @@ export const PLAZO_SIN_ACEPTAR_MIN = 15;
  */
 const AVISO_TITULO = "No encontramos quien te atienda";
 const AVISO_CUERPO =
-  "Nadie tomó tu consulta en 15 minutos. No se te cobró nada — mirá qué otros profesionales están disponibles.";
+  `Nadie tomó tu consulta en ${PLAZO_SIN_ACEPTAR_MIN} minutos. No se te cobró nada — mirá qué otros profesionales están disponibles.`;
 
 export type ResultadoSinRespuesta = {
   liberadas: number;
   omitidasPorProfesionalOcupado: number;
   carrerasPerdidas: number;
+  /** Profesionales a los que se les apagó la Consulta Inmediata al no responder. */
+  desactivados: number;
 };
 
 type SolicitudColgada = {
@@ -96,12 +100,12 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
     logError("[sin-respuesta]", "No se pudieron leer las solicitudes colgadas", {
       error: error.message,
     });
-    return { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0 };
+    return { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0, desactivados: 0 };
   }
 
   const solicitudes = (colgadas ?? []) as SolicitudColgada[];
   if (solicitudes.length === 0) {
-    return { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0 };
+    return { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0, desactivados: 0 };
   }
 
   const ocupados = await medicosOcupados([
@@ -111,6 +115,7 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
   let liberadas = 0;
   let omitidasPorProfesionalOcupado = 0;
   let carrerasPerdidas = 0;
+  let desactivados = 0;
 
   for (const s of solicitudes) {
     if (ocupados.has(s.medico_id)) {
@@ -168,6 +173,17 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
         tag: `sin-respuesta-${s.id}`,
       });
     })().catch(() => {});
+
+    // Y se le apaga la Consulta Inmediata al profesional (Diego, 21/08/2026).
+    // Todo el que llega hasta acá pasó el filtro de `ocupados`: no estaba
+    // atendiendo a nadie más, simplemente no respondió. Si queda publicado, el
+    // próximo paciente lo elige y repite la espera — y muchas veces es el único
+    // de su provincia, así que la espera repetida no tiene alternativa.
+    //
+    // A diferencia de los avisos de arriba, esto SÍ se espera: si fallara en
+    // silencio, el profesional seguiría figurando disponible sin estarlo, que es
+    // el problema que se está arreglando.
+    if (await apagarConsultaInmediata(s.medico_id)) desactivados++;
   }
 
   if (liberadas > 0 || carrerasPerdidas > 0) {
@@ -175,8 +191,59 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
       liberadas,
       omitidasPorProfesionalOcupado,
       carrerasPerdidas,
+      desactivados,
     });
   }
 
-  return { liberadas, omitidasPorProfesionalOcupado, carrerasPerdidas };
+  return { liberadas, omitidasPorProfesionalOcupado, carrerasPerdidas, desactivados };
+}
+
+/**
+ * Apaga la disponibilidad de Consulta Inmediata y le explica al profesional qué
+ * pasó. Mismo procedimiento que el auto-apagado por tiempo: limpiar el flag y su
+ * ancla, registrar la transición en `disponibilidad_log` (así el historial no
+ * miente sobre cuánto estuvo publicado) y avisar por mensaje interno —
+ * persistente, lo ve aunque no tenga push— más push best-effort.
+ *
+ * Devuelve false si ya estaba apagado: el UPDATE va condicionado a
+ * `disponible = true`, así que dos corridas solapadas no duplican el mensaje.
+ */
+async function apagarConsultaInmediata(medicoId: string): Promise<boolean> {
+  if (!medicoId) return false;
+  const admin = createAdminClient();
+
+  const { data: apagado, error } = await admin
+    .from("medicos")
+    .update({ disponible: false, disponible_desde_at: null })
+    .eq("id", medicoId)
+    .eq("disponible", true)
+    .select("id, nombre_completo");
+
+  if (error) {
+    logError("[sin-respuesta]", "No se pudo apagar la CI del profesional", {
+      medicoId,
+      error: error.message,
+    });
+    return false;
+  }
+  if (!apagado || apagado.length === 0) return false;
+
+  await admin.from("disponibilidad_log").insert({ medico_id: medicoId, online: false });
+
+  const primerNombre = (apagado[0].nombre_completo ?? "").split(" ")[0] || "Doctor/a";
+  await admin.from("mensajes_internos_medicos").insert({
+    medico_id: medicoId,
+    titulo: "Liberamos a un paciente que te estaba esperando",
+    cuerpo: `Hola ${primerNombre}. Un paciente pidió una consulta inmediata y, al no recibir respuesta en ${PLAZO_SIN_ACEPTAR_MIN} minutos, lo liberamos para que pueda elegir otro profesional. También te desactivamos de Consulta Inmediata: mientras figurás disponible te siguen eligiendo, y no queremos que a otro paciente le pase lo mismo. Cuando estés frente a la pantalla, activate de nuevo desde tu panel.`,
+    severidad: "media",
+  });
+
+  void pushAlMedico(medicoId, {
+    title: "Docto — te desactivamos de Consulta Inmediata",
+    body: `Un paciente te esperó ${PLAZO_SIN_ACEPTAR_MIN} min y lo liberamos. Reactivate cuando estés frente a la pantalla.`,
+    url: "/dashboard",
+    tag: `sin-respuesta-apagado-${medicoId}`,
+  }).catch(() => {});
+
+  return true;
 }
