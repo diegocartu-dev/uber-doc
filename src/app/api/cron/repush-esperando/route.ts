@@ -14,17 +14,35 @@ import { withCron } from "@/lib/cron-guard";
  *
  * Diseño:
  * - Solo entradas de sala de espera ABIERTAS cuya consulta/turno sigue PENDIENTE
- *   (estados esperando/aceptada/pagada · en_espera). Las terminadas no molestan.
+ *   (estados aceptada/pagada · en_espera). Las terminadas no molestan.
  * - Solo entradas con >= 8 min de antigüedad: el push inmediato ya avisó al
  *   entrar; esto es un RECORDATORIO, no un duplicado.
  * - Agrupado por médico: un solo push aunque haya N pacientes ("3 pacientes te
  *   esperan"), con tag estable → la notificación se reemplaza (suena de nuevo)
  *   en vez de apilarse.
+ * - TOPE DE RECORDATORIOS por entrada (Diego, 21/08/2026: "no podemos mandar más
+ *   de 2"). Sin tope, este cron reenviaba mientras la fila siguiera abierta: en
+ *   el caso del 18/08 fueron 17 mensajes encadenados a una misma profesional,
+ *   uno cada ~40 min, entre las 22:09 y las 8:30 de la mañana siguiente —
+ *   incluidas las 2, 3, 4, 5 y 6 AM. La forma más rápida de que alguien silencie
+ *   para siempre el canal de avisos de Docto.
+ *
+ * `esperando` salió de la lista: la CI que nadie aceptó ya no vive tanto como
+ * para necesitar este cron — su reloj (recordatorio al minuto 5, cierre al 10)
+ * lo lleva `liberar-ci-sin-aceptar`, que corre cada 2 min. Dejarla acá sumaba un
+ * segundo dueño del mismo aviso.
  */
 
-const PENDIENTES_CONSULTA = new Set(["esperando", "aceptada", "pagada"]);
+const PENDIENTES_CONSULTA = new Set(["aceptada", "pagada"]);
 const PENDIENTES_TURNO = new Set(["en_espera"]);
 const EDAD_MINIMA_MIN = 8;
+
+/**
+ * Recordatorios máximos por entrada de sala. El aviso del momento de entrar no
+ * cuenta acá (lo manda `registrarEntradaSala`), así que el techo real de
+ * mensajes por paciente es 1 + MAX_RECORDATORIOS.
+ */
+const MAX_RECORDATORIOS = 2;
 
 async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");
@@ -36,7 +54,7 @@ async function handler(req: Request) {
 
   const { data: entradas, error } = await admin
     .from("sala_espera_entradas")
-    .select("id, medico_id, paciente_id, consulta_id, turno_id, entrada_en")
+    .select("id, medico_id, paciente_id, consulta_id, turno_id, entrada_en, recordatorios_enviados")
     .is("salida_en", null)
     .not("medico_id", "is", null);
 
@@ -67,8 +85,9 @@ async function handler(req: Request) {
   const ahora = Date.now();
 
   // Filtrar pendientes con edad mínima, agrupar por médico
-  type Pendiente = { pacienteId: string; minutos: number };
+  type Pendiente = { entradaId: string; pacienteId: string; minutos: number; recordatorios: number };
   const porMedico = new Map<string, Pendiente[]>();
+  let silenciadasPorTope = 0;
 
   for (const e of entradas) {
     const minutos = Math.floor((ahora - new Date(e.entrada_en).getTime()) / 60000);
@@ -79,8 +98,17 @@ async function handler(req: Request) {
     const pendiente = (!!ec && PENDIENTES_CONSULTA.has(ec)) || (!!et && PENDIENTES_TURNO.has(et));
     if (!pendiente) continue;
 
+    // Tope alcanzado: el paciente sigue esperando y la fila sigue abierta, pero
+    // al profesional no se le manda un mensaje más. Se cuenta para que la
+    // corrida lo reporte en vez de callarlo.
+    const recordatorios = e.recordatorios_enviados ?? 0;
+    if (recordatorios >= MAX_RECORDATORIOS) {
+      silenciadasPorTope++;
+      continue;
+    }
+
     const arr = porMedico.get(e.medico_id) ?? [];
-    arr.push({ pacienteId: e.paciente_id, minutos });
+    arr.push({ entradaId: e.id, pacienteId: e.paciente_id, minutos, recordatorios });
     porMedico.set(e.medico_id, arr);
   }
 
@@ -117,9 +145,27 @@ async function handler(req: Request) {
       medicoId,
       pendientes.length === 1 ? "un paciente" : `${pendientes.length} pacientes`
     ).catch(() => {});
+
+    // Descontar el aviso en TODAS las filas que lo motivaron. Se hace siempre,
+    // incluso si el push falló: el WhatsApp sale igual, y este contador cuenta
+    // "veces que molestamos al profesional por este paciente", no pushes
+    // entregados. Condicionado al valor leído → dos corridas solapadas no
+    // gastan dos créditos por un solo mensaje.
+    for (const p of pendientes) {
+      await admin
+        .from("sala_espera_entradas")
+        .update({ recordatorios_enviados: p.recordatorios + 1 })
+        .eq("id", p.entradaId)
+        .eq("recordatorios_enviados", p.recordatorios);
+    }
   }
 
-  return NextResponse.json({ ok: true, recordatorios, medicosConPendientes: porMedico.size });
+  return NextResponse.json({
+    ok: true,
+    recordatorios,
+    medicosConPendientes: porMedico.size,
+    silenciadasPorTope,
+  });
 }
 
 export const GET = withCron("repush-esperando", handler);
