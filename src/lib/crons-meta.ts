@@ -114,6 +114,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada 10 minutos",
     autoRecupera: false,
   },
+  "liberar-ci-sin-aceptar": {
+    nombre: "Plazo de la consulta inmediata sin aceptar (10 min)",
+    queHace: "libera al paciente cuyo pedido de consulta inmediata nadie tomó en 10 minutos, y desactiva de CI al profesional que no respondió",
+    impacto: "los pedidos que nadie acepta quedan colgados sin vencer: el paciente espera frente a una sala que no va a abrir y el profesional sigue figurando disponible sin estarlo",
+    cadencia: "cada 2 minutos",
+    autoRecupera: false,
+  },
   "resolver-turnos-vencidos": {
     nombre: "Resolución de turnos vencidos",
     queHace: "marca las ausencias (médico o paciente) y dispara el reembolso automático cuando corresponde",

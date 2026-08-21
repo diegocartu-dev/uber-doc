@@ -31,6 +31,9 @@ const ESPERADOS: Record<string, number> = {
   "apagar-disponibilidad": 30,
   "validar-refeps-pendientes": 10,
   "resolver-turnos-vencidos": 10,
+  // Cada 2 min: es el dueño del plazo de 10 min de la CI sin aceptar. Si deja de
+  // correr, los pedidos vuelven a quedar colgados sin que nadie los venza.
+  "liberar-ci-sin-aceptar": 2,
   "reconciliar-identidad": 10,
   "aviso-agenda-vencida": 1440,
   "saldo-servicios": 1440,

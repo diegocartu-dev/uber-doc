@@ -48,6 +48,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/liberar-ci-sin-aceptar",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/resolver-turnos-vencidos",
       "schedule": "*/10 * * * *"
     },
