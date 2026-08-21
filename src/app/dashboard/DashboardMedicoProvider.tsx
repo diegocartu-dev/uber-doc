@@ -77,6 +77,10 @@ type DashboardCtx = {
   flashConsultaId: string | null;
   totalEsperando: number;
   badgeFlash: boolean;
+  /** El sistema apagó la disponibilidad (auto-apagado por tiempo) con la
+   *  pantalla abierta: popup + sonido, mismo trato que un paciente nuevo. */
+  avisoApagado: boolean;
+  dismissAvisoApagado: () => void;
 };
 
 const defaultBloquear = { current: false };
@@ -98,6 +102,8 @@ const Ctx = createContext<DashboardCtx>({
   flashConsultaId: null,
   totalEsperando: 0,
   badgeFlash: false,
+  avisoApagado: false,
+  dismissAvisoApagado: () => {},
 });
 
 export function useDashboardMedico() {
@@ -142,6 +148,13 @@ export default function DashboardMedicoProvider({
   const [enCurso, setEnCurso] = useState(initialEnCurso);
   const [turnosEspera, setTurnosEspera] = useState(initialTurnosEspera);
   const [disponible, setDisponible] = useState(initialDisponible);
+  const [avisoApagado, setAvisoApagado] = useState(false);
+  // Último valor de `disponible` que esta pantalla ya conoce. Se actualiza en
+  // el toggle manual Y en cada poll: así, cuando el poll trae `false` y acá
+  // todavía decía `true`, el cambio vino DE AFUERA (el auto-apagado del cron) y
+  // hay que avisarlo con sonido. El toggle manual no dispara nada porque
+  // actualiza esta ref antes del próximo poll.
+  const disponibleConocidoRef = useRef(initialDisponible);
   const [turnosActivosHoy, setTurnosActivosHoy] = useState(initialTurnosActivosHoy);
   const bloquearPollDisponible = useRef(false);
   const [popupData, setPopupData] = useState<PopupData>(null);
@@ -183,8 +196,13 @@ export default function DashboardMedicoProvider({
   }, []);
 
   const handleSetDisponible = useCallback((v: boolean) => {
+    disponibleConocidoRef.current = v;
     setDisponible(v);
+    // Si se reactiva, el aviso de apagado ya no aplica.
+    if (v) setAvisoApagado(false);
   }, []);
+
+  const dismissAvisoApagado = useCallback(() => setAvisoApagado(false), []);
 
   const dismissPopup = useCallback(() => {
     setPopupData(null);
@@ -252,6 +270,16 @@ export default function DashboardMedicoProvider({
       setPendientes(data.consultas_pendientes);
       setEnCurso(data.consultas_en_curso);
       if (!bloquearPollDisponible.current) {
+        // Apagado EXTERNO (el cron de auto-apagado, decisión Diego 20/08/2026):
+        // el server dice false y esta pantalla todavía creía true. Sin esto, el
+        // médico que está en la compu con la pestaña de fondo sigue creyendo
+        // que está publicado — el aviso persistente (mensaje interno + push) ya
+        // existe, pero no suena en la pantalla abierta, que es donde está él.
+        if (disponibleConocidoRef.current && !data.disponible) {
+          setAvisoApagado(true);
+          if (!silenciadoRef.current) soundPacienteEsperando();
+        }
+        disponibleConocidoRef.current = data.disponible;
         setDisponible(data.disponible);
       }
       setTurnosActivosHoy((data.turnos_activos_hoy ?? 0) > 0);
@@ -412,6 +440,7 @@ export default function DashboardMedicoProvider({
     <Ctx.Provider value={{
       pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy,
       setDisponible: handleSetDisponible, bloquearPollDisponible,
+      avisoApagado, dismissAvisoApagado,
       enVideollamada, silenciado, setSilenciado,
       // Prioridad: el modal "paciente listo" suprime el toast de esperando.
       // Ambos se anulan durante una videollamada activa.

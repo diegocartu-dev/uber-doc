@@ -115,7 +115,9 @@ async function handler(req: Request) {
     // mandar cada 10 min). Inerte sin flag/credenciales. Fire-and-forget.
     void avisarMedicoEsperandoWhatsApp(
       medicoId,
-      pendientes.length === 1 ? "un paciente" : `${pendientes.length} pacientes`
+      pendientes.length === 1 ? "un paciente" : `${pendientes.length} pacientes`,
+      // Agregado de N pacientes: no hay UNA consulta a la que atribuirlo.
+      { disparador: "cron_repush" }
     ).catch(() => {});
   }
 

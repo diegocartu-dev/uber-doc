@@ -71,6 +71,56 @@ async function flagWhatsappOn(): Promise<boolean> {
 
 type Variables = Record<string, string>;
 
+/**
+ * Registro de cada intento de aviso en `whatsapp_envios` (decisión Diego,
+ * 20/08/2026). Hasta hoy un aviso podía no salir —sin celular, flag apagado,
+ * error de Twilio, throttle— y no quedaba NINGÚN rastro consultable: solo un
+ * console.log en Vercel, que caduca. Con el canal entero muerto un mes
+ * (16/06→17/07) nadie se enteró justamente por esto.
+ *
+ * Best-effort SIEMPRE: registrar jamás puede impedir (ni demorar) el envío.
+ * NUNCA se guarda el número de teléfono — es dato personal y ya vive en
+ * `medicos`; acá solo queda el resultado y el SID de Twilio para rastrear la
+ * entrega real en su consola.
+ */
+type ResultadoEnvio =
+  | "enviado"
+  | "sin_celular"
+  | "flag_apagado"
+  | "sin_credenciales"
+  | "error_twilio"
+  | "throttled";
+
+type ContextoEnvio = {
+  consultaId?: string | null;
+  turnoId?: string | null;
+  /** Qué punto del producto disparó el aviso (ej. "solicitud_ci", "cron_repush"). */
+  disparador?: string;
+};
+
+function registrarEnvio(params: {
+  medicoId: string;
+  plantilla: string;
+  resultado: ResultadoEnvio;
+  ctx?: ContextoEnvio;
+  twilioSid?: string | null;
+  twilioErrorCode?: string | null;
+}): void {
+  void (async () => {
+    const admin = createAdminClient();
+    await admin.from("whatsapp_envios").insert({
+      medico_id: params.medicoId,
+      consulta_id: params.ctx?.consultaId ?? null,
+      turno_id: params.ctx?.turnoId ?? null,
+      plantilla: params.plantilla,
+      disparador: params.ctx?.disparador ?? "desconocido",
+      resultado: params.resultado,
+      twilio_sid: params.twilioSid ?? null,
+      twilio_error_code: params.twilioErrorCode ?? null,
+    });
+  })().catch(() => {});
+}
+
 /** ¿Hay credenciales Twilio configuradas en este deploy? (lo usa también el
  *  módulo de avisos institucionales — mismo criterio, una sola fuente). */
 export function twilioConfigurado(): boolean {
@@ -81,6 +131,15 @@ export function twilioConfigurado(): boolean {
  *  caller). Exportada para los avisos institucionales (src/lib/institucional/
  *  avisos.ts) — mismo transporte, otras plantillas; en B2C nada cambia. */
 export async function enviarTwilio(toE164: string, contentSid: string, variables: Variables): Promise<boolean> {
+  const r = await enviarTwilioDetallado(toE164, contentSid, variables);
+  return r.ok;
+}
+
+type DetalleTwilio = { ok: boolean; sid: string | null; errorCode: string | null };
+
+/** Igual que `enviarTwilio` pero conservando el SID del mensaje y el código de
+ *  error — lo que se persiste en `whatsapp_envios`. */
+async function enviarTwilioDetallado(toE164: string, contentSid: string, variables: Variables): Promise<DetalleTwilio> {
   const body = new URLSearchParams();
   body.set("From", TWILIO_FROM);
   body.set("To", `whatsapp:${toE164}`);
@@ -106,12 +165,14 @@ export async function enviarTwilio(toE164: string, contentSid: string, variables
       let code = "";
       try { code = String(JSON.parse(errText)?.code ?? ""); } catch {}
       console.error("[whatsapp] Twilio error", res.status, code ? `code=${code}` : "");
-      return false;
+      return { ok: false, sid: null, errorCode: code || String(res.status) };
     }
-    return true;
+    let sid: string | null = null;
+    try { sid = String((await res.json())?.sid ?? "") || null; } catch {}
+    return { ok: true, sid, errorCode: null };
   } catch (err) {
     console.error("[whatsapp] fallo de envío:", err);
-    return false;
+    return { ok: false, sid: null, errorCode: "fetch_failed" };
   }
 }
 
@@ -122,9 +183,20 @@ const primerNombre = (n: string | null | undefined): string => (n ?? "").trim().
  * la ACEPTE (recién ahí el paciente puede pagar e ingresar). Solo CI.
  * Fire-and-forget: el caller hace `.catch(() => {})`.
  */
-export async function avisarMedicoAceptarWhatsApp(medicoId: string, nombrePaciente: string): Promise<boolean> {
-  if (!(await flagWhatsappOn())) return false;
-  if (!configurado()) return false;
+export async function avisarMedicoAceptarWhatsApp(
+  medicoId: string,
+  nombrePaciente: string,
+  ctx?: ContextoEnvio,
+): Promise<boolean> {
+  const PLANTILLA = "aceptar_paciente";
+  if (!(await flagWhatsappOn())) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "flag_apagado", ctx });
+    return false;
+  }
+  if (!configurado()) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_credenciales", ctx });
+    return false;
+  }
 
   const supabase = createAdminClient();
   const { data: medico } = await supabase
@@ -138,13 +210,23 @@ export async function avisarMedicoAceptarWhatsApp(medicoId: string, nombrePacien
   const toE164 = normalizarTelefonoAR(medico.celular_personal);
   if (!toE164) {
     console.log("[whatsapp] médico sin celular válido (aceptar):", medicoId);
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
     return false;
   }
 
-  return enviarTwilio(toE164, PLANTILLA_ACEPTAR_PACIENTE, {
+  const r = await enviarTwilioDetallado(toE164, PLANTILLA_ACEPTAR_PACIENTE, {
     "1": primerNombre(medico.nombre_completo),
     "2": (nombrePaciente ?? "").trim() || "un paciente",
   });
+  registrarEnvio({
+    medicoId,
+    plantilla: PLANTILLA,
+    resultado: r.ok ? "enviado" : "error_twilio",
+    ctx,
+    twilioSid: r.sid,
+    twilioErrorCode: r.errorCode,
+  });
+  return r.ok;
 }
 
 /**
@@ -155,9 +237,20 @@ export async function avisarMedicoAceptarWhatsApp(medicoId: string, nombrePacien
  * @param cantidadTexto valor para {{2}}: "un paciente" o "N pacientes".
  * Fire-and-forget: el caller hace `.catch(() => {})`.
  */
-export async function avisarMedicoEsperandoWhatsApp(medicoId: string, cantidadTexto: string): Promise<boolean> {
-  if (!(await flagWhatsappOn())) return false;
-  if (!configurado()) return false;
+export async function avisarMedicoEsperandoWhatsApp(
+  medicoId: string,
+  cantidadTexto: string,
+  ctx?: ContextoEnvio,
+): Promise<boolean> {
+  const PLANTILLA = "paciente_esperando";
+  if (!(await flagWhatsappOn())) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "flag_apagado", ctx });
+    return false;
+  }
+  if (!configurado()) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_credenciales", ctx });
+    return false;
+  }
 
   const supabase = createAdminClient();
   const { data: medico } = await supabase
@@ -168,27 +261,41 @@ export async function avisarMedicoEsperandoWhatsApp(medicoId: string, cantidadTe
   if (!medico) return false;
 
   // Throttle: si ya le avisamos hace menos de THROTTLE_ESPERA_MIN, no reenviar.
+  // Se registra: "no le avisamos porque ya le habíamos avisado" también es una
+  // respuesta que el panel tiene que poder dar.
   if (medico.ultimo_whatsapp_espera_at) {
     const minutos = (Date.now() - new Date(medico.ultimo_whatsapp_espera_at).getTime()) / 60000;
-    if (minutos < THROTTLE_ESPERA_MIN) return false;
+    if (minutos < THROTTLE_ESPERA_MIN) {
+      registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "throttled", ctx });
+      return false;
+    }
   }
 
   const toE164 = normalizarTelefonoAR(medico.celular_personal);
   if (!toE164) {
     console.log("[whatsapp] médico sin celular válido (esperando):", medicoId);
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
     return false;
   }
 
-  const ok = await enviarTwilio(toE164, PLANTILLA_PACIENTE_ESPERANDO, {
+  const r = await enviarTwilioDetallado(toE164, PLANTILLA_PACIENTE_ESPERANDO, {
     "1": primerNombre(medico.nombre_completo),
     "2": (cantidadTexto ?? "").trim() || "un paciente",
   });
+  registrarEnvio({
+    medicoId,
+    plantilla: PLANTILLA,
+    resultado: r.ok ? "enviado" : "error_twilio",
+    ctx,
+    twilioSid: r.sid,
+    twilioErrorCode: r.errorCode,
+  });
 
-  if (ok) {
+  if (r.ok) {
     await supabase
       .from("medicos")
       .update({ ultimo_whatsapp_espera_at: new Date().toISOString() })
       .eq("id", medicoId);
   }
-  return ok;
+  return r.ok;
 }

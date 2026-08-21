@@ -14,7 +14,7 @@ import MetricasMedico from "./MetricasMedico";
 import MisTurnosPaciente from "./MisTurnosPaciente";
 import HistorialInline from "./HistorialInline";
 import NovaWidget from "./NovaWidget";
-import { BadgeEsperando, BotonSilenciar, PopupEsperando, PopupPagada } from "./NotificacionMedicoUI";
+import { BadgeEsperando, BotonSilenciar, PopupEsperando, PopupPagada, PopupApagado} from "./NotificacionMedicoUI";
 import AvisoCancelacionPaciente from "./AvisoCancelacionPaciente";
 import { Building2 } from "lucide-react";
 import CardConsultorio from "./CardConsultorio";
@@ -635,6 +635,7 @@ export default async function DashboardPage({
           <ModalPushMedico />
           <PopupEsperando />
           <PopupPagada />
+          <PopupApagado />
           <AvisoCancelacionPaciente />
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>

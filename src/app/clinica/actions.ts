@@ -195,7 +195,10 @@ export async function crearConsulta(
   // TRIGGER A — avisar al médico por WhatsApp que un paciente solicitó una CI y debe
   // aceptarla (recién ahí el paciente puede pagar e ingresar). Solo CI. Fire-and-forget
   // ANTES del redirect (redirect lanza una excepción de control). Inerte sin flag/creds.
-  void avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "").catch(() => {});
+  void avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "", {
+    consultaId: data.id,
+    disparador: "solicitud_ci",
+  }).catch(() => {});
 
   redirect(`/sala-espera/${data.id}`);
 }
