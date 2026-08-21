@@ -10,6 +10,7 @@ import {
   resolverConsultaVencida,
 } from "@/lib/consultas/resolver-vencidas";
 import { esInstitucional } from "@/lib/instancia";
+import { resolverSolicitudesSinRespuesta } from "@/lib/consultas/sin-respuesta";
 
 /**
  * Plazo de la consulta inmediata — 30 minutos (decisión Diego, 09/08/2026).
@@ -129,6 +130,22 @@ async function handler() {
     else pacienteAusente++;
   }
 
+  // ── SEGUNDA FASE: las solicitudes que nadie aceptó ────────────────────────
+  // Va acá y no en un cron nuevo porque es el mismo trabajo —liberar al paciente
+  // de una atención que no va a ocurrir— y comparte el criterio de "el
+  // profesional ocupado no está ausente". Solo B2C: en institucional la CI la
+  // asigna un operador y nace 'pagada', así que nunca hay un 'esperando' sin
+  // aceptar. Aislado en su propio try: si falla, no se lleva puesta la fase de
+  // arriba, que es la que mueve plata.
+  let sinRespuesta = { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0 };
+  if (!esInstitucional()) {
+    try {
+      sinRespuesta = await resolverSolicitudesSinRespuesta();
+    } catch (err) {
+      console.error("[cron/consultas-vencidas] fase sin-respuesta falló:", err);
+    }
+  }
+
   const resumen = {
     ok: true,
     candidatas: vencidas.length,
@@ -136,9 +153,11 @@ async function handler() {
     paciente_ausente: pacienteAusente,
     con_medico_ocupado: conMedicoOcupado,
     carreras_perdidas: carrerasPerdidas,
+    sin_respuesta_liberadas: sinRespuesta.liberadas,
+    sin_respuesta_profesional_ocupado: sinRespuesta.omitidasPorProfesionalOcupado,
   };
 
-  if (medicoAusente || pacienteAusente || conMedicoOcupado) {
+  if (medicoAusente || pacienteAusente || conMedicoOcupado || sinRespuesta.liberadas) {
     console.log("[cron/consultas-vencidas]", JSON.stringify(resumen));
   }
   return NextResponse.json(resumen);

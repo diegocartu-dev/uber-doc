@@ -42,6 +42,12 @@ export const MOTIVO = {
   CANCELO_PROFESIONAL: "cancelo_profesional",
   /** Cancelación hecha desde el panel de administración. */
   CANCELACION_ADMIN: "cancelacion_admin",
+  /**
+   * Se cumplió el plazo sin que ningún profesional la aceptara y el sistema
+   * liberó al paciente. Es la falla de OFERTA hecha explícita: antes esta
+   * solicitud se quedaba viva hasta que el propio paciente la cancelaba.
+   */
+  SIN_RESPUESTA: "sin_respuesta_plazo",
 } as const;
 
 export type Motivo = (typeof MOTIVO)[keyof typeof MOTIVO];
