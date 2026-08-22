@@ -45,7 +45,7 @@
     },
     {
       "path": "/api/cron/resolver-consultas-vencidas",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/3 * * * *"
     },
     {
       "path": "/api/cron/resolver-turnos-vencidos",

@@ -108,10 +108,10 @@ export const CRONS_META: Record<string, CronMeta> = {
     autoRecupera: false,
   },
   "resolver-consultas-vencidas": {
-    nombre: "Plazo de la consulta inmediata (30 min)",
-    queHace: "cierra las CI pagadas que nadie tomó: reintegro del 100% si faltó el profesional, sin reintegro si faltó el paciente",
-    impacto: "un paciente que pagó y no fue atendido no recibe su devolución y queda sin poder consultar con otro",
-    cadencia: "cada 10 minutos",
+    nombre: "Plazo de la consulta inmediata (30 min pagada · 10 min sin aceptar)",
+    queHace: "cierra las CI pagadas que nadie tomó (reintegro del 100% si faltó el profesional, sin reintegro si faltó el paciente) y libera a los 10 min al paciente cuyo pedido nadie aceptó, desactivando de CI al profesional que no respondió",
+    impacto: "un paciente que pagó y no fue atendido no recibe su devolución y queda sin poder consultar con otro; y el que pidió sin que nadie acepte se queda esperando frente a una sala que no va a abrir",
+    cadencia: "cada 3 minutos",
     autoRecupera: false,
   },
   "resolver-turnos-vencidos": {

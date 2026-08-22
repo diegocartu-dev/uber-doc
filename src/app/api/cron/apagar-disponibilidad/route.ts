@@ -20,8 +20,19 @@ import { withCron } from "@/lib/cron-guard";
  *
  * Guardas:
  * - NO toca cuentas de test (es_cuenta_test) — quedan disponibles para E2E.
- * - NO apaga a un médico con una consulta ACTIVA (esperando/aceptada/en_curso):
- *   no cortamos a alguien en medio de una atención.
+ * - NO apaga a un médico con una consulta ACTIVA (aceptada/en_curso): no
+ *   cortamos a alguien en medio de una atención.
+ *
+ *   `esperando` NO cuenta como atención activa, y tenerlo en esa lista tenía el
+ *   efecto exactamente contrario al buscado: un pedido que el profesional nunca
+ *   contestó es la señal más clara de que NO está frente a la pantalla, y sin
+ *   embargo lo protegía del apagado. Caso real del 18/08/2026: una profesional
+ *   quedó marcada "disponible ahora" 14 horas seguidas —siendo la única de su
+ *   provincia esa noche— porque un pedido colgado congelaba este cron; recién
+ *   se pudo apagar 30 minutos después de que ella misma lo cancelara, a la
+ *   mañana siguiente. Hoy el pedido sin aceptar se cae a los 10 minutos
+ *   (`sin-respuesta.ts`), pero sacarlo también de acá evita que un solo pedido
+ *   colgado vuelva a congelar el apagado por tiempo.
  *
  * Al apagar: limpia el flag + timestamp, registra la transición offline en
  * `disponibilidad_log` (consistente con el toggle manual) y avisa al médico
@@ -29,7 +40,7 @@ import { withCron } from "@/lib/cron-guard";
  */
 
 const HORAS_MAX_ENCENDIDO = 3;
-const CONSULTA_ACTIVA = ["esperando", "aceptada", "en_curso"];
+const CONSULTA_ACTIVA = ["aceptada", "en_curso"];
 
 async function handler(req: Request) {
   const authHeader = req.headers.get("authorization");

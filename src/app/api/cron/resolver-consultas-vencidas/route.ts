@@ -137,7 +137,12 @@ async function handler() {
   // asigna un operador y nace 'pagada', así que nunca hay un 'esperando' sin
   // aceptar. Aislado en su propio try: si falla, no se lleva puesta la fase de
   // arriba, que es la que mueve plata.
-  let sinRespuesta = { liberadas: 0, omitidasPorProfesionalOcupado: 0, carrerasPerdidas: 0 };
+  let sinRespuesta = {
+    liberadas: 0,
+    omitidasPorProfesionalOcupado: 0,
+    carrerasPerdidas: 0,
+    desactivados: 0,
+  };
   if (!esInstitucional()) {
     try {
       sinRespuesta = await resolverSolicitudesSinRespuesta();
