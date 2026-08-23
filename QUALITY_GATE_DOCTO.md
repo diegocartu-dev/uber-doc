@@ -27,6 +27,7 @@ WITH CHECK (auth.uid() = user_id);
 | Test | Qué verifica |
 |---|---|
 | TEST 01 | Onboarding: campos vacíos → errores inline, no llega al servidor |
+| TEST 01b | Onboarding: nombre SIN apellido tampoco pasa (regresión del certificado emitido sin apellido, 21/08/2026) |
 | TEST 02 | Onboarding: flujo completo exitoso → redirect sin error |
 | TEST 03 | Login: botón Google OAuth visible y funcional |
 | TEST 04 | Login médico: email/password → llega al dashboard |
