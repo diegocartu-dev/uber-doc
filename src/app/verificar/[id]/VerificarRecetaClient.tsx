@@ -13,6 +13,11 @@ type VerificacionResponse = {
   emitido_at?: string;
   /** El sello se aplicó después de la emisión. */
   sellado_diferido?: boolean;
+  /**
+   * La plataforma completó/corrigió los datos de identidad del paciente después
+   * de la emisión y re-selló (camino 5). Solo fecha y motivo genérico.
+   */
+  rectificacion?: { at: string; motivo: string } | null;
   algoritmo?: string;
   hash?: string;
   motivo?: string;
@@ -319,9 +324,11 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
           rige; el bloque de las dos fechas explica el resto.
         */}
         <p className="mt-1 text-sm text-gray-500">
-          {data?.sellado_diferido
-            ? "Este documento fue firmado electrónicamente y su contenido no fue alterado desde que se aplicó el sello."
-            : "Este documento fue firmado electrónicamente y su contenido no fue alterado desde entonces."}
+          {data?.rectificacion
+            ? "Este documento fue firmado electrónicamente. Su contenido clínico no fue alterado; los datos de identidad del paciente fueron completados por Docto después de la emisión (ver fechas)."
+            : data?.sellado_diferido
+              ? "Este documento fue firmado electrónicamente y su contenido no fue alterado desde que se aplicó el sello."
+              : "Este documento fue firmado electrónicamente y su contenido no fue alterado desde entonces."}
         </p>
       </div>
 
@@ -414,6 +421,23 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
               eso las dos fechas son distintas. La primera es la del acto médico;
               la segunda, la del sello que permite verificarlo en esta página. El
               documento no fue modificado.
+            </p>
+          )}
+
+          {/* Rectificación de identidad (camino 5). Se dice con todas las
+              letras y sin datos del paciente: qué se completó (los datos de
+              identidad que la plataforma carga sola), qué NO se tocó (lo que
+              escribió el profesional) y que el sello actual cubre el documento
+              completo. La fecha del sello de arriba es la de esta rectificación. */}
+          {data?.rectificacion && (
+            <p className="pt-1 text-xs leading-relaxed text-gray-600">
+              Los datos de identidad del paciente impresos en este documento —que
+              Docto completa automáticamente desde su ficha— fueron rectificados
+              por la plataforma después de la emisión, y el documento volvió a
+              sellarse con la firma del profesional. El contenido clínico que el
+              profesional emitió no fue modificado. El sello electrónico de arriba
+              corresponde al documento completo y rectificado; la fecha de
+              emisión es la del acto médico original.
             </p>
           )}
         </div>

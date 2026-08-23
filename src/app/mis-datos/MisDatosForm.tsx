@@ -4,10 +4,15 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { cuilDePaciente } from "@/lib/cuil";
+import { normalizarNombreApellido, separarNombreCompleto } from "@/lib/pacientes/nombre";
 
 type PacienteData = {
   id: string;
   nombre_completo: string;
+  // Partidos desde el 23/08/2026. NULL en filas anteriores: se prefilean
+  // partiendo el compuesto y la persona confirma.
+  nombre?: string | null;
+  apellido?: string | null;
   dni: string | null;
   cuil: string | null;
   sexo_dni: string | null;
@@ -75,9 +80,16 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [linkCopiado, setLinkCopiado] = useState(false);
 
-  // Paciente fields
+  // Paciente: nombre y apellido por separado, los dos obligatorios (decisión
+  // Diego, 22/08/2026). Si la fila es anterior a la migración y no los tiene
+  // partidos, se prefilea partiendo el compuesto y la persona confirma. El
+  // médico sigue con un solo campo: su nombre_completo se edita entero.
+  const prefill = separarNombreCompleto(paciente?.nombre_completo);
   const [nombre, setNombre] = useState(
-    role === "paciente" ? (paciente?.nombre_completo ?? "") : (medico?.nombre_completo ?? "")
+    role === "paciente" ? (paciente?.nombre ?? prefill.nombre) : (medico?.nombre_completo ?? "")
+  );
+  const [apellido, setApellido] = useState(
+    role === "paciente" ? (paciente?.apellido ?? prefill.apellido) : ""
   );
   const [telefono, setTelefono] = useState(paciente?.telefono ?? "");
   // Prefilear con el nombre RESUELTO (FK/otra/legacy), no solo el legacy.
@@ -105,6 +117,12 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
     const supabase = createClient();
 
     if (role === "paciente" && paciente) {
+      if (!nombre.trim() || !apellido.trim()) {
+        setError("Ingresá tu nombre y tu apellido.");
+        setSaving(false);
+        return;
+      }
+      const partes = normalizarNombreApellido(nombre, apellido);
       const tieneOS = !!obraSocial.trim();
       // Escribir en las columnas que la app realmente lee (obra_social_otra está
       // en la cadena de resolución FK > otra > legacy). Como acá editamos texto
@@ -112,7 +130,9 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
       const { error: err } = await supabase
         .from("pacientes")
         .update({
-          nombre_completo: nombre,
+          nombre: partes.nombre,
+          apellido: partes.apellido,
+          nombre_completo: partes.nombre_completo,
           telefono,
           // Nunca dejarlo en null si lo podemos derivar: guardar vacío acá era
           // una forma de perder un dato que ya teníamos.
@@ -187,25 +207,70 @@ export default function MisDatosForm({ role, email, paciente, medico }: Props) {
         <input type="email" value={email} disabled style={disabledInputStyle} />
       </div>
 
-      {/* Nombre */}
-      <div>
-        <label style={labelStyle}>Nombre completo</label>
-        <input
-          type="text"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          required
-          style={inputStyle}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = "var(--color-primary)";
-            e.currentTarget.style.boxShadow = "var(--shadow-focus)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--color-border-strong)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        />
-      </div>
+      {/* Nombre. El paciente lo carga partido —nombre y apellido, los dos
+          obligatorios (Diego, 22/08/2026)—; el médico sigue con su nombre
+          completo en un solo campo. */}
+      {role === "paciente" ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label style={labelStyle}>Nombre</label>
+            <input
+              type="text"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              required
+              autoComplete="given-name"
+              style={inputStyle}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.boxShadow = "var(--shadow-focus)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-border-strong)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Apellido</label>
+            <input
+              type="text"
+              value={apellido}
+              onChange={(e) => setApellido(e.target.value)}
+              required
+              autoComplete="family-name"
+              style={inputStyle}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.boxShadow = "var(--shadow-focus)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-border-strong)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label style={labelStyle}>Nombre completo</label>
+          <input
+            type="text"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            required
+            style={inputStyle}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "var(--color-primary)";
+              e.currentTarget.style.boxShadow = "var(--shadow-focus)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--color-border-strong)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          />
+        </div>
+      )}
 
       {/* Paciente-specific fields */}
       {role === "paciente" && (

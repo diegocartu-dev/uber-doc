@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { completarPerfil } from "@/app/onboarding/actions";
 import ModalTerminos from "@/components/ModalTerminos";
+import { separarNombreCompleto } from "@/lib/pacientes/nombre";
 
 type ObraSocialOption = {
   id: string;
@@ -17,6 +18,10 @@ type ObrasSocialesData = {
 
 type PacienteData = {
   nombre_completo: string | null;
+  // Partidos desde el 23/08/2026. NULL en filas anteriores: se prefilean
+  // partiendo el compuesto y la persona confirma.
+  nombre?: string | null;
+  apellido?: string | null;
   dni: string | null;
   fecha_nacimiento: string | null;
   sexo_dni: string | null;
@@ -36,7 +41,8 @@ type Props = {
 };
 
 type FieldErrors = {
-  nombre_completo?: string;
+  nombre?: string;
+  apellido?: string;
   dni?: string;
   fecha_nacimiento?: string;
   sexo_dni?: string;
@@ -142,11 +148,16 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     if (!form) return {};
 
     const errs: FieldErrors = {};
-    const nombre = (form.elements.namedItem("nombre_completo") as HTMLInputElement)?.value?.trim();
+    const nombre = (form.elements.namedItem("nombre") as HTMLInputElement)?.value?.trim();
+    const apellido = (form.elements.namedItem("apellido") as HTMLInputElement)?.value?.trim();
     const dni = (form.elements.namedItem("dni") as HTMLInputElement)?.value?.trim();
     const sexo = (form.elements.namedItem("sexo_dni") as RadioNodeList)?.value;
 
-    if (!nombre) errs.nombre_completo = "Ingresá tu nombre completo.";
+    // Los dos obligatorios (Diego, 22/08/2026): con un solo campo "nombre
+    // completo" una paciente se registró con el nombre de pila y sus documentos
+    // salieron —y se sellaron— sin apellido.
+    if (!nombre) errs.nombre = "Ingresá tu nombre.";
+    if (!apellido) errs.apellido = "Ingresá tu apellido.";
     if (!dni) {
       errs.dni = "Ingresá tu DNI.";
     } else if (!/^\d{7,8}$/.test(dni)) {
@@ -189,7 +200,8 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
       // El error puede quedar fuera de pantalla (form largo en mobile) y el
       // toque parece "muerto" → llevar al usuario al primer campo con error.
       const anclas: Record<string, string> = {
-        nombre_completo: "nombre_completo",
+        nombre: "nombre",
+        apellido: "apellido",
         dni: "dni",
         fecha_nacimiento: "fecha_nacimiento_display",
         sexo_dni: "fecha_nacimiento_display",
@@ -244,25 +256,50 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
         {esOtra && obraOtraPlan && <input type="hidden" name="plan_obra_social" value={obraOtraPlan} />}
         {esObraConcreto && planValue && <input type="hidden" name="plan_obra_social" value={planValue} />}
 
-        {/* ── Nombre completo ── */}
-        <div>
-          <label htmlFor="nombre_completo" className="block text-[13px] font-medium text-gray-500">
-            Nombre completo
-          </label>
-          <input
-            id="nombre_completo"
-            name="nombre_completo"
-            type="text"
-            required
-            defaultValue={paciente?.nombre_completo ?? ""}
-            className={inputClass}
-            style={errors.nombre_completo ? inputErrorStyle : inputStyle}
-            placeholder="Juan Pérez"
-            onChange={() => errors.nombre_completo && setErrors((e) => ({ ...e, nombre_completo: undefined }))}
-          />
-          {errors.nombre_completo && (
-            <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.nombre_completo}</p>
-          )}
+        {/* ── Nombre y apellido, por separado y los dos obligatorios ──
+            Si la ficha es anterior y no los tiene partidos, se prefilea
+            partiendo el compuesto: la persona confirma o corrige. */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="nombre" className="block text-[13px] font-medium text-gray-500">
+              Nombre
+            </label>
+            <input
+              id="nombre"
+              name="nombre"
+              type="text"
+              required
+              autoComplete="given-name"
+              defaultValue={paciente?.nombre ?? separarNombreCompleto(paciente?.nombre_completo).nombre}
+              className={inputClass}
+              style={errors.nombre ? inputErrorStyle : inputStyle}
+              placeholder="Juan"
+              onChange={() => errors.nombre && setErrors((e) => ({ ...e, nombre: undefined }))}
+            />
+            {errors.nombre && (
+              <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.nombre}</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="apellido" className="block text-[13px] font-medium text-gray-500">
+              Apellido
+            </label>
+            <input
+              id="apellido"
+              name="apellido"
+              type="text"
+              required
+              autoComplete="family-name"
+              defaultValue={paciente?.apellido ?? separarNombreCompleto(paciente?.nombre_completo).apellido}
+              className={inputClass}
+              style={errors.apellido ? inputErrorStyle : inputStyle}
+              placeholder="Pérez"
+              onChange={() => errors.apellido && setErrors((e) => ({ ...e, apellido: undefined }))}
+            />
+            {errors.apellido && (
+              <p className="mt-1 text-[13px] text-[#E24B4A]">{errors.apellido}</p>
+            )}
+          </div>
         </div>
 
         {/* ── DNI ── */}

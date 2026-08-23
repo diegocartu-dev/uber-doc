@@ -299,3 +299,65 @@ export function identidadDesdeJSONB(valor: unknown): IdentidadDocumento | null {
 
   return identidad;
 }
+
+// ─── Rectificación (camino 5 de documento.ts) ────────────────────────────────
+
+/**
+ * Las claves del bloque del PACIENTE dentro del snapshot — lo único que una
+ * rectificación de identidad puede tocar. Si el snapshot suma un campo del
+ * paciente, va acá o la rectificación no lo va a corregir nunca.
+ */
+const CLAVES_PACIENTE = [
+  "paciente_nombre",
+  "paciente_dni",
+  "paciente_cuil",
+  "paciente_sexo_dni",
+  "paciente_fecha_nacimiento",
+  "paciente_tiene_cobertura",
+  "paciente_obra_social",
+  "paciente_nro_afiliado",
+  "paciente_plan_obra_social",
+] as const;
+
+/**
+ * Identidad RECTIFICADA: el bloque del paciente se reemplaza por el de su ficha
+ * de hoy; el bloque del profesional y la versión del snapshot se conservan tal
+ * como se firmaron. Es pura a propósito: se testea sin base, porque es la
+ * garantía de que "no cambiamos nada de lo que escribió el médico".
+ *
+ * `...anterior` primero: en un snapshot v:1 no existe la clave `medico_titulo`
+ * y acá NO se agrega — agregarla le cambiaría el hash (ver la regla de oro de
+ * versionado arriba).
+ */
+export function mezclarIdentidadRectificada(
+  anterior: IdentidadDocumento,
+  ficha: IdentidadDocumento
+): IdentidadDocumento {
+  return {
+    ...anterior,
+    paciente_nombre: ficha.paciente_nombre,
+    paciente_dni: ficha.paciente_dni,
+    paciente_cuil: ficha.paciente_cuil,
+    paciente_sexo_dni: ficha.paciente_sexo_dni,
+    paciente_fecha_nacimiento: ficha.paciente_fecha_nacimiento,
+    paciente_tiene_cobertura: ficha.paciente_tiene_cobertura,
+    paciente_obra_social: ficha.paciente_obra_social,
+    paciente_nro_afiliado: ficha.paciente_nro_afiliado,
+    paciente_plan_obra_social: ficha.paciente_plan_obra_social,
+  };
+}
+
+/**
+ * Qué claves del paciente cambian entre dos snapshots, con antes y después.
+ * Vacío = no hay nada que rectificar. Va al log y a la simulación.
+ */
+export function diferenciasIdentidadPaciente(
+  a: IdentidadDocumento,
+  b: IdentidadDocumento
+): Record<string, { antes: unknown; despues: unknown }> {
+  const d: Record<string, { antes: unknown; despues: unknown }> = {};
+  for (const k of CLAVES_PACIENTE) {
+    if (a[k] !== b[k]) d[k] = { antes: a[k], despues: b[k] };
+  }
+  return d;
+}

@@ -8,6 +8,7 @@ import LoadingButton from "@/components/ui/LoadingButton";
 
 export default function RegisterPage() {
   const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,13 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        data: { full_name: nombre.trim() },
+        // `full_name` sigue siendo el compuesto (lo leen el callback y el
+        // onboarding); las partes viajan aparte para prefilear los dos campos.
+        data: {
+          full_name: `${nombre.trim()} ${apellido.trim()}`.trim(),
+          nombre: nombre.trim(),
+          apellido: apellido.trim(),
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
@@ -157,22 +164,46 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="nombre" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
-              Nombre completo
-            </label>
-            <input
-              id="nombre"
-              type="text"
-              required
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className={inputClass}
-              style={inputStyle}
-              placeholder="Juan Pérez"
-              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
-            />
+          {/* Nombre y apellido por separado, los dos obligatorios (Diego,
+              22/08/2026): con un solo campo una paciente se registró con su
+              nombre de pila y sus documentos salieron sin apellido. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="nombre" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+                Nombre
+              </label>
+              <input
+                id="nombre"
+                type="text"
+                required
+                autoComplete="given-name"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+                placeholder="Juan"
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
+              />
+            </div>
+            <div>
+              <label htmlFor="apellido" className="block text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+                Apellido
+              </label>
+              <input
+                id="apellido"
+                type="text"
+                required
+                autoComplete="family-name"
+                value={apellido}
+                onChange={(e) => setApellido(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+                placeholder="Pérez"
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; e.currentTarget.style.boxShadow = "var(--shadow-focus)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.boxShadow = "none"; }}
+              />
+            </div>
           </div>
 
           <div>
