@@ -114,6 +114,11 @@ export async function GET(
           // criollo; si por lo que sea ese bloque no se pudiera mostrar, la regla
           // es no sellar (dictamen 07/08/2026, límite 4).
           sellado_diferido: doc.sellado_diferido,
+          // La identidad del paciente fue rectificada por la plataforma después
+          // de la emisión (camino 5). Viaja SOLO cuando ocurrió, y lleva fecha y
+          // motivo genérico: esta página no muestra datos del paciente — ni los
+          // de antes ni los de después.
+          ...(doc.rectificacion ? { rectificacion: doc.rectificacion } : {}),
           algoritmo: doc.datos?.algoritmo,
           hash: doc.datos?.hash_original.slice(0, 16),
           // Firmante congelado en la firma cuando existe: si el médico se
@@ -189,6 +194,11 @@ type RespuestaVerificacion = {
   emitido_at?: string;
   /** El sello se aplicó después de la emisión (documentos históricos). */
   sellado_diferido?: boolean;
+  /**
+   * La plataforma completó/corrigió los datos de identidad del paciente después
+   * de la emisión y re-selló (camino 5). Solo viaja cuando ocurrió.
+   */
+  rectificacion?: { at: string; motivo: string } | null;
   algoritmo?: string;
   hash?: string;
   motivo?: string;

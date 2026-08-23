@@ -10,7 +10,7 @@ test.describe("Onboarding paciente", () => {
       await page.goto("/onboarding?edit=1");
     }
 
-    await expect(page.getByLabel("Nombre completo")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel("Nombre", { exact: true })).toBeVisible({ timeout: 10000 });
 
     const requests: string[] = [];
     page.on("request", (req) => {
@@ -24,7 +24,8 @@ test.describe("Onboarding paciente", () => {
       document.querySelectorAll("[required]").forEach((el) => el.removeAttribute("required"));
     });
 
-    await page.getByLabel("Nombre completo").clear();
+    await page.getByLabel("Nombre", { exact: true }).clear();
+    await page.getByLabel("Apellido", { exact: true }).clear();
     await page.getByLabel("DNI").clear();
 
     // Aceptar ambos checkboxes (T&C + datos sensibles) para habilitar el botón submit
@@ -32,11 +33,39 @@ test.describe("Onboarding paciente", () => {
 
     await page.getByRole("button", { name: /guardar/i }).click();
 
-    await expect(page.locator("text=Ingresá tu nombre completo.")).toBeVisible();
+    await expect(page.locator("text=Ingresá tu nombre.")).toBeVisible();
+    await expect(page.locator("text=Ingresá tu apellido.")).toBeVisible();
     await expect(page.locator("text=Ingresá tu DNI.")).toBeVisible();
     await expect(page.locator("text=Ingresá tu fecha de nacimiento (DD/MM/AAAA).")).toBeVisible();
 
     expect(requests).toHaveLength(0);
+  });
+
+  test("TEST 01b — con nombre pero SIN apellido tampoco pasa (regresión del certificado sin apellido)", async ({ page }) => {
+    // El caso real (21/08/2026): el formulario pedía UN campo "Nombre completo"
+    // y validaba solo que no estuviera vacío. Una paciente escribió su nombre de
+    // pila, y sus tres documentos se emitieron —y se sellaron— sin apellido.
+    // Este test fija la regla: el apellido es obligatorio por sí mismo.
+    await loginPaciente(page, PACIENTE_INCOMPLETO.email, PACIENTE_INCOMPLETO.password);
+
+    if (!page.url().includes("/onboarding")) {
+      await page.goto("/onboarding?edit=1");
+    }
+
+    await expect(page.getByLabel("Nombre", { exact: true })).toBeVisible({ timeout: 10000 });
+
+    await page.evaluate(() => {
+      document.querySelectorAll("[required]").forEach((el) => el.removeAttribute("required"));
+    });
+
+    await page.getByLabel("Nombre", { exact: true }).fill("Luciana");
+    await page.getByLabel("Apellido", { exact: true }).clear();
+
+    for (const cb of await page.getByRole("checkbox").all()) await cb.check();
+    await page.getByRole("button", { name: /guardar/i }).click();
+
+    await expect(page.locator("text=Ingresá tu apellido.")).toBeVisible();
+    expect(page.url()).toContain("/onboarding");
   });
 
   test("TEST 02 — onboarding completo exitoso", async ({ page }) => {
@@ -46,9 +75,10 @@ test.describe("Onboarding paciente", () => {
       await page.goto("/onboarding?edit=1");
     }
 
-    await expect(page.getByLabel("Nombre completo")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel("Nombre", { exact: true })).toBeVisible({ timeout: 10000 });
 
-    await page.getByLabel("Nombre completo").fill("Paciente Test Uno");
+    await page.getByLabel("Nombre", { exact: true }).fill("Paciente");
+    await page.getByLabel("Apellido", { exact: true }).fill("Test Uno");
     await page.getByLabel("DNI").fill(PACIENTE_NORMAL.dni);
     await page.getByLabel("Fecha de nacimiento").fill("15/05/1990");
     await page.getByLabel("Femenino").check();
@@ -75,9 +105,10 @@ test.describe("Onboarding paciente", () => {
     await loginPaciente(page, PACIENTE_DNI_INVALIDO.email, PACIENTE_DNI_INVALIDO.password);
 
     await page.goto("/onboarding?edit=1");
-    await expect(page.getByLabel("Nombre completo")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel("Nombre", { exact: true })).toBeVisible({ timeout: 10000 });
 
-    await page.getByLabel("Nombre completo").fill("Test Regresion RLS");
+    await page.getByLabel("Nombre", { exact: true }).fill("Test");
+    await page.getByLabel("Apellido", { exact: true }).fill("Regresion RLS");
     await page.getByLabel("DNI").fill(PACIENTE_DNI_INVALIDO.dni);
     await page.getByLabel("Fecha de nacimiento").fill("05/12/1991");
     await page.getByLabel("Masculino").check();

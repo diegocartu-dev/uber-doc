@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Stethoscope } from "lucide-react";
 import OnboardingForm from "@/components/OnboardingForm";
 import { guardRutaPaciente } from "@/lib/auth/rol";
+import { tieneNombreYApellido } from "@/lib/pacientes/nombre";
 
 export default async function OnboardingPage({
   searchParams,
@@ -20,14 +21,17 @@ export default async function OnboardingPage({
 
   const { data: paciente } = await supabase
     .from("pacientes")
-    .select("nombre_completo, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social, telefono")
+    .select("nombre_completo, nombre, apellido, dni, fecha_nacimiento, sexo_dni, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social, telefono")
     .eq("user_id", user.id)
     .maybeSingle();
 
   const { redirectTo, error, edit } = await searchParams;
 
+  // "Completo" exige nombre Y apellido (una sola palabra ya no alcanza): ver
+  // tieneNombreYApellido. Las filas anteriores con dos palabras pasan.
   const perfilCompleto =
-    paciente?.nombre_completo?.trim() &&
+    paciente &&
+    tieneNombreYApellido(paciente) &&
     paciente?.dni?.trim() &&
     paciente?.fecha_nacimiento &&
     paciente?.sexo_dni;

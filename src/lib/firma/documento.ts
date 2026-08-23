@@ -41,7 +41,9 @@ import { canonicalJSON } from "./receta";
 import { provisionarClaves } from "./claves";
 import {
   construirIdentidadDocumento,
+  diferenciasIdentidadPaciente,
   identidadDesdeJSONB,
+  mezclarIdentidadRectificada,
   type IdentidadDocumento,
 } from "./identidad";
 import { formatNombreMedico } from "@/lib/utils/texto";
@@ -67,11 +69,19 @@ export const METODO_SELLADO_DIFERIDO = "sellado_diferido_plataforma";
  */
 export const METODO_RESCATE_BORRADOR = "rescate_borrador";
 
+/**
+ * La plataforma re-selló un documento YA firmado reemplazando solo el bloque de
+ * identidad del paciente por el de su ficha corregida — contenido clínico y
+ * bloque del profesional intactos. Ver el camino 5 al final del archivo.
+ */
+export const METODO_RECTIFICACION_IDENTIDAD = "rectificacion_identidad_plataforma";
+
 type MetodoAtribucion =
   | "otp"
   | "sesion_medico"
   | typeof METODO_SELLADO_DIFERIDO
-  | typeof METODO_RESCATE_BORRADOR;
+  | typeof METODO_RESCATE_BORRADOR
+  | typeof METODO_RECTIFICACION_IDENTIDAD;
 
 /**
  * Únicos tipos que se sellan: los documentos clínicos que el médico redactó y
@@ -1265,6 +1275,12 @@ export type VerificacionDocumento = {
   emitido_at: string | null;
   /** El sello se aplicó DESPUÉS de la emisión (ver camino 3). */
   sellado_diferido: boolean;
+  /**
+   * La plataforma rectificó la identidad del paciente después de la emisión y
+   * re-selló (camino 5). Solo el instante y el motivo genérico: nada del
+   * paciente sale de acá, ni lo de antes ni lo de después.
+   */
+  rectificacion?: { at: string; motivo: string } | null;
   datos: {
     hash_original: string;
     hash_actual: string;
@@ -1386,10 +1402,19 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
 
   // La emisión sale de la fila, no de la firma: es un dato del documento, y así
   // no depende de que el jsonb lo repita.
+  // Rectificación (camino 5): se lee del jsonb con la misma desconfianza que
+  // el resto — si no tiene la forma esperada, no se afirma nada.
+  const rect = (fd as { rectificacion?: { at?: unknown; motivo?: unknown } | null }).rectificacion;
+  const rectificacion =
+    rect && typeof rect.at === "string"
+      ? { at: rect.at, motivo: typeof rect.motivo === "string" ? rect.motivo : "" }
+      : null;
+
   const comun = {
     medico_id: fd.medico_id,
     emitido_at: doc.created_at,
     sellado_diferido: fd.metodo_atribucion === METODO_SELLADO_DIFERIDO,
+    rectificacion,
     datos,
     firmante,
   };
@@ -1432,4 +1457,302 @@ export async function verificarFirmaDocumento(documentoId: string): Promise<Veri
     alterada: r.estado === "alterada",
     datos: { ...r.datos, medico_id: r.medico_id },
   };
+}
+
+// ─── Camino 5 — rectificación de la identidad del paciente ───────────────────
+//
+// QUÉ PASÓ CUANDO SE USA ESTE CAMINO: el documento se firmó con un bloque de
+// identidad del paciente incompleto o incorrecto, que la plataforma completó
+// sola desde la ficha — el profesional no escribe el nombre del paciente, se le
+// completa. Después la ficha se corrigió. El documento, por diseño, no cambió:
+// la identidad impresa entra al hash (ver ./identidad.ts).
+//
+// Caso que lo originó (21/08/2026): una paciente se registró con su nombre de
+// pila solamente —el formulario lo permitía—, sus tres documentos se sellaron
+// así, ella corrigió su ficha esa noche, y escribió tres veces a soporte
+// pidiendo su apellido. No había ninguna vía: lo sellado es inmutable y el
+// camino post-cierre se niega a emitir dos veces el mismo tipo.
+//
+// DECISIÓN DIEGO (22/08/2026): "No es ninguna alteración. Es completar algo
+// que debimos hacer nosotros si el proceso hubiera estado correcto. Ni siquiera
+// el médico sabe qué apellido tiene [el paciente] porque esos datos se le
+// completan solos. No cambiamos nada de lo que escribió el médico. Solo
+// corregimos un error de proceso. Es transparente para todos."
+//
+// QUÉ HACE: re-sella el MISMO documento (mismo id, mismo contenido clínico,
+// misma fecha de emisión, mismo bloque del profesional) con el bloque del
+// paciente tomado de la ficha de hoy. Nuevo hash, nueva firma con la clave
+// activa del profesional, `firmado_at` = instante real. La firma anterior NO
+// se borra: queda entera dentro de `firma_digital.rectificacion` (hash, firma,
+// identidad, fecha y método anteriores), junto al motivo y la autorización. En
+// `firma_logs` se encadena una fila con método propio cuyo contexto lleva lo
+// mismo, y la página pública de verificación lo muestra.
+//
+// QUÉ NO HACE, nunca: tocar contenido, diagnóstico, tratamiento, reposo, fecha
+// de emisión ni el bloque del profesional (`mezclarIdentidadRectificada` lo
+// garantiza y tiene test). Ni aplicarse sobre un documento sin sello: eso
+// sería firmar, no rectificar. Ni correr si no hay nada que cambiar.
+//
+// INVARIANTE, igual que los otros caminos: documento rectificado ⇔ fila en
+// firma_logs. Si el log no se puede escribir, se restituye la firma anterior.
+
+export type MotivoNoRectificable =
+  | "no_encontrado"
+  | "sin_sello"
+  | "sin_identidad_en_firma"
+  | "sin_ficha"
+  | "sin_cambios"
+  | "sin_claves";
+
+export type CambiosIdentidad = Record<string, { antes: unknown; despues: unknown }>;
+
+export type EvaluacionRectificacion =
+  | { apto: true; documento_id: string; tipo: string; medico_id: string; cambios: CambiosIdentidad }
+  | { apto: false; motivo: MotivoNoRectificable; detalle: string };
+
+/** Lo que hay guardado en `documentos.firma_digital` de un documento sellado. */
+type FirmaDigitalGuardada = {
+  hash: string;
+  firma: string;
+  algoritmo?: string;
+  firmado_at: string;
+  medico_id?: string;
+  metodo_atribucion?: string;
+  otp_id?: string | null;
+  clave_id?: string;
+  identidad?: unknown;
+  [extra: string]: unknown;
+};
+
+type EvaluacionRectificacionInterna =
+  | {
+      apto: true;
+      doc: DocSellable;
+      fdAnterior: FirmaDigitalGuardada;
+      identidadAnterior: IdentidadDocumento;
+      identidadNueva: IdentidadDocumento;
+      cambios: CambiosIdentidad;
+    }
+  | { apto: false; motivo: MotivoNoRectificable; detalle: string };
+
+async function evaluarRectificacionInterna(
+  documentoId: string
+): Promise<EvaluacionRectificacionInterna> {
+  const supabase = createAdminClient();
+
+  const { data: doc } = await supabase
+    .from("documentos")
+    .select(COLUMNAS_FIRMABLES)
+    .eq("id", documentoId)
+    .maybeSingle<DocSellable>();
+
+  if (!doc) return { apto: false, motivo: "no_encontrado", detalle: "No existe el documento" };
+  if (!doc.firma_digital) {
+    return {
+      apto: false,
+      motivo: "sin_sello",
+      detalle: "El documento no tiene sello: no hay identidad firmada que rectificar",
+    };
+  }
+
+  const fdAnterior = doc.firma_digital as FirmaDigitalGuardada;
+  const identidadAnterior = identidadDesdeJSONB(fdAnterior.identidad);
+  if (!identidadAnterior) {
+    return {
+      apto: false,
+      motivo: "sin_identidad_en_firma",
+      detalle: "El sello no lleva snapshot de identidad (formato desconocido)",
+    };
+  }
+
+  // La ficha de HOY. De acá sale SOLO el bloque del paciente; el del
+  // profesional se descarta (se conserva el firmado).
+  const ficha = await construirIdentidadDocumento(doc.medico_id, doc.paciente_id);
+  if (!ficha) {
+    return {
+      apto: false,
+      motivo: "sin_ficha",
+      detalle: "No se pudo leer la ficha actual del paciente o del profesional",
+    };
+  }
+
+  const identidadNueva = mezclarIdentidadRectificada(identidadAnterior, ficha);
+  const cambios = diferenciasIdentidadPaciente(identidadAnterior, identidadNueva);
+  if (Object.keys(cambios).length === 0) {
+    return { apto: false, motivo: "sin_cambios", detalle: "La identidad firmada ya coincide con la ficha" };
+  }
+
+  return { apto: true, doc, fdAnterior, identidadAnterior, identidadNueva, cambios };
+}
+
+/**
+ * Evalúa SIN tocar nada: qué cambiaría en el documento si se rectificara hoy.
+ * Es lo que corre la simulación de la ruta admin, con los mismos guards que la
+ * rectificación real, para que la simulación no mienta.
+ */
+export async function evaluarRectificacionIdentidad(
+  documentoId: string
+): Promise<EvaluacionRectificacion> {
+  const e = await evaluarRectificacionInterna(documentoId);
+  if (!e.apto) return e;
+  return {
+    apto: true,
+    documento_id: e.doc.id,
+    tipo: e.doc.tipo,
+    medico_id: e.doc.medico_id,
+    cambios: e.cambios,
+  };
+}
+
+export type ResultadoRectificacion =
+  | { ok: true; hash: string; hash_anterior: string; firmado_at: string; cambios: CambiosIdentidad }
+  | { ok: false; motivo: MotivoNoRectificable | "error_rectificacion"; detalle: string };
+
+/**
+ * Rectifica la identidad del paciente en un documento sellado. Ver el bloque de
+ * arriba: qué hace, qué no hace, y bajo qué decisión.
+ */
+export async function rectificarIdentidadDocumento(
+  documentoId: string,
+  opciones: { motivo: string; autorizadoPor: string; referencia?: string }
+): Promise<ResultadoRectificacion> {
+  const supabase = createAdminClient();
+
+  const e = await evaluarRectificacionInterna(documentoId);
+  if (!e.apto) return { ok: false, motivo: e.motivo, detalle: e.detalle };
+  const { doc, fdAnterior, identidadAnterior, identidadNueva, cambios } = e;
+
+  const { data: claves } = await supabase
+    .from("medico_claves")
+    .select("id, clave_privada_enc")
+    .eq("medico_id", doc.medico_id)
+    .eq("activa", true)
+    .maybeSingle();
+  if (!claves) {
+    return { ok: false, motivo: "sin_claves", detalle: "El profesional no tiene claves de firma activas" };
+  }
+
+  const hash = hashSHA256(canonicalJSON(contenidoFirmable(doc, identidadNueva)));
+  const firma = firmar(hash, desencriptarClavePrivada(claves.clave_privada_enc));
+  // Reloj del SERVIDOR, UTC. El instante real de ESTE sello, nunca el original.
+  const firmadoAt = new Date().toISOString();
+  const hashAnterior = fdAnterior.hash;
+
+  const rectificacion = {
+    at: firmadoAt,
+    motivo: opciones.motivo,
+    autorizado_por: opciones.autorizadoPor,
+    referencia: opciones.referencia ?? null,
+    aplicado_por: "plataforma",
+    hash_anterior: hashAnterior,
+    firma_anterior: fdAnterior.firma,
+    firmado_at_anterior: fdAnterior.firmado_at,
+    metodo_anterior: fdAnterior.metodo_atribucion ?? null,
+    clave_id_anterior: fdAnterior.clave_id ?? null,
+    identidad_anterior: identidadAnterior,
+    cambios,
+    // Si ya había una rectificación, se conserva encadenada: nada se pierde.
+    rectificacion_previa: fdAnterior.rectificacion ?? null,
+  };
+
+  const firmaDigitalNueva: Record<string, unknown> = {
+    // Se conservan los extras del sello anterior (p. ej. `sellado_diferido` /
+    // `emitido_at`): siguen siendo verdad sobre este documento.
+    ...fdAnterior,
+    hash,
+    firma,
+    algoritmo: ALGORITMO,
+    firmado_at: firmadoAt,
+    medico_id: doc.medico_id,
+    metodo_atribucion: METODO_RECTIFICACION_IDENTIDAD,
+    otp_id: null,
+    clave_id: claves.id,
+    identidad: identidadNueva,
+    rectificacion,
+  };
+
+  // Guard optimista: solo si el sello sigue siendo exactamente el que se evaluó.
+  // Si otro proceso lo cambió en el medio, no se pisa nada.
+  const { data: updated, error: updateError } = await supabase
+    .from("documentos")
+    .update({ firma_digital: firmaDigitalNueva })
+    .eq("id", doc.id)
+    .eq("medico_id", doc.medico_id)
+    .eq("firma_digital->>hash", hashAnterior)
+    .select("id");
+
+  if (updateError || !updated || updated.length === 0) {
+    return {
+      ok: false,
+      motivo: "error_rectificacion",
+      detalle: updateError?.message ?? "El sello cambió mientras se rectificaba; no se tocó nada",
+    };
+  }
+
+  const firmante = await snapshotFirmante(doc.medico_id);
+  const contexto = await contextoDocumento(doc, {
+    consulta_id: doc.consulta_id,
+    turno_id: doc.turno_id,
+  });
+
+  const logResult = await insertarFirmaLog({
+    documento_id: doc.id,
+    receta_id: null,
+    medico_id: doc.medico_id,
+    hash,
+    algoritmo: ALGORITMO,
+    firmado_at: firmadoAt,
+    metodo_atribucion: METODO_RECTIFICACION_IDENTIDAD,
+    otp_id: null,
+    clave_id: claves.id,
+    ip: null,
+    user_agent: null,
+    firmante: { ...firmante, aplicado_por: "plataforma" },
+    contexto: {
+      ...contexto,
+      rectificacion_identidad: true,
+      motivo: opciones.motivo,
+      autorizacion: {
+        tipo: "decision_operativa",
+        responsable: opciones.autorizadoPor,
+        referencia: opciones.referencia ?? null,
+      },
+      hash_anterior: hashAnterior,
+      firmado_at_anterior: fdAnterior.firmado_at,
+      metodo_anterior: fdAnterior.metodo_atribucion ?? null,
+      identidad_anterior: identidadAnterior,
+      identidad_nueva: identidadNueva,
+      cambios,
+      // Constancia expresa, igual que en los caminos 3 y 4.
+      firmado_por_el_profesional_en_este_instante: false,
+      contenido_clinico_modificado: false,
+      bloque_profesional_modificado: false,
+    },
+  });
+
+  if (!logResult.ok) {
+    // Sin log no hay defensa: se restituye la firma anterior, que era verdadera.
+    const { data: revertidas, error: revertError } = await supabase
+      .from("documentos")
+      .update({ firma_digital: fdAnterior })
+      .eq("id", doc.id)
+      .eq("firma_digital->>hash", hash)
+      .select("id");
+    console.error(
+      "[firma-doc] rectificación revertida: no se pudo escribir firma_logs:",
+      logResult.error
+    );
+    if (revertError || !revertidas || revertidas.length === 0) {
+      console.error(
+        `[firma-doc] ALERTA: documento ${doc.id} puede haber quedado rectificado SIN firma_logs`
+      );
+    }
+    return {
+      ok: false,
+      motivo: "error_rectificacion",
+      detalle: `No se pudo registrar la rectificación: ${logResult.error}`,
+    };
+  }
+
+  return { ok: true, hash, hash_anterior: hashAnterior, firmado_at: firmadoAt, cambios };
 }

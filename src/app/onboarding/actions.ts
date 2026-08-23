@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { capitalizarNombre } from "@/lib/utils/texto";
 import { calcularCuilFormateado } from "@/lib/cuil";
+import { normalizarNombreApellido } from "@/lib/pacientes/nombre";
 
 export async function completarPerfil(formData: FormData) {
   const supabase = await createClient();
@@ -11,7 +11,14 @@ export async function completarPerfil(formData: FormData) {
 
   if (!user) redirect("/");
 
-  const nombre_completo = capitalizarNombre((formData.get("nombre_completo") as string)?.trim());
+  // Dos campos, los dos obligatorios (decisión Diego, 22/08/2026). Se guardan
+  // las partes Y el compuesto: `nombre_completo` lo siguen leyendo los
+  // documentos, los listados y los mails, así todos toman ambos sin tocar un
+  // SELECT en producción.
+  const { nombre, apellido, nombre_completo } = normalizarNombreApellido(
+    (formData.get("nombre") as string) ?? "",
+    (formData.get("apellido") as string) ?? ""
+  );
   const dni = (formData.get("dni") as string)?.trim();
   const fecha_nacimiento = (formData.get("fecha_nacimiento") as string)?.trim();
   const sexo_dni = (formData.get("sexo_dni") as string)?.trim() || null;
@@ -34,7 +41,7 @@ export async function completarPerfil(formData: FormData) {
     ? null // Will be resolved from FK in PDF route
     : obra_social_otra ?? null;
 
-  if (!nombre_completo || !dni || !fecha_nacimiento || !sexo_dni || !telefono || !terminosAceptados || !datosSensiblesAceptados) {
+  if (!nombre || !apellido || !dni || !fecha_nacimiento || !sexo_dni || !telefono || !terminosAceptados || !datosSensiblesAceptados) {
     redirect(`/onboarding?error=campos_requeridos&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 
@@ -62,6 +69,8 @@ export async function completarPerfil(formData: FormData) {
     .upsert(
       {
         user_id: user.id,
+        nombre,
+        apellido,
         nombre_completo,
         email: user.email ?? null,
         dni,

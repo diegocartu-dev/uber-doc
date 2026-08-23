@@ -25,7 +25,7 @@ export default async function MisDatosPage() {
 
   const { data: pacienteRaw } = await supabase
     .from("pacientes")
-    .select("id, nombre_completo, dni, cuil, fecha_nacimiento, telefono, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
+    .select("id, nombre_completo, nombre, apellido, dni, cuil, fecha_nacimiento, telefono, tiene_cobertura, obra_social, obra_social_id, obra_social_otra, nro_afiliado, plan_obra_social")
     .eq("user_id", user.id)
     .maybeSingle();
 
