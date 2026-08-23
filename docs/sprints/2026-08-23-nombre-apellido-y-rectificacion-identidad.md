@@ -100,6 +100,43 @@ Corre **dentro de producción** (`/api/admin/rectificar-identidad`, protegido co
 solo escribe con `aplicar: true`. Idempotente: si la identidad firmada ya
 coincide con la ficha, se saltea.
 
+## Qué se hizo en producción (23/08/2026)
+
+1. Se corrigió la ficha de la paciente —incluida la capitalización: el sellado
+   copia el texto literal— **antes** de rectificar.
+2. Se corrió la rectificación **en simulación**: un solo cambio por documento,
+   `paciente_nombre`. Nada más.
+3. Se aplicó a los tres documentos de la consulta.
+4. Se verificó: los tres dan **`verificada`** en la página pública, con el
+   contenido clínico, la profesional, la matrícula y la fecha de emisión
+   intactos, y 6 filas en `firma_logs` (3 originales + 3 de rectificación).
+5. Recién entonces se le respondió a la paciente. **El orden importa**: avisarle
+   antes habría hecho que descargara otra vez la versión sin apellido.
+
+## Al profesional NO se le avisa — decisión de Diego (23/08/2026)
+
+> *"No, no avisamos en estos casos. No afecta lo central."*
+
+**Regla general: cuando Docto corrige un error de proceso propio sobre un
+documento ya firmado, no se le notifica al profesional.** El criterio es uno
+solo: **si no toca lo central —el contenido clínico que él escribió, su
+identidad, su matrícula, la fecha del acto médico— no se avisa.** No hay nada
+que ratificar: no se creó ninguna obligación nueva ni cambió una condición.
+
+Es la segunda vez que se confirma el mismo criterio, sobre dos casos distintos:
+el **sellado diferido** (09/08/2026, ver
+`docs/legal/2026-08-07-sellado-diferido-documentos-historicos.md`) y esta
+rectificación de identidad.
+
+**Límite de la regla, y no es decorativo:** vale *porque* lo central está
+garantizado por código y con test (`mezclarIdentidadRectificada` conserva el
+bloque del profesional y la versión del snapshot). Si algún cambio futuro
+hiciera que una corrección tocara el contenido o los datos del profesional,
+**esta regla deja de aplicar** y la decisión vuelve a Diego.
+
+Al **paciente sí** se le responde — cuando los documentos ya están corregidos y
+verificados, nunca antes.
+
 ## Verificación
 
 - **509/509 tests** (8 nuevos: composición y partición del nombre, y la mezcla
