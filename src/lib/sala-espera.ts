@@ -47,10 +47,27 @@ export async function registrarEntradaSala(params: {
   return data as string;
 }
 
+/**
+ * Motivos de salida que escribe el código de producto. La lista completa que
+ * admite la base incluye además `timeout_sistema` (la fila quedó colgada >24 h y
+ * la cerró el barrido diario: falla técnica, no de servicio) y `cancelado_admin`
+ * — los escriben sus propias rutas, no esta función.
+ *
+ * `medico_no_acepto` NO es "canceló el paciente" (Diego, 24/08/2026): el
+ * paciente pidió la consulta, esperó, y nadie la aceptó. Confundirlos hace que
+ * el día que se mire por qué se pierden pacientes, el dato culpe al usuario de
+ * algo que no hizo.
+ */
+export type MotivoSalidaSala =
+  | "atendido"
+  | "cancelado_paciente"
+  | "cancelado_medico"
+  | "medico_no_acepto";
+
 export async function cerrarEntradaSala(params: {
   consultaId?: string;
   turnoId?: string;
-  motivo: "atendido" | "cancelado_paciente" | "cancelado_medico";
+  motivo: MotivoSalidaSala;
 }): Promise<number> {
   const supabase = createAdminClient();
 
