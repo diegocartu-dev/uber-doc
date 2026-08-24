@@ -33,6 +33,26 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Migraciones SQL: usar la Supabase Management API con SUPABASE_ACCESS_TOKEN (guardado en .env.local) para ejecutar DDL directo. Endpoint: `POST https://api.supabase.com/v1/projects/irpupskopjahbqqvckue/database/query`. Nunca pedir a Diego que toque la terminal.
 - Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
 
+## No suponer, no rellenar (regla base — Diego, 23/08/2026)
+
+**Nada que se afirme sobre el estado del sistema puede ser una suposición.** Si un dato no se verificó, se dice que no se verificó, o no se dice. Si falta un dato en el medio de una explicación, **se dice que falta**: un hueco declarado es información, uno tapado es una mentira que se lee bien.
+
+Vale para todo: informes, diagnósticos, mensajes de commit, PRs, y la respuesta a "¿ya está?".
+
+**Por qué, y este es el argumento que manda:** suponer no ahorra trabajo, lo multiplica. No es una regla de prolijidad ni de honestidad abstracta — es que cada suposición se paga después, siempre más cara. Las que Diego alcanza a detectar cuestan una ronda entera de trabajo extra; las que no, salen como bugs, retrabajo o fallas de sistema.
+
+Los tres casos del 23/08/2026, todos del mismo día:
+
+| Se supuso | Qué costó |
+|---|---|
+| "alguien corrigió la ficha de la paciente" (nadie sabía quién) | análisis forense sobre transacciones de Postgres para averiguar algo que se podía haber dicho "no sé" |
+| que aplicar una migración era un comando | alarma a las 4:20, el cron de avisos caído un día entero en la otra instancia, y un PR extra |
+| que partir un campo del formulario no rompía nada | el gate de CI en rojo, un segundo commit y una segunda espera |
+
+Ninguna ahorró un segundo. **Decir "no sé" cuesta cero y no frena nada** — por eso esta regla no admite excepción por apuro: no hay ninguna situación en la que salga más caro cumplirla.
+
+Las reglas de abajo (evidencia empírica, verificación contra producción, verificar el estado final) son casos particulares de esta.
+
 ## Auditoría de seguridad — Regla de evidencia empírica
 Toda auditoría de seguridad (puntual o integral) debe incluir evidencia empírica reproducible por hallazgo: el comando exacto que reproduce el problema, el output real, y clasificación clara entre "explotable hoy" / "vulnerabilidad latente" / "buena práctica pendiente". Reportes basados solo en lectura de código o policies sin tests reales no son accionables y no disparan sprints de fixes.
 
