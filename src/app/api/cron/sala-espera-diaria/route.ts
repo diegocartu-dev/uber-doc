@@ -29,6 +29,16 @@ async function handler(req: Request) {
   }
 
   // PASO 2: Detectar médicos con pacientes plantados (timeout_sistema en últimas 24hs)
+  //
+  // A PROPÓSITO no incluye `medico_no_acepto`, aunque también sea un paciente
+  // plantado. Ese caso ya está cubierto en el momento: el profesional recibe
+  // hasta 2 recordatorios y, si igual no acepta, se le apaga la Consulta
+  // Inmediata con un mensaje interno explicándole por qué (#435). Sumarlo acá
+  // sería un TERCER aviso por lo mismo, al día siguiente — justo lo que el tope
+  // de recordatorios vino a cortar.
+  //
+  // El motivo existe para poder distinguirlo en los datos, no para volver a
+  // avisar. Si alguna vez se lo agrega a este filtro, revisar antes esa decisión.
   const { data: plantados } = await supabase
     .from("sala_espera_entradas")
     .select("medico_id, paciente_id")

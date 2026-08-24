@@ -159,7 +159,17 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
     // Cerrar la entrada de sala corta el recordatorio de `repush-esperando`: sin
     // esto el profesional seguiría recibiendo avisos de un paciente que ya no
     // está esperando.
-    void cerrarEntradaSala({ consultaId: s.id, motivo: "cancelado_paciente" }).catch(() => {});
+    //
+    // El motivo dice lo que PASÓ, no cómo lo implementamos (Diego, 24/08/2026).
+    // Acá decía `cancelado_paciente` y era falso: el paciente no canceló nada —
+    // pidió una consulta, esperó, y el médico no la aceptó. Ese dato es con el
+    // que después se mira por qué se pierden pacientes, y contarlo al revés
+    // le echa la culpa al usuario de algo que no hizo.
+    //
+    // Tampoco es `timeout_sistema`: ese queda para la fila que se cuelga >24 h
+    // (falla técnica nuestra, la cierra el barrido diario). Mezclarlos borra la
+    // diferencia entre un problema de plomería y uno de servicio.
+    void cerrarEntradaSala({ consultaId: s.id, motivo: "medico_no_acepto" }).catch(() => {});
 
     // Best-effort a propósito: que falle el aviso no puede impedir liberar al
     // paciente. La pantalla es el respaldo — hace polling cada 5s.
