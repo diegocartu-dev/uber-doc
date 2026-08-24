@@ -43,6 +43,35 @@ Y ninguna de las cuatro toca el B2C: son de la base de la instancia.
 de más abajo no son opcionales: son la única prueba de que las defensas escritas
 frenan algo.
 
+## 🛑 Una migración del B2C sobre una tabla compartida son DOS aplicaciones
+
+El baseline de la instancia se congeló el día que se creó (12/08/2026). **Nada
+que se aplique después en `supabase/migrations/` le llega solo.** Y como
+`vercel.json` es **uno solo**, el mismo cron y el mismo código corren en los dos
+deploys: si el código nuevo consulta una columna que solo existe en el B2C, en la
+instancia **tira 500**.
+
+Ya pasó, y así se ve desde afuera: el 22/08/2026 el tope de recordatorios (#435)
+agregó `sala_espera_entradas.recordatorios_enviados` **solo en el B2C**. El cron
+`repush-esperando` —que corre en los dos— empezó a devolver 500 en la instancia y
+el watchdog alertó al día siguiente. Se arregló con la migración **031**, que es
+el espejo exacto de la del B2C.
+
+**Antes de dar por cerrada una migración del B2C, la pregunta es una sola:**
+
+> ¿esta tabla la toca código que corre en los **dos** deploys — un cron de
+> `vercel.json`, una lib compartida, una ruta sin gate de `esInstitucional()`?
+
+Si la respuesta es sí, **son dos aplicaciones**, y la de la instancia se anota
+acá con su número. Las que NO hace falta espejar son las que tocan tablas que
+solo existen en uno de los dos mundos (`metering_*`, `acuerdo_*`,
+`institucion_config` de este lado; MP y marketplace del otro).
+
+Al aplicar a mano, usar un runner que **exija el destino explícito**: el
+incidente salió de un script con el ref del B2C hardcodeado. El `migrar.yml` de
+la guardia ya valida que el archivo corresponda a la base elegida —
+`supabase/migrations/` para B2C, esta carpeta para la instancia.
+
 ## Cambiar la marca de la instancia (030) — la base no alcanza sola
 
 La identidad del cliente vive entera en `institucion_config`: nombre,
