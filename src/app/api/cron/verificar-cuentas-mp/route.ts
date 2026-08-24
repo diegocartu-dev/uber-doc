@@ -4,9 +4,8 @@ import { sendDoctoAlertThrottled } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
 import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import { decrypt } from "@/lib/mp-crypto";
-import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
+import { consultarSiteMp, paisDeSite } from "@/lib/mp-site";
 import { logWarn } from "@/lib/logger";
-import { horaArgentina } from "@/lib/crons-meta";
 
 /**
  * Cron diario (08:00 AR): red de seguridad del país de la cuenta de cobros.
@@ -44,13 +43,12 @@ const LOTE = 10;
 // Días sin poder verificar una cuenta antes de avisar. Un hipo puntual de la API
 // no merece un mail; tres días seguidos sin poder mirar, sí.
 const DIAS_SIN_VERIFICAR_PARA_AVISAR = 3;
-// Cadencia del 🔴. La fatiga de alertas es el modo de falla que enterró el
-// incidente Didit (ver comentario en cron-guard.ts): un mail rojo por día para
-// siempre se vuelve parte del paisaje y deja de leerse. Un caso nuevo avisa todos
-// los días; uno que ya lleva más de 3 días sin resolverse pasa a semanal.
-const HORAS_ALERTA_CASO_NUEVO = 20;
-const HORAS_ALERTA_CASO_VIEJO = 24 * 7 - 4;
-const DIAS_CASO_NUEVO = 3;
+// La cadencia del 🔴 por cuenta extranjera (diaria → semanal) vivía acá. Se fue
+// entera el 23/08/2026 junto con esa alarma: la fatiga de alertas era el modo de
+// falla que se intentaba mitigar espaciando el mail, y la respuesta correcta
+// resultó ser no mandarlo. El caso es de UNA persona, ya avisada, y su
+// resolución es administrativa — se ve en el panel de médicos. La alarma de
+// ceguera crónica (no poder verificar) SÍ sigue: esa habla del sistema.
 
 type CuentaMp = {
   medico_id: string;
@@ -220,27 +218,24 @@ async function handler() {
   }
 
   if (extranjeras.length > 0) {
-    // Cadencia: mientras haya un caso NUEVO (detectado hace menos de 3 días) el
-    // mail sale todos los días. Si todos los casos ya son viejos, pasa a semanal
-    // — el problema sigue visible en el panel y el mail deja de ser paisaje.
-    // Sin las columnas migradas no sabemos la antigüedad: se asume nuevo (o sea,
-    // exactamente el comportamiento diario de antes).
-    const corteNuevo = Date.now() - DIAS_CASO_NUEVO * 24 * 3_600_000;
-    const hayCasoNuevo = extranjeras.some((e) => Date.parse(e.desde) > corteNuevo);
-    const horasThrottle = hayCasoNuevo ? HORAS_ALERTA_CASO_NUEVO : HORAS_ALERTA_CASO_VIEJO;
-    const notaCadencia = hayCasoNuevo
-      ? ""
-      : "\n\n(Este aviso ya no sale todos los días: mientras siga sin resolverse te llega una vez por semana. Si aparece un caso nuevo, vuelve a ser diario.)";
-    const lista = extranjeras
-      .map((e) => `● ${e.nombre} — cuenta de ${e.pais} (sitio ${e.siteId})`)
-      .join("\n");
-    await sendDoctoAlertThrottled(
-      "mp-cuenta-extranjera",
-      horasThrottle,
-      extranjeras.length === 1
-        ? "🔴 Un médico tiene la cuenta de cobros de otro país"
-        : `🔴 ${extranjeras.length} médicos tienen la cuenta de cobros de otro país`,
-      `${lista}\n\nQué significa: la cuenta de Mercado Pago conectada no es argentina, así que los pagos se generan en la moneda y el checkout de ese país. Ningún paciente argentino le puede pagar — el cobro falla siempre, aunque el médico figure disponible y acepte la consulta.\n\n¿Tenés que hacer algo? Sí: escribile y pedile que conecte una cuenta de Mercado Pago de Argentina (Perfil → Mercado Pago → Conectar). Mientras tanto no le entra un peso.\n\nOJO: no le tocamos nada automáticamente — la cuenta sigue conectada igual y el médico sigue habilitado. Si querés bajarlo hasta que lo arregle, es decisión tuya.${notaCadencia}\n\n———\nDetalle técnico (para Claude): cron verificar-cuentas-mp (${horaArgentina()} hs), GET /users/me → site_id ≠ ${MP_SITE_ARGENTINA}. IDs: ${extranjeras.map((e) => e.medicoId).join(", ")}.`
+    // NO se manda mail (decisión Diego, 23/08/2026): "es un solo caso y no me
+    // interesa, ya le avisamos, queda afuera ese médico. No es motivo de ninguna
+    // alarma. Se suspende y listo."
+    //
+    // El razonamiento detrás: esto no es una falla del sistema ni algo que se
+    // degrade con el tiempo — es el estado de UNA persona, que ya está avisada y
+    // cuya resolución es administrativa. Repetirlo por mail todos los días (o
+    // todas las semanas) sólo entrena a ignorar el buzón, que es exactamente lo
+    // que hace que después se pase por alto una alarma que sí importa.
+    //
+    // El dato NO se pierde: la detección se sigue haciendo y queda registrada
+    // abajo, visible en el panel de médicos. Lo único que se saca es el mail.
+    //
+    // Si alguna vez esto deja de ser un caso aislado —varios médicos nuevos
+    // conectando cuentas de otro país— vuelve a merecer aviso, pero por volumen
+    // y como síntoma de un problema de registro, no caso por caso.
+    console.warn(
+      `[verificar-cuentas-mp] ${extranjeras.length} cuenta(s) de cobros no argentina(s). Sin alarma por decisión de producto; visible en el panel de médicos.`
     );
   }
 
