@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { withCron } from "@/lib/cron-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlert } from "@/lib/alertas";
+import {
+  esCaidaConfirmada,
+  esHuecoDeProgramador,
+  MINUTOS_ENTRE_ROJOS_SIN_ESTADO,
+} from "./criterio-caida";
 
 // ─── Monitor de disponibilidad + auto-remediación ────────────────────────────
 // v1 (28/07): nace del 504 del 27/07 — golpea las URLs públicas cada minuto.
@@ -30,6 +35,11 @@ const THROTTLE_ROJO_MS = 30 * 60 * 1000;
 const KEY_ESTADO = "uptime-estado";
 const SUPABASE_REF = "irpupskopjahbqqvckue";
 
+// Qué cuenta como caída vive en `./criterio-caida` — aparte, para poder testear
+// la regla sin levantar el cron. Definición de Diego (23/08/2026): caída es
+// "que no se puedan cursar consultas normalmente"; que el monitor no haya
+// medido NO es una caída.
+
 const horaAR = (iso?: string | null) =>
   iso
     ? new Date(iso).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" })
@@ -37,15 +47,16 @@ const horaAR = (iso?: string | null) =>
 
 const minutoActual = () => Math.floor(Date.now() / 60_000);
 
-// Throttle del rojo cuando la base NO se puede leer: la propia caída impide el
-// registro durable, así que se recuerda en memoria del proceso. Vercel reutiliza
-// la instancia entre corridas del cron (cada minuto); si se recicla, se pierde y
-// se vuelve a alertar — FALLA HACIA AVISAR, que es lo correcto en una caída.
-// Antes esto era `minuto % 15`: una caída de 3-4 min casi nunca pegaba un
-// múltiplo → 3 caídas el 31/07-01/08 mandaron 3 verdes y CERO rojos (Diego:
-// "me llegó solo el verde").
-let ultimaAlertaSinEstadoMs = 0;
-const THROTTLE_SIN_ESTADO_MS = 10 * 60 * 1000;
+// El throttle del rojo sin estado vivía acá, en memoria del proceso, y ese era
+// el problema: Vercel recicla la instancia entre corridas y cada instancia nueva
+// arrancaba el contador en cero y volvía a avisar. Así salieron 68 mails en un
+// día (15/08/2026) por UN episodio. Ahora el freno sale del reloj
+// (`MINUTOS_ENTRE_ROJOS_SIN_ESTADO`), que es lo único que sobrevive al reciclado.
+//
+// EL PRECIO, dicho de frente: una caída de base más corta que esa ventana puede
+// no generar mail. Se acepta a propósito — el auto-reinicio ya la resuelve sola,
+// y para un corte largo queda la red del watchdog, que ve los crons sin latir.
+// La alternativa era seguir recibiendo tormentas de 68 mails.
 
 async function probe(url: string): Promise<{ url: string; ok: boolean; detalle: string }> {
   const inicio = Date.now();
@@ -133,12 +144,19 @@ export const GET = withCron("uptime", async () => {
   const admin = createAdminClient();
   // Leer estado previo puede fallar si la base está caída: en ese caso prev
   // queda null y el throttle pasa a ser sin-estado (minuto % 15).
-  let prev: { last_status: string | null; last_ok_at: string | null; last_alerted_at: string | null; last_run_at: string | null } | null = null;
+  let prev: {
+    last_status: string | null;
+    last_ok_at: string | null;
+    last_alerted_at: string | null;
+    last_run_at: string | null;
+    /** Contador de corridas caídas seguidas — ver FALLOS_PARA_CONFIRMAR. */
+    last_error: string | null;
+  } | null = null;
   let dbEstadoLegible = false;
   try {
     const { data, error } = await admin
       .from("cron_runs")
-      .select("last_status, last_ok_at, last_alerted_at, last_run_at")
+      .select("last_status, last_ok_at, last_alerted_at, last_run_at, last_error")
       .eq("cron_key", KEY_ESTADO)
       .maybeSingle();
     if (!error) {
@@ -153,18 +171,35 @@ export const GET = withCron("uptime", async () => {
   if (caido) {
     const autoReinicio = !db.ok ? await intentarAutoReinicio() : null;
 
-    const debeAlertar = dbEstadoLegible
-      ? !prev?.last_alerted_at || Date.now() - Date.parse(prev.last_alerted_at) >= THROTTLE_ROJO_MS
-      // Sin estado (base caída): la PRIMERA corrida caída alerta siempre; si la
-      // caída persiste, como mucho un mail cada 10 min.
-      : Date.now() - ultimaAlertaSinEstadoMs >= THROTTLE_SIN_ESTADO_MS;
+    // ── CONFIRMACIÓN: una sola corrida caída NO es una caída ──────────────
+    // Un blip de red del runner, un cold start lento o un timeout de 8 s en una
+    // consulta que normalmente tarda 40 ms alcanzaban para declarar "Docto
+    // caído". Se exige que DOS corridas seguidas vean lo mismo. Como el cron
+    // corre cada minuto, cuesta ~1 minuto de latencia y descarta el ruido.
+    const fallosPrevios = dbEstadoLegible ? Number(prev?.last_error ?? 0) || 0 : 0;
+    const fallos = fallosPrevios + 1;
+    const confirmada = esCaidaConfirmada({ fallosSeguidos: fallos, estadoLegible: dbEstadoLegible });
+
+    const debeAlertar =
+      confirmada &&
+      (dbEstadoLegible
+        ? !prev?.last_alerted_at || Date.now() - Date.parse(prev.last_alerted_at) >= THROTTLE_ROJO_MS
+        // Sin estado (la base es justo lo que no responde) no hay dónde anotar
+        // que ya avisamos: el freno tiene que vivir fuera del proceso, porque
+        // Vercel recicla la instancia y cada una nueva volvía a avisar — así
+        // salieron 68 mails en un día. El reloj es el único freno que sobrevive
+        // al reciclado: se avisa en los minutos 0, 20 y 40 de la hora. Techo
+        // duro de 3 por hora, cueste lo que cueste, y como mucho 20 minutos
+        // hasta el primero (para entonces el auto-reinicio ya actuó).
+        : minutoActual() % MINUTOS_ENTRE_ROJOS_SIN_ESTADO === 0);
+
     if (debeAlertar || autoReinicio?.startsWith("🔁")) {
       await sendDoctoAlert(
-        !db.ok ? "🔴 Docto caído — la BASE DE DATOS no responde" : "🔴 Docto NO responde — el sitio está caído",
+        !db.ok ? "🔴 Docto caído — no se pueden cursar consultas" : "🔴 Docto NO responde — el sitio está caído",
         [
           !db.ok
-            ? "QUÉ PASA: la base de datos no contesta. El sitio puede 'abrir' pero cualquier pantalla que cargue datos se cuelga."
-            : "QUÉ PASA: el sitio no responde a este monitor (probado 2 veces).",
+            ? "QUÉ PASA: la base de datos no contesta, dos veces seguidas. Nadie puede pedir ni cursar una consulta: las pantallas que cargan datos se cuelgan."
+            : "QUÉ PASA: el sitio no responde a este monitor, dos veces seguidas.",
           `Último momento OK: ${horaAR(prev?.last_ok_at)} ART.`,
           "",
           "IMPACTO: pacientes y médicos no pueden operar con normalidad.",
@@ -172,55 +207,88 @@ export const GET = withCron("uptime", async () => {
           ...(autoReinicio ? [autoReinicio, ""] : []),
           "QUÉ HACER VOS: nada por ahora — el monitor reintenta cada minuto" +
             (autoReinicio?.startsWith("🔁") ? " y ya disparó el reinicio automático" : "") +
-            ". Si en 10 minutos no llega el mail verde, abrí Claude y decile: \"investigá la caída\".",
+            ". Si en 20 minutos no llega el mail verde, abrí Claude y decile: \"investigá la caída\".",
           "",
           "DETALLE TÉCNICO:",
           detalle,
         ].join("\n")
       );
-      if (!dbEstadoLegible) ultimaAlertaSinEstadoMs = Date.now();
     }
     if (dbEstadoLegible) {
       await admin.from("cron_runs").upsert({
         cron_key: KEY_ESTADO,
         last_run_at: ahora,
-        last_status: "down",
+        // "down" solo cuando está CONFIRMADA: si no, el verde de la próxima
+        // corrida cerraría el ciclo de una caída que nunca se declaró.
+        last_status: confirmada ? "down" : "ok",
+        // El contador de fallos seguidos vive acá (columna de texto libre).
+        last_error: String(fallos),
         ...(debeAlertar ? { last_alerted_at: ahora } : {}),
         updated_at: ahora,
       }).then(() => {}, () => {});
     }
-    return NextResponse.json({ ok: false, caido: true, db: db.ok, resultados });
+    return NextResponse.json({ ok: false, caido: true, confirmada, fallos, db: db.ok, resultados });
   }
 
-  // Sitio y base OK → cerrar el ciclo con el verde. Dos disparadores:
-  //  a) veníamos de caída registrada (last_status=down con alerta), o
-  //  b) HUECO DE LATIDO: este cron corre cada minuto; si su último latido es de
-  //     hace >3 min, estuvo sin poder escribir → hubo caída. Sin esto, una caída
-  //     de la BASE no deja rastro ("down" nunca se pudo guardar) y el verde no
-  //     salía nunca: el 30/07 Diego recibió 20+ rojos y CERO verdes, y siguió
-  //     preocupado 18 h por algo ya resuelto.
-  const HUECO_MS = 3 * 60 * 1000;
-  const huboHueco = prev?.last_run_at ? Date.now() - Date.parse(prev.last_run_at) > HUECO_MS : false;
-  if ((prev?.last_status === "down" && prev?.last_alerted_at) || huboHueco) {
+  // ── Sitio y base OK ────────────────────────────────────────────────────────
+  // El verde cierra el ciclo de una caída que SE DECLARÓ. Dos disparadores:
+  //
+  //  a) veníamos de "down" alertado, o
+  //  b) HUECO LARGO de latido: si la caída fue de la BASE, "down" nunca se pudo
+  //     guardar y sin esto el verde no salía nunca (30/07: 20+ rojos y CERO
+  //     verdes, y Diego quedó 18 h preocupado por algo ya resuelto).
+  //
+  // El umbral del hueco es lo que se corrigió el 23/08/2026, y es la causa del
+  // 71% de las alarmas: estaba en 3 minutos sobre un cron que corre CADA MINUTO,
+  // o sea sin margen. Cuando el programador de Vercel se saltea unas corridas
+  // —cosa que hace, sistemáticamente, alrededor del cambio de hora— el monitor
+  // volvía, veía el hueco y mandaba "hubo una caída de aproximadamente 4
+  // minutos" SIN QUE NADA SE HUBIERA CAÍDO. Medido sobre 26 días: 35 de 49
+  // avisos de recuperación no tenían ni un rojo previo, y 35 de esos llegaban en
+  // los minutos :02 y :03 de la hora.
+  //
+  // Con 12 minutos, un hueco del programador no dispara nada y una caída real
+  // —que dura mucho más: los dos episodios reales de agosto duraron 2 y 5 horas—
+  // sigue cerrando su ciclo. "No pude medir" no es "estuvo caído".
+  const huecoMs = prev?.last_run_at ? Date.now() - Date.parse(prev.last_run_at) : 0;
+  const huecoLargo = huecoMs > 0 && !esHuecoDeProgramador(huecoMs);
+  const veniaDeCaida = prev?.last_status === "down" && Boolean(prev?.last_alerted_at);
+
+  if (veniaDeCaida || huecoLargo) {
     const minCaido = prev?.last_ok_at
       ? Math.max(1, Math.round((Date.now() - Date.parse(prev.last_ok_at)) / 60000))
       : null;
     await sendDoctoAlert(
-      "🟢 Docto volvió — sitio y base respondiendo",
+      "🟢 Docto volvió — se pueden cursar consultas",
       [
         `QUÉ PASÓ: hubo una caída${minCaido ? ` de aproximadamente ${minCaido} minutos` : ""} y ya se recuperó.`,
+        ...(veniaDeCaida
+          ? []
+          : [
+              "",
+              "(El corte se dedujo de un hueco en el propio monitor: no pudo dejar" +
+                " registro mientras pasaba, así que la duración es aproximada.)",
+            ]),
         "",
         "QUÉ HACER VOS: nada. Si se vuelve a caer, llega otro mail rojo.",
       ].join("\n")
     );
+  } else if (huecoMs > 0 && huecoMs > 2 * 60 * 1000) {
+    // Hueco corto: el monitor no corrió, pero todo estaba bien. NO es una caída
+    // y no se avisa — queda anotado para poder medir cuánto se saltea Vercel.
+    console.warn(
+      `[uptime] el monitor no corrió durante ${Math.round(huecoMs / 60000)} min (hueco del programador, sin caída)`
+    );
   }
+
   await admin.from("cron_runs").upsert({
     cron_key: KEY_ESTADO,
     last_run_at: ahora,
     last_ok_at: ahora,
     last_status: "ok",
+    last_error: "0",
     last_alerted_at: null,
     updated_at: ahora,
   });
-  return NextResponse.json({ ok: true, resultados, db: db.detalle });
+  return NextResponse.json({ ok: true, resultados, db: db.detalle, hueco_min: Math.round(huecoMs / 60000) });
 });
