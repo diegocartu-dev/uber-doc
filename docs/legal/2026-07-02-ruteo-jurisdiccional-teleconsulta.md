@@ -1,5 +1,14 @@
 # Ruteo jurisdiccional en teleconsulta — criterio de habilitación por matrícula
 
+> **REVISADO EL 24/08/2026 Y RATIFICADO** — ver
+> `2026-08-24-revision-ruteo-jurisdiccional.md`. Un análisis externo planteó que
+> la jurisdicción no debería filtrar (el certificado laboral es válido igual, y
+> eso quedó confirmado). Al buscar respaldo apareció norma expresa sobre el
+> **ejercicio**, que es un plano distinto del certificado: la Res. 3316/2023 y el
+> protocolo del Colegio de Médicos de PBA del 30/06/2026. **El punto 2 de este
+> documento —"varias provincias exigen matrícula local para telesalud"— quedó
+> confirmado con la fuente.** La Regla A sigue vigente sin cambios.
+
 **Fecha:** 2026-07-02
 **Estado:** Draft asistido por IA (agente legal "Carolina"). **NO es asesoramiento vinculante.** Los 4 puntos marcados al final deben ser confirmados por un abogado matriculado antes de fijar la política en firme. Mientras tanto se lanza la posición conservadora (Regla A), que es la defendible.
 **Decisión de Diego (CEO):** Regla (A). Largar con lo que sabemos que cumplimos.
