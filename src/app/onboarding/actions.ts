@@ -92,10 +92,30 @@ export async function completarPerfil(formData: FormData) {
     );
 
   if (error) {
-    console.error("Onboarding upsert failed:", error.message, { userId: user.id });
-    const msg = error.message?.includes("pacientes_dni_unique")
+    // Los DOS índices únicos que la migración 044 dejó sobre `pacientes` (el de
+    // DNI —que 058 recrea con otro nombre— y el de EMAIL) frenan el alta acá: el
+    // upsert es `onConflict: "user_id"`, así que resuelve SOLO el choque por
+    // user_id y cualquier colisión de dni o email llega como error.
+    //
+    // El clasificador viejo miraba únicamente el de DNI. Una colisión de EMAIL
+    // caía en "error_guardado" → "Ocurrió un error. Intentá de nuevo.": sin
+    // causa, sin salida, y sin siquiera la dirección de soporte. El paciente
+    // reintenta, le vuelve a fallar igual, y de este lado queda un console.error
+    // que nadie mira — un alta trabada así es indistinguible de un alta que
+    // nunca se intentó. Por eso ahora se extrae el nombre del índice: el mensaje
+    // suelto no alcanza para saber cuál de los dos frenó, y sin eso el caso no
+    // se puede diagnosticar después.
+    const constraint = /unique constraint "([^"]+)"/.exec(error.message ?? "")?.[1] ?? null;
+    console.error("Onboarding upsert failed:", error.message, {
+      userId: user.id,
+      constraint,
+      code: error.code,
+    });
+    const msg = constraint?.includes("pacientes_dni_unique")
       ? "dni_duplicado"
-      : "error_guardado";
+      : constraint?.includes("pacientes_email_unique")
+        ? "email_duplicado"
+        : "error_guardado";
     redirect(`/onboarding?error=${msg}&redirectTo=${encodeURIComponent(safeRedirect)}`);
   }
 

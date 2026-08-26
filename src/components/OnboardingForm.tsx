@@ -54,6 +54,19 @@ type FieldErrors = {
 const VALOR_PARTICULAR = "__particular__";
 const VALOR_OTRA = "__otra__";
 
+// El que se traba en el alta no puede destrabarse solo. El mensaje viejo lo
+// mandaba a escribir a soporte@ desde su cliente de correo: redactar de cero, y
+// en un celular sin cliente configurado, directamente nada (el mismo problema
+// que ya nos costó el mailto: del menú). /ayuda es nuestro propio formulario —
+// viaja por nuestro servidor y cae en la Bandeja con su identidad de sesión.
+function EnlaceAyuda() {
+  return (
+    <a href="/ayuda" className="font-medium underline underline-offset-2">
+      pedinos ayuda
+    </a>
+  );
+}
+
 export default function OnboardingForm({ paciente, redirectTo, error: serverError }: Props) {
   // Determine initial cobertura state from existing data
   const initialObraId = paciente?.obra_social_id ?? null;
@@ -234,11 +247,24 @@ export default function OnboardingForm({ paciente, redirectTo, error: serverErro
     <>
       {serverError && (
         <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-[#E24B4A]">
-          {serverError === "campos_requeridos"
-            ? "Completá todos los campos: nombre, DNI, fecha de nacimiento, sexo, teléfono y —si tenés cobertura— el número de afiliado."
-            : serverError === "dni_duplicado"
-              ? "No pudimos guardar tu información. Si el problema persiste, escribinos a soporte@docto.com.ar."
-              : "Ocurrió un error. Intentá de nuevo."}
+          {serverError === "campos_requeridos" ? (
+            "Completá todos los campos: nombre, DNI, fecha de nacimiento, sexo, teléfono y —si tenés cobertura— el número de afiliado."
+          ) : serverError === "dni_duplicado" ? (
+            <>
+              Ese DNI ya figura en otra cuenta de Docto. Reintentar no lo va a
+              destrabar: <EnlaceAyuda /> y lo resolvemos nosotros.
+            </>
+          ) : serverError === "email_duplicado" ? (
+            <>
+              Ese email ya figura en otra cuenta de Docto. Reintentar no lo va a
+              destrabar: <EnlaceAyuda /> y lo resolvemos nosotros.
+            </>
+          ) : (
+            <>
+              No pudimos guardar tus datos. Probá una vez más; si vuelve a
+              fallar, <EnlaceAyuda />.
+            </>
+          )}
         </div>
       )}
 
