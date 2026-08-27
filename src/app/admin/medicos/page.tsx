@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
 import MedicosClient from "./MedicosClient";
+import { estadoCuentaMp } from "@/lib/mp-cuenta";
 
 export default async function AdminMedicosPage() {
   const admin = createAdminClient();
@@ -31,17 +32,18 @@ export default async function AdminMedicosPage() {
   type CuentaMpFila = {
     medico_id: string;
     estado: string | null;
+    expires_at?: string | null;
     site_id?: string | null;
     site_verificado_at?: string | null;
   };
   let cuentasMp: CuentaMpFila[] = [];
   const conSite = await admin
     .from("medicos_mp_accounts")
-    .select("medico_id, estado, site_id, site_verificado_at");
+    .select("medico_id, estado, expires_at, site_id, site_verificado_at");
   if (conSite.error) {
     // Sin las columnas del país seguimos sabiendo QUIÉN tiene cuenta conectada
     // (el dato que ya existe hoy); el país queda "sin verificar todavía".
-    const base = await admin.from("medicos_mp_accounts").select("medico_id, estado");
+    const base = await admin.from("medicos_mp_accounts").select("medico_id, estado, expires_at");
     cuentasMp = (base.data ?? []) as CuentaMpFila[];
   } else {
     cuentasMp = (conSite.data ?? []) as CuentaMpFila[];
@@ -50,9 +52,14 @@ export default async function AdminMedicosPage() {
 
   const medicosConCobros = (medicos ?? []).map((m) => {
     const cuenta = cuentaPorMedico.get(m.id);
+    // Una sola regla para "puede cobrar", en `@/lib/mp-cuenta`: `estado` solo
+    // miente hasta que alguien intenta pagar (ver la nota de ese archivo).
+    const cobros = estadoCuentaMp(cuenta);
     return {
       ...m,
-      mpConectado: cuenta?.estado === "activo",
+      mpConectado: cobros === "conectado",
+      mpVencido: cobros === "expirado",
+      mpExpiraAt: cuenta?.expires_at ?? null,
       mpSiteId: cuenta?.site_id ?? null,
       mpSiteVerificadoAt: cuenta?.site_verificado_at ?? null,
     };

@@ -44,6 +44,9 @@ interface Medico {
   // "MLA" = Argentina (lo único que permite cobrarle a un paciente argentino),
   // otro código = cuenta de otro país, null = todavía sin verificar.
   mpConectado?: boolean;
+  /** El permiso de cobro venció: tiene cuenta conectada pero HOY no puede cobrar. */
+  mpVencido?: boolean;
+  mpExpiraAt?: string | null;
   mpSiteId?: string | null;
   mpSiteVerificadoAt?: string | null;
   // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
@@ -749,6 +752,17 @@ function MedicoRow({
                 Gateado por `mpConectado`: el `site_id` describe la cuenta que
                 estaba conectada, así que sin cuenta activa el chip mentiría — la
                 fila diría "no puede cobrar" y la ficha "sin cuenta conectada". */}
+            {/* Permiso de cobro vencido. Va ANTES del chip de país porque es más
+                urgente y porque sin permiso vigente el país ya no importa: no
+                puede cobrar de ninguna manera. */}
+            {m.mpVencido && (
+              <span
+                title="El permiso que Mercado Pago nos dio para cobrar en su nombre venció. Puede aceptar consultas, pero el pago le va a fallar al paciente al final del flujo."
+                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
+              >
+                <CreditCard size={11} /> Permiso de cobro vencido — no puede cobrar
+              </span>
+            )}
             {m.mpConectado && m.mpSiteId && !esSiteArgentino(m.mpSiteId) && (
               <span
                 title="La cuenta de Mercado Pago conectada no es argentina: los pagos salen en otra moneda y ningún paciente argentino puede pagarle."
@@ -999,7 +1013,20 @@ function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImperso
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cobros (Mercado Pago)</p>
         <div className="mt-3">
-          {!m.mpConectado ? (
+          {m.mpVencido ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-800">
+                <ShieldAlert size={16} /> Permiso de cobro vencido — no puede cobrar
+              </div>
+              <p className="mt-1 text-xs text-red-700">
+                La cuenta está conectada, pero el permiso que Mercado Pago nos dio para cobrar en su
+                nombre venció
+                {m.mpExpiraAt ? ` el ${new Date(m.mpExpiraAt).toLocaleDateString("es-AR")}` : ""}. Mientras
+                siga así puede figurar disponible y aceptar consultas, y el pago le va a fallar al paciente
+                al final del flujo. Hay que pedirle que reconecte Mercado Pago desde su perfil.
+              </p>
+            </div>
+          ) : !m.mpConectado ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <CreditCard size={16} /> Sin cuenta conectada

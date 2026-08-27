@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import Link from "next/link";
 import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 
@@ -21,10 +22,10 @@ function trackClient(evento: string, metadata: Record<string, unknown>) {
   }).catch(() => {});
 }
 
+// La regla vive en `@/lib/mp-cuenta`: esta pantalla la tenía bien y el panel de
+// admin la tenía mal, cada uno con su copia. Ahora es una sola, con test.
 function deriveEstadoInicial(mpAccount: MpAccount | null): string {
-  if (!mpAccount || mpAccount.estado === "revocado") return "no_conectado";
-  if (mpAccount.estado === "activo" && new Date(mpAccount.expires_at) > new Date()) return "conectado";
-  return "expirado";
+  return estadoCuentaMp(mpAccount);
 }
 
 export default function TabCobros({
