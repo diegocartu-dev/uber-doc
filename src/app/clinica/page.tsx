@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import AppNavbar from "@/components/AppNavbar";
 import ClinicaFlow from "./ClinicaFlow";
 import { getFlag } from "@/lib/feature-flags";
@@ -65,9 +66,35 @@ export default async function ClinicaPage() {
     .eq("verificado", true)
     .eq("estado_registro", "aprobado")
     .eq("es_cuenta_test", esPacienteTest);
+  // Quién NO puede cobrar. Query PROPIA y con service role, a propósito: el
+  // SELECT de arriba es el que LLENA la clínica y no se toca (lección del
+  // outage 22/06). `medicos_mp_accounts` además no es legible con RLS de
+  // paciente.
+  //
+  // POR QUÉ ESTÁ ACÁ: este listado filtraba por oculto/verificado/aprobado y
+  // NUNCA por la cuenta de cobros. El único control era el candado del toggle
+  // "disponible", que mira la cuenta solo en el instante de encenderlo. O sea
+  // que un profesional sin cuenta podía quedar visible y EN LÍNEA: el paciente
+  // lo elegía, esperaba que le aceptaran la consulta, y descubría que no había
+  // forma de pagar recién al final. Si no puede cobrar, no está en línea.
+  const { data: cuentasMpRaw } = await createAdminClient()
+    .from("medicos_mp_accounts")
+    .select("medico_id, estado, expires_at");
+  const puedeCobrar = new Map<string, boolean>(
+    (cuentasMpRaw ?? []).map((c) => [
+      c.medico_id as string,
+      // El vencido NO se saca de la oferta: el checkout lo renueva solo
+      // (`lib/mp-token`). El que no tiene cuenta no se repara con nada.
+      estadoCuentaMp(c) !== "no_conectado",
+    ])
+  );
+
   const medicos = (medicosRaw ?? []).map(
     ({ identidad_validada, biometria_exenta, es_cuenta_test, ...m }) => ({
       ...m,
+      // Sin cuenta de cobros no hay consulta posible: se muestra como no
+      // disponible en vez de dejar que el paciente choque contra el pago.
+      disponible: m.disponible && puedeCobrar.get(m.id) === true,
       // Reservable según el gate: si el gate está apagado, todos; si está activo, solo
       // validados/exentos/test. Misma fuente de verdad que el guard de reserva.
       habilitadoIdentidad: !flagIdentidadGate || identidadHabilitada({ identidad_validada, biometria_exenta, es_cuenta_test }),

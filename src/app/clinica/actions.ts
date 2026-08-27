@@ -12,6 +12,7 @@ import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion";
 import { logInfo } from "@/lib/logger";
 import { esInstitucional } from "@/lib/instancia";
+import { estadoCuentaMp } from "@/lib/mp-cuenta";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -140,6 +141,32 @@ export async function crearConsulta(
   }
 
   if (!medico.disponible) {
+    return { error: "El médico no está disponible en este momento. Por favor, elegí otro profesional." };
+  }
+
+  // ¿Puede COBRAR? Hasta acá nadie lo preguntaba, y la clínica tampoco: su
+  // listado filtra por oculto/verificado/aprobado y NUNCA por la cuenta de
+  // cobros. El único control era el candado del toggle "disponible", que mira
+  // la cuenta solo en el instante de encenderlo — después nada la revisa.
+  //
+  // O sea que "un profesional visible puede cobrar" era una suposición, no una
+  // garantía. El costo lo pagaba el paciente al final: elegía, esperaba que se
+  // la aceptaran, y recién al apretar Pagar se encontraba con un 422.
+  //
+  // Se bloquea SOLO al que no tiene cuenta. Un permiso vencido NO se bloquea a
+  // propósito: desde `lib/mp-token` el checkout lo renueva solo, así que sacarlo
+  // de la oferta acá le quitaría al sistema la chance de auto-repararse.
+  // Service role: `medicos_mp_accounts` no es legible por un paciente con RLS.
+  const { data: cuentaMp } = await createAdminClient()
+    .from("medicos_mp_accounts")
+    .select("estado, expires_at")
+    .eq("medico_id", medicoId)
+    .maybeSingle();
+
+  if (estadoCuentaMp(cuentaMp) === "no_conectado") {
+    // Mismo texto que "no disponible": al paciente no le sirve —ni le
+    // corresponde— enterarse de la plomería de cobros del profesional.
+    logInfo("[crearConsulta]", "Bloqueada: el profesional no puede cobrar", { medicoId });
     return { error: "El médico no está disponible en este momento. Por favor, elegí otro profesional." };
   }
 
