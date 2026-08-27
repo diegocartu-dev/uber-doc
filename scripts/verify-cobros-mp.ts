@@ -15,14 +15,24 @@
  *      si vencieron, si no existen, y —lo importante— si el profesional igual
  *      figura PUBLICADO. Ese cruce es el que produce consultas incobrables:
  *      el paciente pide, el profesional acepta, y el pago muere al final.
- *   3. Dónde mueren las atenciones de los últimos días, por estado. Es la
- *      respuesta directa a "hay pacientes y no hay consultas".
+ *   3. Si Mercado Pago acepta HOY el token de cada profesional. Es la prueba
+ *      empírica de "¿MP anda?": se le pregunta a MP, no se deduce de la base.
+ *      Requiere MP_TOKEN_ENCRYPTION_KEY; sin ella el resto igual corre.
+ *   4. EN QUÉ ESCALÓN mueren las atenciones. Un pedido puede morir en tres
+ *      lugares distintos y sólo uno de ellos es Mercado Pago:
+ *        (1) no había profesional disponible para pedirle;
+ *        (2) se pidió y NADIE la aceptó en 10 minutos (`PLAZO_SIN_ACEPTAR_MIN`,
+ *            plazo que existe recién desde el 20-22/08) → se cancela sola;
+ *        (3) la aceptaron y murió al pagar → ahí sí es Mercado Pago.
+ *      Confundir (2) con (3) manda a arreglar cobros cuando el problema es que
+ *      no hay quien atienda.
  *
  * USO:
  *   npx tsx scripts/verify-cobros-mp.ts
  *
  * REQUIERE:
  *   SUPABASE_ACCESS_TOKEN en .env.local o en el entorno (Management API).
+ *   MP_TOKEN_ENCRYPTION_KEY para el punto 3 (opcional).
  *
  * SOLO LECTURA: no aplica DDL, no escribe una sola fila.
  *
@@ -134,26 +144,97 @@ async function main() {
   }
   if (incobrables.length === 0) console.log("   ✅ Todos los aprobados tienen permiso de cobro vigente.");
 
-  // ── 3. Dónde mueren las atenciones ─────────────────────────────────────────
-  console.log("\n3) CONSULTAS INMEDIATAS DE LOS ÚLTIMOS 3 DÍAS, POR ESTADO");
+  // ── 3. ¿Mercado Pago acepta el token HOY? (sonda viva, sin efectos) ────────
+  console.log("\n3) SONDA VIVA CONTRA MERCADO PAGO (GET /users/me por profesional)");
+  const claveCripto = process.env.MP_TOKEN_ENCRYPTION_KEY;
+  if (!claveCripto || claveCripto.length !== 64) {
+    console.log("   ⏭  Sin MP_TOKEN_ENCRYPTION_KEY: no se puede desencriptar. Salteado.");
+  } else {
+    const { decrypt } = await import("../src/lib/mp-crypto");
+    const tokens = await q(
+      token,
+      `select m.nombre_completo, a.medico_id, a.access_token_encrypted
+         from medicos_mp_accounts a
+         join medicos m on m.id = a.medico_id
+        where m.estado_registro = 'aprobado'
+          and coalesce(m.es_cuenta_test,false) = false
+          and a.estado <> 'revocado'`
+    );
+
+    const sonda: Record<string, unknown>[] = [];
+    for (const fila of tokens) {
+      let estado: string;
+      try {
+        const at = decrypt(String(fila.access_token_encrypted));
+        const r = await fetch("https://api.mercadopago.com/users/me", {
+          headers: { Authorization: `Bearer ${at}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        // 401 = MP rechaza el token: ese profesional NO puede cobrar, probado.
+        estado = r.ok ? `✅ ${r.status} OK` : `❌ ${r.status} MP RECHAZA`;
+        if (!r.ok) problemas++;
+      } catch (e) {
+        estado = `⚠️ no se pudo consultar (${e instanceof Error ? e.message : "error"})`;
+      }
+      sonda.push({ profesional: fila.nombre_completo, mercado_pago: estado });
+    }
+    tabla(sonda);
+    console.log("   Un ❌ acá es prueba directa: Mercado Pago no acepta ese token ahora mismo.");
+  }
+
+  // ── 4. ¿En qué escalón mueren? ─────────────────────────────────────────────
+  console.log("\n4) OFERTA: PROFESIONALES QUE PUEDEN RECIBIR UN PEDIDO AHORA");
   tabla(
     await q(
       token,
-      `select estado, count(*)::int as cantidad
-         from consultas
-        where created_at > now() - interval '3 days'
-        group by estado order by cantidad desc`
+      `select count(*) filter (where disponible)::int as disponibles_ahora,
+              count(*)::int                            as aprobados_totales
+         from medicos
+        where estado_registro = 'aprobado' and coalesce(es_cuenta_test,false) = false`
     )
   );
-  console.log("   Referencia: 'esperando' = nadie la aceptó todavía · 'aceptada' sin pago = murió en el checkout.");
+  console.log("   Si 'disponibles_ahora' es 0, ningún paciente puede ni pedir: el freno es la oferta.");
 
-  console.log("\n   PACIENTES CREADOS EN LOS ÚLTIMOS 3 DÍAS");
+  console.log("\n   ESCALÓN DONDE MUERE CADA PEDIDO (últimos 7 días)");
+  tabla(
+    await q(
+      token,
+      `select case
+                when aceptada_at is null and estado = 'cancelada'
+                  then '2 · nadie la aceptó (plazo de 10 min)'
+                when aceptada_at is null
+                  then '1 · todavía esperando que alguien acepte'
+                when estado in ('en_curso','completada') or mp_status = 'approved'
+                  then '4 · se pagó y se atendió'
+                else '3 · la aceptaron y murió antes de pagar (acá miraría MP)'
+              end as escalon,
+              count(*)::int as cantidad
+         from consultas
+        where created_at > now() - interval '7 days'
+        group by 1 order by 1`
+    )
+  );
+
+  console.log("\n   DETALLE CRUDO, SIN AGRUPAR POR MÍ (por si mi bucketing miente)");
+  tabla(
+    await q(
+      token,
+      `select estado, resuelta_por, resolucion_motivo,
+              (aceptada_at is null) as nunca_aceptada,
+              count(*)::int as cantidad
+         from consultas
+        where created_at > now() - interval '7 days'
+        group by 1,2,3,4 order by cantidad desc`
+    )
+  );
+
+  console.log("\n   PACIENTES CREADOS EN LOS ÚLTIMOS 7 DÍAS");
   tabla(
     await q(
       token,
       `select date_trunc('day', created_at)::date as dia, count(*)::int as pacientes
          from pacientes
-        where created_at > now() - interval '3 days'
+        where created_at > now() - interval '7 days'
         group by 1 order by 1 desc`
     )
   );
