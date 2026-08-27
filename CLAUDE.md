@@ -146,6 +146,51 @@ Fuente de verdad única: **`src/lib/consultas/clasificar.ts`** (`clasificarAtenc
 
 **Consecuencia esperada:** el total de "consultas" BAJA respecto de lo que mostraba el tablero antes. Lo que se fue son los pedidos que nunca tuvieron a nadie del otro lado, que ahora se cuentan como intentos en vez de figurar como si hubieran sido atenciones.
 
+## Cobros — `estado` NO alcanza para decir "puede cobrar" (hallazgo 27/08/2026)
+El permiso de Mercado Pago de un profesional **vence solo**, y hasta el 27/08 nada
+lo renovaba: el `refresh_token` se guardaba en el alta de OAuth y no se leía en
+ningún lado del repo.
+
+Peor que el vencimiento era cómo se descubría. `medicos_mp_accounts.estado` pasa
+a `expirado` **dentro del checkout** (`api/pago/crear-v2`), o sea con el paciente
+ya pidiendo la consulta y por apretar Pagar. Hasta ese instante la fila dice
+`activo`. Cualquiera que preguntara solo por `estado` —el gate de disponibilidad,
+el panel de admin— veía en verde justo al profesional que no podía cobrar: se
+publicaba, aceptaba consultas, y el pago moría con 422 al final del flujo, sin
+aviso para nadie. Mismo desenlace que el caso 07/08 (cuenta de otro país) por
+otra puerta: disponible, aceptando, incobrable.
+
+Fuente de verdad única: **`src/lib/mp-cuenta.ts`** (`estadoCuentaMp`). Todo lugar
+que pregunte "¿este profesional puede cobrar?" usa ese helper, **nunca**
+`estado === 'activo'` a mano. Tiene test (`mp-cuenta.test.ts`) con el caso que
+rompía: activo + fecha vencida = NO cobra.
+
+- La renovación vive en **`src/lib/mp-token.ts`**. El checkout se auto-repara y
+  el cron `renovar-tokens-mp` (cada 6 h) la adelanta.
+- **Un rechazo de MP no es lo mismo que una falla de red:** solo un 4xx marca la
+  cuenta; un timeout o un 5xx no tocan el estado, o un hipo de su API apagaría
+  los cobros de gente sana.
+- **MP rota el refresh token** en cada renovación: dos renovaciones simultáneas
+  hacen que la segunda reciba 4xx. Antes de marcar una cuenta se relee — si quedó
+  vigente, fue una carrera, no una falla.
+- **Deuda conocida:** el gate de disponibilidad (`dashboard/actions.ts`) todavía
+  mira `estado` y no la fecha. Arreglarlo NO suma consultas (hace que esos
+  profesionales figuren no disponibles); tiene sentido con la renovación andando.
+
+## Un aviso "enviado" no es un aviso recibido (hallazgo 27/08/2026)
+`whatsapp_envios.resultado = 'enviado'` significa **"Twilio aceptó la llamada a su
+API"**. No dice que le llegó al celular del profesional, ni que lo leyó. El envío
+no manda `StatusCallback` y no hay webhook de Twilio, así que el estado real de
+entrega nunca entró a la base.
+
+Esto pesa sobre el plazo de 10 minutos de la CI: **se fijó sin haber medido nunca
+si el aviso llega a tiempo.** Antes de discutir si los profesionales responden
+rápido hay que saber en qué minuto les llega el mensaje.
+
+Se guarda el `twilio_sid`, así que el pasado es recuperable preguntándole a
+Twilio: `scripts/verify-avisos-whatsapp.ts`. Registrarlo hacia adelante necesita
+`StatusCallback` + webhook + columnas nuevas — pendiente.
+
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
 - Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.
