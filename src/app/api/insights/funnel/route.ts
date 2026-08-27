@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
       admin.from("pacientes").select("id, user_id, nombre_completo, provincia, es_cuenta_test"),
       admin.from("medicos").select("id, jurisdicciones, es_cuenta_test").eq("verificado", true),
       admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeUTC).order("at", { ascending: true }),
-      admin.from("consultas").select("paciente_id, estado, created_at").gte("created_at", desdeUTC),
+      admin.from("consultas").select("paciente_id, estado, created_at, aceptada_at, mp_status").gte("created_at", desdeUTC),
       setsDeTest(admin),
     ]);
 
@@ -119,10 +120,18 @@ export async function GET(req: NextRequest) {
     arr.push({ evento: e.evento, tMs: Date.parse(e.created_at) });
     avancesPorPac.set(e.paciente_id, arr);
   }
-  const consultasPorPac = new Map<string, { estado: string; tMs: number }[]>();
+  const consultasPorPac = new Map<
+    string,
+    { estado: string; tMs: number; aceptada: boolean; mpStatus: string | null }[]
+  >();
   for (const c of consultasRaw ?? []) {
     const arr = consultasPorPac.get(c.paciente_id) ?? [];
-    arr.push({ estado: c.estado, tMs: Date.parse(c.created_at) });
+    arr.push({
+      estado: c.estado,
+      tMs: Date.parse(c.created_at),
+      aceptada: Boolean(c.aceptada_at),
+      mpStatus: (c.mp_status as string | null) ?? null,
+    });
     consultasPorPac.set(c.paciente_id, arr);
   }
 
@@ -138,7 +147,15 @@ export async function GET(req: NextRequest) {
     const pago = avances.some((a) => (a.evento === "pago_creado" || a.evento === "pago_aprobado") && en(a.tMs));
     const cons = consultasPorPac.get(s.pacienteId) ?? [];
     const seAtendio = cons.some((c) => c.estado === "completada" && en(c.tMs));
-    const pagoConsulta = pago || cons.some((c) => en(c.tMs) && ["pagada", "aceptada", "en_curso", "completada", "esperando"].includes(c.estado));
+    // ACÁ HABÍA UNA LISTA DE ESTADOS A MANO QUE INCLUÍA `esperando` — o sea, el
+    // pedido que NADIE aceptó y que nadie pagó se contaba como "pagó". Un fallo
+    // de oferta entraba al tablero como plata cobrada. Se usa el helper que ya
+    // es la fuente de verdad del pago (mira `mp_status`, no solo el estado).
+    const pagoConsulta =
+      pago || cons.some((c) => en(c.tMs) && estadoPagoConsulta(c.estado, c.mpStatus) !== "falta_pagar");
+    // ¿Algún profesional se hizo cargo? Sin esto, "eligió y nadie lo atendió" y
+    // "eligió y no pagó" son la misma fila, y son problemas opuestos.
+    const alguienAcepto = cons.some((c) => en(c.tMs) && c.aceptada);
 
     let resultado: string;
     let matchHabia: boolean;
@@ -154,6 +171,13 @@ export async function GET(req: NextRequest) {
     } else if (pagoConsulta) {
       resultado = "pagó";
       matchHabia = true;
+    } else if (eligio && !alguienAcepto) {
+      // El paciente eligió y del otro lado no hubo nadie: a los 10 minutos el
+      // pedido se cancela solo (`PLAZO_SIN_ACEPTAR_MIN`). Antes esto caía en
+      // "eligió médico, no pagó", que se lee como un problema de cobros y manda
+      // a revisar Mercado Pago — cuando nunca se llegó a intentar un pago.
+      resultado = "eligió, nadie lo aceptó";
+      matchHabia = false;
     } else if (eligio) {
       resultado = "eligió médico, no pagó";
       matchHabia = true;
@@ -181,7 +205,7 @@ export async function GET(req: NextRequest) {
   // ── Resúmenes ──
   const etapas = {
     busquedas: busquedas.length,
-    eligieron: busquedas.filter((b) => ["se atendió", "pagó", "eligió médico, no pagó"].includes(b.resultado)).length,
+    eligieron: busquedas.filter((b) => ["se atendió", "pagó", "eligió médico, no pagó", "eligió, nadie lo aceptó"].includes(b.resultado)).length,
     pagaron: busquedas.filter((b) => ["se atendió", "pagó"].includes(b.resultado)).length,
     seAtendieron: busquedas.filter((b) => b.resultado === "se atendió").length,
     sinMatch: busquedas.filter((b) => !b.matchHabia).length,

@@ -28,6 +28,7 @@ const RESULTADO_COLOR: Record<string, string> = {
   "pagó": "#1D9E75",
   "eligió médico, no pagó": "#BA7517",
   "había oferta, no eligió": "#888780",
+  "eligió, nadie lo aceptó": "#D85A30",
   "había médicos pero ninguno en línea": "#D85A30",
   "sin médicos para su provincia": "#E24B4A",
   "sin provincia cargada": "#888780",
