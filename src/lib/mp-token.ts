@@ -131,10 +131,32 @@ async function renovar(medicoId: string, refreshEnc: string): Promise<ResultadoT
       return { ok: false, motivo: "error_red" };
     }
 
-    // 4xx = rechazo explícito. Recién acá se marca: el profesional tiene que
-    // reconectar y el panel necesita verlo.
+    // 4xx = rechazo explícito... salvo que otro proceso se nos haya adelantado.
+    //
+    // MP **rota** el refresh token en cada renovación: si dos pagos del mismo
+    // profesional entran a la vez —o uno se cruza con el cron— el segundo llega
+    // con un refresh ya rotado y MP lo rechaza. Marcar la cuenta ahí apagaría
+    // los cobros de alguien SANO, causando justo el problema que este archivo
+    // vino a arreglar. Antes de marcar, se relee: si la fila quedó con un token
+    // vigente, la renovación la hizo el otro y esto es una carrera, no una falla.
+    const admin = createAdminClient();
+    const { data: recheck } = await admin
+      .from("medicos_mp_accounts")
+      .select("access_token_encrypted, expires_at")
+      .eq("medico_id", medicoId)
+      .maybeSingle();
+
+    if (recheck && new Date(recheck.expires_at).getTime() > Date.now()) {
+      logInfo("[MP-TOKEN]", "Renovación en carrera: otro proceso ya renovó", { medicoId });
+      try {
+        return { ok: true, accessToken: decrypt(recheck.access_token_encrypted), renovado: false };
+      } catch {
+        return { ok: false, motivo: "cripto" };
+      }
+    }
+
     logError("[MP-TOKEN]", "MP rechazó la renovación", { medicoId, ...sanitizeMpError(res.status, cuerpo) });
-    await createAdminClient()
+    await admin
       .from("medicos_mp_accounts")
       .update({ estado: "expirado", desconectado_en: new Date().toISOString() })
       .eq("medico_id", medicoId);
