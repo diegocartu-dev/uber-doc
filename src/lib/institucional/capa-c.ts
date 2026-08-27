@@ -23,6 +23,7 @@ export const CRONS_CAPA_C = [
   "reintentar-refunds", // sin Mercado Pago no hay refunds
   "saldo-servicios", // los saldos los vigila el deploy B2C (evita alertas dobles)
   "verificar-cuentas-mp", // nadie conecta cuentas de MP
+  "renovar-tokens-mp", // sin cuentas de MP no hay token que renovar
 ] as const;
 
 export type CronCapaC = (typeof CRONS_CAPA_C)[number];

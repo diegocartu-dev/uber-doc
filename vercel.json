@@ -88,6 +88,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/cron/renovar-tokens-mp",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/documentos-sin-sello",
       "schedule": "17 * * * *"
     },

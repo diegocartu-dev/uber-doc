@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { decrypt } from "@/lib/mp-crypto";
 import { getFlag } from "@/lib/feature-flags";
+import { asegurarTokenMp } from "@/lib/mp-token";
 import { transaccionHabilitadaParaCobroReal } from "@/lib/pago-whitelist";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { sendDoctoAlert } from "@/lib/alertas";
@@ -102,45 +102,51 @@ export async function POST(req: NextRequest) {
 
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
-    .select("access_token_encrypted, estado, expires_at, live_mode")
+    // Solo `live_mode` (define a qué checkout mandar): el token y su vencimiento
+    // los maneja `asegurarTokenMp`, no hay por qué traer el secreto acá.
+    .select("live_mode")
     .eq("medico_id", medicoId)
     .single();
 
-  if (!mpAccount || mpAccount.estado !== "activo") {
+  if (!mpAccount) {
     return NextResponse.json(
       { error: "El médico no tiene cobros habilitados." },
       { status: 422 }
     );
   }
 
-  if (new Date(mpAccount.expires_at) <= new Date()) {
-    await admin
-      .from("medicos_mp_accounts")
-      .update({ estado: "expirado", desconectado_en: new Date().toISOString() })
-      .eq("medico_id", medicoId);
+  // Token del vendedor, renovado contra MP si hace falta (ver `@/lib/mp-token`).
+  //
+  // ACÁ ESTABA EL AGUJERO: un token vencido devolvía 422 y marcaba la cuenta
+  // 'expirado', y nada lo renovaba nunca. Como `estado` recién cambiaba en esta
+  // línea, hasta ese momento la fila decía 'activo' y el gate de disponibilidad
+  // —que mira `estado`, no `expires_at`— dejaba al profesional publicarse y
+  // aceptar consultas que ningún paciente podía pagar. El pedido moría al
+  // apretar Pagar, sin aviso para nadie.
+  //
+  // Se usa el token del vendedor en producción Y en sandbox: el callback de
+  // OAuth omite `test_token:true` a propósito, así el token autentica como el
+  // vendedor real que autorizó y no como el dueño de la app.
+  const token = await asegurarTokenMp(medicoId);
 
-    logWarn("[MP-V2]", "Token expirado al crear pago", { medicoId, tipo, recursoId: id });
-
+  if (!token.ok) {
+    logWarn("[MP-V2]", "Sin token de cobro utilizable", {
+      medicoId,
+      tipo,
+      recursoId: id,
+      motivo: token.motivo,
+    });
+    // Un problema nuestro (cripto/config) no es "el médico no cobra".
+    const esNuestro = token.motivo === "config" || token.motivo === "cripto";
     return NextResponse.json(
-      { error: "El médico no tiene cobros habilitados." },
-      { status: 422 }
+      esNuestro
+        ? { error: "Error interno de configuración de cobros." }
+        : { error: "El médico no tiene cobros habilitados." },
+      { status: esNuestro ? 500 : 422 }
     );
   }
 
-  // Always use the seller's OAuth token — in both production and sandbox.
-  // The OAuth callback now omits test_token:true, so the seller's token
-  // authenticates as the actual seller (test or production), not the app owner.
-  let accessToken: string;
-
-  try {
-    accessToken = decrypt(mpAccount.access_token_encrypted);
-  } catch {
-    logError("[MP-V2]", "Error desencriptando token", { medicoId });
-    return NextResponse.json(
-      { error: "Error interno de configuración de cobros." },
-      { status: 500 }
-    );
-  }
+  const accessToken = token.accessToken;
 
   const comisionPct = await getComisionForMedico(medicoId);
   const marketplaceFee = Math.round(monto * (comisionPct / 100) * 100) / 100;

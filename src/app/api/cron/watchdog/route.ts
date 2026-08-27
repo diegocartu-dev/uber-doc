@@ -44,6 +44,7 @@ const ESPERADOS: Record<string, number> = {
   "liberar-reservas": 10,
   "recuperar-registros": 1440,
   "verificar-cuentas-mp": 1440,
+  "renovar-tokens-mp": 360,
   "documentos-sin-sello": 60,
   // Corre en los dos deploys (vercel.json es uno solo): en el B2C responde
   // "no aplica" en la primera línea, pero LATE igual — así que el watchdog lo

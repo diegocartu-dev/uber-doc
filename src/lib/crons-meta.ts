@@ -172,6 +172,17 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "una vez por día a las 10:00",
     autoRecupera: true,
   },
+  "renovar-tokens-mp": {
+    nombre: "Renovación de los tokens de cobro",
+    queHace:
+      "renueva contra Mercado Pago el permiso de cobro de cada médico antes de que venza (vencen solos y hasta ahora nada los renovaba)",
+    impacto:
+      "los permisos empiezan a vencer sin que nadie lo note: el médico sigue figurando disponible y aceptando consultas, y el pago falla recién cuando el paciente aprieta Pagar",
+    cadencia: "cada 6 horas",
+    autoRecupera: false,
+    accion:
+      "Si no corre por más de una semana, revisar en el panel qué médicos tienen la cuenta de cobros vencida y pedirles que reconecten Mercado Pago.",
+  },
   "verificar-cuentas-mp": {
     nombre: "Chequeo del país de las cuentas de cobro",
     queHace:

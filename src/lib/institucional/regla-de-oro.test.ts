@@ -15,7 +15,7 @@
 // sobre plata real.
 //
 // Cubre los cuatro puntos del gate:
-//   (a) los 5 crons de Capa C siguen su camino B2C;
+//   (a) los 6 crons de Capa C siguen su camino B2C;
 //   (b) resolver-vencidas y cancelaciones toman la rama de refund;
 //   (c) el callback NO consulta operadores (contador de llamadas a la DB);
 //   (d) el middleware no evalúa la lista de rutas bloqueadas.
@@ -71,8 +71,8 @@ beforeEach(() => {
 // FLAG APAGADO — el B2C, idéntico
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("(a) los 5 crons de Capa C siguen su camino B2C", () => {
-  assert.equal(CRONS_CAPA_C.length, 5);
+test("(a) los 6 crons de Capa C siguen su camino B2C", () => {
+  assert.equal(CRONS_CAPA_C.length, 6);
   for (const key of CRONS_CAPA_C) {
     assert.equal(cortarSiInstitucional(key), null, `${key} NO puede cortar en B2C`);
   }
@@ -231,7 +231,7 @@ test("cualquier valor que no sea exactamente 'true' sigue siendo B2C", () => {
 // FLAG PRENDIDO — sin esto, borrar los gates también pasaría los tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("prendido: los 5 crons cortan con la MISMA respuesta de siempre", async () => {
+test("prendido: los 6 crons cortan con la MISMA respuesta de siempre", async () => {
   process.env.INSTITUCIONAL = "true";
   for (const key of CRONS_CAPA_C) {
     const res = cortarSiInstitucional(key);
