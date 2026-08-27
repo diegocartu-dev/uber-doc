@@ -46,6 +46,8 @@ interface Medico {
   mpConectado?: boolean;
   /** El permiso de cobro venció: tiene cuenta conectada pero HOY no puede cobrar. */
   mpVencido?: boolean;
+  /** No hay cuenta de cobros conectada (o el profesional revocó la autorización). */
+  mpSinCuenta?: boolean;
   mpExpiraAt?: string | null;
   mpSiteId?: string | null;
   mpSiteVerificadoAt?: string | null;
@@ -755,6 +757,18 @@ function MedicoRow({
             {/* Permiso de cobro vencido. Va ANTES del chip de país porque es más
                 urgente y porque sin permiso vigente el país ya no importa: no
                 puede cobrar de ninguna manera. */}
+            {/* Aprobado y SIN cuenta de cobros. No puede cobrar igual que el
+                vencido, y en la fila no se veía nada: el chip de arriba solo
+                cubría el permiso vencido, así que un profesional que nunca
+                conectó Mercado Pago se leía como si estuviera bien. */}
+            {m.mpSinCuenta && m.estado_registro === "aprobado" && (
+              <span
+                title="No tiene cuenta de Mercado Pago conectada. Puede figurar disponible y aceptar consultas, pero ningún paciente va a poder pagarle."
+                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
+              >
+                <CreditCard size={11} /> Sin cuenta de cobros — no puede cobrar
+              </span>
+            )}
             {m.mpVencido && (
               <span
                 title="El permiso que Mercado Pago nos dio para cobrar en su nombre venció. Puede aceptar consultas, pero el pago le va a fallar al paciente al final del flujo."

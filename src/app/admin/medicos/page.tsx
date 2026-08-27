@@ -59,6 +59,7 @@ export default async function AdminMedicosPage() {
       ...m,
       mpConectado: cobros === "conectado",
       mpVencido: cobros === "expirado",
+      mpSinCuenta: cobros === "no_conectado",
       mpExpiraAt: cuenta?.expires_at ?? null,
       mpSiteId: cuenta?.site_id ?? null,
       mpSiteVerificadoAt: cuenta?.site_verificado_at ?? null,
