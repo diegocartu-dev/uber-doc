@@ -183,9 +183,10 @@ API"**. No dice que le llegó al celular del profesional, ni que lo leyó. El en
 no manda `StatusCallback` y no hay webhook de Twilio, así que el estado real de
 entrega nunca entró a la base.
 
-Esto pesa sobre el plazo de 10 minutos de la CI: **se fijó sin haber medido nunca
-si el aviso llega a tiempo.** Antes de discutir si los profesionales responden
-rápido hay que saber en qué minuto les llega el mensaje.
+Esto pesa sobre el plazo de 10 minutos de la CI, que se fijó sin haber medido
+nunca si el aviso llega a tiempo. **Medido el 27/08: llega y se entrega en el
+minuto cero, y el profesional acepta.** O sea que el plazo no era el freno — pero
+eso se supo preguntándole a Twilio, no mirando nuestra base, que sigue sin saberlo.
 
 Se guarda el `twilio_sid`, así que el pasado es recuperable preguntándole a
 Twilio: `scripts/verify-avisos-whatsapp.ts`. Registrarlo hacia adelante necesita

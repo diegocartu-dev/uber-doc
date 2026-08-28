@@ -196,17 +196,31 @@ async function main() {
   console.log("   Si 'disponibles_ahora' es 0, ningún paciente puede ni pedir: el freno es la oferta.");
 
   console.log("\n   ESCALÓN DONDE MUERE CADA PEDIDO (últimos 7 días)");
+  // Se nombra el motivo REGISTRADO (`resolucion_motivo`), no uno deducido.
+  //
+  // La versión anterior de este bucket metía en "murió antes de pagar (mirá MP)"
+  // todo lo que no fuera atendido, así que un paciente que se retiró por su
+  // cuenta aparecía como una falla de cobros — y mandaba a auditar Mercado Pago
+  // sin ningún motivo. Lo mismo al revés: un retiro del paciente ANTES de que
+  // nadie aceptara se contaba como "nadie la aceptó", inflando la falla de
+  // oferta con ruido normal. Los dos casos aparecieron el 27/08 en producción.
   tabla(
     await q(
       token,
       `select case
-                when aceptada_at is null and estado = 'cancelada'
-                  then '2 · nadie la aceptó (plazo de 10 min)'
+                when estado in ('en_curso','completada')
+                  then '5 · se atendió'
+                when resolucion_motivo = 'sin_respuesta_plazo'
+                  then '1 · NADIE la aceptó — falla de OFERTA'
+                when resolucion_motivo in ('retiro_paciente','cambio_profesional')
+                  then '2 · el paciente se retiró — ruido normal'
+                when resolucion_motivo = 'cancelo_profesional'
+                  then '3 · el profesional canceló'
+                when resolucion_motivo = 'cancelacion_admin'
+                  then '3b · cancelada desde el panel'
                 when aceptada_at is null
-                  then '1 · todavía esperando que alguien acepte'
-                when estado in ('en_curso','completada') or mp_status = 'approved'
-                  then '4 · se pagó y se atendió'
-                else '3 · la aceptaron y murió antes de pagar (acá miraría MP)'
+                  then '0 · todavía esperando que alguien acepte'
+                else '4 · terminó sin registro del motivo (acá SÍ miraría cobros)'
               end as escalon,
               count(*)::int as cantidad
          from consultas
@@ -214,6 +228,7 @@ async function main() {
         group by 1 order by 1`
     )
   );
+  console.log("   Las filas anteriores al 19/08/2026 no tienen motivo registrado: caen en el 4.");
 
   console.log("\n   DETALLE CRUDO, SIN AGRUPAR POR MÍ (por si mi bucketing miente)");
   tabla(
