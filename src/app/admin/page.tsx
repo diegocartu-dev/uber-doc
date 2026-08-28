@@ -7,30 +7,18 @@ import DashboardAdminClient from "./DashboardAdminClient";
 import MobileControlCenter from "./MobileControlCenter";
 import { setsDeTest, esTest } from "@/lib/insights/filtro-test";
 import { soloActividadReal } from "@/lib/insights/reservas";
+import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
 
 function isMobileUA(ua: string): boolean {
   return /Mobile|Android|iPhone|iPad/i.test(ua);
 }
 
-function hoyAR() {
-  const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${ar.getFullYear()}-${pad(ar.getMonth() + 1)}-${pad(ar.getDate())}`;
-}
-
-function hace7dias() {
-  const d = new Date();
-  d.setDate(d.getDate() - 6);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function en7dias() {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+// El día del tablero es el día ARGENTINO, y sale de lib/insights/fechas — la
+// misma fuente que usan /insights y el Historial de Consultas. Antes este
+// archivo tenía sus propios helpers: `hoyAR()` daba bien la fecha AR, pero se
+// comparaba contra `created_at` (timestamptz) tal cual, y Postgres lee
+// "2026-08-28" como 00:00 UTC = 21:00 ART del día ANTERIOR. Resultado: todo lo
+// que pasaba entre las 21 y las 24 hs contaba como "mañana".
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -47,8 +35,8 @@ export default async function AdminDashboardPage({
   }
 
   const admin = createAdminClient();
-  const hoy = hoyAR();
-  const desde7 = hace7dias();
+  const hoy = fechaAR();
+  const desde7 = fechaAR(6);
 
   const [
     sets,
@@ -71,20 +59,20 @@ export default async function AdminDashboardPage({
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("es_cuenta_test", false),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false),
     admin.from("pacientes").select("id", { count: "exact", head: true }).eq("es_cuenta_test", false),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id").gte("created_at", hoy),
+    admin.from("consultas").select("id, estado, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hoy)),
     admin.from("turnos").select("id, estado, medico_id, paciente_id, reservado_hasta, mp_status").eq("fecha", hoy),
     admin.from("consultas").select("id, estado, medico_id, paciente_id").in("estado", ["aceptada", "pagada", "en_curso"]),
     admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("estado", "en_curso"),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
     admin.from("alertas_admin").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
-    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", desde7).limit(5000),
+    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", medianocheARenUTC(desde7)).limit(5000),
     // Chart: excluir slots vacíos (no son "consultas") → alinea el chart con "Consultas
     // hoy" y baja el volumen para que el .limit() no trunque en silencio (Roberto #224).
     admin.from("turnos").select("fecha, estado, medico_id, paciente_id, reservado_hasta, mp_status").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
-    admin.from("turnos").select("medico_id").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", en7dias()),
+    admin.from("turnos").select("medico_id").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", fechaAR(-7)),
     // Reembolsos pendientes: misma cola que /admin/reembolsos (no resueltos)
     admin.from("refunds_pendientes").select("id", { count: "exact", head: true }).neq("estado", "resuelto"),
   ]);
@@ -158,12 +146,12 @@ export default async function AdminDashboardPage({
 
   const diasSemana: { fecha: string; consultas: number; completadas: number }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    const fecha = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const fecha = fechaAR(i);
 
-    const consDelDia = (consultasSemana ?? []).filter((c) => c.created_at?.startsWith(fecha));
+    // `startsWith(fecha)` comparaba el prefijo UTC del timestamp: una consulta
+    // de las 21:04 ART se guarda como 00:04Z del día siguiente y caía en la
+    // barra equivocada. Bucketear por su fecha argentina.
+    const consDelDia = (consultasSemana ?? []).filter((c) => c.created_at && fechaARdeISO(c.created_at) === fecha);
     const turnosDelDia = (turnosSemana ?? []).filter((t) => t.fecha === fecha);
     const total = consDelDia.length + turnosDelDia.length;
     const completadas = consDelDia.filter((c) => c.estado === "completada").length +
