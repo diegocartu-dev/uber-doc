@@ -211,12 +211,24 @@ export default function PerfilClient({
           }),
         });
 
+        const data = await res.json().catch(() => ({}));
+
         if (!res.ok) {
-          const data = await res.json();
           setToast({ msg: data.error || "Error al guardar", type: "error" });
           setSaving(false);
           return;
         }
+
+        // El server normaliza el celular a E.164 (+549…). Sin esto el input
+        // seguía mostrando lo tipeado, `camposDirty` lo comparaba contra el valor
+        // ya normalizado y daba dirty PARA SIEMPRE: el botón Guardar no se
+        // apagaba nunca y parecía que el cambio no había entrado. Se guardaba
+        // bien; lo que fallaba era la confirmación.
+        const g = (data?.guardado ?? {}) as Record<string, string | null>;
+        if ("celular_personal" in g) setCelularPersonal(g.celular_personal ?? "");
+        if ("telefono" in g) setTelefono(g.telefono ?? "");
+        if ("email_personal" in g) setEmailPersonal(g.email_personal ?? "");
+        if ("domicilio_consultorio" in g) setDomicilio(g.domicilio_consultorio ?? "");
       }
 
       // Un fallo de áreas ya no descarta el resto: se avisa la verdad parcial en
@@ -434,7 +446,11 @@ export default function PerfilClient({
                 type="tel"
                 value={celularPersonal}
                 onChange={(e) => setCelularPersonal(e.target.value)}
-                placeholder="11-2345-6789"
+                /* Un placeholder con forma de teléfono se lee como un dato cargado.
+                   Caso real (26/08): un profesional con el campo vacío escribió a
+                   soporte diciendo que le "figuraba un teléfono de Bs As, 011" —
+                   era este texto en gris. Ahora dice qué hay que escribir. */
+                placeholder="Código de área + número, sin 0 ni 15"
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
               />
             </div>

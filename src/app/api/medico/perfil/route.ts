@@ -96,7 +96,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true });
+    // Se devuelve lo que quedó guardado (el celular ya normalizado a E.164). El
+    // formulario se sincroniza con esto: si sigue mostrando lo que se tipeó, el
+    // botón Guardar nunca se apaga y parece que no guardó nunca. Ver PerfilClient.
+    return NextResponse.json({ ok: true, guardado: updates });
   } catch {
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
