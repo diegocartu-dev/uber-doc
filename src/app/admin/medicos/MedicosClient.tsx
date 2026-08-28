@@ -87,7 +87,15 @@ export default function MedicosClient({
   const [search, setSearch] = useState("");
   const [procesando, setProcesando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<{ id: string; accion: string } | null>(null);
-  const [panelMedico, setPanelMedico] = useState<Medico | null>(null);
+  // Se guarda el ID, no una copia del médico.
+  //
+  // Con una copia, la ficha quedaba congelada en el momento de abrirla: cualquier
+  // acción que refrescara los datos (corregir el contacto, re-validar REFEPS)
+  // grababa bien en la base y la ficha seguía mostrando el valor viejo. Se veía
+  // igual que si no hubiera funcionado. Derivándolo del listado, la ficha
+  // siempre muestra lo que hay.
+  const [panelMedicoId, setPanelMedicoId] = useState<string | null>(null);
+  const panelMedico = medicos.find((m) => m.id === panelMedicoId) ?? null;
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
@@ -167,6 +175,17 @@ export default function MedicosClient({
           ? { ...m, refeps_validado: validado, refeps_data: data, ...(jurisdicciones?.length ? { jurisdicciones } : {}) }
           : m
       )
+    );
+  }
+
+  // `medicos` es un useState(initial): `router.refresh()` trae datos nuevos del
+  // servidor pero NO los mete acá, así que cada acción parchea el estado a mano
+  // (mismo patrón que `actualizarRefeps`). Sin esto, el contacto se guardaba
+  // bien en la base y la pantalla seguía mostrando el número viejo — se veía
+  // exactamente igual que si no hubiera funcionado.
+  function actualizarContacto(medicoId: string, celular: string | null, telefono: string | null) {
+    setMedicos((prev) =>
+      prev.map((m) => (m.id === medicoId ? { ...m, celular_personal: celular, telefono } : m))
     );
   }
 
@@ -303,7 +322,7 @@ export default function MedicosClient({
                 onAccion={(accion, motivo) => handleAccion(m.id, accion, motivo)}
                 onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
                 onCancelConfirm={() => setConfirmando(null)}
-                onVerPerfil={() => setPanelMedico(m)}
+                onVerPerfil={() => setPanelMedicoId(m.id)}
                 onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
               />
             ))
@@ -313,10 +332,10 @@ export default function MedicosClient({
       {/* Side panel */}
       <SidePanel
         open={!!panelMedico}
-        onClose={() => setPanelMedico(null)}
+        onClose={() => setPanelMedicoId(null)}
         title={panelMedico?.nombre_completo ?? ""}
       >
-        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} />}
+        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} onContactoActualizado={actualizarContacto} />}
       </SidePanel>
     </div>
   );
@@ -912,7 +931,13 @@ function MedicoRow({
  * está esperando. Hasta ahora la ficha ni siquiera lo mostraba, así que un
  * pedido de soporte por esto no se podía resolver desde acá.
  */
-function BloqueContacto({ medico }: { medico: Medico }) {
+function BloqueContacto({
+  medico,
+  onGuardado,
+}: {
+  medico: Medico;
+  onGuardado?: (id: string, celular: string | null, telefono: string | null) => void;
+}) {
   const router = useRouter();
   const [editando, setEditando] = useState(false);
   const [celular, setCelular] = useState(medico.celular_personal ?? "");
@@ -939,6 +964,13 @@ function BloqueContacto({ medico }: { medico: Medico }) {
       setError(typeof data.error === "string" ? data.error : "No se pudo guardar.");
       return;
     }
+    // Se avisa hacia arriba con lo que devolvió el server (ya normalizado), no
+    // con lo que se tipeó: el celular se guarda en formato E.164.
+    onGuardado?.(
+      medico.id,
+      (data.celular_personal as string | null) ?? null,
+      (data.telefono as string | null) ?? null
+    );
     setEditando(false);
     router.refresh();
   }
@@ -1005,7 +1037,15 @@ function BloqueContacto({ medico }: { medico: Medico }) {
   );
 }
 
-function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImpersonate: () => void }) {
+function MedicoDetalle({
+  medico: m,
+  onImpersonate,
+  onContactoActualizado,
+}: {
+  medico: Medico;
+  onImpersonate: () => void;
+  onContactoActualizado?: (id: string, celular: string | null, telefono: string | null) => void;
+}) {
   const [validando, setValidando] = useState(false);
   const [refepsResult, setRefepsResult] = useState<Record<string, unknown> | null>(m.refeps_data);
   const [refepsValidado, setRefepsValidado] = useState(m.refeps_validado);
@@ -1055,7 +1095,7 @@ function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImperso
           <Field label="Domicilio" value={m.domicilio} />
         </div>
       </div>
-      <BloqueContacto medico={m} />
+      <BloqueContacto medico={m} onGuardado={onContactoActualizado} />
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Matrícula</p>
         <div className="mt-3 space-y-2 text-sm">
