@@ -21,6 +21,10 @@ interface Medico {
   especialidad: string;
   foto_credencial_url: string | null;
   estado_registro: string;
+  /** Teléfono del consultorio (fijo). */
+  telefono?: string | null;
+  /** Celular personal: es el destino de los avisos por WhatsApp. */
+  celular_personal?: string | null;
   created_at: string;
   cuit: string | null;
   user_id: string;
@@ -900,6 +904,107 @@ function MedicoRow({
   );
 }
 
+/**
+ * Contacto del profesional, editable desde el panel.
+ *
+ * El celular NO es un dato de agenda: es el destino de los avisos por WhatsApp.
+ * Con el número mal cargado, el profesional no se entera de que un paciente lo
+ * está esperando. Hasta ahora la ficha ni siquiera lo mostraba, así que un
+ * pedido de soporte por esto no se podía resolver desde acá.
+ */
+function BloqueContacto({ medico }: { medico: Medico }) {
+  const router = useRouter();
+  const [editando, setEditando] = useState(false);
+  const [celular, setCelular] = useState(medico.celular_personal ?? "");
+  const [fijo, setFijo] = useState(medico.telefono ?? "");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    const res = await fetch("/api/admin/medicos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        medicoId: medico.id,
+        accion: "cambiar_contacto",
+        celular_personal: celular,
+        telefono: fijo,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setGuardando(false);
+    if (!res.ok) {
+      setError(typeof data.error === "string" ? data.error : "No se pudo guardar.");
+      return;
+    }
+    setEditando(false);
+    router.refresh();
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contacto</p>
+      {!editando ? (
+        <div className="mt-3 space-y-1 text-sm">
+          <p className="text-gray-600">
+            Celular (avisos WhatsApp):{" "}
+            <span className={medico.celular_personal ? "text-gray-900" : "text-[#D85A30]"}>
+              {medico.celular_personal || "sin cargar — no recibe avisos"}
+            </span>
+          </p>
+          <p className="text-gray-600">
+            Teléfono de consultorio: <span className="text-gray-900">{medico.telefono || "—"}</span>
+          </p>
+          <button
+            onClick={() => setEditando(true)}
+            className="mt-2 rounded-lg border border-[#378ADD] px-3 py-1.5 text-[13px] font-medium text-[#378ADD]"
+          >
+            Corregir
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <label className="block text-[13px] text-gray-600">
+            Celular (avisos WhatsApp)
+            <input
+              value={celular}
+              onChange={(e) => setCelular(e.target.value)}
+              placeholder="3794571779"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block text-[13px] text-gray-600">
+            Teléfono de consultorio
+            <input
+              value={fijo}
+              onChange={(e) => setFijo(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </label>
+          {error && <p className="text-[13px] text-[#E24B4A]">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={guardar}
+              disabled={guardando}
+              className="rounded-lg bg-[#378ADD] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : "Guardar"}
+            </button>
+            <button
+              onClick={() => { setEditando(false); setError(null); setCelular(medico.celular_personal ?? ""); setFijo(medico.telefono ?? ""); }}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-[13px] text-gray-600"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImpersonate: () => void }) {
   const [validando, setValidando] = useState(false);
   const [refepsResult, setRefepsResult] = useState<Record<string, unknown> | null>(m.refeps_data);
@@ -950,6 +1055,7 @@ function MedicoDetalle({ medico: m, onImpersonate }: { medico: Medico; onImperso
           <Field label="Domicilio" value={m.domicilio} />
         </div>
       </div>
+      <BloqueContacto medico={m} />
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Matrícula</p>
         <div className="mt-3 space-y-2 text-sm">

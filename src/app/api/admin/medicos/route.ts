@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizarTelefonoAR } from "@/lib/telefono";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
@@ -294,6 +295,71 @@ export async function PATCH(req: NextRequest) {
       });
     }
     return NextResponse.json({ ok: true, estado: "aprobado" });
+  }
+
+  // Corregir el contacto de un profesional desde el panel.
+  //
+  // POR QUÉ EXISTE: `celular_personal` es el destino de los avisos por WhatsApp.
+  // Un profesional con el número mal cargado no se entera de que un paciente lo
+  // está esperando. Hasta ahora el panel ni siquiera MOSTRABA el teléfono, así
+  // que un pedido de soporte no se podía resolver — solo mirar.
+  //
+  // El profesional además ya puede corregirlo solo desde su perfil; esto es la
+  // vía de soporte para cuando pide ayuda en vez de entrar.
+  if (accion === "cambiar_contacto") {
+    if (!adminUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+    const { celular_personal, telefono } = body;
+    if (celular_personal === undefined && telefono === undefined) {
+      return NextResponse.json({ error: "Nada para cambiar" }, { status: 400 });
+    }
+
+    const cambios: Record<string, string | null> = {};
+
+    if (celular_personal !== undefined) {
+      const crudo = typeof celular_personal === "string" ? celular_personal.trim() : "";
+      if (!crudo) {
+        cambios.celular_personal = null;
+      } else {
+        // Misma validación que usa el profesional en su perfil: un número que la
+        // normalización no resuelve se guardaría igual y el aviso moriría en
+        // silencio al enviarse.
+        const normalizado = normalizarTelefonoAR(crudo);
+        if (!normalizado) {
+          return NextResponse.json(
+            { error: "El celular tiene que ser un móvil argentino de 10 dígitos (código de área + número)." },
+            { status: 400 }
+          );
+        }
+        cambios.celular_personal = normalizado;
+      }
+    }
+
+    if (telefono !== undefined) {
+      cambios.telefono = (typeof telefono === "string" ? telefono.trim() : "") || null;
+    }
+
+    const { data: anterior } = await admin
+      .from("medicos")
+      .select("celular_personal, telefono")
+      .eq("id", medicoId)
+      .single();
+
+    const { error } = await admin.from("medicos").update(cambios).eq("id", medicoId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await logAdminAction({
+      adminUserId: adminUser.id,
+      accion: ADMIN_ACTIONS.CAMBIAR_CONTACTO_MEDICO,
+      recursoTipo: "medico",
+      recursoId: medicoId,
+      payloadAnterior: { celular_personal: anterior?.celular_personal, telefono: anterior?.telefono },
+      payloadNuevo: cambios,
+      motivo: motivo || null,
+    });
+
+    return NextResponse.json({ ok: true, ...cambios });
   }
 
   if (accion === "cambiar_categoria") {
