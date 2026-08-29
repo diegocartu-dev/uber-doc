@@ -31,6 +31,7 @@ import BotonPush from "@/components/BotonPush";
 import PresenciaTracker from "@/components/PresenciaTracker";
 import ModalPushMedico from "./ModalPushMedico";
 import { getFlag } from "@/lib/feature-flags";
+import { medianocheARenUTC } from "@/lib/insights/fechas";
 import { esInstitucional } from "@/lib/instancia";
 import { isAdmin } from "@/lib/admin-auth";
 import { resolverRolInstitucional, rutaOperador } from "@/lib/auth/rol-institucional";
@@ -381,9 +382,13 @@ export default async function DashboardPage({
       }
 
       // Completadas hoy (consultas + turnos)
+      // `created_at` es timestamptz: comparar contra "2026-08-28" a secas lo lee
+      // como 00:00 UTC = 21:00 ART del día ANTERIOR, así que una consulta de las
+      // 22 hs le aparecía al médico en el día siguiente — y su plata también.
+      // Los turnos van por `fecha`, que ya es una fecha argentina.
       const { data: compConsHoy } = await supabase
         .from("consultas").select("id, monto, comision_docto_pct")
-        .eq("medico_id", data.id).eq("estado", "completada").gte("created_at", hoy);
+        .eq("medico_id", data.id).eq("estado", "completada").gte("created_at", medianocheARenUTC(hoy));
       const { data: compTurnosHoy } = await supabase
         .from("turnos").select("id, monto, comision_docto_pct")
         .eq("medico_id", data.id).eq("estado", "completado").eq("fecha", hoy);

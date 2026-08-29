@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
 import { logDisponibilidad } from "@/lib/disponibilidad-log";
+import { medianocheARenUTC } from "@/lib/insights/fechas";
 
 export async function actualizarDisponibilidad(data: {
   disponible: boolean;
@@ -183,7 +184,9 @@ export async function fetchMetricasMedico(
   const { data: consultasCompData } = await supabase
     .from("consultas").select("monto, comision_docto_pct")
     .eq("medico_id", medicoId).eq("estado", "completada")
-    .gte("created_at", `${fechaDesde}T00:00:00`);
+    // Mismo corte por día argentino que page.tsx: sin zona, Postgres lee la
+    // fecha como UTC y arrastra las atenciones de 21 a 24 hs del día anterior.
+    .gte("created_at", medianocheARenUTC(fechaDesde));
 
   const turnosComp = turnosCompData?.length ?? 0;
   const consultasComp = consultasCompData?.length ?? 0;
