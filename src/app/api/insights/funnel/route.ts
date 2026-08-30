@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+import { clasificarAtencion } from "@/lib/consultas/clasificar";
 
 // ── Página "Demanda" (ex Funnel) — directiva Diego 28/07 ─────────────────────
 // "Deberíamos ver esto pero desagregado: qué buscaban, cuándo, y si estaba o no
@@ -40,9 +40,14 @@ export async function GET(req: NextRequest) {
     await Promise.all([
       admin.from("eventos_funnel").select("evento, paciente_id, metadata, created_at").in("evento", ["clinica_vista", "medico_elegido", "pago_creado", "pago_aprobado"]).gte("created_at", desdeUTC).order("created_at", { ascending: true }),
       admin.from("pacientes").select("id, user_id, nombre_completo, provincia, es_cuenta_test"),
-      admin.from("medicos").select("id, jurisdicciones, es_cuenta_test").eq("verificado", true),
+      admin.from("medicos").select("id, nombre_completo, jurisdicciones, es_cuenta_test, verificado"),
       admin.from("disponibilidad_log").select("medico_id, online, at").gte("at", desdeUTC).order("at", { ascending: true }),
-      admin.from("consultas").select("paciente_id, estado, created_at, aceptada_at, mp_status").gte("created_at", desdeUTC),
+      admin
+        .from("consultas")
+        .select(
+          "paciente_id, medico_id, estado, created_at, aceptada_at, mp_status, resuelta_por, resolucion_motivo, pago_id, sala_video_url, en_curso_at"
+        )
+        .gte("created_at", desdeUTC),
       setsDeTest(admin),
     ]);
 
@@ -57,7 +62,11 @@ export async function GET(req: NextRequest) {
   }
   const pacDe = (pid: string) => pacPorUser.get(pid) ?? pacPorId.get(pid);
 
-  const medicos = (medicosRaw ?? []).filter((m) => !soloReales || !m.es_cuenta_test);
+  // Los NOMBRES se necesitan de todos (incluso de un profesional hoy no
+  // verificado: la búsqueda vieja igual tiene que decir a quién eligió).
+  // El cálculo de OFERTA, en cambio, sigue contando solo a los verificados.
+  const nombreDeMedico = new Map((medicosRaw ?? []).map((m) => [m.id, m.nombre_completo ?? "—"]));
+  const medicos = (medicosRaw ?? []).filter((m) => m.verificado && (!soloReales || !m.es_cuenta_test));
   const medicosDeProvincia = (prov: string | null): number =>
     prov ? medicos.filter((m) => ((m.jurisdicciones as string[] | null) ?? []).includes(prov)).length : 0;
 
@@ -120,17 +129,31 @@ export async function GET(req: NextRequest) {
     arr.push({ evento: e.evento, tMs: Date.parse(e.created_at) });
     avancesPorPac.set(e.paciente_id, arr);
   }
+  // Cada pedido se clasifica con `clasificarAtencion` — la fuente de verdad de
+  // la escalera intento/consulta. Antes acá se leía `aceptada_at` a secas, y ese
+  // hito recién se registra desde el 20/08 (#430): de 77 consultas, 6 lo tienen
+  // y 51 más SÍ fueron aceptadas pero solo se sabe por el pago o la sala. Con el
+  // dato crudo, una consulta aceptada figuraba como "nadie la aceptó".
   const consultasPorPac = new Map<
     string,
-    { estado: string; tMs: number; aceptada: boolean; mpStatus: string | null }[]
+    { tMs: number; medicoId: string | null; mpStatus: string | null; clas: ReturnType<typeof clasificarAtencion> }[]
   >();
   for (const c of consultasRaw ?? []) {
     const arr = consultasPorPac.get(c.paciente_id) ?? [];
     arr.push({
-      estado: c.estado,
       tMs: Date.parse(c.created_at),
-      aceptada: Boolean(c.aceptada_at),
+      medicoId: (c.medico_id as string | null) ?? null,
       mpStatus: (c.mp_status as string | null) ?? null,
+      clas: clasificarAtencion({
+        estado: c.estado,
+        aceptada_at: c.aceptada_at,
+        resuelta_por: c.resuelta_por,
+        resolucion_motivo: c.resolucion_motivo,
+        pago_id: c.pago_id,
+        mp_status: c.mp_status,
+        sala_video_url: c.sala_video_url,
+        en_curso_at: c.en_curso_at,
+      }),
     });
     consultasPorPac.set(c.paciente_id, arr);
   }
@@ -145,17 +168,33 @@ export async function GET(req: NextRequest) {
     const avances = avancesPorPac.get(s.pacienteId) ?? [];
     const eligio = avances.some((a) => a.evento === "medico_elegido" && en(a.tMs));
     const pago = avances.some((a) => (a.evento === "pago_creado" || a.evento === "pago_aprobado") && en(a.tMs));
-    const cons = consultasPorPac.get(s.pacienteId) ?? [];
-    const seAtendio = cons.some((c) => c.estado === "completada" && en(c.tMs));
+    const cons = (consultasPorPac.get(s.pacienteId) ?? []).filter((c) => en(c.tMs));
+    const seAtendio = cons.some((c) => c.clas.desenlace === "atendida");
     // ACÁ HABÍA UNA LISTA DE ESTADOS A MANO QUE INCLUÍA `esperando` — o sea, el
     // pedido que NADIE aceptó y que nadie pagó se contaba como "pagó". Un fallo
     // de oferta entraba al tablero como plata cobrada. Se usa el helper que ya
     // es la fuente de verdad del pago (mira `mp_status`, no solo el estado).
-    const pagoConsulta =
-      pago || cons.some((c) => en(c.tMs) && estadoPagoConsulta(c.estado, c.mpStatus) !== "falta_pagar");
+    const pagoConsulta = pago || cons.some((c) => c.clas.fuePagada);
     // ¿Algún profesional se hizo cargo? Sin esto, "eligió y nadie lo atendió" y
     // "eligió y no pagó" son la misma fila, y son problemas opuestos.
-    const alguienAcepto = cons.some((c) => en(c.tMs) && c.aceptada);
+    const alguienAcepto = cons.some((c) => c.clas.fueAceptada);
+    // A QUIÉN eligió y qué hizo cada uno. Es el dato accionable: sin el nombre,
+    // "nadie lo aceptó" no sirve ni para reavisarle a alguien (pedido Diego).
+    const pedidos = cons.map((c) => ({
+      medico: c.medicoId ? nombreDeMedico.get(c.medicoId) ?? "—" : "—",
+      desenlace: c.clas.desenlace,
+      acepto: c.clas.fueAceptada,
+      // "hito" = el sistema registró la aceptación. "inferido" = se dedujo del
+      // pago o la sala. "no" = no hay rastro de que nadie la tomara — y en una
+      // fila anterior al 20/08 eso NO prueba que el profesional la haya ignorado.
+      certeza: c.clas.origenAceptacion,
+    }));
+    // Un pedido que el PACIENTE retiró no es una falla del profesional. Antes
+    // los dos casos caían en "nadie lo aceptó": con el nombre a la vista, eso
+    // sería acusar a alguien que no hizo nada.
+    const hayFallaDeOferta = pedidos.some((p) => p.desenlace === "sin_respuesta");
+    const soloRetiros =
+      pedidos.length > 0 && !hayFallaDeOferta && pedidos.every((p) => p.desenlace !== "en_progreso");
 
     let resultado: string;
     let matchHabia: boolean;
@@ -170,6 +209,11 @@ export async function GET(req: NextRequest) {
       matchHabia = true;
     } else if (pagoConsulta) {
       resultado = "pagó";
+      matchHabia = true;
+    } else if (eligio && !alguienAcepto && soloRetiros) {
+      // El paciente se fue por su cuenta antes de que nadie lo tomara. Ruido
+      // normal, no falla de oferta: hubo match, lo dejó él.
+      resultado = "eligió, el paciente se retiró";
       matchHabia = true;
     } else if (eligio && !alguienAcepto) {
       // El paciente eligió y del otro lado no hubo nadie: a los 10 minutos el
@@ -197,6 +241,7 @@ export async function GET(req: NextRequest) {
       medicosProvincia: medicosProv,
       ciOnline,
       exacto: !!s.snapshot,
+      pedidos,
       resultado,
       matchHabia,
     };
