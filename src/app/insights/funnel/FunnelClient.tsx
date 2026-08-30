@@ -38,6 +38,9 @@ const RESULTADO_COLOR: Record<string, string> = {
   "había oferta, no eligió": "#888780",
   "eligió, nadie lo aceptó": "#D85A30",
   "eligió, el paciente se retiró": "#888780",
+  "eligió turno, no reservó": "#888780",
+  "eligió, no llegó a pedir": "#888780",
+  "esperando que lo tomen": "#BA7517",
   "había médicos pero ninguno en línea": "#D85A30",
   "sin médicos para su provincia": "#E24B4A",
   "sin provincia cargada": "#888780",
@@ -197,6 +200,16 @@ export default function FunnelClient() {
                                     no lo aceptó{p.certeza === "no" ? " ?" : ""}
                                   </span>
                                 )}
+                                {p.desenlace === "no_reservo" && (
+                                  <span className="ml-1 text-white/35" title="Abrió su agenda de turnos y no reservó. En un turno no hay nada que aceptar: el paciente reserva y paga.">
+                                    no reservó el turno
+                                  </span>
+                                )}
+                                {p.desenlace === "no_pidio" && (
+                                  <span className="ml-1 text-white/35" title="Lo eligió y no llegó a mandar el pedido. Del otro lado nunca llegó nada.">
+                                    no llegó a pedirle
+                                  </span>
+                                )}
                                 {p.desenlace === "retirado" && (
                                   <span className="ml-1 text-white/35" title="El paciente retiró el pedido antes de que nadie lo tomara.">
                                     lo retiró el paciente
@@ -233,6 +246,7 @@ export default function FunnelClient() {
             * = médicos por provincia estimados con la oferta actual; desde el 28/07 cada búsqueda guarda la foto exacta.
             En la columna A quién eligió, <span className="text-[#D85A30]">no lo aceptó ?</span> significa que NO hay registro de aceptación pero tampoco prueba de lo contrario:
             el hito se guarda recién desde el 20/08. Sin el signo, el pedido cayó por el plazo de 10 minutos o quedó cerrado sin que nadie lo tomara.
+            Solo <span className="text-[#D85A30]">no lo aceptó</span> es imputable a un profesional: en un turno nadie acepta nada, y si el paciente no llegó a pedir, del otro lado nunca sonó el teléfono.
           </p>
         </>
       )}
