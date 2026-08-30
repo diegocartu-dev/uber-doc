@@ -4,6 +4,15 @@ import { verificarAdmin } from "@/lib/admin-auth";
 import { setsDeTest, esTest, leerSoloReales } from "@/lib/insights/filtro-test";
 import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
 import { clasificarAtencion } from "@/lib/consultas/clasificar";
+import { decidirResultado, type DesenlacePedido } from "@/lib/insights/resultado-busqueda";
+
+// Lo que la fila muestra en "A quién eligió".
+type PedidoFila = {
+  medico: string;
+  desenlace: DesenlacePedido;
+  acepto: boolean;
+  certeza: "hito" | "inferido" | "no";
+};
 
 // ── Página "Demanda" (ex Funnel) — directiva Diego 28/07 ─────────────────────
 // "Deberíamos ver esto pero desagregado: qué buscaban, cuándo, y si estaba o no
@@ -122,18 +131,31 @@ export async function GET(req: NextRequest) {
   }
 
   // Eventos de avance por paciente (para el resultado de cada búsqueda).
-  const avancesPorPac = new Map<string, { evento: string; tMs: number }[]>();
+  // Elegir un profesional para un TURNO no es lo mismo que pedirle una consulta
+  // inmediata: en el turno nadie acepta nada, el paciente reserva y paga. El
+  // evento siempre trae `modo` (ci | turno | lead) y a quién eligió, y sin
+  // leerlos esta pantalla trataba las tres cosas como un pedido de CI.
+  type Avance = { evento: string; tMs: number; modo: string | null; medicoId: string | null };
+  const avancesPorPac = new Map<string, Avance[]>();
   for (const e of eventos) {
     if (e.evento === "clinica_vista") continue;
+    const meta = (e.metadata ?? {}) as { modo?: string; medicoId?: string };
     const arr = avancesPorPac.get(e.paciente_id) ?? [];
-    arr.push({ evento: e.evento, tMs: Date.parse(e.created_at) });
+    arr.push({
+      evento: e.evento,
+      tMs: Date.parse(e.created_at),
+      modo: meta.modo ?? null,
+      // "sin-oferta" es el marcador del formulario de contacto en una provincia
+      // sin médicos: no es un profesional elegido.
+      medicoId: meta.medicoId && meta.medicoId !== "sin-oferta" ? meta.medicoId : null,
+    });
     avancesPorPac.set(e.paciente_id, arr);
   }
   // Cada pedido se clasifica con `clasificarAtencion` — la fuente de verdad de
   // la escalera intento/consulta. Antes acá se leía `aceptada_at` a secas, y ese
-  // hito recién se registra desde el 20/08 (#430): de 77 consultas, 6 lo tienen
-  // y 51 más SÍ fueron aceptadas pero solo se sabe por el pago o la sala. Con el
-  // dato crudo, una consulta aceptada figuraba como "nadie la aceptó".
+  // hito recién se registra desde el 20/08 (#430): la mayoría de las filas no lo
+  // tiene, y muchas SÍ fueron aceptadas pero eso solo se sabe por el pago o la
+  // sala. Con el dato crudo, una consulta aceptada figuraba como "nadie la aceptó".
   const consultasPorPac = new Map<
     string,
     { tMs: number; medicoId: string | null; mpStatus: string | null; clas: ReturnType<typeof clasificarAtencion> }[]
@@ -166,7 +188,8 @@ export async function GET(req: NextRequest) {
 
     const en = (tMs: number) => tMs >= s.t0 && tMs <= s.tFin + VENTANA_RESULTADO_MS;
     const avances = avancesPorPac.get(s.pacienteId) ?? [];
-    const eligio = avances.some((a) => a.evento === "medico_elegido" && en(a.tMs));
+    const elecciones = avances.filter((a) => a.evento === "medico_elegido" && en(a.tMs) && a.modo !== "lead");
+    const eligio = elecciones.length > 0;
     const pago = avances.some((a) => (a.evento === "pago_creado" || a.evento === "pago_aprobado") && en(a.tMs));
     const cons = (consultasPorPac.get(s.pacienteId) ?? []).filter((c) => en(c.tMs));
     const seAtendio = cons.some((c) => c.clas.desenlace === "atendida");
@@ -180,7 +203,7 @@ export async function GET(req: NextRequest) {
     const alguienAcepto = cons.some((c) => c.clas.fueAceptada);
     // A QUIÉN eligió y qué hizo cada uno. Es el dato accionable: sin el nombre,
     // "nadie lo aceptó" no sirve ni para reavisarle a alguien (pedido Diego).
-    const pedidos = cons.map((c) => ({
+    const pedidos: PedidoFila[] = cons.map((c) => ({
       medico: c.medicoId ? nombreDeMedico.get(c.medicoId) ?? "—" : "—",
       desenlace: c.clas.desenlace,
       acepto: c.clas.fueAceptada,
@@ -192,46 +215,35 @@ export async function GET(req: NextRequest) {
     // Un pedido que el PACIENTE retiró no es una falla del profesional. Antes
     // los dos casos caían en "nadie lo aceptó": con el nombre a la vista, eso
     // sería acusar a alguien que no hizo nada.
-    const hayFallaDeOferta = pedidos.some((p) => p.desenlace === "sin_respuesta");
-    const soloRetiros =
-      pedidos.length > 0 && !hayFallaDeOferta && pedidos.every((p) => p.desenlace !== "en_progreso");
-
-    let resultado: string;
-    let matchHabia: boolean;
-    if (!provincia) {
-      resultado = "sin provincia cargada";
-      matchHabia = medicos.length > 0;
-    } else if (medicosProv === 0) {
-      resultado = "sin médicos para su provincia";
-      matchHabia = false;
-    } else if (seAtendio) {
-      resultado = "se atendió";
-      matchHabia = true;
-    } else if (pagoConsulta) {
-      resultado = "pagó";
-      matchHabia = true;
-    } else if (eligio && !alguienAcepto && soloRetiros) {
-      // El paciente se fue por su cuenta antes de que nadie lo tomara. Ruido
-      // normal, no falla de oferta: hubo match, lo dejó él.
-      resultado = "eligió, el paciente se retiró";
-      matchHabia = true;
-    } else if (eligio && !alguienAcepto) {
-      // El paciente eligió y del otro lado no hubo nadie: a los 10 minutos el
-      // pedido se cancela solo (`PLAZO_SIN_ACEPTAR_MIN`). Antes esto caía en
-      // "eligió médico, no pagó", que se lee como un problema de cobros y manda
-      // a revisar Mercado Pago — cuando nunca se llegó a intentar un pago.
-      resultado = "eligió, nadie lo aceptó";
-      matchHabia = false;
-    } else if (eligio) {
-      resultado = "eligió médico, no pagó";
-      matchHabia = true;
-    } else if (ciOnline === 0) {
-      resultado = "había médicos pero ninguno en línea";
-      matchHabia = false;
-    } else {
-      resultado = "había oferta, no eligió";
-      matchHabia = true;
+    // Sin fila en `consultas` nadie llegó a pedirle nada al profesional: el
+    // paciente lo eligió y se fue antes de mandar el pedido (o, en turno, antes
+    // de reservar). El nombre igual tiene que aparecer, con el verbo correcto.
+    if (pedidos.length === 0) {
+      const vistos = new Set<string>();
+      for (const el of elecciones) {
+        if (!el.medicoId || vistos.has(el.medicoId)) continue;
+        vistos.add(el.medicoId);
+        pedidos.push({
+          medico: nombreDeMedico.get(el.medicoId) ?? "—",
+          desenlace: el.modo === "turno" ? "no_reservo" : "no_pidio",
+          acepto: false,
+          certeza: "no" as const,
+        });
+      }
     }
+    // La decisión vive en lib/insights/resultado-busqueda, con tests: desde que
+    // la fila nombra al profesional, cuál rama gana señala a una persona.
+    const { resultado, matchHabia } = decidirResultado({
+      provincia,
+      medicosProvincia: medicosProv,
+      ciOnline,
+      hayOfertaEnElPais: medicos.length > 0,
+      seAtendio,
+      pago: pagoConsulta,
+      eligio,
+      alguienAcepto,
+      desenlaces: pedidos.map((p) => p.desenlace),
+    });
 
     return {
       cuando: s.t0,
