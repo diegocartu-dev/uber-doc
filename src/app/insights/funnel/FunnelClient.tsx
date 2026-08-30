@@ -4,6 +4,13 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+interface Pedido {
+  medico: string;
+  desenlace: string;
+  acepto: boolean;
+  certeza: "hito" | "inferido" | "no";
+}
+
 interface Busqueda {
   cuando: number;
   paciente: string;
@@ -12,6 +19,7 @@ interface Busqueda {
   medicosProvincia: number;
   ciOnline: number;
   exacto: boolean;
+  pedidos: Pedido[];
   resultado: string;
   matchHabia: boolean;
 }
@@ -29,6 +37,7 @@ const RESULTADO_COLOR: Record<string, string> = {
   "eligió médico, no pagó": "#BA7517",
   "había oferta, no eligió": "#888780",
   "eligió, nadie lo aceptó": "#D85A30",
+  "eligió, el paciente se retiró": "#888780",
   "había médicos pero ninguno en línea": "#D85A30",
   "sin médicos para su provincia": "#E24B4A",
   "sin provincia cargada": "#888780",
@@ -141,13 +150,14 @@ export default function FunnelClient() {
                   <th className="px-3 py-3 font-medium">Provincia</th>
                   <th className="px-3 py-3 font-medium" title="Médicos habilitados para su provincia en ese momento">Méd. p/su prov.</th>
                   <th className="px-3 py-3 font-medium" title="De esos, cuántos estaban EN LÍNEA para consulta inmediata en ese instante">CI en línea</th>
+                  <th className="px-3 py-3 font-medium">A quién eligió</th>
                   <th className="px-3 py-3 font-medium">Qué pasó</th>
                 </tr>
               </thead>
               <tbody>
                 {data.busquedas.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-white/40">Sin búsquedas en el período.</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-white/40">Sin búsquedas en el período.</td>
                   </tr>
                 )}
                 {data.busquedas.map((b, i) => {
@@ -168,6 +178,44 @@ export default function FunnelClient() {
                         <span className={b.ciOnline > 0 ? "text-white/70" : "text-[#D85A30]"}>{b.ciOnline}</span>
                       </td>
                       <td className="px-3 py-3">
+                        {b.pedidos.length === 0 ? (
+                          <span className="text-white/25">—</span>
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {b.pedidos.map((p, j) => (
+                              <span key={j} className="whitespace-nowrap text-[12px] text-white/80">
+                                {p.medico}
+                                {p.desenlace === "sin_respuesta" && (
+                                  <span
+                                    className="ml-1 text-[#D85A30]"
+                                    title={
+                                      p.certeza === "no"
+                                        ? "No hay registro de que lo tomara. Antes del 20/08 el sistema no guardaba el hito de aceptación: no alcanza como prueba."
+                                        : "No lo aceptó."
+                                    }
+                                  >
+                                    no lo aceptó{p.certeza === "no" ? " ?" : ""}
+                                  </span>
+                                )}
+                                {p.desenlace === "retirado" && (
+                                  <span className="ml-1 text-white/35" title="El paciente retiró el pedido antes de que nadie lo tomara.">
+                                    lo retiró el paciente
+                                  </span>
+                                )}
+                                {p.acepto && (
+                                  <span
+                                    className="ml-1 text-[#1D9E75]"
+                                    title={p.certeza === "inferido" ? "Aceptación deducida del pago o de la sala de video (fila anterior al registro del hito)." : "Aceptación registrada."}
+                                  >
+                                    aceptó{p.certeza === "inferido" ? "*" : ""}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
                         <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: c + "22", color: c }}>
                           {b.resultado}
                         </span>
@@ -183,6 +231,8 @@ export default function FunnelClient() {
             Una búsqueda = una visita a la clínica (entradas del mismo paciente con menos de 30 min de diferencia cuentan como una).
             "CI en línea" se reconstruye del registro histórico de disponibilidad al instante exacto de la búsqueda.
             * = médicos por provincia estimados con la oferta actual; desde el 28/07 cada búsqueda guarda la foto exacta.
+            En la columna A quién eligió, <span className="text-[#D85A30]">no lo aceptó ?</span> significa que NO hay registro de aceptación pero tampoco prueba de lo contrario:
+            el hito se guarda recién desde el 20/08. Sin el signo, el pedido cayó por el plazo de 10 minutos o quedó cerrado sin que nadie lo tomara.
           </p>
         </>
       )}
