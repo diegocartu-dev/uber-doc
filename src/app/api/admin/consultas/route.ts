@@ -16,7 +16,7 @@ function hoyAR() {
 // Medianoche ART en UTC (ART = UTC-3 fijo) — comparar timestamptz contra la
 // fecha a secas corta a las 21:00 del día anterior.
 const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
-const SLOTS = ["disponible", "bloqueado"];
+const SLOTS = ["disponible", "bloqueado", "bloqueado_sin_cobro"];
 
 // Las reservas ABANDONADAS (decisión Diego 06/08) no se muestran en ningún
 // reporte: el criterio, el mecanismo que las genera y por qué no se borran de la
@@ -165,9 +165,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (tab === "historial") {
-    // Historial lista SOLO consultas inmediatas (tabla `consultas`): no trae
-    // turnos, así que acá no hay reservas abandonadas que esconder. Si algún día
-    // se le suman turnos, filtrarlos con `sinReservasAbandonadas`.
+    // El Historial listaba SOLO consultas inmediatas. La tabla `turnos` quedaba
+    // entera afuera: un turno atendido, o uno al que el profesional no se
+    // presentó y se reembolsó, NO figuraba en ningún lado de esta pantalla.
+    // Diego lo leyó como "no hay consultas" y como una falla del sistema — y en
+    // términos de reporte lo era: la atención existió y la pantalla decía que no.
+    // Los turnos se filtran con `sinReservasAbandonadas` (lib/insights/reservas):
+    // un `reservado_pendiente` con la retención vencida y sin pago es un paciente
+    // que se arrepintió, no una atención.
     const desde = req.nextUrl.searchParams.get("desde");
     const hasta = req.nextUrl.searchParams.get("hasta");
 
@@ -187,26 +192,59 @@ export async function GET(req: NextRequest) {
       query = query.lt("created_at", medianocheARenUTC(sig.toISOString().slice(0, 10)));
     }
 
-    const { data: consultas } = await query;
+    // Los turnos se acotan por su columna `fecha`, que YA es una fecha
+    // argentina: no lleva el corrimiento de medianoche que sí necesita
+    // `created_at` (timestamptz) arriba.
+    let qTurnos = admin
+      .from("turnos")
+      .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, reservado_hasta, mp_status")
+      .not("paciente_id", "is", null)
+      .not("estado", "in", `(${SLOTS.join(",")})`)
+      .order("fecha", { ascending: false })
+      .limit(200);
+    if (desde) qTurnos = qTurnos.gte("fecha", desde);
+    if (hasta) qTurnos = qTurnos.lte("fecha", hasta);
 
-    const medicoIds = [...new Set((consultas ?? []).map((c) => c.medico_id))];
-    const pacienteIds = [...new Set((consultas ?? []).map((c) => c.paciente_id))];
+    const [{ data: consultas }, { data: turnosRaw }] = await Promise.all([query, qTurnos]);
+    const turnos = sinReservasAbandonadas(turnosRaw ?? []);
+
+    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnos.map((t) => t.medico_id)])];
+    // `consultas.paciente_id` es el user_id; `turnos.paciente_id` es pacientes.id.
+    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnos.map((t) => t.paciente_id)])].filter(Boolean);
 
     const [{ data: medicos }, { data: pacientes }] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
-      pacienteIds.length > 0 ? admin.from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacienteIds) : { data: [] },
+      pacienteIds.length > 0
+        ? admin.from("pacientes").select("id, user_id, nombre_completo, es_cuenta_test").or(`user_id.in.(${pacienteIds.join(",")}),id.in.(${pacienteIds.join(",")})`)
+        : { data: [] },
     ]);
 
     const testIds3 = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
-    const medMap3 = new Map((medicos ?? []).filter((m) => !m.es_cuenta_test).map((m) => [m.id, m.nombre_completo]));
-    const pacMap = new Map((pacientes ?? []).map((p) => [p.user_id, p.nombre_completo]));
+    const medMap3 = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
+    const pacPorUser3 = new Map((pacientes ?? []).map((p) => [p.user_id, p]));
+    const pacPorId3 = new Map((pacientes ?? []).map((p) => [p.id, p]));
+    const pacDe3 = (pid: string | null) => (pid ? pacPorUser3.get(pid) ?? pacPorId3.get(pid) : undefined);
+    const real = (medicoId: string, pacienteId: string | null) =>
+      !testIds3.has(medicoId) && !pacDe3(pacienteId)?.es_cuenta_test;
 
-    const items = (consultas ?? []).filter((c) => !testIds3.has(c.medico_id)).map((c) => ({
-      id: c.id, tipo: "CI" as const, estado: c.estado,
-      medico: medMap3.get(c.medico_id) ?? "—",
-      paciente: pacMap.get(c.paciente_id) ?? "Paciente",
-      inicio: c.created_at, especialidad: c.especialidad,
-    }));
+    const items = [
+      ...(consultas ?? []).filter((c) => real(c.medico_id, c.paciente_id)).map((c) => ({
+        id: c.id, tipo: "CI" as const, canal: "ci", estado: c.estado,
+        medico: medMap3.get(c.medico_id) ?? "—",
+        paciente: pacDe3(c.paciente_id)?.nombre_completo ?? "Paciente",
+        inicio: c.created_at, especialidad: c.especialidad,
+      })),
+      ...turnos.filter((t) => real(t.medico_id, t.paciente_id)).map((t) => ({
+        id: t.id, tipo: "Turno" as const,
+        canal: (t.canal_origen as string) === "consultorio_privado" ? "consultorio" : "clinica",
+        estado: t.estado,
+        medico: medMap3.get(t.medico_id) ?? "—",
+        paciente: pacDe3(t.paciente_id)?.nombre_completo ?? "Paciente",
+        // El "inicio" de un turno es la hora de la cita, no cuándo se reservó.
+        inicio: `${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`,
+        especialidad: "",
+      })),
+    ].sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
 
     return NextResponse.json({ items });
   }
