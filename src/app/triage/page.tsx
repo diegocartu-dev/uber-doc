@@ -9,6 +9,7 @@ import type { EncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import DoctoLogo from "@/components/DoctoLogo";
 import LoadingButton from "@/components/ui/LoadingButton";
 import TerminosContent from "@/app/terminos/TerminosContent";
+import { trackFunnel } from "@/lib/funnel-client";
 
 const SINTOMAS_EMERGENCIA = [
   "Dolor de pecho",
@@ -108,6 +109,15 @@ function TriageContent() {
     }
   }, []);
 
+  // El recorrido entre "elegí un profesional" y "existe el pedido" no dejaba
+  // ningún rastro: quien se iba en el muro de términos y quien se iba en el
+  // formulario eran indistinguibles, y los dos se leían como "eligió y no
+  // pidió". Cada paso deja su marca; el alta sigue siendo la fila en `consultas`.
+  useEffect(() => {
+    trackFunnel("triage_paso", { paso: "terminos", medicoId, canal: canalOrigen });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function toggleSintoma(s: string) {
     setSintomas((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
@@ -127,9 +137,15 @@ function TriageContent() {
       setError("Indicá hace cuánto tiempo tenés los síntomas.");
       return;
     }
-    if (tieneEmergencia) return;
+    if (tieneEmergencia) {
+      // Freno correcto (Docto no es urgencias), pero hasta ahora invisible: el
+      // paciente desaparecía del embudo sin motivo registrado.
+      trackFunnel("triage_bloqueado", { motivo: "emergencia", sintomas, medicoId });
+      return;
+    }
 
     setError(null);
+    trackFunnel("triage_paso", { paso: "confirmacion", medicoId, canal: canalOrigen });
     setMostrarConfirmacion(true);
   }
 
@@ -141,14 +157,19 @@ function TriageContent() {
   function procesarRespuesta(result: Awaited<ReturnType<typeof crearConsulta>>) {
     if (!result) return;
     if ("encuentroPagado" in result && result.encuentroPagado) {
+      trackFunnel("triage_bloqueado", { motivo: "encuentro_pagado", medicoId });
       setEncuentroPagado(result.encuentroPagado);
       return;
     }
     if ("cambioDeProfesional" in result && result.cambioDeProfesional) {
+      trackFunnel("triage_bloqueado", { motivo: "cambio_profesional", medicoId });
       setCambioPendiente(result.cambioDeProfesional);
       return;
     }
     if ("error" in result && result.error) {
+      // El motivo va tal cual lo vio el paciente: si un pedido muere acá, el
+      // cartel que leyó es el dato, no una categoría inventada después.
+      trackFunnel("triage_bloqueado", { motivo: "error", detalle: result.error, medicoId });
       setError(result.error);
     }
   }
@@ -293,7 +314,10 @@ function TriageContent() {
 
             <button
               disabled={!checkTerminos || !checkMayorEdad}
-              onClick={() => setPaso(2)}
+              onClick={() => {
+                trackFunnel("triage_paso", { paso: "formulario", medicoId, canal: canalOrigen });
+                setPaso(2);
+              }}
               className="mt-6 w-full rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.97] transition-all duration-100"
               style={{ backgroundColor: "var(--color-primary)" }}
             >

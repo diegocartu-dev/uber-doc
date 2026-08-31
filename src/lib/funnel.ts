@@ -18,7 +18,17 @@ type EventoFunnel =
   | "pago_chargeback"
   // Recorrido del paciente (funnel temprano)
   | "clinica_vista"
-  | "medico_elegido";
+  | "medico_elegido"
+  // El TRIAGE era el punto ciego del recorrido: entre elegir profesional y
+  // que exista el pedido hay un muro de términos (con scroll obligatorio y dos
+  // casillas) y recién después el formulario. Sin estos dos eventos, un
+  // paciente que se caía ahí no dejaba ningún rastro y la única lectura posible
+  // era "eligió y no pidió", sin saber DÓNDE se fue.
+  | "triage_paso"
+  | "triage_bloqueado"
+  // Registro del médico (Fase B). Ya se emitían; faltaban en este tipo.
+  | "registro_medico_paso"
+  | "registro_medico_error";
 
 export async function trackEvent(params: {
   evento: EventoFunnel;
