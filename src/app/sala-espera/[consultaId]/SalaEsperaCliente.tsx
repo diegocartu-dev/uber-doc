@@ -37,7 +37,12 @@ type Props = {
 
 // A los 10 minutos sin aceptación se le dice al paciente la verdad (caso de un
 // paciente 04/08: esperó más de una hora sin ninguna señal ni forma de salir).
-const MINUTOS_AVISO_DEMORA = 10;
+// El plazo REAL de la solicitud sin aceptar. Tiene que coincidir con
+// PLAZO_SIN_ACEPTAR_MIN (src/lib/consultas/sin-respuesta.ts, con test que lo
+// fija en 10): es el número que esta pantalla le PROMETE al paciente. No se
+// importa de ahí porque ese módulo arrastra dependencias de servidor y esto es
+// un client component.
+const MINUTOS_PLAZO_ACEPTAR = 10;
 
 // Cuánto le creemos al `?pago=pendiente` de Mercado Pago mientras el webhook no
 // escribe `mp_status`. Acotado a propósito: si MP no confirma nada en ese rato,
@@ -63,7 +68,8 @@ export default function SalaEsperaCliente({
   especialidad,
   posicion: posicionInicial,
   tiempoEstimado: tiempoInicial,
-  createdAt,
+  // `createdAt` sigue en Props (lo pasa el server) pero ya no se destructura:
+  // alimentaba el reloj del banner del minuto 10, que murió con el contrato fijo.
   resultadoPago = null,
   isDev = false,
 }: Props) {
@@ -80,7 +86,6 @@ export default function SalaEsperaCliente({
   const [pagando, setPagando] = useState(false);
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
-  const [minutosEspera, setMinutosEspera] = useState(0);
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
@@ -161,15 +166,6 @@ export default function SalaEsperaCliente({
     return () => clearInterval(interval);
   }, [poll]);
 
-  // Minutos desde la solicitud — para avisar la demora sin aceptación.
-  useEffect(() => {
-    if (!createdAt) return;
-    const calcular = () =>
-      setMinutosEspera(Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000)));
-    calcular();
-    const interval = setInterval(calcular, 30000);
-    return () => clearInterval(interval);
-  }, [createdAt]);
 
   async function cancelarSolicitud() {
     setCancelando(true);
@@ -552,21 +548,29 @@ export default function SalaEsperaCliente({
       {/* Estudios del paciente — solo después de que el médico acepte */}
       {medicoAcepto && <EstudiosPaciente consultaId={consultaId} />}
 
-      {/* Aviso de demora: a los 10 min sin aceptación, decir la verdad y dar salida */}
-      {!medicoAcepto && minutosEspera >= MINUTOS_AVISO_DEMORA && (
-        <div
-          className="mt-6 rounded-xl p-4 text-left text-sm"
-          style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
-        >
-          <p className="font-semibold">{nombreMedico} todavía no aceptó tu consulta.</p>
-          <p className="mt-1">
-            Podés seguir esperando, cancelar sin cargo, o{" "}
-            <a href="/clinica" className="font-semibold underline">
-              buscar otro médico disponible
-            </a>
-            . No se te cobra nada hasta que acepten tu consulta y pagues.
-          </p>
-        </div>
+      {/* El CONTRATO de la espera, visible desde el minuto uno: la espera tiene
+          techo y el desenlace es conocido. Reemplaza al banner que aparecía al
+          minuto 10 — el MISMO minuto en que el cron cancela la solicitud
+          (PLAZO_SIN_ACEPTAR_MIN): el paciente esperaba a ciegas y el aviso
+          nacía muerto. Una espera con tope conocido se tolera; una sin tope
+          termina en mail a soporte (caso 30/08). */}
+      {!medicoAcepto && (
+        <p className="mt-6 text-center text-[13px] leading-relaxed" style={{ color: "#888780" }}>
+          Si {nombreMedico} no acepta tu consulta en {MINUTOS_PLAZO_ACEPTAR} minutos, la
+          cancelamos sin cargo y te ayudamos a elegir otro profesional. No se te
+          cobra nada hasta que acepten y pagues.
+        </p>
+      )}
+
+      {/* Mismo contrato para la etapa PAGA: si el profesional no inicia, el
+          plazo de 30 min (PLAZO_CI_MIN, resolver-vencidas) devuelve el 100%
+          solo. La paciente del 30/08 no lo sabía y escribió a soporte con el
+          reembolso ya hecho. */}
+      {medicoAcepto && !salaVideoUrl && (estado === "pagada" || estado === "en_curso") && (
+        <p className="mt-6 text-center text-[13px] leading-relaxed" style={{ color: "#888780" }}>
+          Si {nombreMedico} no inicia tu consulta dentro de los 30 minutos del pago,
+          la cancelamos y te devolvemos el 100% — sin que tengas que hacer nada.
+        </p>
       )}
 
       {/* Cancelar solicitud — disponible mientras no haya pago ni videollamada.
