@@ -8,6 +8,7 @@ import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { guardRutaPaciente } from "@/lib/auth/rol";
 import { type AreaAtencion, parsearAreasAtencion } from "@/lib/areas-atencion";
+import { parsearEspecialidadesAdicionales, adicionalesVisibles } from "@/lib/especialidades";
 
 export default async function ClinicaPage() {
   const supabase = await createClient();
@@ -172,9 +173,17 @@ export default async function ClinicaPage() {
   // es el que LLENA la clínica — si algo fallara con esta columna, se pierde solo el
   // cartelito informativo y NUNCA el listado de médicos (lección del outage 22/06).
   // El dato es informativo: no filtra ni bloquea a nadie.
-  const { data: areasRows } = await supabaseAdmin.from("medicos").select("id, areas_atencion");
+  // Las especialidades adicionales viajan por ACÁ, no por el SELECT de arriba,
+  // por el mismo motivo: una columna sin GRANT en el query del listado lo
+  // rompería entero y en silencio.
+  const { data: areasRows } = await supabaseAdmin
+    .from("medicos")
+    .select("id, areas_atencion, especialidades_adicionales");
   const areasMap = new Map<string, AreaAtencion[]>(
     (areasRows ?? []).map((a) => [a.id, parsearAreasAtencion(a.areas_atencion)])
+  );
+  const adicionalesMap = new Map<string, string[]>(
+    (areasRows ?? []).map((a) => [a.id, parsearEspecialidadesAdicionales(a.especialidades_adicionales)])
   );
 
   // Provincia guardada del paciente (solo para pre-seleccionar; se valida igual cada vez).
@@ -189,6 +198,7 @@ export default async function ClinicaPage() {
     ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
     jurisdicciones: jurisMap.get(m.id) ?? [],
     areasAtencion: areasMap.get(m.id) ?? [],
+    especialidadesAdicionales: adicionalesVisibles(m.especialidad, adicionalesMap.get(m.id) ?? []),
   }));
 
   return (

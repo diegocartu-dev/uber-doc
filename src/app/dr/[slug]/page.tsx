@@ -10,6 +10,7 @@ import ConsultorioLoginClient from "./ConsultorioLoginClient";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { parsearAreasAtencion, textosAreas } from "@/lib/areas-atencion";
+import { parsearEspecialidadesAdicionales, adicionalesVisibles } from "@/lib/especialidades";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -64,10 +65,14 @@ export default async function ConsultorioPublicoPage({
   // perfil público del médico. Informativa: no condiciona nada.
   const { data: areasRow } = await supabaseAdmin
     .from("medicos")
-    .select("areas_atencion")
+    .select("areas_atencion, especialidades_adicionales")
     .eq("slug", slug)
     .maybeSingle();
   const areas = textosAreas(parsearAreasAtencion(areasRow?.areas_atencion));
+  const especialidadesExtra = adicionalesVisibles(
+    medico.especialidad,
+    parsearEspecialidadesAdicionales(areasRow?.especialidades_adicionales)
+  );
 
   // Si el usuario ya está logueado, redirigir al consultorio
   const supabase = await createClient();
@@ -126,7 +131,7 @@ export default async function ConsultorioPublicoPage({
           className="mt-1 text-sm"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          {medico.especialidad}
+          {[medico.especialidad, ...especialidadesExtra].join(" · ")}
         </p>
 
         {/* Área de atención declarada por el médico. Informativa. */}

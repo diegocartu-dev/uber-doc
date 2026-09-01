@@ -29,6 +29,11 @@ export type Medico = {
   // Informativas: se muestran y se pueden buscar, NO filtran ni bloquean nada.
   // Opcional a propósito: un médico sin el dato sigue funcionando igual que siempre.
   areasAtencion?: AreaAtencion[];
+  // Especialidades ADICIONALES declaradas (ej: una cirujana que además atiende
+  // clínica médica). Hacen que aparezca al buscarlas y se muestran en su ficha;
+  // la que agrupa en los reportes sigue siendo `especialidad`, una sola.
+  // Opcional a propósito: sin el dato el listado funciona igual que siempre.
+  especialidadesAdicionales?: string[];
 };
 
 export type ConsultaEspera = { medico_id: string };
@@ -129,6 +134,7 @@ export function coincideConBusqueda(medico: Medico, termino: string): boolean {
   if (!t) return true;
   return (
     normalizeTexto(medico.especialidad).includes(t) ||
+    (medico.especialidadesAdicionales ?? []).some((e) => normalizeTexto(e).includes(t)) ||
     normalizeTexto(medico.nombre_completo).includes(t) ||
     areasCoincidenBusqueda(medico.areasAtencion, termino)
   );
