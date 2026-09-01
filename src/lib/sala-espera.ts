@@ -3,9 +3,14 @@ import { avisarMedicoEsperandoWhatsApp } from "@/lib/whatsapp";
 
 type TipoEntrada = "ci" | "turno_programado" | "consultorio_particular";
 
-function tipoFromCanalOrigen(canalOrigen: string): TipoEntrada {
+// El canal manda para el consultorio particular; para el resto, manda QUÉ es la
+// entrada: con turno_id es un turno programado aunque el canal sea la clínica
+// virtual. Antes cualquier canal ≠ consultorio devolvía "ci", y las entradas de
+// turnos de la clínica quedaban etiquetadas como consultas inmediatas (caso
+// 30/08: el turno de las 15:00 figuraba tipo "ci" en la sala).
+function tipoDeEntrada(canalOrigen: string | undefined, turnoId: string | undefined): TipoEntrada {
   if (canalOrigen === "consultorio_privado") return "consultorio_particular";
-  return "ci";
+  return turnoId ? "turno_programado" : "ci";
 }
 
 export async function registrarEntradaSala(params: {
@@ -16,11 +21,7 @@ export async function registrarEntradaSala(params: {
   canalOrigen?: string;
 }): Promise<string | null> {
   const supabase = createAdminClient();
-  const tipo = params.canalOrigen
-    ? tipoFromCanalOrigen(params.canalOrigen)
-    : params.turnoId
-      ? "turno_programado"
-      : "ci";
+  const tipo = tipoDeEntrada(params.canalOrigen, params.turnoId);
 
   const { data, error } = await supabase.rpc("registrar_entrada_sala", {
     p_paciente_id: params.pacienteId,
@@ -62,7 +63,12 @@ export type MotivoSalidaSala =
   | "atendido"
   | "cancelado_paciente"
   | "cancelado_medico"
-  | "medico_no_acepto";
+  | "medico_no_acepto"
+  // El profesional nunca entró a atender (turno en_espera o CI paga vencidos por
+  // su ausencia). Distinto de `cancelado_medico` (acción explícita de cancelar)
+  // y de `medico_no_acepto` (pedido de CI que nadie tomó): acá había una
+  // atención comprometida y del otro lado no vino nadie.
+  | "medico_ausente";
 
 export async function cerrarEntradaSala(params: {
   consultaId?: string;

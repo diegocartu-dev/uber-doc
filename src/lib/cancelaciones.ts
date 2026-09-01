@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailTurnoCancelado } from "@/lib/email";
 import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { enviarEmailTurnoAusenteMedico } from "@/lib/email";
 import { refundTotal } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
@@ -407,6 +408,21 @@ export async function resolverNoShowMedico(
     .select("id")
     .maybeSingle();
   if (error || !actualizado) return { ok: false, reembolso: reintegroEstado };
+
+  // Cerrar la fila de la sala de espera. Las cancelaciones manuales ya lo hacen
+  // (arriba); esta resolución automática NO lo hacía, y la entrada quedaba viva:
+  // el panel admin mostraba al paciente "esperando" horas después de resuelto y
+  // reembolsado, y el cron de recordatorios seguía intentando avisarle al
+  // profesional por un paciente que ya no estaba. Caso 30/08: la entrada quedó
+  // abierta 18 horas hasta que Diego la cerró a mano creyendo que nada había
+  // funcionado — la resolución y el reembolso habían salido a los 21 minutos.
+  void cerrarEntradaSala({ turnoId, motivo: "medico_ausente" }).catch(() => {});
+
+  // Mail al paciente, además del push y el mensaje interno de abajo: el push
+  // solo llega si activó notificaciones (la paciente del 30/08 tenía CERO
+  // suscripciones — el aviso salió a la nada), y el mensaje interno hay que ir
+  // a buscarlo. El mail es el único canal que no depende de nada.
+  void enviarEmailTurnoAusenteMedico(turnoId).catch(() => {});
 
   if (turno.paciente_id) {
     const reembolsoMsg =
