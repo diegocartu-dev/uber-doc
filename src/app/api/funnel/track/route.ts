@@ -7,7 +7,7 @@ import { trackEvent } from "@/lib/funnel";
 const EVENTOS_MEDICO = ["mp_oauth_view_tab", "mp_oauth_start_click"] as const;
 // Eventos del recorrido del PACIENTE (se guardan con paciente_id = user.id, igual
 // que consultas.paciente_id, para que el funnel y el filtro de test cuadren).
-const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido", "triage_paso", "triage_bloqueado"] as const;
+const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido", "triage_paso", "triage_bloqueado", "rescate_elegido"] as const;
 // Eventos del REGISTRO médico (Fase B). El médico todavía NO tiene ficha, así que
 // medico_id va null y el user_id viaja en metadata para correlacionar. Motivo:
 // los 16 trabados de jul/ago murieron dentro del form y no había forma de saber
