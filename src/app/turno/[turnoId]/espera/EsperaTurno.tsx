@@ -169,6 +169,20 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
           : "Redirigiendo..."}
       </p>
 
+      {/* El CONTRATO del turno, visible mientras espera: la espera tiene techo
+          y el desenlace es automático. La paciente del 30/08 miró este spinner
+          sin ninguna promesa y terminó escribiendo a soporte — con el turno ya
+          resuelto y reembolsado por el cron (GRACIA_MIN=20 en
+          resolver-turnos-vencidos). Cuando el profesional está atendiendo otra
+          consulta la espera es legítima y el plazo no corre: ahí habla el
+          banner de arriba, no este. */}
+      {estado === "esperando" && !medicoOcupado && (
+        <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed" style={{ color: "#888780" }}>
+          Si {sujetoMedico} no se presenta, pasados 20 minutos de la hora del turno lo
+          cancelamos y te devolvemos el 100% — sin que tengas que hacer nada.
+        </p>
+      )}
+
       {/* Info card */}
       <div className="mt-8 rounded-xl bg-white p-6 text-left" style={{ border: "0.5px solid #e5e7eb" }}>
         <div className="space-y-3">
