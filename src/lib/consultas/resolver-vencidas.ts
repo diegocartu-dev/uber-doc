@@ -44,6 +44,7 @@ import { ejecutarRefund } from "@/lib/cancelaciones";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { pushAlPaciente } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { avisarMedicoPorPlantada } from "@/lib/cancelaciones";
 import { logError, logInfo } from "@/lib/logger";
 import { esInstitucional, correspondeRefund } from "@/lib/instancia";
 
@@ -352,6 +353,15 @@ export async function resolverConsultaVencida(
   // en turnos — "esperando" en el panel y recordatorios al profesional por una
   // consulta ya resuelta y reembolsada.
   void cerrarEntradaSala({ consultaId: consulta.id, motivo: "medico_ausente" }).catch(() => {});
+
+  // Y el profesional se entera y tiene consecuencia — hueco detectado el 01/09
+  // (pregunta de Diego): la CI PAGA plantada no le avisaba NADA al médico ni le
+  // apagaba la disponibilidad, mientras el turno plantado ya tenía las dos
+  // cosas. Mismo tratamiento, mismo helper (mensaje siempre + push + CI off +
+  // agenda pausada).
+  const hoyAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const fechaHoy = `${hoyAR.getFullYear()}-${String(hoyAR.getMonth() + 1).padStart(2, "0")}-${String(hoyAR.getDate()).padStart(2, "0")}`;
+  void avisarMedicoPorPlantada(consulta.medico_id, "ci", fechaHoy).catch(() => {});
 
   const filaPac = await filaPaciente(consulta.paciente_id);
   if (filaPac) {
