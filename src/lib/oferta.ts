@@ -191,7 +191,7 @@ export async function alternativasVivas(params: {
       // columnas que terminan whitelisted en los tipos públicos de arriba.
       admin
         .from("medicos")
-        .select("id, especialidad, especialidades_adicionales, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test, jurisdicciones")
+        .select("id, especialidad, especialidades_adicionales, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test, jurisdicciones, agenda_pausada_at")
         .eq("oculto_clinica", false)
         .eq("verificado", true)
         .eq("estado_registro", "aprobado")
@@ -259,9 +259,12 @@ export async function alternativasVivas(params: {
     enEspera: enEsperaPorMedico.get(m.id) ?? 0,
   }));
 
+  // Agenda despublicada por no-show (T8): sus turnos libres no se ofrecen —
+  // tampoco acá. La CI no pasa por esta bandera: la gobierna `disponible`.
+  const agendasPausadas = new Set((medicosRaw ?? []).filter((m) => m.agenda_pausada_at).map((m) => m.id));
   return seleccionarAlternativas({
     medicos,
-    turnosDisponibles: (turnosDisp ?? []).filter((t) => t.medico_id) as { medico_id: string; fecha: string; hora_inicio: string }[],
+    turnosDisponibles: (turnosDisp ?? []).filter((t) => t.medico_id && !agendasPausadas.has(t.medico_id)) as { medico_id: string; fecha: string; hora_inicio: string }[],
     jurisdiccion,
     especialidad: params.especialidad,
     excluirMedicoId: params.excluirMedicoId,

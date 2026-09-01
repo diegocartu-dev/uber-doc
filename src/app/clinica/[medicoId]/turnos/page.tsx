@@ -53,6 +53,14 @@ export default async function TurnosPage({
   const { getFlag } = await import("@/lib/feature-flags");
   if (!medico || ((await getFlag("identidad_gate_activa")) && !identidadHabilitada(medico))) redirect("/clinica");
 
+  // Agenda despublicada por no-show (T8): el calendario tampoco se ve por URL
+  // directa. SERVICE ROLE en query aparte: la columna no tiene GRANT y sumarla
+  // al SELECT de arriba (cliente RLS) rompería la query entera (outage 22/06).
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { data: pausaRow } = await createAdminClient()
+    .from("medicos").select("agenda_pausada_at").eq("id", medicoId).maybeSingle();
+  if (pausaRow?.agenda_pausada_at) redirect("/clinica");
+
   // Enforcement del canal privado (Roberto, gate 15/07): consultorio apagado =
   // su calendario privado tampoco se ve por URL directa.
   if (canalOrigen === "consultorio_privado" && medico.visible_consultorio_particular === false) {

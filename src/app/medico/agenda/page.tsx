@@ -6,6 +6,8 @@ import FormularioModelo from "./FormularioModelo";
 import PanelDerecho from "./PanelDerecho";
 import AppNavbar from "@/components/AppNavbar";
 import { getFlag } from "@/lib/feature-flags";
+import { createAdminClient } from "@/lib/supabase/admin";
+import BannerAgendaPausada from "./BannerAgendaPausada";
 
 export default async function AgendaPage({
   searchParams,
@@ -23,6 +25,12 @@ export default async function AgendaPage({
     .eq("user_id", user.id)
     .single();
   if (!medico) redirect("/dashboard");
+
+  // Pausa por no-show (T8): con SERVICE ROLE — la columna no tiene GRANT y con
+  // el cliente RLS la query fallaría entera (regla de grants, CLAUDE.md).
+  const { data: pausa } = await createAdminClient()
+    .from("medicos").select("agenda_pausada_at").eq("id", medico.id).maybeSingle();
+  const agendaPausada = !!pausa?.agenda_pausada_at;
 
   const fullName = user.user_metadata?.full_name || user.email;
 
@@ -57,6 +65,7 @@ export default async function AgendaPage({
   return (
     <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
       <AppNavbar userName={fullName} userRole="medico" />
+      {agendaPausada && <BannerAgendaPausada />}
       <div className="flex flex-1 flex-col md:grid md:grid-cols-[40fr_60fr] md:overflow-hidden">
       {/*
         Mobile: flex-col apilado — PanelDerecho primero (agenda), luego modelos

@@ -628,6 +628,15 @@ async function avisarMedicoPorTurnoPlantado(medicoId: string, fecha: string): Pr
   if (!medicoId) return;
   const admin = createAdminClient();
 
+  // La agenda queda DESPUBLICADA hasta que él la reactive (decisión Diego
+  // 31/08). Bandera y no slots: la sincronización contra modelos desharía
+  // cualquier bloqueo de slots. Los turnos ya pagados no se tocan.
+  await admin
+    .from("medicos")
+    .update({ agenda_pausada_at: new Date().toISOString() })
+    .eq("id", medicoId)
+    .is("agenda_pausada_at", null);
+
   const { data: apagado } = await admin
     .from("medicos")
     .update({ disponible: false, disponible_desde_at: null })
@@ -646,8 +655,9 @@ async function avisarMedicoPorTurnoPlantado(medicoId: string, fecha: string): Pr
 
   const cuerpo =
     `Hola ${primerNombre}. Un paciente te esperó en su turno del ${formatearFechaCorta(fecha)} y la consulta no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
+    " Pausamos la publicación de tus turnos libres para que no le pase lo mismo a otro paciente — los reactivás con un toque desde tu agenda cuando puedas volver a atender. Tus turnos ya reservados siguen en pie." +
     (seApago
-      ? " También te desactivamos de Consulta Inmediata: mientras figurás disponible te siguen eligiendo, y no queremos que a otro paciente le pase lo mismo. Cuando estés frente a la pantalla, activate de nuevo desde tu panel."
+      ? " También te desactivamos de Consulta Inmediata."
       : " Si te surge un imprevisto, cancelá el turno con anticipación desde tu agenda: el paciente recibe el reembolso al instante y puede reservar con otro profesional.");
 
   await admin.from("mensajes_internos_medicos").insert({
