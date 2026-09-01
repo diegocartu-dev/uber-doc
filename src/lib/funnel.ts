@@ -26,6 +26,13 @@ type EventoFunnel =
   // era "eligió y no pidió", sin saber DÓNDE se fue.
   | "triage_paso"
   | "triage_bloqueado"
+  // Menú de rescate (sprint 31/08). `rescate_ofrecido` lo emite el SERVIDOR al
+  // servir alternativas (metadata: momento, cuántas opciones, si había de la
+  // misma especialidad — con opciones.n=0 también: "no tuvimos qué ofrecer" es
+  // dato). `rescate_elegido` lo emite el cliente al tocar una card. El éxito
+  // sigue siendo el pago (regla de Fede): un tap es diagnóstico, no éxito.
+  | "rescate_ofrecido"
+  | "rescate_elegido"
   // Registro del médico (Fase B). Ya se emitían; faltaban en este tipo.
   | "registro_medico_paso"
   | "registro_medico_error";
