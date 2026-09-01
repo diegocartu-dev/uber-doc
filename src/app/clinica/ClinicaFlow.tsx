@@ -23,6 +23,7 @@ export default function ClinicaFlow({
   medicosEnTurno,
   flagCiActiva,
   flagTurnosActivos,
+  pilotoDespertarActivo,
 }: {
   provinciaGuardada: string | null;
   medicos: Medico[];
@@ -31,6 +32,11 @@ export default function ClinicaFlow({
   medicosEnTurno: string[];
   flagCiActiva: boolean;
   flagTurnosActivos: boolean;
+  // Piloto despertar-oferta (Diego lo dejó EN PAUSA el 01/09): el botón del
+  // paciente solo existe si la plantilla de Twilio está configurada — la misma
+  // llave que hace inerte al endpoint. Sin esto, el botón prometía avisar y
+  // siempre terminaba en "no hay nadie": una promesa muerta en el momento B.
+  pilotoDespertarActivo: boolean;
 }) {
   // null = mostrar la pantalla de jurisdicción. Arranca null SIEMPRE (validar cada vez),
   // aunque haya provinciaGuardada. El polling (router.refresh) conserva este estado.
@@ -57,6 +63,7 @@ export default function ClinicaFlow({
       medicosEnTurno={medicosEnTurno}
       flagCiActiva={flagCiActiva}
       flagTurnosActivos={flagTurnosActivos}
+      pilotoDespertarActivo={pilotoDespertarActivo}
       onCambiarProvincia={() => setProvincia(null)}
     />
   );

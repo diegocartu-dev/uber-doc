@@ -223,6 +223,7 @@ export default async function ClinicaPage() {
           turnosClinicaVirtual={turnosOfertables}
           medicosEnTurno={medicosEnTurno}
           flagCiActiva={await getFlag("consulta_inmediata_global")}
+          pilotoDespertarActivo={Boolean(process.env.TWILIO_CONTENT_SID_DEMANDA)}
           flagTurnosActivos={await getFlag("turnos_global")}
         />
       </main>
