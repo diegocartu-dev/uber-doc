@@ -296,7 +296,9 @@ export default function ListadoMedicos({
                       <p className="truncate text-[15px] font-medium text-gray-900">{formatNombreMedico(m.nombre_completo, m.titulo)}</p>
                       <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
                     </div>
-                    <p className="mt-0.5 truncate text-[13px] text-gray-500">{m.especialidad}</p>
+                    <p className="mt-0.5 truncate text-[13px] text-gray-500">
+                      {[m.especialidad, ...(m.especialidadesAdicionales ?? [])].join(" · ")}
+                    </p>
                     {/* Área de atención declarada por el médico (informativa: "Atiende
                         adolescentes (10 a 19 años)"). No condiciona la reserva. */}
                     {textosAreas(m.areasAtencion).map((texto) => (
