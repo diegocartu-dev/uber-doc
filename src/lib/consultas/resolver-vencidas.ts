@@ -43,6 +43,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ejecutarRefund } from "@/lib/cancelaciones";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { pushAlPaciente } from "@/lib/push";
+import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { logError, logInfo } from "@/lib/logger";
 import { esInstitucional, correspondeRefund } from "@/lib/instancia";
 
@@ -345,6 +346,12 @@ export async function resolverConsultaVencida(
       consultaId: consulta.id,
     });
   }
+
+  // El paciente ESTUVO en la sala (por eso este desenlace es medico_ausente):
+  // su entrada sigue abierta y hay que cerrarla, o queda el mismo fantasma que
+  // en turnos — "esperando" en el panel y recordatorios al profesional por una
+  // consulta ya resuelta y reembolsada.
+  void cerrarEntradaSala({ consultaId: consulta.id, motivo: "medico_ausente" }).catch(() => {});
 
   const filaPac = await filaPaciente(consulta.paciente_id);
   if (filaPac) {

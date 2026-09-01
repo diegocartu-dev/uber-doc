@@ -355,6 +355,64 @@ export async function enviarEmailTurnoCancelado(
   }
 }
 
+/**
+ * El profesional no atendió el turno (resolución automática `ausente_medico`,
+ * cron resolver-turnos-vencidos). El paciente ya recibe push y mensaje interno,
+ * pero el push exige haber activado notificaciones y el mensaje hay que ir a
+ * buscarlo: la paciente del 30/08 tenía cero suscripciones y se enteró del
+ * desenlace escribiendo a soporte. El mail no depende de nada.
+ *
+ * Mismo framing que el push y la pantalla de espera ("no pudo atender", no
+ * "no se presentó" — gate Sofía): hecho verificable, sin incendiar al médico.
+ */
+export async function enviarEmailTurnoAusenteMedico(turnoId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "turno_ausente_medico"); return; }
+  try {
+    const datos = await obtenerDatosTurno(turnoId);
+    if (!datos) return;
+
+    const medicoConArt = capitalizarInicio(medicoConArticulo(datos.medicoNombre, datos.medicoTitulo));
+
+    const html = wrapHtml("Tu turno no pudo realizarse — Docto", `
+      <div style="margin-bottom:20px;">${chip("No se pudo realizar", NARANJA)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu turno no pudo realizarse</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+        Hola ${datos.pacienteNombre}. ${medicoConArt} no pudo atender tu turno del
+        ${formatearFecha(datos.fecha)} a las ${formatearHora(datos.hora_inicio)}.
+        Ya iniciamos la devoluci&oacute;n del <strong>100%</strong> de lo que pagaste, al mismo
+        medio de pago. Los tiempos de acreditaci&oacute;n dependen del medio.
+      </p>
+      ${detalleTurno(datos)}
+      <p style="margin:24px 0 0;font-size:14px;color:#6b7280;">
+        Si necesit&aacute;s atenderte, hay profesionales disponibles para consulta inmediata o con turnos pr&oacute;ximos.
+      </p>
+      ${boton("Ver profesionales disponibles", `${BASE_URL}/clinica`, AZUL)}
+      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
+        El archivo .ics adjunto quita el turno de tu calendario autom&aacute;ticamente.
+      </p>
+    `);
+
+    const ics = generarICS(datos, "CANCEL");
+    const asunto = `Tu turno del ${formatearFecha(datos.fecha)} no pudo realizarse — devoluci\u00f3n del 100% en curso`;
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: datos.pacienteEmail,
+        subject: asunto,
+        html,
+        headers: { "Idempotency-Key": `${turnoId}-ausente-medico` },
+        attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
+      }),
+      turnoId
+    );
+
+    console.log("[email] turno ausente_medico enviado:", turnoId);
+  } catch (err) {
+    console.error("[email] enviarEmailTurnoAusenteMedico falló (agotados reintentos):", err);
+  }
+}
+
 export async function enviarDocumentoMedico(params: {
   pacienteEmail: string;
   pacienteNombre: string;
