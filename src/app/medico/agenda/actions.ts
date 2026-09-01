@@ -245,3 +245,27 @@ export async function eliminarModelo(modeloId: string) {
 
   return { success: true };
 }
+
+/**
+ * Levanta la pausa de publicación (T8 rescate): la puso el sistema cuando un
+ * turno pago quedó sin atender, y la saca el PROPIO profesional con un toque.
+ * Own-session + service role: la columna no tiene GRANT para authenticated
+ * (leerla o escribirla con el cliente RLS fallaría; regla de grants de
+ * CLAUDE.md), así que se resuelve la ficha por user_id y se escribe con admin.
+ */
+export async function reactivarAgenda(): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const admin = createAdminClient();
+  const { data: medico } = await admin
+    .from("medicos").select("id").eq("user_id", user.id).maybeSingle();
+  if (!medico) return { ok: false };
+
+  const { error } = await admin
+    .from("medicos")
+    .update({ agenda_pausada_at: null })
+    .eq("id", medico.id);
+  return { ok: !error };
+}

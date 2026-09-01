@@ -52,6 +52,15 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   if (!turno) return { error: "Turno no encontrado." };
   if (turno.estado !== "disponible") return { error: "Este turno ya no está disponible." };
 
+  // Agenda despublicada por no-show (T8): sus slots libres tampoco se reservan
+  // por URL directa. Con SERVICE ROLE: la columna no tiene GRANT y con el
+  // cliente RLS la query fallaría ENTERA en silencio (outage 22/06).
+  const { data: medicoPausa } = await createAdminClient()
+    .from("medicos").select("agenda_pausada_at").eq("id", turno.medico_id).maybeSingle();
+  if (medicoPausa?.agenda_pausada_at) {
+    return { error: "Este turno ya no está disponible." };
+  }
+
   // Guard de canal (sprint cómo-atendés 15/07): el slot pertenece a UN canal —
   // un turno del consultorio privado no se reserva desde la clínica pública ni
   // al revés. Antes el filtro vivía solo en el SELECT de la página y la reserva

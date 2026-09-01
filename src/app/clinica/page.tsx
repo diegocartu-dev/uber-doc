@@ -183,7 +183,12 @@ export default async function ClinicaPage() {
   // rompería entero y en silencio.
   const { data: areasRows } = await supabaseAdmin
     .from("medicos")
-    .select("id, areas_atencion, especialidades_adicionales");
+    .select("id, areas_atencion, especialidades_adicionales, agenda_pausada_at");
+  // Agenda despublicada por no-show (T8 rescate): sus slots libres no se
+  // ofrecen. Post-filtro en JS sobre la query admin existente — el SELECT que
+  // llena el listado no se toca (outage 22/06).
+  const agendasPausadas = new Set((areasRows ?? []).filter((a) => a.agenda_pausada_at).map((a) => a.id));
+  const turnosOfertables = (turnosDisponibles ?? []).filter((t) => !agendasPausadas.has(t.medico_id));
   const areasMap = new Map<string, AreaAtencion[]>(
     (areasRows ?? []).map((a) => [a.id, parsearAreasAtencion(a.areas_atencion)])
   );
@@ -215,7 +220,7 @@ export default async function ClinicaPage() {
           provinciaGuardada={provinciaRow?.provincia ?? null}
           medicos={medicosConEstado}
           consultasEspera={consultasEspera ?? []}
-          turnosClinicaVirtual={turnosDisponibles ?? []}
+          turnosClinicaVirtual={turnosOfertables}
           medicosEnTurno={medicosEnTurno}
           flagCiActiva={await getFlag("consulta_inmediata_global")}
           flagTurnosActivos={await getFlag("turnos_global")}
