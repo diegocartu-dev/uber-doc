@@ -47,6 +47,11 @@ export default function ListadoMedicos({
   const [busqueda, setBusqueda] = useState("");
   const [emailLead, setEmailLead] = useState("");
   const [leadEnviado, setLeadEnviado] = useState(false);
+  // Piloto despertar-oferta: idle → enviando → resultado. Un disparo por vista
+  // (el server además tiene sus topes: opt-in, 1/día por profesional, 8-22,
+  // tope global). El paciente lo pide con un toque explícito — guardrail de
+  // Tomás: la carga de la página no despierta a nadie.
+  const [despertar, setDespertar] = useState<"idle" | "enviando" | number>("idle");
   // Atajo "sin CI → próximo turno" (Diego 28/07): se ofrece UNA vez por visita.
 
   // Polling cada 15s: mantiene el semáforo vivo sin refresh manual (regla del proyecto:
@@ -264,6 +269,35 @@ export default function ListadoMedicos({
             </span>
           </div>
         </button>
+      )}
+
+      {flagCiActiva && ordenados.length > 0 && !hayCIVisible && (
+        <div className="mb-4 text-center">
+          {despertar === "idle" && (
+            <button
+              onClick={() => {
+                setDespertar("enviando");
+                fetch("/api/despertar-oferta", { method: "POST", credentials: "include" })
+                  .then((r) => (r.ok ? r.json() : { avisados: 0 }))
+                  .then((d) => setDespertar(d.avisados ?? 0))
+                  .catch(() => setDespertar(0));
+              }}
+              className="text-[13px] font-medium text-[#378ADD] underline underline-offset-2"
+            >
+              ¿Preferís atenderte ahora? Avisales a los profesionales de tu provincia que estás buscando
+            </button>
+          )}
+          {despertar === "enviando" && (
+            <p className="text-[13px] text-gray-500">Avisando…</p>
+          )}
+          {typeof despertar === "number" && (
+            <p className="text-[13px] text-gray-600">
+              {despertar > 0
+                ? `Les avisamos a ${despertar === 1 ? "un profesional" : `${despertar} profesionales`} de tu provincia. Si alguien se conecta, vas a verlo acá — la lista se actualiza sola.`
+                : "Por ahora no hay profesionales para avisar. Podés reservar un turno o dejarnos tu contacto."}
+            </p>
+          )}
+        </div>
       )}
 
       {ordenados.length === 0 ? (
