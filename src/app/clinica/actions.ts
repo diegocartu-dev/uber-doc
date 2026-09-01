@@ -305,28 +305,57 @@ export async function cambiarDeProfesional(
     .maybeSingle();
 
   if (!cancelada) {
-    // Perdió la carrera: se pagó o cambió de estado. No se cancela nada y se
-    // deja que `crearConsulta` decida — va a encontrar el encuentro y lo va a
-    // mandar ahí.
-    return { error: "Esa consulta cambió de estado. Volvé a intentar." };
+    // Perdió la carrera. Hay dos carreras MUY distintas:
+    //
+    // 1) El SISTEMA la cerró un segundo antes (el cron de 10 min la venció, o
+    //    ya la había cancelado él mismo). El paciente quería exactamente eso:
+    //    dejar esa consulta atrás. Rebotar con "volvé a intentar" era castigar
+    //    el mismo desenlace que pedía — y con el menú de rescate apareciendo
+    //    justo alrededor del minuto 10, este borde pasa de teórico a frecuente.
+    //    Se sigue de largo: no hay nada que cancelar, la creación continúa.
+    //
+    // 2) Apareció PLATA o la aceptaron y pagó en el medio. Acá sí se frena y
+    //    se deja que `crearConsulta` encuentre el encuentro y lo mande ahí.
+    const { data: estadoActual } = await admin
+      .from("consultas")
+      .select("estado, mp_status")
+      .eq("id", consultaAAbandonar)
+      .maybeSingle();
+    const yaCerradaSinPlata =
+      estadoActual &&
+      ["cancelada", "rechazada"].includes(estadoActual.estado) &&
+      estadoActual.mp_status !== "approved";
+    if (!yaCerradaSinPlata) {
+      return { error: "Esa consulta cambió de estado. Volvé a intentar." };
+    }
+    logInfo("[cambiar-profesional]", "La solicitud ya estaba cerrada (cron ganó la carrera): se sigue de largo", {
+      consultaId: consultaAAbandonar,
+    });
   }
 
-  logInfo("[cambiar-profesional]", "El paciente abandonó una solicitud sin pagar", {
-    consultaId: consultaAAbandonar,
-  });
+  if (cancelada) {
+    logInfo("[cambiar-profesional]", "El paciente abandonó una solicitud sin pagar", {
+      consultaId: consultaAAbandonar,
+    });
+  }
 
-  // El profesional se entera. Best-effort a propósito: que falle el aviso no
-  // puede dejar al paciente sin poder consultar con otro.
+  // El profesional se entera — SOLO si la cancelación fue de este camino. Si el
+  // cron ganó la carrera, ya recibió su propio aviso ("liberamos al paciente y
+  // te desactivamos"), y un "el paciente canceló" encima lo contradiría.
+  // Best-effort a propósito: que falle el aviso no puede dejar al paciente sin
+  // poder consultar con otro.
   const { data: pacienteFila } = await admin
     .from("pacientes")
     .select("nombre_completo")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  await avisarCancelacionDelPaciente(
-    vieja.medico_id,
-    pacienteFila?.nombre_completo ?? "Un paciente"
-  ).catch(() => {});
+  if (cancelada) {
+    await avisarCancelacionDelPaciente(
+      vieja.medico_id,
+      pacienteFila?.nombre_completo ?? "Un paciente"
+    ).catch(() => {});
+  }
 
   // Ya no hay encuentro activo: el camino normal se encarga del resto (gates de
   // médico, insert, WhatsApp y redirect a la sala de espera).
