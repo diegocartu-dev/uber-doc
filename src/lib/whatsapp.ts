@@ -145,6 +145,13 @@ async function enviarTwilioDetallado(toE164: string, contentSid: string, variabl
   body.set("To", `whatsapp:${toE164}`);
   body.set("ContentSid", contentSid);
   body.set("ContentVariables", JSON.stringify(variables));
+  // Estado real de entrega (hallazgo 27/08: "enviado" solo dice que Twilio
+  // aceptó). El webhook vive en /api/twilio/status y la URL viene por env —
+  // apuntando a WWW (regla: los webhooks al apex se pierden en el 307). Sin la
+  // env var no se manda el parámetro y todo queda exactamente como antes:
+  // previews y la instancia institucional no ensucian el webhook de prod.
+  const statusCallback = process.env.WHATSAPP_STATUS_CALLBACK_URL;
+  if (statusCallback) body.set("StatusCallback", statusCallback);
 
   try {
     const res = await fetch(
