@@ -418,6 +418,13 @@ export async function resolverNoShowMedico(
   // funcionado — la resolución y el reembolso habían salido a los 21 minutos.
   void cerrarEntradaSala({ turnoId, motivo: "medico_ausente" }).catch(() => {});
 
+  // Consecuencia para el profesional (decisión Diego 31/08: "el que hace
+  // esperar se le desactiva la oferta"). Para la CI sin aceptar ya existía
+  // (sin-respuesta.ts, 21/08); acá se calca para el turno que dejó plantado.
+  // La agenda publicada NO se toca: tiene turnos ya pagados por otros
+  // pacientes, y cancelarlos en cadena es una decisión aparte de Diego.
+  void avisarMedicoPorTurnoPlantado(turno.medico_id, turno.fecha).catch(() => {});
+
   // Mail al paciente, además del push y el mensaje interno de abajo: el push
   // solo llega si activó notificaciones (la paciente del 30/08 tenía CERO
   // suscripciones — el aviso salió a la nada), y el mensaje interno hay que ir
@@ -601,4 +608,59 @@ function formatearFechaCorta(fecha: string): string {
     month: "long",
     timeZone: "America/Argentina/Buenos_Aires",
   });
+}
+
+/**
+ * El profesional no atendió un turno PAGO (`ausente_medico`): mensaje interno
+ * SIEMPRE (persistente, lo ve aunque no tenga push) + push best-effort, y si
+ * tenía la Consulta Inmediata prendida, se la apagamos — mismo criterio que el
+ * pedido de CI sin aceptar (sin-respuesta.ts): mientras figura disponible lo
+ * siguen eligiendo, y no queremos que otro paciente repita la espera. El
+ * apagado va condicionado a `disponible = true` (dos corridas no duplican) y
+ * registra la transición en `disponibilidad_log` para que el historial no
+ * mienta sobre cuánto estuvo publicado.
+ *
+ * A diferencia de la CI —donde el mensaje solo existe si hubo apagado— acá el
+ * mensaje va SIEMPRE: lo central no es el toggle, es que dejó a un paciente
+ * pago esperando y hubo que devolverle la plata.
+ */
+async function avisarMedicoPorTurnoPlantado(medicoId: string, fecha: string): Promise<void> {
+  if (!medicoId) return;
+  const admin = createAdminClient();
+
+  const { data: apagado } = await admin
+    .from("medicos")
+    .update({ disponible: false, disponible_desde_at: null })
+    .eq("id", medicoId)
+    .eq("disponible", true)
+    .select("id, nombre_completo");
+  const seApago = !!apagado && apagado.length > 0;
+  if (seApago) {
+    await admin.from("disponibilidad_log").insert({ medico_id: medicoId, online: false });
+  }
+
+  const { data: med } = seApago
+    ? { data: apagado![0] }
+    : await admin.from("medicos").select("nombre_completo").eq("id", medicoId).maybeSingle();
+  const primerNombre = (med?.nombre_completo ?? "").split(" ")[0] || "Doctor/a";
+
+  const cuerpo =
+    `Hola ${primerNombre}. Un paciente te esperó en su turno del ${formatearFechaCorta(fecha)} y la consulta no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
+    (seApago
+      ? " También te desactivamos de Consulta Inmediata: mientras figurás disponible te siguen eligiendo, y no queremos que a otro paciente le pase lo mismo. Cuando estés frente a la pantalla, activate de nuevo desde tu panel."
+      : " Si te surge un imprevisto, cancelá el turno con anticipación desde tu agenda: el paciente recibe el reembolso al instante y puede reservar con otro profesional.");
+
+  await admin.from("mensajes_internos_medicos").insert({
+    medico_id: medicoId,
+    titulo: "Un paciente te esperó en su turno",
+    cuerpo,
+    severidad: "media",
+  });
+
+  pushAlMedico(medicoId, {
+    title: "Un paciente te esperó en su turno",
+    body: `El turno del ${formatearFechaCorta(fecha)} no ocurrió y devolvimos el pago. Mirá el mensaje en tu panel.`,
+    url: "/dashboard",
+    tag: `turno-plantado-${fecha}`,
+  }).catch(() => {});
 }
