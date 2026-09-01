@@ -31,6 +31,7 @@ export default function ListadoMedicos({
   turnosClinicaVirtual,
   medicosEnTurno,
   flagCiActiva,
+  pilotoDespertarActivo,
   flagTurnosActivos,
   onCambiarProvincia,
 }: {
@@ -40,6 +41,7 @@ export default function ListadoMedicos({
   turnosClinicaVirtual: TurnoClinicaVirtual[];
   medicosEnTurno: string[];
   flagCiActiva: boolean;
+  pilotoDespertarActivo: boolean;
   flagTurnosActivos: boolean;
   onCambiarProvincia: () => void;
 }) {
@@ -271,7 +273,7 @@ export default function ListadoMedicos({
         </button>
       )}
 
-      {flagCiActiva && ordenados.length > 0 && !hayCIVisible && (
+      {pilotoDespertarActivo && flagCiActiva && ordenados.length > 0 && !hayCIVisible && (
         <div className="mb-4 text-center">
           {despertar === "idle" && (
             <button
