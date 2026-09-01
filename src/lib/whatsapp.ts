@@ -121,6 +121,63 @@ function registrarEnvio(params: {
   })().catch(() => {});
 }
 
+/**
+ * Piloto "despertar oferta dormida" (Diego 31/08): un paciente está buscando
+ * en la provincia del profesional y no hay nadie en línea. Los GUARDRAILS
+ * (opt-in, tope diario, ventana horaria, candidatos) viven en el caller
+ * (/api/despertar-oferta) — acá solo el transporte y el registro, como el
+ * resto de los avisos. Inerte sin TWILIO_CONTENT_SID_DEMANDA: la plantilla
+ * tiene que existir en Twilio y aprobarla Meta antes de que esto mande nada.
+ */
+export async function avisarDemandaProvincia(
+  medicoId: string,
+  provincia: string,
+  ctx?: ContextoEnvio,
+): Promise<boolean> {
+  const PLANTILLA = "demanda_provincia";
+  const contentSid = process.env.TWILIO_CONTENT_SID_DEMANDA;
+  if (!contentSid) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_credenciales", ctx });
+    return false;
+  }
+  if (!(await flagWhatsappOn())) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "flag_apagado", ctx });
+    return false;
+  }
+  if (!configurado()) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_credenciales", ctx });
+    return false;
+  }
+
+  const admin = createAdminClient();
+  const { data: medico } = await admin
+    .from("medicos")
+    .select("nombre_completo, celular_personal")
+    .eq("id", medicoId)
+    .maybeSingle();
+  if (!medico) return false;
+
+  const toE164 = normalizarTelefonoAR(medico.celular_personal);
+  if (!toE164) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  const r = await enviarTwilioDetallado(toE164, contentSid, {
+    "1": primerNombre(medico.nombre_completo),
+    "2": provincia,
+  });
+  registrarEnvio({
+    medicoId,
+    plantilla: PLANTILLA,
+    resultado: r.ok ? "enviado" : "error_twilio",
+    ctx,
+    twilioSid: r.sid,
+    twilioErrorCode: r.errorCode,
+  });
+  return r.ok;
+}
+
 /** ¿Hay credenciales Twilio configuradas en este deploy? (lo usa también el
  *  módulo de avisos institucionales — mismo criterio, una sola fuente). */
 export function twilioConfigurado(): boolean {
