@@ -43,6 +43,18 @@ function textoAHtml(texto: string): string {
  * (dirección 'salida'), incluso si el envío falla (error_envio con el motivo).
  * Si es respuesta (enRespuestaA), marca el original como atendido.
  */
+/**
+ * Adjunto que sale con una respuesta de la Bandeja. `contenidoBase64` viaja
+ * desde el navegador YA COMPRIMIDO (regla de la casa: comprimirImagen antes de
+ * cualquier tope de peso — el límite de body de Vercel son ~4,5 MB y un
+ * screenshot crudo de iPhone lo roza).
+ */
+export type AdjuntoSalida = {
+  nombre: string;
+  tipo: string;
+  contenidoBase64: string;
+};
+
 export async function enviarDesdeBandeja(params: {
   para: string;
   asunto: string;
@@ -50,10 +62,12 @@ export async function enviarDesdeBandeja(params: {
   desde?: DireccionPropia;
   enRespuestaA?: string | null;
   enviadoPor?: string | null;
+  adjuntos?: AdjuntoSalida[];
 }): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
   const direccionDe = DIRECCIONES[params.desde ?? "contacto"];
   const cuerpoFinal = params.cuerpo.trimEnd() + FIRMA;
+  const adjuntos = params.adjuntos ?? [];
 
   let resendId: string | null = null;
   let errorEnvio: string | null = null;
@@ -65,6 +79,9 @@ export async function enviarDesdeBandeja(params: {
       subject: params.asunto,
       text: cuerpoFinal,
       html: textoAHtml(cuerpoFinal),
+      ...(adjuntos.length > 0
+        ? { attachments: adjuntos.map((a) => ({ filename: a.nombre, content: a.contenidoBase64 })) }
+        : {}),
     });
     if (error) errorEnvio = error.message ?? String(error);
     else resendId = data?.id ?? null;
@@ -78,6 +95,9 @@ export async function enviarDesdeBandeja(params: {
     para: params.para,
     asunto: params.asunto,
     cuerpo_texto: cuerpoFinal,
+    // Mismo shape que los adjuntos ENTRANTES (`filename`), para que la ficha los
+    // liste igual sin importar la dirección. El archivo vive en el mail enviado.
+    adjuntos: adjuntos.map((a) => ({ filename: a.nombre, tipo: a.tipo })),
     en_respuesta_a: params.enRespuestaA ?? null,
     resend_id: resendId,
     enviado_por: params.enviadoPor ?? null,

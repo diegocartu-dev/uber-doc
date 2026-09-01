@@ -3,8 +3,31 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Paperclip, Reply } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Paperclip, Reply, X } from "lucide-react";
 import { enviarCorreo, marcarAtendido } from "../actions";
+import { comprimirImagen } from "@/lib/imagenes/comprimir";
+
+// Adjunto ya listo para viajar en la server action. Las imágenes pasan SIEMPRE
+// por comprimirImagen antes de convertirse a base64: un screenshot de iPhone
+// crudo pesa varios MB y el body de una server action de Vercel muere ~4,5 MB
+// (regla de la casa desde el 413 de los registros médicos).
+type AdjuntoLocal = { nombre: string; tipo: string; contenidoBase64: string; bytes: number };
+
+const MAX_ARCHIVOS = 3;
+
+function aBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    // readAsDataURL da "data:<tipo>;base64,<contenido>" — se manda solo el contenido.
+    fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
+    fr.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    fr.readAsDataURL(file);
+  });
+}
+
+function pesoLegible(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 interface Correo {
   id: string;
@@ -75,7 +98,32 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
     correo.asunto.toLowerCase().startsWith("re:") ? correo.asunto : `Re: ${correo.asunto}`
   );
   const [error, setError] = useState<string | null>(null);
+  const [adjuntos, setAdjuntos] = useState<AdjuntoLocal[]>([]);
+  const [adjuntando, setAdjuntando] = useState(false);
   const [pendiente, startTransition] = useTransition();
+
+  async function agregarArchivos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setError(null);
+    setAdjuntando(true);
+    try {
+      const nuevos: AdjuntoLocal[] = [];
+      for (const file of Array.from(files).slice(0, MAX_ARCHIVOS - adjuntos.length)) {
+        const listo = await comprimirImagen(file);
+        nuevos.push({
+          nombre: listo.name || file.name,
+          tipo: listo.type || file.type,
+          contenidoBase64: await aBase64(listo),
+          bytes: listo.size,
+        });
+      }
+      setAdjuntos((prev) => [...prev, ...nuevos].slice(0, MAX_ARCHIVOS));
+    } catch {
+      setError("No se pudo preparar el archivo. Probá con otra imagen.");
+    } finally {
+      setAdjuntando(false);
+    }
+  }
 
   function enviarRespuesta() {
     setError(null);
@@ -86,6 +134,7 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
         cuerpo,
         desde: correo.responderDesde,
         enRespuestaA: correo.id,
+        adjuntos: adjuntos.map(({ nombre, tipo, contenidoBase64 }) => ({ nombre, tipo, contenidoBase64 })),
       });
       if (!r.ok) {
         setError(r.error ?? "No se pudo enviar.");
@@ -93,6 +142,7 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
       }
       setResponder(false);
       setCuerpo("");
+      setAdjuntos([]);
       router.refresh();
     });
   }
@@ -210,8 +260,27 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
                 autoFocus
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#378ADD]"
               />
+              {adjuntos.length > 0 && (
+                <ul className="space-y-1.5">
+                  {adjuntos.map((a, i) => (
+                    <li key={i} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                      <Paperclip size={14} className="shrink-0 text-gray-400" />
+                      <span className="min-w-0 flex-1 truncate text-gray-700">{a.nombre}</span>
+                      <span className="shrink-0 text-xs text-gray-400">{pesoLegible(a.bytes)}</span>
+                      <button
+                        onClick={() => setAdjuntos((prev) => prev.filter((_, j) => j !== i))}
+                        className="shrink-0 rounded p-1 text-gray-400 hover:text-[#E24B4A]"
+                        aria-label={`Quitar ${a.nombre}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               {error && <p className="text-sm font-medium text-[#E24B4A]">{error}</p>}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={enviarRespuesta}
                   disabled={pendiente}
@@ -220,6 +289,24 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
                   {pendiente && <Loader2 size={14} className="animate-spin" />}
                   Enviar respuesta
                 </button>
+
+                {/* El input va DENTRO del label: en iOS un input file disparado
+                    por JS fuera del gesto del usuario no abre el selector. */}
+                <label className={`flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 ${adjuntos.length >= MAX_ARCHIVOS || adjuntando ? "pointer-events-none opacity-50" : ""}`}>
+                  {adjuntando ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                  {adjuntando ? "Preparando…" : "Adjuntar"}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void agregarArchivos(e.target.files);
+                      e.target.value = ""; // permite volver a elegir el mismo archivo
+                    }}
+                  />
+                </label>
+
                 <button
                   onClick={() => setResponder(false)}
                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600"
