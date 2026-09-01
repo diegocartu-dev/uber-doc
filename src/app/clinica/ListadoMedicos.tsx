@@ -48,7 +48,6 @@ export default function ListadoMedicos({
   const [emailLead, setEmailLead] = useState("");
   const [leadEnviado, setLeadEnviado] = useState(false);
   // Atajo "sin CI → próximo turno" (Diego 28/07): se ofrece UNA vez por visita.
-  const [atajoCerrado, setAtajoCerrado] = useState(false);
 
   // Polling cada 15s: mantiene el semáforo vivo sin refresh manual (regla del proyecto:
   // no depender solo de Realtime). Conserva el comportamiento de la grilla anterior.
@@ -95,7 +94,13 @@ export default function ListadoMedicos({
     }
     return best;
   }, [ordenados, medicosConTurnos, turnoMasCercano]);
-  const atajoVisible = flagTurnosActivos && !atajoCerrado && ordenados.length > 0 && !hayCIVisible && !!mejorTurno;
+  // Card INLINE, no modal (rediseño 31/08 con OK de Diego). El popup se mostró
+  // 35 veces en un mes y tuvo CERO taps: interrumpía con overlay antes de que el
+  // paciente viera un solo médico, pedía el compromiso más grande (una persona
+  // que no vio, un horario concreto) con la información más chica (sin precio),
+  // y a quien vino por "ahora" le contestaba "el jueves" sin reconocerlo. Inline
+  // no interrumpe: rankea — el paciente puede escanear el resto y volver.
+  const atajoVisible = flagTurnosActivos && ordenados.length > 0 && !hayCIVisible && !!mejorTurno;
 
   // Foto de la oferta EN el momento de la vista (pedido Diego 28/07: el tablero
   // Demanda responde "¿el match estaba o no?"). Se emite UNA vez, pero con los
@@ -119,7 +124,6 @@ export default function ListadoMedicos({
   function reservarAtajo() {
     if (!mejorTurno) return;
     trackFunnel("medico_elegido", { medicoId: mejorTurno.medico.id, modo: "turno", origen: "atajo_sin_ci" });
-    setAtajoCerrado(true);
     router.push(`/clinica/${mejorTurno.medico.id}/turnos`);
   }
 
@@ -235,32 +239,31 @@ export default function ListadoMedicos({
       </div>
 
       {atajoVisible && mejorTurno && (
-        <div className="fixed inset-0 flex items-center justify-center p-5" style={{ zIndex: 9999, backgroundColor: "rgba(0,0,0,0.45)" }}>
-          <div className="w-full max-w-[340px] rounded-2xl bg-white p-5 text-center" role="dialog" aria-modal="true">
-            <p className="text-[16px] font-semibold text-gray-900">Sin médicos en consulta inmediata en este momento.</p>
-            <p className="mt-2.5 text-[14px] leading-relaxed text-gray-700">
-              El próximo turno de <span className="font-medium">{mejorTurno.medico.especialidad}</span> es{" "}
-              <span className="font-medium text-gray-900">{formatFechaTurnoCorta(mejorTurno.turno.fecha, mejorTurno.turno.hora_inicio)} h</span>
-              {/* Con su tratamiento: el atajo propone reservar con una persona
-                  concreta, así que la nombra como ella eligió llamarse. */}
-              <br />con {formatNombreMedico(mejorTurno.medico.nombre_completo, mejorTurno.medico.titulo)}
-            </p>
-            <button
-              onClick={reservarAtajo}
-              className="mt-4 w-full rounded-xl py-3 text-[15px] font-medium text-white active:scale-[0.98]"
-              style={{ backgroundColor: "#378ADD" }}
-            >
-              Reservar ese turno
-            </button>
-            <button
-              onClick={() => setAtajoCerrado(true)}
-              className="mt-2 w-full rounded-xl border py-2.5 text-[14px] font-medium text-gray-600"
-              style={{ borderColor: "#d6d3d1" }}
-            >
-              Buscar otro turno
-            </button>
+        <button
+          onClick={reservarAtajo}
+          className="mb-3 w-full rounded-xl border border-[#378ADD]/40 bg-[#378ADD]/5 p-4 text-left active:scale-[0.99] transition-all duration-100"
+        >
+          <p className="text-[13px] font-medium text-gray-500">
+            Nadie puede atenderte ahora mismo. Lo más pronto:
+          </p>
+          <div className="mt-1.5 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              {/* Con su tratamiento: propone reservar con una persona concreta,
+                  así que la nombra como ella eligió llamarse. */}
+              <p className="truncate text-[15px] font-semibold text-gray-900">
+                {formatNombreMedico(mejorTurno.medico.nombre_completo, mejorTurno.medico.titulo)}
+              </p>
+              <p className="truncate text-[13px] text-gray-600">
+                {mejorTurno.medico.especialidad} ·{" "}
+                <span className="whitespace-nowrap">{formatFechaTurnoCorta(mejorTurno.turno.fecha, mejorTurno.turno.hora_inicio)} h</span>
+                {mejorTurno.medico.precio_consulta ? ` · ${formatPrecio(mejorTurno.medico.precio_consulta)}` : ""}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-lg bg-[#378ADD] px-4 py-2 text-[13px] font-semibold text-white">
+              Reservar
+            </span>
           </div>
-        </div>
+        </button>
       )}
 
       {ordenados.length === 0 ? (
