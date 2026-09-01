@@ -423,7 +423,7 @@ export async function resolverNoShowMedico(
   // (sin-respuesta.ts, 21/08); acá se calca para el turno que dejó plantado.
   // La agenda publicada NO se toca: tiene turnos ya pagados por otros
   // pacientes, y cancelarlos en cadena es una decisión aparte de Diego.
-  void avisarMedicoPorTurnoPlantado(turno.medico_id, turno.fecha).catch(() => {});
+  void avisarMedicoPorPlantada(turno.medico_id, "turno", turno.fecha).catch(() => {});
 
   // Mail al paciente, además del push y el mensaje interno de abajo: el push
   // solo llega si activó notificaciones (la paciente del 30/08 tenía CERO
@@ -620,11 +620,20 @@ function formatearFechaCorta(fecha: string): string {
  * registra la transición en `disponibilidad_log` para que el historial no
  * mienta sobre cuánto estuvo publicado.
  *
- * A diferencia de la CI —donde el mensaje solo existe si hubo apagado— acá el
- * mensaje va SIEMPRE: lo central no es el toggle, es que dejó a un paciente
- * pago esperando y hubo que devolverle la plata.
+ * A diferencia del pedido sin aceptar —donde el mensaje solo existe si hubo
+ * apagado— acá el mensaje va SIEMPRE: lo central no es el toggle, es que dejó a
+ * un paciente PAGO esperando y hubo que devolverle la plata.
+ *
+ * Sirve a los DOS canales (canal 'turno' | 'ci'): el hueco de la CI paga se
+ * detectó el 01/09 — el paciente pagaba, esperaba 30 minutos, cobraba su
+ * reembolso... y el profesional no se enteraba de NADA ni perdía la
+ * disponibilidad. Exportada porque la llama resolver-vencidas (plazo CI).
  */
-async function avisarMedicoPorTurnoPlantado(medicoId: string, fecha: string): Promise<void> {
+export async function avisarMedicoPorPlantada(
+  medicoId: string,
+  canal: "turno" | "ci",
+  fecha: string
+): Promise<void> {
   if (!medicoId) return;
   const admin = createAdminClient();
 
@@ -653,24 +662,35 @@ async function avisarMedicoPorTurnoPlantado(medicoId: string, fecha: string): Pr
     : await admin.from("medicos").select("nombre_completo").eq("id", medicoId).maybeSingle();
   const primerNombre = (med?.nombre_completo ?? "").split(" ")[0] || "Doctor/a";
 
+  const queEsperaba =
+    canal === "turno"
+      ? `en su turno del ${formatearFechaCorta(fecha)}`
+      : "en su consulta inmediata, ya paga,";
+  const titulo =
+    canal === "turno" ? "Un paciente te esperó en su turno" : "Un paciente pagó y te esperó";
   const cuerpo =
-    `Hola ${primerNombre}. Un paciente te esperó en su turno del ${formatearFechaCorta(fecha)} y la consulta no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
+    `Hola ${primerNombre}. Un paciente te esperó ${queEsperaba} y la consulta no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
     " Pausamos la publicación de tus turnos libres para que no le pase lo mismo a otro paciente — los reactivás con un toque desde tu agenda cuando puedas volver a atender. Tus turnos ya reservados siguen en pie." +
     (seApago
       ? " También te desactivamos de Consulta Inmediata."
-      : " Si te surge un imprevisto, cancelá el turno con anticipación desde tu agenda: el paciente recibe el reembolso al instante y puede reservar con otro profesional.");
+      : canal === "turno"
+        ? " Si te surge un imprevisto, cancelá el turno con anticipación desde tu agenda: el paciente recibe el reembolso al instante y puede reservar con otro profesional."
+        : " Si no vas a poder atender, apagate de Consulta Inmediata desde tu panel: mientras figurás en línea te siguen eligiendo.");
 
   await admin.from("mensajes_internos_medicos").insert({
     medico_id: medicoId,
-    titulo: "Un paciente te esperó en su turno",
+    titulo,
     cuerpo,
     severidad: "media",
   });
 
   pushAlMedico(medicoId, {
-    title: "Un paciente te esperó en su turno",
-    body: `El turno del ${formatearFechaCorta(fecha)} no ocurrió y devolvimos el pago. Mirá el mensaje en tu panel.`,
+    title: titulo,
+    body:
+      canal === "turno"
+        ? `El turno del ${formatearFechaCorta(fecha)} no ocurrió y devolvimos el pago. Mirá el mensaje en tu panel.`
+        : "La consulta paga no ocurrió y devolvimos el pago. Mirá el mensaje en tu panel.",
     url: "/dashboard",
-    tag: `turno-plantado-${fecha}`,
+    tag: `plantada-${canal}-${fecha}`,
   }).catch(() => {});
 }
