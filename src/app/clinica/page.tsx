@@ -60,6 +60,11 @@ export default async function ClinicaPage() {
   // columnas sin GRANT para `authenticated` y con el cliente RLS basta que UNA
   // entre al SELECT para que PostgREST falle la query ENTERA y devuelva null en
   // silencio (outage del dashboard médico, junio). `titulo` sí tiene GRANT.
+  // MIGA DE PAN: la regla de "está ofertado" que arma este bloque (aprobado +
+  // no oculto + carril test + identidad + puede cobrar + R2) está CALCADA en
+  // src/lib/oferta.ts para el menú de rescate. Si tocás un filtro acá, tocalo
+  // allá — esta página no se refactoriza a propósito (es el SELECT que llena
+  // la clínica; lección del outage 22/06).
   const { data: medicosRaw } = await supabase
     .from("medicos")
     .select("id, especialidad, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test")
