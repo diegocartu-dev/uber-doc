@@ -6,6 +6,7 @@ import { Video, CheckCircle, CreditCard } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
+import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 
 const POLL_INTERVAL = 5000;
 
@@ -273,15 +274,10 @@ export default function SalaEsperaCliente({
           dentro de los 30 minutos. <strong>Ya iniciamos la devolución total</strong> del importe al
           mismo medio con el que pagaste.
         </p>
-        <p className="mt-2 text-sm text-gray-600">
-          Podés elegir otro profesional ahora mismo.
-        </p>
-        <a
-          href="/clinica"
-          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
-        >
-          Elegir otro profesional
-        </a>
+        {/* El menú de rescate: A QUIÉN puede elegir, con nombres — no un link
+            frío a la clínica. En los casos históricos, la mitad de las veces
+            había alguien de la misma jurisdicción online y no se lo mostramos. */}
+        <MenuAlternativas consultaId={consultaId} />
       </div>
     );
   }
@@ -333,12 +329,7 @@ export default function SalaEsperaCliente({
           {nombreMedico ? `${nombreMedico} no llegó` : "No llegaron"} a tomar tu consulta esta vez.{" "}
           <strong>No se te cobró nada.</strong>
         </p>
-        <a
-          href="/clinica"
-          className="mt-6 block w-full rounded-xl bg-[#378ADD] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.97] transition-all duration-100"
-        >
-          Buscar otro médico
-        </a>
+        <MenuAlternativas consultaId={consultaId} />
       </div>
     );
   }

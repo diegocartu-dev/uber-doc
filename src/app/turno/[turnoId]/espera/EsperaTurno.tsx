@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { CheckCircle, XCircle, Video } from "lucide-react";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
@@ -233,6 +234,16 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
         >
           Unirse a la videollamada
         </a>
+      )}
+
+      {/* El menú de rescate, en bloque APARTE del cierre de la transacción
+          (orden emocional, gate Sofía): primero "te devolvemos el 100%", después
+          "¿necesitás atenderte hoy?". El que falló no aparece (lo excluye el
+          servidor); si no hay nada vivo, el bloque no existe. */}
+      {(estado === "cancelado" || estado === "ausente") && (
+        <div className="mx-auto max-w-md text-left">
+          <MenuAlternativas turnoId={turnoId} />
+        </div>
       )}
 
       {/* Terminales con plata: el paciente se va cuando terminó de leer, no a los 4s. */}
