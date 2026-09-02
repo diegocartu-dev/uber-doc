@@ -72,7 +72,7 @@ export default async function AdminDashboardPage({
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
-    admin.from("turnos").select("medico_id").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", fechaAR(-7)),
+    admin.from("turnos").select("medico_id, fecha").eq("estado", "disponible").gte("fecha", hoy).lte("fecha", fechaAR(-7)),
     // Reembolsos pendientes: misma cola que /admin/reembolsos (no resueltos)
     admin.from("refunds_pendientes").select("id", { count: "exact", head: true }).neq("estado", "resuelto"),
   ]);
@@ -135,6 +135,18 @@ export default async function AdminDashboardPage({
     }))
     .sort((a, b) => b.slots - a.slots);
 
+  // Turnos libres de HOY por profesional. La tarjeta de "disponibles ahora"
+  // decía en qué CANAL se lo ve (clínica/consultorio) pero no qué está
+  // OFRECIENDO: con el toggle prendido, saber si además tiene agenda abierta hoy
+  // cambia a quién se le reclama oferta. Sale de la query de oferta que ya
+  // existía — solo se le sumó `fecha`, sin viaje extra a la base.
+  const turnosHoyPorMedico = new Map<string, number>();
+  for (const t of turnosDisponiblesData ?? []) {
+    if (t.medico_id && t.fecha === hoy) {
+      turnosHoyPorMedico.set(t.medico_id, (turnosHoyPorMedico.get(t.medico_id) ?? 0) + 1);
+    }
+  }
+
   const medicosDisponibles = (medicosDisponiblesData ?? []).map((m) => ({
     id: m.id,
     nombre: m.nombre_completo,
@@ -142,6 +154,7 @@ export default async function AdminDashboardPage({
     clinica: !m.oculto_clinica,
     consultorio: m.visible_consultorio_particular ?? true,
     hasta: m.disponible_hasta,
+    turnosHoy: turnosHoyPorMedico.get(m.id) ?? 0,
   }));
 
   const diasSemana: { fecha: string; consultas: number; completadas: number }[] = [];
