@@ -657,10 +657,16 @@ export async function avisarMedicoPorPlantada(
     await admin.from("disponibilidad_log").insert({ medico_id: medicoId, online: false });
   }
 
-  const { data: med } = seApago
-    ? { data: apagado![0] }
-    : await admin.from("medicos").select("nombre_completo").eq("id", medicoId).maybeSingle();
+  // `categoria` en la misma lectura: el aviso solo menciona la condición de
+  // fundador si efectivamente la tiene (a un tradicional no se le advierte que
+  // puede perder algo que ya no tiene).
+  const { data: med } = await admin
+    .from("medicos")
+    .select("nombre_completo, categoria")
+    .eq("id", medicoId)
+    .maybeSingle();
   const primerNombre = (med?.nombre_completo ?? "").split(" ")[0] || "Doctor/a";
+  const esFounder = med?.categoria === "founder";
 
   const queEsperaba =
     canal === "turno"
@@ -675,13 +681,41 @@ export async function avisarMedicoPorPlantada(
       ? " También te desactivamos de Consulta Inmediata."
       : canal === "turno"
         ? " Si te surge un imprevisto, cancelá el turno con anticipación desde tu agenda: el paciente recibe el reembolso al instante y puede reservar con otro profesional."
-        : " Si no vas a poder atender, apagate de Consulta Inmediata desde tu panel: mientras figurás en línea te siguen eligiendo.");
+        : " Si no vas a poder atender, apagate de Consulta Inmediata desde tu panel: mientras figurás en línea te siguen eligiendo.") +
+    // El AVISO de la política de categorías (decisión Diego 01/09: la primera vez
+    // avisa; él decide caso por caso, que hoy son pocos). Sin esta línea el
+    // "aviso" no advierte de nada: el profesional se entera de la consecuencia
+    // recién cuando le llega. Vocabulario fijado por Diego: "coste por uso de la
+    // plataforma", NUNCA "comisión".
+    (esFounder
+      ? " Te recordamos que tu condición de fundador —el 5% de coste por uso de la plataforma, en lugar del 10% general— se sostiene atendiendo las consultas que los pacientes ya pagaron."
+      : "");
 
   await admin.from("mensajes_internos_medicos").insert({
     medico_id: medicoId,
     titulo,
     cuerpo,
     severidad: "media",
+  });
+
+  // Alerta en el panel admin. Hasta ahora una plantada no generaba NINGUNA señal
+  // para el equipo: del caso del 30/08 nos enteramos porque la paciente escribió
+  // a soporte. Si la decisión de cambiar la categoría es manual (Diego, 01/09),
+  // sin esta alerta no hay nada que decidir.
+  await admin.from("alertas_admin").insert({
+    tipo: "medico_ausente",
+    titulo: `${med?.nombre_completo ?? "Un profesional"} no atendió una consulta paga`,
+    descripcion:
+      `${canal === "turno" ? "Turno" : "Consulta inmediata"} del ${formatearFechaCorta(fecha)}. ` +
+      `Se reembolsó el 100% al paciente, se pausó la publicación de su agenda` +
+      `${seApago ? " y se apagó su Consulta Inmediata" : ""}. ` +
+      (esFounder
+        ? "Es fundador (5%): revisar si corresponde pasarlo a categoría general."
+        : "Ya está en categoría general."),
+    entidad_tipo: "medico",
+    entidad_id: medicoId,
+    severidad: "alta",
+    estado: "pendiente",
   });
 
   pushAlMedico(medicoId, {
