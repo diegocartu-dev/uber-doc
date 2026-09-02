@@ -23,7 +23,7 @@ interface Props {
     testOcultasHoy: number;
   };
   diasSemana: { fecha: string; consultas: number; completadas: number }[];
-  medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null }[];
+  medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null; turnosHoy: number }[];
   turnosPorEspecialidad: { especialidad: string; slots: number; medicos: { id: string; nombre: string; slots: number }[] }[];
 }
 
@@ -59,7 +59,10 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
         {/* Médicos disponibles ahora */}
         <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Médicos disponibles ahora</h2>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Con Consulta Inmediata activa
+              <span className="ml-1.5 font-normal text-gray-400">— pueden atender ahora mismo</span>
+            </h2>
             <span className="text-xs font-semibold" style={{ color: medicosDisponibles.length > 0 ? "#1D9E75" : "#888780" }}>
               {medicosDisponibles.length}
             </span>
@@ -75,14 +78,27 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
                     <p className="text-xs text-gray-400">
                       {m.especialidad}
                       {m.hasta ? ` · hasta las ${m.hasta.slice(0, 5)}` : ""}
+                      {m.turnosHoy > 0
+                        ? ` · ${m.turnosHoy} ${m.turnosHoy === 1 ? "turno libre" : "turnos libres"} hoy`
+                        : " · sin turnos libres hoy"}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     {m.clinica && (
-                      <span className="rounded-full bg-[#378ADD]/10 px-2 py-0.5 text-[11px] font-medium text-[#378ADD]">Clínica</span>
+                      <span
+                        className="rounded-full bg-[#378ADD]/10 px-2 py-0.5 text-[11px] font-medium text-[#378ADD]"
+                        title="Visible en la clínica virtual: cualquier paciente puede elegirlo"
+                      >
+                        En la clínica
+                      </span>
                     )}
                     {m.consultorio && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">Consultorio</span>
+                      <span
+                        className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500"
+                        title="Visible en su consultorio particular: solo por el link que él comparte"
+                      >
+                        Su consultorio
+                      </span>
                     )}
                   </div>
                 </div>
