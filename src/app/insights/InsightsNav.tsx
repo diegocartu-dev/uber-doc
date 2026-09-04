@@ -6,6 +6,8 @@ import { Stethoscope, Settings, AlertTriangle } from "lucide-react";
 
 const LINKS = [
   { href: "/insights", label: "Hoy" },
+  // Tablero único (Diego, 04/09/2026): convive con "Hoy" mientras se valida.
+  { href: "/admin/tablero", label: "Tablero" },
   { href: "/insights/atenciones", label: "Atenciones" },
   { href: "/insights/medicos", label: "Médicos" },
   { href: "/insights/especialidades", label: "Especialidades" },

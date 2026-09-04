@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
+  Gauge,
   Stethoscope,
   Users,
   MessageSquare,
@@ -25,6 +26,9 @@ import {
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badgeKey: null },
+  // Tablero único (Diego, 04/09/2026): reemplaza al Dashboard y al "Hoy" de
+  // Insights. Convive con los dos mientras se valida en producción.
+  { href: "/admin/tablero", label: "Tablero", icon: Gauge, badgeKey: null },
   { href: "/admin/medicos", label: "Medicos", icon: Stethoscope, badgeKey: "medicos" as const },
   { href: "/admin/pacientes", label: "Pacientes", icon: Users, badgeKey: null },
   { href: "/admin/consultas", label: "Consultas", icon: MessageSquare, badgeKey: null },

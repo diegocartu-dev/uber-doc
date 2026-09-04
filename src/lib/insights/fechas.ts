@@ -34,3 +34,14 @@ export function lunesDeSemanaAR(iso?: string): string {
   d.setUTCDate(d.getUTCDate() - retroceso);
   return d.toISOString().slice(0, 10);
 }
+
+/** Suma (o resta) días a una fecha "AAAA-MM-DD" sin pasar por la zona local del proceso. */
+export function sumarDiasAR(fecha: string, n: number): string {
+  const d = new Date(fecha + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Hora (0–23) y minuto de un instante ISO, en hora argentina. */
+export const horaARdeISO = (iso: string) => new Date(Date.parse(iso) - 3 * 3600_000).getUTCHours();
+export const minutoARdeISO = (iso: string) => new Date(Date.parse(iso) - 3 * 3600_000).getUTCMinutes();
