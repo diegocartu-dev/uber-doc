@@ -332,6 +332,7 @@ Features en produccion que no estaban en el ROADMAP original. Detectados en audi
 | 12g. Feature flags | ✅ En prod | src/app/api/admin/feature-flags/ + tabla feature_flags |
 | 12h. Beta access + registro cerrado + whitelist | ✅ En prod | src/app/beta-access/ + api/beta-login/ + whitelist email (PR #87) |
 | 12i. Insights dashboard (hoy, funnel, medicos, especialidades) | ✅ En prod | src/app/insights/ — 4 vistas |
+| 12j. Tablero único de gestión (`/admin/tablero`) | 🟡 En prod, en validación (04/09/2026) | src/lib/tablero/ + src/app/admin/tablero/; reemplaza a 12i y al Dashboard cuando Diego lo valide — docs/sprints/2026-09-04-tablero-unico.md |
 | 12j. Lista de espera pre-launch | ✅ En prod | src/app/api/lista-espera/ — captura emails medicos/pacientes |
 | 12k. Canal de documentacion (estudios, envio docs medico) | ✅ En prod | api/consulta/subir-estudio, enviar-documento-medico, estudios, eliminar-estudio |
 | 12l. Info medica paciente (pre-consulta) | ✅ En prod | src/app/consulta/[id]/info-medica/ + turno/[turnoId]/info-medica/ |

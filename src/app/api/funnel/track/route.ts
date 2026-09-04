@@ -14,6 +14,26 @@ const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido", "triage_paso", "tri
 // en qué paso — con esto, "¿dónde se frenan?" se responde con una query.
 const EVENTOS_REGISTRO = ["registro_medico_paso", "registro_medico_error"] as const;
 
+// La metadata la escribe el cliente y termina en pantallas del admin (tablero,
+// Demanda). Para los eventos del PACIENTE solo se guardan claves cortas con
+// valores de texto limpio, números o booleanos; `medicoId` tiene que ser un
+// UUID (o el marcador "sin-oferta" del formulario de contacto). Lo demás se
+// descarta en silencio: no se confía en el cliente (hallazgo de Roberto, 04/09).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TEXTO = /^[\p{L}\p{N} _.,:;()'¿?¡!\/-]{1,200}$/u;
+function metadataDePaciente(m: unknown): Record<string, unknown> {
+  if (!m || typeof m !== "object") return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(m as Record<string, unknown>)) {
+    if (!/^[a-zA-Z_]{1,40}$/.test(k)) continue;
+    if (typeof v === "number" || typeof v === "boolean") out[k] = v;
+    else if (typeof v === "string") {
+      if (k === "medicoId" ? UUID.test(v) || v === "sin-oferta" : TEXTO.test(v)) out[k] = v;
+    }
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -47,7 +67,7 @@ export async function POST(req: NextRequest) {
       // No contaminar el funnel del PACIENTE con médicos que curiosean la clínica:
       // si el usuario es médico, descartamos el evento de paciente.
       if (medico) return NextResponse.json({ ok: true });
-      await trackEvent({ evento, pacienteId: user.id, metadata: metadata ?? {} });
+      await trackEvent({ evento, pacienteId: user.id, metadata: metadataDePaciente(metadata) });
     }
     // Cualquier otro evento: se ignora silenciosamente (no se confía en el cliente).
   } catch {
