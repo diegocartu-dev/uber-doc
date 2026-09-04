@@ -5,6 +5,12 @@
 lo valida. Cuando lo dé por bueno, los dos viejos se apagan y `/insights`
 redirige.
 
+PR #469, mergeado el 04/09/2026 (squash, `b984282`); deploy de producción
+en Ready ese mismo día. Verificado desde afuera: la ruta responde y redirige
+al login sin sesión. **La pantalla con sesión de admin la valida Diego en su
+navegador**: la extensión de Chrome no estaba conectada para hacerlo desde
+la sesión de trabajo, así que ese paso no se verificó.
+
 Decisión que lo origina (Diego, 04/09): *"Quiero rehacer desde cero los
 tableros de Docto [...] Un solo tablero, no dos."* y, para publicarlo:
 *"podemos aplicarlo a un nuevo ITEM consulta en el menu, sin quitar lo que hoy

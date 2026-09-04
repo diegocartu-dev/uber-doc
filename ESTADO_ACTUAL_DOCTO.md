@@ -396,7 +396,8 @@ del sistema, infraestructura, regulatorio o roadmap principal.*
 
 **Estado:** en producción como ítem nuevo del menú del admin
 (`/admin/tablero`, "Tablero"), **conviviendo** con el Dashboard y con
-Insights mientras Diego lo valida. Decisión literal (04/09): *"podemos
+Insights mientras Diego lo valida. PR #469 mergeado y desplegado el
+04/09/2026; la pantalla con sesión de admin queda por validar por Diego. Decisión literal (04/09): *"podemos
 aplicarlo a un nuevo ITEM consulta en el menu, sin quitar lo que hoy esta?
 osea mientras validamos conviven los dos?"* Detalle técnico en
 `docs/sprints/2026-09-04-tablero-unico.md`. El manual que rige es `MANUAL-TABLEROS.md` (raíz
