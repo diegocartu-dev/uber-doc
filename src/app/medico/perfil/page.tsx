@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
+import { parsearEspecialidadesAdicionales } from "@/lib/especialidades";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -53,10 +54,15 @@ export default async function PerfilMedicoPage() {
   // funcionan en producción). Con service role, filtrada por user_id.
   const { data: areasRow } = await admin
     .from("medicos")
-    .select("areas_atencion")
+    .select("areas_atencion, especialidades_adicionales")
     .eq("user_id", user.id)
     .maybeSingle();
   const areasAtencion = parsearAreasAtencion(areasRow?.areas_atencion);
+  // Especialidades adicionales (#451): se cargan por admin y el profesional
+  // tiene que VERLAS acá o cree que no existen — una médica escribió a soporte
+  // "en mi perfil figura solo lo que yo puse" con la segunda especialidad ya
+  // cargada. Misma query admin (la columna no tiene GRANT para authenticated).
+  const especialidadesAdicionales = parsearEspecialidadesAdicionales(areasRow?.especialidades_adicionales);
 
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
@@ -74,6 +80,7 @@ export default async function PerfilMedicoPage() {
           mpAccount={mpAccount}
           userEmail={user.email ?? ""}
           areasAtencion={areasAtencion}
+          especialidadesAdicionales={especialidadesAdicionales}
         />
       </Suspense>
     </div>
