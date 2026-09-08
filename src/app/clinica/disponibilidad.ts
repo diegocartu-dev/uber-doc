@@ -47,13 +47,23 @@ export function normalizeTime(t: string): string {
   return t.slice(0, 5);
 }
 
-export function estaEnHorario(medico: Medico): boolean {
+/** "HH:MM" de AHORA en hora argentina, sin importar dónde corra el código. */
+export function horaActualAR(ahora: Date = new Date()): string {
+  const ar = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  return `${ar.getHours().toString().padStart(2, "0")}:${ar.getMinutes().toString().padStart(2, "0")}`;
+}
+
+// La ventana horaria del profesional (disponible_desde/hasta) está en hora
+// ARGENTINA, así que se compara contra la hora argentina — no contra la hora
+// local del runtime. Antes usaba `new Date().getHours()`, que en el navegador
+// es la hora del dispositivo del paciente (uno en otra zona horaria veía
+// "nadie en línea" con la médica adentro de su ventana) y en el SERVIDOR es
+// UTC (Vercel): el menú de rescate, que reusa esta función, evaluaba una
+// ventana 09–12 como si fuera 12–15. Caso 01/09: paciente real de CABA, 09:17,
+// médica en línea desde las 08:55 con ventana 09–12 → la foto dijo 0 en línea.
+export function estaEnHorario(medico: Medico, horaActual: string = horaActualAR()): boolean {
   if (!medico.disponible) return false;
   if (!medico.disponible_desde || !medico.disponible_hasta) return medico.disponible;
-  const ahora = new Date();
-  const hh = ahora.getHours().toString().padStart(2, "0");
-  const mm = ahora.getMinutes().toString().padStart(2, "0");
-  const horaActual = `${hh}:${mm}`;
   return horaActual >= normalizeTime(medico.disponible_desde) && horaActual <= normalizeTime(medico.disponible_hasta);
 }
 
