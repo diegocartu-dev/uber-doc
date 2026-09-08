@@ -48,10 +48,13 @@ export default function PerfilClient({
   mpAccount,
   userEmail,
   areasAtencion = [],
+  especialidadesAdicionales = [],
 }: {
   medico: Medico;
   mpAccount: MpAccount | null;
   userEmail: string;
+  /** Especialidades en las que TAMBIÉN figura (las carga admin, #451). */
+  especialidadesAdicionales?: string[];
   // Áreas de atención adicionales ya declaradas (ej: Adolescencia 10-19). Llega
   // con default [] para que la pantalla nunca dependa de que el dato exista.
   areasAtencion?: AreaAtencion[];
@@ -354,6 +357,12 @@ export default function PerfilClient({
                 readOnly
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500"
               />
+              {especialidadesAdicionales.length > 0 && (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  También figurás en <strong className="text-gray-700">{especialidadesAdicionales.join(", ")}</strong>:
+                  los pacientes te encuentran buscando cualquiera de las dos.
+                </p>
+              )}
             </div>
 
             {/* Tipo matrícula */}
