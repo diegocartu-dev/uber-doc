@@ -98,8 +98,15 @@ export default async function DetalleAtencionPage({
         { hora: fmtHora(at.completada_at), label: `Cierre — ${CIERRE_LABEL[at.cierre_origen as string] ?? "sin firma (anterior al 04/08)"}` },
       ]
     : [
-        { hora: fmtHora(at.created_at), label: `Solicitada y pagada (${fmtARS(at.monto)})` },
+        // El pedido de una CI NO se paga al pedirlo: el paciente paga DESPUÉS de
+        // que el profesional acepta. Este renglón decía "Solicitada y pagada"
+        // siempre, incluso en consultas sin un peso cobrado — y la ficha se
+        // contradecía a sí misma con el bloque PLATA de abajo ("Sin pago").
+        // Caso 08/09: pedida 08:01, aceptada 08:02, nunca pagada, y la línea de
+        // tiempo la daba por pagada.
+        { hora: fmtHora(at.created_at), label: "Solicitada" },
         { hora: fmtHora(at.aceptada_at), label: "Aceptada por el médico" },
+        { hora: fmtHora(at.mp_payment_created_at), label: `Pagada (${fmtARS(at.monto)})` },
         { hora: fmtHora(at.en_curso_at), label: "Video iniciado" },
         { hora: fmtHora(at.desconectado_at), label: "Corte de conexión (sin retorno)" },
         { hora: fmtHora(at.completada_at), label: `Cierre — ${CIERRE_LABEL[at.cierre_origen as string] ?? "sin firma (anterior al 04/08)"}` },
