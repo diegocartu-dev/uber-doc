@@ -32,11 +32,17 @@ export async function registrarSW(): Promise<ServiceWorkerRegistration | null> {
 }
 
 export async function suscribirPush(rol: "medico" | "paciente"): Promise<boolean> {
-  const reg = await registrarSW();
-  if (!reg) return false;
+  if (!pushSoportado()) return false;
 
+  // El permiso se pide PRIMERO, sin ningún await antes: Safari solo lo concede
+  // dentro del gesto del usuario, y registrar el service worker (async) rompe
+  // esa cadena — la misma trampa que el prompt de cámara/micrófono documentada
+  // en CLAUDE.md. Además, si dice que no, ni siquiera registramos el SW.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return false;
+
+  const reg = await registrarSW();
+  if (!reg) return false;
 
   const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!vapidKey) return false;

@@ -10,6 +10,7 @@ import DoctoLogo from "@/components/DoctoLogo";
 import LoadingButton from "@/components/ui/LoadingButton";
 import TerminosContent from "@/app/terminos/TerminosContent";
 import { trackFunnel } from "@/lib/funnel-client";
+import { suscribirPush, pushSoportado, pushYaActivo, pushRechazado, esIOSSinPWA } from "@/lib/push-client";
 
 const SINTOMAS_EMERGENCIA = [
   "Dolor de pecho",
@@ -174,8 +175,47 @@ function TriageContent() {
     }
   }
 
+  /**
+   * Permiso de avisos, pedido ACÁ y no después (decisión Diego 08/09: "los
+   * pacientes sí o sí tienen que tener notificaciones cuando seleccionan un
+   * profesional, porque después no se enteran").
+   *
+   * Este clic es el gesto del usuario que los navegadores exigen para mostrar
+   * el prompt: por eso se pide antes de cualquier await. Si el paciente dice
+   * que no —o está en un iPhone sin la app instalada, donde el push no existe—
+   * la consulta se crea igual: bloquearla dejaría afuera a media Argentina.
+   * El aviso llega por MAIL en todos los casos; el push es el extra.
+   */
+  async function pedirPermisoAvisos(): Promise<void> {
+    try {
+      if (esIOSSinPWA()) {
+        trackFunnel("permiso_notificaciones", { resultado: "imposible", motivo: "ios_sin_pwa" });
+        return;
+      }
+      if (!pushSoportado()) {
+        trackFunnel("permiso_notificaciones", { resultado: "imposible", motivo: "no_soportado" });
+        return;
+      }
+      if (pushYaActivo()) {
+        trackFunnel("permiso_notificaciones", { resultado: "ya_activo" });
+        return;
+      }
+      if (pushRechazado()) {
+        trackFunnel("permiso_notificaciones", { resultado: "rechazado_antes" });
+        return;
+      }
+      const ok = await suscribirPush("paciente");
+      trackFunnel("permiso_notificaciones", { resultado: ok ? "concedido" : "rechazado" });
+    } catch {
+      trackFunnel("permiso_notificaciones", { resultado: "error" });
+    }
+  }
+
   function handleConfirmarConsulta() {
     setMostrarConfirmacion(false);
+    // El permiso se pide DENTRO del gesto del clic, antes de la transición: un
+    // await previo rompe la cadena y Safari no muestra el prompt.
+    void pedirPermisoAvisos();
     startTransition(async () => {
       procesarRespuesta(
         await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen)
@@ -562,6 +602,16 @@ function TriageContent() {
             </p>
             <p className="mt-3 text-sm font-medium text-gray-900">
               ¿Tu consulta es no urgente y podés esperar la atención del médico?
+            </p>
+
+            {/* Por qué el navegador va a pedir permiso al tocar continuar. Sin
+                esta línea el prompt aparece de la nada y se rechaza por reflejo
+                — y el paciente que rechaza es el que después no se entera de
+                que lo aceptaron (caso 08/09). */}
+            <p className="mt-4 rounded-lg bg-gray-50 px-3 py-2.5 text-[13px] leading-relaxed text-gray-600">
+              Al continuar te vamos a pedir permiso para <strong>avisarte</strong>: el
+              profesional puede aceptar tu consulta en menos de un minuto, y necesitás
+              enterarte aunque no estés mirando la pantalla. También te llega por mail.
             </p>
 
             <div className="mt-6 space-y-3">
