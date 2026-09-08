@@ -626,13 +626,18 @@ function PendienteCard({
       <BloqueIdentidad medico={m} gateActiva={gateIdentidadActiva} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
+        {/* Link nativo, no window.open: en Safari/iPhone (y en la PWA) el
+            window.open se traga en silencio y el admin "no puede ver la
+            credencial" (reporte Diego 07/09). Misma regla que DescargarPDF. */}
         {m.foto_credencial_url && (
-          <button
-            onClick={() => window.open(`/api/admin/credencial?path=${encodeURIComponent(m.foto_credencial_url!)}`, "_blank")}
+          <a
+            href={`/api/admin/credencial?path=${encodeURIComponent(m.foto_credencial_url!)}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
           >
             <FileText size={14} /> Ver credencial
-          </button>
+          </a>
         )}
         <button
           onClick={onImpersonate}
@@ -1246,12 +1251,14 @@ function MedicoDetalle({
         </div>
       )}
       {m.foto_credencial_url && (
-        <button
-          onClick={() => window.open(`/api/admin/credencial?path=${encodeURIComponent(m.foto_credencial_url!)}`, "_blank")}
+        <a
+          href={`/api/admin/credencial?path=${encodeURIComponent(m.foto_credencial_url!)}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
         >
           <FileText size={16} /> Ver credencial
-        </button>
+        </a>
       )}
 
       <div className="border-t border-gray-100 pt-4">
