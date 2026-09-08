@@ -1,6 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { enviarEmailConsultaAceptada } from "@/lib/email";
+import { pushAlPaciente } from "@/lib/push";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function aceptarConsulta(consultaId: string) {
   const supabase = await createClient();
@@ -56,6 +59,38 @@ export async function aceptarConsulta(consultaId: string) {
   if (error) {
     return { error: error.message };
   }
+
+  // AVISARLE AL PACIENTE. Hasta el 08/09 esto no existía: aceptar solo cambiaba
+  // el estado, y el paciente se enteraba únicamente si tenía la pestaña abierta
+  // (la sala pregunta cada 5 s). Caso real: aceptada a los 25 segundos, el
+  // paciente reapareció 32 minutos después y la profesional ya la había
+  // cancelado. Best-effort a propósito: que falle un aviso no puede desarmar
+  // una aceptación que ya está escrita.
+  //
+  // Mail SIEMPRE (es el canal que no depende de nada: de 388 pacientes reales,
+  // UNO tenía permiso de notificaciones) y push si lo tiene.
+  void enviarEmailConsultaAceptada(consultaId).catch(() => {});
+  void (async () => {
+    const admin = createAdminClient();
+    const { data: c } = await admin
+      .from("consultas")
+      .select("paciente_id")
+      .eq("id", consultaId)
+      .maybeSingle();
+    if (!c?.paciente_id) return;
+    const { data: fila } = await admin
+      .from("pacientes")
+      .select("id")
+      .eq("user_id", c.paciente_id)
+      .maybeSingle();
+    if (!fila) return;
+    await pushAlPaciente(fila.id, {
+      title: "Aceptaron tu consulta",
+      body: "Falta el pago para que empiece. Entrá ahora.",
+      url: `/sala-espera/${consultaId}`,
+      tag: `aceptada-${consultaId}`,
+    });
+  })().catch(() => {});
 
   return { success: true };
 }
