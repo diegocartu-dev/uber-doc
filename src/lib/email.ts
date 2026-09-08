@@ -191,6 +191,8 @@ function generarICS(datos: DatosTurno, method: "REQUEST" | "CANCEL"): string {
 
 const AZUL = "#378ADD";
 const NARANJA = "#D85A30";
+// Verde del sistema: SOLO indicadores de estado (nunca botones ni marcos).
+const VERDE = "#1D9E75";
 const GRIS = "#374151";
 const GRIS_CLARO = "#f3f4f6";
 const BORDE = "#e5e7eb";
@@ -410,6 +412,83 @@ export async function enviarEmailTurnoAusenteMedico(turnoId: string): Promise<vo
     console.log("[email] turno ausente_medico enviado:", turnoId);
   } catch (err) {
     console.error("[email] enviarEmailTurnoAusenteMedico falló (agotados reintentos):", err);
+  }
+}
+
+/**
+ * El profesional ACEPTÓ una consulta inmediata: el paciente tiene que pagar
+ * para que arranque. Hasta el 08/09 `aceptarConsulta` solo cambiaba el estado y
+ * NO avisaba por ningún canal — el paciente se enteraba únicamente si tenía la
+ * pestaña abierta (la sala pregunta cada 5 s). Caso real: pidió 08:01, la
+ * aceptaron 08:02, dejó el teléfono, y a los 30 minutos la profesional canceló;
+ * él reapareció a las 08:34 y ya no había nada.
+ *
+ * El mail es el canal que NO depende de nada (el push exige permiso, y de 388
+ * pacientes reales lo tenía UNO). Va con el precio y el link directo a su sala.
+ */
+export async function enviarEmailConsultaAceptada(consultaId: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "consulta_aceptada"); return; }
+  try {
+    const supabase = createAdminClient();
+    const { data: consulta } = await supabase
+      .from("consultas")
+      .select("id, paciente_id, medico_id, monto")
+      .eq("id", consultaId)
+      .single();
+    if (!consulta) return;
+
+    // Solo columnas con GRANT: una sin grant tira la query entera (PostgREST).
+    const { data: medico } = await supabase
+      .from("medicos")
+      .select("nombre_completo, titulo, especialidad, precio_consulta, duracion_consulta")
+      .eq("id", consulta.medico_id)
+      .single();
+    if (!medico) return;
+
+    // `consultas.paciente_id` es el user_id (asimetría de schema por canal).
+    const { data: { user } } = await supabase.auth.admin.getUserById(consulta.paciente_id);
+    if (!user?.email) return;
+    const { data: paciente } = await supabase
+      .from("pacientes")
+      .select("nombre_completo")
+      .eq("user_id", consulta.paciente_id)
+      .maybeSingle();
+
+    const primerNombre = (paciente?.nombre_completo ?? "").split(" ")[0] || "Hola";
+    const medicoConArt = capitalizarInicio(medicoConArticulo(medico.nombre_completo, medico.titulo));
+    const precio = consulta.monto ?? medico.precio_consulta;
+    const importe = precio
+      ? new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(precio)
+      : null;
+
+    const html = wrapHtml("Aceptaron tu consulta — Docto", `
+      <div style="margin-bottom:20px;">${chip("Te esperan", VERDE)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">${medicoConArt} acept&oacute; tu consulta</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+        ${primerNombre}, ya te est&aacute;n esperando${medico.especialidad ? ` en ${medico.especialidad}` : ""}.
+        Para que la consulta empiece, falta que completes el pago${importe ? ` de <strong>${importe}</strong>` : ""}.
+        ${medico.duracion_consulta ? `La videollamada dura ${medico.duracion_consulta} minutos.` : ""}
+      </p>
+      <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">
+        <strong>Es por orden de llegada:</strong> si pasa demasiado tiempo, el profesional puede tomar
+        otro paciente y la consulta se cancela sin cargo.
+      </p>
+      ${boton("Pagar y entrar a la consulta", `${BASE_URL}/sala-espera/${consulta.id}`, AZUL)}
+    `);
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: user.email!,
+        subject: `${medicoConArt} acept\u00f3 tu consulta — falta el pago para empezar`,
+        html,
+        headers: { "Idempotency-Key": `${consulta.id}-aceptada` },
+      }),
+      consulta.id
+    );
+    console.log("[email] consulta aceptada enviada:", consulta.id);
+  } catch (err) {
+    console.error("[email] enviarEmailConsultaAceptada falló (agotados reintentos):", err);
   }
 }
 

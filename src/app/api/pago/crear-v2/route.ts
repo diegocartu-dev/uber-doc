@@ -153,6 +153,13 @@ export async function POST(req: NextRequest) {
 
   const baseUrl = req.nextUrl.origin;
 
+  // El paciente APRETÓ pagar. Se registra ANTES de hablar con Mercado Pago:
+  // `pago_creado` sale recién DESPUÉS de que MP responde bien, así que hasta hoy
+  // un checkout roto no dejaba ningún rastro y "no apretó pagar" era
+  // indistinguible de "apretó y se rompió" (caso 08/09: consulta aceptada en 25
+  // segundos, nunca pagada, y no se pudo saber por qué).
+  trackEvent({ evento: "pago_intento", pacienteId: user.id, medicoId, metadata: { tipo, recursoId: id, monto } });
+
   try {
     const prefBody = {
       items: [
@@ -234,6 +241,10 @@ export async function POST(req: NextRequest) {
       let errBody: unknown = null;
       try { errBody = await mpRes.json(); } catch { errBody = { raw: "non-json response" }; }
       logError("[MP-V2]", "Error creando preferencia", { ...sanitizeMpError(mpRes.status, errBody), medico_id: medicoId });
+      // El intento ya quedó registrado arriba; acá se marca que MURIÓ en MP, con
+      // el status. Sin esto, el embudo muestra el intento y nunca sabe si el
+      // paciente se arrepintió o si el checkout lo expulsó.
+      trackEvent({ evento: "pago_rechazado", pacienteId: user.id, medicoId, metadata: { tipo, recursoId: id, monto, motivo: "preferencia_mp", status: mpRes.status } });
       return NextResponse.json(
         { error: "Error al procesar el pago con Mercado Pago." },
         { status: 502 }

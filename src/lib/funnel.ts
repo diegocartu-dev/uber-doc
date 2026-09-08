@@ -33,6 +33,13 @@ type EventoFunnel =
   // sigue siendo el pago (regla de Fede): un tap es diagnóstico, no éxito.
   | "rescate_ofrecido"
   | "rescate_elegido"
+  // Se emite ANTES de llamar a Mercado Pago: `pago_creado` sale DESPUÉS de que
+  // MP responde bien, así que un checkout roto no dejaba rastro y "no apretó
+  // pagar" era indistinguible de "apretó y falló" (caso 08/09).
+  | "pago_intento"
+  // Qué contestó el paciente al pedido de permiso de avisos al elegir
+  // profesional: concedido / rechazado / imposible en este dispositivo.
+  | "permiso_notificaciones"
   // Registro del médico (Fase B). Ya se emitían; faltaban en este tipo.
   | "registro_medico_paso"
   | "registro_medico_error";
