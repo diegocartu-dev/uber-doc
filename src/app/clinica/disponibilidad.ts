@@ -136,6 +136,22 @@ export function normalizeTexto(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
+/**
+ * Especialidades del médico en el orden en que se MUESTRAN: la que coincide con
+ * lo que el paciente buscó va primero (decisión Diego 07/09/2026). Una médica
+ * de "Cirugía plástica" que también atiende "Clínica médica" aparecía ante quien
+ * buscó clínica como "Cirugía plástica · Clínica médica": la especialidad que NO
+ * buscó, primero — y el paciente pasaba de largo. Sin término, el orden es el
+ * declarado (principal primero). Orden estable: no cambia nada más.
+ */
+export function especialidadesEnOrdenDeBusqueda(medico: Medico, termino: string): string[] {
+  const todas = [medico.especialidad, ...(medico.especialidadesAdicionales ?? [])];
+  const t = normalizeTexto(termino.trim());
+  if (!t) return todas;
+  const coincide = (e: string) => normalizeTexto(e).includes(t);
+  return [...todas.filter(coincide), ...todas.filter((e) => !coincide(e))];
+}
+
 // Buscador del listado: nombre, especialidad y —desde 07/08/2026— las áreas de atención
 // declaradas ("adolescencia", "adolescentes"…). SUMA formas de encontrar al médico; no
 // saca a ninguno de los que ya aparecían con el término tipeado.
