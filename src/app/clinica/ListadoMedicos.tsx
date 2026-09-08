@@ -15,6 +15,7 @@ import {
   formatFechaTurnoCorta,
   formatPrecio,
   normalizeTexto,
+  especialidadesEnOrdenDeBusqueda,
   ordenarMedicos,
   coincideConBusqueda,
 } from "./disponibilidad";
@@ -336,7 +337,7 @@ export default function ListadoMedicos({
                       <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
                     </div>
                     <p className="mt-0.5 truncate text-[13px] text-gray-500">
-                      {[m.especialidad, ...(m.especialidadesAdicionales ?? [])].join(" · ")}
+                      {especialidadesEnOrdenDeBusqueda(m, termino).join(" · ")}
                     </p>
                     {/* Área de atención declarada por el médico (informativa: "Atiende
                         adolescentes (10 a 19 años)"). No condiciona la reserva. */}
