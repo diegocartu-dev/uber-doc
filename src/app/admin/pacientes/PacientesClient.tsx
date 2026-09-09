@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Eye, PauseCircle, ShieldOff, RotateCcw, Loader2, LogIn } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Eye, PauseCircle, ShieldOff, RotateCcw, Loader2, LogIn } from "lucide-react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
@@ -21,63 +22,37 @@ interface Paciente {
   created_at: string;
 }
 
-type Tab = "todos" | "pausado" | "bloqueado";
+// El ESTADO se ordena por ciclo de vida, no por su inicial: primero el que opera normal.
+const CICLO_ESTADO = ["activo", "pausado", "bloqueado"];
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "todos", label: "Todos" },
-  { key: "pausado", label: "Pausados" },
-  { key: "bloqueado", label: "Bloqueados" },
-];
-
-export default function PacientesClient({ pacientes: initial, totalInicial = 0 }: { pacientes: Paciente[]; totalInicial?: number }) {
+// `totalInicial` ya no se usa: la pantalla trae todas las filas y la cuenta la muestra la
+// barra de la tabla ("N de M"). Se deja en las props para no tocar el server component.
+export default function PacientesClient({ pacientes: initial }: { pacientes: Paciente[]; totalInicial?: number }) {
   const [pacientes, setPacientes] = useState(initial);
-  const [tab, setTab] = useState<Tab>("todos");
-  const [search, setSearch] = useState("");
   const [procesando, setProcesando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<{ id: string; accion: string } | null>(null);
   const [panelPaciente, setPanelPaciente] = useState<Paciente | null>(null);
   const [duracion, setDuracion] = useState<string>("7d");
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
-  const [buscando, setBuscando] = useState(false);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(totalInicial);
-  const pageSize = 50;
-  const totalPages = Math.ceil(total / pageSize);
 
-  const filtered = pacientes.filter((p) => {
-    if (tab === "pausado" && (p.estado_cuenta ?? "activo") !== "pausado") return false;
-    if (tab === "bloqueado" && (p.estado_cuenta ?? "activo") !== "bloqueado") return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      p.nombre_completo?.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) ||
-      p.dni?.includes(q)
-    );
+  // Las columnas: esto es TODO lo que la pantalla declara. El buscador, el orden, el
+  // embudo, el ancho ajustable y la vista en la URL salen de acá.
+  const COLUMNAS: Columna<Paciente>[] = useMemo(() => [
+    { k: "paciente", t: "Paciente", val: (p) => p.nombre_completo || "Sin nombre",
+      // El DNI se busca aunque no tenga columna propia: quien lo tiene a mano lo tipea.
+      busca: (p) => `${p.nombre_completo ?? ""} ${p.dni ?? ""}` },
+    { k: "email", t: "Email", val: (p) => p.email, porEvento: true },
+    { k: "registro", t: "Registro", val: (p) => p.created_at, tipo: "fecha", porEvento: true },
+    { k: "estado", t: "Estado", val: (p) => p.estado_cuenta ?? "activo", rango: CICLO_ESTADO },
+    { k: "acc", t: "Acciones", val: () => "", sinOrden: true, sinBuscar: true },
+  ], []);
+
+  const vista = useVistaTabla(pacientes, COLUMNAS, {
+    clave: (p) => p.id,
+    // Lo más nuevo arriba. Sin masNuevoPrimero a propósito: su respaldo por id numérico no
+    // sirve acá (el id es un uuid), y created_at nunca falta en esta tabla.
+    defecto: (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
   });
-
-  async function buscarServer(p?: number) {
-    const targetPage = p ?? page;
-    setBuscando(true);
-    try {
-      const params = new URLSearchParams({ page: targetPage.toString(), pageSize: pageSize.toString() });
-      if (search) params.set("q", search);
-      if (tab !== "todos") params.set("estado", tab);
-      const res = await fetch(`/api/admin/pacientes?${params}`);
-      const data = await res.json();
-      if (data.pacientes) {
-        setPacientes(data.pacientes);
-        setTotal(data.total ?? 0);
-        setPage(targetPage);
-      }
-    } catch { /* ignore */ }
-    setBuscando(false);
-  }
-
-  function irAPagina(p: number) {
-    if (p < 1 || p > totalPages) return;
-    buscarServer(p);
-  }
 
   async function handleImpersonate(userId: string, nombre: string) {
     setProcesando(userId);
@@ -139,73 +114,36 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
         <DuplicatesBanner />
       </div>
 
-      {/* Tabs */}
-      <div className="mt-5 flex gap-1 border-b border-gray-200">
-        {TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-              tab === key
-                ? "text-[#378ADD] border-b-2 border-[#378ADD]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative mt-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && buscarServer()}
-          placeholder="Buscar por nombre, email o DNI (Enter para buscar en servidor)..."
-          className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-700 placeholder-gray-400 focus:border-[#378ADD] focus:outline-none focus:ring-1 focus:ring-[#378ADD]"
-        />
-        {buscando && <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-400" />}
-      </div>
-
       {mensaje && (
         <p className={`mt-3 text-center text-sm ${mensaje.tipo === "ok" ? "text-[#1D9E75]" : "text-[#E24B4A]"}`}>
           {mensaje.texto}
         </p>
       )}
 
-      {/* Table */}
-      <div className="mt-4 overflow-hidden rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-              <th className="px-4 py-3">Paciente</th>
-              <th className="hidden px-4 py-3 lg:table-cell">Email</th>
-              <th className="hidden px-4 py-3 lg:table-cell">Registro</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Acciones</th>
-            </tr>
-          </thead>
+      <BarraTabla vista={vista} placeholder="Buscar por nombre, email o DNI…" cuenta="pacientes" />
+
+      {/* El scroll vive acá, con tope de alto: así la cabecera se pega al borde de ESTE
+          cuadro y los títulos no se pierden al scrollear la página. */}
+      <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <CabezaTabla vista={vista} />
           <tbody className="divide-y divide-gray-50">
-            {filtered.length === 0 && (
+            {vista.filas.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                   No se encontraron pacientes
                 </td>
               </tr>
             )}
-            {filtered.map((p) => {
+            {vista.filas.map((p) => {
               const estado = p.estado_cuenta ?? "activo";
               return (
                 <tr key={p.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3">
                     <p className="font-medium text-gray-900">{p.nombre_completo || "Sin nombre"}</p>
-                    <p className="text-xs text-gray-400 lg:hidden">{p.email}</p>
                   </td>
-                  <td className="hidden px-4 py-3 text-gray-600 lg:table-cell">{p.email || "—"}</td>
-                  <td className="hidden px-4 py-3 text-gray-500 lg:table-cell">
+                  <td className="px-4 py-3 text-gray-600">{p.email || "—"}</td>
+                  <td className="px-4 py-3 text-gray-500">
                     {new Date(p.created_at).toLocaleDateString("es-AR")}
                   </td>
                   <td className="px-4 py-3">
@@ -261,49 +199,6 @@ export default function PacientesClient({ pacientes: initial, totalInicial = 0 }
           </tbody>
         </table>
       </div>
-
-      {/* Paginacion */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-gray-400">
-            {total} pacientes · Pagina {page} de {totalPages}
-          </p>
-          <div className="flex gap-1">
-            <button
-              onClick={() => irAPagina(page - 1)}
-              disabled={page <= 1 || buscando}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-30 hover:bg-gray-50"
-            >
-              Anterior
-            </button>
-            {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-              const p = page <= 3 ? i + 1 : page - 2 + i;
-              if (p > totalPages) return null;
-              return (
-                <button
-                  key={p}
-                  onClick={() => irAPagina(p)}
-                  disabled={buscando}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                    p === page
-                      ? "bg-[#378ADD] text-white"
-                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => irAPagina(page + 1)}
-              disabled={page >= totalPages || buscando}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 disabled:opacity-30 hover:bg-gray-50"
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Confirm dialogs */}
       {confirmando && (
