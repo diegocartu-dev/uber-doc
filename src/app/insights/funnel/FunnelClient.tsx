@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 
 interface Pedido {
   medico: string;
@@ -46,6 +47,10 @@ const RESULTADO_COLOR: Record<string, string> = {
   "sin provincia cargada": "#888780",
 };
 
+/** Los desenlaces de una búsqueda, de lo peor a lo mejor. Manda el orden del embudo:
+ *  no se ordenan por su inicial. Es el mismo orden que RESULTADO_COLOR. */
+const CICLO_RESULTADO = Object.keys(RESULTADO_COLOR).reverse();
+
 function horaDe(ms: number) {
   return new Date(ms).toLocaleString("es-AR", {
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
@@ -61,6 +66,26 @@ export default function FunnelClient() {
   const real = sp.get("real") !== "0";
 
   const [error, setError] = useState(false);
+
+  const busquedas = useMemo(() => data?.busquedas ?? [], [data]);
+  const COLUMNAS: Columna<Busqueda>[] = useMemo(() => [
+    { k: "cuando", t: "Cuándo", val: (b) => b.cuando, tipo: "numero", porEvento: true, busca: (b) => horaDe(b.cuando),
+      ayuda: "Una búsqueda es una visita a la clínica. Dos entradas del mismo paciente con menos de 30 minutos cuentan como una" },
+    { k: "paciente", t: "Paciente", val: (b) => b.paciente },
+    { k: "provincia", t: "Provincia", val: (b) => b.provincia ?? "" },
+    { k: "medprov", t: "Méd. p/su prov.", val: (b) => b.medicosProvincia, num: true, porEvento: true,
+      ayuda: "Profesionales habilitados para su provincia en ese momento. El asterisco marca los estimados con la oferta de hoy: desde el 28/07 cada búsqueda guarda la foto exacta" },
+    { k: "cionline", t: "CI en línea", val: (b) => b.ciOnline, num: true, porEvento: true,
+      ayuda: "De esos, cuántos estaban en línea para consulta inmediata en ese instante" },
+    { k: "elegido", t: "A quién eligió", val: (b) => b.pedidos.map((x) => x.medico).join(", "),
+      ayuda: "Se puede filtrar por profesional: acá se ve a quién eligieron y quién no lo tomó" },
+    { k: "resultado", t: "Qué pasó", val: (b) => b.resultado, rango: CICLO_RESULTADO },
+  ], []);
+  const vista = useVistaTabla(busquedas, COLUMNAS, {
+    clave: (b) => `${b.cuando}-${b.paciente}`,
+    defecto: (a, b) => b.cuando - a.cuando,
+    tono: "oscuro",
+  });
 
   useEffect(() => {
     setLoading(true);
@@ -144,26 +169,21 @@ export default function FunnelClient() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#1E293B]">
-            <table className="w-full min-w-[880px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
-                  <th className="px-4 py-3 font-medium">Cuándo</th>
-                  <th className="px-3 py-3 font-medium">Paciente</th>
-                  <th className="px-3 py-3 font-medium">Provincia</th>
-                  <th className="px-3 py-3 font-medium" title="Médicos habilitados para su provincia en ese momento">Méd. p/su prov.</th>
-                  <th className="px-3 py-3 font-medium" title="De esos, cuántos estaban EN LÍNEA para consulta inmediata en ese instante">CI en línea</th>
-                  <th className="px-3 py-3 font-medium">A quién eligió</th>
-                  <th className="px-3 py-3 font-medium">Qué pasó</th>
-                </tr>
-              </thead>
+          <div>
+          <BarraTabla vista={vista} placeholder="Buscar paciente, provincia o profesional…" cuenta="búsquedas" />
+          <div className="rounded-xl border border-white/10 bg-[#1E293B]">
+            <div className="overflow-auto max-h-[68vh]">
+            <table className="w-full min-w-[880px] border-separate border-spacing-0 text-left text-sm">
+              <CabezaTabla vista={vista} />
               <tbody>
-                {data.busquedas.length === 0 && (
+                {vista.filas.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-white/40">Sin búsquedas en el período.</td>
+                    <td colSpan={COLUMNAS.length} className="px-4 py-10 text-center text-white/40">
+                      {vista.hay ? "Ninguna búsqueda con esos filtros." : "Sin búsquedas en el período."}
+                    </td>
                   </tr>
                 )}
-                {data.busquedas.map((b, i) => {
+                {vista.filas.map((b, i) => {
                   const c = RESULTADO_COLOR[b.resultado] ?? "#888780";
                   return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
@@ -173,11 +193,11 @@ export default function FunnelClient() {
                       </td>
                       <td className="px-3 py-3 text-white/90">{b.paciente}</td>
                       <td className="px-3 py-3 text-white/60">{b.provincia ?? <span className="text-white/25">—</span>}</td>
-                      <td className="px-3 py-3 text-white/70">
+                      <td className="px-3 py-3 text-right text-white/70">
                         {b.medicosProvincia}
                         {!b.exacto && <span className="ml-0.5 text-white/25" title="Reconstruido con la oferta actual (el evento no guardó la foto)">*</span>}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 text-right">
                         <span className={b.ciOnline > 0 ? "text-white/70" : "text-[#D85A30]"}>{b.ciOnline}</span>
                       </td>
                       <td className="px-3 py-3">
@@ -238,15 +258,14 @@ export default function FunnelClient() {
                 })}
               </tbody>
             </table>
+            </div>
+          </div>
           </div>
 
           <p className="text-center text-[11px] text-white/25">
-            Una búsqueda = una visita a la clínica (entradas del mismo paciente con menos de 30 min de diferencia cuentan como una).
-            "CI en línea" se reconstruye del registro histórico de disponibilidad al instante exacto de la búsqueda.
-            * = médicos por provincia estimados con la oferta actual; desde el 28/07 cada búsqueda guarda la foto exacta.
-            En la columna A quién eligió, <span className="text-[#D85A30]">no lo aceptó ?</span> significa que NO hay registro de aceptación pero tampoco prueba de lo contrario:
-            el hito se guarda recién desde el 20/08. Sin el signo, el pedido cayó por el plazo de 10 minutos o quedó cerrado sin que nadie lo tomara.
-            Solo <span className="text-[#D85A30]">no lo aceptó</span> es imputable a un profesional: en un turno nadie acepta nada, y si el paciente no llegó a pedir, del otro lado nunca sonó el teléfono.
+            Solo <span className="text-[#D85A30]">no lo aceptó</span> es imputable a un profesional: en un turno nadie acepta nada,
+            y si el paciente no llegó a pedir, del otro lado nunca sonó el teléfono.
+            El resto de las salvedades está en el globo de cada columna y de cada marca.
           </p>
         </>
       )}
