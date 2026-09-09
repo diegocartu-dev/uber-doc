@@ -13,7 +13,9 @@ export default async function AdminMedicosPage() {
       .from("medicos")
       .select("id, nombre_completo, email, dni, tipo_matricula, numero_matricula, provincia_matricula, especialidad, foto_credencial_url, estado_registro, created_at, cuit, user_id, domicilio, verificado, verificado_at, verificado_por, disponible, notas_admin, slug, categoria, telefono, celular_personal, refeps_validado, refeps_data, refeps_validado_at, jurisdicciones, identidad_validada, biometria_exenta, didit_status, identidad_revision_motivo")
       .eq("es_cuenta_test", false)
-      .order("created_at", { ascending: true }),
+      // Lo más nuevo arriba (regla de la casa). Estaba al revés: de 72 profesionales, el
+      // que se registró hoy quedaba al FONDO — y es justo el que se mira.
+      .order("created_at", { ascending: false }),
     // Estado REAL del gate de identidad — la ficha lo muestra en vez de
     // afirmar un estado fijo (el cartel decía "apagado" con el gate prendido).
     getFlag("identidad_gate_activa"),

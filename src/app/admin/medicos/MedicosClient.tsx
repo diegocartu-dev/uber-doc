@@ -102,14 +102,11 @@ export default function MedicosClient({
   const filtered = medicos.filter((m) => {
     if (m.estado_registro !== tab) return false;
     if (filtroCategoria && m.categoria !== filtroCategoria) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      m.nombre_completo.toLowerCase().includes(q) ||
-      m.email.toLowerCase().includes(q) ||
-      m.numero_matricula.includes(q) ||
-      (m.dni && m.dni.includes(q))
-    );
+    // El buscador mira TODO lo que está a la vista en la fila (regla 1 del mandato de
+    // tablas). Antes solo nombre, email, matrícula y DNI: escribir "cardiología" o
+    // "Córdoba" no encontraba a nadie, aunque las dos cosas se leen en la tarjeta.
+    // Y compara sin acentos: "cardiologia" tiene que encontrar "Cardiología".
+    return coincideConTexto(m, search);
   });
 
   const counts = {
@@ -343,6 +340,25 @@ export default function MedicosClient({
 
 // Errores de SISTEMA del Bus (timeout/caído): el resultado NO es definitivo — la
 // validación automática (registro + cron) lo va a reintentar sola.
+/** Texto comparable: minúsculas y sin acentos. Misma receta que src/lib/tabla.ts —
+ *  normalizar a NFD ANTES de sacar diacríticos, si no "Atención" pierde la letra. */
+function textoBuscable(v: unknown): string {
+  return String(v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** ¿La ficha coincide con lo tipeado? Varias palabras separadas por espacio funcionan
+ *  como Y: "cardiologia cordoba" trae al que cumple las dos cosas. */
+function coincideConTexto(m: Medico, texto: string): boolean {
+  const q = textoBuscable(texto).trim();
+  if (!q) return true;
+  const heno = textoBuscable([
+    m.nombre_completo, m.email, m.numero_matricula, m.tipo_matricula, m.dni,
+    m.especialidad, m.provincia_matricula, m.categoria === "founder" ? "founder fundador" : m.categoria,
+    ...(m.jurisdicciones ?? []),
+  ].filter(Boolean).join(" "));
+  return q.split(/\s+/).every((t) => heno.includes(t));
+}
+
 const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
 
 // Estado ternario ÚNICO — lo leen la card Y el diálogo de aprobar, para que nunca
