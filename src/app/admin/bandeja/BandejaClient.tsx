@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inbox, Send, PenLine, Loader2 } from "lucide-react";
@@ -27,10 +28,19 @@ function fechaCorta(iso: string): string {
   });
 }
 
+// El estado en UNA palabra, que es lo que se busca, se ordena y se filtra. El ciclo va de
+// lo que reclama atención a lo que ya está cerrado.
+const CICLO_ESTADO = ["No salió", "Sin atender", "Sin leer", "Atendido", "Leído"];
+function estadoDe(c: Correo): string {
+  if (c.errorEnvio) return "No salió";
+  if (c.direccion === "salida") return "Enviado";
+  if (!c.atendido) return "Sin atender";
+  return c.leido ? "Atendido" : "Sin leer";
+}
+
 export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const router = useRouter();
   const [tab, setTab] = useState<"entrada" | "salida">("entrada");
-  const [verSistemas, setVerSistemas] = useState(false);
   const [redactar, setRedactar] = useState(false);
   const [para, setPara] = useState("");
   const [desde, setDesde] = useState<"contacto" | "soporte">("contacto");
@@ -43,14 +53,29 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const entradas = useMemo(() => correos.filter((c) => c.direccion === "entrada"), [correos]);
   // Notificaciones automáticas (LinkedIn etc.): guardadas pero fuera de la vista
   // por defecto — ensuciaban la Bandeja (Diego 03/08).
-  const deSistema = useMemo(() => entradas.filter((c) => c.sistema), [entradas]);
-  const recibidos = useMemo(
-    () => (verSistemas ? entradas : entradas.filter((c) => !c.sistema)),
-    [entradas, verSistemas]
-  );
   const enviados = useMemo(() => correos.filter((c) => c.direccion === "salida"), [correos]);
   const sinLeer = entradas.filter((c) => !c.leido && !c.sistema).length;
-  const visibles = tab === "entrada" ? recibidos : enviados;
+  const visibles = useMemo(() => (tab === "entrada" ? entradas : enviados), [tab, entradas, enviados]);
+
+  // Las notificaciones automáticas (LinkedIn y parecidas) ya no se esconden detrás de un
+  // interruptor: son un VALOR de la columna Tipo, con su embudo. Se ven cuántas son, se
+  // sacan de un clic, y el buscador las encuentra igual — antes quedaban invisibles y el
+  // buscador habría mentido sobre ellas (Diego 03/08 las quiso fuera de la vista; el
+  // embudo cumple lo mismo sin ocultarlas del buscador).
+  const COLUMNAS: Columna<Correo>[] = useMemo(() => [
+    { k: "quien", t: tab === "entrada" ? "De" : "Para", val: (c) => (c.direccion === "entrada" ? c.de : c.para) },
+    { k: "asunto", t: "Asunto", val: (c) => c.asunto, porEvento: true },
+    { k: "buzon", t: "Buzón", val: (c) => ((c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@") },
+    { k: "tipo", t: "Tipo", val: (c) => (c.sistema ? "Automático" : "De una persona") },
+    { k: "estado", t: "Estado", val: (c) => estadoDe(c), rango: CICLO_ESTADO },
+    { k: "fecha", t: tab === "entrada" ? "Recibido" : "Enviado", val: (c) => c.creadoEn, tipo: "fecha", porEvento: true },
+  ], [tab]);
+
+  const vista = useVistaTabla(visibles, COLUMNAS, {
+    clave: (c) => c.id,
+    // Lo más nuevo arriba. El id es un uuid, así que el desempate va por fecha y clave.
+    defecto: (a, b) => Date.parse(b.creadoEn) - Date.parse(a.creadoEn),
+  });
 
   function enviar() {
     setError(null);
@@ -90,17 +115,6 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
         >
           <Send size={15} /> Enviados
         </button>
-        {tab === "entrada" && deSistema.length > 0 && (
-          <button
-            onClick={() => setVerSistemas(!verSistemas)}
-            className={`rounded-lg px-3 py-2 text-xs font-medium ${
-              verSistemas ? "bg-gray-200 text-gray-700" : "text-gray-400 hover:text-gray-600"
-            }`}
-            title="Notificaciones automáticas de plataformas (LinkedIn, etc.). Guardadas pero fuera de la vista."
-          >
-            Sistemas ({deSistema.length})
-          </button>
-        )}
         <button
           onClick={() => setRedactar(!redactar)}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-2 text-sm font-medium text-[#378ADD] hover:bg-blue-50"
@@ -164,49 +178,74 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {visibles.length === 0 ? (
-          <p className="p-10 text-center text-sm text-gray-400">
-            {tab === "entrada" ? "Todavía no llegó ningún correo." : "Todavía no enviaste ningún correo."}
-          </p>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {visibles.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/admin/bandeja/${c.id}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`truncate text-sm ${!c.leido && c.direccion === "entrada" ? "font-bold text-gray-900" : "text-gray-700"}`}>
+      <BarraTabla
+        vista={vista}
+        placeholder={tab === "entrada" ? "Buscar en lo recibido…" : "Buscar en lo enviado…"}
+        cuenta="correos"
+      />
+
+      {/* El scroll vive acá, con tope de alto: la cabecera se pega al borde de ESTE cuadro
+          y los títulos no se pierden al scrollear la página. */}
+      <div className="overflow-auto rounded-xl border border-gray-200 bg-white max-h-[72vh]">
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <CabezaTabla vista={vista} />
+          <tbody>
+            {vista.filas.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                  {vista.hay
+                    ? "Nada coincide con lo buscado."
+                    : tab === "entrada"
+                      ? "Todavía no llegó ningún correo."
+                      : "Todavía no enviaste ningún correo."}
+                </td>
+              </tr>
+            )}
+            {vista.filas.map((c) => {
+              const sinLeerEste = !c.leido && c.direccion === "entrada";
+              const estado = estadoDe(c);
+              return (
+                <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <Link href={`/admin/bandeja/${c.id}`} className="block">
+                      <span className={"block truncate " + (sinLeerEste ? "font-bold text-gray-900" : "text-gray-700")}>
                         {c.direccion === "entrada" ? c.de : c.para}
                       </span>
                       {c.esRespuesta && <span className="text-[10px] text-gray-400">respuesta</span>}
-                      {c.direccion === "entrada" && (
-                        <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-                          {(c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@"}
-                        </span>
-                      )}
-                    </div>
-                    <p className={`truncate text-sm ${!c.leido && c.direccion === "entrada" ? "font-semibold text-gray-800" : "text-gray-500"}`}>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/admin/bandeja/${c.id}`}
+                      className={"block truncate " + (sinLeerEste ? "font-semibold text-gray-800" : "text-gray-500")}
+                    >
                       {c.asunto}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {c.direccion === "entrada" && !c.atendido && (
-                      <span className="rounded-full bg-[#BA7517]/15 px-2 py-0.5 text-[10px] font-bold text-[#BA7517]">SIN ATENDER</span>
-                    )}
-                    {c.errorEnvio && (
-                      <span className="rounded-full bg-[#E24B4A]/15 px-2 py-0.5 text-[10px] font-bold text-[#E24B4A]">NO SALIÓ</span>
-                    )}
-                    <span className="text-xs text-gray-400">{fechaCorta(c.creadoEn)}</span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                      {(c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[12px] text-gray-500">
+                    {c.sistema ? "Automático" : "De una persona"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {/* Punto de color + texto: el color acompaña, la palabra informa. */}
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: estado === "No salió" ? "#E24B4A" : estado === "Sin atender" ? "#BA7517" : estado === "Sin leer" ? "#378ADD" : "#1D9E75" }}
+                      />
+                      {estado}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">{fechaCorta(c.creadoEn)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
