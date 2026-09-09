@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { avisarContadoresCambiaron } from "../AdminShell";
 import { CheckCircle, XCircle, ExternalLink, FileText, Loader2, Search, Eye, Ban, RotateCcw, ShieldCheck, ShieldAlert, LogIn, Clock, CreditCard } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
@@ -99,6 +100,8 @@ export default function MedicosClient({
   const [mensaje, setMensaje] = useState<{ texto: string; tipo: "ok" | "error" } | null>(null);
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
+  const esFlujo = tab === "pendiente_revision";
+
   const filtered = medicos.filter((m) => {
     if (m.estado_registro !== tab) return false;
     if (filtroCategoria && m.categoria !== filtroCategoria) return false;
@@ -107,6 +110,28 @@ export default function MedicosClient({
     // "Córdoba" no encontraba a nadie, aunque las dos cosas se leen en la tarjeta.
     // Y compara sin acentos: "cardiologia" tiene que encontrar "Cardiología".
     return coincideConTexto(m, search);
+  });
+
+  // Las columnas de las pestañas que son LISTA (aprobados, rechazados, suspendidos).
+  // Pendientes no entra: es un flujo de aprobación con REFEPS, identidad y credencial,
+  // y eso no se mete en una fila.
+  const COLUMNAS: Columna<Medico>[] = useMemo(() => [
+    { k: "profesional", t: "Profesional", val: (m) => m.nombre_completo,
+      busca: (m) => `${m.nombre_completo} ${m.email} ${m.dni ?? ""}` },
+    { k: "especialidad", t: "Especialidad", val: (m) => m.especialidad },
+    { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
+    { k: "categoria", t: "Categoría", val: (m) => (m.categoria === "founder" ? "Founder" : m.categoria ? "Tradicional" : "—"),
+      busca: (m) => (m.categoria === "founder" ? "founder fundador" : m.categoria ?? "") },
+    { k: "atender", t: "¿Puede atender?", val: (m) => estadoAtender(m), rango: CICLO_ATENDER },
+    { k: "cobros", t: "Cobros", val: (m) => estadoCobros(m), rango: CICLO_COBROS },
+    { k: "identidad", t: "Identidad", val: (m) => estadoIdentidad(m), rango: CICLO_IDENTIDAD },
+    { k: "acc", t: "Acciones", val: () => "", sinOrden: true, sinBuscar: true },
+  ], []);
+
+  const vista = useVistaTabla(esFlujo ? [] : filtered, COLUMNAS, {
+    clave: (m) => m.id,
+    // Lo más nuevo arriba. El id es uuid: el desempate lo hace la clave, no un id numérico.
+    defecto: (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
   });
 
   const counts = {
@@ -294,36 +319,56 @@ export default function MedicosClient({
           </div>
         )}
 
-        {tab === "pendiente_revision"
-          ? filtered.map((m) => (
-              <PendienteCard
-                key={m.id}
-                medico={m}
-                gateIdentidadActiva={gateIdentidadActiva}
-                procesando={procesando === m.id}
-                confirmando={confirmando?.id === m.id ? confirmando.accion : null}
-                onAprobar={() => handleAccion(m.id, "aprobar")}
-                onRechazar={(motivo) => handleAccion(m.id, "rechazar", motivo)}
-                onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
-                onCancelConfirm={() => setConfirmando(null)}
-                onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
-                onRefepsActualizado={(validado, data, juris) => actualizarRefeps(m.id, validado, data, juris)}
-              />
-            ))
-          : filtered.map((m) => (
-              <MedicoRow
-                key={m.id}
-                medico={m}
-                procesando={procesando === m.id}
-                confirmando={confirmando?.id === m.id ? confirmando.accion : null}
-                onAccion={(accion, motivo) => handleAccion(m.id, accion, motivo)}
-                onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
-                onCancelConfirm={() => setConfirmando(null)}
-                onVerPerfil={() => setPanelMedicoId(m.id)}
-                onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
-              />
-            ))
-        }
+        {esFlujo ? (
+          filtered.map((m) => (
+            <PendienteCard
+              key={m.id}
+              medico={m}
+              gateIdentidadActiva={gateIdentidadActiva}
+              procesando={procesando === m.id}
+              confirmando={confirmando?.id === m.id ? confirmando.accion : null}
+              onAprobar={() => handleAccion(m.id, "aprobar")}
+              onRechazar={(motivo) => handleAccion(m.id, "rechazar", motivo)}
+              onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
+              onCancelConfirm={() => setConfirmando(null)}
+              onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
+              onRefepsActualizado={(validado, data, juris) => actualizarRefeps(m.id, validado, data, juris)}
+            />
+          ))
+        ) : (
+          <>
+            <BarraTabla vista={vista} placeholder="Buscar por nombre, matrícula, especialidad…" cuenta="profesionales" />
+            {/* El scroll vive acá, con tope de alto: la cabecera se pega al borde de ESTE
+                cuadro y los títulos no se pierden al scrollear la página. */}
+            <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+              <table className="w-full border-separate border-spacing-0 text-sm">
+                <CabezaTabla vista={vista} />
+                <tbody>
+                  {vista.filas.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                        {vista.hay ? "Nada coincide con lo buscado." : "No hay profesionales en esta pestaña."}
+                      </td>
+                    </tr>
+                  )}
+                  {vista.filas.map((m) => (
+                    <MedicoFila
+                      key={m.id}
+                      medico={m}
+                      procesando={procesando === m.id}
+                      confirmando={confirmando?.id === m.id ? confirmando.accion : null}
+                      onAccion={(accion, motivo) => handleAccion(m.id, accion, motivo)}
+                      onStartConfirm={(accion) => setConfirmando({ id: m.id, accion })}
+                      onCancelConfirm={() => setConfirmando(null)}
+                      onVerPerfil={() => setPanelMedicoId(m.id)}
+                      onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Side panel */}
@@ -358,6 +403,55 @@ function coincideConTexto(m: Medico, texto: string): boolean {
   ].filter(Boolean).join(" "));
   return q.split(/\s+/).every((t) => heno.includes(t));
 }
+
+// ── LO QUE ANTES ERA UNA INSIGNIA, AHORA ES UNA COLUMNA ──────────────────────
+// Las tarjetas mostraban "Sin cuenta de cobros", "Identidad rechazada", "No puede
+// atender · faltan 3 de 5" como chips sueltos: informaban, pero no se podían filtrar.
+// Como valor de columna, "mostrame los que no pueden cobrar" es un clic en el embudo.
+// El texto largo con su explicación no se pierde: viaja en el `title` de la celda.
+
+const CICLO_COBROS = ["Puede cobrar", "Sin cuenta", "Permiso vencido", "Cuenta de otro país"];
+function estadoCobros(m: Medico): string {
+  if (m.mpSinCuenta && m.estado_registro === "aprobado") return "Sin cuenta";
+  if (m.mpVencido) return "Permiso vencido";
+  if (m.mpConectado && m.mpSiteId && !esSiteArgentino(m.mpSiteId)) return "Cuenta de otro país";
+  return "Puede cobrar";
+}
+function detalleCobros(m: Medico): string | undefined {
+  const e = estadoCobros(m);
+  if (e === "Sin cuenta") return "No tiene cuenta de Mercado Pago conectada. Puede figurar disponible y aceptar consultas, pero ningún paciente va a poder pagarle.";
+  if (e === "Permiso vencido") return "El permiso que Mercado Pago nos dio para cobrar en su nombre venció. Puede aceptar consultas, pero el pago le va a fallar al paciente al final del flujo.";
+  if (e === "Cuenta de otro país") return `La cuenta conectada es de ${paisDeSite(m.mpSiteId!)}: los pagos salen en otra moneda y ningún paciente argentino puede pagarle.`;
+  return undefined;
+}
+
+const CICLO_IDENTIDAD = ["Validada", "Necesita revisión", "Rechazada", "En revisión", "Pendiente", "Exenta"];
+function estadoIdentidad(m: Medico): string {
+  if (m.identidad_validada) return "Validada";
+  if (m.biometria_exenta) return "Exenta";
+  if (m.didit_status === "Declined") return "Rechazada";
+  if ((m.didit_status === "In Review" || m.didit_status === "Resubmitted") && m.identidad_revision_motivo) return "Necesita revisión";
+  if (m.didit_status === "In Review" || m.didit_status === "Resubmitted") return "En revisión";
+  return "Pendiente";
+}
+
+const CICLO_ATENDER = ["Listo para atender", "Perfil incompleto", "Perfil sin empezar"];
+function estadoAtender(m: Medico): string {
+  if (m.faltantesCount === undefined) return "—";
+  if (m.listoParaAtender) return "Listo para atender";
+  return m.sinEmpezar ? "Perfil sin empezar" : "Perfil incompleto";
+}
+function detalleAtender(m: Medico): string | undefined {
+  if (m.listoParaAtender || m.faltantesCount === undefined) return undefined;
+  return m.sinEmpezar ? "Todavía no empezó a completar su perfil." : `Le faltan ${m.faltantesCount} de ${m.totalRequisitos}: ${(m.faltantes ?? []).join(", ")}`;
+}
+
+const COLOR_ESTADO_TABLA: Record<string, string> = {
+  "Puede cobrar": "#1D9E75", "Sin cuenta": "#E24B4A", "Permiso vencido": "#E24B4A", "Cuenta de otro país": "#E24B4A",
+  "Validada": "#1D9E75", "Exenta": "#888780", "Rechazada": "#E24B4A", "Necesita revisión": "#E24B4A",
+  "En revisión": "#BA7517", "Pendiente": "#BA7517",
+  "Listo para atender": "#1D9E75", "Perfil incompleto": "#BA7517", "Perfil sin empezar": "#D85A30",
+};
 
 const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
 
@@ -738,7 +832,22 @@ function PendienteCard({
   );
 }
 
-function MedicoRow({
+/** Una fila de la tabla. Reemplaza a la tarjeta: lo que antes eran insignias sueltas
+ *  —cobros, identidad, "puede atender"— ahora son COLUMNAS, así que se pueden ordenar y
+ *  filtrar con el embudo. El texto largo de cada una no se pierde: va en el `title` de la
+ *  celda, que es donde estaba antes. El detalle completo sigue en el panel lateral. */
+function Celda({ valor, detalle }: { valor: string; detalle?: string }) {
+  return (
+    <span title={detalle} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
+      {valor !== "—" && (
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: COLOR_ESTADO_TABLA[valor] ?? "#888780" }} />
+      )}
+      {valor}
+    </span>
+  );
+}
+
+function MedicoFila({
   medico: m,
   procesando,
   confirmando,
@@ -758,160 +867,64 @@ function MedicoRow({
   onImpersonate: () => void;
 }) {
   return (
-    <div className="rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-gray-900">{m.nombre_completo}</h3>
-            <StatusBadge status={m.estado_registro} />
-            {m.categoria && (
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                m.categoria === "founder"
-                  ? "bg-blue-50 text-[#378ADD]"
-                  : "bg-gray-100 text-gray-600"
-              }`}>
-                {m.categoria === "founder" ? "Founder" : "Tradicional"}
-              </span>
+    <>
+      <tr className="border-b border-gray-50 hover:bg-gray-50/50">
+        <td className="px-3 py-2.5">
+          <button onClick={onVerPerfil} className="block max-w-[220px] truncate text-left text-sm font-medium text-gray-900 hover:text-[#378ADD]">
+            {m.nombre_completo}
+          </button>
+          <span className="block max-w-[220px] truncate text-[11px] text-gray-400">{m.email}</span>
+        </td>
+        <td className="px-3 py-2.5 text-[12px] text-gray-600">{m.especialidad}</td>
+        <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-gray-500">
+          {m.tipo_matricula} {m.numero_matricula}
+        </td>
+        <td className="px-3 py-2.5">
+          {m.categoria ? (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              m.categoria === "founder" ? "bg-blue-50 text-[#378ADD]" : "bg-gray-100 text-gray-600"
+            }`}>
+              {m.categoria === "founder" ? "Founder" : "Tradicional"}
+            </span>
+          ) : <span className="text-gray-300">—</span>}
+        </td>
+        <td className="px-3 py-2.5"><Celda valor={estadoAtender(m)} detalle={detalleAtender(m)} /></td>
+        <td className="px-3 py-2.5"><Celda valor={estadoCobros(m)} detalle={detalleCobros(m)} /></td>
+        <td className="px-3 py-2.5"><Celda valor={estadoIdentidad(m)} detalle={m.identidad_revision_motivo ?? undefined} /></td>
+        <td className="px-3 py-2.5">
+          <div className="flex items-center justify-end gap-1.5">
+            <button onClick={onVerPerfil} title="Ver perfil"
+              className="rounded-lg border border-gray-200 p-1.5 text-gray-600 transition hover:bg-gray-50">
+              <Eye size={14} />
+            </button>
+            <button onClick={onImpersonate} disabled={procesando} title="Ingresar como médico"
+              className="rounded-lg border border-[#378ADD] p-1.5 text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50">
+              <LogIn size={14} />
+            </button>
+            {m.estado_registro === "aprobado" && (
+              <button onClick={() => onStartConfirm("suspender")} disabled={procesando} title="Suspender"
+                className="rounded-lg border border-[#D85A30] p-1.5 text-[#D85A30] transition hover:bg-orange-50 disabled:opacity-50">
+                <Ban size={14} />
+              </button>
             )}
-            {/* Estado de onboarding: ¿puede atender? (verde = indicador de estado;
-                #0F6E56 / #854F0B = variantes de contraste del verde/ámbar de estado) */}
-            {m.estado_registro === "aprobado" && m.faltantesCount !== undefined && (
-              m.listoParaAtender ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#0F6E56]">
-                  <CheckCircle size={11} /> Listo para atender{m.disponible ? " · disponible ahora" : ""}
-                </span>
-              ) : (
-                <span
-                  title={m.faltantes?.join(", ")}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]"
-                >
-                  <ShieldAlert size={11} />
-                  {m.sinEmpezar
-                    ? "No puede atender · perfil sin empezar"
-                    : `No puede atender · faltan ${m.faltantesCount} de ${m.totalRequisitos}${m.criticosFaltantes && m.criticosFaltantes.length ? ` · ${m.criticosFaltantes.join(", ")}` : ""}`}
-                </span>
-              )
-            )}
-            {/* Cuenta de cobros de otro país (caso 07/08/2026). Chip SOLO cuando hay
-                algo que hacer: si la cuenta es argentina o todavía no se verificó,
-                no se muestra nada acá (el detalle completo está en la ficha).
-                Gateado por `mpConectado`: el `site_id` describe la cuenta que
-                estaba conectada, así que sin cuenta activa el chip mentiría — la
-                fila diría "no puede cobrar" y la ficha "sin cuenta conectada". */}
-            {/* Permiso de cobro vencido. Va ANTES del chip de país porque es más
-                urgente y porque sin permiso vigente el país ya no importa: no
-                puede cobrar de ninguna manera. */}
-            {/* Aprobado y SIN cuenta de cobros. No puede cobrar igual que el
-                vencido, y en la fila no se veía nada: el chip de arriba solo
-                cubría el permiso vencido, así que un profesional que nunca
-                conectó Mercado Pago se leía como si estuviera bien. */}
-            {m.mpSinCuenta && m.estado_registro === "aprobado" && (
-              <span
-                title="No tiene cuenta de Mercado Pago conectada. Puede figurar disponible y aceptar consultas, pero ningún paciente va a poder pagarle."
-                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
-              >
-                <CreditCard size={11} /> Sin cuenta de cobros — no puede cobrar
-              </span>
-            )}
-            {m.mpVencido && (
-              <span
-                title="El permiso que Mercado Pago nos dio para cobrar en su nombre venció. Puede aceptar consultas, pero el pago le va a fallar al paciente al final del flujo."
-                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
-              >
-                <CreditCard size={11} /> Permiso de cobro vencido — no puede cobrar
-              </span>
-            )}
-            {m.mpConectado && m.mpSiteId && !esSiteArgentino(m.mpSiteId) && (
-              <span
-                title="La cuenta de Mercado Pago conectada no es argentina: los pagos salen en otra moneda y ningún paciente argentino puede pagarle."
-                className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
-              >
-                <CreditCard size={11} /> Cobros de {paisDeSite(m.mpSiteId)} — no puede cobrar
-              </span>
-            )}
-            {/* Identidad biométrica (Didit) — aviso al admin en el panel, sin mails.
-                Verde=validada (estado OK), gris=exenta, rojo=rechazada por Didit,
-                ámbar=pendiente (aún no la completó). TAMBIÉN en Pendientes (Diego
-                17/07): el dato existe ANTES de aprobar y esconderlo produjo una
-                aprobación a ciegas con identidad rechazada. */}
-            {(m.estado_registro === "aprobado" || m.estado_registro === "pendiente_revision") && (
-              m.identidad_validada ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-medium text-[#0F6E56]">
-                  <CheckCircle size={11} /> Identidad ✓
-                </span>
-              ) : m.biometria_exenta ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                  Identidad exenta
-                </span>
-              ) : m.didit_status === "Declined" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]">
-                  <ShieldAlert size={11} /> Identidad rechazada — revisar
-                </span>
-              ) : (m.didit_status === "In Review" || m.didit_status === "Resubmitted") &&
-                m.identidad_revision_motivo ? (
-                <span
-                  title={m.identidad_revision_motivo}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#E24B4A]/10 px-2 py-0.5 text-[10px] font-medium text-[#B03231]"
-                >
-                  <ShieldAlert size={11} /> Necesita tu revisión — cruce sin cerrar
-                </span>
-              ) : m.didit_status === "In Review" || m.didit_status === "Resubmitted" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]">
-                  <Clock size={11} /> En revisión de Didit
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#BA7517]/10 px-2 py-0.5 text-[10px] font-medium text-[#854F0B]">
-                  <ShieldAlert size={11} /> Identidad pendiente
-                </span>
-              )
+            {(m.estado_registro === "suspendido" || m.estado_registro === "rechazado") && (
+              <button onClick={() => onStartConfirm("reactivar")} disabled={procesando} title="Reactivar"
+                className="rounded-lg border border-[#378ADD] p-1.5 text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50">
+                {procesando ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+              </button>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {m.especialidad} · {m.tipo_matricula} {m.numero_matricula} · {m.email}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onVerPerfil}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-          >
-            <Eye size={14} /> Ver perfil
-          </button>
-          <button
-            onClick={onImpersonate}
-            disabled={procesando}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
-          >
-            <LogIn size={14} /> Ingresar como médico
-          </button>
-          {m.estado_registro === "aprobado" && (
-            <button
-              onClick={() => onStartConfirm("suspender")}
-              disabled={procesando}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#D85A30] px-3 py-1.5 text-xs font-medium text-[#D85A30] transition hover:bg-orange-50 disabled:opacity-50"
-            >
-              <Ban size={14} /> Suspender
-            </button>
-          )}
-          {(m.estado_registro === "suspendido" || m.estado_registro === "rechazado") && (
-            <button
-              onClick={() => onStartConfirm("reactivar")}
-              disabled={procesando}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-1.5 text-xs font-medium text-[#378ADD] transition hover:bg-blue-50 disabled:opacity-50"
-            >
-              {procesando ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-              Reactivar
-            </button>
-          )}
-        </div>
-      </div>
-
+        </td>
+      </tr>
       {m.notas_admin && (
-        <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-          <span className="font-medium text-gray-600">Nota:</span> {m.notas_admin}
-        </p>
+        <tr>
+          <td colSpan={8} className="px-3 pb-2.5">
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              <span className="font-medium text-gray-600">Nota:</span> {m.notas_admin}
+            </p>
+          </td>
+        </tr>
       )}
-
       {confirmando === "suspender" && (
         <ConfirmDialog
           title={`Suspender a ${m.nombre_completo}?`}
@@ -940,18 +953,10 @@ function MedicoRow({
           isLoading={procesando}
         />
       )}
-    </div>
+    </>
   );
 }
 
-/**
- * Contacto del profesional, editable desde el panel.
- *
- * El celular NO es un dato de agenda: es el destino de los avisos por WhatsApp.
- * Con el número mal cargado, el profesional no se entera de que un paciente lo
- * está esperando. Hasta ahora la ficha ni siquiera lo mostraba, así que un
- * pedido de soporte por esto no se podía resolver desde acá.
- */
 function BloqueContacto({
   medico,
   onGuardado,
