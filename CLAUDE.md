@@ -201,6 +201,107 @@ Twilio: `scripts/verify-avisos-whatsapp.ts`. Registrarlo hacia adelante necesita
 - Amarillo #BA7517 (pendiente)
 - Tipografía: Inter en todo el producto, incluyendo PDFs.
 
+## Mandato de tablas y listados (regla de la casa — Diego, 08/09/2026)
+
+Nació en OverCall y se pega igual en todos nuestros proyectos. **Aplica a toda pantalla
+que liste cosas**, exista ya o se cree mañana. No es una sugerencia.
+
+### Las siete reglas
+
+1. **Toda tabla tiene buscador.** Sin importar cuántas filas haya hoy: la tabla de 8 filas
+   tiene 400 en dos años. Busca sobre todas las columnas visibles, sin distinguir mayúsculas
+   ni acentos (`atencion` encuentra `Atención`). Varias palabras separadas por espacio
+   funcionan como Y.
+2. **Toda columna ordena, con un clic en su nombre.** Tres estados: ascendente →
+   descendente → vuelve al orden por defecto. La flecha se ve siempre apagada (`↕`) y en
+   color cuando la columna está ordenada. El orden de texto es el que espera una persona:
+   `Base 2` antes que `Base 10`, la `ñ` en su lugar.
+3. **Filtro por columna, tipo Excel.** Un embudo abre los valores que existen en esa columna
+   con su conteo, para destildar. Con más de ocho valores el panel trae su propio buscador.
+   **El default es LLEVAR embudo**: sólo se declaran a mano las que no lo llevan.
+
+   | El valor… | Ejemplos en Docto | Lleva |
+   |---|---|---|
+   | lo crea alguien (catálogo finito) | profesional, paciente, especialidad, provincia, estado, canal, motor | embudo + orden |
+   | lo genera cada evento (crece sin techo) | fecha y hora, monto, duración, id, minutos de espera | sólo orden |
+
+4. **Lo más nuevo arriba. Siempre.** Si no hay fecha de alta se usa el id y se anota la
+   deuda. Una pantalla se desvía **sólo con el motivo escrito en el código**. Los desvíos
+   vigentes: la agenda del día va de la mañana a la noche; los rankings van por su cifra
+   (deuda, facturado, tasa); la fila de gente esperando va por quien lleva más tiempo.
+5. **Lo que no se usa va al fondo, plegado.** Sección `Históricos (N)` al final de la MISMA
+   tabla, con el contador siempre visible. Baja lógica, nunca destructiva. **Si el buscador
+   encuentra algo adentro, la sección se abre sola**: si no, el buscador mentiría.
+6. **Todo en castellano, y una sola palabra por cosa.** Nada de `Search`, `Filter`, `Sort`.
+   La misma cosa se llama igual en todas las pantallas. Los estados se muestran como
+   **punto de color + texto**, nunca color solo: el color acompaña, la palabra informa.
+7. **La vista filtrada viaja en la URL.** Se comparte por WhatsApp y sobrevive a un F5. NO
+   se guarda en el navegador: un filtro invisible de ayer es un "¿por qué no veo a Fulano?"
+   que nadie explica.
+
+### Cuatro trampas, porque ya nos mordieron
+
+1. **`Number(null)` da cero, no "vacío".** Sin chequearlo, una celda vacía se ordena como 0
+   y aparece primera.
+2. **Los vacíos van al final ordene como ordene.** Hay que sacarlos de la comparación, no
+   multiplicarlos por el signo.
+3. **Quitar acentos sin normalizar primero borra la letra.** Normalizar a NFD y recién ahí
+   sacar los diacríticos por rango `\u0300-\u036f`.
+4. **En una tabla que se refresca sola, los empates hacen temblar la lista.** El desempate
+   va por una clave estable (el id).
+
+Y una de dibujo: el panel del embudo se dibuja **fuera de la tabla** (portal + posición
+fija). Adentro, la tarjeta con scroll lo recorta y la cabecera le pone todo en mayúsculas.
+
+### Qué NO hacer
+
+- **No** poner el buscador "sólo en las tablas grandes". Todas.
+- **No** poner embudo en una columna que crece sin techo: sería una lista tan larga como la
+  tabla. Para eso está el buscador.
+- **No** hacer un componente por pantalla. Si aplicar esto a una pantalla lleva más de
+  treinta líneas, el componente está mal hecho.
+- **No** borrar para "limpiar la lista". Se archiva.
+- **No** dar por terminada una pantalla con tabla sin buscador, sin flechas y sin filtro.
+
+### Dónde vive en Docto
+
+| Qué | Dónde |
+|---|---|
+| Lógica pura (orden, filtros, búsqueda, URL) | `src/lib/tabla.ts` |
+| Sus pruebas (44) | `tests/unit/tabla.test.ts` |
+| Componente (hook + barra + cabeza + históricos + anchos) | `src/components/tabla/TablaDatos.tsx` |
+| Estilos que necesitan CSS de verdad | `src/app/globals.css`, sección "vista de tabla" |
+| Ejemplo aplicado | `src/app/admin/medicos/MedicosClient.tsx` |
+
+Los dos archivos de lógica son **copia textual de OverCall**: sincronizar sigue siendo
+copiar y pegar. El componente acepta `tono: "claro" | "oscuro"` — el panel de admin es
+claro, el tablero `/insights` es oscuro.
+
+Así se aplica a una pantalla, y esto es todo lo que hay que escribir:
+
+```tsx
+const COLUMNAS: Columna<Fila>[] = useMemo(() => [
+  { k: "medico", t: "Profesional", val: (f) => f.medico },
+  { k: "estado", t: "Estado", val: (f) => f.estadoLabel, rango: CICLO_ESTADO },
+  { k: "alta",   t: "Alta",   val: (f) => f.created_at, tipo: "fecha", porEvento: true },
+], []);
+const vista = useVistaTabla(filas, COLUMNAS, {
+  clave: (f) => f.id,
+  defecto: (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+});
+<BarraTabla vista={vista} placeholder="Buscar profesional…" cuenta="profesionales" />
+<table><CabezaTabla vista={vista} /><tbody>{vista.filas.map(fila)}</tbody></table>
+```
+
+`porEvento` es lo único que se declara a mano. Todo lo demás nace con embudo.
+
+**Desvío declarado:** el tablero (`src/app/admin/tablero/motor.js`) tiene su propio motor en
+JavaScript plano. Cumple las siete reglas menos una: su filtro por columna es un desplegable
+o un campo de texto, no el panel de casillas con conteo.
+
+**No aplica:** `/admin/padron` no es un listado sino la vista previa de un archivo que se
+está importando. Sus filas son las líneas del archivo, no registros guardados.
+
 ## Arquitectura de video — LiveKit
 
 > **Nota (28/05/2026):** Migrado de Daily.co a LiveKit. El código ya NO usa Daily.co.
