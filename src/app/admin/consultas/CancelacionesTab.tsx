@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 
 type Periodo = "hoy" | "semana" | "mes" | "personalizado";
 
@@ -78,26 +79,28 @@ const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "personalizado", label: "Personalizado" },
 ];
 
-const TIPOS_CANCELACION = [
-  { key: "", label: "Todos" },
-  { key: "cancelado_medico", label: "Cancelado por medico" },
-  { key: "cancelado_paciente", label: "Cancelado por paciente" },
-  { key: "ausente_paciente", label: "Ausente paciente" },
-  { key: "ausente_medico", label: "Ausente medico" },
-  { key: "cancelada", label: "CI cancelada" },
-];
-
-const MODALIDADES = [
-  { key: "", label: "Todas" },
-  { key: "CI", label: "CI" },
-  { key: "Turno", label: "Turno" },
-];
-
 const REEMBOLSO_LABELS: Record<string, string> = {
   pendiente: "Pendiente",
   reembolsado: "Reembolsado",
   usado_reprogramacion: "Reprogramado",
 };
+
+/** Las mismas palabras que muestra StatusBadge. El embudo filtra por lo que se LEE
+ *  en la celda, no por el nombre interno del estado. */
+const DESENLACE_LABEL: Record<string, string> = {
+  cancelado_medico: "Cancelado (med.)",
+  ausente_medico: "Ausente (med.)",
+  cancelado_paciente: "Cancelado (pac.)",
+  ausente_paciente: "Ausente (pac.)",
+  cancelada: "Cancelada",
+};
+
+/** De quién fue la caída: primero lo que nos toca a nosotros. */
+const CICLO_DESENLACE = ["Cancelado (med.)", "Ausente (med.)", "Cancelado (pac.)", "Ausente (pac.)", "Cancelada"];
+
+function fechaCorta(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" });
+}
 
 export default function CancelacionesTab() {
   const [data, setData] = useState<Data | null>(null);
@@ -105,9 +108,6 @@ export default function CancelacionesTab() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [filtroMedico, setFiltroMedico] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroModalidad, setFiltroModalidad] = useState("");
   const [vista, setVista] = useState<"tabla" | "medicos">("tabla");
 
   const fetchData = useCallback(async () => {
@@ -117,10 +117,6 @@ export default function CancelacionesTab() {
       if (desde) params.set("desde", desde);
       if (hasta) params.set("hasta", hasta);
     }
-    if (filtroMedico) params.set("medico", filtroMedico);
-    if (filtroTipo) params.set("tipo_cancelacion", filtroTipo);
-    if (filtroModalidad) params.set("modalidad", filtroModalidad);
-
     try {
       const res = await fetch(`/api/admin/cancelaciones?${params}`);
       if (res.ok) {
@@ -129,11 +125,47 @@ export default function CancelacionesTab() {
       }
     } catch { /* ignore */ }
     setLoading(false);
-  }, [periodo, desde, hasta, filtroMedico, filtroTipo, filtroModalidad]);
+  }, [periodo, desde, hasta]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Las columnas se declaran antes del primer return: los hooks de la vista de tabla
+  // no pueden quedar detrás de un `if`.
+  const cancelaciones = useMemo(() => data?.cancelaciones ?? [], [data]);
+  const medicoStats = useMemo(() => data?.medico_stats ?? [], [data]);
+
+  const COLS_CANCEL: Columna<CancelacionRow>[] = useMemo(() => [
+    { k: "fecha", t: "Fecha", val: (c) => c.fecha, tipo: "fecha", porEvento: true, busca: (c) => fechaCorta(c.fecha) },
+    { k: "modalidad", t: "Modalidad", val: (c) => c.tipo },
+    { k: "medico", t: "Médico", val: (c) => c.medico },
+    { k: "paciente", t: "Paciente", val: (c) => c.paciente },
+    { k: "desenlace", t: "Tipo", val: (c) => DESENLACE_LABEL[c.estado] ?? c.estado, rango: CICLO_DESENLACE },
+    { k: "motivo", t: "Motivo", val: (c) => c.motivo ?? "", porEvento: true },
+    { k: "reembolso", t: "Reembolso", val: (c) => (c.reembolso ? REEMBOLSO_LABELS[c.reembolso] ?? c.reembolso : "—") },
+  ], []);
+  const tCancel = useVistaTabla(cancelaciones, COLS_CANCEL, {
+    clave: (c) => `${c.tipo}-${c.id}`,
+    defecto: (a, b) => Date.parse(b.fecha) - Date.parse(a.fecha),
+  });
+
+  const COLS_MEDICOS: Columna<MedicoStats>[] = useMemo(() => [
+    { k: "medico", t: "Médico", val: (m) => m.medico },
+    { k: "turnos", t: "Total turnos", val: (m) => m.total_turnos, num: true, porEvento: true },
+    { k: "canceladas", t: "Canceladas por él", val: (m) => m.canceladas_por_el, num: true, porEvento: true },
+    { k: "plantadas", t: "Plantadas (no inició)", val: (m) => m.plantadas_no_inicio, num: true, porEvento: true },
+    { k: "pacientes", t: "Cancel. por pacientes", val: (m) => m.canceladas_por_pacientes, num: true, porEvento: true },
+    { k: "tasa", t: "Tasa total", val: (m) => m.tasa_total, num: true, porEvento: true },
+  ], []);
+  // Acá NO manda "lo más nuevo": la fila no es un hecho con fecha sino el acumulado de
+  // un profesional, y lo que se busca es a quién mirar primero. Motivo escrito, como
+  // pide la regla 4 para desviarse del orden por defecto.
+  const tMedicos = useVistaTabla(medicoStats, COLS_MEDICOS, {
+    clave: (m) => m.medico_id,
+    defecto: (a, b) => b.tasa_total - a.tasa_total,
+    prefijo: "m_",
+  });
 
   if (loading && !data) {
     return (
@@ -151,7 +183,7 @@ export default function CancelacionesTab() {
     );
   }
 
-  const { kpis, cancelaciones, medico_stats, promedios, medicos_disponibles } = data;
+  const { kpis, promedios } = data;
 
   return (
     <div className="mt-4 space-y-4">
@@ -197,7 +229,7 @@ export default function CancelacionesTab() {
         <KPICard label="Total cancelaciones" value={kpis.total_cancelaciones.toString()} />
         <KPICard label="Tasa global" value={`${Math.round(kpis.tasa_global * 100)}%`} />
         <KPICard
-          label="Por medico"
+          label="Por médico"
           value={kpis.por_tipo.cancelado_medico.toString()}
           sub={`+ ${kpis.por_tipo.ausente_medico} ausente`}
         />
@@ -211,13 +243,13 @@ export default function CancelacionesTab() {
       {/* Distribution breakdown */}
       <div className="rounded-xl bg-white p-4" style={{ border: "1px solid #e5e7eb" }}>
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
-          Distribucion por tipo
+          Distribución por tipo
         </p>
         <div className="flex flex-wrap gap-3">
-          <DistItem label="Cancelado por medico" count={kpis.por_tipo.cancelado_medico} color="#E24B4A" />
+          <DistItem label="Cancelado por médico" count={kpis.por_tipo.cancelado_medico} color="#E24B4A" />
           <DistItem label="Cancelado por paciente" count={kpis.por_tipo.cancelado_paciente} color="#BA7517" />
           <DistItem label="Ausente paciente" count={kpis.por_tipo.ausente_paciente} color="#D85A30" />
-          <DistItem label="Ausente medico" count={kpis.por_tipo.ausente_medico} color="#D85A30" />
+          <DistItem label="Ausente médico" count={kpis.por_tipo.ausente_medico} color="#D85A30" />
           <DistItem label="CI cancelada" count={kpis.por_tipo.cancelada_ci} color="#888780" />
         </div>
       </div>
@@ -239,68 +271,26 @@ export default function CancelacionesTab() {
               vista === "medicos" ? "bg-gray-100 text-gray-900" : "text-gray-500"
             }`}
           >
-            Por medico
+            Por médico
           </button>
         </div>
 
-        {vista === "tabla" && (
-          <>
-            <select
-              value={filtroMedico}
-              onChange={(e) => setFiltroMedico(e.target.value)}
-              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 focus:border-[#378ADD] focus:outline-none"
-            >
-              <option value="">Todos los medicos</option>
-              {medicos_disponibles.map((m) => (
-                <option key={m.id} value={m.id}>{m.nombre}</option>
-              ))}
-            </select>
-
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 focus:border-[#378ADD] focus:outline-none"
-            >
-              {TIPOS_CANCELACION.map(({ key, label }) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-
-            <select
-              value={filtroModalidad}
-              onChange={(e) => setFiltroModalidad(e.target.value)}
-              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 focus:border-[#378ADD] focus:outline-none"
-            >
-              {MODALIDADES.map(({ key, label }) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-          </>
-        )}
       </div>
 
       {/* Cancelaciones table */}
       {vista === "tabla" && (
         cancelaciones.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center" style={{ border: "1px solid #e5e7eb" }}>
-            <p className="text-gray-500">No se encontraron cancelaciones en este periodo</p>
+            <p className="text-gray-500">No se encontraron cancelaciones en este período</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">Modalidad</th>
-                  <th className="px-4 py-3">Medico</th>
-                  <th className="px-4 py-3">Paciente</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">Motivo</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">Reembolso</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {cancelaciones.map((c) => (
+          <>
+          <BarraTabla vista={tCancel} placeholder="Buscar por médico, paciente o motivo…" cuenta="cancelaciones" />
+          <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <CabezaTabla vista={tCancel} />
+              <tbody>
+                {tCancel.filas.map((c) => (
                   <tr key={`${c.tipo}-${c.id}`} className="hover:bg-gray-50/50">
                     <td className="px-4 py-3 text-gray-500">
                       {new Date(c.fecha).toLocaleDateString("es-AR", {
@@ -309,7 +299,7 @@ export default function CancelacionesTab() {
                         timeZone: "America/Argentina/Buenos_Aires",
                       })}
                     </td>
-                    <td className="hidden px-4 py-3 lg:table-cell">
+                    <td className="px-4 py-3">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                         c.tipo === "CI" ? "bg-blue-50 text-[#378ADD]" : "bg-purple-50 text-purple-600"
                       }`}>
@@ -321,10 +311,10 @@ export default function CancelacionesTab() {
                     <td className="px-4 py-3">
                       <StatusBadge status={c.estado} />
                     </td>
-                    <td className="hidden max-w-[200px] truncate px-4 py-3 text-xs text-gray-400 lg:table-cell">
+                    <td className="max-w-[220px] truncate px-4 py-3 text-xs text-gray-400" title={c.motivo ?? undefined}>
                       {c.motivo ?? "—"}
                     </td>
-                    <td className="hidden px-4 py-3 lg:table-cell">
+                    <td className="px-4 py-3">
                       {c.reembolso ? (
                         <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                           c.reembolso === "reembolsado"
@@ -344,30 +334,24 @@ export default function CancelacionesTab() {
               </tbody>
             </table>
           </div>
+          </>
         )
       )}
 
       {/* Per-medico stats table */}
       {vista === "medicos" && (
-        medico_stats.length === 0 ? (
+        medicoStats.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center" style={{ border: "1px solid #e5e7eb" }}>
-            <p className="text-gray-500">No hay datos de medicos para este periodo</p>
+            <p className="text-gray-500">No hay datos de profesionales para este período</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-                  <th className="px-4 py-3">Medico</th>
-                  <th className="px-4 py-3 text-center">Total turnos</th>
-                  <th className="px-4 py-3 text-center">Canceladas por el</th>
-                  <th className="px-4 py-3 text-center">Plantadas (no inicio)</th>
-                  <th className="hidden px-4 py-3 text-center lg:table-cell">Cancel. por pacientes</th>
-                  <th className="px-4 py-3 text-center">Tasa total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {medico_stats.map((m) => {
+          <>
+          <BarraTabla vista={tMedicos} placeholder="Buscar médico…" cuenta="profesionales" />
+          <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <CabezaTabla vista={tMedicos} />
+              <tbody>
+                {tMedicos.filas.map((m) => {
                   const rateCancelEl = m.total_turnos > 0 ? m.canceladas_por_el / m.total_turnos : 0;
                   const ratePlantadas = m.total_turnos > 0 ? m.plantadas_no_inicio / m.total_turnos : 0;
                   const ratePacientes = m.total_turnos > 0 ? m.canceladas_por_pacientes / m.total_turnos : 0;
@@ -375,8 +359,8 @@ export default function CancelacionesTab() {
                   return (
                     <tr key={m.medico_id} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 font-medium text-gray-900">{m.medico}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">{m.total_turnos}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-right text-gray-600">{m.total_turnos}</td>
+                      <td className="px-4 py-3 text-right">
                         <span
                           className="font-medium"
                           style={{ color: colorPorUmbral(rateCancelEl, promedios.canceladas_por_el) }}
@@ -384,7 +368,7 @@ export default function CancelacionesTab() {
                           {m.canceladas_por_el} ({pct(m.canceladas_por_el, m.total_turnos)})
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-right">
                         <span
                           className="font-medium"
                           style={{ color: colorPorUmbral(ratePlantadas, promedios.plantadas_no_inicio) }}
@@ -392,7 +376,7 @@ export default function CancelacionesTab() {
                           {m.plantadas_no_inicio} ({pct(m.plantadas_no_inicio, m.total_turnos)})
                         </span>
                       </td>
-                      <td className="hidden px-4 py-3 text-center lg:table-cell">
+                      <td className="px-4 py-3 text-right">
                         <span
                           className="font-medium"
                           style={{ color: colorPorUmbral(ratePacientes, promedios.canceladas_por_pacientes) }}
@@ -400,7 +384,7 @@ export default function CancelacionesTab() {
                           {m.canceladas_por_pacientes} ({pct(m.canceladas_por_pacientes, m.total_turnos)})
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-right">
                         <span
                           className="font-semibold"
                           style={{ color: colorPorUmbral(m.tasa_total, promedios.tasa_total) }}
@@ -414,6 +398,7 @@ export default function CancelacionesTab() {
               </tbody>
             </table>
           </div>
+          </>
         )
       )}
     </div>
