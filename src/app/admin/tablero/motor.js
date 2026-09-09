@@ -428,7 +428,7 @@ export function montarTablero(root, D) {
       <div class="preguntas">
         ${preg("q2a", "¿Dónde no había nadie: reclutar o prender?", `${nn(provs.filter((p) => p.accion === "Reclutar").length, "provincia para reclutar", "provincias para reclutar")}<span class="sub">${fmt(provs.filter((p) => p.accion === "Prender").length)} para prender</span>`, () => tabla("t-prov", [
           { k: "prov", t: "Provincia del paciente" }, { k: "accion", t: "Acción", tipo: "sel", render: (r) => `<span class="est ${r.accion === "Reclutar" ? "adv" : r.accion === "Prender" ? "aten" : r.accion === "Pedir la provincia" ? "adv" : "neutro"}">${esc(r.accion)}</span>` }, { k: "n", t: "Búsquedas", tipo: "num" }, { k: "medicos", t: "Prof. habilitados hoy", tipo: "num" }, { k: "sinMed", t: "Sin profesionales", tipo: "num" }, { k: "sinLinea", t: "Nadie en línea", tipo: "num" }, { k: "nadieAcepto", t: "Nadie aceptó", tipo: "num" }, { k: "sinMatch", t: "Sin nadie (total)", tipo: "num", render: (r) => `<span class="mbar" style="width:${(r.sinMatch / Math.max(r.n, 1)) * 60}px;background:var(--adv)"></span><b>${fmt(r.sinMatch)}</b>` }, { k: "pago", t: "Pagaron", tipo: "num" },
-        ], provs, { ord: "sinMatch", fila: (r) => ({ tipo: "prov", id: r.prov, mas: { act: "filtro", k: "prov", v: r.prov } }), buscar: false }))}
+        ], provs, { ord: "sinMatch", fila: (r) => ({ tipo: "prov", id: r.prov, mas: { act: "filtro", k: "prov", v: r.prov } }) }))}
         ${preg("q2b", "¿A qué hora buscan los pacientes y a qué hora hay alguien en línea?", `pico de búsqueda ${horaLab(Array.from({ length: 24 }, (_, h) => V.bus.filter((b) => b.hora === h).length).reduce((m, v, h, arr) => (v > arr[m] ? h : m), 0))}<span class="sub">cobertura ${V.cobertura == null ? "—" : fmt(V.cobertura) + "%"}</span>`, () => `
           <div class="mapa"><span></span>${Array.from({ length: 24 }, (_, h) => `<span class="lab" style="text-align:center">${h % 3 === 0 ? h : ""}</span>`).join("")}${mapa}</div>
           <div class="leg"><span><i style="background:#D6E7F9"></i>alguien en línea pocas veces</span><span><i style="background:#6FA8E6"></i>más de la mitad de los días</span><span><i style="background:var(--brand)"></i>casi siempre</span><span><i style="box-shadow:inset 0 0 0 1px var(--adv)"></i>búsquedas con nadie</span><span class="mini">número = búsquedas · hora argentina</span></div>`)}
@@ -439,7 +439,7 @@ export function montarTablero(root, D) {
         ${preg("q2e", "¿Cuántos pidieron y nadie aceptó, a quién le llegó, y cuánto tardan en aceptar?", `${ciPed.length ? `aceptación ${pct(acept.length, ciPed.length)}` : "sin pedidos"}<span class="sub">${fmt(sinResp.length)} sin respuesta · ${hitos.length ? `mediana ${minutos(mediana(hitos.map((a) => a.minAceptar)))}, ${fmt(rapidos)} de ${fmt(hitos.length)} en menos de 10 min` : "tiempo sin hito registrado"}</span>`, () => `<p class="nota">Registrado desde el 20/08; antes, deducido°.</p>` + tabla("t-sinresp", [
           colFecha, colHora, { k: "medico", t: "Le llegó a" }, { k: "especialidad", t: "Especialidad", tipo: "sel" }, colPac,
           { k: "certeza", t: "Certeza", tipo: "sel", texto: (r) => (r.fecha >= COB.hito ? "Registrado" : "Deducido°"), render: (r) => `<span class="est ${r.fecha >= COB.hito ? "adv" : "ded"}">${r.fecha >= COB.hito ? "Registrado" : "Deducido°"}</span>` }, { k: "causaTexto", t: "Cómo se cerró", texto: (r) => motivoDe(r) },
-        ], sinResp, { ord: "fecha", fila: filaAt, vacio: "Cero pedidos sin respuesta en el período." }) + (hitos.length ? tabla("t-aceptar", [colFecha, { k: "medico", t: "Profesional" }, colPac, { k: "minAceptar", t: "Tardó en aceptar", tipo: "num", texto: (r) => minutos(r.minAceptar) }, colDes], hitos, { ord: "minAceptar", dir: -1, fila: filaAt, buscar: false }) : ""))}
+        ], sinResp, { ord: "fecha", fila: filaAt, vacio: "Cero pedidos sin respuesta en el período." }) + (hitos.length ? tabla("t-aceptar", [colFecha, { k: "medico", t: "Profesional" }, colPac, { k: "minAceptar", t: "Tardó en aceptar", tipo: "num", texto: (r) => minutos(r.minAceptar) }, colDes], hitos, { ord: "minAceptar", dir: -1, fila: filaAt }) : ""))}
         ${preg("q2g", "¿Cuántos fueron aceptados y no pagaron: se fueron, o se les cayó el pago?", `${nn(abandono.length, "consulta", "consultas")}<span class="sub">si se fue o si falló el pago no se distingue todavía</span>`, () => tabla("t-abandono", [
           colFecha, colHora, { k: "medico", t: "Profesional" }, colPac, { k: "causaTexto", t: "Cómo se cerró", texto: (r) => motivoDe(r) },
         ], abandono, { ord: "fecha", fila: filaAt, vacio: "Cero en el período." }))}
@@ -506,7 +506,7 @@ export function montarTablero(root, D) {
         ], devol, { ord: "fecha", fila: filaAt, vacio: "Cero devoluciones en el período." }))}
         ${preg("q3h", "¿De quién depende Docto, y qué pasa si se va?", conc.length ? `${esc(top3.map((t) => t.nombre.split(" ")[0]).join(", "))}<span class="sub">${fmt(shareC * 100)}% del cobrado</span>` : "—", () => `<p class="esc">${top3.length ? `<b>${nn(top3.length, "profesional concentra", "profesionales concentran")} el ${fmt(shareC * 100)}% de lo cobrado</b>, el ${fmt(shareA * 100)}% de las atendidas y el ${fmt(shareH * 100)}% de las horas de CI del período. Si el primero (${esc(top3[0].nombre)}, ${ars(top3[0].cobrado)}) dejara de atender, el cobrado del período bajaría a ${ars(V.cobrado - top3[0].cobrado)} y el fee a ${ars(V.fee - suma(pag.filter((a) => a.medicoId === top3[0].id), "fee"))}.` : "Sin cobros en el período."}</p>` + tabla("t-conc", [
           { k: "nombre", t: "Profesional" }, { k: "n", t: "Consultas cobradas", tipo: "num" }, { k: "cobrado", t: "Cobrado", tipo: "num", render: (r) => `<span class="mbar" style="width:${(r.cobrado / Math.max(conc[0]?.cobrado ?? 1, 1)) * 60}px"></span>${ars(r.cobrado)}` }, { k: "share", t: "Del total", tipo: "num", sortVal: (r) => r.cobrado / Math.max(V.cobrado, 1), texto: (r) => pct(r.cobrado, V.cobrado) }, { k: "hci", t: "Horas CI", tipo: "num", texto: (r) => fmt(r.hci) },
-        ], conc, { ord: "cobrado", buscar: false, fila: (r) => ({ tipo: "medico", id: r.id }) }))}
+        ], conc, { ord: "cobrado", fila: (r) => ({ tipo: "medico", id: r.id }) }))}
         ${preg("q3g", "¿Los avisos al profesional le llegaron al teléfono?", avisosMed.length ? `${fmt(avisosMed.filter((a) => a.entrega === "delivered" || a.entrega === "read").length)} de ${fmt(avisosMed.length)} entregados<span class="sub">desde el 31/08</span>` : `${fmt(avisos.length)} enviados<span class="sub">entrega sin registro antes del 31/08</span>`, () => `<p class="nota">"Enviado" significa que el proveedor lo aceptó; la entrega se guarda desde el 31/08.</p>` + tabla("t-avisos", [
           colFecha, colHora, { k: "medico", t: "Profesional", texto: (r) => MED.get(r.medicoId)?.nombre ?? "—" }, { k: "disparador", t: "Motivo", tipo: "sel", texto: (r) => r.disparador ?? "—" }, { k: "resultado", t: "Envío", tipo: "sel", texto: (r) => r.resultado ?? "—" }, { k: "entrega", t: "Entrega", tipo: "sel", texto: (r) => entregaLab(r.entrega, r.fecha) },
         ], avisos, { ord: "fecha", fila: (r) => ({ tipo: "medico", id: r.medicoId }) }), { nomide: !avisosMed.length })}
@@ -632,6 +632,14 @@ export function montarTablero(root, D) {
   }
 
   /* ───────────────────────── tablas (tipo Excel) ───────────────────────── */
+
+  // Texto comparable: minúsculas y sin acentos. Normalizar a NFD ANTES de sacar los
+  // diacríticos; al revés, "Atención".replace(/[áéíóú]/g,"") deja "Atencin".
+  const norm = (v) => String(v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // Orden alfabético como lo espera una persona: "Base 2" antes que "Base 10", la ñ en su
+  // lugar, acentos y mayúsculas sin alterar la posición.
+  const cmpTxt = (a, b) => String(a ?? "").localeCompare(String(b ?? ""), "es", { sensitivity: "base", numeric: true });
+
   const TAB = {};
   function tabla(id, cols, rows, opts = {}) {
     TAB[id] = { cols, rows, opts };
@@ -639,11 +647,31 @@ export function montarTablero(root, D) {
     const val = (r, c) => (c.sortVal ? c.sortVal(r) : r[c.k]);
     const txt = (r, c) => (c.texto ? c.texto(r) : String(val(r, c) ?? ""));
     let out = rows;
-    if (st.q) { const q = st.q.toLowerCase(); out = out.filter((r) => cols.some((c) => txt(r, c).toLowerCase().includes(q))); }
-    for (const c of cols) { const fv = st.f[c.k]; if (!fv) continue; const q = fv.toLowerCase(); out = out.filter((r) => (c.tipo === "sel" ? txt(r, c) === fv : txt(r, c).toLowerCase().includes(q))); }
-    if (st.ord) { const c = cols.find((x) => x.k === st.ord); if (c) out = [...out].sort((a, b) => { const va = val(a, c), vb = val(b, c); if (va == null) return 1; if (vb == null) return -1; return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "es")) * st.dir; }); }
+    // varias palabras separadas por espacio funcionan como Y: "cobranza salta" trae las
+    // filas que tienen las dos cosas
+    if (st.q.trim()) {
+      const ts = norm(st.q).trim().split(/\s+/);
+      out = out.filter((r) => { const heno = norm(cols.map((c) => txt(r, c)).join(" ")); return ts.every((t) => heno.includes(t)); });
+    }
+    for (const c of cols) { const fv = st.f[c.k]; if (!fv) continue; const q = norm(fv); out = out.filter((r) => (c.tipo === "sel" ? txt(r, c) === fv : norm(txt(r, c)).includes(q))); }
+    if (st.ord) {
+      const c = cols.find((x) => x.k === st.ord);
+      // El desempate por la PRIMERA columna es lo que evita que la lista tiemble: sin él,
+      // dos filas que valen lo mismo se intercambian en cada refresco bajo el mouse.
+      const clave = (r) => txt(r, cols[0]);
+      if (c) out = [...out].sort((a, b) => {
+        const va = val(a, c), vb = val(b, c);
+        // los vacíos van SIEMPRE al final, ordene como ordene: al invertir, un "—" no
+        // puede saltar al primer lugar
+        const ea = va == null || va === "", eb = vb == null || vb === "";
+        if (ea !== eb) return ea ? 1 : -1;
+        if (ea && eb) return cmpTxt(clave(a), clave(b));
+        const d = typeof va === "number" && typeof vb === "number" ? va - vb : cmpTxt(va, vb);
+        return d * st.dir || cmpTxt(clave(a), clave(b));
+      });
+    }
     const vis = out.slice(0, st.max);
-    const th = cols.map((c) => `<th class="${c.tipo === "num" ? "num" : ""}"><button data-ts="${id}" data-k="${c.k}">${esc(c.t)}${st.ord === c.k ? (st.dir > 0 ? " ↑" : " ↓") : ""}</button></th>`).join("");
+    const th = cols.map((c) => `<th class="${c.tipo === "num" ? "num" : ""}"><button data-ts="${id}" data-k="${c.k}">${esc(c.t)}<span class="flecha${st.ord === c.k ? " on" : ""}">${st.ord === c.k ? (st.dir > 0 ? "↑" : "↓") : "↕"}</span></button></th>`).join("");
     const tf = cols.map((c) => {
       if (c.tipo === "sel") { const vals = [...new Set(rows.map((r) => txt(r, c)))].filter(Boolean).sort((a, b) => a.localeCompare(b, "es")); return `<th><select data-tf="${id}" data-k="${c.k}"><option value="">Todos</option>${vals.map((v) => `<option value="${esc(v)}" ${st.f[c.k] === v ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></th>`; }
       if (c.sinFiltro) return "<th></th>";
@@ -655,7 +683,7 @@ export function montarTablero(root, D) {
       return `<tr class="${clk ? "clk" : ""}" ${clk ? `data-act="ficha" data-tipo="${clk.tipo}" data-id="${esc(clk.id)}"` : ""}>${tds}</tr>`;
     }).join("");
     return `<div class="tabla" id="${id}">
-      <div class="tb-top">${opts.buscar === false ? "<span></span>" : `<input data-tq="${id}" value="${esc(st.q)}" placeholder="Buscar en la tabla…">`}<span class="cnt">${out.length === rows.length ? nn(rows.length, "fila", "filas") : `${fmt(out.length)} de ${fmt(rows.length)} filas`}</span></div>
+      <div class="tb-top">${`<input data-tq="${id}" value="${esc(st.q)}" placeholder="Buscar en la tabla…">`}<span class="cnt">${out.length === rows.length ? nn(rows.length, "fila", "filas") : `${fmt(out.length)} de ${fmt(rows.length)} filas`}</span></div>
       <div class="scroll"><table><thead><tr>${th}</tr><tr class="f">${tf}</tr></thead><tbody>${tr || `<tr><td colspan="${cols.length}" class="vacio">${esc(opts.vacio ?? "Sin filas para este período y estos filtros.")}</td></tr>`}</tbody></table></div>
       ${out.length > st.max ? `<div class="tb-foot"><span>Mostrando ${st.max} de ${fmt(out.length)}</span><button data-tmas="${id}">Mostrar más</button></div>` : ""}
     </div>`;
@@ -800,7 +828,15 @@ export function montarTablero(root, D) {
     else if (t.dataset.tf) { S.tablas[t.dataset.tf].f[t.dataset.k] = t.value; refrescarTabla(t.dataset.tf, t.tagName === "SELECT" ? null : `[data-tf="${t.dataset.tf}"][data-k="${t.dataset.k}"]`); }
   });
   root.addEventListener("click", (e) => {
-    const s = e.target.closest("[data-ts]"); if (s) { const st = S.tablas[s.dataset.ts]; if (st.ord === s.dataset.k) st.dir = -st.dir; else { st.ord = s.dataset.k; st.dir = -1; } refrescarTabla(s.dataset.ts); return; }
+    // tres estados: ascendente → descendente → vuelve al orden por defecto de la tabla
+    const s = e.target.closest("[data-ts]");
+    if (s) {
+      const st = S.tablas[s.dataset.ts], base = TAB[s.dataset.ts].opts;
+      if (st.ord !== s.dataset.k) { st.ord = s.dataset.k; st.dir = 1; }
+      else if (st.dir === 1) st.dir = -1;
+      else { st.ord = base.ord ?? null; st.dir = base.dir ?? -1; }
+      refrescarTabla(s.dataset.ts); return;
+    }
     const m = e.target.closest("[data-tmas]"); if (m) { S.tablas[m.dataset.tmas].max += 50; refrescarTabla(m.dataset.tmas); }
   });
   // tooltips: curva (crosshair por columna) y barras por hora
