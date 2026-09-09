@@ -1,9 +1,12 @@
 "use client";
-// VISTA DE TABLA — la UI del buscador, el orden por cabecera y el filtro por columna.
+// VISTA DE TABLA — la UI del buscador, el orden por cabecera, el filtro por columna y el
+// ANCHO AJUSTABLE de cada columna.
 //
 // PORTADO DESDE OVERCALL (gestion/app/tabla-datos.tsx). El COMPORTAMIENTO es idéntico:
 // lo único que cambia son las clases, que allá son CSS propio y acá utilidades con los
-// tokens de Docto (azul #378ADD interactivo, verde solo para estado).
+// tokens de Docto — salvo las cuatro que SÍ necesitan CSS de verdad (.th-ancho y
+// .tabla-ajustada), que van en globals.css con los mismos nombres para que sincronizar
+// con OverbCall siga siendo copiar y pegar.
 // La lógica pura y sus pruebas viven en src/lib/tabla.ts.
 //
 // Cómo se usa una pantalla (esto es TODO lo que hay que escribir):
@@ -21,7 +24,8 @@
 // "el orden siempre es de más nuevo a más viejo en TODO"). La excepción escrita es el
 // monitor, que ordena por puesto: el supervisor busca a alguien en un lugar fijo.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState,
+         type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { filtrar, hayVista, llevaFiltro, ordenar, siguienteOrden, urlAVista,
          valoresDe, vistaAUrl, VISTA_VACIA, type Columna, type Orden, type Vista } from "@/lib/tabla";
@@ -50,30 +54,32 @@ export type VistaTabla<T> = {
 export function useVistaTabla<T>(
   filas: T[],
   cols: Columna<T>[],
-  opciones: { clave: (f: T) => string; defecto?: (a: T, b: T) => number; urlOff?: boolean }
+  opciones: { clave: (f: T) => string; defecto?: (a: T, b: T) => number; urlOff?: boolean; prefijo?: string }
 ): VistaTabla<T> {
-  const { clave, defecto, urlOff } = opciones;
+  const { clave, defecto, urlOff, prefijo = "" } = opciones;
   const [vista, setVista] = useState<Vista>(VISTA_VACIA);
 
   // la vista se lee de la URL UNA vez, después de hidratar (en el servidor no hay window;
   // leerla en el useState inicial rompería la hidratación)
   useEffect(() => {
     if (urlOff) return;
-    const v = urlAVista(window.location.search);
+    const v = urlAVista(window.location.search, prefijo);
     if (hayVista(v)) setVista(v);
-  }, [urlOff]);
+  }, [urlOff, prefijo]);
 
   // y se escribe con replaceState: no navega, no re-renderiza Next, y la flecha "atrás"
   // del navegador no deshace un filtro (que sería desconcertante)
   useEffect(() => {
     if (urlOff) return;
-    const qs = vistaAUrl(vista);
+    const qs = vistaAUrl(vista, prefijo);
     const otros = new URLSearchParams(window.location.search);
-    [...otros.keys()].forEach((k) => { if (k === "buscar" || k === "orden" || k.startsWith("sin_")) otros.delete(k); });
+    [...otros.keys()].forEach((k) => {
+      if (k === `${prefijo}buscar` || k === `${prefijo}orden` || k.startsWith(`${prefijo}sin_`)) otros.delete(k);
+    });
     const resto = otros.toString();
     const final = [resto, qs].filter(Boolean).join("&");
     window.history.replaceState(null, "", window.location.pathname + (final ? "?" + final : ""));
-  }, [vista, urlOff]);
+  }, [vista, urlOff, prefijo]);
 
   const porDefecto = defecto || (() => 0);
   const visibles = useMemo(
@@ -132,17 +138,108 @@ export function BarraTabla<T>({ vista, placeholder, children, cuenta, enHistoric
   );
 }
 
+// ─── ANCHO DE COLUMNA, A LO EXCEL ─────────────────────────────────────────────
+// Se arrastra el borde derecho de la cabecera y la columna cambia de ancho; doble clic
+// vuelve a los anchos de fábrica. Queda guardado por pantalla: el que agranda "Motivo"
+// porque su operación lo necesita, no lo agranda de nuevo mañana.
+//
+// Dónde se escribe el ancho importa: en `table-layout: fixed` MANDA el <col>, así que si
+// la tabla tiene colgroup (el monitor) hay que escribir ahí; si no lo tiene, en el <th>.
+// Escribir en el th de una tabla con colgroup no hace nada — y parece un bug del arrastre.
+const MIN_ANCHO = 56;
+
+function useAnchos<T>(cols: Columna<T>[]) {
+  const cabeza = useRef<HTMLTableSectionElement>(null);
+  const claveLS = useCallback(
+    () => `docto.anchos:${window.location.pathname}:${cols.map((c) => c.k).join(",")}`, [cols]);
+
+  const piezas = useCallback(() => {
+    const thead = cabeza.current;
+    const tabla = thead?.closest("table") as HTMLTableElement | null;
+    if (!thead || !tabla) return null;
+    const ths = [...thead.querySelectorAll<HTMLTableCellElement>("tr > th")];
+    const colEls = [...tabla.querySelectorAll<HTMLTableColElement>("colgroup > col")];
+    return { tabla, ths, colEls: colEls.length === ths.length ? colEls : [] };
+  }, []);
+
+  // Se congelan TODAS las columnas, no solo la que se arrastra: si las demás quedan en
+  // porcentaje, el navegador les devuelve el espacio y la que agrandaste se encoge sola.
+  const aplicar = useCallback((anchos: number[]) => {
+    const p = piezas();
+    if (!p || anchos.length !== p.ths.length) return;
+    const total = anchos.reduce((a, b) => a + b, 0);
+    p.tabla.classList.add("tabla-ajustada");
+    p.tabla.style.tableLayout = "fixed";
+    p.tabla.style.width = `${total}px`;
+    p.tabla.style.minWidth = `${total}px`;
+    anchos.forEach((w, i) => { (p.colEls.length ? p.colEls[i] : p.ths[i]).style.width = `${w}px`; });
+  }, [piezas]);
+
+  const alFabrica = useCallback(() => {
+    const p = piezas();
+    if (!p) return;
+    p.tabla.classList.remove("tabla-ajustada");
+    p.tabla.style.tableLayout = "";
+    p.tabla.style.width = "";
+    p.tabla.style.minWidth = "";
+    [...p.ths, ...p.colEls].forEach((e) => { e.style.width = ""; });
+    try { localStorage.removeItem(claveLS()); } catch { /* modo privado */ }
+  }, [piezas, claveLS]);
+
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem(claveLS());
+      if (!guardado) return;
+      const anchos = JSON.parse(guardado);
+      // si la pantalla cambió de columnas, lo guardado ya no describe esta tabla
+      if (Array.isArray(anchos) && anchos.length === cols.length) aplicar(anchos.map(Number));
+    } catch { /* dato viejo o roto: se ignora, no se rompe la tabla */ }
+  }, [aplicar, claveLS, cols.length]);
+
+  const tirar = useCallback((i: number, e: ReactPointerEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();   // el tirador vive dentro del th: sin esto, arrastrar ordena
+    const p = piezas();
+    if (!p) return;
+    const base = p.ths.map((th) => th.getBoundingClientRect().width);
+    const x0 = e.clientX;
+    const tirador = e.currentTarget;
+    let ultimo = base;
+    tirador.classList.add("tirando");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const mover = (ev: PointerEvent) => {
+      ultimo = [...base];
+      ultimo[i] = Math.max(MIN_ANCHO, Math.round(base[i] + (ev.clientX - x0)));
+      aplicar(ultimo);
+    };
+    const soltar = () => {
+      tirador.classList.remove("tirando");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("pointermove", mover);
+      document.removeEventListener("pointerup", soltar);
+      try { localStorage.setItem(claveLS(), JSON.stringify(ultimo.map(Math.round))); } catch { /* modo privado */ }
+    };
+    document.addEventListener("pointermove", mover);
+    document.addEventListener("pointerup", soltar);
+  }, [piezas, aplicar, claveLS]);
+
+  return { cabeza, tirar, alFabrica };
+}
+
 /** El <thead> completo: cada columna con su botón de orden y, si corresponde, su embudo. */
 export function CabezaTabla<T>({ vista }: { vista: VistaTabla<T> }) {
   const [abierta, setAbierta] = useState<string | null>(null);
+  const { cabeza, tirar, alFabrica } = useAnchos(vista.cols);
   return (
-    <thead>
+    <thead ref={cabeza}>
       <tr>
-        {vista.cols.map((c) => {
+        {vista.cols.map((c, i) => {
           const ordenada = vista.orden?.k === c.k;
           return (
-            <th key={c.k}
-                className={"border-b border-gray-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 " + (c.num ? "text-right" : "text-left")}
+            <th key={c.k} title={c.ayuda}
+                className={"sticky top-0 z-[2] h-[34px] border-b border-gray-200 bg-gray-50 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 " + (c.num ? "text-right" : "text-left")}
                 aria-sort={ordenada ? (vista.orden!.dir === "asc" ? "ascending" : "descending") : undefined}>
               <span className="inline-flex max-w-full items-center gap-px">
                 {c.sinOrden ? <span className="px-1 py-0.5">{c.t}</span> : (
@@ -156,6 +253,13 @@ export function CabezaTabla<T>({ vista }: { vista: VistaTabla<T> }) {
                 )}
                 {llevaFiltro(c) && <Embudo vista={vista} col={c} abierta={abierta} setAbierta={setAbierta} />}
               </span>
+              {/* el tirador del ancho: en el borde derecho, en todas menos la última */}
+              {i < vista.cols.length - 1 && (
+                <span className="th-ancho" role="separator" aria-hidden="true"
+                  title="Arrastrá para cambiar el ancho · doble clic vuelve a los anchos originales"
+                  onPointerDown={(e) => tirar(i, e)} onDoubleClick={alFabrica}
+                  onClick={(e) => e.stopPropagation()} />
+              )}
             </th>
           );
         })}
@@ -199,10 +303,9 @@ function Embudo<T>({ vista, col, abierta, setAbierta }: {
         aria-haspopup="dialog" aria-expanded={abierto} aria-label={`Filtrar ${col.t}`}
         onClick={(e) => {
           e.stopPropagation();
-          // El buscador de valores se limpia acá, al ABRIR, y no en el efecto de cierre:
-          // resetear estado dentro del cuerpo de un efecto dispara renders en cascada (lo
-          // marca el lint de Docto). El resultado es el mismo — el panel siempre abre
-          // vacío — y es el único apartamiento del port de OverCall.
+          // Se limpia al ABRIR (en el clic) y no al cerrar (en un efecto): el lint de Docto
+          // marca —con razón— que resetear estado dentro de un efecto dispara renders en
+          // cascada. Resultado visible idéntico. Único apartamiento del port.
           if (!abierto) setBuscaValor("");
           setAbierta(abierto ? null : col.k);
         }}>
@@ -242,8 +345,8 @@ function Embudo<T>({ vista, col, abierta, setAbierta }: {
 
 /** La sección "Históricos" al final de la MISMA tabla: lo que no se usa, plegado.
  *  Si la búsqueda encuentra algo adentro, se abre sola (si no, el buscador mentiría). */
-export function Historicos<T>({ filas, colSpan, buscando, total, children }: {
-  filas: T[]; colSpan: number; buscando: boolean; total?: number; children: (f: T) => ReactNode;
+export function Historicos<T>({ filas, colSpan, buscando, total, titulo = "Históricos", children }: {
+  filas: T[]; colSpan: number; buscando: boolean; total?: number; titulo?: string; children: (f: T) => ReactNode;
 }) {
   const [abierto, setAbierto] = useState(false);
   const forzado = buscando && filas.length > 0;
@@ -254,11 +357,16 @@ export function Historicos<T>({ filas, colSpan, buscando, total, children }: {
         <td colSpan={colSpan} className="border-t-2 border-gray-200 p-0">
           <button className="flex w-full items-center gap-2.5 bg-gray-50 px-2.5 py-2.5 text-left text-sm font-medium text-gray-600 hover:bg-[#EBF3FC] hover:text-gray-900" aria-expanded={ver} onClick={() => setAbierto(!ver)}>
             <span className="w-2.5 text-[#378ADD]" aria-hidden="true">{ver ? "▾" : "▸"}</span>
-            Históricos <span className="text-[12px] font-normal text-gray-400">({total != null && total !== filas.length ? `${filas.length} de ${total}` : filas.length})</span>
+            {titulo} <span className="text-[12px] font-normal text-gray-400">({total != null && total !== filas.length ? `${filas.length} de ${total}` : filas.length})</span>
             {forzado && !abierto ? <span className="text-[12px] font-normal text-gray-400"> — abierto por la búsqueda</span> : null}
           </button>
         </td>
       </tr>
+      {ver && filas.length === 0 && (
+        <tr><td colSpan={colSpan} className="vacio" style={{ whiteSpace: "normal" }}>
+          Ninguna con esos filtros.
+        </td></tr>
+      )}
       {ver && filas.map((f) => children(f))}
     </tbody>
   );

@@ -1,9 +1,9 @@
 // VISTA DE TABLA — la lógica pura del buscador, el orden y el filtro por columna.
 //
 // PORTADO DESDE OVERCALL, sin cambios de comportamiento (gestion/lib/tabla.ts). El mandato
-// de tablas es regla de la casa para todos los proyectos, y la implementación de referencia
-// ya existe probada: copiarla evita que cada producto invente su propia versión con sus
-// propios bugs. Si algo se corrige acá, se corrige allá — y al revés.
+// de tablas es regla de la casa para todos los proyectos y la implementación de referencia
+// ya existe probada: copiarla evita que cada producto invente su versión con sus bugs.
+// Si algo se corrige acá, se corrige allá — y al revés.
 //
 // Pedido de Diego (2026-09-07/08): "todas las tablas deben tener su buscador y su filtro u
 // ordenador tipo Excel" · "el orden siempre es de más nuevo a más viejo en TODO".
@@ -41,6 +41,14 @@ export type Columna<T> = {
   porEvento?: boolean;
   /** no participa del buscador de texto (p. ej. una columna de solo íconos) */
   sinBuscar?: boolean;
+  /** Texto que se ve en la cabecera como ayuda (title del th). Se perdieron 9 tooltips que
+   *  ya existían al migrar las pantallas: "CLL = llamadas atendidas hoy" y parecidos. */
+  ayuda?: string;
+  /** Texto BUSCABLE distinto del valor que ordena. Sirve cuando la celda muestra más de lo
+   *  que la columna ordena (el nombre técnico debajo del visible) o cuando el valor tiene que
+   *  ser una fecha ISO para ordenar bien pero nadie busca "2026-09-08". Si no está, se busca
+   *  y se filtra por `val`. */
+  busca?: (f: T) => string;
   /** ORDEN POR CICLO DE VIDA, no alfabético. Un estado no se ordena por su inicial:
    *  "Conversando, Timbrando, Disponible, En pausa, Desconectado" es el orden que tiene
    *  sentido para quien mira. Lo que no esté en la lista va al final, alfabético. */
@@ -115,7 +123,8 @@ export function valoresDe<T>(filas: T[], cols: Columna<T>[], c: Columna<T>, v: V
 export function coincide<T>(f: T, cols: Columna<T>[], texto: string): boolean {
   const q = textoBuscable(texto).trim();
   if (!q) return true;
-  const heno = textoBuscable(cols.filter((c) => !c.sinBuscar && !c.sinOrden).map((c) => c.val(f) ?? "").join(" "));
+  const heno = textoBuscable(cols.filter((c) => !c.sinBuscar && !c.sinOrden)
+    .map((c) => (c.busca ? c.busca(f) : c.val(f)) ?? "").join(" "));
   return q.split(/\s+/).every((t) => heno.includes(t));
 }
 
@@ -172,22 +181,24 @@ export function hayVista(v: Vista): boolean {
 }
 
 // ── la vista viaja en la URL: se comparte por link y sobrevive a un F5 ──────────────
-export function vistaAUrl(v: Vista): string {
+export function vistaAUrl(v: Vista, prefijo = ""): string {
+  // el prefijo permite DOS tablas en la misma pantalla sin que se pisen los parámetros
   const p = new URLSearchParams();
-  if (v.texto) p.set("buscar", v.texto);
-  if (v.orden) p.set("orden", `${v.orden.k},${v.orden.dir}`);
-  for (const [k, ex] of Object.entries(v.filtros)) if (ex && ex.length) p.set(`sin_${k}`, ex.join("~"));
+  if (v.texto) p.set(`${prefijo}buscar`, v.texto);
+  if (v.orden) p.set(`${prefijo}orden`, `${v.orden.k},${v.orden.dir}`);
+  for (const [k, ex] of Object.entries(v.filtros)) if (ex && ex.length) p.set(`${prefijo}sin_${k}`, ex.join("~"));
   return p.toString();
 }
 
-export function urlAVista(busqueda: string): Vista {
+export function urlAVista(busqueda: string, prefijo = ""): Vista {
   const p = new URLSearchParams(busqueda);
-  const v: Vista = { texto: p.get("buscar") || "", orden: null, filtros: {} };
-  const o = p.get("orden");
+  const v: Vista = { texto: p.get(`${prefijo}buscar`) || "", orden: null, filtros: {} };
+  const o = p.get(`${prefijo}orden`);
   if (o) {
     const [k, dir] = o.split(",");
     if (k) v.orden = { k, dir: dir === "desc" ? "desc" : "asc" };
   }
-  p.forEach((val, k) => { if (k.startsWith("sin_") && val) v.filtros[k.slice(4)] = val.split("~"); });
+  const pre = `${prefijo}sin_`;
+  p.forEach((val, k) => { if (k.startsWith(pre) && val) v.filtros[k.slice(pre.length)] = val.split("~"); });
   return v;
 }

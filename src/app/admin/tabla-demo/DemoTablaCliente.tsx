@@ -27,6 +27,18 @@ const DATOS: Fila[] = [
   { id: 7, profesional: "Oscar Iriarte", especialidad: "Dermatología", provincia: "Mendoza", estado: "Identidad pendiente", atenciones: null, precio: 35000, alta: "2026-08-28", activo: true },
   { id: 8, profesional: "Lucía Sandoval", especialidad: "Clínica médica", provincia: "CABA", estado: "Disponible", atenciones: 5, precio: 40000, alta: "2026-06-15", activo: false },
   { id: 9, profesional: "Rubén Ávalos", especialidad: "Cardiología", provincia: "Córdoba", estado: "Suspendido", atenciones: 2, precio: 38000, alta: "2026-04-02", activo: false },
+  // De acá para abajo, relleno inventado: sin unas cuantas filas no se puede comprobar que
+  // la cabecera queda fija al scrollear ni que el ancho a mano recorta la celda.
+  { id: 10, profesional: "Camila Ferreyra", especialidad: "Pediatría", provincia: "Buenos Aires", estado: "Disponible", atenciones: 9, precio: 32000, alta: "2026-08-20", activo: true },
+  { id: 11, profesional: "Hernán Quiroga", especialidad: "Clínica médica", provincia: "Santa Fe", estado: "En consulta", atenciones: 15, precio: 42000, alta: "2026-07-03", activo: true },
+  { id: 12, profesional: "Valeria Ocampo", especialidad: "Ginecología", provincia: "CABA", estado: "Disponible", atenciones: 33, precio: 55000, alta: "2026-06-28", activo: true },
+  { id: 13, profesional: "Ignacio Bustos", especialidad: "Cardiología", provincia: "Mendoza", estado: "Identidad pendiente", atenciones: null, precio: 47000, alta: "2026-09-02", activo: true },
+  { id: 14, profesional: "Sofía Miranda", especialidad: "Pediatría", provincia: "Córdoba", estado: "Disponible", atenciones: 18, precio: 29000, alta: "2026-05-12", activo: true },
+  { id: 15, profesional: "Tomás Aguirre", especialidad: "Dermatología", provincia: "CABA", estado: "Sin cuenta de cobros", atenciones: 1, precio: null, alta: "2026-08-05", activo: true },
+  { id: 16, profesional: "Paula Benítez", especialidad: "Clínica médica", provincia: "Buenos Aires", estado: "Disponible", atenciones: 27, precio: 36000, alta: "2026-07-19", activo: true },
+  { id: 17, profesional: "Emilio Rosales", especialidad: "Ginecología", provincia: "Santa Fe", estado: "En consulta", atenciones: 6, precio: 51000, alta: "2026-06-09", activo: true },
+  { id: 18, profesional: "Delfina Ibarra", especialidad: "Pediatría", provincia: "Mendoza", estado: "Disponible", atenciones: 11, precio: 33000, alta: "2026-08-30", activo: true },
+  { id: 19, profesional: "Gonzalo Paredes", especialidad: "Dermatología", provincia: "Córdoba", estado: "Suspendido", atenciones: 4, precio: 39000, alta: "2026-03-18", activo: false },
 ];
 
 // El ciclo de vida manda sobre el alfabeto: un estado no se ordena por su inicial.
@@ -96,12 +108,20 @@ export default function DemoTablaCliente() {
         quedan al final en los dos sentidos), ordenar <strong>Profesional</strong> (Base 2 antes que Base 10),
         el embudo de <strong>Especialidad</strong>, y buscar <strong>Sandoval</strong>, que está en Históricos
         y abre la sección sola. Todo queda escrito en la dirección de la página.
+        {" "}Y lo nuevo: <strong>arrastrá el borde derecho de cualquier título</strong> para cambiarle el ancho
+        (doble clic vuelve a los originales, y el ancho queda guardado para la próxima vez), y
+        <strong> scrolleá la lista</strong>: los títulos quedan fijos arriba.
       </p>
 
       <div className="mt-5 rounded-xl bg-white p-4" style={{ border: "1px solid #e5e7eb" }}>
         <BarraTabla vista={vista} placeholder="Buscar profesional…" cuenta="profesionales" enHistoricos={historicos.length} />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left">
+        {/* El scroll —horizontal Y vertical— vive ACÁ, no en la página: una tabla ancha no
+            puede empujar el documento de costado, y una larga tiene que scrollear adentro
+            para que la cabecera pegajosa se pegue al borde de ESTE cuadro. Sin el tope de
+            alto, al scrollear la página los títulos se van y se pierde la referencia
+            (razonamiento de OverCall, 08/09). */}
+        <div className="overflow-auto max-h-[72vh]">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left">
             <CabezaTabla vista={vista} />
             <tbody>
               {vista.filas.length === 0 && (

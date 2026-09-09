@@ -161,3 +161,30 @@ body {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
+
+/* ═══ VISTA DE TABLA — lo que no se puede resolver con utilidades ══════════════
+   PORTADO DESDE OVERCALL (globals.css, sección "vista de tabla") con los MISMOS
+   nombres de clase, para que sincronizar los dos productos siga siendo copiar y
+   pegar. Todo lo demás del componente usa utilidades con los tokens de Docto.
+
+   Estas tres reglas necesitan CSS de verdad: el tirador es un ::after con estado
+   :hover, y `.tabla-ajustada` la agrega el JavaScript al arrastrar. */
+
+/* Ancho de columna a lo Excel: el borde derecho de cada cabecera se arrastra, y doble
+   clic vuelve a los anchos de fábrica. La franja es de 9px porque 4 no se agarra con
+   trackpad. `th:has()` pesa menos que la clase de la cabecera, así que NO le pisa el
+   position: sticky. */
+th:has(> .th-ancho) { position: relative; }
+.th-ancho {
+  position: absolute; top: 0; right: -2px; z-index: 3;
+  width: 9px; height: 100%;
+  cursor: col-resize; touch-action: none;
+}
+.th-ancho::after {
+  content: ""; position: absolute; top: 6px; bottom: 6px; right: 4px;
+  border-right: 2px solid transparent; border-radius: 2px;
+}
+.th-ancho:hover::after, .th-ancho.tirando::after { border-right-color: #378ADD; }
+
+/* Con el ancho puesto a mano, la celda RECORTA en vez de empujar a la de al lado. */
+.tabla-ajustada th, .tabla-ajustada td { overflow: hidden; text-overflow: ellipsis; }
