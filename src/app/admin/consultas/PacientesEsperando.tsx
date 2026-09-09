@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, Clock, X } from "lucide-react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 
 interface EntradaSala {
   id: string;
@@ -18,6 +19,29 @@ interface EntradaSala {
 }
 
 const POLL_INTERVAL = 10_000;
+
+const TIPO_LABEL: Record<string, string> = {
+  ci: "CI",
+  turno_programado: "Turno",
+  consultorio: "Consultorio",
+};
+
+/** La espera se decía SOLO con color. Ahora también con la palabra: el color acompaña,
+ *  la palabra informa (regla 6 del mandato de tablas). */
+const URGENCIA_LABEL: Record<string, string> = { alta: "Alta", media: "Media", baja: "Baja" };
+const CICLO_URGENCIA = ["Alta", "Media", "Baja"];
+
+function urgenciaColor(urgencia: string) {
+  if (urgencia === "alta") return "#E24B4A";
+  if (urgencia === "media") return "#BA7517";
+  return "#1D9E75";
+}
+
+function formatTiempo(min: number) {
+  if (min < 60) return `${min} min`;
+  const hrs = Math.floor(min / 60);
+  return `${hrs}h ${min % 60}min`;
+}
 
 export default function PacientesEsperando() {
   const [entradas, setEntradas] = useState<EntradaSala[]>([]);
@@ -53,12 +77,31 @@ export default function PacientesEsperando() {
     });
   }
 
-  function selectAll() {
-    if (selected.size === entradas.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(entradas.map((e) => e.id)));
-    }
+  const COLUMNAS: Columna<EntradaSala>[] = useMemo(() => [
+    { k: "sel", t: "", val: () => "", sinOrden: true },
+    { k: "paciente", t: "Paciente", val: (e) => e.paciente?.nombre_completo ?? "—",
+      busca: (e) => `${e.paciente?.nombre_completo ?? ""} ${e.paciente?.email ?? ""}` },
+    { k: "medico", t: "Médico", val: (e) => e.medico?.nombre_completo ?? "Sin asignar" },
+    { k: "tipo", t: "Tipo", val: (e) => TIPO_LABEL[e.tipo] ?? e.tipo },
+    { k: "espera", t: "Espera", val: (e) => e.tiempo_espera_min, num: true, porEvento: true,
+      busca: (e) => formatTiempo(e.tiempo_espera_min) },
+    { k: "urgencia", t: "Urgencia", val: (e) => URGENCIA_LABEL[e.urgencia] ?? e.urgencia, rango: CICLO_URGENCIA },
+    { k: "acc", t: "", val: () => "", sinOrden: true, num: true },
+  ], []);
+  // Acá NO manda "lo más nuevo": es una fila de gente esperando en vivo, y arriba va el
+  // que lleva más tiempo sin que lo atiendan. Motivo escrito, como pide la regla 4 para
+  // desviarse del orden por defecto.
+  const vista = useVistaTabla(entradas, COLUMNAS, {
+    clave: (e) => e.id,
+    defecto: (a, b) => b.tiempo_espera_min - a.tiempo_espera_min,
+  });
+
+  /** Tilda o destilda las filas QUE SE VEN. Antes tomaba la lista entera: con un filtro
+   *  puesto se podían cancelar entradas que no estaban en pantalla. */
+  function seleccionarVisibles() {
+    const ids = vista.filas.map((e) => e.id);
+    const todas = ids.length > 0 && ids.every((id) => selected.has(id));
+    setSelected(todas ? new Set() : new Set(ids));
   }
 
   async function cancelarSeleccionadas() {
@@ -90,18 +133,6 @@ export default function PacientesEsperando() {
       setError("Error de conexión");
     }
     setCancelando(false);
-  }
-
-  function urgenciaColor(urgencia: string) {
-    if (urgencia === "alta") return "#E24B4A";
-    if (urgencia === "media") return "#BA7517";
-    return "#1D9E75";
-  }
-
-  function formatTiempo(min: number) {
-    if (min < 60) return `${min} min`;
-    const hrs = Math.floor(min / 60);
-    return `${hrs}h ${min % 60}min`;
   }
 
   if (loading) {
@@ -141,27 +172,19 @@ export default function PacientesEsperando() {
       )}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-              <th className="px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={selected.size === entradas.length && entradas.length > 0}
-                  onChange={selectAll}
-                  className="h-3.5 w-3.5 rounded border-gray-300"
-                />
-              </th>
-              <th className="px-4 py-3">Paciente</th>
-              <th className="px-4 py-3">Médico</th>
-              <th className="hidden px-4 py-3 lg:table-cell">Tipo</th>
-              <th className="px-4 py-3">Tiempo</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {entradas.map((e) => (
+      <BarraTabla vista={vista} placeholder="Buscar paciente o médico…" cuenta="esperando">
+        <button
+          onClick={seleccionarVisibles}
+          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[12px] font-medium text-gray-600 transition hover:border-[#378ADD] hover:text-[#378ADD]"
+        >
+          Tildar los {vista.filas.length} que se ven
+        </button>
+      </BarraTabla>
+      <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <CabezaTabla vista={vista} />
+          <tbody>
+            {vista.filas.map((e) => (
               <tr key={e.id} className="hover:bg-gray-50/50">
                 <td className="px-4 py-3">
                   <input
@@ -182,7 +205,7 @@ export default function PacientesEsperando() {
                 <td className="px-4 py-3 text-gray-600">
                   {e.medico?.nombre_completo ?? "Sin asignar"}
                 </td>
-                <td className="hidden px-4 py-3 lg:table-cell">
+                <td className="px-4 py-3">
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                     e.tipo === "ci"
                       ? "bg-blue-50 text-[#378ADD]"
@@ -190,21 +213,24 @@ export default function PacientesEsperando() {
                         ? "bg-purple-50 text-purple-600"
                         : "bg-teal-50 text-teal-600"
                   }`}>
-                    {e.tipo === "ci" ? "CI" : e.tipo === "turno_programado" ? "Turno" : "Consultorio"}
+                    {TIPO_LABEL[e.tipo] ?? e.tipo}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1.5">
                     <Clock size={14} style={{ color: urgenciaColor(e.urgencia) }} />
-                    <span
-                      className="font-medium"
-                      style={{ color: urgenciaColor(e.urgencia) }}
-                    >
+                    <span className="font-medium" style={{ color: urgenciaColor(e.urgencia) }}>
                       {formatTiempo(e.tiempo_espera_min)}
                     </span>
                   </div>
                 </td>
                 <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: urgenciaColor(e.urgencia) }} />
+                    {URGENCIA_LABEL[e.urgencia] ?? e.urgencia}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => {
                       setSelected(new Set([e.id]));
