@@ -10,7 +10,11 @@ export default async function BandejaPage() {
     .from("correos")
     .select("id, creado_en, direccion, de, para, asunto, leido, atendido, error_envio, en_respuesta_a, sistema")
     .order("creado_en", { ascending: false })
-    .limit(200);
+    // El buscador, el orden y el embudo de la vista de tabla trabajan sobre lo que llega
+    // acá: con el tope viejo de 200, un correo más antiguo era INENCONTRABLE. Hoy son 165.
+    // DEUDA: pasados unos miles hay que paginar del lado del servidor y llevarse la
+    // búsqueda con ella.
+    .limit(2000);
 
   const lista = (correos ?? []).map((c) => ({
     id: c.id as string,
