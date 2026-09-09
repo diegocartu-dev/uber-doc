@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import { useRouter } from "next/navigation";
 import { Loader2, Download, AlertTriangle } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
@@ -67,6 +68,34 @@ export default function ConsultasClient() {
   const [hasta, setHasta] = useState(() => fechaAR(0));
   const [forzando, setForzando] = useState<string | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
+
+  // Las columnas cambian según la pestaña, igual que la cabecera de antes. `tipo`,
+  // `estado`, `medico` y `especialidad` salen de catálogos finitos → llevan embudo.
+  // Los instantes (solicitada, cita, inicio) crecen sin techo → solo orden.
+  // Solo "hoy" mostraba Solicitada y Turno para, en cabecera y cuerpo. Se respeta.
+  const conFechas = tab === "hoy";
+  const COLUMNAS: Columna<ConsultaItem>[] = useMemo(() => {
+    const cols: Columna<ConsultaItem>[] = [
+      { k: "tipo", t: "Tipo", val: (i) => (i.tipo === "CI" ? "CI" : i.canal === "consultorio" ? "Turno consultorio" : "Turno clínica") },
+      { k: "medico", t: "Médico", val: (i) => i.medico },
+      { k: "paciente", t: "Paciente", val: (i) => i.paciente },
+      { k: "especialidad", t: "Especialidad", val: (i) => i.especialidad },
+      { k: "estado", t: "Estado", val: (i) => i.estado },
+    ];
+    if (conFechas) {
+      cols.push({ k: "solicitada", t: "Solicitada", val: (i) => i.solicitada ?? null, tipo: "fecha", porEvento: true });
+      cols.push({ k: "cita", t: "Turno para", val: (i) => i.citaPara ?? null, tipo: "fecha", porEvento: true });
+    }
+    cols.push({ k: "inicio", t: tab === "en_curso" ? "Tiempo" : "Inicio", val: (i) => i.inicio, tipo: "fecha", porEvento: true });
+    if (tab === "en_curso") cols.push({ k: "acc", t: "", val: () => "", sinOrden: true, sinBuscar: true });
+    return cols;
+  }, [tab, conFechas]);
+
+  const vista = useVistaTabla(items, COLUMNAS, {
+    clave: (i) => `${i.tipo}-${i.id}`,
+    // Lo más nuevo arriba: en esta pantalla el instante que ordena es el inicio.
+    defecto: (a, b) => Date.parse(b.inicio) - Date.parse(a.inicio),
+  });
 
   const fetchData = useCallback(async () => {
     if (tab === "esperando" || tab === "cancelaciones") { setLoading(false); return; }
@@ -244,27 +273,22 @@ export default function ConsultasClient() {
           </p>
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3">Médico</th>
-                <th className="px-4 py-3">Paciente</th>
-                <th className="hidden px-4 py-3 lg:table-cell">Estado</th>
-                {tab === "hoy" ? (
-                  <>
-                    <th className="px-4 py-3">Solicitada</th>
-                    <th className="px-4 py-3">Turno para</th>
-                  </>
-                ) : (
-                  <th className="px-4 py-3">{tab === "en_curso" ? "Tiempo" : "Inicio"}</th>
-                )}
-                {tab === "en_curso" && <th className="px-4 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {items.map((item) => {
+        <>
+        <BarraTabla vista={vista} placeholder="Buscar por médico, paciente, especialidad…" cuenta="atenciones" />
+        {/* El scroll vive acá, con tope de alto: la cabecera se pega al borde de ESTE
+            cuadro y los títulos no se pierden al scrollear la página. */}
+        <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+          <table className="w-full border-separate border-spacing-0 text-sm">
+            <CabezaTabla vista={vista} />
+            <tbody>
+              {vista.filas.length === 0 && (
+                <tr>
+                  <td colSpan={COLUMNAS.length} className="px-4 py-10 text-center text-sm text-gray-400">
+                    Nada coincide con lo buscado.
+                  </td>
+                </tr>
+              )}
+              {vista.filas.map((item) => {
                 const esHuerfana = tab === "en_curso" && (Date.now() - new Date(item.inicio).getTime()) > 2 * 60 * 60 * 1000;
                 return (
                   <tr
@@ -289,7 +313,8 @@ export default function ConsultasClient() {
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">{item.medico}</td>
                     <td className="px-4 py-3 text-gray-600">{item.paciente}</td>
-                    <td className="hidden px-4 py-3 lg:table-cell"><EstadoChip estado={item.estado} /></td>
+                    <td className="px-4 py-3 text-[12px] text-gray-500">{item.especialidad}</td>
+                    <td className="px-4 py-3"><EstadoChip estado={item.estado} /></td>
                     {tab === "hoy" ? (
                       <>
                         <td className="whitespace-nowrap px-4 py-3 text-gray-700">
@@ -346,6 +371,7 @@ export default function ConsultasClient() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
