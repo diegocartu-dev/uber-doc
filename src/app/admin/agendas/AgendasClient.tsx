@@ -8,8 +8,9 @@
 // y se muestra como dato (decisión 12/08 — "quien levanta las agendas es la
 // institución", pero la duración es política de la instancia, no del form).
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { BarraTabla, CabezaTabla, Historicos, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import { crearAgendaAcordada, desactivarAgenda } from "./actions";
 import type { Franja } from "@/lib/agenda/crear-agenda";
 
@@ -28,7 +29,11 @@ export interface AgendaFila {
   fechaFin: string;
   canal: "acordado" | "ofrecido";
   activo: boolean;
+  /** cuándo se cargó. Manda el orden por defecto: lo más nuevo arriba. */
+  creadaEn: string;
 }
+
+const CANAL_LABEL: Record<string, string> = { acordado: "Acordado", ofrecido: "Ofrecido" };
 
 const ACCION = "#378ADD";
 const card: React.CSSProperties = {
@@ -125,6 +130,52 @@ export default function AgendasClient({
   const [bajaPendiente, setBajaPendiente] = useState<AgendaFila | null>(null);
 
   const medicoSel = medicos.find((m) => m.id === medicoId) ?? null;
+
+  const COLUMNAS: Columna<AgendaFila>[] = useMemo(() => [
+    { k: "medico", t: "Profesional", val: (a) => a.medicoNombre },
+    { k: "agenda", t: "Agenda", val: (a) => a.nombre },
+    { k: "vigencia", t: "Vigencia", val: (a) => a.fechaInicio, tipo: "fecha", porEvento: true,
+      busca: (a) => `${a.fechaInicio} ${a.fechaFin}` },
+    { k: "canal", t: "Motor", val: (a) => CANAL_LABEL[a.canal] ?? a.canal, rango: ["Acordado", "Ofrecido"] },
+    { k: "estado", t: "Estado", val: (a) => (a.activo ? "Activa" : "Inactiva"), rango: ["Activa", "Inactiva"] },
+    { k: "acc", t: "", val: () => "", sinOrden: true, num: true },
+  ], []);
+  // El hook recibe TODAS y recién después se parten en dos: si le pasara sólo las activas,
+  // el buscador no miraría dentro de Históricos y la sección se abriría sin nada que mostrar.
+  const vista = useVistaTabla(agendas, COLUMNAS, {
+    clave: (a) => a.id,
+    defecto: (a, b) => Date.parse(b.creadaEn) - Date.parse(a.creadaEn),
+  });
+  const activas = useMemo(() => vista.filas.filter((a) => a.activo), [vista.filas]);
+  const historicas = useMemo(() => vista.filas.filter((a) => !a.activo), [vista.filas]);
+  const historicasTotal = useMemo(() => agendas.filter((a) => !a.activo).length, [agendas]);
+
+  // Una sola fila para la tabla y para Históricos: así no hay dos markups que se
+  // desincronizan cuando cambia una columna.
+  const filaAgenda = (a: AgendaFila, historica = false) => (
+    <tr key={a.id} style={{ borderBottom: "1px solid #F1F3F4", opacity: historica ? 0.6 : 1 }}>
+      <td style={{ padding: "10px 8px", fontWeight: 600, color: "#111827" }}>{a.medicoNombre}</td>
+      <td style={{ padding: "10px 8px", color: "#4B5563" }}>{a.nombre}</td>
+      <td style={{ padding: "10px 8px", color: "#4B5563", fontVariantNumeric: "tabular-nums" }}>
+        {a.fechaInicio} → {a.fechaFin}
+      </td>
+      <td style={{ padding: "10px 8px" }}>
+        <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 99, fontSize: 12, fontWeight: 600, background: "#EBF3FC", color: "#2D75C4" }}>
+          {CANAL_LABEL[a.canal] ?? a.canal}
+        </span>
+      </td>
+      <td style={{ padding: "10px 8px" }}>
+        <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 99, fontSize: 12, fontWeight: 600, background: a.activo ? "#E8F5F0" : "#F4F4F3", color: a.activo ? "#1D9E75" : "#888780" }}>
+          {a.activo ? "Activa" : "Inactiva"}
+        </span>
+      </td>
+      <td style={{ padding: "10px 8px", textAlign: "right" }}>
+        {a.activo && (
+          <button style={btnSec} onClick={() => setBajaPendiente(a)}>Desactivar</button>
+        )}
+      </td>
+    </tr>
+  );
 
   async function crear() {
     setError(null);
@@ -261,34 +312,29 @@ export default function AgendasClient({
         {agendas.length === 0 ? (
           <p style={{ fontSize: 13, color: "#4B5563" }}>Todavía no hay agendas institucionales.</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <tbody>
-              {agendas.map((a) => (
-                <tr key={a.id} style={{ borderBottom: "1px solid #F1F3F4" }}>
-                  <td style={{ padding: "10px 8px", fontWeight: 600, color: "#111827" }}>{a.medicoNombre}</td>
-                  <td style={{ padding: "10px 8px", color: "#4B5563" }}>{a.nombre}</td>
-                  <td style={{ padding: "10px 8px", color: "#4B5563", fontVariantNumeric: "tabular-nums" }}>
-                    {a.fechaInicio} → {a.fechaFin}
-                  </td>
-                  <td style={{ padding: "10px 8px" }}>
-                    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 99, fontSize: 12, fontWeight: 600, background: "#EBF3FC", color: "#2D75C4" }}>
-                      {a.canal === "acordado" ? "Acordado" : "Ofrecido"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px 8px" }}>
-                    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 99, fontSize: 12, fontWeight: 600, background: a.activo ? "#E8F5F0" : "#F4F4F3", color: a.activo ? "#1D9E75" : "#888780" }}>
-                      {a.activo ? "Activa" : "Inactiva"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px 8px", textAlign: "right" }}>
-                    {a.activo && (
-                      <button style={btnSec} onClick={() => setBajaPendiente(a)}>Desactivar</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div style={{ marginTop: 12 }}>
+              <BarraTabla vista={vista} placeholder="Buscar profesional o agenda…" cuenta="activas" enHistoricos={historicas.length} />
+            </div>
+            <div className="overflow-auto max-h-[64vh]">
+              <table className="w-full border-separate border-spacing-0" style={{ fontSize: 13 }}>
+                <CabezaTabla vista={vista} />
+                <tbody>
+                  {activas.map((a) => filaAgenda(a))}
+                  {activas.length === 0 && historicas.length === 0 && (
+                    <tr><td colSpan={6} style={{ padding: "14px 8px", color: "#4B5563" }}>
+                      Ninguna agenda con esos filtros. Sacá alguno, o mirá en Históricos.
+                    </td></tr>
+                  )}
+                </tbody>
+                {/* Las desactivadas al fondo y plegadas. Si la búsqueda encuentra una acá
+                    adentro, la sección se abre sola. */}
+                <Historicos filas={historicas} total={historicasTotal} colSpan={6} buscando={vista.hay} titulo="Desactivadas">
+                  {(a) => filaAgenda(a, true)}
+                </Historicos>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
