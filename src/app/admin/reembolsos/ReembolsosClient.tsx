@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import { Loader2, RefreshCw, Clock, AlertTriangle, Wallet } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 
@@ -191,20 +192,31 @@ function Vacio({ texto }: { texto: string }) {
 }
 
 function ColaView({ rows }: { rows: ColaRow[] }) {
+  // Paciente, Médico y Bloqueo salen de catálogos finitos → embudo. El monto y los
+  // instantes crecen sin techo → solo orden. `tipo` viaja en el texto buscable: se lee
+  // al lado del paciente pero no merece columna propia.
+  const COLUMNAS: Columna<ColaRow>[] = useMemo(() => [
+    { k: "paciente", t: "Paciente", val: (r) => r.paciente, busca: (r) => `${r.paciente} ${r.tipo} ${r.motivo ?? ""}` },
+    { k: "medico", t: "Médico", val: (r) => r.medico },
+    { k: "monto", t: "Monto", val: (r) => r.monto, num: true, porEvento: true },
+    { k: "bloqueo", t: "Bloqueo", val: (r) => (ESTADO_BADGE[r.estado] ?? { label: r.estado }).label },
+    { k: "intentos", t: "Intentos", val: (r) => r.intentos, num: true },
+    { k: "proximo", t: "Próximo reintento", val: (r) => r.proximo_intento_at, tipo: "fecha", porEvento: true },
+    { k: "desde", t: "Desde", val: (r) => r.creado_at, tipo: "fecha", porEvento: true },
+  ], []);
+  const vista = useVistaTabla(rows, COLUMNAS, {
+    clave: (r) => r.id,
+    defecto: (a, b) => Date.parse(b.creado_at) - Date.parse(a.creado_at),
+  });
   if (rows.length === 0) return <Vacio texto="No hay reembolsos pendientes de reintento." />;
   return (
-    <div className="overflow-x-auto rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-100 text-left">
-            <Th>Paciente</Th><Th>Médico</Th><Th>Monto</Th><Th>Bloqueo</Th>
-            <Th className="hidden lg:table-cell">Intentos</Th>
-            <Th className="hidden lg:table-cell">Próximo reintento</Th>
-            <Th className="hidden lg:table-cell">Desde</Th>
-          </tr>
-        </thead>
+    <>
+    <BarraTabla vista={vista} placeholder="Buscar por paciente, médico, motivo…" cuenta="reembolsos" />
+    <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <CabezaTabla vista={vista} />
         <tbody>
-          {rows.map((r) => {
+          {vista.filas.map((r) => {
             const badge = ESTADO_BADGE[r.estado] ?? { status: r.estado, label: r.estado };
             return (
               <tr key={r.id} className="border-b border-gray-50 last:border-0">
@@ -216,19 +228,31 @@ function ColaView({ rows }: { rows: ColaRow[] }) {
                 <Td>{r.medico}</Td>
                 <Td className="font-medium text-gray-900">{money(r.monto)}</Td>
                 <Td><StatusBadge status={badge.status} label={badge.label} /></Td>
-                <Td className="hidden lg:table-cell">{r.intentos}</Td>
-                <Td className="hidden text-gray-500 lg:table-cell">{fechaCorta(r.proximo_intento_at)}</Td>
-                <Td className="hidden text-gray-400 lg:table-cell">{desdeHace(r.creado_at)}</Td>
+                <Td>{r.intentos}</Td>
+                <Td className="text-gray-500">{fechaCorta(r.proximo_intento_at)}</Td>
+                <Td className="text-gray-400">{desdeHace(r.creado_at)}</Td>
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
 function AccionView({ rows }: { rows: AccionRow[] }) {
+  const COLUMNAS: Columna<AccionRow>[] = useMemo(() => [
+    { k: "paciente", t: "Paciente", val: (r) => r.paciente, busca: (r) => `${r.paciente} ${r.tipo}` },
+    { k: "medico", t: "Médico", val: (r) => r.medico },
+    { k: "monto", t: "Monto a cubrir", val: (r) => r.monto, num: true, porEvento: true },
+    { k: "cvu", t: "CVU paciente", val: (r) => r.cvu, porEvento: true },
+    { k: "desde", t: "Desde", val: (r) => r.creado_at, tipo: "fecha", porEvento: true },
+  ], []);
+  const vista = useVistaTabla(rows, COLUMNAS, {
+    clave: (r) => r.id,
+    defecto: (a, b) => Date.parse(b.creado_at) - Date.parse(a.creado_at),
+  });
   if (rows.length === 0) return <Vacio texto="No hay reembolsos que requieran acción manual." />;
   return (
     <div className="space-y-3">
@@ -237,15 +261,12 @@ function AccionView({ rows }: { rows: AccionRow[] }) {
           Estos reembolsos se escalaron tras 48hs sin saldo del médico. <strong>Docto debe cubrir al paciente por transferencia CVU.</strong> La captura del CVU del paciente llega en el ticket 3A; por ahora coordinar el dato manualmente.
         </span>
       </div>
-      <div className="overflow-x-auto rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-left">
-              <Th>Paciente</Th><Th>Médico</Th><Th>Monto a cubrir</Th><Th>CVU paciente</Th><Th>Desde</Th>
-            </tr>
-          </thead>
+      <BarraTabla vista={vista} placeholder="Buscar por paciente o médico…" cuenta="casos" />
+      <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <CabezaTabla vista={vista} />
           <tbody>
-            {rows.map((r) => (
+            {vista.filas.map((r) => (
               <tr key={r.id} className="border-b border-gray-50 last:border-0">
                 <Td>
                   <span className="font-medium text-gray-900">{r.paciente}</span>
@@ -269,17 +290,28 @@ function AccionView({ rows }: { rows: AccionRow[] }) {
 }
 
 function DeudaView({ rows }: { rows: DeudaRow[] }) {
+  const COLUMNAS: Columna<DeudaRow>[] = useMemo(() => [
+    { k: "medico", t: "Médico", val: (r) => r.medico },
+    { k: "debe", t: "Deuda total", val: (r) => r.total_debe, num: true, porEvento: true },
+    { k: "recuperado", t: "Recuperado", val: (r) => r.total_recuperado, num: true, porEvento: true },
+    { k: "restante", t: "Restante", val: (r) => r.restante, num: true, porEvento: true },
+    { k: "casos", t: "Casos", val: (r) => r.items, num: true },
+  ], []);
+  // Acá NO manda "lo más nuevo": la fila no tiene fecha y lo que importa es quién debe
+  // más. Motivo escrito, como pide la regla 4 para desviarse del default.
+  const vista = useVistaTabla(rows, COLUMNAS, {
+    clave: (r) => r.medico_id,
+    defecto: (a, b) => b.restante - a.restante,
+  });
   if (rows.length === 0) return <Vacio texto="Ningún médico tiene deuda pendiente." />;
   return (
-    <div className="overflow-x-auto rounded-xl bg-white" style={{ border: "1px solid #e5e7eb" }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-100 text-left">
-            <Th>Médico</Th><Th>Deuda total</Th><Th>Recuperado</Th><Th>Restante</Th><Th>Casos</Th>
-          </tr>
-        </thead>
+    <>
+    <BarraTabla vista={vista} placeholder="Buscar médico…" cuenta="médicos con deuda" />
+    <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <CabezaTabla vista={vista} />
         <tbody>
-          {rows.map((r) => (
+          {vista.filas.map((r) => (
             <tr key={r.medico_id} className="border-b border-gray-50 last:border-0">
               <Td className="font-medium text-gray-900">{r.medico}</Td>
               <Td>{money(r.total_debe)}</Td>
@@ -291,11 +323,8 @@ function DeudaView({ rows }: { rows: DeudaRow[] }) {
         </tbody>
       </table>
     </div>
+    </>
   );
-}
-
-function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <th className={`px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-gray-400 ${className}`}>{children}</th>;
 }
 
 function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
