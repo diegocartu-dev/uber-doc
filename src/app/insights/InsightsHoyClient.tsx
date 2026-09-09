@@ -5,9 +5,10 @@
 // la fila de métricas chicas ("no suma en nada"), y la tabla cuenta el día
 // completo: pendientes + hechas con resultado, en orden cronológico.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 
 interface HoyData {
   completadasHoy: number;
@@ -38,6 +39,12 @@ function formatARS(n: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 }
 
+/** CI, turno de clínica y turno de consultorio particular: las tres categorías de siempre. */
+function canalLabel(a: { tipo: "CI" | "Turno"; canal: string | null }): string {
+  if (a.tipo === "CI") return "CI";
+  return a.canal === "consultorio_privado" ? "Turno consult." : "Turno clínica";
+}
+
 function horaDe(iso: string) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
@@ -58,6 +65,25 @@ export default function InsightsHoyClient() {
     } catch { /* ignore */ }
     setLoading(false);
   }, [real]);
+
+  const actividad = useMemo(() => data?.actividad ?? [], [data]);
+  const COLUMNAS: Columna<HoyData["actividad"][number]>[] = useMemo(() => [
+    { k: "hora", t: "Hora", val: (a) => a.inicio, tipo: "fecha", porEvento: true, busca: (a) => horaDe(a.inicio) },
+    { k: "medico", t: "Médico", val: (a) => a.medico },
+    { k: "paciente", t: "Paciente", val: (a) => a.paciente },
+    { k: "especialidad", t: "Especialidad", val: (a) => a.especialidad },
+    { k: "canal", t: "Canal", val: canalLabel, rango: ["CI", "Turno clínica", "Turno consult."] },
+    { k: "pagado", t: "Pagado", val: (a) => (a.pagada ? a.monto : null), num: true, porEvento: true,
+      ayuda: "Lo que efectivamente entró. Sin pago acreditado la celda muestra el precio en gris" },
+    { k: "estado", t: "Estado", val: (a) => ESTADOS[a.estado]?.label ?? a.estado, rango: CICLO_ESTADO },
+  ], []);
+  // Acá NO manda "lo más nuevo": es la agenda del día y se lee de la mañana a la noche,
+  // como cualquier agenda. Motivo escrito, como pide la regla 4 para desviarse.
+  const vista = useVistaTabla(actividad, COLUMNAS, {
+    clave: (a) => `${a.tipo}-${a.id}`,
+    defecto: (a, b) => Date.parse(a.inicio) - Date.parse(b.inicio),
+    tono: "oscuro",
+  });
 
   useEffect(() => {
     fetchData();
@@ -229,26 +255,23 @@ export default function InsightsHoyClient() {
         {data.actividad.length === 0 ? (
           <div className="p-8 text-center text-sm text-white/30">Sin atenciones ni turnos reservados para hoy</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-medium uppercase tracking-wide text-white/30">
-                  <th className="px-5 py-3">Hora</th>
-                  <th className="px-5 py-3">Médico</th>
-                  <th className="hidden px-5 py-3 sm:table-cell">Paciente</th>
-                  <th className="hidden px-5 py-3 lg:table-cell">Especialidad</th>
-                  <th className="px-5 py-3">Canal</th>
-                  <th className="hidden px-5 py-3 sm:table-cell">Pagado</th>
-                  <th className="px-5 py-3">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {data.actividad.map((a) => (
-                  <tr key={`${a.tipo}-${a.id}`} className="hover:bg-white/[0.02]">
+          <div className="px-5 pb-5">
+            <BarraTabla vista={vista} placeholder="Buscar médico, paciente o especialidad…" cuenta="atenciones" />
+            <div className="overflow-auto max-h-[60vh]">
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <CabezaTabla vista={vista} />
+              <tbody>
+                {vista.filas.length === 0 && (
+                  <tr><td colSpan={COLUMNAS.length} className="px-5 py-8 text-center text-white/30">
+                    Ninguna atención con esos filtros.
+                  </td></tr>
+                )}
+                {vista.filas.map((a) => (
+                  <tr key={`${a.tipo}-${a.id}`} className="border-b border-white/5 hover:bg-white/[0.02]">
                     <td className="px-5 py-3 text-white/60">{horaDe(a.inicio)}</td>
                     <td className="max-w-[140px] truncate px-5 py-3 font-medium text-white/90">{a.medico}</td>
-                    <td className="hidden max-w-[140px] truncate px-5 py-3 text-white/60 sm:table-cell">{a.paciente}</td>
-                    <td className="hidden px-5 py-3 text-white/40 lg:table-cell">{a.especialidad || "—"}</td>
+                    <td className="max-w-[140px] truncate px-5 py-3 text-white/60">{a.paciente}</td>
+                    <td className="px-5 py-3 text-white/40">{a.especialidad || "—"}</td>
                     <td className="px-5 py-3">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                         a.tipo === "CI"
@@ -257,10 +280,10 @@ export default function InsightsHoyClient() {
                             ? "bg-[#BA7517]/20 text-[#BA7517]"
                             : "bg-white/10 text-white/60"
                       }`}>
-                        {a.tipo === "CI" ? "CI" : a.canal === "consultorio_privado" ? "Turno consult." : "Turno clínica"}
+                        {canalLabel(a)}
                       </span>
                     </td>
-                    <td className="hidden px-5 py-3 sm:table-cell">
+                    <td className="px-5 py-3 text-right">
                       {a.pagada ? (
                         <span className="text-white/70">{formatARS(a.monto)}</span>
                       ) : (
@@ -274,6 +297,7 @@ export default function InsightsHoyClient() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -281,9 +305,9 @@ export default function InsightsHoyClient() {
   );
 }
 
-// Estados en criollo: qué pasó (o va a pasar) con esa atención.
-function EstadoBadge({ estado }: { estado: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
+// Estados en criollo: qué pasó (o va a pasar) con esa atención. Vive a nivel de módulo
+// porque la columna Estado filtra por lo que se LEE, no por el nombre interno.
+const ESTADOS: Record<string, { label: string; cls: string }> = {
     completada: { label: "completada", cls: "bg-[#1D9E75]/20 text-[#1D9E75]" },
     completado: { label: "completado", cls: "bg-[#1D9E75]/20 text-[#1D9E75]" },
     en_curso: { label: "en curso", cls: "bg-[#378ADD]/20 text-[#378ADD]" },
@@ -302,7 +326,19 @@ function EstadoBadge({ estado }: { estado: string }) {
     medico_ausente: { label: "médico ausente", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
     reprogramado: { label: "reprogramado", cls: "bg-white/10 text-white/50" },
     interrumpida: { label: "interrumpida", cls: "bg-[#E24B4A]/20 text-[#E24B4A]" },
-  };
+};
+
+/** El día de una atención, de lo que está por pasar a lo que ya pasó. Manda el orden
+ *  del embudo: un estado no se ordena por su inicial. */
+const CICLO_ESTADO = [
+  "reservando…", "reservado · pendiente", "aceptada · sin pagar", "pagada · por empezar",
+  "esperando al médico", "paciente en sala", "en curso", "completada", "completado",
+  "interrumpida", "reprogramado", "canceló el paciente", "canceló el médico", "cancelada",
+  "médico ausente", "paciente ausente",
+];
+
+function EstadoBadge({ estado }: { estado: string }) {
+  const map = ESTADOS;
   const e = map[estado] ?? { label: estado, cls: "bg-white/10 text-white/50" };
   return (
     <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${e.cls}`}>

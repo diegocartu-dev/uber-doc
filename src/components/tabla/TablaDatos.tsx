@@ -33,6 +33,12 @@ import { filtrar, hayVista, llevaFiltro, ordenar, siguienteOrden, urlAVista,
 export type { Columna } from "@/lib/tabla";
 export { compararTexto } from "@/lib/tabla";
 
+/** Docto tiene dos fondos: el panel de admin es claro y el tablero /insights es oscuro.
+ *  El COMPORTAMIENTO es el mismo; sólo cambian los colores de la barra y la cabecera.
+ *  El panel del embudo se dibuja en un portal sobre la página y queda claro en los dos:
+ *  es un menú flotante, como el de cualquier sistema operativo. */
+export type Tono = "claro" | "oscuro";
+
 export type VistaTabla<T> = {
   filas: T[];            // ya filtradas y ordenadas: es lo que la pantalla pinta
   total: number;         // cuántas había antes de filtrar
@@ -48,15 +54,16 @@ export type VistaTabla<T> = {
   setTexto: (s: string) => void;
   limpiar: () => void;
   valores: (c: Columna<T>) => { valor: string; n: number }[];
+  tono: Tono;
 };
 
 /** El hook: recibe las filas y las columnas, devuelve las filas ya filtradas y ordenadas. */
 export function useVistaTabla<T>(
   filas: T[],
   cols: Columna<T>[],
-  opciones: { clave: (f: T) => string; defecto?: (a: T, b: T) => number; urlOff?: boolean; prefijo?: string }
+  opciones: { clave: (f: T) => string; defecto?: (a: T, b: T) => number; urlOff?: boolean; prefijo?: string; tono?: Tono }
 ): VistaTabla<T> {
-  const { clave, defecto, urlOff, prefijo = "" } = opciones;
+  const { clave, defecto, urlOff, prefijo = "", tono = "claro" } = opciones;
   const [vista, setVista] = useState<Vista>(VISTA_VACIA);
 
   // la vista se lee de la URL UNA vez, después de hidratar (en el servidor no hay window;
@@ -105,7 +112,7 @@ export function useVistaTabla<T>(
   return { filas: visibles, total: filas.length, cols, vista, orden: vista.orden, hay: hayVista(vista),
            todas: filas, alternarOrden, alternarValor, verTodos,
            verNinguno: (k: string) => verNinguno(k, valoresDe(filas, cols, cols.find((c) => c.k === k)!, { ...vista, filtros: { ...vista.filtros, [k]: [] } }).map((x) => x.valor)),
-           setTexto, limpiar, valores };
+           setTexto, limpiar, valores, tono };
 }
 
 /** La barra de arriba: buscador + lo que la pantalla quiera meter (chips) + Limpiar + cuenta. */
@@ -115,10 +122,11 @@ export function BarraTabla<T>({ vista, placeholder, children, cuenta, enHistoric
   // un chip por columna filtrada: el filtro puesto se VE y se saca de un clic, en vez de
   // quedar escondido en un embudo que hay que ir a buscar
   const activos = vista.cols.filter((c) => (vista.vista.filtros[c.k] || []).length > 0);
+  const osc = vista.tono === "oscuro";
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <div>
-        <input type="search" className="w-[230px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-[#378ADD]" value={vista.vista.texto} placeholder={placeholder}
+        <input type="search" className={"w-[230px] rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#378ADD] " + (osc ? "border-white/10 bg-white/5 text-white placeholder:text-white/30" : "border-gray-200 text-gray-900 placeholder:text-gray-400")} value={vista.vista.texto} placeholder={placeholder}
           aria-label={placeholder} onChange={(e) => vista.setTexto(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Escape") vista.setTexto(""); }} />
       </div>
@@ -129,8 +137,8 @@ export function BarraTabla<T>({ vista, placeholder, children, cuenta, enHistoric
           {c.t}: sin {(vista.vista.filtros[c.k] || []).length} <span aria-hidden="true">×</span>
         </button>
       ))}
-      {vista.hay && <button className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[#378ADD] hover:bg-[#EBF3FC]" onClick={vista.limpiar}>Limpiar filtros</button>}
-      <span className="ml-auto text-[12px] text-gray-500" aria-live="polite">
+      {vista.hay && <button className={"rounded-lg px-2.5 py-1 text-[12px] font-medium text-[#378ADD] " + (osc ? "hover:bg-white/10" : "hover:bg-[#EBF3FC]")} onClick={vista.limpiar}>Limpiar filtros</button>}
+      <span className={"ml-auto text-[12px] " + (osc ? "text-white/40" : "text-gray-500")} aria-live="polite">
         <strong>{vista.filas.length}</strong>{vista.filas.length !== vista.total ? <> de <strong>{vista.total}</strong></> : null} {cuenta || ""}
         {enHistoricos ? <> · <strong>{enHistoricos}</strong> en históricos</> : null}
       </span>
@@ -232,6 +240,7 @@ function useAnchos<T>(cols: Columna<T>[]) {
 export function CabezaTabla<T>({ vista }: { vista: VistaTabla<T> }) {
   const [abierta, setAbierta] = useState<string | null>(null);
   const { cabeza, tirar, alFabrica } = useAnchos(vista.cols);
+  const osc = vista.tono === "oscuro";
   return (
     <thead ref={cabeza}>
       <tr>
@@ -239,14 +248,16 @@ export function CabezaTabla<T>({ vista }: { vista: VistaTabla<T> }) {
           const ordenada = vista.orden?.k === c.k;
           return (
             <th key={c.k} title={c.ayuda}
-                className={"sticky top-0 z-[2] h-[34px] border-b border-gray-200 bg-gray-50 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 " + (c.num ? "text-right" : "text-left")}
+                className={"sticky top-0 z-[2] h-[34px] border-b px-2.5 text-[11px] font-semibold uppercase tracking-wide "
+                  + (osc ? "border-white/10 bg-[#18243A] text-white/45 " : "border-gray-200 bg-gray-50 text-gray-500 ")
+                  + (c.num ? "text-right" : "text-left")}
                 aria-sort={ordenada ? (vista.orden!.dir === "asc" ? "ascending" : "descending") : undefined}>
               <span className="inline-flex max-w-full items-center gap-px">
                 {c.sinOrden ? <span className="px-1 py-0.5">{c.t}</span> : (
-                  <button className="inline-flex items-center gap-1.5 whitespace-nowrap rounded px-1 py-0.5 font-[inherit] text-[inherit] uppercase tracking-[inherit] hover:bg-[#EBF3FC] hover:text-gray-900" onClick={() => vista.alternarOrden(c.k)}
+                  <button className={"inline-flex items-center gap-1.5 whitespace-nowrap rounded px-1 py-0.5 font-[inherit] text-[inherit] uppercase tracking-[inherit] " + (osc ? "hover:bg-white/10 hover:text-white" : "hover:bg-[#EBF3FC] hover:text-gray-900")} onClick={() => vista.alternarOrden(c.k)}
                     aria-label={`Ordenar por ${c.t}`}>
                     {c.t}
-                    <span className={"inline-block w-2 text-[10px] " + (ordenada ? "text-[#378ADD] opacity-100" : "text-gray-400 opacity-45")} aria-hidden="true">
+                    <span className={"inline-block w-2 text-[10px] " + (ordenada ? "text-[#378ADD] opacity-100" : (osc ? "text-white/50 opacity-70" : "text-gray-400 opacity-45"))} aria-hidden="true">
                       {ordenada ? (vista.orden!.dir === "asc" ? "↑" : "↓") : "↕"}
                     </span>
                   </button>
@@ -299,7 +310,7 @@ function Embudo<T>({ vista, col, abierta, setAbierta }: {
 
   return (
     <>
-      <button ref={btn} className={"rounded p-[3px] leading-none hover:bg-[#EBF3FC] hover:text-[#378ADD] " + (excluidos.length ? "bg-[#EBF3FC] text-[#378ADD] opacity-100" : "text-gray-400 opacity-50")}
+      <button ref={btn} className={"rounded p-[3px] leading-none hover:bg-[#EBF3FC] hover:text-[#378ADD] " + (excluidos.length ? "bg-[#EBF3FC] text-[#378ADD] opacity-100" : (vista.tono === "oscuro" ? "text-white/50 opacity-70" : "text-gray-400 opacity-50"))}
         aria-haspopup="dialog" aria-expanded={abierto} aria-label={`Filtrar ${col.t}`}
         onClick={(e) => {
           e.stopPropagation();

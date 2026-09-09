@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 
 interface Cobro {
   pagado: boolean;
   monto: number | null;
 }
 interface Atencion {
+  /** el instante, para ordenar. La API ya lo manda; el cliente no lo declaraba. */
+  cuandoSort: number;
   cuando: string;
   tipo: "CI" | "Turno";
   canal: "clinica_virtual" | "consultorio_privado" | null;
@@ -56,6 +59,25 @@ const DESENLACE_COLOR: Record<string, string> = {
   paciente_se_fue: "#E24B4A",
 };
 
+/** El camino de una atención, de lo peor para nosotros a lo mejor. Manda el orden del
+ *  embudo: un desenlace no se ordena por su inicial. */
+const CICLO_DESENLACE = [
+  "No la aceptó nadie",
+  "El profesional no sostuvo",
+  "El paciente no llegó",
+  "Aceptada, sin pagar",
+  "El paciente se retiró",
+  "Cancelada (sin registro)",
+  "En curso",
+  "Atendida",
+];
+
+/** CI, turno de clínica y turno de consultorio particular: tres categorías (Diego 28/07). */
+function tipoLabel(a: Atencion): string {
+  if (a.tipo === "CI") return "CI";
+  return a.canal === "consultorio_privado" ? "Turno consult." : "Turno clínica";
+}
+
 const ESTADO_COLOR: Record<string, string> = {
   completada: "#1D9E75",
   completado: "#1D9E75",
@@ -71,7 +93,6 @@ export default function AtencionesClient() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [dias, setDias] = useState(30);
-  const [nivel, setNivel] = useState<"todo" | "consulta" | "intento">("todo");
   const sp = useSearchParams();
   const real = sp.get("real") !== "0";
 
@@ -87,7 +108,28 @@ export default function AtencionesClient() {
   // los KPIs de arriba siguen contando el total del período aunque la tabla
   // esté filtrada — si el filtro recortara los datos, "Aceptación" se leería
   // como 100% al mirar solo consultas.
-  const filas = (data?.atenciones ?? []).filter((a) => nivel === "todo" || a.nivel === nivel);
+  const atenciones = useMemo(() => data?.atenciones ?? [], [data]);
+
+  const COLUMNAS: Columna<Atencion>[] = useMemo(() => [
+    { k: "cuando", t: "Cuándo", val: (a) => a.cuandoSort, tipo: "numero", porEvento: true, busca: (a) => a.cuando },
+    { k: "tipo", t: "Tipo", val: tipoLabel, rango: ["CI", "Turno clínica", "Turno consult."] },
+    { k: "nivel", t: "Nivel", val: (a) => (a.nivel === "consulta" ? "Consulta" : "Intento"), rango: ["Consulta", "Intento"],
+      ayuda: "Un pedido es consulta recién cuando un profesional lo acepta" },
+    { k: "medico", t: "Médico", val: (a) => a.medico },
+    { k: "paciente", t: "Paciente", val: (a) => a.paciente },
+    { k: "provincia", t: "Provincia", val: (a) => a.provincia ?? "" },
+    { k: "desenlace", t: "Desenlace", val: (a) => a.desenlaceLabel, rango: CICLO_DESENLACE },
+    { k: "duro", t: "Duró", val: (a) => a.duracionMin, num: true, porEvento: true,
+      ayuda: "Del inicio al cierre. Vacío cuando el cierre no quedó registrado" },
+    { k: "docs", t: "Documentó", val: (a) => a.docs.join(", ") },
+    { k: "cobro", t: "Cobró", val: (a) => (a.cobro?.pagado ? a.cobro.monto : a.cobro ? 0 : null), num: true, porEvento: true,
+      busca: (a) => (a.cobro?.pagado ? fmtMonto(a.cobro.monto) : a.cobro ? "pendiente" : "") },
+  ], []);
+  const vista = useVistaTabla(atenciones, COLUMNAS, {
+    clave: (a) => `${a.cuandoSort}-${a.medico}-${a.paciente}`,
+    defecto: (a, b) => b.cuandoSort - a.cuandoSort,
+    tono: "oscuro",
+  });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8">
@@ -158,64 +200,36 @@ export default function AtencionesClient() {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-xs text-white/30">Ver:</span>
-            {(
-              [
-                ["todo", "Todo"],
-                ["consulta", "Solo consultas"],
-                ["intento", "Solo intentos"],
-              ] as const
-            ).map(([v, l]) => (
-              <button
-                key={v}
-                onClick={() => setNivel(v)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                  nivel === v ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
-                }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#1E293B]">
-            <table className="w-full min-w-[840px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
-                  <th className="px-4 py-3 font-medium">Cuándo</th>
-                  <th className="px-3 py-3 font-medium">Tipo</th>
-                  <th className="px-3 py-3 font-medium">Médico</th>
-                  <th className="px-3 py-3 font-medium">Paciente</th>
-                  <th className="px-3 py-3 font-medium">Provincia</th>
-                  <th className="px-3 py-3 font-medium">Desenlace</th>
-                  <th className="px-3 py-3 font-medium">Duró</th>
-                  <th className="px-3 py-3 font-medium">Documentó</th>
-                  <th className="px-3 py-3 font-medium">Cobró</th>
-                </tr>
-              </thead>
+          <div>
+          <BarraTabla vista={vista} placeholder="Buscar médico, paciente o provincia…" cuenta="atenciones" />
+          <div className="rounded-xl border border-white/10 bg-[#1E293B]">
+            <div className="overflow-auto max-h-[68vh]">
+            <table className="w-full min-w-[840px] border-separate border-spacing-0 text-left text-sm">
+              <CabezaTabla vista={vista} />
               <tbody>
-                {filas.length === 0 && (
+                {vista.filas.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-white/40">
-                      Sin atenciones en el período.
+                    <td colSpan={COLUMNAS.length} className="px-4 py-10 text-center text-white/40">
+                      {vista.hay ? "Ninguna atención con esos filtros." : "Sin atenciones en el período."}
                     </td>
                   </tr>
                 )}
-                {filas.map((a, i) => {
+                {vista.filas.map((a, i) => {
                   const ec = DESENLACE_COLOR[a.desenlace] ?? ESTADO_COLOR[a.estado] ?? "#888780";
                   // Tres categorías (Diego 28/07): CI azul, turno clínica gris,
                   // turno consultorio particular ámbar. Verde es solo para estados.
                   const esConsultorio = a.tipo === "Turno" && a.canal === "consultorio_privado";
                   const tc = a.tipo === "CI" ? "#378ADD" : esConsultorio ? "#BA7517" : "#888780";
-                  const tipoLabel = a.tipo === "CI" ? "CI" : esConsultorio ? "Turno consult." : "Turno clínica";
                   return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
                       <td className="whitespace-nowrap px-4 py-3 text-white/70">{a.cuando}</td>
                       <td className="px-3 py-3">
                         <span className="whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: tc + "22", color: tc }}>
-                          {tipoLabel}
+                          {tipoLabel(a)}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-white/60">
+                        {a.nivel === "consulta" ? "Consulta" : "Intento"}
                       </td>
                       <td className="px-3 py-3 text-white/90">{a.medico}</td>
                       <td className="px-3 py-3 text-white/90">{a.paciente}</td>
@@ -226,9 +240,6 @@ export default function AtencionesClient() {
                         <span className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: ec + "22", color: ec }}>
                           {a.desenlaceLabel}
                         </span>
-                        {a.nivel === "intento" && (
-                          <span className="ml-1.5 whitespace-nowrap text-[10px] text-white/30">intento</span>
-                        )}
                         {/* Sin el hito registrado el desenlace es una deducción, no
                             un hecho. Se marca para no leerlo como certeza. */}
                         {a.deducido && a.nivel === "intento" && (
@@ -237,7 +248,7 @@ export default function AtencionesClient() {
                           </span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                      <td className="whitespace-nowrap px-3 py-3 text-right text-white/70">
                         {a.duracionMin != null ? `${a.duracionMin} min` : <span className="text-white/25">—</span>}
                       </td>
                       <td className="px-3 py-3">
@@ -253,7 +264,7 @@ export default function AtencionesClient() {
                           <span className="text-white/25">—</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3">
+                      <td className="whitespace-nowrap px-3 py-3 text-right">
                         {a.cobro?.pagado ? (
                           <span className="font-semibold text-[#1D9E75]">{fmtMonto(a.cobro.monto)}</span>
                         ) : a.cobro ? (
@@ -267,11 +278,12 @@ export default function AtencionesClient() {
                 })}
               </tbody>
             </table>
+            </div>
+          </div>
           </div>
 
           <p className="text-center text-[11px] text-white/25">
-            Solo atenciones reales (no incluye los slots libres de agenda). Duración: del inicio al cierre de la consulta;
-            "—" cuando el cierre no quedó registrado (se está mejorando).
+            Solo atenciones reales: no incluye los lugares libres de agenda.
           </p>
         </>
       )}
