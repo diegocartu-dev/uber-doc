@@ -32,7 +32,7 @@ export default async function AgendasPage() {
       .order("nombre_completo"),
     admin
       .from("agenda_modelos")
-      .select("id, medico_id, nombre, fecha_inicio, fecha_fin, canal_origen, activo")
+      .select("id, medico_id, nombre, fecha_inicio, fecha_fin, canal_origen, activo, created_at")
       .in("canal_origen", ["acordado", "ofrecido"])
       .order("activo", { ascending: false })
       .order("fecha_inicio", { ascending: false })
@@ -56,6 +56,7 @@ export default async function AgendasPage() {
     fechaFin: mo.fecha_fin,
     canal: mo.canal_origen as "acordado" | "ofrecido",
     activo: mo.activo,
+    creadaEn: mo.created_at,
   }));
 
   return (
