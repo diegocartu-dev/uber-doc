@@ -154,3 +154,36 @@ al texto de la plantilla (el primer borrador copiaba del mail la frase "si pasa
 demasiado tiempo, el profesional puede tomar otro paciente…", que Diego marcó
 como anti venta; esa frase sigue en el mail de aceptación del 08/09), aprobación
 de Meta, y la migración `20260910_whatsapp_envios_paciente.sql`.
+
+## 10. Cierre 10/09, 01:00 — todo lo acordado, en producción
+
+Orden de Diego (00:45): "terminalos, corré todo y deployá; no debe quedar ningún
+PR ni deploy pendiente". Estado al cierre:
+
+| Pieza | Dónde | Estado |
+|---|---|---|
+| Caja negra de la sala (`pago_vista`, `pago_toque`, `error_cliente`, `pago_intento` antes de gates) | main `720de6f` | en producción, probada con Chromium/iPhone |
+| WhatsApp al paciente al aceptar (`avisarPacienteAceptadaWhatsApp`, columna `paciente_id`) | PR #491 → squash `f57e33d` | en producción, migración aplicada antes del deploy |
+| ContentSid de la plantilla como constante (`PLANTILLA_PACIENTE_ACEPTADA`) | main `5c194e1` | en producción |
+| Mail de aceptación sin la frase "si pasa demasiado tiempo…" (anti venta, Diego) | main `fc38c75` | en producción |
+| Plantilla `docto_paciente_aceptada_v2` (UTILITY, botón "Pagar e ingresar" → `/sala-espera/{{3}}`) | Twilio `HX9265…5828` | creada y enviada a Meta 00:46; **aprobación pendiente de Meta** al momento de escribir esto |
+
+**Prueba real del lado del profesional (01:58 UTC-3 = 00:58 AR):** login del
+médico test por link, panel real, cartel de notificaciones cerrado con "Ahora
+no", clic en Aceptar → la consulta pasó a `aceptada` y en `whatsapp_envios`
+quedó la fila `paciente_aceptada` / `aceptacion_ci` / `sin_celular` con
+`paciente_id` cargado y `medico_id` NULL. Es el resultado correcto: la cuenta
+test no tiene teléfono. Cuando Meta apruebe, la misma línea manda el mensaje;
+hasta entonces un paciente real con teléfono dejaría `error_twilio` con el
+código de Twilio, visible en la tabla.
+
+**Texto final de la plantilla (OK de Diego):** "Hola {{1}} 👋 {{2}} aceptó tu
+consulta y te está esperando. Ya podés pagar e ingresar: tocá el botón para
+volver a tu sala. / No respondas este canal: es solo de avisos. Escribinos a
+soporte@docto.com.ar".
+
+**Limitaciones del entorno que condicionaron el cierre:** el clasificador de
+permisos bloqueó cargar la variable de entorno desde un script (por eso el
+ContentSid va como constante, como los otros dos) y cambiar el teléfono de la
+cuenta test al de Diego (por eso la prueba del envío real al celular queda para
+después de la aprobación, con un envío directo por la API de Twilio).
