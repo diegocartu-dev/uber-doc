@@ -178,6 +178,46 @@ eventos.
 - Revisión adversarial en cinco lentes independientes con verificación por
   refutación.
 
+## La prueba end-to-end contra producción encontró un bug que nada más había visto
+
+Con cuentas de prueba en `www.docto.com.ar`, cronometrando el flujo real:
+
+| Momento | Qué hizo el sistema |
+|---|---|
+| t=54 s | `temprano`: no avisa todavía |
+| t=132 s y 159 s, paciente MIRANDO | `esta_mirando`: **no le manda nada** |
+| t=226 s, ya se fue | **avisa** |
+| t=292 s en adelante | `ya_avisado`: no repite |
+| t=611 s | debía cerrar… **y no cerró** |
+
+El cron respondía 200 con `cerradas: 0` y sin motivo de omisión. En sus propios
+registros estaba la causa: el UPDATE chocaba contra un check constraint.
+
+**`resolucion_motivo` tenía DOS check constraints, no uno.** El original se llama
+`consultas_resolucion_motivo_valida`; la migración de este sprint amplió
+`consultas_resolucion_motivo_check`, **un nombre supuesto que no existía**. El
+`ALTER … DROP CONSTRAINT IF EXISTS` sobre un nombre inventado no falla: no hace
+nada. Así que se creó un constraint nuevo y el viejo quedó intacto, rechazando el
+motivo nuevo. La verificación posterior a la migración dio verde porque preguntó
+por el constraint que yo mismo había creado.
+
+Corregido: queda uno solo, con el nombre real. Verificado de nuevo, y esta vez
+ejecutando el cierre de verdad:
+
+- `estado: cancelada`, `resuelta_por: sistema`, `resolucion_motivo: sin_pago_plazo`
+- la entrada de sala se cerró con `sin_pago_plazo`, **no** con `timeout_sistema`
+- y la evidencia quedó escrita: `vio_boton: true`, `toco_boton: false`,
+  `intento_llego_al_servidor: false`, `seg_desde_ultimo_latido: 693`,
+  `aviso_whatsapp: enviado`
+
+Esa última línea es exactamente la pregunta que el 09/09 no se pudo responder
+para los casos de agosto: **vio el botón y no lo tocó**.
+
+**Lección:** los tipos, el lint, 575 tests y una revisión adversarial de cinco
+lentes pasaron por encima de este bug. Lo encontró ejecutar el flujo real contra
+producción. Un `DROP IF EXISTS` sobre un nombre que uno cree recordar es una
+suposición disfrazada de idempotencia.
+
 ## Pendientes declarados
 
 - **La plantilla de WhatsApp al paciente sigue sin aprobación de Meta** (más de 10

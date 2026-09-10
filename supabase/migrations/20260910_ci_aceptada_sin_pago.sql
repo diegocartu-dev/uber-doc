@@ -96,3 +96,25 @@ DROP INDEX IF EXISTS consultas_aceptada_sin_pago_idx;
 CREATE INDEX IF NOT EXISTS consultas_aceptada_sin_pago_idx
   ON consultas (aceptada_at)
   WHERE estado = 'aceptada' AND (mp_status IS NULL OR mp_status <> 'approved');
+
+-- ── Segunda corrección, encontrada por la prueba end-to-end contra producción ─
+-- `resolucion_motivo` tenía DOS check constraints, no uno: el original se llama
+-- `consultas_resolucion_motivo_valida` (lo creó la migración del 19/08) y arriba
+-- se amplió `consultas_resolucion_motivo_check`, un nombre supuesto que no
+-- existía — el ALTER lo creó de cero y dejó el viejo intacto. Resultado: el cron
+-- corría, respondía 200 y NO cerraba nada, porque el UPDATE chocaba contra el
+-- constraint viejo. Un `DROP ... IF EXISTS` sobre un nombre inventado no falla:
+-- no hace nada, y por eso el error salió recién al ejecutarse de verdad.
+-- Se deja UNO SOLO, con el nombre real.
+ALTER TABLE consultas DROP CONSTRAINT IF EXISTS consultas_resolucion_motivo_check;
+ALTER TABLE consultas DROP CONSTRAINT IF EXISTS consultas_resolucion_motivo_valida;
+ALTER TABLE consultas ADD CONSTRAINT consultas_resolucion_motivo_valida CHECK (
+  resolucion_motivo IS NULL OR resolucion_motivo = ANY (ARRAY[
+    'retiro_paciente',
+    'cambio_profesional',
+    'cancelo_profesional',
+    'cancelacion_admin',
+    'sin_respuesta_plazo',
+    'sin_pago_plazo'
+  ])
+);
