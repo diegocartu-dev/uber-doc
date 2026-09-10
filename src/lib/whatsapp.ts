@@ -18,6 +18,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefonoAR } from "@/lib/telefono";
+import { formatNombreMedico } from "@/lib/utils/texto";
 
 // La normalización vive en @/lib/telefono (módulo puro, importable desde el
 // cliente — la usa la validación del paso 1 del registro médico). Se re-exporta
@@ -99,7 +100,11 @@ type ContextoEnvio = {
 };
 
 function registrarEnvio(params: {
-  medicoId: string;
+  /** Destinatario médico. NULL en los avisos al paciente, para no inflar los
+   *  conteos de avisos al médico (el profesional queda vía `consulta_id`). */
+  medicoId?: string | null;
+  /** Destinatario paciente (`pacientes.id`). Columna agregada el 10/09/2026. */
+  pacienteId?: string | null;
   plantilla: string;
   resultado: ResultadoEnvio;
   ctx?: ContextoEnvio;
@@ -109,7 +114,8 @@ function registrarEnvio(params: {
   void (async () => {
     const admin = createAdminClient();
     await admin.from("whatsapp_envios").insert({
-      medico_id: params.medicoId,
+      medico_id: params.medicoId ?? null,
+      paciente_id: params.pacienteId ?? null,
       consulta_id: params.ctx?.consultaId ?? null,
       turno_id: params.ctx?.turnoId ?? null,
       plantilla: params.plantilla,
@@ -241,6 +247,87 @@ async function enviarTwilioDetallado(toE164: string, contentSid: string, variabl
 }
 
 const primerNombre = (n: string | null | undefined): string => (n ?? "").trim().split(/\s+/)[0] || "Doctor/a";
+
+/**
+ * TRIGGER C — el profesional ACEPTÓ la consulta inmediata. Es el único momento
+ * del flujo en que el que tiene que actuar es el PACIENTE (pagar), y es justo
+ * cuando ya no está mirando la pantalla. Decisión de Diego (10/09/2026) sobre el
+ * diagnóstico del 09/09: de 4 aceptadas sin pago, en 3 el paciente se había ido
+ * de la sala antes de la aceptación (a los 9 y 15 segundos) o tuvo 22 segundos;
+ * el mail que se agregó el 08/09 llegó en el mismo segundo y no alcanzó. El
+ * WhatsApp al médico, en cambio, se lee en segundos (medido 27/08 y 09/09).
+ *
+ * Mismo transporte, misma tabla y mismo webhook de entrega que los avisos al
+ * médico. La plantilla la aprueba Meta y su ContentSid viaja por env var, como
+ * `demanda_provincia`: sin la variable esto es inerte y deja rastro
+ * (`sin_credenciales`), nunca rompe la aceptación.
+ *
+ * {{1}}=primer nombre del paciente, {{2}}=profesional con tratamiento,
+ * {{3}}=id de la consulta (sufijo dinámico del botón → /sala-espera/{{3}}).
+ * Fire-and-forget: el caller hace `.catch(() => {})`.
+ */
+export async function avisarPacienteAceptadaWhatsApp(
+  consultaId: string,
+  ctx?: ContextoEnvio,
+): Promise<boolean> {
+  const PLANTILLA = "paciente_aceptada";
+  const contexto: ContextoEnvio = { consultaId, disparador: "aceptacion_ci", ...ctx };
+
+  const admin = createAdminClient();
+  const { data: consulta } = await admin
+    .from("consultas")
+    .select("paciente_id, medico_id")
+    .eq("id", consultaId)
+    .maybeSingle();
+  if (!consulta) return false;
+
+  // `consultas.paciente_id` es el user_id; la ficha está en `pacientes` por user_id.
+  const [{ data: paciente }, { data: medico }] = await Promise.all([
+    admin
+      .from("pacientes")
+      .select("id, nombre_completo, telefono")
+      .eq("user_id", consulta.paciente_id)
+      .maybeSingle(),
+    admin
+      .from("medicos")
+      .select("nombre_completo, titulo")
+      .eq("id", consulta.medico_id)
+      .maybeSingle(),
+  ]);
+
+  const base = { pacienteId: paciente?.id ?? null, plantilla: PLANTILLA, ctx: contexto };
+
+  const contentSid = process.env.TWILIO_CONTENT_SID_PACIENTE_ACEPTADA;
+  if (!contentSid || !configurado()) {
+    registrarEnvio({ ...base, resultado: "sin_credenciales" });
+    return false;
+  }
+  // Mismo interruptor que el resto del canal: es el kill switch de WhatsApp.
+  if (!(await flagWhatsappOn())) {
+    registrarEnvio({ ...base, resultado: "flag_apagado" });
+    return false;
+  }
+  if (!paciente) return false;
+
+  const toE164 = normalizarTelefonoAR(paciente.telefono);
+  if (!toE164) {
+    registrarEnvio({ ...base, resultado: "sin_celular" });
+    return false;
+  }
+
+  const r = await enviarTwilioDetallado(toE164, contentSid, {
+    "1": (paciente.nombre_completo ?? "").trim().split(/\s+/)[0] || "paciente",
+    "2": formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo) || "El profesional",
+    "3": consultaId,
+  });
+  registrarEnvio({
+    ...base,
+    resultado: r.ok ? "enviado" : "error_twilio",
+    twilioSid: r.sid,
+    twilioErrorCode: r.errorCode,
+  });
+  return r.ok;
+}
 
 /**
  * TRIGGER A — el paciente solicitó una Consulta Inmediata; avisamos al médico para que
