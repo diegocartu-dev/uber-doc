@@ -52,6 +52,7 @@ const TWILIO_FROM = normalizarFromWhatsApp(process.env.TWILIO_WHATSAPP_FROM);
 // canal de avisos y nadie lee ahí). v1: HX28f31177… / HX5b80894…
 export const PLANTILLA_ACEPTAR_PACIENTE = "HX25f4187f6a159560fe86ed3087ceb8ca"; // docto_aceptar_paciente_v2
 export const PLANTILLA_PACIENTE_ESPERANDO = "HX8023671239ec07bdd66e6e238438b81b"; // docto_paciente_esperando_v2
+export const PLANTILLA_PACIENTE_ACEPTADA = "HX92655588afc1443f60850e50b5a45828"; // docto_paciente_aceptada_v2 (al PACIENTE, 10/09/2026)
 
 // No reenviar "paciente esperando" al mismo médico dentro de esta ventana. Cubre dos
 // casos a la vez: el cron repush cada 10 min y los re-render de la página de sala.
@@ -297,7 +298,13 @@ export async function avisarPacienteAceptadaWhatsApp(
 
   const base = { pacienteId: paciente?.id ?? null, plantilla: PLANTILLA, ctx: contexto };
 
-  const contentSid = process.env.TWILIO_CONTENT_SID_PACIENTE_ACEPTADA;
+  // ContentSid de `docto_paciente_aceptada_v2` (creada en Twilio el 10/09/2026,
+  // categoría UTILITY). Como los otros dos ContentSid de este archivo: es un id
+  // de plantilla, no un secreto, así que vive acá; la env var solo lo pisa.
+  // Hasta que Meta la apruebe, Twilio rechaza el envío y queda `error_twilio`
+  // con el código — o sea, la aprobación se ve en la tabla, no hace falta otro
+  // deploy.
+  const contentSid = process.env.TWILIO_CONTENT_SID_PACIENTE_ACEPTADA || PLANTILLA_PACIENTE_ACEPTADA;
   if (!contentSid || !configurado()) {
     registrarEnvio({ ...base, resultado: "sin_credenciales" });
     return false;
