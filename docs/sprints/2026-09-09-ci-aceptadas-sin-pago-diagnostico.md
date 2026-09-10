@@ -120,3 +120,37 @@ La CLI devuelve como máximo **50 filas únicas por llamada**, cada una repetida
 20 veces, sin importar `-n`. Para reconstruir una ventana hay que pedir
 **minuto a minuto** y deduplicar por `id`; los minutos con más de 50 requests
 quedan truncados igual. Los logs del 01/09 seguían disponibles el 09/09.
+
+## 9. Cierre 10/09 — decisión y lo que quedó en producción
+
+**Decisión de Diego (10/09, madrugada):** la lógica NO cambia (pide → acepta →
+paga → ambos entran). Lo que falta es (a) la caja negra de la pantalla del
+paciente, primero, y (b) un WhatsApp al paciente en el momento de la aceptación.
+
+**(a) Caja negra — en producción** (commit `720de6f`, migración del CHECK de
+`eventos_funnel` aplicada antes del deploy):
+- `pago_vista`: el paciente VIO el botón de pagar (una vez por carga).
+- `pago_toque`: TOCÓ el botón. Por beacon, antes de cualquier otra cosa.
+- `pago_intento` (servidor) pasa a emitirse antes de los gates; cada gate que
+  corta emite `pago_rechazado` con motivo.
+- `error_cliente`: excepciones, promesas rechazadas, fallos del poll y del pago
+  en la sala, y el error boundary global, con texto limpio y tope por carga.
+
+Verificado en producción con cuentas test en un Chromium real emulando iPhone
+(Playwright): aceptación escrita en la base → la sala pasó a "Falta un paso:
+pagá tu consulta" → toque → quedaron `pago_vista`, `pago_toque`,
+`pago_intento` y `pago_rechazado` (motivo `cuenta_test`, por diseño) en ese
+orden, y el navegador siguió a `info-medica`. Con esto, la próxima vez que un
+paciente esté frente al botón y no pague, vamos a saber si tocó y qué error
+tuvo su teléfono.
+
+Nota de herramienta: el panel de navegador embebido, cuando está oculto, NO
+ejecuta el JavaScript de la página (la sala quedó server-rendered, sin
+hidratar, sin polls, durante minutos). Las pruebas de cliente se hacen con
+Playwright/Chromium desde la raíz del repo, no con el panel oculto.
+
+**(b) WhatsApp al paciente — en PR #491**, inerte hasta tres cosas: OK de Diego
+al texto de la plantilla (el primer borrador copiaba del mail la frase "si pasa
+demasiado tiempo, el profesional puede tomar otro paciente…", que Diego marcó
+como anti venta; esa frase sigue en el mail de aceptación del 08/09), aprobación
+de Meta, y la migración `20260910_whatsapp_envios_paciente.sql`.
