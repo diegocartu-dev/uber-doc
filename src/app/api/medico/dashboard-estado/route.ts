@@ -75,7 +75,12 @@ export async function GET(req: NextRequest) {
   const { data: enCurso } = await supabase
     .from("consultas")
     .select(
-      "id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, estado, canal_origen"
+      // `aceptada_at` (10/09/2026): la tarjeta del panel necesita saber CUÁNDO se
+      // aceptó para mostrar el reloj del paciente y para habilitar el botón de
+      // cancelar recién a los 3 min. `consultas` tiene GRANT SELECT en las 35 de 35
+      // columnas para `authenticated` (verificado en prod), así que sumarla acá no
+      // corre el riesgo de grants de `medicos`.
+      "id, especialidad, paciente_id, sala_video_url, motivo_consulta, sintomas, created_at, aceptada_at, estado, canal_origen"
     )
     .eq("medico_id", medicoId)
     .in("estado", ["aceptada", "pagada", "en_curso"])
@@ -94,6 +99,7 @@ export async function GET(req: NextRequest) {
       motivo_consulta: c.motivo_consulta,
       sintomas: c.sintomas,
       created_at: c.created_at,
+      aceptada_at: (c as { aceptada_at?: string | null }).aceptada_at ?? null,
       fecha_nacimiento: p?.nacimiento ?? null,
       canal_origen: (c as { canal_origen?: string }).canal_origen ?? null,
     };

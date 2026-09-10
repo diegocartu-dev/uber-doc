@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo } from "@/lib/logger";
 import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 import { MOTIVO } from "@/lib/consultas/clasificar";
+import { registrarEvidenciaCierre } from "@/lib/consultas/evidencia-cierre";
 
 // Cancelación de una solicitud de CI por el PROPIO paciente, antes de que haya
 // plata en juego (caso Lucas 04/08: esperó más de una hora una aceptación que
@@ -89,5 +90,13 @@ export async function POST(req: NextRequest) {
   }
 
   logInfo("[cancelar-solicitud]", "Solicitud cancelada por el paciente", { consultaId });
+  // La caja negra en la base (Diego, 10/09). Acá el desenlace es el más claro de
+  // todos —el paciente se fue por su cuenta— pero igual importa saber si llegó a
+  // ver el botón de pagar: no es lo mismo irse esperando que irse del checkout.
+  // Se ESPERA, no se dispara con `void`: en Vercel el trabajo que queda pendiente
+  // después de la respuesta HTTP no está garantizado, y esto es justamente lo que
+  // no puede perderse. Nunca lanza (ver el módulo), así que no puede romper el
+  // cierre que ya está escrito en la base.
+  await registrarEvidenciaCierre(consultaId);
   return NextResponse.json({ ok: true, estado: "cancelada" });
 }

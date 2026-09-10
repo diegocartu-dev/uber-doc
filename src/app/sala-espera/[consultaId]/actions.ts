@@ -3,7 +3,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { enviarEmailConsultaAceptada } from "@/lib/email";
 import { pushAlPaciente } from "@/lib/push";
-import { avisarPacienteAceptadaWhatsApp } from "@/lib/whatsapp";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function aceptarConsulta(consultaId: string) {
@@ -71,11 +70,13 @@ export async function aceptarConsulta(consultaId: string) {
   // Mail SIEMPRE (es el canal que no depende de nada: de 388 pacientes reales,
   // UNO tenía permiso de notificaciones) y push si lo tiene.
   void enviarEmailConsultaAceptada(consultaId).catch(() => {});
-  // WhatsApp al paciente (decisión Diego 10/09): el mail del 08/09 llegó en el
-  // mismo segundo de la aceptación y el paciente no volvió; el WhatsApp es el
-  // canal que sí se lee en segundos. Inerte hasta que la plantilla esté aprobada
-  // y su ContentSid cargado (TWILIO_CONTENT_SID_PACIENTE_ACEPTADA).
-  void avisarPacienteAceptadaWhatsApp(consultaId).catch(() => {});
+  // El WhatsApp al paciente NO sale de acá (Diego, 10/09/2026, segunda vuelta).
+  // Si el paciente está mirando la pantalla, el aviso es ruido; y si ya tocó
+  // Pagar, es peor: le suena el teléfono adentro del checkout de Mercado Pago.
+  // Lo manda el cron `ci-aceptada-sin-pago` a los 90 segundos, y solo si el
+  // paciente dejó de dar señales de estar mirando. El mail, en cambio, sigue
+  // saliendo ya: no interrumpe, y es el respaldo del que cierra todo a los
+  // diez segundos.
   void (async () => {
     const admin = createAdminClient();
     const { data: c } = await admin

@@ -29,6 +29,8 @@ type ConsultaEnCurso = {
   motivo_consulta: string | null;
   sintomas: string[] | null;
   created_at: string;
+  /** Cuándo lo aceptó el profesional. NULL en las viejas (el hito existe desde el 19/08). */
+  aceptada_at?: string | null;
   fecha_nacimiento: string | null;
   canal_origen?: string;
 };

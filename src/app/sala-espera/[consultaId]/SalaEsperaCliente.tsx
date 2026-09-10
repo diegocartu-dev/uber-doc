@@ -35,6 +35,20 @@ function textoLimpio(v: unknown): string {
 // 5 s en una manguera de eventos.
 const MAX_ERRORES_REPORTADOS = 5;
 
+// ── El latido de presencia (Diego, 10/09/2026) ─────────────────────────────
+// Cada cuánto le avisamos al servidor que el paciente tiene ESTA pantalla a la
+// vista. Es lo único que separa "está mirando y ya va a pagar" de "se fue", y de
+// eso depende que el WhatsApp de la aceptación salga o no: al que está mirando
+// no se le manda nada; al que se fue le llega justo cuando se fue.
+//
+// No es lo mismo que el poll. El poll sigue corriendo con la pestaña en segundo
+// plano (el navegador lo frena, pero sigue), así que "hubo poll" no prueba que
+// haya alguien del otro lado. `visibilityState` sí.
+//
+// 20 s: suficientemente fino para el plazo de 90 s del aviso, y una cuarta parte
+// de los pings del poll.
+const MS_ENTRE_LATIDOS = 20_000;
+
 type Props = {
   consultaId: string;
   estado: string;
@@ -107,6 +121,9 @@ export default function SalaEsperaCliente({
 
   const [estado, setEstado] = useState(estadoInicial);
   const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
+  // Por qué se cerró. Sin esto, a quien se le venció el plazo para pagar la
+  // pantalla le decía que el profesional no había llegado a tomar su consulta.
+  const [motivoCierre, setMotivoCierre] = useState<string | null>(null);
   const [posicion, setPosicion] = useState(posicionInicial);
   const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [pagando, setPagando] = useState(false);
@@ -183,16 +200,28 @@ export default function SalaEsperaCliente({
   }, []);
 
   // Polling: 5s interval contra /api/consulta-estado
+  const ultimoLatidoRef = useRef(0);
   const poll = useCallback(async () => {
     try {
-      const res = await fetch(`/api/consulta-estado?consultaId=${consultaId}`, {
-        credentials: "include",
-      });
+      // Latido: solo si la pantalla está A LA VISTA, y como mucho cada 20 s. Se
+      // marca ANTES de la llamada a propósito: si la red falla, no queremos que
+      // el reintento del próximo ciclo mande un latido por cada error.
+      const mirando =
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible" &&
+        Date.now() - ultimoLatidoRef.current >= MS_ENTRE_LATIDOS;
+      if (mirando) ultimoLatidoRef.current = Date.now();
+
+      const res = await fetch(
+        `/api/consulta-estado?consultaId=${consultaId}${mirando ? "&mirando=1" : ""}`,
+        { credentials: "include" }
+      );
       if (!res.ok) return;
       const data = await res.json() as {
         estado: string;
         sala_video_url: string | null;
         mp_status?: string | null;
+        resolucion_motivo?: string | null;
       };
 
       if (
@@ -209,6 +238,7 @@ export default function SalaEsperaCliente({
       prevEstadoRef.current = data.estado;
       setEstado(data.estado);
       setMpStatus(data.mp_status ?? null);
+      setMotivoCierre(data.resolucion_motivo ?? null);
       if (data.sala_video_url) {
         salaVideoUrlRef.current = data.sala_video_url;
         setSalaVideoUrl(data.sala_video_url);
@@ -401,11 +431,26 @@ export default function SalaEsperaCliente({
           <span className="text-5xl">🕐</span>
         </div>
         <h1 className="mt-6 text-xl font-bold text-gray-900">
-          Esta consulta no pudo concretarse
+          {motivoCierre === "sin_pago_plazo"
+            ? "Se venció el tiempo para pagar"
+            : "Esta consulta no pudo concretarse"}
         </h1>
+        {/* Dos desenlaces distintos, y decirlos igual era mentirle al paciente y
+            culpar al profesional de algo que no hizo: cuando vence el plazo de
+            pago, él SÍ aceptó y estuvo esperando. */}
         <p className="mt-2 text-sm text-gray-600">
-          {nombreMedico ? `${nombreMedico} no llegó` : "No llegaron"} a tomar tu consulta esta vez.{" "}
-          <strong>No se te cobró nada.</strong>
+          {motivoCierre === "sin_pago_plazo" ? (
+            <>
+              {nombreMedico ? `${nombreMedico} aceptó tu consulta` : "Tu consulta fue aceptada"} y te
+              esperó, pero el pago no se completó a tiempo.{" "}
+              <strong>No se te cobró nada.</strong> Podés pedir una nueva cuando quieras.
+            </>
+          ) : (
+            <>
+              {nombreMedico ? `${nombreMedico} no llegó` : "No llegaron"} a tomar tu consulta esta vez.{" "}
+              <strong>No se te cobró nada.</strong>
+            </>
+          )}
         </p>
         <MenuAlternativas consultaId={consultaId} />
       </div>

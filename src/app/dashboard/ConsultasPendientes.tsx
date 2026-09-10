@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { aceptarConsulta } from "@/app/sala-espera/[consultaId]/actions";
 import { rechazarConsulta } from "./actions";
 import { TouchButton } from "@/components/TouchButton";
@@ -51,7 +50,6 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
   const [localRemoved, setLocalRemoved] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [showRecordatorio, setShowRecordatorio] = useState(false);
-  const router = useRouter();
 
   // Filter out locally-accepted/rejected consultas until the next poll refreshes
   const consultas = pendientes.filter((c) => !localRemoved.has(c.id));
@@ -61,7 +59,14 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
       const result = await aceptarConsulta(consultaId);
       if (result?.success) {
         setLocalRemoved((prev) => new Set(prev).add(consultaId));
-        router.push(`/medico/consulta/${consultaId}/workspace`);
+        // NO se va al workspace. Acá había un `router.push` a la sala de video, y
+        // la sala de video solo abre con la consulta `pagada` o `en_curso`: recién
+        // aceptada está impaga, así que rebotaba al dashboard en el mismo segundo
+        // (visible en los registros de los 4 casos caídos y de los 3 pagados).
+        // El profesional se queda en su panel, donde la consulta aparece con el
+        // reloj del paciente; cuando el pago entra, el estado pasa a `en_curso` y
+        // ahí sí aparece el botón para entrar a la videollamada.
+        // El poll del panel (5 s) la trae a "en curso" sola.
       }
     });
   }
