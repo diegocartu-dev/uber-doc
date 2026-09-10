@@ -11,7 +11,10 @@ const EVENTOS_MEDICO = ["mp_oauth_view_tab", "mp_oauth_start_click"] as const;
 // 09/09 no figuraba acá: el POST llegaba con 200 y se descartaba en silencio, así
 // que la pregunta que motivó el evento ("¿los pacientes aceptan los avisos?") no
 // tenía ni una fila con qué responderse.
-const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido", "triage_paso", "triage_bloqueado", "rescate_elegido", "permiso_notificaciones"] as const;
+// `pago_vista`, `pago_toque` y `error_cliente` (10/09): la caja negra de la sala
+// de espera. Los tres los emite el navegador del paciente; `pago_vista` ya
+// existía pero solo lo emitía el servidor (turnos) y desde el cliente se tiraba.
+const EVENTOS_PACIENTE = ["clinica_vista", "medico_elegido", "triage_paso", "triage_bloqueado", "rescate_elegido", "permiso_notificaciones", "pago_vista", "pago_toque", "error_cliente"] as const;
 // Eventos del REGISTRO médico (Fase B). El médico todavía NO tiene ficha, así que
 // medico_id va null y el user_id viaja en metadata para correlacionar. Motivo:
 // los 16 trabados de jul/ago murieron dentro del form y no había forma de saber

@@ -469,10 +469,6 @@ export async function enviarEmailConsultaAceptada(consultaId: string): Promise<v
         Para que la consulta empiece, falta que completes el pago${importe ? ` de <strong>${importe}</strong>` : ""}.
         ${medico.duracion_consulta ? `La videollamada dura ${medico.duracion_consulta} minutos.` : ""}
       </p>
-      <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">
-        <strong>Es por orden de llegada:</strong> si pasa demasiado tiempo, el profesional puede tomar
-        otro paciente y la consulta se cancela sin cargo.
-      </p>
       ${boton("Pagar y entrar a la consulta", `${BASE_URL}/sala-espera/${consulta.id}`, AZUL)}
     `);
 

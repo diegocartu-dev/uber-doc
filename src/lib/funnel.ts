@@ -40,6 +40,15 @@ type EventoFunnel =
   // Qué contestó el paciente al pedido de permiso de avisos al elegir
   // profesional: concedido / rechazado / imposible en este dispositivo.
   | "permiso_notificaciones"
+  // La caja negra de la sala de espera (Diego, 10/09/2026). `pago_toque`: el
+  // paciente TOCÓ el botón de pagar, emitido por beacon antes de cualquier otra
+  // cosa — con `pago_vista` (vio el botón) y `pago_intento` (llegó al servidor)
+  // separa "no tocó" de "tocó y su navegador falló antes de llegar", que hasta
+  // hoy dejaban la misma huella: ninguna. `error_cliente`: un error del
+  // navegador del usuario (sala de espera o error boundary global) que antes
+  // moría en su consola.
+  | "pago_toque"
+  | "error_cliente"
   // Registro del médico (Fase B). Ya se emitían; faltaban en este tipo.
   | "registro_medico_paso"
   | "registro_medico_error";
