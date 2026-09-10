@@ -68,7 +68,13 @@ export type MotivoSalidaSala =
   // su ausencia). Distinto de `cancelado_medico` (acción explícita de cancelar)
   // y de `medico_no_acepto` (pedido de CI que nadie tomó): acá había una
   // atención comprometida y del otro lado no vino nadie.
-  | "medico_ausente";
+  | "medico_ausente"
+  // Venció el plazo para pagar una consulta que el profesional YA había aceptado
+  // (10/09/2026). Motivo propio y no `timeout_sistema` a propósito: ese valor lo
+  // usa `sala-espera-diaria` para juntar los pacientes plantados y avisarle al
+  // profesional, y acá el profesional no plantó a nadie — aceptó y esperó los
+  // 10 minutos. Reusarlo le mandaría un reproche por haber hecho lo correcto.
+  | "sin_pago_plazo";
 
 export async function cerrarEntradaSala(params: {
   consultaId?: string;

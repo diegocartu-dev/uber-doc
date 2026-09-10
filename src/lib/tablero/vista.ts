@@ -35,6 +35,10 @@ export const MOTIVO_LAB: Record<string, string> = {
   cancelo_profesional: "El profesional canceló",
   cancelacion_admin: "Cancelada por Docto",
   sin_respuesta_plazo: "Venció el plazo sin respuesta",
+  // Aceptada por el profesional y sin pagar dentro del plazo (10/09/2026). Antes
+  // este desenlace se veía como "El profesional canceló", porque era él quien
+  // apretaba el botón después de esperar: la caída quedaba a su nombre.
+  sin_pago_plazo: "Venció el plazo para pagar",
   motivo_libre: "Motivo escrito a mano",
   medico_ausente: "El profesional no llegó a atender",
   paciente_ausente: "El paciente no se presentó",

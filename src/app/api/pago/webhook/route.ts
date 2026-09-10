@@ -304,10 +304,50 @@ async function handleApproved(
       // sincronía. Distinguimos para no alertar en cada pago aprobado.
       const { data: ya } = await admin
         .from("consultas")
-        .select("estado, pago_id")
+        .select("estado, pago_id, medico_id")
         .eq("id", id)
         .maybeSingle();
       const reentregaBenigna = ya?.pago_id === paymentId && ya?.estado !== "aceptada";
+
+      // LA PLATA ENTRÓ SOBRE UNA CONSULTA YA CERRADA (10/09/2026).
+      // Caso: el paciente estaba adentro del checkout cuando la consulta se
+      // cerró — el plazo de pago, o el profesional cancelando. `crear-v2` no
+      // escribe nada en la fila, así que hasta este webhook nadie sabía que
+      // había un pago en vuelo. Antes esto solo dejaba un mail de alerta: la
+      // fila quedaba SIN `pago_id`, y sin `pago_id` el reembolso automático no
+      // tiene con qué encontrar el pago (lo exige `ejecutarRefund`), así que
+      // había que ir a buscarlo a mano a Mercado Pago.
+      // Ahora el rastro del pago se escribe SOBRE la fila cerrada —sin tocar su
+      // estado, que ya es el correcto— y el reembolso se dispara solo. Si falla,
+      // cae en `refunds_pendientes` y lo levanta el cron de reintentos.
+      if (!reentregaBenigna && ya?.estado === "cancelada" && !ya?.pago_id && ya?.medico_id) {
+        await admin
+          .from("consultas")
+          .update({
+            pago_id: paymentId,
+            monto: Math.round(transactionAmount),
+            mp_status: "approved",
+            mp_application_fee: applicationFee,
+            mp_net_amount_medico: netAmount,
+            mp_payment_created_at: dateCreated,
+          })
+          .eq("id", id)
+          .is("pago_id", null);
+
+        const { ejecutarRefund } = await import("@/lib/cancelaciones");
+        const reintegro = await ejecutarRefund(
+          id,
+          ya.medico_id,
+          paymentId,
+          netAmount,
+          applicationFee,
+          "consulta"
+        ).catch(() => null);
+        logWarn("[WEBHOOK]", "Pago acreditado sobre consulta cerrada: reembolso disparado", {
+          ...logCtx,
+          reintegro,
+        });
+      }
       if (reentregaBenigna) {
         logInfo("[WEBHOOK]", "Consulta: reentrega benigna de MP (ya procesada)", { ...logCtx, estadoActual: ya?.estado });
       } else {

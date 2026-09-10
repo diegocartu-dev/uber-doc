@@ -48,6 +48,15 @@ export const MOTIVO = {
    * solicitud se quedaba viva hasta que el propio paciente la cancelaba.
    */
   SIN_RESPUESTA: "sin_respuesta_plazo",
+  /**
+   * El profesional la aceptó, el paciente no pagó dentro del plazo y el sistema
+   * cerró la consulta para liberar al profesional (10/09/2026). Es distinto de
+   * `sin_respuesta_plazo`: acá SÍ hubo alguien del otro lado, así que la consulta
+   * existió — lo que faltó fue el pago. Antes este desenlace no existía y lo
+   * tapaba `cancelo_profesional`: el profesional esperaba hasta cansarse y
+   * cancelaba a mano, quedando como responsable de una caída que no era suya.
+   */
+  SIN_PAGO_PLAZO: "sin_pago_plazo",
 } as const;
 
 export type Motivo = (typeof MOTIVO)[keyof typeof MOTIVO];

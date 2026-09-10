@@ -33,7 +33,12 @@ export async function GET(req: NextRequest) {
   // paciente para distinguir "aceptada SIN pagar" de "pago en camino / ya pagado".
   let query = supabase
     .from("consultas")
-    .select("estado, sala_video_url, desconectado_at, mp_status")
+    // `resolucion_motivo` (10/09/2026): la pantalla de cierre del paciente le
+    // decía SIEMPRE "no llegó a tomar tu consulta", que es falso —y una acusación
+    // al profesional— cuando lo que venció fue el plazo para pagar una consulta
+    // que él SÍ había aceptado. `consultas` tiene GRANT SELECT en las 35 de 35
+    // columnas para `authenticated` (verificado en prod).
+    .select("estado, sala_video_url, desconectado_at, mp_status, resolucion_motivo")
     .eq("id", consultaId);
 
   if (medico) {
@@ -45,6 +50,25 @@ export async function GET(req: NextRequest) {
   const { data } = await query.single();
 
   if (!data) return NextResponse.json({ error: "No encontrada" }, { status: 403 });
+
+  // ── Latido de presencia del PACIENTE (Diego, 10/09/2026) ─────────────────
+  // `?mirando=1` lo manda la sala de espera solo cuando la pantalla está a la
+  // vista, como mucho cada 20 s. Es lo que decide si el aviso por WhatsApp de la
+  // aceptación sale: al que está mirando no se le manda nada.
+  //
+  // Solo cuenta para el paciente: el médico también pollea este endpoint desde
+  // su workspace y su presencia no dice nada sobre si el paciente va a pagar.
+  // Fire-and-forget con service role (la fila de la sala no es del paciente en
+  // RLS): que falle un latido jamás puede demorar ni romper el poll, que es lo
+  // que le muestra al paciente que ya lo aceptaron.
+  if (!medico && req.nextUrl.searchParams.get("mirando") === "1") {
+    void createAdminClient()
+      .from("sala_espera_entradas")
+      .update({ ultimo_latido_at: new Date().toISOString() })
+      .eq("consulta_id", consultaId)
+      .is("salida_en", null)
+      .then(() => {}, () => {});
+  }
 
   // Cierre on-demand del rejoin: si el corte (desconectado_at) lleva >= 2 min sin
   // reconexión, cerramos acá mismo en vez de depender de un cron de 1 min (que
@@ -108,5 +132,6 @@ export async function GET(req: NextRequest) {
     sala_video_url: data.sala_video_url,
     desconectado_at,
     mp_status: data.mp_status ?? null,
+    resolucion_motivo: (data as { resolucion_motivo?: string | null }).resolucion_motivo ?? null,
   });
 }

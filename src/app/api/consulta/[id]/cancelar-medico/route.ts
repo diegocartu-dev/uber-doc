@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { ejecutarRefund } from "@/lib/cancelaciones";
 import { MOTIVO } from "@/lib/consultas/clasificar";
+import { registrarEvidenciaCierre } from "@/lib/consultas/evidencia-cierre";
 
 export async function POST(
   req: NextRequest,
@@ -76,6 +77,13 @@ export async function POST(
   }
 
   cerrarEntradaSala({ consultaId, motivo: "cancelado_medico" }).catch(() => {});
+  // La caja negra, en la base y no en los registros del servidor que duran 8 días
+  // (Diego, 10/09): qué sabíamos del paciente en el momento en que esto se cerró.
+  // Se ESPERA, no se dispara con `void`: en Vercel el trabajo que queda pendiente
+  // después de la respuesta HTTP no está garantizado, y esto es justamente lo que
+  // no puede perderse. Nunca lanza (ver el módulo), así que no puede romper el
+  // cierre que ya está escrito en la base.
+  await registrarEvidenciaCierre(consultaId);
 
   return NextResponse.json({ ok: true, reintegro_estado: reintegroEstado });
 }

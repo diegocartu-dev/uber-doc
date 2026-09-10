@@ -107,6 +107,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada 10 minutos",
     autoRecupera: false,
   },
+  "ci-aceptada-sin-pago": {
+    nombre: "Ventana de pago de la consulta aceptada (aviso a los 90 s · plazo de 10 min)",
+    queHace: "le avisa por WhatsApp al paciente que ya lo aceptaron, pero solo si dejó de mirar la pantalla y no está pagando; y a los 10 minutos cierra la consulta impaga para liberar al profesional",
+    impacto: "el paciente que se fue de la pantalla no se entera de que lo aceptaron, y el profesional queda esperando indefinidamente a alguien que no va a pagar (le sacamos el botón de cancelar los primeros 3 minutos contra la promesa de que esto lo libera)",
+    cadencia: "cada minuto",
+    autoRecupera: false,
+  },
   "resolver-consultas-vencidas": {
     nombre: "Plazo de la consulta inmediata (30 min pagada · 10 min sin aceptar)",
     queHace: "cierra las CI pagadas que nadie tomó (reintegro del 100% si faltó el profesional, sin reintegro si faltó el paciente) y libera a los 10 min al paciente cuyo pedido nadie aceptó, desactivando de CI al profesional que no respondió",
