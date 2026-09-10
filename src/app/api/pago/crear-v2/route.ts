@@ -62,6 +62,17 @@ export async function POST(req: NextRequest) {
 
   const { medicoId, monto, titulo, descripcion, redirectSuccess, redirectFailure, redirectPending } = recurso;
 
+  // El paciente APRETÓ pagar. Se registra ACÁ, apenas se sabe de qué recurso y de
+  // qué profesional se trata, y ANTES de todos los gates de abajo (cuenta de test,
+  // flag de cobro, cuenta MP, token). La versión del 08/09 lo emitía después de
+  // los gates, así que un 503/422 de cualquiera de ellos seguía sin dejar rastro
+  // — exactamente el hueco que el evento vino a cerrar. Cada gate que corta emite
+  // además `pago_rechazado` con su motivo.
+  const rastro = { tipo, recursoId: id, monto };
+  trackEvent({ evento: "pago_intento", pacienteId: user.id, medicoId, metadata: rastro });
+  const rechazado = (motivo: string, extra: Record<string, unknown> = {}) =>
+    trackEvent({ evento: "pago_rechazado", pacienteId: user.id, medicoId, metadata: { ...rastro, motivo, ...extra } });
+
   // Cuentas de test SIEMPRE simulan — sin importar el flag global `pago_marketplace`
   // ni la whitelist. Garantiza que medico.test / paciente.test funcionen siempre y
   // evita cobrar plata real en pruebas (la cuenta MP del médico test es live_mode).
@@ -71,6 +82,7 @@ export async function POST(req: NextRequest) {
     admin.from("pacientes").select("es_cuenta_test").eq("user_id", user.id).maybeSingle(),
   ]);
   if (medTest?.es_cuenta_test || pacTest?.es_cuenta_test) {
+    rechazado("cuenta_test");
     return NextResponse.json(
       { error: "Pagos marketplace deshabilitados temporalmente.", code: "FEATURE_DISABLED" },
       { status: 503 }
@@ -94,6 +106,7 @@ export async function POST(req: NextRequest) {
     }
   }
   if (!cobroRealHabilitado) {
+    rechazado("cobro_deshabilitado");
     return NextResponse.json(
       { error: "Pagos marketplace deshabilitados temporalmente.", code: "FEATURE_DISABLED" },
       { status: 503 }
@@ -109,6 +122,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (!mpAccount) {
+    rechazado("sin_cuenta_mp");
     return NextResponse.json(
       { error: "El médico no tiene cobros habilitados." },
       { status: 422 }
@@ -138,6 +152,7 @@ export async function POST(req: NextRequest) {
     });
     // Un problema nuestro (cripto/config) no es "el médico no cobra".
     const esNuestro = token.motivo === "config" || token.motivo === "cripto";
+    rechazado("sin_token", { detalle: token.motivo });
     return NextResponse.json(
       esNuestro
         ? { error: "Error interno de configuración de cobros." }
@@ -153,13 +168,7 @@ export async function POST(req: NextRequest) {
 
   const baseUrl = req.nextUrl.origin;
 
-  // El paciente APRETÓ pagar. Se registra ANTES de hablar con Mercado Pago:
-  // `pago_creado` sale recién DESPUÉS de que MP responde bien, así que hasta hoy
-  // un checkout roto no dejaba ningún rastro y "no apretó pagar" era
-  // indistinguible de "apretó y se rompió" (caso 08/09: consulta aceptada en 25
-  // segundos, nunca pagada, y no se pudo saber por qué).
-  trackEvent({ evento: "pago_intento", pacienteId: user.id, medicoId, metadata: { tipo, recursoId: id, monto } });
-
+  // (`pago_intento` ya quedó registrado arriba, antes de los gates.)
   try {
     const prefBody = {
       items: [
