@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { trackFunnel } from "@/lib/funnel-client";
 
 // Error boundary global de la app. Antes de esto NO existía ninguna: cualquier throw de
 // un client component desmontaba el árbol entero y dejaba la página nativa muerta del
@@ -15,6 +16,24 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("[error-boundary]", error.message, error.digest ?? "");
+    // Hasta el 10/09 esto moría en la consola del navegador del usuario, o sea
+    // en ninguna parte. Va al servidor como `error_cliente`, limpio y corto
+    // (el filtro de metadata del paciente descarta el valor entero si no lo
+    // está). Best-effort: la pantalla de error nunca puede fallar por avisar.
+    try {
+      const limpio = (v: unknown) =>
+        String(v ?? "").replace(/[^\p{L}\p{N} _.,:;()'¿?¡!\/-]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+      trackFunnel("error_cliente", {
+        pantalla: "boundary",
+        donde: limpio(typeof window !== "undefined" ? window.location.pathname : ""),
+        mensaje: limpio(error.message) || "sin mensaje",
+        tipo: limpio(error.name),
+        digest: limpio(error.digest ?? ""),
+        ua: limpio(typeof navigator !== "undefined" ? navigator.userAgent : ""),
+      });
+    } catch {
+      // noop
+    }
   }, [error]);
 
   return (

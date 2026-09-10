@@ -7,8 +7,33 @@ import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 import MenuAlternativas from "@/components/rescate/MenuAlternativas";
+import { trackFunnel } from "@/lib/funnel-client";
 
 const POLL_INTERVAL = 5000;
+
+// ── La caja negra de esta pantalla (Diego, 10/09/2026) ─────────────────────
+// Diagnóstico del 09/09: una paciente estuvo 2,5 minutos con el botón de pago a
+// la vista y el servidor no recibió nada. Desde el servidor, "no tocó" y "tocó y
+// su navegador falló antes de mandar nada" dejan la MISMA huella: ninguna. Por
+// eso esta pantalla ahora avisa el toque ANTES de hacer cualquier otra cosa
+// (`pago_toque`, por beacon, sobrevive a la navegación) y manda al servidor los
+// errores que antes morían en el teléfono del paciente (`error_cliente`).
+//
+// El servidor solo guarda texto limpio y corto en la metadata del paciente
+// (/api/funnel/track descarta el valor entero si no pasa su filtro), así que
+// acá se limpia ANTES de mandar: un mensaje de error con comillas o corchetes
+// se perdería completo justo cuando más se lo necesita.
+function textoLimpio(v: unknown): string {
+  return String(v ?? "")
+    .replace(/[^\p{L}\p{N} _.,:;()'¿?¡!\/-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+}
+
+// Tope por carga de página: una red que parpadea no puede convertir el poll de
+// 5 s en una manguera de eventos.
+const MAX_ERRORES_REPORTADOS = 5;
 
 type Props = {
   consultaId: string;
@@ -93,6 +118,38 @@ export default function SalaEsperaCliente({
   const prevEstadoRef = useRef(estadoInicial);
   const salaVideoUrlRef = useRef<string | null>(null);
 
+  const erroresReportadosRef = useRef(0);
+  const reportarError = useCallback((donde: string, err: unknown, extra: Record<string, unknown> = {}) => {
+    if (erroresReportadosRef.current >= MAX_ERRORES_REPORTADOS) return;
+    erroresReportadosRef.current += 1;
+    const e = err as { message?: unknown; name?: unknown; reason?: unknown } | null;
+    const mensaje = textoLimpio(
+      e && typeof e === "object" ? (e.message ?? e.reason ?? JSON.stringify(e)) : err
+    );
+    trackFunnel("error_cliente", {
+      pantalla: "sala_espera",
+      donde,
+      consultaId,
+      mensaje: mensaje || "sin mensaje",
+      tipo: textoLimpio(e && typeof e === "object" ? e.name : typeof err),
+      ua: textoLimpio(typeof navigator !== "undefined" ? navigator.userAgent : ""),
+      ...extra,
+    });
+  }, [consultaId]);
+
+  // Errores que hoy mueren en el navegador del paciente: excepciones sueltas y
+  // promesas rechazadas sin catch mientras esta pantalla está montada.
+  useEffect(() => {
+    const onError = (ev: ErrorEvent) => reportarError("window", ev.error ?? ev.message);
+    const onRejection = (ev: PromiseRejectionEvent) => reportarError("promesa", ev.reason);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, [reportarError]);
+
   // `?pago=pendiente` lo devuelve Mercado Pago (back_url `redirectPending` de
   // crear-v2) cuando el pago EXISTE pero todavía no está acreditado: cupón de
   // Rapipago / Pago Fácil, pago en revisión, tarjeta autorizada sin capturar.
@@ -156,10 +213,14 @@ export default function SalaEsperaCliente({
         salaVideoUrlRef.current = data.sala_video_url;
         setSalaVideoUrl(data.sala_video_url);
       }
-    } catch {
-      // red error — próximo ciclo reintenta
+    } catch (err) {
+      // Red caída o excepción dentro del poll: el próximo ciclo reintenta, pero
+      // el error ya no se traga en silencio — si algo acá tirara antes de
+      // `setEstado`, la pantalla se quedaría en "Esperando" para siempre sin
+      // que nadie lo supiera.
+      reportarError("poll", err);
     }
-  }, [consultaId]);
+  }, [consultaId, reportarError]);
 
   useEffect(() => {
     poll();
@@ -193,6 +254,9 @@ export default function SalaEsperaCliente({
 
   // Pago real (crear-v2) con fallback a simulación para cuentas de test.
   async function pagarConsulta() {
+    // EL TOQUE, antes que nada. Por beacon: sobrevive aunque el resto falle o la
+    // página navegue a Mercado Pago. Con esto, "tocó y no pasó nada" deja huella.
+    trackFunnel("pago_toque", { tipo: "consulta", consultaId, estado, mpStatus: mpStatus ?? "null" });
     setPagando(true);
     setErrorPago(null);
     try {
@@ -227,9 +291,14 @@ export default function SalaEsperaCliente({
 
       // Ambos fallaron — avisar SIEMPRE (antes fallaba en silencio y el
       // paciente no sabía si pagó o no)
+      reportarError("pagar_respuesta", "ambos endpoints fallaron", {
+        statusCrear: mpRes.status,
+        statusSimular: simRes.status,
+      });
       setErrorPago("No pudimos procesar el pago. Reintentá en unos segundos — si sigue fallando, escribinos a soporte@docto.com.ar.");
       setPagando(false);
-    } catch {
+    } catch (err) {
+      reportarError("pagar", err);
       setErrorPago("No pudimos procesar el pago. Revisá tu conexión y reintentá.");
       setPagando(false);
     }
@@ -256,6 +325,15 @@ export default function SalaEsperaCliente({
   const faltaPagar = medicoAcepto && !salaVideoUrl && pago === "falta_pagar";
   const pagoEnCamino = medicoAcepto && !salaVideoUrl && pago === "en_camino";
   const pagoConfirmado = medicoAcepto && pago === "confirmado";
+
+  // El paciente VIO el botón de pagar (una vez por carga). Es la otra mitad de
+  // `pago_toque`: separa "vio el botón y no lo tocó" de "nunca llegó a verlo".
+  const vioBotonRef = useRef(false);
+  useEffect(() => {
+    if (!faltaPagar || vioBotonRef.current) return;
+    vioBotonRef.current = true;
+    trackFunnel("pago_vista", { tipo: "consulta", consultaId });
+  }, [faltaPagar, consultaId]);
 
   // ── Venció el plazo de 30 minutos (cron resolver-consultas-vencidas) ───────
   // El profesional no entró: la plata vuelve entera y el paciente queda libre.
