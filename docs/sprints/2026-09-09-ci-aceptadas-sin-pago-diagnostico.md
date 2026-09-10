@@ -187,3 +187,52 @@ permisos bloqueó cargar la variable de entorno desde un script (por eso el
 ContentSid va como constante, como los otros dos) y cambiar el teléfono de la
 cuenta test al de Diego (por eso la prueba del envío real al celular queda para
 después de la aprobación, con un envío directo por la API de Twilio).
+
+## 11. 10/09 08:16 — el primer caso real con la caja negra puesta: consulta pagada y atendida
+
+Una consulta inmediata real, pagada y completada, con toda la cadena registrada
+por primera vez. Es el caso de control que faltaba, y confirma el diagnóstico:
+**el paciente que está mirando la pantalla, paga en segundos.**
+
+| Hora (AR) | Qué pasó | Fuente |
+|---|---|---|
+| 08:13:50 | eligió profesional | `medico_elegido` |
+| 08:13:51 → 08:16:16 | términos → formulario → confirmación | `triage_paso` ×3 |
+| 08:16:40 | permiso de avisos: **imposible, iPhone sin la app instalada** | `permiso_notificaciones` |
+| 08:16:41 | pedido creado; WhatsApp al profesional | `whatsapp_envios` → **delivered** en 12 s |
+| 08:18:06 | la profesional **aceptó** (1 min 25 s después del pedido) | `aceptada_at` |
+| 08:18:06 | mail al paciente | Resend → **delivered** |
+| 08:18:06 | WhatsApp al paciente | **undelivered, error 63016** (ver abajo) |
+| 08:18:07 | **vio el botón de pago** (1 s después de la aceptación) | `pago_vista` |
+| 08:18:11 | **tocó el botón** (5 s después de la aceptación) | `pago_toque` |
+| 08:18:11 / :12 | llegó al servidor / preferencia creada en MP | `pago_intento`, `pago_creado` |
+| 08:18:43 | **pago aprobado**: $20.000, comisión 5% ($1.000), neto $19.000 | `pago_aprobado`, webhook |
+| 08:18:43 → 08:34:38 | consulta en curso, **15,9 minutos** | `en_curso_at`, `completada_at` |
+| cierre | 3 documentos (certificado, indicaciones, receta), evolución validada, cerrada por la profesional | `documentos`, `evolucion_validada_at` |
+
+Cero `error_cliente` en toda la sesión.
+
+**Lo que este caso prueba.** La distancia entre la aceptación y el pago fue de
+**37 segundos**, y entre el botón apareciendo y el dedo del paciente, **4
+segundos**. Los cuatro casos caídos del 07 al 09/09 no fallaron en el pago:
+fallaron porque cuando el profesional aceptó, el paciente ya no estaba en la
+pantalla. Acá la profesional aceptó en 1 min 25 s y el paciente seguía ahí.
+
+**El aviso por WhatsApp al paciente NO llegó — hallazgo real.** La fila quedó
+`enviado` (Twilio aceptó la llamada) y el webhook de entrega la corrigió a
+`undelivered` con **código 63016** de Twilio: mensaje de texto libre fuera de la
+ventana permitida. La causa consistente con todo lo demás es que la plantilla
+`docto_paciente_aceptada_v2` **sigue pendiente de aprobación en Meta** (creada
+00:45, todavía `pending` a las 09:41): sin aprobación, Twilio la degrada a texto
+libre y Meta la rechaza porque el paciente nunca escribió a ese número. Cuando
+Meta apruebe, sale sola, sin tocar código. Si después de la aprobación volviera
+a fallar, la causa sería otra y hay que volver a mirar.
+
+**Esto es exactamente lo que el StatusCallback del 31/08 vino a evitar:** sin él,
+la tabla diría `enviado` y habríamos creído que el aviso llegó. La regla
+"un aviso enviado no es un aviso recibido" se verificó en vivo, en el primer
+caso real.
+
+**Nota:** los 26 `medico_elegido` repetidos sobre un mismo profesional entre el
+09 y el 10/09 son de **una cuenta de prueba** (nunca llegó al triage), no un
+paciente real trabado. El filtro de test de los reportes ya los excluye.
