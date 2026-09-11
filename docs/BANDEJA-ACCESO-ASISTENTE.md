@@ -12,8 +12,8 @@ Manual de contenido para responder: `docs/MANUAL-SOPORTE-MAIL.md`.
 ## La idea en una línea
 
 El asistente no entra a Docto. Entra a **una sola puerta** que solo sabe hacer
-tres cosas: listar lo que está sin atender, abrir un hilo, y contestar a alguien
-que ya nos escribió.
+cuatro cosas: listar lo que está sin atender, abrir un hilo, ver el estado de
+quien escribió, y contestarle.
 
 ## Por qué no se le da el panel ni la base
 
@@ -61,6 +61,56 @@ nuestros. Cada uno trae `id`, `creado_en`, `de`, `para`, `asunto`,
 
 `para` dice si entró por contacto o por soporte. Sirve para elegir desde cuál
 contestar.
+
+### Quién escribió
+
+```
+GET https://docto.com.ar/api/bandeja/bot?accion=quien&correoId=<id del correo>
+```
+
+Devuelve el **estado** de la persona que mandó ese mail. Existe porque casi toda
+la bandeja son profesionales preguntando por su registro, su validación o su
+cobro, y las tres cosas se miran en el panel, que el asistente no tiene.
+
+De un **profesional**: en qué paso quedó el registro, si la matrícula figura
+validada en REFEPS y en qué jurisdicciones, si la identidad está validada, si
+Mercado Pago está conectado o vencido, si completó la firma, y si está disponible
+ahora.
+
+De un **paciente**: solamente si está registrado y desde cuándo. Nada clínico.
+
+Si la dirección no figura en la base, responde `registrado: false`.
+
+Tres límites, puestos a propósito:
+
+1. **No se busca por correo libre.** Se entra por el id de un mail de la bandeja
+   y el servidor resuelve la dirección leyéndolo. El asistente no puede preguntar
+   por una persona cualquiera: solo por alguien que nos escribió. Y como los ids
+   solo los conoce por la lista de pendientes, tampoco puede armar un padrón.
+2. **No viaja la PII que no hace falta para contestar.** Quedan afuera DNI, CUIT,
+   celular personal, domicilio, notas internas de admin, la foto de la credencial
+   y el crudo de REFEPS.
+3. **No viaja la categoría comercial.** El coste por uso depende de ella y la
+   regla de la casa es que un porcentaje no se dice nunca sin verificarlo caso por
+   caso. Dándole la categoría, el asistente podría deducirlo. Ese tema sigue
+   escalando a una persona.
+
+**El límite que este candado NO tiene, y conviene saberlo.** Una fila `entrada`
+no siempre viene de un mail: el formulario público de `/ayuda` escribe una con la
+dirección que la persona tipeó, y cuando no hay sesión nadie comprueba que sea
+suya. O sea que alguien puede poner la dirección de un profesional ajeno y hacer
+que el asistente consulte su estado. No lo ve quien lo hizo —la respuesta le sale
+al titular de la dirección— pero el dato igual se movió hacia el tercero por un
+pedido falso.
+
+Mientras tanto la respuesta trae `direccion_probada`: en `true` cuando el mail
+llegó de verdad como correo (tiene `resend_id`), en `false` cuando la dirección
+fue tipeada en un formulario. La instrucción del asistente le prohíbe contar el
+estado de una cuenta cuando viene en `false`.
+
+El arreglo de fondo es una columna de origen en `correos`, escrita por el webhook
+de entrada y por `/ayuda` según haya sesión o no. Es una migración y las
+migraciones esperan el OK de Diego, así que está propuesta, no aplicada.
 
 ### Un hilo completo
 
