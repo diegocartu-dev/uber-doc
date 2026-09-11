@@ -74,14 +74,13 @@ Un profesional puede usar una, dos o las tres a la vez
 ### Cómo gana plata Docto
 
 El paciente paga por Mercado Pago y **el dinero va directo a la cuenta del
-profesional**. Docto descuenta una comisión por consulta realizada, que depende
-de la categoría del profesional (`comisiones_config` en producción, verificado
-11/09):
+profesional**. Docto descuenta un porcentaje por consulta realizada, que depende
+de la categoría del profesional. Hay dos categorías, *founder* y *tradicional*,
+y la de menor porcentaje es la de founder.
 
-| Categoría | Comisión |
-|---|---|
-| founder | 5,00 % |
-| tradicional | 10,00 % |
+**El porcentaje exacto de cada categoría no se escribe acá**, porque este
+repositorio es público. Vive en `comisiones_config`, en producción, y se
+consulta en el panel de administración caso por caso. Nunca se dice de memoria.
 
 **Cuidado con la palabra.** Hacia afuera **no se dice "comisión"**: se dice
 **"coste por uso de la plataforma"**. Es una decisión explícita y se respeta
@@ -201,34 +200,27 @@ arme. No corresponde mencionarla a un paciente.
 
 Los mails llegan a la bandeja del panel de administración
 (`src/app/admin/bandeja/`), que guarda entrantes y salientes en la tabla
-`correos`. Volumen real medido el 11/09/2026: **114 mails entrantes desde el
-30/07**, de los cuales 17 seguían sin atender.
+`correos`. Los números de volumen no se escriben acá porque este repositorio es
+público: se miran en el panel.
 
-**Las casillas que reciben** (medido sobre los entrantes reales):
-
-| Casilla | Mails |
-|---|---|
-| soporte@docto.com.ar | 82 |
-| contacto@docto.com.ar | 9 |
-| recepcion@, compras@, administracion@ | 1 cada una |
-
-**Desde dónde se responde:** contacto@ (42 respuestas) y soporte@ (22).
+**Las casillas que reciben**, ordenadas por cuánto les entra: soporte@ es la
+principal y por lejos, contacto@ recibe bastante menos, y recepcion@, compras@ y
+administracion@ son residuales. **Se contesta desde la casilla por la que entró
+el mail**, no desde una fija.
 
 ### Quién escribe, de verdad
 
-Este es el dato que más cambia la forma de trabajar la bandeja. Medido sobre los
-114 entrantes:
+Este es el dato que más cambia la forma de trabajar la bandeja. Por orden de
+volumen: primero los remitentes automáticos y el spam externo, después los
+**profesionales registrados**, después desconocidos que no están en la base, y
+al final los pacientes registrados.
 
-| Quién | Mails |
-|---|---|
-| Remitentes automáticos y spam externo | 59 |
-| **Profesionales registrados** | **26** |
-| Desconocidos, no están en la base | 17 |
-| Pacientes registrados | 12 |
+Dos consecuencias, y son las que importan:
 
-**La bandeja es, sobre todo, de profesionales.** El 39 % del total es ruido
-externo: notificaciones de LinkedIn, avisos de reclutamiento y newsletters. Eso
-no se responde, se archiva.
+- **La bandeja es, sobre todo, de profesionales**, no de pacientes. Se responde
+  pensando en eso.
+- **El bloque más grande es ruido externo**: notificaciones de LinkedIn, avisos
+  de reclutamiento y newsletters. Eso no se responde, se archiva.
 
 ### Los otros canales
 
@@ -249,17 +241,19 @@ no se responde, se archiva.
 
 ## 4. Tipos de consulta frecuentes
 
-Taxonomía medida sobre los 114 mails entrantes reales (11/09/2026):
+Taxonomía medida sobre los mails entrantes reales (11/09/2026), **de mayor a
+menor volumen**. Los porcentajes no se escriben acá porque el repositorio es
+público; lo que importa acá es el orden y qué hacer con cada uno.
 
-| Tipo | Volumen | Qué llega |
-|---|---|---|
-| **Ruido externo** | 39 % | LinkedIn, reclutamiento, newsletters. No se responde. |
-| **Registro y validación de profesionales** | 20 % | El tema real número uno. Asuntos como "Validación", "Consultas sobre incorporación como profesional", "NO PUEDO CARGAR MIS DATOS". |
-| Pruebas internas | 12 % | Mails de prueba del equipo. Se ignoran. |
-| Sin clasificar | 11 % | Mezcla. Hay que leerlos. |
-| **Pagos y cobros** | 10 % | "consulta de pagos como profesional médico", dudas sobre el coste por uso. |
-| **Documentos de la consulta** | 4 % | Recetas o certificados que el paciente no encuentra. |
-| **Problemas técnicos o de datos** | 4 % | "Cambio de número de teléfono", datos mal cargados. |
+| Tipo | Qué llega |
+|---|---|
+| **Ruido externo** | LinkedIn, reclutamiento, newsletters. No se responde. Es el bloque más grande de todos. |
+| **Registro y validación de profesionales** | El tema real número uno de los que sí se responden. Asuntos como "Validación", "Consultas sobre incorporación como profesional", "NO PUEDO CARGAR MIS DATOS". |
+| Pruebas internas | Mails de prueba del equipo. Se ignoran. |
+| Sin clasificar | Mezcla. Hay que leerlos. |
+| **Pagos y cobros** | "consulta de pagos como profesional médico", dudas sobre el coste por uso. |
+| **Documentos de la consulta** | Recetas o certificados que el paciente no encuentra. |
+| **Problemas técnicos o de datos** | "Cambio de número de teléfono", datos mal cargados. |
 
 **Lo que casi no llega:** turnos y cancelaciones de pacientes. Solo 2 mails en
 seis semanas.
@@ -293,7 +287,8 @@ Sin emojis en el cuerpo del mail.
 
 ### La firma
 
-De 63 respuestas reales, **56 firman Valentina**. Es la firma de la casa:
+La enorme mayoría de las respuestas ya enviadas firman **Valentina**. Es la
+firma de la casa:
 
 ```
 Un saludo,
@@ -610,7 +605,8 @@ causa la demora:
 | **Normal** | Dudas de funcionamiento, cómo empezar, cómo armar agenda | 24 a 48 h |
 | **Se archiva** | Ruido externo, pruebas internas | No se responde |
 
-**Dato de contexto:** al 11/09 había 17 mails entrantes sin atender de 114.
+**Dato de contexto:** al 11/09 quedaba una cola de mails entrantes sin atender.
+Cuántos, se mira en el panel: acá no va, porque el repositorio es público.
 
 ---
 
