@@ -94,4 +94,5 @@
 - **Todas las capturas son reales**, tomadas de `www.docto.com.ar` con una cuenta de prueba, en pantalla de iPhone. Ninguna está retocada ni recreada.
 - **La comisión que muestra la pantalla es la de cada profesional.** En las capturas dice 5% porque la cuenta de prueba es Médico Fundador. Si el video es para todos, conviene tapar ese bloque o aclarar en voz que el porcentaje depende de la categoría.
 - **No filmar una cuenta real.** El panel muestra ingresos, nombres de pacientes y turnos. Usar siempre la cuenta de prueba.
-- **Faltan dos capturas** que no se pudieron tomar en esta pasada: el formulario de crear agenda con los campos llenos, y la pantalla de Nova armando una agenda por voz. Se pueden sacar cuando quieras.
+- **Faltan tres capturas**: el formulario de crear agenda con los campos llenos, la pantalla de Nova armando una agenda por voz, y una agenda limpia (la que se capturó tiene 40 agendas de prueba acumuladas y no se entiende).
+- **NO existe una captura de la pantalla de Perfil.** Se tomó una y se borró: mostraba el celular personal y el número de cuenta de Mercado Pago. Esa pantalla no se filma nunca con una cuenta que tenga datos cargados.
