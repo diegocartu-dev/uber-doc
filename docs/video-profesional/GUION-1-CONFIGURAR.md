@@ -12,7 +12,7 @@
 
 ## Bloque 1 · De dónde sale todo (15 s)
 
-**Imagen:** `capturas/v1-01-hub-como-atendes.png`
+**Imágenes:** `capturas/v2-00-panel-del-profesional.png` (2 s de apertura) y después `capturas/v1-01-hub-como-atendes.png`
 
 **Narración:**
 > Todo lo que define cómo trabajás está en un solo lugar. Desde tu panel, tocá **Configurá cómo atendés**.
@@ -92,7 +92,7 @@
 ## Notas de producción
 
 - **Todas las capturas son reales**, tomadas de `www.docto.com.ar` con una cuenta de prueba, en pantalla de iPhone. Ninguna está retocada ni recreada.
-- **La comisión que muestra la pantalla es la de cada profesional.** En las capturas dice 5% porque la cuenta de prueba es Médico Fundador. Si el video es para todos, conviene tapar ese bloque o aclarar en voz que el porcentaje depende de la categoría.
+- **El porcentaje de comisión ya está difuminado** en las dos capturas donde aparecía. Ese número depende de la categoría de cada profesional, así que no puede mostrarse en un video para todos. No hace falta hacer nada más.
 - **No filmar una cuenta real.** El panel muestra ingresos, nombres de pacientes y turnos. Usar siempre la cuenta de prueba.
-- **Faltan tres capturas**: el formulario de crear agenda con los campos llenos, la pantalla de Nova armando una agenda por voz, y una agenda limpia (la que se capturó tiene 40 agendas de prueba acumuladas y no se entiende).
+- **Faltan dos capturas**: el formulario de crear agenda con los campos llenos y la pantalla de Nova armando una agenda por voz.
 - **NO existe una captura de la pantalla de Perfil.** Se tomó una y se borró: mostraba el celular personal y el número de cuenta de Mercado Pago. Esa pantalla no se filma nunca con una cuenta que tenga datos cargados.

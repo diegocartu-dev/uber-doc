@@ -12,7 +12,7 @@ Docto, una plataforma argentina de telemedicina. El público son médicos, mucho
 de ellos poco familiarizados con tecnología. Tono: claro, cercano, tuteo
 argentino (vos, tenés, podés). Sin jerga técnica.
 
-TE ENTREGO DOS GUIONES Y ONCE IMÁGENES. Los guiones son:
+TE ENTREGO DOS GUIONES Y DOCE IMÁGENES. Los guiones son:
   GUION-1-CONFIGURAR.md  → video 1
   GUION-2-ATENDER.md     → video 2
 Las imágenes están en la carpeta capturas/.
@@ -31,38 +31,25 @@ que el guion nombra para ese bloque.
 
 === REGLA NÚMERO DOS: NO INVENTES PANTALLAS ===
 
-Estas once imágenes son fotos reales del producto. NO las recrees, NO las
+Estas doce imágenes son fotos reales del producto. NO las recrees, NO las
 redibujes, NO generes pantallas parecidas, NO uses capturas de stock ni mockups
-de teléfonos genéricos. Si una pantalla no está entre las once, ese momento se
+de teléfonos genéricos. Si una pantalla no está entre las doce, ese momento se
 narra sin imagen o con la imagen anterior en pantalla.
 
 Tampoco cambies los textos que se ven adentro de las imágenes. Son los textos
 reales del producto y el profesional los va a buscar tal cual en su teléfono.
 
-=== REGLA NÚMERO TRES: TAPAR EL PORCENTAJE DE COMISIÓN ===
+=== REGLA NÚMERO TRES: LAS IMÁGENES YA VIENEN TRATADAS ===
 
-Dos imágenes muestran al pie un bloque que dice:
+En dos de las imágenes vas a ver una zona con un desenfoque suave, al pie de la
+pantalla. Está puesto a propósito: ahí había un dato que no corresponde mostrar
+porque no es igual para todos los profesionales.
 
-  "¡Felicitaciones por tu categoría de Médico Fundador! Docto te descuenta una
-  comisión de solo el 5% por consulta realizada; el resto va directo a tu
-  Mercado Pago."
+NO la quites, NO intentes reconstruir lo que dice, NO la reemplaces, NO la
+menciones en la narración. Tratala como parte de la imagen.
 
-Las dos imágenes son:
-  capturas/v1-01-hub-como-atendes.png       → el bloque está al pie, abajo de todo
-  capturas/v1-04-consultorio-particular.png → el bloque está dentro de la tarjeta
-                                               del link, debajo del texto gris
-
-EN LAS DOS, TAPÁ ESE BLOQUE COMPLETO. Usá un rectángulo del mismo color de fondo
-de la pantalla (gris muy claro, casi blanco) para que parezca que no está, o
-recortá la imagen por encima de ese bloque.
-
-Por qué: ese porcentaje NO es el mismo para todos los profesionales, depende de
-la categoría de cada uno. La cuenta con la que se tomaron las fotos tiene una
-condición especial. Si queda a la vista, el video le promete a todos un número
-que puede no ser el suyo.
-
-No lo reemplaces por otro número ni lo menciones en la narración. Simplemente no
-se habla de comisiones en estos videos.
+Tampoco apliques filtros, correcciones de color, nitidez ni mejoras automáticas
+a ninguna imagen: están tal como se necesitan.
 
 === CÓMO ANIMAR ===
 
@@ -111,15 +98,16 @@ recrees. Esas tomas se van a filmar aparte de un teléfono real.
 
 ## Para vos, Diego, antes de mandarlo
 
-**Las once imágenes que van adjuntas:**
+**Las doce imágenes que van adjuntas:**
 
 | Archivo | Qué muestra | Va en |
 |---|---|---|
-| `v1-01-hub-como-atendes.png` | Las tres formas de atender | Video 1, bloque 1 · **tapar comisión** |
+| `v2-00-panel-del-profesional.png` | El panel, de donde arranca todo | Video 1, bloque 1 (apertura) |
+| `v1-01-hub-como-atendes.png` | Las tres formas de atender | Video 1, bloque 1 |
 | `v1-02-configurar-consulta-inmediata.png` | Precio, duración, horario, interruptor | Video 1, bloque 2 |
-| `v1-03-agenda.png` | El calendario de la agenda | Video 1, bloque 3 · ver aviso abajo |
-| `v1-04-consultorio-particular.png` | El link privado, Copiar, WhatsApp | Video 1, bloque 4 · **tapar comisión** |
-| `v2-01-panel-paciente-esperando.png` | El panel con el aviso | Video 2, bloque 1 · ver aviso abajo |
+| `v1-03-agenda.png` | El calendario de la agenda | Video 1, bloque 3 |
+| `v1-04-consultorio-particular.png` | El link privado, Copiar, WhatsApp | Video 1, bloque 4 |
+| `v2-01-panel-paciente-esperando.png` | El panel con el paciente esperando | Video 2, bloque 1 |
 | `v2-02-paciente-sala-espera.png` | El paciente esperando ser aceptado | Video 2, bloque 3 |
 | `v2-03-esperando-pago.png` | "Esperando pago" con el reloj | Video 2, bloque 2 |
 | `v2-04-paciente-falta-pagar.png` | "Falta un paso: pagá tu consulta" | Video 2, bloque 3 |
@@ -127,12 +115,15 @@ recrees. Esas tomas se van a filmar aparte de un teléfono real.
 | `v2-06-consultorio-virtual.png` | El consultorio con las tres pestañas | Video 2, bloque 5 |
 | `v2-07-documentar.png` | Documentar con "Volver a la llamada" | Video 2, bloque 6 |
 
-**Dos imágenes que convendría volver a sacar antes de producir:**
+**Lo que ya se resolvió sobre las imágenes:**
 
-- `v1-03-agenda.png` muestra cuarenta agendas de prueba acumuladas. Se entiende
-  poco. Con la cuenta de prueba limpia queda mucho mejor.
-- `v2-01-panel-paciente-esperando.png` tiene arriba un bloque naranja que dice
-  "5 consultas sin documentación entregada", que es basura de las pruebas. En un
-  video institucional queda mal.
-
-Las dos las puedo volver a capturar limpias cuando quieras, en diez minutos.
+- **El porcentaje de comisión está difuminado** en las dos pantallas donde
+  aparecía. Se ve una zona borrosa suave, no un rectángulo tapado: la pantalla
+  sigue pareciendo natural. La IA tiene la orden de no tocarlo.
+- **Las pantallas desprolijas se limpiaron en serio**, no se taparon. El cartel
+  naranja de "consultas sin documentación entregada" y las cuarenta agendas de
+  prueba acumuladas ya no están porque se limpiaron los datos viejos de la
+  cuenta de prueba, y las pantallas se volvieron a capturar. Lo que se ve ahora
+  es una cuenta prolija de verdad.
+- **Las capturas largas están recortadas** a la parte que importa: el panel y la
+  agenda medían más de cinco pantallas de alto.
