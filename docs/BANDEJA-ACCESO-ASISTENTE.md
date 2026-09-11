@@ -43,6 +43,34 @@ escrito primero.
 mandaría, y no sale ningún mail. Es el interruptor para entrenarlo sin riesgo:
 mientras esté apagado, cada respuesta pasa por una persona.
 
+**Y aunque esté prendido, solo manda a direcciones comprobadas.** Un correo que
+llegó de verdad tiene `resend_id`. Una fila escrita por el formulario público de
+`/ayuda` no lo tiene, y su dirección la tipeó quien completó el formulario, sin
+sesión y sin comprobar que sea suya. A esas se les redacta un borrador y lo
+aprueba una persona.
+
+## Por qué el envío automático conviene que siga apagado
+
+No es cautela genérica, es una cadena concreta que se puede recorrer:
+
+1. El formulario de `/ayuda` es público. Cualquiera escribe un texto y elige la
+   dirección del remitente.
+2. Esa fila aparece en `pendientes`, con su id, y con el cuerpo entero.
+3. El cuerpo lo lee un modelo. Puede estar escrito para manipularlo.
+4. Si el envío está prendido, ese mismo modelo tiene un verbo que manda mail de
+   vuelta.
+
+El candado nuevo corta el paso 4 para esas filas. Lo que NO corta es la versión
+con un correo de verdad: alguien manda un mail real desde su propia dirección con
+instrucciones adentro, y la respuesta le vuelve a él. Los candados del servidor
+gobiernan **a quién se le escribe**, no **qué se le escribe**.
+
+Y del otro lado, `pendientes` le entrega al asistente los cuerpos completos de
+los mails de otras personas, que es lo que se pidió para que sepa responder.
+
+Contra eso, lo único que cierra de verdad es que una persona apruebe cada
+respuesta antes de que salga. Por eso el interruptor está apagado.
+
 ---
 
 ## Cómo se usa

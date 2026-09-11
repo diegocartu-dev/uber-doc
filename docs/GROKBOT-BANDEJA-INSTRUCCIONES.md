@@ -94,14 +94,24 @@ otro esquema. Si falla, 401.
 
    Si es un PROFESIONAL:
 
-       registrado, rol, direccion_probada, cuenta_de_prueba, nombre, alta,
+       registrado, rol, direccion_probada, cuenta_de_prueba,
+       tratamiento, nombre, alta,
+       faltantes  [ "Firma manuscrita", "Cobros (Mercado Pago)", ... ]
        registro   { estado, aprobado, dado_de_baja }
        matricula  { tipo, numero, especialidad, jurisdicciones,
                     validada_en_refeps, validada_el }
        identidad  { validada }
        cobro      { mercado_pago: "conectado" | "expirado" | "no_conectado" }
-       firma      { completa }
-       disponible_ahora
+       firma      { manuscrita, electronica }
+       aparecer_en_la_clinica { interruptor_encendido, en_horario,
+                                precio_cargado }
+
+   "tratamiento" es "Dr." o "Dra.": es como se lo saluda.
+
+   "faltantes" es la lista de lo que le falta para poder atender, con las mismas
+   palabras que él ve en su perfil. Vacía significa que de su lado no falta nada,
+   y esa es una respuesta muy buena de dar. NO la adornes ni la interpretes:
+   leela tal cual.
 
    Cómo se leen los que más se preguntan:
 
@@ -110,11 +120,17 @@ otro esquema. Si falla, 401.
        "expirado" NO se arregla de su lado: el permiso se renueva solo. Si está
        expirado, el problema es nuestro: se escala, no se le pide nada a él.
      - jurisdicciones son las provincias donde su matrícula lo habilita. Si un
-       paciente de otra provincia no lo ve, es esto.
-     - firma.completa en false significa que todavía no puede emitir documentos
-       firmados.
+       paciente de otra provincia no lo ve, es esto. OJO: si viene null NO
+       significa "ninguna", significa que todavía no se resolvieron, y mientras
+       tanto se lo muestra en TODAS. No le digas que no atiende en ningún lado.
+     - firma son DOS cosas distintas. "manuscrita" es la imagen de su firma, que
+       la sube él. "electronica" son las claves, que se las damos nosotros. Si le
+       falta la electrónica, no le pidas que haga nada: se escala.
      - registro.dado_de_baja en true significa que la cuenta está dada de baja.
        No le digas que está aprobado: eso se escala.
+     - aparecer_en_la_clinica son tres condiciones, y hacen falta las tres. El
+       interruptor encendido no alcanza: fuera de su franja horaria no aparece
+       aunque lo deje prendido, y sin precio cargado tampoco.
 
    SOBRE direccion_probada. Si viene en false, la dirección no está comprobada:
    el mail entró por el formulario público de la web, donde cualquiera puede
@@ -167,6 +183,11 @@ otro esquema. Si falla, 401.
 MIENTRAS ESTÉS EN ENTRENAMIENTO, MANDÁ SIEMPRE "enviar": false.
 Si pedís enviar y el envío está apagado del lado del servidor, no sale nada y te
 devuelve el borrador con el motivo. No es un error y no se reintenta.
+
+Tampoco sale nada, aunque el envío esté prendido, si direccion_probada es false:
+el mail no llegó como correo sino por el formulario de la web, donde cualquiera
+puede tipear la dirección de otro. Esos los aprueba una persona. Es correcto y no
+se reintenta.
 
 
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -244,8 +265,15 @@ REGISTRO TRABADO O VALIDACIÓN PENDIENTE (el tema número uno de la bandeja)
         No va a poder cobrar: le falta conectar Mercado Pago desde su panel.
         Si dice "expirado", eso NO lo arregla él: se escala.
 
-      firma.completa en false
-        Todavía no puede emitir documentos firmados. Le falta completar la firma.
+      firma.manuscrita en false
+        Le falta subir la imagen de su firma. Eso sí es trabajo suyo.
+
+      firma.electronica en false
+        Le faltan las claves, que se las damos nosotros. No le pidas nada: se
+        escala.
+
+    La lista "faltantes" ya te dice todo esto junto y con las palabras que él ve
+    en su pantalla. Usala para armar el párrafo de qué le falta.
 
 NO PUEDO COBRAR / NO ME LLEGA LA PLATA
 
@@ -258,9 +286,15 @@ NO PUEDO COBRAR / NO ME LLEGA LA PLATA
 NO APAREZCO EN LA CLÍNICA / UN PACIENTE NO ME VE
 
     Mirá, en este orden: registro.aprobado, identidad.validada,
-    matricula.validada_en_refeps, disponible_ahora, y matricula.jurisdicciones.
-    Lo primero que esté en false es la respuesta. Si está todo bien y el paciente
-    es de otra provincia, es el ruteo por jurisdicción.
+    matricula.validada_en_refeps, y después las tres de
+    aparecer_en_la_clinica. Lo primero que esté en false es la respuesta.
+
+    La más común y la que menos se adivina sola: tiene el interruptor encendido
+    pero está fuera de su franja horaria. Fuera de esa franja no aparece, por más
+    que lo deje prendido.
+
+    Si está todo bien y el paciente es de otra provincia, es el ruteo por
+    jurisdicción de la matrícula.
 
 Y estas cosas no dependen de nadie en particular: son iguales para todos.
 

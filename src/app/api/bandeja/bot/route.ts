@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarDesdeBandeja, type DireccionPropia } from "@/lib/correo";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
-import { identidadHabilitada } from "@/lib/perfil-medico";
+import { identidadHabilitada, camposFaltantesMedico } from "@/lib/perfil-medico";
+import { estaEnHorario } from "@/app/clinica/disponibilidad";
 import { tieneClaves } from "@/lib/firma/claves";
 import { logInfo, logWarn } from "@/lib/logger";
 import { assertNoInstitucional } from "@/lib/instancia";
@@ -44,7 +45,13 @@ import { assertNoInstitucional } from "@/lib/instancia";
 
 export const dynamic = "force-dynamic";
 
-/** Campos que el asistente puede ver. `cuerpo_html` queda afuera a propósito. */
+// Campos que el asistente puede ver. `cuerpo_html` queda afuera, pero que quede
+// claro que eso NO es una protección: `cuerpo_texto` trae el mismo contenido del
+// mismo mail. Lo único que se evita es mandarle marcado que no necesita.
+//
+// Y esto sí importa: `cuerpo_texto` es texto que escribió cualquiera. Del otro
+// lado hay un modelo que lo lee. Tratarlo como dato y nunca como instrucción es
+// una regla del asistente, no algo que esta ruta pueda garantizar.
 const CAMPOS = "id, creado_en, direccion, de, para, asunto, cuerpo_texto, leido, atendido, en_respuesta_a, sistema";
 
 /** Tope de mails por pedido, para que una sola llamada no se lleve la bandeja entera. */
@@ -228,8 +235,11 @@ async function quienEscribio(
   const [medicos, pacientes] = await Promise.all([
     admin
       .from("medicos")
+      // `celular_personal`, `domicilio_consultorio` y `foto_url` entran SOLO para
+      // computar qué le falta al profesional. Nunca se devuelven: lo que sale es
+      // la ETIQUETA ("Celular personal"), no el valor.
       .select(
-        "id, email, nombre_completo, especialidad, tipo_matricula, numero_matricula, estado_registro, verificado, dado_de_baja, disponible, refeps_validado, refeps_validado_at, jurisdicciones, identidad_validada, biometria_exenta, firma_manuscrita_url, es_cuenta_test, created_at",
+        "id, email, titulo, nombre_completo, especialidad, tipo_matricula, numero_matricula, estado_registro, verificado, dado_de_baja, disponible, disponible_desde, disponible_hasta, precio_consulta, refeps_validado, refeps_validado_at, jurisdicciones, identidad_validada, biometria_exenta, firma_manuscrita_url, celular_personal, domicilio_consultorio, foto_url, es_cuenta_test, created_at",
       )
       .ilike("email", patron),
     admin.from("pacientes").select("email, nombre_completo, created_at").ilike("email", patron),
@@ -258,14 +268,30 @@ async function quienEscribio(
       return NextResponse.json({ error: "No se pudo consultar el estado" }, { status: 502 });
     }
 
+    const firmaElectronica = claves;
+    const firmaManuscrita = !!medico.firma_manuscrita_url?.trim();
+    const mpConectado = estadoCuentaMp(cuentaMp.data) === "conectado";
+
+    // La lista canónica de lo que le falta, con las mismas etiquetas que ve el
+    // profesional en su propio perfil. Son ETIQUETAS, no valores: acá no sale
+    // ningún dato personal nuevo.
+    const faltantes = camposFaltantesMedico(medico, {
+      mpConectado,
+      firmaConfigurada: firmaElectronica,
+    }).map((c) => c.label);
+
     logInfo("[bandeja-bot]", "Quién escribió: profesional", { correoId, direccionProbada });
     return NextResponse.json({
       registrado: true,
       rol: "profesional",
       direccion_probada: direccionProbada,
       cuenta_de_prueba: !!medico.es_cuenta_test,
+      // "Dr." o "Dra.", que es como se lo saluda.
+      tratamiento: medico.titulo ?? null,
       nombre: medico.nombre_completo,
       alta: medico.created_at,
+      // Lo que le falta para poder atender. Vacío = no le falta nada de su lado.
+      faltantes,
       registro: {
         estado: medico.estado_registro,
         // La baja es blanda y NO toca `estado_registro` ni `verificado`: sin
@@ -277,8 +303,11 @@ async function quienEscribio(
         tipo: medico.tipo_matricula,
         numero: medico.numero_matricula,
         especialidad: medico.especialidad,
-        // El profesional solo puede atender donde su matrícula está habilitada.
-        jurisdicciones: medico.jurisdicciones ?? [],
+        // OJO con el vacío: en el producto, "sin jurisdicciones resueltas" NO
+        // significa que no atiende en ninguna provincia, significa que todavía
+        // no se resolvieron y se lo muestra en todas. Por eso va null y no [],
+        // que se leería exactamente al revés.
+        jurisdicciones: medico.jurisdicciones?.length ? medico.jurisdicciones : null,
         validada_en_refeps: !!medico.refeps_validado,
         validada_el: medico.refeps_validado_at ?? null,
       },
@@ -291,8 +320,27 @@ async function quienEscribio(
       // 6 h más la auto-reparación del checkout), así que si persiste el
       // problema es nuestro y se escala.
       cobro: { mercado_pago: estadoCuentaMp(cuentaMp.data) },
-      firma: { completa: claves && !!medico.firma_manuscrita_url?.trim() },
-      disponible_ahora: !!medico.disponible,
+      // Son DOS cosas distintas y se piden por separado: la imagen de su firma
+      // la sube él, las claves electrónicas se las provisiona Docto. Fundirlas
+      // en un solo "completa" hacía que se le pidiera trabajo que no es suyo.
+      firma: { manuscrita: firmaManuscrita, electronica: firmaElectronica },
+      // NO se llama "disponible_ahora" a propósito: el interruptor solo no
+      // alcanza para que un paciente lo vea. Hacen falta además la franja
+      // horaria (en hora argentina, no la del servidor) y el precio cargado.
+      // Se devuelven las tres piezas por separado en vez de un sí/no que
+      // prometería algo que este endpoint no puede saber del todo.
+      aparecer_en_la_clinica: {
+        interruptor_encendido: !!medico.disponible,
+        // `estaEnHorario` solo mira estos tres campos, y compara contra la hora
+        // ARGENTINA: el runtime de Vercel está en UTC, así que hacerlo a mano
+        // acá evaluaría una ventana de 09 a 12 como si fuera de 12 a 15.
+        en_horario: estaEnHorario({
+          disponible: !!medico.disponible,
+          disponible_desde: medico.disponible_desde,
+          disponible_hasta: medico.disponible_hasta,
+        } as Parameters<typeof estaEnHorario>[0]),
+        precio_cargado: !!medico.precio_consulta && medico.precio_consulta > 0,
+      },
     });
   }
 
@@ -355,7 +403,7 @@ export async function POST(req: NextRequest) {
   // que impide que esta ruta sirva para escribirle a cualquiera.
   const { data: original, error: errOriginal } = await admin
     .from("correos")
-    .select("id, de, para, asunto, direccion")
+    .select("id, de, para, asunto, direccion, resend_id")
     .eq("id", correoId)
     .maybeSingle();
 
@@ -373,13 +421,34 @@ export async function POST(req: NextRequest) {
   const asunto = (body.asunto?.trim() || `Re: ${original.asunto ?? ""}`).slice(0, 200);
   const desde: DireccionPropia = body.desde === "soporte" ? "soporte" : "contacto";
 
+  // SEGUNDO CANDADO DEL ENVÍO, y es el que tapa un agujero real. Una fila
+  // `entrada` no prueba que alguien escribió: el formulario público de /ayuda
+  // inserta una con la dirección que la persona tipeó, sin sesión y sin
+  // comprobar que sea suya. Con eso, cualquiera plantaba una fila con la
+  // dirección de un tercero y hacía que Docto le mandara un mail.
+  //
+  // Un correo que llegó de verdad tiene `resend_id`. Al resto se le puede
+  // redactar un borrador, pero no se le manda nada solo: lo aprueba una persona.
+  const direccionProbada = !!original.resend_id;
+
   // El interruptor. Sin él, el asistente propone y no manda nada.
   const envioHabilitado = process.env.BANDEJA_BOT_ENVIO === "on";
-  if (!body.enviar || !envioHabilitado) {
-    logInfo("[bandeja-bot]", "Borrador propuesto", { correoId, pidioEnviar: Boolean(body.enviar), envioHabilitado });
+  if (!body.enviar || !envioHabilitado || !direccionProbada) {
+    logInfo("[bandeja-bot]", "Borrador propuesto", {
+      correoId,
+      pidioEnviar: Boolean(body.enviar),
+      envioHabilitado,
+      direccionProbada,
+    });
+    const motivo = !body.enviar
+      ? "No se pidió enviar"
+      : !envioHabilitado
+        ? "El envío está apagado (BANDEJA_BOT_ENVIO)"
+        : "La dirección no está comprobada: este mail no llegó como correo, así que la respuesta la aprueba una persona";
     return NextResponse.json({
       enviado: false,
-      motivo: body.enviar ? "El envío está apagado (BANDEJA_BOT_ENVIO)" : "No se pidió enviar",
+      motivo,
+      direccion_probada: direccionProbada,
       borrador: { para: destino, asunto, cuerpo, desde },
     });
   }
@@ -399,8 +468,10 @@ export async function POST(req: NextRequest) {
   });
 
   if (!r.ok) {
+    // El texto crudo del proveedor de mail suele citar la dirección de destino y
+    // detalle interno suyo. Se registra, no se reenvía.
     logWarn("[bandeja-bot]", "Falló el envío", { correoId, error: r.error });
-    return NextResponse.json({ enviado: false, error: r.error ?? "No se pudo enviar" }, { status: 502 });
+    return NextResponse.json({ enviado: false, error: "No se pudo enviar" }, { status: 502 });
   }
 
   // `enviarDesdeBandeja` ya marca el original como atendido al registrar la
