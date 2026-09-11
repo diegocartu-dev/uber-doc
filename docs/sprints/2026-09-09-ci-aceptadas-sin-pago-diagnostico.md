@@ -166,7 +166,7 @@ PR ni deploy pendiente". Estado al cierre:
 | WhatsApp al paciente al aceptar (`avisarPacienteAceptadaWhatsApp`, columna `paciente_id`) | PR #491 → squash `f57e33d` | en producción, migración aplicada antes del deploy |
 | ContentSid de la plantilla como constante (`PLANTILLA_PACIENTE_ACEPTADA`) | main `5c194e1` | en producción |
 | Mail de aceptación sin la frase "si pasa demasiado tiempo…" (anti venta, Diego) | main `fc38c75` | en producción |
-| Plantilla `docto_paciente_aceptada_v2` (UTILITY, botón "Pagar e ingresar" → `/sala-espera/{{3}}`) | Twilio `HX9265…5828` | creada y enviada a Meta 00:46; **aprobación pendiente de Meta** al momento de escribir esto |
+| Plantilla `docto_paciente_aceptada_v2` (UTILITY, botón "Pagar e ingresar" → `/sala-espera/{{3}}`) | Twilio `HX9265…5828` | **aprobada por Meta el 10/09 23:55** (23 h de cola) y verificada entregada el 11/09 |
 
 **Prueba real del lado del profesional (01:58 UTC-3 = 00:58 AR):** login del
 médico test por link, panel real, cartel de notificaciones cerrado con "Ahora

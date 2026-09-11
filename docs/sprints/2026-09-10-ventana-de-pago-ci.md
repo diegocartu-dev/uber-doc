@@ -220,12 +220,19 @@ suposición disfrazada de idempotencia.
 
 ## Pendientes declarados
 
-- **La plantilla de WhatsApp al paciente sigue sin aprobación de Meta** (más de 10
-  horas, creada 00:45 del 10/09, sin motivo de rechazo). Hasta que apruebe, el
-  aviso sale y Twilio lo rechaza con 63016, dejando el rastro en
-  `whatsapp_envios`. El código no necesita cambios: cuando apruebe, funciona. La
-  diferencia con las dos plantillas ya aprobadas es que esta lleva un botón con
-  dirección variable.
+- ~~La plantilla de WhatsApp al paciente sin aprobación de Meta~~ **RESUELTO.**
+  Meta la aprobó el 10/09 a las 23:55, poco más de 23 horas después de enviarla.
+  Verificado de punta a punta el 11/09: mensaje **entregado** al teléfono, sin
+  error. No hizo falta tocar código: el identificador de la plantilla ya estaba
+  como constante. De paso quedó descartada la hipótesis de que el botón con
+  dirección variable la trababa — hay otras dos plantillas aprobadas en la cuenta
+  que usan exactamente ese formato; simplemente estuvo en cola.
+- **Las cuentas de paciente de prueba tenían teléfonos de terceros.** Mientras la
+  plantilla no estaba aprobada eso era inofensivo, porque ningún envío llegaba.
+  Con la plantilla aprobada, cualquier prueba del flujo le habría mandado un
+  WhatsApp real a un desconocido. Se vaciaron los cinco teléfonos (11/09). Para
+  probar el envío hay que usar el número del profesional de prueba, que es el de
+  Diego.
 - **Un paciente que cierra la pestaña no tiene forma de volver a su sala desde la
   app.** `/mis-consultas` lista la consulta pero no linkea a la sala de espera. Hoy
   el único camino de vuelta es el mail. No se tocó en este sprint.
