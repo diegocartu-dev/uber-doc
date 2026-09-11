@@ -12,6 +12,45 @@ puede responder, no que se pueda completar con criterio.
 
 ---
 
+## 0. Lo primero: Docto NO es un servicio de emergencias
+
+**Esta es la regla que va antes que todas las demás.** Si un mail describe una
+urgencia, no se responde ninguna otra cosa hasta haber dicho esto.
+
+El producto lo afirma en tres lugares distintos, con este texto
+(`src/app/terminos/TerminosContent.tsx:16` y `ConsentimientoInformado.tsx:95`):
+
+> "IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un
+> servicio de emergencias ni urgencias médicas. Ante una urgencia o emergencia,
+> llamá al SAME (107) o concurrí al centro de salud más cercano."
+
+Los casos que los Términos excluyen expresamente
+(`TerminosContent.tsx:29-38`):
+
+- Emergencias médicas o situaciones que pongan en riesgo la vida
+- Dolor en el pecho, dificultad para respirar o pérdida del conocimiento
+- Accidentes o traumatismos graves
+- Cuadros que requieran atención presencial inmediata
+- Crisis de salud mental con riesgo para la integridad del paciente o terceros
+
+**Qué se responde**, sin agregar nada y sin preguntar detalles clínicos:
+
+```
+{{nombre}}, esto es importante: Docto es una plataforma de telemedicina
+electiva y no es un servicio de emergencias.
+
+Si estás ante una urgencia, llamá ahora al 107 (SAME en AMBA) o al número de
+emergencias de tu localidad, o andá a la guardia más cercana.
+
+Valentina — Docto
+```
+
+El propio producto ya bloquea antes: la pantalla de triage corta el flujo si el
+paciente marca síntomas de emergencia (`src/app/triage/page.tsx:383-403`). Si
+igual llega un mail así, la prioridad es esa respuesta y nada más.
+
+---
+
 ## 1. Qué es Docto
 
 ### El producto
@@ -47,6 +86,25 @@ de la categoría del profesional (`comisiones_config` en producción, verificado
 **Cuidado con la palabra.** Hacia afuera **no se dice "comisión"**: se dice
 **"coste por uso de la plataforma"**. Es una decisión explícita y se respeta
 siempre.
+
+### Docto no ejerce la medicina
+
+Es la base legal de por qué soporte no puede opinar de nada clínico. Copy
+literal de los Términos (`TerminosContent.tsx:27, :41, :46, :73, :98`):
+
+> "Docto actúa como intermediario tecnológico. La relación médico-paciente se
+> establece exclusivamente entre el profesional y el paciente. Docto no ejerce
+> la medicina ni presta servicios médicos directamente."
+
+> "Docto no garantiza diagnósticos, resultados de tratamientos ni la
+> disponibilidad permanente de profesionales en ninguna especialidad."
+
+> "La decisión sobre si tu caso puede resolverse de forma remota o necesita
+> atención presencial es siempre del profesional que te atiende."
+
+> "La emisión de una receta es una decisión exclusiva del profesional
+> interviniente. El paciente no tiene derecho a exigir la prescripción de
+> medicamentos específicos."
 
 ### Los roles
 
@@ -93,6 +151,9 @@ redondean ni se estiman:
 | Reserva de un turno sin pagar | 15 min y el turno vuelve a estar libre | `clinica/[medicoId]/turnos/actions.ts:160` |
 | Gracia de un turno programado | 20 min desde la hora del turno | `cron/resolver-turnos-vencidos/route.ts:23` |
 | Recordatorios por WhatsApp al profesional | máximo 2 por paciente | `cron/repush-esperando/route.ts:48` |
+| Cancelación de turno por el paciente | **más de 48 h antes: con reembolso. 48 h o menos: sin reembolso** | `turnos/actions.ts` (`esMasDe48hAntes`) |
+| Turno: el profesional no llegó | 20 min desde la hora de **inicio** → reintegro del 100 % | `cron/resolver-turnos-vencidos/route.ts:23` |
+| Turno: el paciente no llegó | 20 min desde la hora de **fin** → sin reembolso | mismo cron |
 
 ---
 
@@ -421,7 +482,7 @@ peor que no responder:
 
 ---
 
-## 9. Privacidad y compliance
+## 9. Privacidad, marco legal y compliance
 
 ### Qué se puede escribir en un mail
 
@@ -436,25 +497,108 @@ peor que no responder:
 - No se piden datos sensibles por mail: ni contraseñas, ni datos de tarjeta, ni
   fotos de documentos de identidad.
 
-### Marco normativo que aplica
+### Los datos regulatorios que sí se pueden dar
 
-En el repositorio hay material sobre firma electrónica, receta electrónica y
-ruteo jurisdiccional, con referencias a la Ley 27.802, a la AAIP y a ReNaPDiS
-(`docs/legal/`). **El detalle de qué obligación concreta impone cada norma al
-soporte por mail no está escrito en ningún lado: [NO ENCONTRADO].** Ante
-cualquier pedido con implicancia legal, se escala.
+Están publicados en los Términos, en la Política de Privacidad y en el pie del
+sitio, con este texto (`TerminosContent.tsx:20`, `Footer.tsx:80, :83`):
+
+> "Docto es una plataforma digital de telemedicina inscripta en el Registro
+> Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270 y ante
+> la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo
+> RL-2026-36086505."
+
+### La videollamada no se graba
+
+Es una pregunta frecuente y la respuesta está escrita en dos lugares
+(`ConsentimientoInformado.tsx:97`, `PrivacidadContent.tsx:52`):
+
+> "Videollamada no grabada. La videollamada no es grabada ni almacenada por
+> Docto."
+
+Y del otro lado, los Términos le prohíben al usuario grabar o distribuir el
+contenido de una videoconsulta sin consentimiento expreso del profesional.
+
+### Medicamentos controlados: hoy no se recetan por Docto
+
+Si un paciente reclama que no le recetaron un psicofármaco, esto es lo que pasó:
+la plataforma **bloquea** la receta de principios activos controlados
+(`MedicamentoAutocomplete.tsx:430-439`), con este texto para el profesional:
+
+> "Las recetas de psicotrópicos y estupefacientes requieren un circuito de
+> trazabilidad especial que estará disponible próximamente en Docto."
+
+No es una decisión del profesional ni un error: es una función que todavía no
+existe. Se puede decir así, sin prometer fecha.
+
+### Baja de cuenta y derecho de arrepentimiento
+
+Existe la página pública `/arrepentimiento`, enlazada desde el pie del sitio
+(Resolución 1033/2021). Copy literal para la baja:
+
+> "Podés solicitar la eliminación de tu cuenta y de tus datos en cualquier
+> momento, sin costo ni penalidad. Escribinos a soporte@docto.com.ar con el
+> asunto 'Arrepentimiento / Baja de cuenta' desde el correo asociado a tu
+> cuenta, y procesamos la baja."
+
+**El derecho de revocación de 10 días NO aplica a una consulta ya agendada**
+para fecha y hora determinadas: eso se rige por la política de cancelaciones
+(art. 34, Ley 24.240, citado en `/arrepentimiento` y en Términos §6.4).
+
+### Defensa del Consumidor
+
+Si alguien pregunta dónde reclamar, la respuesta está en los Términos §14:
+
+> "Ventanilla Única Federal de Defensa del Consumidor, disponible para todo el
+> país en consumidor.gob.ar. En la Ciudad Autónoma de Buenos Aires, también
+> podés comunicarte con la Dirección General de Defensa y Protección al
+> Consumidor llamando al 147."
+
+### Por qué un paciente puede no ver profesionales en su provincia
+
+No es un error de la plataforma. Un profesional solo puede atender pacientes que
+estén físicamente en las jurisdicciones donde tiene matrícula habilitada, según
+la Resolución 3316/2023 y el protocolo del Colegio de Médicos de la Provincia de
+Buenos Aires (`docs/legal/2026-08-24-revision-ruteo-jurisdiccional.md`). Por eso
+se le pregunta al paciente en qué provincia está.
+
+**Ojo:** "Matrícula Nacional" **no** habilita en todo el país.
+
+### Una advertencia sobre los documentos legales del repositorio
+
+Todos los análisis legales del repositorio son **borradores asistidos por IA y
+ninguno tiene firma de abogado matriculado**. Ellos mismos lo dicen: "Draft de
+criterio asistido por IA — NO es asesoramiento legal vinculante".
+
+**Qué significa para soporte:** sirven para saber qué **no** afirmar. **No** se
+citan ante un tercero como respaldo jurídico, ni se transcriben a un usuario.
 
 ### Procedimiento formal de acceso o borrado de datos
 
-**[NO ENCONTRADO].** No hay un procedimiento documentado. Se escala a Diego.
+Para derechos de datos personales hay un plazo comprometido, y es el único
+número de respuesta que Docto promete por escrito
+(`PrivacidadContent.tsx:78`):
 
----
+> "Para ejercer cualquiera de estos derechos, enviá un correo a
+> soporte@docto.com.ar indicando tu nombre, DNI y el derecho que deseás ejercer.
+> **Se responderá dentro de los 10 días hábiles.**"
+
+Estos pedidos **se escalan a Diego el mismo día**, porque el reloj de los 10 días
+hábiles ya está corriendo.
 
 ## 10. SLA interno
 
-**No hay un tiempo de respuesta comprometido por escrito: [NO ENCONTRADO].** Lo
+**Para la bandeja en general no hay tiempo comprometido: [NO ENCONTRADO].** Lo
 único que el producto le promete al usuario es que se le responde por mail
 (`src/app/ayuda/FormularioAyuda.tsx`), sin plazo.
+
+**La excepción, que sí es obligatoria:** los pedidos de derechos sobre datos
+personales tienen **10 días hábiles** comprometidos en la Política de Privacidad
+(`PrivacidadContent.tsx:78`). Ese plazo corre desde que entra el mail.
+
+**Dato operativo que cambia la urgencia de todo lo demás:** al que escribe **no
+le llega ningún acuse automático**. Ni el formulario de ayuda ni el correo
+entrante le responden nada. Hasta que un humano contesta desde la bandeja, la
+persona no tiene ninguna señal de que su mail llegó.
 
 Hasta que Diego fije uno, esta es la prioridad sugerida, basada en el daño que
 causa la demora:
@@ -492,6 +636,10 @@ Los ocho controles obligatorios. Si uno falla, no se manda:
 
 ## Reglas duras para el bot
 
+- **SÍ, ANTES QUE TODO:** ante cualquier mail que describa una urgencia médica,
+  responder que Docto no es un servicio de emergencias y que llame al 107 o vaya
+  a la guardia. Nada más, y antes que cualquier otra cosa.
+- **NO** preguntar detalles clínicos, nunca, por ningún motivo.
 - **SÍ** responder solo con datos verificados en el panel de administración o
   presentes en este manual.
 - **NO** inventar, estimar, redondear ni deducir un dato que no vio.
@@ -517,6 +665,17 @@ Los ocho controles obligatorios. Si uno falla, no se manda:
   persona, o que no tiene que hacer nada.
 - **SÍ** cerrar con "Si te queda alguna duda, respondeme por acá."
 - **NO** mencionar a Nova en un mail a un paciente: Nova es del profesional.
+- **NO** afirmar que una videollamada quedó grabada: no se graban.
+- **NO** prometer una fecha para la receta de medicamentos controlados: hoy la
+  plataforma los bloquea y no hay fecha escrita.
+- **NO** citar los análisis legales del repositorio ante un usuario: son
+  borradores sin firma de abogado.
+- **SÍ** escalar el MISMO DÍA cualquier pedido de acceso, rectificación o
+  borrado de datos personales: hay 10 días hábiles comprometidos por escrito.
+- **SÍ** recordar que al que escribe no le llegó ningún acuse automático: si
+  tardamos, del otro lado no hay ninguna señal de que su mail entró.
+- **NO** decirle a un paciente que "no hay médicos" cuando no ve ninguno en su
+  provincia: es el ruteo por jurisdicción de la matrícula, no una falla.
 
 ---
 
@@ -525,11 +684,13 @@ Los ocho controles obligatorios. Si uno falla, no se manda:
 Estos huecos son reales y están declarados a propósito. Ninguno se puede
 completar con criterio:
 
-- **[NO ENCONTRADO]** Tiempo de respuesta comprometido con el usuario.
-- **[NO ENCONTRADO]** Procedimiento formal ante un pedido de acceso,
-  rectificación o borrado de datos personales.
+- **[NO ENCONTRADO]** Tiempo de respuesta comprometido para la bandeja en
+  general. El único plazo escrito son los 10 días hábiles de datos personales.
+- **[NO ENCONTRADO]** Pasos operativos concretos para ejecutar un borrado de
+  datos: el plazo está comprometido, el procedimiento no está escrito.
 - **[NO ENCONTRADO]** Qué obligación concreta impone cada norma citada al
-  soporte por mail.
+  soporte por mail. Los análisis del repositorio son borradores sin firma de
+  abogado matriculado.
 - **[NO ENCONTRADO]** Criterio escrito para decidir un reembolso por
   disconformidad con la atención.
 - **[NO ENCONTRADO]** Canal telefónico o chat de soporte: no existen.
