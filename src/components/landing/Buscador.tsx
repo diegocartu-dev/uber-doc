@@ -4,18 +4,28 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Stethoscope } from "lucide-react";
 
+// OJO: esta NO es el catálogo, es una vitrina. El catálogo completo vive en
+// src/lib/especialidades.ts y tiene más de cincuenta entradas en orden
+// alfabético; acá van pocas y por popularidad, porque el desplegable muestra
+// ocho y arranca por la primera. El buscador de la landing todavía no filtra
+// nada: el botón lleva a ingresar. Al sumar una especialidad al catálogo, sumarla
+// acá SOLO si merece estar en la vitrina.
 const ESPECIALIDADES = [
-  "Clínica Médica",
+  "Medicina general",
+  "Clínica médica",
   "Cardiología",
   "Dermatología",
   "Pediatría",
   "Ginecología",
-  "Psicología",
+  // Decía "Psicología", que no existe en el catálogo ni como especialidad ni
+  // como área: le prometía al paciente algo que Docto no tiene.
   "Psiquiatría",
   "Neurología",
   "Nutrición",
   "Endocrinología",
-  "Traumatología",
+  // En el catálogo se llama "Ortopedia y traumatología": así escrito, el
+  // paciente que lo busque encuentra al profesional que lo eligió.
+  "Ortopedia y traumatología",
   "Oftalmología",
   "Otorrinolaringología",
   "Urología",

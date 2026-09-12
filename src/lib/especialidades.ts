@@ -52,6 +52,11 @@ export const ESPECIALIDADES = [
   "Medicina del deporte",
   "Medicina del trabajo",
   "Medicina familiar",
+  // Para el profesional que todavía NO tiene una especialidad y atiende dolencias
+  // comunes (pedido Diego 12/09/2026). Es distinta de las dos vecinas, que son
+  // especialidades con residencia propia: esta es la puerta de entrada del médico
+  // recién matriculado.
+  "Medicina general",
   "Medicina general y familiar",
   "Medicina legal",
   "Medicina nuclear",
