@@ -54,6 +54,8 @@ type Props = {
   mpResultado: string | null; // "ok" | "error" | null (al volver del OAuth)
   mpError: string | null; // credentials_mismatch | mp_account_already_linked | cuenta_no_argentina | ...
   mpPais: string | null; // país de la cuenta MP rechazada por no ser argentina (ej: "Brasil")
+  /** Si la cuenta puede ver los videos de capacitación. Decide si aparece el link del cierre. */
+  mostrarVideos: boolean;
 };
 
 // Estado del biométrico derivado del didit_status (espejo de mapEstado de
@@ -296,6 +298,22 @@ export default function OnboardingWizard(props: Props) {
         >
           Ir a mi panel
         </button>
+        {/* El cierre es el momento de más intención del recorrido: link a los
+            videos de capacitación (Diego, 15/09). Aparece en las dos variantes,
+            "¡Listo!" y "¡Casi listo!", y quien deja la identidad para después lo
+            vuelve a ver cada vez que retoma el wizard. Secundario a propósito: el
+            camino principal sigue siendo el panel. Un <a> y no router.push para
+            que el navegador baje hasta la sección por el ancla. Solo se muestra
+            si la sección va a estar del otro lado (ver onboarding/page.tsx). */}
+        {props.mostrarVideos && (
+          <a
+            href="/medico/como-atendes#videos"
+            className="mt-3 block w-full rounded-xl py-3 text-center text-[15px] font-medium"
+            style={{ color: C.azul }}
+          >
+            Ver los videos de cómo se usa Docto
+          </a>
+        )}
       </Marco>
     );
   }

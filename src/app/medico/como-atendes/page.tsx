@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import { getComisionForMedico } from "@/lib/comisiones";
+import { esInstitucional } from "@/lib/instancia";
+import { videosParaPantalla, puedeVerCapacitacion } from "@/lib/capacitacion";
+import VideosCapacitacion from "./VideosCapacitacion";
 import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +52,26 @@ export default async function ComoAtendesPage() {
   const resumenCI = ciConfigurada
     ? `$${Number(medico.precio_consulta).toLocaleString("es-AR")} · ${medico.duracion_consulta} min · ${String(medico.disponible_desde).slice(0, 5)}–${String(medico.disponible_hasta).slice(0, 5)}`
     : null;
+
+  // ── Videos de capacitación: solo cuentas aprobadas (Diego, 15/09) ──
+  // Query PROPIA, a propósito: el SELECT de arriba es el que arma la pantalla y
+  // no se toca (mismo criterio que clinica/page.tsx). Si esta lectura falla, el
+  // bloque simplemente no aparece y el resto de la pantalla sigue igual: nadie
+  // que hoy entra deja de entrar. El mismo gate se repite en la ruta que firma
+  // el link, porque esconder el bloque no protege el archivo.
+  let puedeVerVideos = false;
+  let marcaVideos = "";
+  if (!esInstitucional()) {
+    const { data: aprobacion, error: errAprobacion } = await admin
+      .from("medicos")
+      .select("verificado, estado_registro, dado_de_baja, nombre_completo")
+      .eq("id", medico.id)
+      .maybeSingle();
+    if (!errAprobacion && puedeVerCapacitacion(aprobacion)) {
+      puedeVerVideos = true;
+      marcaVideos = (aprobacion?.nombre_completo ?? "").trim() || (user.email ?? "");
+    }
+  }
 
   const fullName = user.user_metadata?.full_name || user.email;
   const cardBorder = { border: "0.5px solid #e5e7eb" };
@@ -168,6 +191,22 @@ export default async function ComoAtendesPage() {
             Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
             consulta realizada; el resto va directo a tu Mercado Pago.
           </p>
+        )}
+
+        {/* ── Cómo se usa Docto ──
+            Al FINAL de la pantalla, por dos motivos. Quien entra a prender la
+            consulta inmediata la sigue teniendo como lo primero. Y las dos notas
+            de arriba (precio y comisión) hablan de las tarjetas: si los videos
+            quedaban en el medio, se leían como parte de los videos.
+            El id es el destino del link del cierre del onboarding. */}
+        {puedeVerVideos && (
+          <section id="videos" className="mt-7 scroll-mt-20">
+            <h2 className="text-[15px] font-semibold text-gray-900">Cómo se usa Docto</h2>
+            <p className="mt-0.5 text-[13px] text-gray-500">
+              Dos videos cortos para empezar. Los podés ver las veces que quieras.
+            </p>
+            <VideosCapacitacion videos={videosParaPantalla()} marca={marcaVideos} />
+          </section>
         )}
       </div>
     </div>

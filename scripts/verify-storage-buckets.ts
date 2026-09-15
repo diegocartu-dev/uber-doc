@@ -34,6 +34,17 @@ const REQUIRED_BUCKETS = [
     expectedPublic: false,
     description: "Firmas manuscritas de medicos",
   },
+  {
+    // Si este bucket aparece PÚBLICO, los videos quedan abiertos a cualquiera
+    // con la dirección: se pierde todo lo que pidió Diego (15/09).
+    // Solo B2C: la instancia institucional no tiene este bucket a propósito,
+    // porque los videos explican el flujo del B2C. Correr el script contra su
+    // base con INSTITUCIONAL=true lo saltea en vez de dar un falso rojo.
+    id: "capacitacion-profesionales",
+    expectedPublic: false,
+    description: "Videos de capacitacion para profesionales aprobados",
+    soloB2C: true,
+  },
 ];
 
 async function main() {
@@ -58,7 +69,13 @@ async function main() {
 
   console.log("\n=== Verificacion de buckets de Storage ===\n");
 
+  const institucional = process.env.INSTITUCIONAL === "true";
+
   for (const req of REQUIRED_BUCKETS) {
+    if (institucional && "soloB2C" in req && req.soloB2C) {
+      console.log(`⏭️  ${req.id} — solo B2C, no aplica a la instancia institucional`);
+      continue;
+    }
     const bucket = bucketMap.get(req.id);
 
     if (!bucket) {

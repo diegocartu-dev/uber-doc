@@ -822,10 +822,15 @@ async function renderFirma(pdf: PDFKit.PDFDocument, doc: DocumentoPDF, footerTop
   if (hasImage) {
     try {
       const { createAdminClient } = await import("@/lib/supabase/admin");
+      const { esPathFirmaValido } = await import("@/lib/firma/path-firma");
       const admin = createAdminClient();
-      const { data } = await admin.storage
-        .from("firmas-medicos")
-        .download(doc.medico_firma_manuscrita_path!);
+      // El path viene del snapshot de la ficha del profesional, que él escribe.
+      // Se baja con service role: sin este control, un `../otro-bucket/x` bajaría
+      // cualquier objeto privado y lo estamparía en el PDF. Solo la forma
+      // legítima `medicos/<uuid>/firma.<png|jpg>`.
+      const { data } = esPathFirmaValido(doc.medico_firma_manuscrita_path)
+        ? await admin.storage.from("firmas-medicos").download(doc.medico_firma_manuscrita_path!)
+        : { data: null };
 
       if (data) {
         const imgBuffer = Buffer.from(await data.arrayBuffer());

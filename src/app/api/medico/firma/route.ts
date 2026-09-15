@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esPathFirmaPropia } from "@/lib/firma/path-firma";
 
 const BUCKET = "firmas-medicos";
 const ALLOWED_TYPES = ["image/png", "image/jpeg"];
@@ -32,6 +33,14 @@ export async function GET() {
         { error: "No tiene firma cargada" },
         { status: 404 }
       );
+    }
+
+    // El path lo escribe el propio profesional en su fila y acá se baja con
+    // service role. Sin este control, un `../otro-bucket/objeto` bajaría
+    // cualquier archivo privado (credenciales, estudios de pacientes). Solo se
+    // acepta la firma propia con su forma exacta.
+    if (!esPathFirmaPropia(medico.firma_manuscrita_url, user.id)) {
+      return NextResponse.json({ error: "Firma no válida" }, { status: 404 });
     }
 
     // Descargar desde bucket privado con admin
