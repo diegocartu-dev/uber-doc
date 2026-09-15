@@ -48,35 +48,50 @@ export type VideoCapacitacion = {
   id: string;
   titulo: string;
   bajada: string;
-  /** Como se lee en pantalla, medido del archivo real. */
+  /** Como se lee en pantalla. Medido del archivo real. */
   duracion: string;
-  /** Nombre del objeto en el bucket privado. */
+  /** Nombre del objeto en el bucket privado. NUNCA viaja al navegador. */
   archivo: string;
   /** Portada: el cuadro de título del propio video. Vive en public/, no es sensible. */
   poster: string;
 };
 
-// Los títulos usan las palabras de Diego ("cómo empezar a usar Docto", "cómo
-// cursar una consulta"). Las duraciones salen de ffprobe sobre los archivos
-// subidos: 150,0 s y 225,7 s.
+/** Lo único que necesita la pantalla. Sin `archivo`: el nombre del objeto no sale del servidor. */
+export type VideoCapacitacionVisible = Omit<VideoCapacitacion, "archivo">;
+
+// LOS TÍTULOS SON LOS DEL CUADRO DE TÍTULO DE CADA VIDEO, a propósito. La
+// tarjeta, el encabezado del reproductor y lo primero que muestra el video
+// tienen que decir lo mismo: si dicen tres cosas distintas, un profesional de
+// 70 años no sabe si abrió el video correcto. Por eso tampoco se usa "cursar",
+// que es vocabulario interno y no aparece en ninguna pantalla.
+//
+// El video 2 es solo del flujo de CONSULTA INMEDIATA (aceptar, esperar el
+// pago, atender, documentar): la bajada lo dice para que nadie espere ver turnos.
+//
+// Duraciones medidas con ffprobe sobre los archivos subidos: 150,0 s y 225,7 s.
 export const VIDEOS_CAPACITACION: readonly VideoCapacitacion[] = [
   {
     id: "empezar",
-    titulo: "Cómo empezar a atender",
+    titulo: "Cómo configurar cómo atendés",
     bajada: "Consulta inmediata, agenda de turnos y el link de tu consultorio particular.",
-    duracion: "2:30",
+    duracion: "2 min 30 s",
     archivo: "v1-configurar-2026-09-14.mp4",
     poster: "/capacitacion/v1-configurar.jpg",
   },
   {
     id: "consulta",
-    titulo: "Cómo cursar una consulta",
-    bajada: "Desde que llega el pedido hasta que el paciente recibe sus documentos.",
-    duracion: "3:46",
+    titulo: "Atender una consulta de principio a fin",
+    bajada: "Consulta inmediata: desde que un paciente te espera hasta que recibe sus documentos.",
+    duracion: "3 min 46 s",
     archivo: "v2-atender-2026-09-14.mp4",
     poster: "/capacitacion/v2-atender.jpg",
   },
 ];
+
+/** Para la pantalla: el catálogo sin los nombres de los objetos del bucket. */
+export function videosParaPantalla(): VideoCapacitacionVisible[] {
+  return VIDEOS_CAPACITACION.map(({ id, titulo, bajada, duracion, poster }) => ({ id, titulo, bajada, duracion, poster }));
+}
 
 export function videoPorId(id: string): VideoCapacitacion | null {
   return VIDEOS_CAPACITACION.find((v) => v.id === id) ?? null;

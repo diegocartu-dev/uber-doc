@@ -7,7 +7,13 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { puedeVerCapacitacion, videoPorId, VIDEOS_CAPACITACION, SEGUNDOS_LINK_FIRMADO } from "@/lib/capacitacion";
+import {
+  puedeVerCapacitacion,
+  videoPorId,
+  videosParaPantalla,
+  VIDEOS_CAPACITACION,
+  SEGUNDOS_LINK_FIRMADO,
+} from "@/lib/capacitacion";
 
 test("aprobado de verdad: ve los videos", () => {
   assert.equal(puedeVerCapacitacion({ verificado: true, estado_registro: "aprobado", dado_de_baja: false }), true);
@@ -53,6 +59,13 @@ test("ids aptos para URL y archivos sin barras", () => {
     assert.match(v.id, /^[a-z-]+$/, v.id);
     assert.equal(v.archivo.includes("/"), false, v.archivo);
   }
+});
+
+test("la pantalla no recibe los nombres de los objetos del bucket", () => {
+  for (const v of videosParaPantalla()) {
+    assert.equal("archivo" in v, false, v.id);
+  }
+  assert.equal(videosParaPantalla().length, VIDEOS_CAPACITACION.length);
 });
 
 test("el link firmado no es corto: con minutos se corta el video a la mitad", () => {

@@ -7,6 +7,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esInstitucional } from "@/lib/instancia";
+import { puedeVerCapacitacion } from "@/lib/capacitacion";
 import OnboardingWizard from "./OnboardingWizard";
 
 export const dynamic = "force-dynamic";
@@ -101,6 +103,12 @@ export default async function OnboardingPage({
       mpResultado={sp.mp ?? null}
       mpError={sp.error ?? null}
       mpPais={sp.pais ?? null}
+      // El link a los videos aparece solo si la sección va a estar del otro lado:
+      // no en la instancia institucional, y no en un preview con ?qa=1 de alguien
+      // sin aprobar. La baja no está en el SELECT de arriba y no se le suma: ese
+      // SELECT arma el wizard y no se toca. Un dado de baja que llegara acá vería
+      // el link y aterrizaría en la pantalla sin la sección, que no rompe nada.
+      mostrarVideos={!esInstitucional() && puedeVerCapacitacion(medico)}
     />
   );
 }

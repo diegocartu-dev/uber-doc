@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { esInstitucional } from "@/lib/instancia";
-import { VIDEOS_CAPACITACION, puedeVerCapacitacion } from "@/lib/capacitacion";
+import { videosParaPantalla, puedeVerCapacitacion } from "@/lib/capacitacion";
 import VideosCapacitacion from "./VideosCapacitacion";
 import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft } from "lucide-react";
 
@@ -176,21 +176,6 @@ export default async function ComoAtendesPage() {
           </div>
         </div>
 
-        {/* ── Cómo se usa Docto ──
-            DEBAJO de las tres tarjetas y no arriba: quien entra a prender la
-            consulta inmediata la sigue teniendo como lo primero de la pantalla.
-            Lo único que baja es texto informativo. El id es el destino del link
-            del cierre del onboarding. */}
-        {puedeVerVideos && (
-          <section id="videos" className="mt-5 scroll-mt-20">
-            <h2 className="text-[15px] font-semibold text-gray-900">Cómo se usa Docto</h2>
-            <p className="mt-0.5 text-[13px] text-gray-500">
-              Dos videos cortos para empezar. Los podés ver las veces que quieras.
-            </p>
-            <VideosCapacitacion videos={VIDEOS_CAPACITACION} marca={marcaVideos} />
-          </section>
-        )}
-
         <p className="mt-5 text-[13px] text-gray-500">
           El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees.
         </p>
@@ -206,6 +191,22 @@ export default async function ComoAtendesPage() {
             Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
             consulta realizada; el resto va directo a tu Mercado Pago.
           </p>
+        )}
+
+        {/* ── Cómo se usa Docto ──
+            Al FINAL de la pantalla, por dos motivos. Quien entra a prender la
+            consulta inmediata la sigue teniendo como lo primero. Y las dos notas
+            de arriba (precio y comisión) hablan de las tarjetas: si los videos
+            quedaban en el medio, se leían como parte de los videos.
+            El id es el destino del link del cierre del onboarding. */}
+        {puedeVerVideos && (
+          <section id="videos" className="mt-7 scroll-mt-20">
+            <h2 className="text-[15px] font-semibold text-gray-900">Cómo se usa Docto</h2>
+            <p className="mt-0.5 text-[13px] text-gray-500">
+              Dos videos cortos para empezar. Los podés ver las veces que quieras.
+            </p>
+            <VideosCapacitacion videos={videosParaPantalla()} marca={marcaVideos} />
+          </section>
         )}
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight, Play, X } from "lucide-react";
-import type { VideoCapacitacion } from "@/lib/capacitacion";
+import type { VideoCapacitacionVisible as VideoCapacitacion } from "@/lib/capacitacion";
 
 // ─── Los dos videos de capacitación ──────────────────────────────────────────
 //
@@ -23,13 +23,19 @@ const SEGUNDOS_ENTRE_POSICIONES = 18;
 // Posiciones de la marca, en porcentaje. Cambia de lugar para que no alcance
 // con recortar una esquina de la grabación. Nunca en la franja de abajo, donde
 // están los controles.
+//
+// El margen izquierdo es chico en todas: en un teléfono la caja del video mide
+// unos 330 px, y con un margen del 40% un nombre largo se cortaba. Además la
+// pastilla tiene tope de ancho y parte línea (ver `anchoMaximo`).
 const POSICIONES = [
-  { top: "12%", left: "8%" },
-  { top: "38%", left: "46%" },
-  { top: "62%", left: "10%" },
-  { top: "24%", left: "40%" },
-  { top: "50%", left: "18%" },
+  { top: "12%", left: "6%" },
+  { top: "36%", left: "18%" },
+  { top: "60%", left: "8%" },
+  { top: "24%", left: "22%" },
+  { top: "48%", left: "12%" },
 ];
+
+const anchoMaximo = (left: string) => `calc(94% - ${left})`;
 
 type Props = {
   videos: readonly VideoCapacitacion[];
@@ -60,7 +66,7 @@ export default function VideosCapacitacion({ videos, marca }: Props) {
             <span className="min-w-0 flex-1">
               <span className="block text-[15px] font-semibold text-gray-900">{v.titulo}</span>
               <span className="mt-0.5 block text-[13px] leading-snug text-gray-500">{v.bajada}</span>
-              <span className="mt-1.5 block text-[13px] font-medium text-gray-700">{v.duracion} min</span>
+              <span className="mt-1.5 block text-[13px] font-medium text-gray-700">Dura {v.duracion}</span>
             </span>
             <span className="flex items-center gap-1 text-sm font-medium" style={{ color: "var(--color-text-link)" }}>
               Ver <ChevronRight size={16} />
@@ -86,6 +92,9 @@ function Reproductor({
   const ref = useRef<HTMLVideoElement>(null);
   const [posicion, setPosicion] = useState(0);
   const [fallo, setFallo] = useState(false);
+  // Cambiar la key remonta el <video>: vuelve a pedir la ruta y recibe una firma
+  // nueva. Es lo que arregla un link vencido o un corte de red.
+  const [intento, setIntento] = useState(0);
 
   const cerrar = useCallback(() => {
     ref.current?.pause();
@@ -137,12 +146,26 @@ function Reproductor({
           style={{ height: "100%", maxWidth: "100%", aspectRatio: "9 / 16" }}
         >
           {fallo ? (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+            // Texto neutro: el mismo error llega por un corte de red, un link
+            // vencido o una sesión que caducó, y culpar a la conexión sería
+            // mentirle a quien tiene buena señal.
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-6 text-center">
               <p className="text-[15px] text-white">No pudimos abrir el video.</p>
-              <p className="text-[13px] text-gray-300">Revisá tu conexión y volvé a intentar en un momento.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFallo(false);
+                  setIntento((n) => n + 1);
+                }}
+                className="rounded-xl px-5 py-3 text-[15px] font-semibold text-white"
+                style={{ background: "var(--color-primary)" }}
+              >
+                Volver a intentar
+              </button>
             </div>
           ) : (
             <video
+              key={intento}
               ref={ref}
               src={`/api/medico/capacitacion/${video.id}`}
               poster={video.poster}
@@ -167,9 +190,10 @@ function Reproductor({
               // Pastilla oscura translúcida: los videos son casi todo pantallas
               // blancas, y un texto blanco suelto ahí no se leería. Así se ve
               // igual sobre fondo claro y oscuro, sin tapar el contenido.
-              className="pointer-events-none absolute select-none whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-medium transition-all duration-1000"
+              className="pointer-events-none absolute select-none break-words rounded-md px-2 py-1 text-[12px] font-medium transition-all duration-1000"
               style={{
                 ...POSICIONES[posicion],
+                maxWidth: anchoMaximo(POSICIONES[posicion].left),
                 color: "rgba(255,255,255,0.92)",
                 background: "rgba(17,24,39,0.34)",
               }}
