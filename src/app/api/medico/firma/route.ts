@@ -184,7 +184,11 @@ export async function DELETE() {
       .eq("user_id", user.id)
       .single();
 
-    if (medico?.firma_manuscrita_url) {
+    // Mismo control que en GET: solo se borra la firma propia. Sin esto, un
+    // `medicos/<uid ajeno>/firma.png` escrito en la ficha borraría la firma de
+    // otro profesional dentro del bucket (remove no cruza de bucket, pero sí
+    // alcanza otras carpetas del mismo).
+    if (medico?.firma_manuscrita_url && esPathFirmaPropia(medico.firma_manuscrita_url, user.id)) {
       const admin = createAdminClient();
       await admin.storage
         .from(BUCKET)
