@@ -90,6 +90,7 @@ function Reproductor({
   onCerrar: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const botonCerrar = useRef<HTMLButtonElement>(null);
   const [posicion, setPosicion] = useState(0);
   const [fallo, setFallo] = useState(false);
   // Cambiar la key remonta el <video>: vuelve a pedir la ruta y recibe una firma
@@ -101,17 +102,36 @@ function Reproductor({
     onCerrar();
   }, [onCerrar]);
 
-  // Escape cierra, y la página de abajo no se desplaza mientras está abierto.
+  // El botón atrás de Android y el gesto de volver de iPhone tienen que CERRAR el
+  // reproductor, no salir de la pantalla: parece una página nueva, así que un
+  // profesional mayor toca "atrás" para volver. Se agrega una entrada al
+  // historial al abrir y se cierra al retroceder.
+  useEffect(() => {
+    window.history.pushState({ capacitacion: true }, "");
+    const alVolver = () => cerrar();
+    window.addEventListener("popstate", alVolver);
+    return () => window.removeEventListener("popstate", alVolver);
+  }, [cerrar]);
+
+  // Escape cierra (en captura, para que llegue aunque el foco esté en los
+  // controles del video), y la página de abajo no se desplaza mientras está
+  // abierto. El foco entra al diálogo y vuelve a su lugar al cerrar.
   useEffect(() => {
     const alTeclear = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cerrar();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cerrar();
+      }
     };
-    document.addEventListener("keydown", alTeclear);
+    document.addEventListener("keydown", alTeclear, true);
     const overflowPrevio = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const focoPrevio = document.activeElement as HTMLElement | null;
+    botonCerrar.current?.focus();
     return () => {
-      document.removeEventListener("keydown", alTeclear);
+      document.removeEventListener("keydown", alTeclear, true);
       document.body.style.overflow = overflowPrevio;
+      focoPrevio?.focus?.();
     };
   }, [cerrar]);
 
@@ -125,12 +145,13 @@ function Reproductor({
       role="dialog"
       aria-modal="true"
       aria-label={video.titulo}
-      className="fixed inset-0 flex flex-col bg-black/90"
+      className="fixed inset-0 flex flex-col bg-black"
       style={{ zIndex: 9999 }}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <p className="min-w-0 truncate text-[15px] font-semibold text-white">{video.titulo}</p>
+        <p className="min-w-0 text-[15px] font-semibold leading-snug text-white">{video.titulo}</p>
         <button
+          ref={botonCerrar}
           type="button"
           onClick={cerrar}
           className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[15px] font-medium text-white"
@@ -190,7 +211,9 @@ function Reproductor({
               // Pastilla oscura translúcida: los videos son casi todo pantallas
               // blancas, y un texto blanco suelto ahí no se leería. Así se ve
               // igual sobre fondo claro y oscuro, sin tapar el contenido.
-              className="pointer-events-none absolute select-none break-words rounded-md px-2 py-1 text-[12px] font-medium transition-all duration-1000"
+              // Salta de posición sin animar el tamaño: `transition-all` movía el
+              // ancho máximo y partía la línea a mitad de camino en el celular.
+              className="pointer-events-none absolute select-none break-words rounded-md px-2 py-1 text-[12px] font-medium"
               style={{
                 ...POSICIONES[posicion],
                 maxWidth: anchoMaximo(POSICIONES[posicion].left),

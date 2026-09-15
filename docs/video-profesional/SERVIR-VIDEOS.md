@@ -76,10 +76,11 @@ streaming impide la grabación.
 Dos detalles con consecuencias:
 
 - **La marca con el nombre desaparece si se usa la pantalla completa del
-  sistema.** El reproductor ya ocupa toda la pantalla, y en los navegadores
-  basados en Chrome, que incluyen Chrome de Android, el botón de pantalla completa
-  del sistema está sacado. Safari, el de iPhone incluido, y Firefox ignoran ese
-  pedido y muestran igual su botón: ahí, si alguien lo toca, la marca no se ve.
+  sistema.** El reproductor ya ocupa toda la pantalla. En los navegadores basados
+  en Chrome el botón de pantalla completa del sistema queda **visible pero gris y
+  sin función** (`controlsList` lo deshabilita, no lo saca). Safari, el de iPhone
+  incluido, y Firefox lo muestran activo: ahí, si alguien lo toca, la marca no se
+  ve. Sacarlo del todo exigiría controles propios, que no vale la pena.
 - **Por qué el link dura dos horas y no cinco minutos.** El navegador pide el
   video por pedazos a medida que avanza, y cada pedazo vuelve a presentar la
   firma. Con cinco minutos, alguien que pausa o deja la pestaña abierta se queda
