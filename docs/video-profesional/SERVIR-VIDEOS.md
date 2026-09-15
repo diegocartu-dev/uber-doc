@@ -4,10 +4,15 @@ Dos videos para profesionales, producidos con los guiones de esta carpeta:
 
 | Video | Guion | Duración | Peso |
 |---|---|---|---|
-| Cómo configurar cómo atendés | `GUION-1-CONFIGURAR.md` | 2 min 30 s | 16 MB |
-| Atender una consulta de principio a fin | `GUION-2-ATENDER.md` | 3 min 46 s | 20 MB |
+| Cómo configurar cómo atendés | `GUION-1-CONFIGURAR.md` | 2 min 30 s | 7,8 MB |
+| Atender una consulta de principio a fin | `GUION-2-ATENDER.md` | 3 min 46 s | 10 MB |
 
 El segundo video cubre solo el flujo de consulta inmediata.
+
+Los archivos originales pesaban 16 y 20 MB. Se recomprimieron el 15/09 con
+`libx264 -preset slow -crf 28` (audio AAC 96k, faststart): la mitad de peso, sin
+pérdida visible en el texto de las pantallas. Si se vuelve a producir un video,
+misma receta.
 
 ## Las decisiones de Diego (15/09/2026)
 
