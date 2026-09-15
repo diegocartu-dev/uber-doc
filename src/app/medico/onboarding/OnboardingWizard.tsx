@@ -296,6 +296,18 @@ export default function OnboardingWizard(props: Props) {
         >
           Ir a mi panel
         </button>
+        {/* Momento de máxima intención y se ve una sola vez: el link a los videos
+            de capacitación (Diego, 15/09). Secundario a propósito: el camino
+            principal sigue siendo el panel. Un <a> y no router.push para que el
+            navegador baje hasta la sección por el ancla. Este wizard solo lo ve
+            un profesional ya aprobado, que es quien puede ver los videos. */}
+        <a
+          href="/medico/como-atendes#videos"
+          className="mt-3 block w-full rounded-xl py-3 text-center text-[15px] font-medium"
+          style={{ color: C.azul }}
+        >
+          Ver los videos de cómo se usa Docto
+        </a>
       </Marco>
     );
   }

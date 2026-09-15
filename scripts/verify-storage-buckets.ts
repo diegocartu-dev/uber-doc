@@ -34,6 +34,13 @@ const REQUIRED_BUCKETS = [
     expectedPublic: false,
     description: "Firmas manuscritas de medicos",
   },
+  {
+    // Si este bucket aparece PÚBLICO, los videos quedan abiertos a cualquiera
+    // con la dirección: se pierde todo lo que pidió Diego (15/09).
+    id: "capacitacion-profesionales",
+    expectedPublic: false,
+    description: "Videos de capacitacion para profesionales aprobados",
+  },
 ];
 
 async function main() {
