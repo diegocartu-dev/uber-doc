@@ -75,7 +75,9 @@ export const VIDEOS_CAPACITACION: readonly VideoCapacitacion[] = [
     titulo: "Cómo configurar cómo atendés",
     bajada: "Consulta inmediata, agenda de turnos y el link de tu consultorio particular.",
     duracion: "2 min 30 s",
-    archivo: "v1-configurar-2026-09-14.mp4",
+    // Recomprimido 15/09: la mitad de peso (16 → 7,8 MB) sin pérdida visible.
+    // Nombre nuevo a propósito (nunca se pisa el viejo: la CDN lo sigue sirviendo).
+    archivo: "v1-configurar-2026-09-15.mp4",
     poster: "/capacitacion/v1-configurar.jpg",
   },
   {
@@ -83,7 +85,8 @@ export const VIDEOS_CAPACITACION: readonly VideoCapacitacion[] = [
     titulo: "Atender una consulta de principio a fin",
     bajada: "Consulta inmediata: desde que un paciente te espera hasta que recibe sus documentos.",
     duracion: "3 min 46 s",
-    archivo: "v2-atender-2026-09-14.mp4",
+    // Recomprimido 15/09: 20 → 10 MB sin pérdida visible.
+    archivo: "v2-atender-2026-09-15.mp4",
     poster: "/capacitacion/v2-atender.jpg",
   },
 ];
