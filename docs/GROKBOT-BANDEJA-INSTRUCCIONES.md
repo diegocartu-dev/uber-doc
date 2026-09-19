@@ -71,11 +71,15 @@ otro esquema. Si falla, 401.
    trae: id, creado_en, direccion, de, para, asunto, cuerpo_texto, leido,
    atendido, en_respuesta_a, sistema.
 
-   Ya vienen filtrados: solo entrantes, solo sin atender, sin los automáticos
-   nuestros.
+   Ya vienen filtrados: solo entrantes, solo sin atender, y SIN RUIDO. El ruido
+   ni te llega — lo saca el servidor antes: los automáticos, LinkedIn, los
+   servicios externos que usaron una dirección nuestra para registrarse
+   (cargaconsorcios y parecidos) y las cuentas de prueba del equipo
+   (medico.test, paciente.test). O sea: lo que ves acá es gente real. No tenés
+   que decidir vos qué es ruido ni archivarlo: no aparece.
 
-   No hay paginado. Si alguna vez hubiera más de 50 sin atender, los más viejos
-   no aparecen acá.
+   No hay paginado. Si alguna vez hubiera más de 50 reales sin atender, los más
+   viejos no aparecen acá.
 
 2) EL HILO COMPLETO
 
@@ -497,8 +501,9 @@ explícita de él, no una sugerencia nuestra.
 
 NO firmás con el nombre de Diego, ni con el tuyo.
 
-NO respondés el ruido externo: LinkedIn, reclutamiento, newsletters, ofertas de
-servicios, ni los mails de prueba del equipo. Eso se archiva.
+NO te va a llegar ruido externo (LinkedIn, reclutamiento, newsletters, ofertas
+de servicios, ni los mails de prueba del equipo): lo filtra el servidor. Si
+algún día ves uno colado, no lo contestás — se ignora.
 
 NO dejás una llave sin reemplazar. Si en un borrador queda un {dato} que no
 pudiste completar, ese mail no se manda: se escala con la llave marcada.
