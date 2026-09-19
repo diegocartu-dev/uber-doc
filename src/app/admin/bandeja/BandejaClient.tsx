@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
+import { BarraTabla, CabezaTabla, Historicos, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inbox, Send, PenLine, Loader2 } from "lucide-react";
@@ -19,6 +19,7 @@ interface Correo {
   atendido: boolean;
   errorEnvio: string | null;
   esRespuesta: boolean;
+  ruido?: boolean;
 }
 
 function fechaCorta(iso: string): string {
@@ -51,10 +52,9 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const [pendiente, startTransition] = useTransition();
 
   const entradas = useMemo(() => correos.filter((c) => c.direccion === "entrada"), [correos]);
-  // Notificaciones automáticas (LinkedIn etc.): guardadas pero fuera de la vista
-  // por defecto — ensuciaban la Bandeja (Diego 03/08).
   const enviados = useMemo(() => correos.filter((c) => c.direccion === "salida"), [correos]);
-  const sinLeer = entradas.filter((c) => !c.leido && !c.sistema).length;
+  // El contador de "sin leer" es de gente real: no cuenta el ruido plegado.
+  const sinLeer = entradas.filter((c) => !c.leido && !c.ruido).length;
   const visibles = useMemo(() => (tab === "entrada" ? entradas : enviados), [tab, entradas, enviados]);
 
   // Las notificaciones automáticas (LinkedIn y parecidas) ya no se esconden detrás de un
@@ -76,6 +76,65 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
     // Lo más nuevo arriba. El id es un uuid, así que el desempate va por fecha y clave.
     defecto: (a, b) => Date.parse(b.creadoEn) - Date.parse(a.creadoEn),
   });
+
+  // El ruido (LinkedIn, servicios externos, cuentas de prueba, automáticos) se
+  // pliega en "Otros" al fondo. Se parte DESPUÉS de filtrar y ordenar, así el
+  // buscador lo sigue encontrando y la sección se abre sola cuando hay un match.
+  // Solo en Recibidos: lo enviado nunca es ruido.
+  const partirRuido = tab === "entrada";
+  const principales = useMemo(
+    () => (partirRuido ? vista.filas.filter((c) => !c.ruido) : vista.filas),
+    [vista.filas, partirRuido],
+  );
+  const otros = useMemo(
+    () => (partirRuido ? vista.filas.filter((c) => c.ruido) : []),
+    [vista.filas, partirRuido],
+  );
+
+  // Una sola definición de la fila: la usan la tabla principal y la sección "Otros".
+  function filaCorreo(c: Correo) {
+    const sinLeerEste = !c.leido && c.direccion === "entrada";
+    const estado = estadoDe(c);
+    return (
+      <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+        <td className="px-4 py-3">
+          <Link href={`/admin/bandeja/${c.id}`} className="block">
+            <span className={"block truncate " + (sinLeerEste ? "font-bold text-gray-900" : "text-gray-700")}>
+              {c.direccion === "entrada" ? c.de : c.para}
+            </span>
+            {c.esRespuesta && <span className="text-[10px] text-gray-400">respuesta</span>}
+          </Link>
+        </td>
+        <td className="px-4 py-3">
+          <Link
+            href={`/admin/bandeja/${c.id}`}
+            className={"block truncate " + (sinLeerEste ? "font-semibold text-gray-800" : "text-gray-500")}
+          >
+            {c.asunto}
+          </Link>
+        </td>
+        <td className="px-4 py-3">
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+            {(c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@"}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-[12px] text-gray-500">
+          {c.sistema ? "Automático" : "De una persona"}
+        </td>
+        <td className="px-4 py-3">
+          {/* Punto de color + texto: el color acompaña, la palabra informa. */}
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: estado === "No salió" ? "#E24B4A" : estado === "Sin atender" ? "#BA7517" : estado === "Sin leer" ? "#378ADD" : "#1D9E75" }}
+            />
+            {estado}
+          </span>
+        </td>
+        <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">{fechaCorta(c.creadoEn)}</td>
+      </tr>
+    );
+  }
 
   function enviar() {
     setError(null);
@@ -182,6 +241,7 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
         vista={vista}
         placeholder={tab === "entrada" ? "Buscar en lo recibido…" : "Buscar en lo enviado…"}
         cuenta="correos"
+        enHistoricos={otros.length}
       />
 
       {/* El scroll vive acá, con tope de alto: la cabecera se pega al borde de ESTE cuadro
@@ -201,50 +261,25 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
                 </td>
               </tr>
             )}
-            {vista.filas.map((c) => {
-              const sinLeerEste = !c.leido && c.direccion === "entrada";
-              const estado = estadoDe(c);
-              return (
-                <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/bandeja/${c.id}`} className="block">
-                      <span className={"block truncate " + (sinLeerEste ? "font-bold text-gray-900" : "text-gray-700")}>
-                        {c.direccion === "entrada" ? c.de : c.para}
-                      </span>
-                      {c.esRespuesta && <span className="text-[10px] text-gray-400">respuesta</span>}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/bandeja/${c.id}`}
-                      className={"block truncate " + (sinLeerEste ? "font-semibold text-gray-800" : "text-gray-500")}
-                    >
-                      {c.asunto}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-                      {(c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[12px] text-gray-500">
-                    {c.sistema ? "Automático" : "De una persona"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {/* Punto de color + texto: el color acompaña, la palabra informa. */}
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: estado === "No salió" ? "#E24B4A" : estado === "Sin atender" ? "#BA7517" : estado === "Sin leer" ? "#378ADD" : "#1D9E75" }}
-                      />
-                      {estado}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">{fechaCorta(c.creadoEn)}</td>
-                </tr>
-              );
-            })}
+            {principales.length === 0 && otros.length > 0 && !vista.hay && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                  No hay correos de personas. Los avisos y pruebas están en “Otros”, abajo.
+                </td>
+              </tr>
+            )}
+            {principales.map((c) => filaCorreo(c))}
           </tbody>
+          {partirRuido && otros.length > 0 && (
+            <Historicos
+              filas={otros}
+              colSpan={6}
+              buscando={vista.hay}
+              titulo="Otros — avisos, LinkedIn y pruebas"
+            >
+              {(c) => filaCorreo(c)}
+            </Historicos>
+          )}
         </table>
       </div>
     </div>

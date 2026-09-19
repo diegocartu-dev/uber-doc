@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esRuidoBandeja } from "@/lib/bandeja/ruido";
 import BandejaClient from "./BandejaClient";
 
 // Bandeja de correo (contacto@docto.com.ar). /admin/layout ya gatea isAdmin.
@@ -28,6 +29,10 @@ export default async function BandejaPage() {
     atendido: !!c.atendido,
     errorEnvio: (c.error_envio as string) ?? null,
     esRespuesta: !!c.en_respuesta_a,
+    // Ruido (LinkedIn, servicios externos, cuentas de prueba, automáticos): se
+    // pliega en "Otros" para no ocupar la vista de gente real (Diego 18/09).
+    // Solo cuenta para los entrantes; una salida nuestra nunca es ruido.
+    ruido: c.direccion === "entrada" && esRuidoBandeja({ de: (c.de as string) ?? "", sistema: !!c.sistema }),
   }));
 
   return (
