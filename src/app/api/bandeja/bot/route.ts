@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarDesdeBandeja, type DireccionPropia } from "@/lib/correo";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
+import { esRuidoBandeja } from "@/lib/bandeja/ruido";
 import { identidadHabilitada, camposFaltantesMedico } from "@/lib/perfil-medico";
 import { estaEnHorario } from "@/app/clinica/disponibilidad";
 import { tieneClaves } from "@/lib/firma/claves";
@@ -119,19 +120,25 @@ export async function GET(req: NextRequest) {
   const accion = req.nextUrl.searchParams.get("accion") ?? "pendientes";
 
   if (accion === "pendientes") {
-    // Solo lo que ENTRÓ, sin atender y que no sea un mail automático nuestro.
+    // Lo que ENTRÓ y nadie atendió. El asistente NO ve ruido: automáticos,
+    // LinkedIn, servicios externos (cargaconsorcios) ni cuentas de prueba — el
+    // mismo criterio que la Bandeja pliega en "Otros" (esRuidoBandeja). Se trae
+    // de más y se filtra en JS, porque el criterio de ruido es por remitente y
+    // no se expresa completo en SQL; se recorta a MAX_LISTA ya filtrado.
     const { data, error } = await admin
       .from("correos")
       .select(CAMPOS)
       .eq("direccion", "entrada")
       .eq("atendido", false)
-      .or("sistema.is.null,sistema.eq.false")
       .order("creado_en", { ascending: false })
-      .limit(MAX_LISTA);
+      .limit(300);
 
     if (error) return NextResponse.json({ error: "No se pudo leer la bandeja" }, { status: 500 });
-    logInfo("[bandeja-bot]", "Pendientes", { cantidad: (data ?? []).length });
-    return NextResponse.json({ correos: data ?? [] });
+    const reales = (data ?? [])
+      .filter((c) => !esRuidoBandeja({ de: c.de ?? "", sistema: !!c.sistema }))
+      .slice(0, MAX_LISTA);
+    logInfo("[bandeja-bot]", "Pendientes", { devueltos: reales.length, traidos: (data ?? []).length });
+    return NextResponse.json({ correos: reales });
   }
 
   if (accion === "hilo") {
