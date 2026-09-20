@@ -63,7 +63,11 @@ export const CRONS_META: Record<string, CronMeta> = {
     queHace: "cada minuto busca los turnos que empiezan en ~15 minutos y le manda un push al médico para que llegue con tiempo (gratis, además del WhatsApp del momento)",
     impacto: "sin esto el médico solo se entera cuando el paciente ya está esperando, a la hora del turno — un profesional ocupado con otro paciente puede perdérselo (caso 18/09). El push solo llega si el médico tiene Docto en la pantalla de inicio y las notificaciones activadas",
     cadencia: "cada minuto",
-    autoRecupera: true,
+    // false, como su par de cada minuto ci-aceptada-sin-pago: si el watchdog
+    // avisa que este cron no late, ya pasaron ~31 min = decenas de corridas
+    // caídas, y una ventana de aviso perdida NO se recupera sola. El mail tiene
+    // que decir "avisá ahora", no "esperá que se recupera".
+    autoRecupera: false,
   },
   "limpieza-estudios-temp": {
     nombre: "Limpieza de archivos temporales",

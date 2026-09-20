@@ -22,14 +22,16 @@ import { withCron } from "@/lib/cron-guard";
 // turno se arma igual (fecha+hora parseadas como locales), la RESTA entre los dos
 // da los minutos reales que faltan, sin importar la zona del runtime.
 //
-// DEDUPE: corre cada minuto y la ventana es de 14 a 16 min antes, así que un
-// turno puede matchear en 2-3 corridas. El `tag` del push colapsa esas copias en
-// UNA sola notificación en el teléfono (mismo criterio que el recordatorio del
-// paciente). La ventana de 3 minutos —y no de 1— es a propósito: aguanta que una
-// corrida del cron se saltee sin que el médico se quede sin aviso.
+// UNA SOLA ALERTA: la ventana es de un minuto ([15,16) min antes), así que con el
+// cron corriendo cada minuto cada turno matchea en UNA corrida y suena UNA vez.
+// Una ventana más ancha aguantaría mejor una corrida salteada, pero hacía que el
+// teléfono volviera a sonar 2-3 veces (el `tag` colapsa lo que se VE, no el
+// sonido, porque el service worker usa renotify). Para un médico de 70 años una
+// sola alerta es mejor, y el respaldo real de "no perderse al paciente" es el
+// WhatsApp del momento, que sigue disparando aunque este aviso previo se saltee.
 
 const AR = "America/Argentina/Buenos_Aires";
-const VENTANA_MIN_DESDE = 14;
+const VENTANA_MIN_DESDE = 15;
 const VENTANA_MIN_HASTA = 16;
 
 async function handler(req: NextRequest) {
@@ -47,6 +49,9 @@ async function handler(req: NextRequest) {
   const arManana = new Date(arNow.getTime() + 24 * 60 * 60 * 1000);
   const fechaManana = arManana.toLocaleDateString("sv-SE");
 
+  // Ventana de 2 días y solo confirmados sin sala: el conjunto es chico. Si algún
+  // día hubiera más de ~1000 confirmados en 48 h, PostgREST corta y algunos
+  // quedarían sin aviso en silencio — hoy estamos lejísimos de eso.
   const { data: turnos, error } = await supabase
     .from("turnos")
     .select("id, fecha, hora_inicio, medico_id")
@@ -64,7 +69,8 @@ async function handler(req: NextRequest) {
     // minutos reales que faltan.
     const start = new Date(`${t.fecha}T${t.hora_inicio}`);
     const min = (start.getTime() - arNow.getTime()) / 60000;
-    return min >= VENTANA_MIN_DESDE && min <= VENTANA_MIN_HASTA;
+    // [15,16): media abierta arriba para que un turno caiga en una sola corrida.
+    return min >= VENTANA_MIN_DESDE && min < VENTANA_MIN_HASTA;
   });
 
   if (porAvisar.length === 0) return NextResponse.json({ ok: true, enviados: 0 });
@@ -80,7 +86,7 @@ async function handler(req: NextRequest) {
         title: "🟡 Docto",
         body: `Tenés un turno a las ${hora}. En 15 minutos te va a estar esperando un paciente.`,
         url: "/dashboard",
-        tag: `turno-15min-${t.id}`, // colapsa las copias de las corridas seguidas
+        tag: `turno-15min-${t.id}`, // por si dos corridas caen en el borde: una sola visible
       },
       true,
     );
