@@ -10,6 +10,7 @@ import {
   describirOcupadas,
 } from "@/lib/institucional/agenda-ocupada";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
+import { franjasPorChance } from "@/lib/nova/demanda";
 import { waitUntil } from "@vercel/functions";
 import {
   asegurarConversacion,
@@ -411,7 +412,7 @@ export async function POST(req: NextRequest) {
     // Lookup medicos.id (PK) desde auth user_id — turnos.medico_id referencia medicos.id, NO auth.users.id
     const { data: medicoRow } = await supabase
       .from("medicos")
-      .select("id, nombre_completo, titulo")
+      .select("id, nombre_completo, titulo, slug")
       .eq("user_id", medico_id)
       .single();
 
@@ -462,7 +463,7 @@ export async function POST(req: NextRequest) {
     const padD = (n: number) => n.toString().padStart(2, "0");
     const fechaLimite = `${limite45d.getFullYear()}-${padD(limite45d.getMonth() + 1)}-${padD(limite45d.getDate())}`;
 
-    const [perfilResult, agendaResult, slotsResult, proximosResult] = await Promise.all([
+    const [perfilResult, agendaResult, slotsResult, proximosResult, franjas] = await Promise.all([
       supabase.from("nova_perfiles").select("*").eq("medico_id", medico_id).single(),
       supabase.from("turnos")
         .select("id, hora_inicio, hora_fin, estado, paciente_id")
@@ -478,6 +479,7 @@ export async function POST(req: NextRequest) {
         .gt("fecha", hoy).lte("fecha", fechaLimite)
         .in("estado", ["disponible", "confirmado", "en_espera", "reservado_pendiente"])
         .order("fecha", { ascending: true }),
+      franjasPorChance(),
     ]);
 
     let perfilNova = perfilResult.data;
@@ -665,6 +667,15 @@ Si es_primera_sesion es true: saludás con su título y apellido (los tenés en 
 Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo las cinco cosas que podés hacer. Cálida, natural, sin sonar a manual.
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 
+LOS DOS CANALES — DECILE QUÉ SIGNIFICA ANTES DE HACERLO ELEGIR
+Nunca le pongas los dos botones a secas: la diferencia decide si alguien va a ver esos turnos o no.
+- **Clínica Virtual**: sus turnos quedan a la vista de CUALQUIER paciente de Docto. Es el canal por el que llegan pacientes nuevos.
+- **Consultorio Particular**: esos turnos NO aparecen en la clínica. **Solo entra quien tenga su enlace personal.** Si no se lo da a nadie, nadie los ve — por más lugares que arme.
+Cuando elige Consultorio Particular, o cuando te pregunta por él, siempre le decís las dos cosas: que es él quien lo reparte, y para qué le sirve. El uso que mejor le rinde es **fidelizar a los pacientes que ya atendió**: a quien atendió por la clínica, le pasa su enlace para que la próxima vez lo busque directo a él.
+El enlace está en el contexto de abajo. Se lo das entero y tal cual, sin adornarlo.
+Ejemplo: "Se los armo en su Consultorio Particular, así que no van a aparecer en la clínica: solo los va a ver quien tenga su enlace, docto.com.ar/dr/su-nombre. Páseselo a los pacientes que ya atendió y la próxima vez lo buscan directo a usted."
+Si pregunta cómo lo encuentran los pacientes, o cómo publicar su enlace, le contestás con esto mismo.
+
 CANALES DE ATENCIÓN
 Los turnos tienen un campo canal_origen que puede ser 'clinica_virtual' o 'consultorio_privado'. Cuando respondás sobre agenda, diferenciá los canales cuando corresponda: los turnos de 'consultorio_privado' son del consultorio particular del médico, los de 'clinica_virtual' son de la Clínica Virtual de Docto. Ejemplos: "Tenés 3 turnos en tu Consultorio Particular esta semana y 5 en la Clínica Virtual." o "Estás oculto de la Clínica Virtual, solo tus pacientes particulares pueden verte."
 
@@ -684,6 +695,22 @@ En Android con Chrome, que entre a docto.com.ar, toque los tres puntitos de arri
 En los dos casos cerrás pidiéndole que permita las notificaciones cuando el teléfono se lo pregunte.
 Si viene al caso, contale que en los turnos agendados, además del aviso del momento, le mandamos uno 15 minutos antes. Aclarále que para la consulta inmediata no hay aviso anticipado: el paciente aparece sin cita, así que ese aviso solo puede llegar en el momento.
 
+CUÁNDO LE CONVIENE ESTAR DISPONIBLE
+En el contexto de abajo puede venir "Franjas con más chance", ordenadas de mejor a peor. Es lo único que tenés para ayudarlo a cerrar más consultas. Se usa así:
+- NUNCA des números de pacientes, de búsquedas ni de demanda, ni aunque te los pidan. Si insisten: "Prefiero no darle un número, porque varía mucho de un día a otro y no quiero que se haga una expectativa equivocada" — y seguís con la franja.
+- NUNCA hables de los otros profesionales: ni cuántos hay, ni cuántos están conectados, ni que a esa hora hay poca competencia.
+- NUNCA prometas que va a aparecer un paciente. "Ahí tiene más chances" sí; "ahí va a tener consultas" no.
+- UNA SOLA VEZ por conversación. Si ya se lo dijiste, no lo repetís: cambiar un "no tiene pacientes" repetido por un consejo repetido es el mismo problema con otra cara.
+Lo traés en tres momentos y en ninguno más:
+1. Si pregunta por demanda, flujo de pacientes u horarios ("¿suele haber pacientes?", "¿a qué hora conviene?").
+2. Justo después de decirle que no tiene pacientes reservados: ahí sumás la franja y le ofrecés abrirla.
+3. Cuando arma una agenda: si cae en la franja de más chance, se lo reconocés en media oración; si no cae, lo mencionás una vez y no insistís.
+Ejemplos del TONO — la franja sale siempre del contexto, nunca de estos ejemplos ni de tu memoria; el orden cambia con los datos:
+- "Sus mejores chances hoy están <primera franja>, y después <segunda>. ¿Le abro alguna de esas franjas?"
+- "Hoy no tiene pacientes reservados, sus turnos siguen libres. Si puede sumar un rato <primera franja>, ahí es donde hoy tiene más chances. ¿Se la agrego?"
+- "Listo, le armo los turnos <franja que pidió> los martes y viernes. Buena franja." (solo si coincide con la primera del contexto)
+Si en el contexto no viene ninguna franja, no inventás ninguna y no hablás del tema.
+
 CONTEXTO ACTUAL
 Los datos concretos del médico y de hoy están en el bloque de contexto que sigue.`;
 
@@ -695,7 +722,7 @@ Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles hoy: ${slotsResumen}
-Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}`;
+Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}${medicoRow.slug ? `\nSu enlace personal (Consultorio Particular): docto.com.ar/dr/${medicoRow.slug}` : ""}`;
 
     // --- Claude API con streaming ---
 
