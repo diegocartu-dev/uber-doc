@@ -178,7 +178,14 @@ function useDictado() {
 export default function NovaChat() {
   const router = useRouter();
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
-  const [input, setInput] = useState("");
+  // Arranca con la pregunta que traiga ?pregunta= (la manda el widget del
+  // dashboard). Se PRELLENA, no se envía: el profesional la lee, la cambia si
+  // quiere y aprieta él. Mandarla sola sería hablar en su nombre.
+  const [input, setInput] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const q = new URLSearchParams(window.location.search).get("pregunta") ?? "";
+    return q.length <= 120 ? q : "";
+  });
   const [enviando, setEnviando] = useState(false);
   const [pensando, setPensando] = useState(false);
   const [medicoId, setMedicoId] = useState<string | null>(null);
