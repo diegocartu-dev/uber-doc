@@ -28,6 +28,9 @@ const ESPERADOS: Record<string, number> = {
   "reintentar-refunds": 1440,
   "rejoin-expirar": 1440,
   "repush-esperando": 10,
+  // Aviso al médico 15 min antes del turno: corre cada minuto. Del que un médico
+  // no se pierda un paciente depende que este cron esté vivo, así que se vigila.
+  "recordatorio-medico-15min": 1,
   "apagar-disponibilidad": 30,
   "validar-refeps-pendientes": 10,
   // Faltaba: el cron que resuelve las CI vencidas —el que dispara reembolsos y
