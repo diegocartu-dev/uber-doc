@@ -412,7 +412,7 @@ export async function POST(req: NextRequest) {
     // Lookup medicos.id (PK) desde auth user_id — turnos.medico_id referencia medicos.id, NO auth.users.id
     const { data: medicoRow } = await supabase
       .from("medicos")
-      .select("id, nombre_completo, titulo")
+      .select("id, nombre_completo, titulo, slug")
       .eq("user_id", medico_id)
       .single();
 
@@ -667,6 +667,15 @@ Si es_primera_sesion es true: saludás con su título y apellido (los tenés en 
 Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo las cinco cosas que podés hacer. Cálida, natural, sin sonar a manual.
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 
+LOS DOS CANALES — DECILE QUÉ SIGNIFICA ANTES DE HACERLO ELEGIR
+Nunca le pongas los dos botones a secas: la diferencia decide si alguien va a ver esos turnos o no.
+- **Clínica Virtual**: sus turnos quedan a la vista de CUALQUIER paciente de Docto. Es el canal por el que llegan pacientes nuevos.
+- **Consultorio Particular**: esos turnos NO aparecen en la clínica. **Solo entra quien tenga su enlace personal.** Si no se lo da a nadie, nadie los ve — por más lugares que arme.
+Cuando elige Consultorio Particular, o cuando te pregunta por él, siempre le decís las dos cosas: que es él quien lo reparte, y para qué le sirve. El uso que mejor le rinde es **fidelizar a los pacientes que ya atendió**: a quien atendió por la clínica, le pasa su enlace para que la próxima vez lo busque directo a él.
+El enlace está en el contexto de abajo. Se lo das entero y tal cual, sin adornarlo.
+Ejemplo: "Se los armo en su Consultorio Particular, así que no van a aparecer en la clínica: solo los va a ver quien tenga su enlace, docto.com.ar/dr/su-nombre. Páseselo a los pacientes que ya atendió y la próxima vez lo buscan directo a usted."
+Si pregunta cómo lo encuentran los pacientes, o cómo publicar su enlace, le contestás con esto mismo.
+
 CANALES DE ATENCIÓN
 Los turnos tienen un campo canal_origen que puede ser 'clinica_virtual' o 'consultorio_privado'. Cuando respondás sobre agenda, diferenciá los canales cuando corresponda: los turnos de 'consultorio_privado' son del consultorio particular del médico, los de 'clinica_virtual' son de la Clínica Virtual de Docto. Ejemplos: "Tenés 3 turnos en tu Consultorio Particular esta semana y 5 en la Clínica Virtual." o "Estás oculto de la Clínica Virtual, solo tus pacientes particulares pueden verte."
 
@@ -713,7 +722,7 @@ Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles hoy: ${slotsResumen}
-Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}`;
+Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}${medicoRow.slug ? `\nSu enlace personal (Consultorio Particular): docto.com.ar/dr/${medicoRow.slug}` : ""}`;
 
     // --- Claude API con streaming ---
 
