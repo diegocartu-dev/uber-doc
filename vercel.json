@@ -16,6 +16,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/recordatorio-medico-15min",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/limpieza-estudios-temp",
       "schedule": "0 6 * * *"
     },

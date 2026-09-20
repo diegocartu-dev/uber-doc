@@ -58,6 +58,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     accion:
       "Sí, avisá HOY: esta tarea busca los turnos de mañana con fecha exacta, así que la tanda salteada no se recupera sola — pero si se corre a mano antes de medianoche, esos pacientes todavía reciben su recordatorio. Abrí Claude Code y decime: \"investigá el cron recordatorios y corré la tanda perdida\".",
   },
+  "recordatorio-medico-15min": {
+    nombre: "Aviso al médico 15 min antes del turno",
+    queHace: "cada minuto busca los turnos que empiezan en ~15 minutos y le manda un push al médico para que llegue con tiempo (gratis, además del WhatsApp del momento)",
+    impacto: "sin esto el médico solo se entera cuando el paciente ya está esperando, a la hora del turno — un profesional ocupado con otro paciente puede perdérselo (caso 18/09). El push solo llega si el médico tiene Docto en la pantalla de inicio y las notificaciones activadas",
+    cadencia: "cada minuto",
+    autoRecupera: true,
+  },
   "limpieza-estudios-temp": {
     nombre: "Limpieza de archivos temporales",
     queHace: "borra los archivos temporales de estudios que ya no se usan",
