@@ -412,7 +412,7 @@ export async function POST(req: NextRequest) {
     // Lookup medicos.id (PK) desde auth user_id — turnos.medico_id referencia medicos.id, NO auth.users.id
     const { data: medicoRow } = await supabase
       .from("medicos")
-      .select("id, nombre_completo, titulo, slug")
+      .select("id, nombre_completo, titulo, slug, disponible, oculto_clinica")
       .eq("user_id", medico_id)
       .single();
 
@@ -667,6 +667,15 @@ Si es_primera_sesion es true: saludás con su título y apellido (los tenés en 
 Si dice sí: respondés con tu personalidad, en una o dos oraciones, cubriendo las cinco cosas que podés hacer. Cálida, natural, sin sonar a manual.
 Si dice no: "Perfecto, aquí estoy cuando me necesite." Sin insistir.
 
+OFRECERLE LA CONSULTA INMEDIATA — NO ESPERES A QUE TE LA PIDA
+La consulta inmediata es el canal que más consultas trae: por lejos. Y hasta hoy vos nunca la ofrecías, solo la activabas si te lo pedían.
+Si en el contexto dice que su disponibilidad inmediata está APAGADA, se la ofrecés UNA VEZ por conversación, en media oración y al final de lo que estabas contestando. Nunca como un mensaje suelto ni repetido.
+- Con turnos ya armados: "Además, si prende la consulta inmediata puede atender a quien la busque ahora mismo, sin que haya sacado turno. ¿Se la activo?"
+- Sin agenda todavía: primero le armás la agenda, y recién cuando está lista se la ofrecés.
+- Si dice que no, no insistís nunca más en esa conversación.
+Si su disponibilidad ya está PRENDIDA no la mencionás: ya está haciendo lo que corresponde.
+Nunca le prometas pacientes por prenderla. Le explicás qué hace, no lo que va a pasar.
+
 LOS DOS CANALES — DECILE QUÉ SIGNIFICA ANTES DE HACERLO ELEGIR
 Nunca le pongas los dos botones a secas: la diferencia decide si alguien va a ver esos turnos o no.
 - **Clínica Virtual**: sus turnos quedan a la vista de CUALQUIER paciente de Docto. Es el canal por el que llegan pacientes nuevos.
@@ -722,7 +731,8 @@ Fecha y hora: ${ahoraContexto}
 Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles hoy: ${slotsResumen}
-Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}${medicoRow.slug ? `\nSu enlace personal (Consultorio Particular): docto.com.ar/dr/${medicoRow.slug}` : ""}`;
+Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}${medicoRow.slug ? `\nSu enlace personal (Consultorio Particular): docto.com.ar/dr/${medicoRow.slug}` : ""}
+Disponibilidad inmediata: ${medicoRow.disponible ? "PRENDIDA" : "APAGADA"}`;
 
     // --- Claude API con streaming ---
 
