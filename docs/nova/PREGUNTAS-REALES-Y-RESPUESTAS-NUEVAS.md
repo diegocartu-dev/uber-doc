@@ -11,33 +11,37 @@
 
 | Fuente | Qué trae | Período |
 |---|---|---|
-| `nova_mensajes` | 121 preguntas de 25 profesionales, en 53 conversaciones | 10/08 → 19/09 |
-| `correos` (Bandeja) | 30 mails entrantes de profesionales aprobados | 06/08 → 19/09 |
-| `eventos_funnel` | 888 entradas a la clínica, para saber cuándo hay demanda | últimos 60 días |
+| `nova_mensajes` | lo que los profesionales le escribieron a Nova | 10/08 → 19/09 |
+| `correos` (Bandeja) | mails entrantes de profesionales aprobados | 06/08 → 19/09 |
+| `eventos_funnel` | entradas a la clínica, para saber cuándo hay demanda | últimos 60 días |
 | Prompt de Nova | qué cubre hoy, leído de `src/app/api/nova/chat/route.ts` | actual |
+
+Las cifras exactas **no van acá: este repo es público**. Viven en `MANUAL-NOVA-DEMANDA.md`,
+en la raíz y sin commitear. Lo que sigue usa proporciones y orden, no conteos.
 
 **Tres límites, dichos antes que las conclusiones:**
 
 1. **Antes del 10/08 Nova no guardaba nada.** Todo lo que se preguntó desde que existe
    hasta esa fecha no está. Lo de acá es un mes y diez días, no la historia.
-2. **25 de 67 aprobados usaron Nova.** Es lo que preguntan los que la abren. Los otros 42
-   no sabemos qué se preguntan, ni si no la abren porque no la necesitan o porque no la
+2. **Poco más de un tercio de los aprobados usó Nova.** Es lo que preguntan los que la
+   abren. Del resto no sabemos qué se preguntan, ni si no la abren porque no la necesitan o porque no la
    encuentran.
 3. **La Bandeja guarda desde el 30/07.** Los mails anteriores vivían en otro lado.
 
 ## El hallazgo principal no es una respuesta que falta
 
-De las 121 preguntas, **18 son alguna forma de "¿tengo pacientes?"** — el tema más
-frecuente, por lejos y por casi el doble sobre el segundo.
+El tema más frecuente, por lejos y por casi el doble sobre el segundo, es alguna forma de
+**"¿tengo pacientes?"**.
 
-Un profesional la hizo **seis veces**. Las seis, Nova le contestó bien: que no, que la
-agenda estaba vacía, que los nueve turnos seguían libres. Seis redacciones distintas de
-la misma noticia, todas correctas, y ninguna que hiciera nada con ella.
+Un profesional la repitió media docena de veces en distintos días. Todas las veces Nova le
+contestó bien: que no, que la agenda estaba vacía, que sus turnos seguían libres. Varias
+redacciones distintas de la misma noticia, todas correctas, y ninguna que hiciera algo
+con ella.
 
 Ese es el hueco, y no se tapa agregando un tema al prompt. Nova entrega el dato y suelta
 al profesional justo en el momento en que se está preguntando si esto sirve. **La pregunta
-más frecuente del producto tiene hoy la respuesta más desalentadora posible, dada seis
-veces seguidas a la misma persona.**
+más frecuente del producto tiene hoy la respuesta más desalentadora posible, repetida a la
+misma persona hasta que dejó de preguntar.**
 
 Lo que sigue son las respuestas que faltan, en tres grupos: las que podemos dar con datos
 que ya tenemos, las que necesitan que Diego decida qué decimos, y las que no son
@@ -45,22 +49,22 @@ respuestas sino arreglos.
 
 ## Lo que preguntan, por volumen
 
-| Tema | Preguntas | ¿Nova lo cubre hoy? |
+| # | Tema | ¿Nova lo cubre hoy? |
 |---|---|---|
-| ¿Tengo pacientes? ¿Hay demanda? | 18 | El dato sí; qué hacer con él, no |
-| ¿Cómo se atiende? Receta, orden, historia clínica | 7 | **No** — dice "ese tema no es lo mío" |
-| ¿Cómo me ven los pacientes? ¿Cuál es mi enlace? | 6 | **No** |
-| ¿Mi perfil ya está listo para atender? | 6 | Parcial |
-| Plata: cuánto cobro, cuánto cobran los demás, qué se lleva Docto | 5 | Solo su propio precio |
-| Estados: disponible / confirmado / reservado / aceptar | 4 | **No** — y hay confusión real |
-| ¿Cómo me entero de que llegó un paciente? | 3 | Sí, pero solo si preguntan por "avisos" |
-| ¿Dónde bajo la aplicación? | 3 | Sí, con el mismo disparador estrecho |
-| Capacitación, tutorial, manual | 2 | **No** — y los videos existen desde el 15/09 |
-| Dos dispositivos en una consulta | 1 (+2 mails) | **No** |
-| No puedo cambiar un dato de mi perfil | 1 (+3 mails) | **No** |
+| 1 | ¿Tengo pacientes? ¿Hay demanda? | El dato sí; qué hacer con él, no |
+| 2 | ¿Cómo se atiende? Receta, orden, historia clínica | **No** — dice "ese tema no es lo mío" |
+| 3 | ¿Cómo me ven los pacientes? ¿Cuál es mi enlace? | **No** |
+| 4 | ¿Mi perfil ya está listo para atender? | Parcial |
+| 5 | Plata: cuánto cobro, cuánto cobran los demás, qué se lleva Docto | Solo su propio precio |
+| 6 | Estados: disponible / confirmado / reservado / aceptar | **No** — y hay confusión real |
+| 7 | ¿Cómo me entero de que llegó un paciente? | Sí, pero solo si preguntan por "avisos" |
+| 8 | ¿Dónde bajo la aplicación? | Sí, con el mismo disparador estrecho |
+| 9 | Capacitación, tutorial, manual | **No** — y los videos existen desde el 15/09 |
+| 10 | Dos dispositivos en una consulta | **No** |
+| 11 | No puedo cambiar un dato de mi perfil | **No** |
 
-Las 65 restantes son el flujo normal de agenda —crear turnos, elegir horario, confirmar—
-que Nova ya maneja bien, más respuestas cortas ("sí", "ok", "gracias").
+Poco más de la mitad de las preguntas son el flujo normal de agenda —crear turnos, elegir
+horario, confirmar— que Nova ya maneja bien, más respuestas cortas ("sí", "ok", "gracias").
 
 ## Grupo A — se pueden contestar con datos que ya tenemos
 
@@ -72,23 +76,30 @@ Preguntado tal cual: *"¿vos sabés si suele haber flujo de pacientes? para reco
 qué horarios es más probable"*, *"¿suele haber demanda de pacientes en este horario?"*,
 *"¿hay pacientes para activar la disponibilidad inmediata?"*.
 
-**Tenemos el dato.** Entradas a la clínica por hora argentina, últimos 60 días:
+**Tenemos el dato**, y también la otra mitad: cuántos profesionales estaban en línea en
+cada franja (`disponibilidad_log` reconstruye el histórico, y el cron de auto-apagado
+también escribe ahí, así que la oferta es confiable). El orden de las franjas, de más a
+menos gente buscando: **mañana (9–12), tarde (14–17), noche (19–23)**, y la madrugada
+al fondo.
 
-| Franja | Entradas a la clínica |
-|---|---|
-| 09:00–11:00 | 176 |
-| 14:00–15:00 | 132 |
-| 20:00–21:00 | 91 |
-| 04:00–06:00 | 45 (el piso) |
+Pero el dato que decide no es ese. La noche tiene **casi la misma demanda por profesional
+conectado que la mañana, con bastante menos competencia**, porque hay menos gente en línea.
+Una recomendación hecha solo con la demanda bruta manda a todos a la mañana, que es donde
+ya están todos.
 
 Y hay precedente de que **funciona**: soporte le recomendó por mail a una profesional
 conectarse antes de las 9, y dos semanas después escribió que lo confirmó, que aumentaron
 sus chances, y pidió más franjas. Esa recomendación hoy la da una persona por mail, de
-memoria, a quien escribe. Nova puede dársela a los 67.
+memoria, y solo a quien escribe. Nova puede dársela a todos.
 
-**Ojo con el número que se usa:** la franja que más le sirve al profesional no es la de más
-demanda, sino la de más demanda **con menos oferta conectada**. Eso todavía no está
-calculado; es trabajo, no un dato que exista hecho.
+**El límite que manda sobre todo esto:** al volumen de hoy, la franja más cargada recibe
+del orden de una persona por día, repartida entre unos pocos profesionales en línea. Nova
+puede decir dónde se concentra la demanda; **no puede dar a entender que va a aparecer un
+paciente**, porque la mayoría de las veces no va a aparecer y la recomendación se lee como
+mentira. Ese techo no lo arregla el texto.
+
+Tampoco alcanza para cortar por especialidad y provincia: partido así, cada celda es ruido.
+Nova daría un número general, no "el suyo", y eso hay que decírselo.
 
 ### A2. ¿Qué me falta para poder atender?
 
@@ -165,7 +176,7 @@ Acá no propongo texto: la decisión es tuya y después se escribe.
 
 ## Lo que no sé
 
-- **Qué preguntan los 42 aprobados que no usan Nova.** Puede que sea lo mismo, puede que no.
+- **Qué preguntan los aprobados que no usan Nova.** Puede que sea lo mismo, puede que no.
 - **Si una respuesta mejor cambia la conducta.** El único indicio a favor es el caso de la
   recomendación de horario por mail, que es uno.
 - **Cuál es la franja con más demanda y menos oferta.** Tengo la demanda por hora; la
