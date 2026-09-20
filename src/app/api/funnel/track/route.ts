@@ -4,7 +4,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/funnel";
 
 // Eventos que emite el MÉDICO (se guardan con medico_id).
-const EVENTOS_MEDICO = ["mp_oauth_view_tab", "mp_oauth_start_click"] as const;
+// `nova_widget_visto` / `nova_widget_click` (20/09): más de la mitad de los
+// profesionales aprobados nunca abrió Nova, y casi dos tercios de ellos SÍ
+// entran a Docto. Sin estos dos eventos no se puede distinguir "no ve la
+// tarjeta" de "la ve y no le interesa", que es justo la pregunta.
+const EVENTOS_MEDICO = ["mp_oauth_view_tab", "mp_oauth_start_click", "nova_widget_visto", "nova_widget_click"] as const;
 // Eventos del recorrido del PACIENTE (se guardan con paciente_id = user.id, igual
 // que consultas.paciente_id, para que el funnel y el filtro de test cuadren).
 // `permiso_notificaciones` lo emite el triage desde el 08/09 (#6cbdba0) y hasta el

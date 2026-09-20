@@ -156,6 +156,7 @@ export default async function DashboardPage({
   let turnosEsperaCompletos: { id: string; fecha: string; hora_inicio: string; paciente_nombre: string; paciente_tabla_id: string | null; especialidad: string; canal_origen?: string }[] = [];
   let turnosHoy: { id: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
   let proximosTurnos: { id: string; fecha: string; hora_inicio: string; hora_fin: string; estado: string; paciente_nombre: string }[] = [];
+  let tieneAgendaFutura = false;
   let turnoEnCurso: { id: string; hora_inicio: string; paciente_nombre: string } | null = null;
   let modelosActivosList: { id: string; nombre: string }[] = [];
 
@@ -429,6 +430,15 @@ export default async function DashboardPage({
       }
 
       // Próximos turnos (después de hoy, max 5)
+      // ¿Tiene agenda armada? Es lo que decide qué le ofrece el widget de Nova.
+      // Cuenta sin traer filas (head) y mira lugares LIBRES a futuro: los
+      // `proximosTurnos` de abajo son los ya reservados, que es otra cosa.
+      const { count: slotsFuturos } = await supabase
+        .from("turnos")
+        .select("id", { count: "exact", head: true })
+        .eq("medico_id", data.id).gte("fecha", hoy).eq("estado", "disponible");
+      tieneAgendaFutura = (slotsFuturos ?? 0) > 0;
+
       const { data: proximosData } = await supabase
         .from("turnos")
         .select("id, fecha, hora_inicio, hora_fin, estado, paciente_id")
@@ -690,6 +700,8 @@ export default async function DashboardPage({
                 nombreMedico={fullName}
                 tituloMedico={medico.titulo}
                 turnosHoy={turnosHoy.length}
+                tieneAgenda={tieneAgendaFutura}
+                disponibleAhora={!!medico.disponible}
               />
             )}
 
