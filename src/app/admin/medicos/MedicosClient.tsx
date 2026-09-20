@@ -10,6 +10,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
+import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
 
 interface Medico {
   id: string;
@@ -56,13 +57,6 @@ interface Medico {
   mpExpiraAt?: string | null;
   mpSiteId?: string | null;
   mpSiteVerificadoAt?: string | null;
-  // Estado de onboarding (lo calcula el API): qué le falta para poder atender.
-  faltantes?: string[];
-  faltantesCount?: number;
-  totalRequisitos?: number;
-  criticosFaltantes?: string[];
-  sinEmpezar?: boolean;
-  listoParaAtender?: boolean;
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -122,7 +116,11 @@ export default function MedicosClient({
     { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
     { k: "categoria", t: "Categoría", val: (m) => (m.categoria === "founder" ? "Founder" : m.categoria ? "Tradicional" : "—"),
       busca: (m) => (m.categoria === "founder" ? "founder fundador" : m.categoria ?? "") },
-    { k: "atender", t: "¿Puede atender?", val: (m) => estadoAtender(m), rango: CICLO_ATENDER },
+    // Fecha de alta: sin ella, decidir una suspensión es a ciegas — el que se anotó
+    // anteayer merece más tiempo que el de hace ocho meses. Crece sin techo, así que
+    // lleva orden y NO embudo (mandato de tablas), y se busca por "14/09", no por ISO.
+    { k: "registro", t: "Registro", val: (m) => m.created_at, tipo: "fecha", porEvento: true,
+      busca: (m) => `${fechaCorta(m.created_at)} ${antiguedad(m.created_at)}` },
     { k: "cobros", t: "Cobros", val: (m) => estadoCobros(m), rango: CICLO_COBROS },
     { k: "identidad", t: "Identidad", val: (m) => estadoIdentidad(m), rango: CICLO_IDENTIDAD },
     { k: "acc", t: "Acciones", val: () => "", sinOrden: true, sinBuscar: true },
@@ -435,22 +433,33 @@ function estadoIdentidad(m: Medico): string {
   return "Pendiente";
 }
 
-const CICLO_ATENDER = ["Listo para atender", "Perfil incompleto", "Perfil sin empezar"];
-function estadoAtender(m: Medico): string {
-  if (m.faltantesCount === undefined) return "—";
-  if (m.listoParaAtender) return "Listo para atender";
-  return m.sinEmpezar ? "Perfil sin empezar" : "Perfil incompleto";
+// ── CUÁNDO SE REGISTRÓ ───────────────────────────────────────────────────────
+// El día se calcula en hora ARGENTINA (`fechaARdeISO`), no en la zona del proceso
+// que dibuja: un alta de las 22:30 de anoche es de ANOCHE, no de hoy.
+
+/** "14/09/2026" — el día argentino del alta. */
+function fechaCorta(iso: string): string {
+  const [a, m, d] = fechaARdeISO(iso).split("-");
+  return `${d}/${m}/${a}`;
 }
-function detalleAtender(m: Medico): string | undefined {
-  if (m.listoParaAtender || m.faltantesCount === undefined) return undefined;
-  return m.sinEmpezar ? "Todavía no empezó a completar su perfil." : `Le faltan ${m.faltantesCount} de ${m.totalRequisitos}: ${(m.faltantes ?? []).join(", ")}`;
+
+/** "hoy" · "ayer" · "hace 6 días" · "hace 3 meses" — la cifra con la que se decide. */
+function antiguedad(iso: string): string {
+  const aMediodia = (f: string) => Date.parse(`${f}T12:00:00Z`);
+  const dias = Math.round((aMediodia(fechaAR()) - aMediodia(fechaARdeISO(iso))) / 86_400_000);
+  if (dias <= 0) return "hoy";
+  if (dias === 1) return "ayer";
+  if (dias < 31) return `hace ${dias} días`;
+  const meses = Math.round(dias / 30.44);
+  if (meses < 12) return `hace ${meses} ${meses === 1 ? "mes" : "meses"}`;
+  const anios = Math.max(1, Math.floor(dias / 365.25));
+  return `hace ${anios} ${anios === 1 ? "año" : "años"}`;
 }
 
 const COLOR_ESTADO_TABLA: Record<string, string> = {
   "Puede cobrar": "#1D9E75", "Sin cuenta": "#E24B4A", "Permiso vencido": "#E24B4A", "Cuenta de otro país": "#E24B4A",
   "Validada": "#1D9E75", "Exenta": "#888780", "Rechazada": "#E24B4A", "Necesita revisión": "#E24B4A",
   "En revisión": "#BA7517", "Pendiente": "#BA7517",
-  "Listo para atender": "#1D9E75", "Perfil incompleto": "#BA7517", "Perfil sin empezar": "#D85A30",
 };
 
 const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
@@ -888,7 +897,10 @@ function MedicoFila({
             </span>
           ) : <span className="text-gray-300">—</span>}
         </td>
-        <td className="px-3 py-2.5"><Celda valor={estadoAtender(m)} detalle={detalleAtender(m)} /></td>
+        <td className="whitespace-nowrap px-3 py-2.5">
+          <span className="block text-[12px] text-gray-600">{fechaCorta(m.created_at)}</span>
+          <span className="block text-[11px] text-gray-400">{antiguedad(m.created_at)}</span>
+        </td>
         <td className="px-3 py-2.5"><Celda valor={estadoCobros(m)} detalle={detalleCobros(m)} /></td>
         <td className="px-3 py-2.5"><Celda valor={estadoIdentidad(m)} detalle={m.identidad_revision_motivo ?? undefined} /></td>
         <td className="px-3 py-2.5">
