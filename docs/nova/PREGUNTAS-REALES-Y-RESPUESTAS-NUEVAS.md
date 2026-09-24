@@ -1,7 +1,9 @@
 # Nova — lo que preguntan los profesionales, y las respuestas que faltan
 
-> **Fecha:** 20/09/2026 · **Estado:** PROPUESTA. Nada implementado, ningún texto escrito.
-> Espera decisión de Diego sobre qué habilitar y, en los casos marcados, sobre **qué decimos**.
+> **Fecha:** 20/09/2026 · **Actualizado:** 24/09/2026.
+> **Estado: el grupo A está EN PRODUCCIÓN.** Lo que sigue abajo es el análisis que lo
+> originó, tal como se escribió; lo construido y lo que quedó afuera están al final, en
+> "Qué se hizo con esto".
 >
 > Documento hermano: `NOVA_V2_DISENO_CAPACIDADES.md` (01/06), que mira las *manos* de Nova.
 > Este mira sus *respuestas*, y a diferencia de aquel no parte de un circuito de prueba:
@@ -182,3 +184,59 @@ Acá no propongo texto: la decisión es tuya y después se escribe.
 - **Cuál es la franja con más demanda y menos oferta.** Tengo la demanda por hora; la
   oferta conectada por hora no la calculé.
 - **Si el flujo de dos dispositivos funciona.**
+
+
+## Qué se hizo con esto (24/09/2026)
+
+El análisis se aprobó y se construyó casi todo el grupo A en cuatro días.
+
+| | Qué | Estado |
+|---|---|---|
+| A1 | Nova recomienda en qué franja del día tiene más chances | ✅ en producción |
+| A1 | Nova ofrece la consulta inmediata sin que se la pidan | ✅ en producción |
+| A3 | Explica los dos canales antes de hacer elegir, y da el enlace personal | ✅ en producción |
+| — | La tarjeta del dashboard ofrece el trabajo que le falta a cada uno | ✅ en producción |
+| — | Instrumentación de la tarjeta (`nova_widget_visto` / `nova_widget_click`) | ✅ en producción |
+| A2 | "¿Qué me falta para poder atender?" (`camposFaltantesMedico` ya lo calcula) | pendiente |
+| A4 | Que Nova sepa que existen los videos de capacitación | pendiente |
+| A5 | Disparador de "dónde bajo la app" y la anticipación del aviso | pendiente |
+| A6 | El vocabulario de disponible / confirmado / reservado | pendiente |
+| A7 | "No puedo cambiar un dato": decirle dónde se cambia | pendiente |
+| B | Coste por uso, precio de referencia, facturación, cómo se atiende | esperan decisión |
+| C | Segunda especialidad sin pantalla · dos dispositivos sin probar | siguen abiertos |
+
+### Las reglas de lo que Nova puede decir (decisión Diego, 20/09)
+
+El objetivo es que el profesional **cierre más consultas**, no que audite nuestro tamaño:
+
+- **Nunca cifras de demanda**, ni aunque las pidan: al volumen de hoy no informan y hacen
+  perder confianza en la plataforma.
+- **Nunca nada sobre los demás profesionales.** El ranking sí se calcula con la oferta
+  conectada —sin eso la recomendación manda a todos a la misma hora— pero eso es mecánica
+  interna.
+- **Nunca prometer** que va a aparecer un paciente. **Una sola vez** por conversación.
+
+El tipo que devuelve `src/lib/nova/demanda.ts` no tiene un solo `number`: es la garantía de
+que no se filtre una cifra por accidente, y el script `scripts/probar-nova-demanda.mts` lo
+verifica contra producción.
+
+### Una corrección al análisis de arriba
+
+En A1 este documento decía que la franja de la noche le ganaba a la mañana. **Era un error
+de medición**: comparaba franjas de distinto ancho normalizando por día en vez de por hora
+de disponibilidad, y una franja más larga acumula más demanda diaria solo por ser más
+larga. Medido por hora —que es lo que al profesional le cuesta estar conectado— **gana la
+mañana**. El orden correcto coincide además con la curva de registros por hora, que es una
+fuente independiente.
+
+### Lo que dijo la medición, cuatro días después
+
+La hipótesis de este documento era que la tarjeta no se veía. **Es falsa**: se ve, y hace
+clic aproximadamente uno de cada nueve, parejo entre las tres ofertas. Lo que sí se movió
+es lo que importa: **las agendas armadas con Nova en esos cuatro días superaron a todas las
+de la historia previa juntas**.
+
+También quedó descartado que Nova estuviera escondida: su flag está prendido desde mayo y
+la tarjeta es lo primero del dashboard, además del link en el encabezado y en la agenda.
+Lo que fallaba era la oferta, no la visibilidad — el botón decía "Hablar con Nova", que
+ofrece una charla en vez de un trabajo.
