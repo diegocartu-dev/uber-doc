@@ -32,7 +32,7 @@ import type { Atencion, Busqueda, CiHora, DatosTablero, Medico, Paciente, Slot }
 const SLOT = new Set(["disponible", "bloqueado", "bloqueado_sin_cobro"]);
 const EVENTOS = ["clinica_vista", "medico_elegido", "pago_vista", "pago_creado", "pago_aprobado", "pago_rechazado", "triage_paso", "triage_bloqueado"];
 const CAP_CI_MS = 16 * 3600_000; // un intervalo de CI abierto se capea a 16 h (igual que /insights/oferta)
-const SESION_GAP_MS = 30 * 60_000; // huecos de más de 30 min separan búsquedas (igual que /insights/funnel)
+const SESION_GAP_MS = 30 * 60_000; // huecos de más de 30 min separan búsquedas
 const VENTANA_RESULTADO_MS = 2 * 3600_000;
 
 type Fila = { id?: unknown } & Record<string, unknown>;
