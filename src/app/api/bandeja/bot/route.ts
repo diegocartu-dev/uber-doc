@@ -410,7 +410,7 @@ export async function POST(req: NextRequest) {
   // que impide que esta ruta sirva para escribirle a cualquiera.
   const { data: original, error: errOriginal } = await admin
     .from("correos")
-    .select("id, de, para, asunto, direccion, resend_id")
+    .select("id, de, para, asunto, direccion, resend_id, remitente_user_id")
     .eq("id", correoId)
     .maybeSingle();
 
@@ -420,7 +420,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Solo se responde a un correo recibido" }, { status: 400 });
   }
 
-  const destino = direccionDe(original.de);
+  // El destino, cuando el pedido vino del formulario con sesión, NO es la
+  // dirección que la persona tipeó: es la de SU cuenta. Esa la probó al
+  // autenticarse; la otra no la comprobó nadie. Es lo que deja cerrado el relay
+  // aunque el asistente mande solo.
+  let destino = direccionDe(original.de);
+  let mailDeLaCuenta: string | null = null;
+  if (original.remitente_user_id) {
+    const { data: cuenta } = await admin.auth.admin.getUserById(original.remitente_user_id as string);
+    const suyo = (cuenta?.user?.email ?? "").trim().toLowerCase();
+    if (suyo) {
+      mailDeLaCuenta = suyo;
+      destino = suyo;
+    }
+  }
   if (!destino) {
     return NextResponse.json({ error: "El correo original no tiene remitente válido" }, { status: 422 });
   }
@@ -436,7 +449,13 @@ export async function POST(req: NextRequest) {
   //
   // Un correo que llegó de verdad tiene `resend_id`. Al resto se le puede
   // redactar un borrador, pero no se le manda nada solo: lo aprueba una persona.
-  const direccionProbada = !!original.resend_id;
+  // Dos formas de probar una dirección, y ninguna confía en lo que alguien tipeó:
+  //  · llegó como correo de verdad (`resend_id`), o
+  //  · el pedido lo hizo un usuario autenticado y le respondemos al mail de SU
+  //    cuenta (`mailDeLaCuenta`), que probó al iniciar sesión.
+  // Un pedido anónimo del formulario no cumple ninguna: esa respuesta la sigue
+  // aprobando una persona, y está bien — ahí no sabemos de quién es el mail.
+  const direccionProbada = !!original.resend_id || !!mailDeLaCuenta;
 
   // El interruptor. Sin él, el asistente propone y no manda nada.
   const envioHabilitado = process.env.BANDEJA_BOT_ENVIO === "on";
@@ -451,7 +470,7 @@ export async function POST(req: NextRequest) {
       ? "No se pidió enviar"
       : !envioHabilitado
         ? "El envío está apagado (BANDEJA_BOT_ENVIO)"
-        : "La dirección no está comprobada: este mail no llegó como correo, así que la respuesta la aprueba una persona";
+        : "La dirección no está comprobada: vino del formulario de ayuda sin sesión iniciada, así que la respuesta la aprueba una persona";
     return NextResponse.json({
       enviado: false,
       motivo,
