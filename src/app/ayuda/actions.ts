@@ -178,6 +178,11 @@ export async function enviarPedidoAyuda(params: {
         para: CORREO_SOPORTE,
         asunto,
         cuerpo_texto: cuerpo,
+        // Quién lo mandó, como DATO y no como texto en el cuerpo. Es lo que le
+        // permite al asistente responder solo: con esto la respuesta va al mail
+        // de SU cuenta, no al que tipeó acá (que no comprobamos). Sin sesión
+        // queda null y esa respuesta la sigue aprobando una persona.
+        remitente_user_id: userId,
       })
       .select("id")
       .single();
