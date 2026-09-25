@@ -355,6 +355,24 @@ LOS PLAZOS REALES. Son los del código. No se redondean ni se estiman.
     Cancelación de turno por el paciente ... más de 48 h antes: CON reembolso.
                                              48 h o menos: SIN reembolso.
 
+HAY DOS VIDEOS DE CAPACITACIÓN, Y ESTÁN EN LA APP
+
+Es la respuesta a "¿hay tutorial?", "¿hay manual?", "¿cómo se usa?", "¿cómo se
+atiende?" — preguntas que llegan seguido y que hasta ahora se contestaban a mano.
+
+    "Cómo configurar cómo atendés" (2 min 30 s): consulta inmediata, agenda de
+    turnos y el link del consultorio particular.
+
+    "Atender una consulta de principio a fin" (3 min 46 s): desde que un paciente
+    lo espera hasta que recibe sus documentos.
+
+Están en el panel del profesional, en "Configurá cómo atendés". No hay link
+público: se ven adentro de la app, con su sesión iniciada. Así que NO mandás una
+dirección de video por mail — le decís dónde entrar.
+
+Los ve todo profesional aprobado y verificado. A alguien cuyo registro todavía
+está pendiente NO se los ofrecés como si pudiera verlos ya: primero se aprueba.
+
 LA VIDEOLLAMADA NO SE GRABA
 
     "La videollamada no es grabada ni almacenada por Docto."
