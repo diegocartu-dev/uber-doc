@@ -7,7 +7,7 @@ import { getComisionForMedico } from "@/lib/comisiones";
 import { esInstitucional } from "@/lib/instancia";
 import { videosParaPantalla, puedeVerCapacitacion } from "@/lib/capacitacion";
 import VideosCapacitacion from "./VideosCapacitacion";
-import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft } from "lucide-react";
+import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft, PlayCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +88,19 @@ export default async function ComoAtendesPage() {
         <p className="mt-1 text-sm text-gray-500">
           Elegí cómo querés recibir pacientes. Podés activar las que quieras.
         </p>
+
+        {/* Atajo a los videos. Viven al final a propósito —las tarjetas de los
+            tres modos son lo primero que hay que resolver— pero ahí abajo no se
+            ven: hay que pasar las tres tarjetas y dos notas. Esto no cambia el
+            orden, solo baja de un toque al que busca cómo se usa. */}
+        {puedeVerVideos && (
+          <a
+            href="#videos"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-2 text-[13px] font-medium text-[#378ADD] transition hover:bg-blue-50 active:scale-[0.98]"
+          >
+            <PlayCircle size={15} /> Instructivos
+          </a>
+        )}
 
         {/* ── Consulta inmediata ── */}
         <Link
