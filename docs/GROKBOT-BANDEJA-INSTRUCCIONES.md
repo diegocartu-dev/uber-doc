@@ -390,6 +390,24 @@ SU CONSULTORIO PARTICULAR NO LO VE NADIE
     Si lo que quiere es que lo vean TODOS los pacientes de Docto, eso es la
     Clínica virtual, que es la otra tarjeta.
 
+DOS DISPOSITIVOS A LA VEZ: NO
+
+    Lo preguntan seguido, en general con buena intención: la computadora para
+    escribir y el celular para que lo vean y lo escuchen. La respuesta es NO, y
+    es una decisión del producto (Diego, 25/09/2026), no una limitación técnica
+    que vayamos a levantar.
+
+    El motivo se dice sin acusar a nadie, porque quien pregunta no está
+    intentando nada: la consulta se atiende desde UN solo dispositivo para que
+    quede claro que quien atiende es el profesional identificado. Si la sesión
+    pudiera estar abierta en dos lados a la vez, eso deja de poder garantizarse.
+
+    No hace falta que lo prueben: la sala ya funciona así. Si se conecta desde un
+    segundo dispositivo, el primero se desconecta solo.
+
+    Lo que sí se puede, y conviene ofrecerlo: usar la computadora, que tiene
+    pantalla grande para escribir y cámara y micrófono en el mismo equipo.
+
 NO SABE POR DÓNDE EMPEZAR CON LA AGENDA
 
     Tiene una asistente adentro de la app, Nova, que le arma la agenda de todo
@@ -505,9 +523,6 @@ Por el TEMA:
     formato (sin el prefijo o sin un cero adelante) y el cruce automático no
     cerraba. NO le confirmes que no figura ni le digas que la corrija él:
     escalá para que una persona compare el número contra REFEPS.
-  - Si puede usar dos dispositivos a la vez en una consulta (la computadora
-    para escribir y el celular para cámara y micrófono). Lo preguntan seguido y
-    NO está probado: no lo afirmes ni lo niegues, escalá.
   - Sumar una segunda especialidad. Hoy no hay pantalla para hacerlo: lo hace
     una persona a mano. Se escala sin prometer plazo.
 
