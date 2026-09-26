@@ -390,6 +390,46 @@ SU CONSULTORIO PARTICULAR NO LO VE NADIE
     Si lo que quiere es que lo vean TODOS los pacientes de Docto, eso es la
     Clínica virtual, que es la otra tarjeta.
 
+RECETAS QUE LA PLATAFORMA NO EMITE, Y EL ERROR QUE NO HAY QUE DEJAR PASAR
+
+    Docto NO emite recetas de psicofármacos ni de otras sustancias controladas
+    (ansiolíticos, clonazepam y familia, opioides). El profesional escribe la
+    receta y el sistema la rechaza.
+
+    LO MÁS IMPORTANTE, y es lo que evita que la persona pague de nuevo: el
+    bloqueo NO depende de la especialidad. Un psiquiatra dentro de Docto choca
+    con lo mismo. Si alguien escribe "entonces necesito un psiquiatra", se le
+    dice que NO, que con eso no se resuelve, ANTES de que saque otra consulta.
+    Ya pasó: una paciente pagó dos consultas seguidas buscando la misma receta y
+    se fue sin ella las dos veces.
+
+    Tampoco es culpa del profesional, y conviene decirlo: hizo su trabajo, lo
+    frenó la plataforma.
+
+    Lo que sí se puede decir: esa receta la puede obtener en una consulta
+    presencial. Sin fecha de cuándo lo vamos a habilitar, porque no hay fecha.
+
+    Si además reclama por la plata —pagó y no recibió lo que buscaba— eso es
+    plata: se escala, no lo resolvés vos.
+
+DÓNDE DESCRIBE LO QUE OFRECE EN LA CONSULTA: HOY NO EXISTE
+
+    "No encuentro dónde poner en qué áreas trabajo / qué ofrezco / mi perfil de
+    atención." No es que no lo encuentre: ese campo no existe en Docto. El perfil
+    tiene la especialidad, y poco más.
+
+    NO le contestes "no se puede". Se escala: puede haber algo que le sirva
+    (sumarle una segunda especialidad, por ejemplo) y esa decisión no es tuya.
+
+"LE LLEGÓ UN AVISO DE PACIENTE ESPERANDO Y NO HAY NADIE"
+
+    Es un problema conocido y es nuestro, no de ella: un aviso puede llegar por
+    una consulta que YA terminó. Se le dice que no se equivocó, que el aviso
+    estaba de más, y que se está corrigiendo.
+
+    Lo que NO se hace: mandarla a revisar su conexión, su teléfono o sus
+    notificaciones, como si el error fuera suyo.
+
 DOS DISPOSITIVOS A LA VEZ: NO
 
     Lo preguntan seguido, en general con buena intención: la computadora para
