@@ -357,7 +357,10 @@ export default function ListadoMedicos({
                           ? "Atendiendo un turno ahora"
                           : "No disponible ahora"}
                     </p>
-                    <p className="mt-0.5 text-[12px] text-gray-400">{formatPrecio(m.precio_consulta)} · {m.duracion_consulta} min</p>
+                    <p className="mt-1 text-[14px] font-semibold text-gray-900">
+                      {formatPrecio(m.precio_consulta)}
+                      <span className="ml-1.5 text-[12px] font-normal text-gray-400">· {m.duracion_consulta} min</span>
+                    </p>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5">
