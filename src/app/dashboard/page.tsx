@@ -783,6 +783,34 @@ export default async function DashboardPage({
               </a>
             )}
 
+            {/* ACTIVÁ LA CONSULTA INMEDIATA (Diego, 29/09/2026).
+                Cartel FIJO, no una sugerencia que aparece y se va: de 80
+                profesionales aprobados sólo 5 tenían la consulta inmediata
+                prendida, y es el canal que trae el triple de consultas que los
+                turnos. Mientras siga apagada, el cartel queda.
+
+                No se apila con el del precio: si falta el precio, ése es el paso
+                accionable y éste no tiene sentido todavía. Y no aparece si ya la
+                tiene prendida. */}
+            {!!medico.precio_consulta && !medico.disponible && (
+              <a
+                href="/medico/como-atendes/consulta-inmediata"
+                className="mt-4 block rounded-xl p-4"
+                style={{ border: "1px solid #378ADD", background: "#F5F9FE" }}
+              >
+                <p className="text-[14px] font-semibold text-gray-900">
+                  Activá la consulta inmediata y empezá a monetizar tu tiempo
+                </p>
+                <p className="mt-1 text-[13px] text-gray-600">
+                  Mientras esté apagada no aparecés en la clínica para quien necesita
+                  atenderse ahora.
+                </p>
+                <span className="mt-2 inline-block text-[13px] font-medium" style={{ color: "#378ADD" }}>
+                  Activar →
+                </span>
+              </a>
+            )}
+
             {/* Hub "cómo atendés" (spec 14/07): entrada única a la config de CI,
                 agendas y consultorio privado. Sin estado acá — el hub calcula. */}
             <a
