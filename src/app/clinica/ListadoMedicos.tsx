@@ -359,7 +359,9 @@ export default function ListadoMedicos({
                     </p>
                     <p className="mt-1 text-[14px] font-semibold text-gray-900">
                       {formatPrecio(m.precio_consulta)}
-                      <span className="ml-1.5 text-[12px] font-normal text-gray-400">· {m.duracion_consulta} min</span>
+                      {m.duracion_consulta ? (
+                        <span className="ml-1.5 text-[12px] font-normal text-gray-400">· {m.duracion_consulta} min</span>
+                      ) : null}
                     </p>
                   </div>
                 </div>
