@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import AppNavbar from "@/components/AppNavbar";
 import ClinicaFlow from "./ClinicaFlow";
+import { puedeAtenderAhora } from "./disponibilidad";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { guardRutaPaciente } from "@/lib/auth/rol";
@@ -224,18 +225,23 @@ export default async function ClinicaPage() {
   const conTurnosOfertables = new Set(turnosOfertables.map((t) => t.medico_id));
 
   const medicosConEstado = medicos
-    // Ver el comentario de arriba: se va sólo quien no ofrece NINGUNA de las dos
-    // formas de reservar. Sin precio no puede haber consulta inmediata (la
-    // clínica lo mostraría a "$0"), y sin turnos publicados no hay agenda: ese
-    // nombre no le sirve a nadie y le alarga la lista al que necesita atención.
-    .filter((m) => (!!m.precio_consulta && m.precio_consulta > 0) || conTurnosOfertables.has(m.id))
     .map((m) => ({
       ...m,
       ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
       jurisdicciones: jurisMap.get(m.id) ?? [],
       areasAtencion: areasMap.get(m.id) ?? [],
       especialidadesAdicionales: adicionalesVisibles(m.especialidad, adicionalesMap.get(m.id) ?? []),
-    }));
+    }))
+    // SE MUESTRA SÓLO QUIEN TIENE ALGO QUE OFRECER (Diego, 29/09/2026).
+    //
+    // Reservable AHORA —en horario, con precio, con cobros, habilitado— o con
+    // turnos publicados. El que no cumple ninguna de las dos no aparece: no hay
+    // nada que el paciente pueda hacer con ese nombre.
+    //
+    // Se usa `puedeAtenderAhora`, la MISMA función con la que el cliente pinta
+    // el semáforo y arma el orden. Escribir el criterio dos veces es la forma
+    // segura de que un día digan cosas distintas.
+    .filter((m) => puedeAtenderAhora(m) || conTurnosOfertables.has(m.id));
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>
