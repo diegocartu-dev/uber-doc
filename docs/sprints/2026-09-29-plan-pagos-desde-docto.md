@@ -95,6 +95,22 @@ Un commit por ticket. Toda migración: SQL completo y OK de Diego antes de aplic
 
 ---
 
+## 4b. Sprint 0 — lo verificado el 29/09 (doc y ayuda oficial de MP + una prueba de solo lectura)
+
+**Decisiones de Diego del 29/09:** D-a = sí, se cambia la política. El destino **no se le pide al profesional** (errores de tipeo): tiene que salir de MP. Los pagos **pueden ser manuales** mientras no haya API. Sprint 0 delegado.
+
+**1. La API no está habilitada.** `GET /v1/payouts/…` con el token de producción de Docto devuelve **403** (`PA_UNAUTHORIZED_RESULT_FROM_POLICIES`), con y sin `X-test-token`. No es autoservicio con la aplicación de cobros actual. El camino que da la documentación: crear **otra aplicación** en "Tus integraciones" eligiendo **Checkout API** y tipo **Orders API** ("no hay indicación específica para Payouts"), aceptar Privacidad y Términos; salen credenciales de prueba; se prueba un payout ficticio con `X-test-token: true`; para producción, activar credenciales (formulario + reCAPTCHA) y entregar la clave pública ed25519 al "equipo de Integraciones" — **la documentación no dice por qué canal**; los canales publicados son el ticket de soporte técnico (con login) y Discord. Si la app nueva también da 403, la habilitación la hace MP.
+
+**2. Hay un camino manual que usa el email y no pide nada al profesional.** En la app de MP, **"Envío de dinero → Proveedores"** (ayuda 4557, ruta `/bulk-payments/suppliers`): se carga al proveedor con **CUIT/CUIL/DNI + el email de su cuenta de MP**, queda en una agenda, se paga a varios en una misma operación, **sin costo con dinero disponible, sin límite de monto, acreditación en el momento**. Los dos datos ya los tiene Docto: el DNI/CUIT en `medicos` (columnas sin grant: leer con service role) y el email por `users/me` (T1.2). **No verificado:** que la opción exista hoy con ese nombre (la página del artículo no tiene fecha y la pantalla pide login).
+
+**3. Los T&C de MP (17/07/2026), cláusula 3.3:** *"el uso de la funcionalidad de transferencias entre Cuentas Mercado Pago a través de la Plataforma se encuentra destinada exclusivamente para fines no comerciales"*. Pagarle a un profesional por "Transferir" (el flujo personal) roza esa cláusula. Por eso el manual va por **"Proveedores"** (que es la herramienta comercial de MP) o por la API, nunca por "Transferir".
+
+**4. Costos.** Transferir con dinero disponible: **0%** a cuentas de MP y a bancos. Impuesto a los débitos y créditos (0,6%): solo personas jurídicas; la cuenta de origen es de una **persona física** responsable inscripto → no aplica (la tabla de MP nombra "consumidores finales, monotributistas y autónomos"; "responsable inscripto" no figura literal). Payouts por API: costo **no publicado**.
+
+**5. Destino.** API: entre cuentas de MP, solo el **email**; a banco, campos sin CBU/CVU/alias y "solo cuenta corriente" (texto que parece heredado de Brasil). App: "Transferir" busca por celular, email o nombre (dos páginas de ayuda lo dicen; una tercera omite el email). Tope diario de transferencias desde la app: $20.000.000 (otro artículo dice $40.000.000).
+
+**Qué cambia en el plan:** el Sprint 1 queda igual (el email de `users/me` sirve para los dos caminos). El **Sprint 2 arranca manual por "Proveedores"** con el libro de pagos (T2.1) y el panel (T2.5); la API entra cuando MP la habilite. Sigue pendiente: canal para Integraciones, costo de la API, si "Proveedores" existe hoy.
+
 ## 5. Fuera de este plan
 - **Recuperar la deuda del profesional** (ticket 3C: subir la comisión en sus próximas consultas). Es la pata inversa y sigue pendiente.
 - **Cobrarle a Validdar.** Lo arreglan Docto y Validdar (decisión del 28/09).
