@@ -195,6 +195,27 @@ export function ordenarMedicos(
       } else if (ta) return -1;
       else if (tb) return 1;
     }
+    // PRECIO, DE MENOR A MAYOR (Diego, 29/09/2026).
+    //
+    // Por qué entra acá y no más arriba: el rango macro es disponibilidad, y eso
+    // no se toca — primero quien puede atender ahora. Dentro de un mismo grupo,
+    // en cambio, el orden era por quién prendió la disponibilidad antes, que para
+    // el paciente es azar. Y el azar nos estaba poniendo adelante justo al que
+    // hace que se vayan.
+    //
+    // Lo que se midió el 29/09: de los que abren una agenda de turnos, el que
+    // RESERVA había elegido a alguien de $20.000 de mediana, y el que se va sin
+    // reservar, a alguien de $40.000. El doble. Y en consulta inmediata, hasta
+    // $20.000 convierte 62% y arriba de $20.000, 13%.
+    //
+    // ⚠️ SIN PRECIO VA AL FINAL, NUNCA PRIMERO. `Number(null)` da 0, así que
+    // ordenar a lo bobo pondría arriba a los 31 profesionales sin precio cargado
+    // —la mitad del padrón— justo delante de todos. `puedeAtenderAhora` ya los
+    // deja fuera de "reservable ahora", pero pueden aparecer por turnos.
+    const precio = (m: Medico): number =>
+      m.precio_consulta && m.precio_consulta > 0 ? m.precio_consulta : Number.POSITIVE_INFINITY;
+    const pa = precio(a), pb = precio(b);
+    if (pa !== pb) return pa - pb;
     // Menos cola primero.
     const ea = esperasPorMedico.get(a.id) ?? 0, eb = esperasPorMedico.get(b.id) ?? 0;
     if (ea !== eb) return ea - eb;
