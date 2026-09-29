@@ -107,6 +107,22 @@ export default async function ClinicaPage() {
     })
   );
 
+  // FUERA DE LA CLÍNICA QUIEN NO SE PUEDE RESERVAR DE NINGUNA FORMA
+  // (Diego, 29/09/2026).
+  //
+  // Medido ese día: de 80 profesionales visibles, 28 no tenían precio NI turnos
+  // publicados. Un tercio de la lista era relleno — nombres que el paciente lee,
+  // considera y no puede reservar por ningún camino. Y el paciente que entra a
+  // la clínica está necesitando atención ahora: una lista larga de "No
+  // disponible ahora" no le informa, lo cansa.
+  //
+  // El corte es por PODER RESERVAR, no por estar completo: quien tiene precio
+  // aparece aunque hoy esté fuera de horario (el paciente ve cuándo atiende), y
+  // quien tiene turnos publicados aparece aunque no haga consulta inmediata. Se
+  // va sólo el que no ofrece ninguna de las dos cosas.
+  //
+  // Se calcula DESPUÉS de traer los turnos, así que este bloque va abajo.
+
   // Turnos disponibles en clínica virtual: traemos fecha + hora_inicio para poder
   // ordenar los médicos por "turno libre más cercano" (decisión §11.2). Mismo
   // filtro que ya andaba en producción (estado disponible, canal clinica_virtual,
@@ -203,13 +219,23 @@ export default async function ClinicaPage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const medicosConEstado = medicos.map((m) => ({
-    ...m,
-    ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
-    jurisdicciones: jurisMap.get(m.id) ?? [],
-    areasAtencion: areasMap.get(m.id) ?? [],
-    especialidadesAdicionales: adicionalesVisibles(m.especialidad, adicionalesMap.get(m.id) ?? []),
-  }));
+  // Quién tiene al menos un turno ofertable: el que no hace consulta inmediata
+  // igual aparece si ofrece agenda.
+  const conTurnosOfertables = new Set(turnosOfertables.map((t) => t.medico_id));
+
+  const medicosConEstado = medicos
+    // Ver el comentario de arriba: se va sólo quien no ofrece NINGUNA de las dos
+    // formas de reservar. Sin precio no puede haber consulta inmediata (la
+    // clínica lo mostraría a "$0"), y sin turnos publicados no hay agenda: ese
+    // nombre no le sirve a nadie y le alarga la lista al que necesita atención.
+    .filter((m) => (!!m.precio_consulta && m.precio_consulta > 0) || conTurnosOfertables.has(m.id))
+    .map((m) => ({
+      ...m,
+      ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
+      jurisdicciones: jurisMap.get(m.id) ?? [],
+      areasAtencion: areasMap.get(m.id) ?? [],
+      especialidadesAdicionales: adicionalesVisibles(m.especialidad, adicionalesMap.get(m.id) ?? []),
+    }));
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--color-bg-secondary)" }}>

@@ -754,6 +754,35 @@ export default async function DashboardPage({
                 </div>
               )}
 
+            {/* SIN PRECIO NO APARECE EN LA CLÍNICA, Y NADIE SE LO DECÍA
+                (Diego, 29/09/2026). El precio NO está en `camposFaltantesMedico`,
+                así que el cartel de activación no lo cuenta, y el asistente de
+                /medico/onboarding no tiene un paso para cargarlo: el profesional
+                se enteraba recién al intentar prender la disponibilidad. Medido
+                ese día: 31 de 81 aprobados sin precio cargado.
+
+                Va aparte del cartel de activación a propósito — ése lleva al
+                asistente, y mandarlo ahí para algo que el asistente no resuelve
+                es un callejón. Éste lleva a la pantalla donde el precio se carga. */}
+            {!medico.precio_consulta && (
+              <a
+                href="/medico/como-atendes/consulta-inmediata"
+                className="mt-4 block rounded-xl p-4"
+                style={{ border: "1px solid #BA7517", background: "#FDF8EF" }}
+              >
+                <p className="text-[14px] font-semibold text-gray-900">
+                  Falta el valor de tu consulta
+                </p>
+                <p className="mt-1 text-[13px] text-gray-600">
+                  Sin ese dato no podés aparecer disponible en la clínica. Cargalo y
+                  ya podés recibir pacientes.
+                </p>
+                <span className="mt-2 inline-block text-[13px] font-medium" style={{ color: "#BA7517" }}>
+                  Cargar el valor →
+                </span>
+              </a>
+            )}
+
             {/* Hub "cómo atendés" (spec 14/07): entrada única a la config de CI,
                 agendas y consultorio privado. Sin estado acá — el hub calcula. */}
             <a
