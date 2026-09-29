@@ -175,19 +175,24 @@ export function ordenarMedicos(
   turnoMasCercano: Map<string, TurnoClinicaVirtual>,
   medicosConTurnos: Set<string>
 ): Medico[] {
-  // Rango macro: 0 reservable ahora, 1 con espera (online con cola), 2 solo turno, 3 nada.
+  // Rango macro: 0 consulta inmediata reservable ahora, 1 solo turno, 2 nada.
+  //
+  // La COLA ya no parte este grupo (Diego, 29/09/2026): antes el que tenía un
+  // paciente esperando caía a un rango peor, así que uno más caro sin cola
+  // quedaba arriba de uno más barato con uno esperando. Ahora dentro de la
+  // consulta inmediata manda el precio, y la cola es desempate. El paciente ve
+  // la espera en el semáforo de cada tarjeta: no hace falta esconderle al barato.
   const rango = (m: Medico): number => {
-    if (puedeAtenderAhora(m)) {
-      return (esperasPorMedico.get(m.id) ?? 0) === 0 ? 0 : 1;
-    }
-    if (medicosConTurnos.has(m.id)) return 2;
-    return 3;
+    if (puedeAtenderAhora(m)) return 0;
+    if (medicosConTurnos.has(m.id)) return 1;
+    return 2;
   };
   return [...medicos].sort((a, b) => {
     const ra = rango(a), rb = rango(b);
     if (ra !== rb) return ra - rb;
-    // Dentro del grupo "solo turno": por turno más cercano.
-    if (ra === 2) {
+    // Dentro del grupo "solo turno": primero el turno más cercano, y recién
+    // después el precio (el orden que pidió Diego el 29/09).
+    if (ra === 1) {
       const ta = turnoMasCercano.get(a.id), tb = turnoMasCercano.get(b.id);
       if (ta && tb) {
         if (ta.fecha !== tb.fecha) return ta.fecha < tb.fecha ? -1 : 1;
