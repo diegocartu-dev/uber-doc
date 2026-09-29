@@ -44,3 +44,27 @@ test("la disponibilidad sigue mandando sobre el precio", () => {
   const r = ordenar([baratoFuera, caroDisponible]);
   assert.equal(r[0], "caroAhora");
 });
+
+test("el más barato va arriba aunque tenga cola (Diego, 29/09)", () => {
+  // Antes la cola partía el grupo de consulta inmediata ANTES del precio: el
+  // caro sin nadie esperando quedaba arriba del barato con uno en la fila.
+  const esperas = new Map<string, number>([["barato", 3]]);
+  const r = ordenarMedicos(
+    [med("caro", 45000), med("barato", 15000)],
+    esperas,
+    new Map() as never,
+    new Set<string>(),
+  ).map((m) => m.id);
+  assert.deepEqual(r, ["barato", "caro"]);
+});
+
+test("con el mismo precio, menos cola primero", () => {
+  const esperas = new Map<string, number>([["conCola", 2]]);
+  const r = ordenarMedicos(
+    [med("conCola", 20000), med("sinCola", 20000)],
+    esperas,
+    new Map() as never,
+    new Set<string>(),
+  ).map((m) => m.id);
+  assert.deepEqual(r, ["sinCola", "conCola"]);
+});
