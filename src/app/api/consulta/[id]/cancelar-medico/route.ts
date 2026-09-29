@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { pushAlPaciente } from "@/lib/push";
 import { ejecutarRefund } from "@/lib/cancelaciones";
 import { MOTIVO } from "@/lib/consultas/clasificar";
 import { registrarEvidenciaCierre } from "@/lib/consultas/evidencia-cierre";
@@ -34,7 +35,7 @@ export async function POST(
 
   const { data: consulta } = await admin
     .from("consultas")
-    .select("id, estado, medico_id, pago_id, mp_net_amount_medico, mp_application_fee")
+    .select("id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee")
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
     .in("estado", ["aceptada", "pagada", "en_curso"])
@@ -77,6 +78,32 @@ export async function POST(
   }
 
   cerrarEntradaSala({ consultaId, motivo: "cancelado_medico" }).catch(() => {});
+
+  // RESCATE DEL PACIENTE (Diego, 29/09/2026). Hasta hoy, cuando el profesional
+  // cancelaba, al paciente no le llegaba NADA: la pantalla le mostraba que se
+  // canceló y ahí terminaba. De los seis casos medidos desde el 19/08, cinco no
+  // volvieron nunca — y en cinco de los seis el profesional canceló justamente
+  // porque el paciente no había pagado.
+  //
+  // El mismo rescate que ya existe para el pedido que nadie acepta: se le avisa
+  // y se lo manda a la clínica a elegir otro. Best-effort a propósito — que
+  // falle el aviso no puede tocar la cancelación, que ya está escrita.
+  void (async () => {
+    const { data: fila } = await admin
+      .from("pacientes")
+      .select("id")
+      .eq("user_id", consulta.paciente_id)
+      .maybeSingle();
+    if (!fila?.id) return;
+    await pushAlPaciente(fila.id, {
+      title: "Tu consulta no pudo concretarse",
+      body: reintegroEstado
+        ? "El profesional no pudo atenderte y te devolvemos lo que pagaste. Mirá qué otros profesionales están disponibles ahora."
+        : "El profesional no pudo atenderte y no se te cobró nada. Mirá qué otros profesionales están disponibles ahora.",
+      url: "/clinica",
+      tag: `cancelo-profesional-${consultaId}`,
+    });
+  })().catch(() => {});
   // La caja negra, en la base y no en los registros del servidor que duran 8 días
   // (Diego, 10/09): qué sabíamos del paciente en el momento en que esto se cerró.
   // Se ESPERA, no se dispara con `void`: en Vercel el trabajo que queda pendiente
