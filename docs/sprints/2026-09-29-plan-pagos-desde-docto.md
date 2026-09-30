@@ -1,6 +1,6 @@
 # Plan — Docto paga por Mercado Pago
 
-**Fecha:** 29/09/2026 · **Estado:** PROPUESTA — espera OK de Diego (decisiones en §3) · **Nada de esto está construido.**
+**Fecha:** 29/09/2026 · **Estado:** PLAN APROBADO el 30/09/2026 (las cinco decisiones de §3 resueltas) · **Sprint 0 hecho; Sprints 1 a 4 sin construir.**
 
 **Origen:** decisión de Diego del 28/09 (a los profesionales de medicina laboral les paga Docto por Mercado Pago, desde su cuenta con saldo) y su pedido del 29/09: *"es la pata que nos está faltando para reintegros tanto en pacientes como en médicos de Docto tradicional"*.
 
@@ -51,9 +51,9 @@ Doc oficial de MP Argentina + pruebas de solo lectura contra producción. Las pr
 | **D-b** | ¿El pago sale solo o lo aprueba un admin con un clic? | **Con clic de Diego, inicialmente.** Automático más adelante, con topes. |
 | **D-c** | ¿Quién dice que una falla fue nuestra (para devolverle el neto al profesional)? | Diego: *"no veo muchas fallas nuestras: bien revisado el proceso, debería ser falla del médico o del paciente; ahora, cuando no avisamos, o la plataforma no anduvo, ahí sí es nuestra."* → **Falla nuestra = Docto no mandó el aviso que correspondía, o la plataforma no funcionó** (la sala no conectó, un error del sistema). La marca la pone una persona desde el admin, con un motivo de esa lista corta; el sistema la propone cuando tiene la prueba (un aviso sin enviar, un error registrado). |
 | **D-d** | Cuenta de origen. | **Se sigue con la cuenta actual**, que tiene todo andando. |
-| **D-e** | ¿El dato del paciente se pide siempre o solo cuando hace falta? | **Se pide por adelantado**, con el aviso *"en caso de cancelación, el reintegro se hará a esta cuenta"*. Diego propone pedirlo **al registrarse**; ver la propuesta de abajo sobre el momento y el dato. |
+| **D-e** | ¿El dato del paciente se pide siempre o solo cuando hace falta? | **Se pide por adelantado, al primer pago**, con el aviso *"en caso de cancelación, el reintegro se hará a esta cuenta"*. Dato: **alias o CVU/CBU**. Detalle abajo. |
 
-**Sobre D-e (propuesta, pendiente de Diego):**
+**Sobre D-e — decidido con Diego el 30/09 ("me parece bien"):**
 - **Momento:** al **primer pago** en vez de al registro. Se lo pide solo a quien puso plata (hoy la mayoría de los registrados nunca pagó), y el aviso tiene sentido justo ahí: acaba de pagar y se le dice a dónde vuelve si algo se cancela.
 - **Dato:** **alias o CVU/CBU**. El alias es más fácil de tipear y un error de tipeo casi siempre da "cuenta inexistente" en vez de otra persona; igual, **antes de transferir a mano se verifica que el titular que muestra la app de MP coincida con el paciente** (la app lo muestra al cargar el alias). Para la API, el destino bancario es CVU/CBU numérico (el alias no figura en la documentación); mientras el pago sea manual, el alias alcanza.
 - **Dónde se guarda:** en la tabla aparte del T1.1, nunca en `pacientes` (trampa de grants).
