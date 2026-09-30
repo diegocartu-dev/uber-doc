@@ -7,6 +7,7 @@ import { trackEvent } from "@/lib/funnel";
 import { pushAlMedico } from "@/lib/push";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { assertNoInstitucional } from "@/lib/instancia";
+import { presenciaDelPaciente, decidirReaccionADevolucion } from "@/lib/video/presencia";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -223,6 +224,10 @@ async function handlePayment(paymentId: string): Promise<void> {
 
   if (existing?.pago_id === paymentId && existing?.mp_status === status) {
     logInfo("[WEBHOOK]", "Evento ya procesado", { paymentId, status, tipo, id });
+    // Un `refunded` repetido vuelve a pasar por la reacción, que es idempotente:
+    // si la primera vez falló después de anotar `mp_status`, el reintento de MP
+    // es la única segunda oportunidad.
+    if (status === "refunded") await reaccionarADevolucionExterna(admin, tipo, id, paymentId, { paymentId, status, tipo, id });
     return;
   }
 
@@ -541,7 +546,151 @@ async function handleStatusOnly(
   logInfo("[WEBHOOK]", "Status actualizado", { ...logCtx, mpStatus });
   if (mpStatus === "refunded") {
     trackEvent({ evento: "pago_refund", pacienteId: null, metadata: { tipo, recursoId: id, paymentId } });
+    await reaccionarADevolucionExterna(admin, tipo, id, paymentId, logCtx);
   }
+}
+
+/**
+ * Una devolución que NO disparó Docto (29/09/2026, ver lib/video/presencia.ts).
+ *
+ * El profesional es el cobrador: puede devolver un pago desde su cuenta de
+ * Mercado Pago, y lo hace. Hasta hoy Docto solo anotaba `refunded` y seguía
+ * como si nada: la atención quedaba "atendida", nadie se enteraba, y el
+ * reporte contaba plata que ya había vuelto. Ahora: se marca el reintegro, se
+ * avisa al equipo si la atención estaba viva o figuraba hecha, y si figuraba
+ * hecha sin que el paciente hubiera entrado a la sala y sin dejar evolución
+ * ni documentos, se anula. Al paciente no se le escribe (decisión Diego
+ * 30/09: "no vamos a andar con idas y vueltas").
+ */
+async function reaccionarADevolucionExterna(
+  admin: ReturnType<typeof createAdminClient>,
+  tipo: "consulta" | "turno",
+  id: string,
+  paymentId: string,
+  logCtx: Record<string, unknown>
+): Promise<void> {
+  const table = tipo === "consulta" ? "consultas" : "turnos";
+  const { data: fila, error: errFila } = await admin
+    .from(table)
+    .select("estado, reintegro_estado, evolucion")
+    .eq("id", id)
+    .maybeSingle();
+  if (errFila || !fila) {
+    logError("[WEBHOOK]", "Devolución: no se pudo leer la atención", { ...logCtx, error: errFila?.message });
+    return;
+  }
+  // Un slot no es una atención: un pago aprobado tarde sobre una reserva vencida
+  // y devuelto desde el panel de MP llega con la referencia del slot, y la marca
+  // viajaría al próximo paciente que lo reserve. Se loguea y nada más.
+  const ESTADOS_SLOT = new Set(["disponible", "reservado_pendiente", "bloqueado", "bloqueado_sin_cobro", "reprogramado"]);
+  if (ESTADOS_SLOT.has(fila.estado)) {
+    logWarn("[WEBHOOK]", "Devolución sobre un slot sin atención: no se marca nada", { ...logCtx, estado: fila.estado });
+    return;
+  }
+
+  // 'pendiente' = Docto la intentó (o la reservó) y MP ahora confirma que salió:
+  // se cierra acá, sin aviso. Cubre también al profesional sin token de MP, cuya
+  // fila queda 'pendiente' hasta que él mismo devuelve desde su cuenta.
+  if (fila.reintegro_estado === "pendiente") {
+    await admin.from(table).update({ reintegro_estado: "reembolsado" }).eq("id", id).eq("reintegro_estado", "pendiente");
+    await admin
+      .from("refunds_pendientes")
+      .update({ estado: "resuelto", resuelto_at: new Date().toISOString(), ultimo_error: "Mercado Pago informó refunded (webhook)" })
+      .eq("tipo", tipo)
+      .eq("recurso_id", id)
+      .in("estado", ["pendiente", "fee_pendiente", "escalado"]);
+    logInfo("[WEBHOOK]", "Reintegro pendiente confirmado por MP", logCtx);
+    return;
+  }
+  // Docto ya le pagó al paciente por CVU (deuda del profesional) y ahora el
+  // profesional devuelve desde MP: el paciente cobró dos veces. Nada se toca
+  // (la fila y la deuda las mira una persona); se avisa.
+  if (fila.reintegro_estado === "cubierto_docto") {
+    logWarn("[WEBHOOK]", "Devolución externa sobre un reintegro que Docto ya cubrió: posible doble cobro", logCtx);
+    await sendDoctoAlert(
+      "[DEVOLUCIÓN] Posible doble cobro: el profesional devolvió un pago que Docto ya había cubierto",
+      `Docto ya le había devuelto al paciente por CVU (reintegro cubierto por Docto, con deuda del profesional), ` +
+        `y ahora el mismo pago figura devuelto desde la cuenta de Mercado Pago del profesional.\n\n` +
+        `Qué significa: el paciente probablemente cobró dos veces, y la deuda del profesional en medicos_deuda ya no corresponde.\n\n` +
+        `¿Tenés que hacer algo? Sí: revisar el caso en el admin de reembolsos y la deuda del profesional.\n\n` +
+        `———\nDetalle técnico (para Claude): webhook MP refunded sobre reintegro_estado='cubierto_docto'. ` +
+        `Tipo: ${tipo} · Id: ${id} · Pago: ${paymentId} · Estado: ${fila.estado}.`
+    );
+    return;
+  }
+  // Ya marcada de otra forma: nada que hacer (también cubre el reintento de MP).
+  if (fila.reintegro_estado !== null && fila.reintegro_estado !== undefined) return;
+
+  const cerradaComoAtendida = fila.estado === "completado" || fila.estado === "completada";
+  let presencia: Awaited<ReturnType<typeof presenciaDelPaciente>> = "sin_datos";
+  let hayEvidencia = false;
+  if (cerradaComoAtendida) {
+    presencia = await presenciaDelPaciente(tipo, id);
+    const { count, error: errDocs } = await admin
+      .from("documentos")
+      .select("id", { count: "exact", head: true })
+      .eq(tipo === "turno" ? "turno_id" : "consulta_id", id);
+    if (errDocs) logError("[WEBHOOK]", "Devolución: no se pudieron contar los documentos", { ...logCtx, error: errDocs.message });
+    // Ante la duda (error al contar) se asume que hay evidencia: no se anula nada.
+    hayEvidencia = !!errDocs || (typeof fila.evolucion === "string" && fila.evolucion.trim().length > 0) || (count ?? 0) > 0;
+  }
+  const decision = decidirReaccionADevolucion({
+    estado: fila.estado,
+    reintegroEstado: null,
+    presencia,
+    hayEvidencia,
+  });
+  if (!decision.externa) return;
+
+  const cambios: Record<string, unknown> = { reintegro_estado: "reembolsado" };
+  let estadoNuevo: string | null = null;
+  if (decision.anularAtencion) {
+    if (tipo === "turno") {
+      estadoNuevo = "cancelado_medico";
+      cambios.estado = estadoNuevo;
+      cambios.motivo_cancelacion =
+        "Devolución hecha desde Mercado Pago, fuera de Docto. La atención no se realizó: el paciente nunca entró a la sala.";
+    } else {
+      estadoNuevo = "cancelada";
+      cambios.estado = estadoNuevo;
+      cambios.resolucion_motivo = "cancelo_profesional";
+      cambios.resuelta_por = "medico";
+      cambios.resuelta_at = new Date().toISOString();
+    }
+  }
+
+  // `reintegro_estado IS NULL` en el UPDATE: si un camino de Docto llega a
+  // escribir la fila entre la lectura y acá, no se le pisa nada.
+  const { data: tocada, error: errUpdate } = await admin
+    .from(table)
+    .update(cambios)
+    .eq("id", id)
+    .is("reintegro_estado", null)
+    .select("id")
+    .maybeSingle();
+  if (errUpdate) {
+    logError("[WEBHOOK]", "Devolución externa: error marcando la atención", { ...logCtx, error: errUpdate.message });
+    return;
+  }
+  if (!tocada) {
+    logInfo("[WEBHOOK]", "Devolución externa: la fila ya tenía reintegro (carrera con Docto), no se toca", logCtx);
+    return;
+  }
+
+  logWarn("[WEBHOOK]", "Devolución hecha fuera de Docto", { ...logCtx, estadoAntes: fila.estado, estadoNuevo, avisar: decision.avisar });
+  if (!decision.avisar) return;
+  await sendDoctoAlert(
+    "[DEVOLUCIÓN] Hecha desde Mercado Pago, fuera de Docto",
+    `Un profesional devolvió un pago desde su cuenta de Mercado Pago, sin pasar por Docto.\n\n` +
+      `Qué significa: el pago volvió al paciente (Mercado Pago ya lo hizo). Docto lo registró como reintegro` +
+      (estadoNuevo
+        ? ` y anuló la atención, porque figuraba como hecha pero el paciente nunca entró a la sala y no quedó nada escrito.`
+        : `. La atención queda en el estado en que estaba (${fila.estado}).`) +
+      `\n\n¿Tenés que hacer algo? Mirar el caso en el admin y, si corresponde, hablar con el profesional. ` +
+      `Al paciente no se le escribe desde acá.\n\n` +
+      `———\nDetalle técnico (para Claude): webhook MP refunded sin reintegro_estado previo. ` +
+      `Tipo: ${tipo} · Id: ${id} · Pago: ${paymentId} · Estado antes: ${fila.estado} · Estado después: ${estadoNuevo ?? fila.estado} · Presencia del paciente: ${presencia}.`
+  );
 }
 
 async function handleChargedBack(

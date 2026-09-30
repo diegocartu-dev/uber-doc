@@ -107,9 +107,21 @@ async function handler(req: NextRequest) {
       .eq("estado", "activo")
       .maybeSingle();
 
+    // Sin token no hay con qué devolver, y estas ramas salían del loop ANTES
+    // del tope de intentos: la fila reintentaba a diario para siempre y nunca
+    // llegaba a revisión manual (tercera revisión, 30/09). El tope aplica igual.
+    const sinToken = async (motivo: string) => {
+      if (intentosActual >= MAX_INTENTOS) {
+        await marcarRevisionManual(admin, r, `${motivo} tras ${intentosActual} intentos`);
+        revisionManual++;
+      } else {
+        await setError(admin, r.id, motivo);
+        reintentados++;
+      }
+    };
+
     if (!mpAccount?.access_token_encrypted) {
-      await setError(admin, r.id, "Sin token MP del médico");
-      reintentados++;
+      await sinToken("Sin token MP del médico");
       continue;
     }
 
@@ -117,8 +129,7 @@ async function handler(req: NextRequest) {
     try {
       tokenMedico = decrypt(mpAccount.access_token_encrypted);
     } catch {
-      await setError(admin, r.id, "Error desencriptando token médico");
-      reintentados++;
+      await sinToken("Error desencriptando token médico");
       continue;
     }
 

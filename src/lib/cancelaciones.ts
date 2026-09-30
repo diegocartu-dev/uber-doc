@@ -3,7 +3,7 @@ import { enviarEmailTurnoCancelado } from "@/lib/email";
 import { pushAlPaciente, pushAlMedico } from "@/lib/push";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { enviarEmailTurnoAusenteMedico } from "@/lib/email";
-import { refundTotal } from "@/lib/mp-refund";
+import { refundTotal, getPaymentState } from "@/lib/mp-refund";
 import { decrypt } from "@/lib/mp-crypto";
 import { registrarRefundPendiente } from "@/lib/refunds-pendientes";
 import { sendDoctoAlert } from "@/lib/alertas";
@@ -43,23 +43,46 @@ export async function ejecutarRefund(
     .eq("estado", "activo")
     .maybeSingle();
 
-  if (!mpAccount?.access_token_encrypted) {
-    logError("[REFUND]", "Sin token MP del médico", { recursoId, medicoId });
+  // Sin token no hay con qué devolver: la fila queda 'pendiente' Y en la cola,
+  // con aviso. Antes volvía 'pendiente' a secas: el paciente veía "tu reembolso
+  // está en proceso" y nadie lo retomaba nunca (hallazgo revisión 30/09).
+  const sinToken = async (motivo: string): Promise<ReintegroEstado> => {
+    logError("[REFUND]", motivo, { recursoId, medicoId });
+    await registrarRefundPendiente({ tipo, recursoId, medicoId, pagoId, netoMedico, applicationFee, estado: "pendiente", error: motivo });
+    await sendDoctoAlert(
+      "[REFUND] Reembolso sin token de Mercado Pago del profesional",
+      `No se pudo devolver un pago porque el profesional no tiene cuenta de MP activa en Docto (${motivo}).\n\n` +
+        `Tipo: ${tipo}\nRecurso: ${recursoId}\nMédico: ${medicoId}\nPago: ${pagoId}\nMonto: ${netoMedico + applicationFee}\n\n` +
+        `Quedó en la cola de reintentos. Acción: que el profesional vuelva a conectar Mercado Pago, o devolver a mano y marcarlo en el admin.`
+    ).catch((e) => logError("[REFUND]", "Error enviando alerta sin token", { recursoId, error: String(e) }));
     return "pendiente";
-  }
+  };
+
+  if (!mpAccount?.access_token_encrypted) return sinToken("Sin token MP del médico");
 
   let tokenMedico: string;
   try {
     tokenMedico = decrypt(mpAccount.access_token_encrypted);
   } catch (err) {
-    logError("[REFUND]", "Error desencriptando token médico", { recursoId, medicoId, error: String(err) });
-    return "pendiente";
+    return sinToken(`Error desencriptando token médico: ${String(err)}`);
   }
 
   // UN solo refund total con el token del MÉDICO. MP revierte automáticamente la
   // comisión de Docto (vive en la cuenta marketplace/GREBA) por el split — no hay
   // pata de fee separada (la vieja `refundConReversionDeFee` fallaba en prod con
   // "Payment not found" al intentar el fee con el token de GREBA).
+  // Se marca ANTES de llamar a Mercado Pago que esta devolución es nuestra:
+  // el webhook `refunded` puede llegar antes de que el que llama anote el
+  // resultado, y con `reintegro_estado` en null lo tomaría por una devolución
+  // hecha fuera de Docto (30/09/2026, ver lib/video/presencia.ts).
+  const tabla = tipo === "turno" ? "turnos" : "consultas";
+  const { error: errMarca } = await supabase
+    .from(tabla)
+    .update({ reintegro_estado: "pendiente" })
+    .eq("id", recursoId)
+    .is("reintegro_estado", null);
+  if (errMarca) logError("[REFUND]", "No se pudo marcar el reintegro como pendiente antes de llamar a MP", { recursoId, error: errMarca.message });
+
   const result = await refundTotal(pagoId, tokenMedico, `refund:${tipo}:${recursoId}`);
 
   logInfo("[REFUND]", "Resultado refund total", {
@@ -69,7 +92,27 @@ export async function ejecutarRefund(
     insufficientFunds: !result.ok && result.insufficientFunds,
   });
 
-  if (result.ok) return "reembolsado";
+  if (result.ok) {
+    // Por si el que llama no llega a anotarlo (handleApproved solo loguea).
+    await supabase.from(tabla).update({ reintegro_estado: "reembolsado" }).eq("id", recursoId).eq("reintegro_estado", "pendiente");
+    return "reembolsado";
+  }
+
+  // ¿Falló porque YA estaba devuelto? El profesional puede devolver desde su
+  // cuenta de Mercado Pago sin pasar por Docto; si después alguien cancela por
+  // Docto, MP rechaza el segundo refund. Sin este chequeo la fila caía en la
+  // cola, el cron reintentaba diez días, escalaba a "Docto cubre por CVU" y el
+  // paciente cobraba dos veces.
+  const estadoPago = await getPaymentState(pagoId, tokenMedico);
+  if (
+    estadoPago.ok &&
+    (estadoPago.status === "refunded" ||
+      (typeof estadoPago.transactionAmount === "number" && (estadoPago.amountRefunded ?? 0) >= estadoPago.transactionAmount))
+  ) {
+    logInfo("[REFUND]", "El pago ya estaba devuelto en Mercado Pago (fuera de Docto): no se encola", { recursoId, pagoId });
+    await supabase.from(tabla).update({ reintegro_estado: "reembolsado" }).eq("id", recursoId).eq("reintegro_estado", "pendiente");
+    return "reembolsado";
+  }
 
   // Falló → encolar para reintento diario (cron). El refund total ya incluye la
   // comisión de Docto, así que ya no hay estado `fee_pendiente`.
@@ -217,7 +260,10 @@ export async function cancelarTurnoPorPaciente(
     .update({
       estado: "cancelado_paciente",
       motivo_cancelacion: motivo || null,
-      reintegro_estado: reintegroEstado,
+      // La columna la escribe `ejecutarRefund` (pendiente antes de llamar a MP,
+      // reembolsado si salió). Acá solo se reafirma el éxito: un null o un
+      // 'pendiente' tardío pisaría la marca que dejó el webhook de MP.
+      ...(reintegroEstado === "reembolsado" ? { reintegro_estado: "reembolsado" } : {}),
     })
     .eq("id", turnoId)
     .in("estado", ["confirmado", "en_espera"])
@@ -300,7 +346,7 @@ export async function cancelarTurnoPorMedico(
     .update({
       estado: "cancelado_medico",
       motivo_cancelacion: motivo || null,
-      reintegro_estado: reintegroEstado,
+      ...(reintegroEstado === "reembolsado" ? { reintegro_estado: "reembolsado" } : {}),
     })
     .eq("id", turnoId)
     .in("estado", CANCELABLES)
@@ -401,7 +447,7 @@ export async function resolverNoShowMedico(
       estado: "ausente_medico",
       resolucion_motivo: "medico_ausente",
       motivo_cancelacion: "Médico ausente — no atendió el turno",
-      reintegro_estado: reintegroEstado,
+      ...(reintegroEstado === "reembolsado" ? { reintegro_estado: "reembolsado" } : {}),
     })
     .eq("id", turnoId)
     .eq("estado", "en_espera")
