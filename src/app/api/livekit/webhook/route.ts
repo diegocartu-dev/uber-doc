@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver, RoomServiceClient } from "livekit-server-sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
+import { revertirTurnoSinPaciente } from "@/lib/video/presencia";
 import { rescatarBorradorAlCerrar } from "@/lib/consultas/cerrar-con-rescate";
 
 const LIVEKIT_URL =
@@ -147,6 +148,27 @@ async function handleRoomFinished(event: { room?: { name?: string } }) {
   // firma del cierre y sin emitir nada.
   const finalizacionDelMedico = registro.cierre_origen === "medico";
 
+  // Una sala sin paciente no es una atención (29/09/2026, ver lib/video/presencia.ts):
+  // si es un turno, nadie tocó "Finalizar" y el paciente nunca entró, el turno
+  // vuelve a `confirmado` (o a `en_espera` si había hecho el check-in) en vez
+  // de quedar "completado". Si su horario ya pasó, `resolver-turnos-vencidos`
+  // lo resuelve; si no (el profesional entró antes de hora), sigue esperando.
+  if (tipo === "turno") {
+    const reversion = await revertirTurnoSinPaciente(recursoId, finalizacionDelMedico);
+    if (reversion.accion === "error") {
+      return NextResponse.json(
+        { ok: false, error: "Error revirtiendo turno sin paciente", detail: reversion.detalle },
+        { status: 500 }
+      );
+    }
+    if (reversion.accion === "ya_cerrada") {
+      return NextResponse.json({ ok: true, action: "none", reason: "ya cerrada por otro camino" });
+    }
+    if (reversion.accion === "revertida") {
+      return NextResponse.json({ ok: true, action: "revertida_sin_paciente", tipo, consultaId: recursoId });
+    }
+  }
+
   const estadoFinal = tipo === "turno" ? "completado" : "completada";
   const { data: cerrada, error: errUpdate } = await supabase
     .from(tabla)
@@ -217,6 +239,9 @@ async function handleParticipantJoined(event: {
   const roomName = event.room!.name!;
   const identity = event.participant?.identity || "";
   const supabase = createAdminClient();
+  // Se toma ANTES de escribir la presencia: el `iniciado_en` de abajo acota la
+  // lectura de presencia de esta sesión, y su propia fila tiene que entrar.
+  const ahora = new Date().toISOString();
 
   await registrarPresencia(supabase, {
     roomName,
@@ -226,6 +251,24 @@ async function handleParticipantJoined(event: {
     evento: "joined",
     raw: event,
   });
+
+  // El profesional vuelve a una sala de un turno que la reversión dejó en
+  // `confirmado`/`en_espera` (se le cortó la red, tocó "Retomar": el token sale
+  // igual y la página de video no vuelve a correr): es la misma transición que
+  // hace la página al entrar. Sin esto el profesional quedaba en una sala
+  // fantasma y el paciente esperando hasta que el cron resolvía en su contra.
+  if (tipo === "turno" && parseRol(identity) === "medico") {
+    const { data: reabierto } = await supabase
+      .from("turnos")
+      .update({ estado: "en_curso", iniciado_en: ahora, sala_video_url: roomName })
+      .eq("id", recursoId)
+      .in("estado", ["confirmado", "en_espera"])
+      .select("id")
+      .maybeSingle();
+    if (reabierto) {
+      logInfo("[LK/WEBHOOK]", "El profesional reentró a un turno revertido: vuelve a en_curso", { recursoId });
+    }
+  }
 
   // ¿Había un corte pendiente? → reconexión estable, limpiar el reloj.
   // Solo limpiamos si sigue en_curso (no pisar estados terminales).
