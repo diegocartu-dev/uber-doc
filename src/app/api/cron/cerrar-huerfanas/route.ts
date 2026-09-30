@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logWarn, logError } from "@/lib/logger";
+import { revertirTurnoSinPaciente } from "@/lib/video/presencia";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { withCron } from "@/lib/cron-guard";
 import { esInstitucional } from "@/lib/instancia";
@@ -58,7 +59,7 @@ async function handler(req: NextRequest) {
     const umbral = tabla === "consultas" ? hace4h : hace10min;
     const { data: huerfanas, error: errSelect } = await supabase
       .from(tabla)
-      .select("id")
+      .select("id, cierre_origen")
       .eq("estado", "en_curso")
       .lt(columnaTiempo, umbral);
 
@@ -74,7 +75,27 @@ async function handler(req: NextRequest) {
       continue;
     }
 
-    const ids = huerfanas.map((h) => h.id);
+    // Una sala sin paciente no es una atención (29/09/2026, lib/video/presencia.ts):
+    // un turno `en_curso` al que el paciente nunca entró no se cierra como
+    // "completado" desde acá tampoco — vuelve a esperar su hora, como en el
+    // webhook de LiveKit. Los que sí tuvieron paciente siguen el camino de siempre.
+    let ids = huerfanas.map((h) => h.id);
+    if (tabla === "turnos") {
+      const aCerrar: string[] = [];
+      for (const h of huerfanas) {
+        const reversion = await revertirTurnoSinPaciente(h.id, h.cierre_origen === "medico");
+        if (reversion.accion === "completar") aCerrar.push(h.id);
+        else if (reversion.accion === "error") {
+          huboError = true;
+          logError("[CRON/HUERFANAS]", "Error revirtiendo turno sin paciente", { id: h.id, error: reversion.detalle });
+        }
+      }
+      ids = aCerrar;
+      if (ids.length === 0) {
+        detalle.push({ tabla, cerradas: 0, ids: [] });
+        continue;
+      }
+    }
     const estadoFinal = tabla === "consultas" ? "completada" : "completado";
 
     // `.eq("estado","en_curso").select("id")`: el UPDATE condicionado devuelve
