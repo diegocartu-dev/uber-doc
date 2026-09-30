@@ -6,6 +6,7 @@ import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import { decrypt } from "@/lib/mp-crypto";
 import { consultarSiteMp, paisDeSite } from "@/lib/mp-site";
 import { logWarn } from "@/lib/logger";
+import { guardarDestino } from "@/lib/pagos/destinos";
 
 /**
  * Cron diario (08:00 AR): red de seguridad del país de la cuenta de cobros.
@@ -99,7 +100,7 @@ async function handler() {
 
   const { data: medicos, error: medicosError } = await admin
     .from("medicos")
-    .select("id, nombre_completo, email, es_cuenta_test")
+    .select("id, nombre_completo, email, es_cuenta_test, user_id")
     .in("id", filas.map((c) => c.medico_id));
   // Si esto falla no podemos filtrar cuentas de prueba ni nombrar a nadie:
   // mejor 500 (el watchdog lo ve) que correr a ciegas y mandar mails raros.
@@ -112,14 +113,17 @@ async function handler() {
   // que no contesta: mandar un 🔴 nombrando a un médico que no existe para el
   // negocio es ruido en el mismo canal donde vive el watchdog.
   const nombrePorId = new Map<string, string>();
+  const userIdPorMedico = new Map<string, string>();
   for (const m of (medicos ?? []) as {
     id: string;
     nombre_completo: string | null;
     email: string | null;
     es_cuenta_test: boolean | null;
+    user_id: string | null;
   }[]) {
     if (m.es_cuenta_test) continue;
     nombrePorId.set(m.id, m.nombre_completo || m.email || m.id);
+    if (m.user_id) userIdPorMedico.set(m.id, m.user_id);
   }
 
   const cuentas = filas.filter((c) => nombrePorId.has(c.medico_id));
@@ -150,7 +154,16 @@ async function handler() {
   // corrió, el update falla y el cron sigue — la alerta es lo que no puede fallar.
   // `site_extranjera_desde` marca desde cuándo conocemos el problema (alimenta la
   // cadencia del mail) y se BORRA en cuanto la cuenta vuelve a ser argentina.
-  async function marcarSite(medicoId: string, siteId: string, desde: string | null) {
+  async function marcarSite(medicoId: string, siteId: string, desde: string | null, email: string | null = null) {
+    // El e-mail de la cuenta de MP es a dónde Docto le paga: se refresca todos
+    // los días, y así las cuentas ya conectadas quedan cargadas sin pedir nada
+    // (relleno retroactivo del T1.2). Falla suave.
+    const userId = userIdPorMedico.get(medicoId);
+    if (email && userId) {
+      await guardarDestino({ userId, rol: "medico", tipo: "mp_email", valor: email, origen: "oauth_mp" }).catch((e) =>
+        logWarn("[CRON/VERIFICAR-MP]", "No se pudo guardar el destino de pago", { medicoId, error: String(e) })
+      );
+    }
     const { error } = await admin
       .from("medicos_mp_accounts")
       .update({
@@ -190,7 +203,7 @@ async function handler() {
         const chequeo = await consultarSiteMp(token);
         if (chequeo.estado === "argentina") {
           argentinas++;
-          await marcarSite(cuenta.medico_id, chequeo.siteId, null);
+          await marcarSite(cuenta.medico_id, chequeo.siteId, null, chequeo.email);
           return;
         }
         if (chequeo.estado === "extranjera") {

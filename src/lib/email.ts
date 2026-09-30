@@ -861,3 +861,47 @@ export async function enviarAvisoAgendaVencida(
   if (error) throw new Error(`Resend: ${error.message}`);
   console.log("[email] aviso agenda vencida enviado a:", email);
 }
+
+/**
+ * Cambió la cuenta a la que Docto le devuelve la plata (destinos_pago,
+ * lib/pagos/destinos.ts). Va a la persona misma: si no fue ella, tiene 24 h
+ * para decirlo antes de que el destino nuevo se pueda usar.
+ */
+export async function enviarEmailCambioDestino(userId: string, etiquetaNueva: string, usableDesde: string): Promise<void> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "cambio_destino"); return; }
+  try {
+    const supabase = createAdminClient();
+    const { data: { user } } = await supabase.auth.admin.getUserById(userId);
+    if (!user?.email) return;
+    const { data: paciente } = await supabase.from("pacientes").select("nombre_completo").eq("user_id", userId).maybeSingle();
+    const primerNombre = (paciente?.nombre_completo ?? "").split(" ")[0] || "Hola";
+    const cuando = new Date(usableDesde).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+
+    const html = wrapHtml("Cambiaste la cuenta para reintegros — Docto", `
+      <div style="margin-bottom:20px;">${chip("Aviso de seguridad", AZUL)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Cambiaste la cuenta para reintegros</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
+        ${primerNombre}, la cuenta a la que Docto te devuelve la plata si algo se cancela ahora es:
+        <strong style="color:${GRIS};">${etiquetaNueva}</strong>.
+      </p>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+        El cambio se hace efectivo el ${cuando}. <strong>Si no fuiste vos, respond&eacute; este correo</strong> (llega a soporte) antes de esa hora y lo frenamos a mano.
+      </p>
+    `);
+
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: user.email!,
+        subject: "Cambiaste la cuenta para reintegros — Docto",
+        replyTo: "soporte@docto.com.ar",
+        html,
+        headers: { "Idempotency-Key": `${userId}-destino-${usableDesde}` },
+      }),
+      userId
+    );
+    console.log("[email] cambio de destino enviado");
+  } catch (err) {
+    console.error("[email] enviarEmailCambioDestino falló (agotados reintentos):", err);
+  }
+}

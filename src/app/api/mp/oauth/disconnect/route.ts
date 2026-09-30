@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { apagarDestinoVigente } from "@/lib/pagos/destinos";
 import { trackEvent } from "@/lib/funnel";
 import { guardarSiteMp } from "@/lib/mp-site-db";
 import { assertNoInstitucional } from "@/lib/instancia";
@@ -57,6 +58,11 @@ export async function POST() {
     { site_id: null, site_verificado_at: null, site_extranjera_desde: null },
     "[MP/DISCONNECT]"
   );
+
+  // El e-mail de esa cuenta era a dónde Docto le pagaba (lib/pagos/destinos):
+  // desconectada, pagarle ahí sería pagarle a una cuenta que ya no usa. Al
+  // reconectar, el callback lo vuelve a cargar. Best-effort.
+  await apagarDestinoVigente(user.id, "medico", "oauth_mp").catch(() => {});
 
   await trackEvent({
     evento: "mp_oauth_disconnect",

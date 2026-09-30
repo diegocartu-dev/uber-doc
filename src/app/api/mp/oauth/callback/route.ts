@@ -6,6 +6,7 @@ import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { sendDoctoAlert, sendDoctoAlertThrottled } from "@/lib/alertas";
 import { consultarSiteMp, paisDeSite, MP_SITE_ARGENTINA } from "@/lib/mp-site";
+import { guardarDestino } from "@/lib/pagos/destinos";
 import { guardarSiteMp } from "@/lib/mp-site-db";
 import { assertNoInstitucional } from "@/lib/instancia";
 
@@ -302,6 +303,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(
       new URL(urlError("token_exchange_failed"), req.url)
     );
+  }
+
+  // A dónde le paga Docto (reintegros, honorarios): el e-mail de SU cuenta de MP,
+  // que acaba de decir /users/me. Falla suave: la tabla puede no estar migrada.
+  if (chequeoSite.estado === "argentina" && chequeoSite.email) {
+    const { data: medicoRow } = await admin.from("medicos").select("user_id").eq("id", medicoId).maybeSingle();
+    if (medicoRow?.user_id) {
+      await guardarDestino({
+        userId: medicoRow.user_id,
+        rol: "medico",
+        tipo: "mp_email",
+        valor: chequeoSite.email,
+        origen: "oauth_mp",
+      }).catch((e) => logError("[OAUTH]", "No se pudo guardar el destino de pago", { medicoId, error: String(e) }));
+    }
   }
 
   // Dejar registrado el país verificado. Va en un UPDATE aparte y a propósito:

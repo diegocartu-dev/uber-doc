@@ -57,8 +57,8 @@ export function esSiteArgentino(siteId: string | null | undefined): boolean {
  * respondió y el sitio no es MLA) habilita a marcar o rechazar a alguien.
  */
 export type ChequeoSite =
-  | { estado: "argentina"; siteId: string }
-  | { estado: "extranjera"; siteId: string }
+  | { estado: "argentina"; siteId: string; email: string | null }
+  | { estado: "extranjera"; siteId: string; email: string | null }
   | { estado: "no_verificable"; motivo: string };
 
 /**
@@ -80,14 +80,17 @@ export async function consultarSiteMp(
       // sobre el país de la cuenta.
       return { estado: "no_verificable", motivo: `HTTP ${resp.status}` };
     }
-    const data = (await resp.json()) as { site_id?: unknown };
+    const data = (await resp.json()) as { site_id?: unknown; email?: unknown };
     const siteId = typeof data.site_id === "string" ? data.site_id.toUpperCase() : "";
     if (!siteId) {
       return { estado: "no_verificable", motivo: "respuesta sin site_id" };
     }
+    // El e-mail de la cuenta de MP es a dónde Docto le paga al profesional
+    // (lib/pagos/destinos.ts): sale de acá y no se le pide nunca.
+    const email = typeof data.email === "string" && data.email.includes("@") ? data.email.trim().toLowerCase() : null;
     return siteId === MP_SITE_ARGENTINA
-      ? { estado: "argentina", siteId }
-      : { estado: "extranjera", siteId };
+      ? { estado: "argentina", siteId, email }
+      : { estado: "extranjera", siteId, email };
   } catch (e) {
     const motivo = e instanceof Error ? e.message : "error de red";
     return { estado: "no_verificable", motivo: motivo.slice(0, 120) };
