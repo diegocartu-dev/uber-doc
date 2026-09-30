@@ -111,7 +111,18 @@ Un commit por ticket. Toda migración: SQL completo y OK de Diego antes de aplic
 
 **Qué cambia en el plan:** el Sprint 1 queda igual (el email de `users/me` sirve para los dos caminos). El **Sprint 2 arranca manual por "Proveedores"** con el libro de pagos (T2.1) y el panel (T2.5); la API entra cuando MP la habilite. Sigue pendiente: canal para Integraciones, costo de la API, si "Proveedores" existe hoy.
 
-## 5. Fuera de este plan
+## 4c. Sprint 0 — respuesta de Mercado Pago (30/09, asistente del soporte para integraciones)
+
+Con OK de Diego se creó la aplicación **"Docto Pagos"** (Checkout API / API de Orders) y se probó Payouts con sus credenciales de prueba: **403 igual, en GET y en POST**. Se le preguntó al soporte de MP (asistente con IA, que deriva a ticket). Lo que contestó, textual en lo que importa:
+
+- **"Primero debés haber sido autorizado por nuestra área comercial."** La habilitación de Payouts / Money Out es **a nivel cuenta y la da el área comercial**; no depende de crear una aplicación ni de credenciales de prueba o producción: sin autorización la política bloquea igual.
+- **El endpoint documentado hoy para Money Out en Argentina es `POST /v1/transaction-intents/process`** (transaction intents), no `/v1/payouts`; sugiere validar contra ese una vez autorizados. **No verificado por nosotros**: la documentación de "Payouts" que leímos el 28/09 muestra `/v1/payouts`. Se resuelve con el contacto comercial.
+- **Clave pública ed25519:** el canal no está en la documentación; "queda dentro del circuito de onboarding": cuando comercial habilita el producto, coordinan el intercambio.
+- **Costo:** no es tabla pública, lo define el esquema comercial. **Plazo de acreditación:** sin SLA publicado; estados "en proceso / pendiente de banco". **Destino a banco:** número de cuenta (CBU/CVU numérico) + banco; alias y e-mail no figuran para cuenta bancaria vía API. Preguntó si queremos pagar a cuentas bancarias o a cuentas de MP de los profesionales (respuesta pendiente de Diego).
+
+**Consecuencia:** el Sprint 0 tiene un paso comercial con MP que no es un formulario. Mientras tanto, el camino **manual** del Sprint 2 no depende de nada de esto.
+
+
 - **Recuperar la deuda del profesional** (ticket 3C: subir la comisión en sus próximas consultas). Es la pata inversa y sigue pendiente.
 - **Cobrarle a Validdar.** Lo arreglan Docto y Validdar (decisión del 28/09).
 
