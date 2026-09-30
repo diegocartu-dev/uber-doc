@@ -177,6 +177,22 @@ rompía: activo + fecha vencida = NO cobra.
   mira `estado` y no la fecha. Arreglarlo NO suma consultas (hace que esos
   profesionales figuren no disponibles); tiene sentido con la renovación andando.
 
+## A dónde le paga Docto a cada persona (decisión Diego, 30/09/2026)
+Docto le paga al profesional por Mercado Pago desde su propia cuenta con saldo
+(honorarios de medicina laboral, reintegros). Fuente de verdad del destino:
+**`destinos_pago`** (`src/lib/pagos/destinos.ts`), tabla aparte de `medicos`
+y `pacientes` a propósito (trampa de grants). Una vigente por persona, con
+historia; escribe solo el servidor. **Al profesional no se le pide nada:** el
+e-mail de su cuenta de MP sale de `/users/me` con su propio token (conexión +
+cron diario). **Al paciente se le pide alias o CVU/CBU al primer pago**, en "Tu
+información médica", con el aviso "en caso de cancelación, el reintegro se hará
+a esta cuenta"; nunca bloquea. Se valida (`destinos-puro.ts`: verificadores del
+CBU/CVU, forma del alias) y, antes de transferir a mano, se compara el titular
+que muestra la app de MP con el paciente. Un cambio de destino declarado se
+avisa por mail a la persona y el panel lo muestra **bloqueado 24 h** (nadie
+transfiere ahí hasta que venza). Al desconectar MP se apaga el destino de esa
+cuenta. Plan completo: `docs/sprints/2026-09-29-plan-pagos-desde-docto.md`.
+
 ## Un aviso "enviado" no es un aviso recibido (hallazgo 27/08/2026)
 `whatsapp_envios.resultado = 'enviado'` significa **"Twilio aceptó la llamada a su
 API"**. No dice que le llegó al celular del profesional, ni que lo leyó. El envío
