@@ -43,17 +43,21 @@ Doc oficial de MP Argentina + pruebas de solo lectura contra producción. Las pr
 
 ---
 
-## 3. Decisiones de Diego
+## 3. Decisiones de Diego (resueltas el 30/09/2026)
 
-| # | Pregunta | Recomendación |
+| # | Pregunta | Decisión |
 |---|---|---|
-| **D-a** | Cambiar el *cómo* de §2.2 de la política ("no rediscutir"): de CVU manual a transferencia por MP, con el CVU manual como respaldo. | Sí. La regla de fondo queda igual. |
-| **D-b** | ¿El pago sale solo al cumplirse la condición (informe emitido, 48 h vencidas) o lo aprueba un admin con un clic? | Con clic las primeras semanas: la plata no vuelve y el volumen es bajo. Automático después, con tope por pago y por día. |
-| **D-c** | ¿Quién dice que una falla fue nuestra (para devolverle el neto al profesional)? | El admin, con una marca "falla nuestra" al reembolsar. Esa marca genera el pago al profesional. |
-| **D-d** | Cuenta de origen: hoy la cuenta de MP es de GREBA. Si Payouts se da de alta ahí y después la SRL tiene cuenta propia, el alta se repite. | Decide Diego. |
-| **D-e** | Al paciente, ¿se le pide el dato siempre (en el perfil) o solo cuando hace falta? | Solo cuando hace falta: el caso es raro, no se guarda un dato personal de todos, y se pide fresco. |
+| **D-a** | Cambiar el *cómo* de §2.2 de la política ("no rediscutir"): de CVU manual a transferencia por MP. | **Sí.** *"Acá no somos burócratas: si tenemos un producto mejor, cambiamos."* |
+| **D-b** | ¿El pago sale solo o lo aprueba un admin con un clic? | **Con clic de Diego, inicialmente.** Automático más adelante, con topes. |
+| **D-c** | ¿Quién dice que una falla fue nuestra (para devolverle el neto al profesional)? | Diego: *"no veo muchas fallas nuestras: bien revisado el proceso, debería ser falla del médico o del paciente; ahora, cuando no avisamos, o la plataforma no anduvo, ahí sí es nuestra."* → **Falla nuestra = Docto no mandó el aviso que correspondía, o la plataforma no funcionó** (la sala no conectó, un error del sistema). La marca la pone una persona desde el admin, con un motivo de esa lista corta; el sistema la propone cuando tiene la prueba (un aviso sin enviar, un error registrado). |
+| **D-d** | Cuenta de origen. | **Se sigue con la cuenta actual**, que tiene todo andando. |
+| **D-e** | ¿El dato del paciente se pide siempre o solo cuando hace falta? | **Se pide por adelantado**, con el aviso *"en caso de cancelación, el reintegro se hará a esta cuenta"*. Diego propone pedirlo **al registrarse**; ver la propuesta de abajo sobre el momento y el dato. |
 
----
+**Sobre D-e (propuesta, pendiente de Diego):**
+- **Momento:** al **primer pago** en vez de al registro. Se lo pide solo a quien puso plata (hoy la mayoría de los registrados nunca pagó), y el aviso tiene sentido justo ahí: acaba de pagar y se le dice a dónde vuelve si algo se cancela.
+- **Dato:** **alias o CVU/CBU**. El alias es más fácil de tipear y un error de tipeo casi siempre da "cuenta inexistente" en vez de otra persona; igual, **antes de transferir a mano se verifica que el titular que muestra la app de MP coincida con el paciente** (la app lo muestra al cargar el alias). Para la API, el destino bancario es CVU/CBU numérico (el alias no figura en la documentación); mientras el pago sea manual, el alias alcanza.
+- **Dónde se guarda:** en la tabla aparte del T1.1, nunca en `pacientes` (trampa de grants).
+- Es un dato personal que se pide con un fin declarado; el texto del aviso lo aprueba Diego (Carolina en pausa).
 
 ## 4. Sprints
 
@@ -68,7 +72,7 @@ Un commit por ticket. Toda migración: SQL completo y OK de Diego antes de aplic
 - **T1.1 Tabla propia para el destino de pago** (una fila por persona: email de la cuenta de MP, de dónde salió —conexión con MP o declarado—, cuándo se confirmó, cuándo cambió). Va **aparte** de `medicos` y `pacientes` a propósito: una columna personal en `medicos` sin grant rompe la consulta entera, y con grant la expone por la policy pública (regla de CLAUDE.md). RLS: cada uno lee la suya; solo escribe el servidor.
 - **T1.2 Profesional con MP conectado:** el email se guarda solo, en la conexión y en el cron diario que ya consulta `users/me`. Relleno retroactivo de las cuentas ya conectadas sin pedirles nada. En su perfil: *"Te pagamos a tu cuenta de Mercado Pago ‹email›"*, con opción de cambiarla.
 - **T1.3 Profesional sin MP conectado** (plantel de medicina laboral): un campo, el email de su cuenta de MP escrito dos veces.
-- **T1.4 Paciente** (según D-e): una pantalla por link, un campo, prellenado con su email de Docto y el aviso *"si tu cuenta de Mercado Pago usa otro email, cambialo"*. Alternativa: CVU o alias para una transferencia manual (el panel de admin que ya existe).
+- **T1.4 Paciente** (según D-e): un campo **alias o CVU/CBU** que se pide por adelantado (propuesta: al primer pago) con el aviso *"en caso de cancelación, el reintegro se hará a esta cuenta"*; si falta cuando hay que devolver, se pide por link. El manual verifica el titular en la app de MP antes de transferir.
 - **T1.5 Fácil de guardar, difícil de cambiar a escondidas:** el que recibe no corre ningún riesgo, Docto sí. Una transferencia procesada no vuelve. Un email mal escrito, o cambiado por alguien que entró a la cuenta de un profesional, manda la plata a otra persona. Si el destino cambia, se avisa al contacto anterior y el pago siguiente espera 24 h.
 - **Gates:** Sofía (pantallas para un profesional de 70 años), Roberto (RLS y grants), Diego (migración).
 
