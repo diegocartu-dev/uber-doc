@@ -120,7 +120,7 @@ Con OK de Diego se creó la aplicación **"Docto Pagos"** (Checkout API / API de
 - **Clave pública ed25519:** el canal no está en la documentación; "queda dentro del circuito de onboarding": cuando comercial habilita el producto, coordinan el intercambio.
 - **Costo:** no es tabla pública, lo define el esquema comercial. **Plazo de acreditación:** sin SLA publicado; estados "en proceso / pendiente de banco". **Destino a banco:** número de cuenta (CBU/CVU numérico) + banco; alias y e-mail no figuran para cuenta bancaria vía API. Preguntó si queremos pagar a cuentas bancarias o a cuentas de MP de los profesionales (respuesta pendiente de Diego).
 
-**Consecuencia:** el Sprint 0 tiene un paso comercial con MP que no es un formulario. Mientras tanto, el camino **manual** del Sprint 2 no depende de nada de esto.
+**Consecuencia:** el Sprint 0 tiene un paso comercial con MP que no es un formulario. **Ticket abierto el 30/09 a las 12:09** desde el soporte para integraciones (tema: habilitación Money Out / Payouts + canal para la clave pública; incluye volumen estimado y las tres consultas de costo, plazo y destino). La confirmación llega por e-mail con número WCS-XXXXX; se sigue desde el Centro de atención del panel. Mientras tanto, el camino **manual** del Sprint 2 no depende de nada de esto.
 
 
 - **Recuperar la deuda del profesional** (ticket 3C: subir la comisión en sus próximas consultas). Es la pata inversa y sigue pendiente.
