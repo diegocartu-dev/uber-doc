@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import InfoMedicaForm from "@/components/InfoMedicaForm";
 import { tieneNombreYApellido } from "@/lib/pacientes/nombre";
+import { esInstitucional } from "@/lib/instancia";
 
 export default async function InfoMedicaTurnoPage({
   params,
@@ -56,12 +57,23 @@ export default async function InfoMedicaTurnoPage({
   }
 
 
+  // A dónde se le devuelve la plata si algo se cancela. Lo lee con la sesión
+  // del paciente (la policy le muestra solo lo suyo). Si la tabla no está
+  // migrada o falla, null: la pantalla lo pide, nunca se cae.
+  // En la instancia institucional nadie pagó: ni se pregunta ni se lee.
+  const mostrarDestino = !esInstitucional();
+  const { data: destinoPago } = mostrarDestino
+    ? await supabase.from("destinos_pago").select("tipo, valor").eq("user_id", user.id).eq("rol", "paciente").eq("vigente", true).maybeSingle()
+    : { data: null };
+
   return (
     <InfoMedicaForm
       paciente={{
         ...paciente,
         obra_social_nombre: obraSocialNombre,
       }}
+      destinoActual={(destinoPago as { tipo: "mp_email" | "alias" | "cvu" | "cbu"; valor: string } | null) ?? null}
+      mostrarDestino={mostrarDestino}
       redirect={destino}
       editUrl={`/onboarding?redirectTo=${encodeURIComponent(currentPath)}&edit=true`}
     />

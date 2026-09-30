@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { normalizarDestinoDeclarado, etiquetaDestino } from "@/lib/pagos/destinos-puro";
 
 type PacienteData = {
   nombre_completo: string | null;
@@ -19,6 +21,10 @@ type Props = {
   paciente: PacienteData;
   redirect: string;
   editUrl: string;
+  /** A dónde se le devuelve la plata si algo se cancela (lib/pagos/destinos). null = todavía no lo cargó. */
+  destinoActual?: { tipo: "mp_email" | "alias" | "cvu" | "cbu"; valor: string } | null;
+  /** false en la instancia institucional: nadie pagó, no hay reintegros. */
+  mostrarDestino?: boolean;
 };
 
 const MESES = [
@@ -32,8 +38,51 @@ function formatFecha(fecha: string | null): string {
   return `${parseInt(dia)} de ${MESES[parseInt(mes) - 1]} de ${anio}`;
 }
 
-export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUrl }: Props) {
+export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUrl, destinoActual = null, mostrarDestino = true }: Props) {
   const router = useRouter();
+
+  // "¿A dónde te devolvemos si se cancela?" Se pide acá, al primer pago, con el
+  // aviso de reintegro (Diego, 30/09/2026). NUNCA bloquea la atención: lo que
+  // frena es solo un dato mal escrito, y aun ahí queda "Entrar sin cargarlo";
+  // si el servidor falla (tabla sin migrar, red), se entra igual y se le vuelve
+  // a pedir en el próximo pago.
+  const [destino, setDestino] = useState("");
+  const [cambiando, setCambiando] = useState(false);
+  const [errorDestino, setErrorDestino] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const pideDestino = mostrarDestino && (!destinoActual || cambiando);
+
+  async function confirmar() {
+    if (guardando) return;
+    if (pideDestino && destino.trim()) {
+      const v = normalizarDestinoDeclarado(destino);
+      if (!v.ok) {
+        setErrorDestino(v.error);
+        return;
+      }
+      setGuardando(true);
+      setErrorDestino(null);
+      try {
+        const res = await fetch("/api/paciente/destino-pago", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valor: destino }),
+          // Safari/iOS < 16 no tiene AbortSignal.timeout: sin él, sin timeout.
+          signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(8_000) : undefined,
+        });
+        if (res.status === 400) {
+          const json = await res.json().catch(() => ({}));
+          setErrorDestino(json?.error ?? "Revisá el alias o CVU.");
+          setGuardando(false);
+          return;
+        }
+        if (!res.ok) console.warn("[destino] no se guardó (servidor), se entra igual:", res.status);
+      } catch (e) {
+        console.warn("[destino] no se guardó (red), se entra igual:", e);
+      }
+    }
+    router.push(redirectUrl);
+  }
 
   // Resolve display name: FK name > obra_social_otra > legacy obra_social
   const obraSocialDisplay =
@@ -97,18 +146,70 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
             </>
           )}
         </div>
+
+        {mostrarDestino && (
+        <div className="mt-5 rounded-xl bg-[#f8f9fa] p-5 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+          <p className="font-medium text-gray-900">¿A dónde te devolvemos si se cancela?</p>
+          <p className="mt-1 text-gray-500">
+            En caso de cancelación, el reintegro se hará a esta cuenta. Alias o CVU/CBU de tu cuenta de Mercado Pago o de tu banco.
+          </p>
+          {destinoActual && !cambiando ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="font-medium text-gray-900">{etiquetaDestino(destinoActual)}</span>
+              <button type="button" onClick={() => setCambiando(true)} className="text-[#378ADD]">
+                Cambiar
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={destino}
+                onChange={(e) => {
+                  setDestino(e.target.value);
+                  if (errorDestino) setErrorDestino(null);
+                }}
+                placeholder="alias o CVU/CBU"
+                aria-label="Alias o CVU/CBU para reintegros"
+                className="mt-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-[#378ADD]"
+              />
+              {errorDestino && <p className="mt-2 text-xs text-[#E24B4A]">{errorDestino}</p>}
+              <p className="mt-2 text-xs text-gray-400">
+                {destinoActual
+                  ? "Un cambio de cuenta se avisa por mail y se hace efectivo a las 24 horas."
+                  : "Opcional. Si no lo cargás, te lo volvemos a pedir en tu próximo pago."}
+              </p>
+            </>
+          )}
+        </div>
+        )}
       </div>
 
       <div className="sticky bottom-0 bg-white px-6 pb-6 pt-4" style={{ boxShadow: "0 -4px 12px rgba(0,0,0,0.04)" }}>
         <button
-          onClick={() => router.push(redirectUrl)}
-          className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100"
+          onClick={confirmar}
+          disabled={guardando}
+          className="w-full rounded-xl bg-[#378ADD] py-3.5 text-sm font-medium text-white active:scale-[0.97] transition-all duration-100 disabled:opacity-60"
         >
-          Confirmar y entrar
+          {guardando ? "Guardando…" : "Confirmar y entrar"}
         </button>
+        {errorDestino && (
+          <button
+            onClick={() => router.push(redirectUrl)}
+            disabled={guardando}
+            className="mt-3 w-full text-center text-sm text-[#378ADD] disabled:opacity-60"
+          >
+            Entrar sin cargarlo
+          </button>
+        )}
         <button
           onClick={() => router.push(editUrl)}
-          className="mt-3 w-full text-center text-sm text-[#888780] hover:text-gray-600"
+          disabled={guardando}
+          className="mt-3 w-full text-center text-sm text-[#888780] hover:text-gray-600 disabled:opacity-60"
         >
           Editar datos
         </button>
