@@ -32,7 +32,9 @@ interface AccionRow {
   monto: number;
   creado_at: string;
   ultimo_error: string | null;
-  cvu: string | null;
+  destino: string | null;
+  destino_declarado_hace: string | null;
+  destino_bloqueado_hasta: string | null;
 }
 
 interface DeudaRow {
@@ -138,7 +140,7 @@ export default function ReembolsosClient() {
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KPI icon={Wallet} label="Total a devolver" value={money(resumen.montoPendienteTotal)} color="#BA7517" />
         <KPI icon={Clock} label="Reembolsos pendientes" value={resumen.pendientes.toString()} color="#BA7517" />
-        <KPI icon={AlertTriangle} label="Acción requerida (CVU)" value={resumen.accionRequerida.toString()} color="#E24B4A" />
+        <KPI icon={AlertTriangle} label="Acción requerida (transferencia a mano)" value={resumen.accionRequerida.toString()} color="#E24B4A" />
         <KPI icon={Wallet} label="Deuda médicos (restante)" value={money(resumen.deudaTotalRestante)} color="#378ADD" />
       </div>
 
@@ -246,7 +248,7 @@ function AccionView({ rows }: { rows: AccionRow[] }) {
     { k: "paciente", t: "Paciente", val: (r) => r.paciente, busca: (r) => `${r.paciente} ${r.tipo}` },
     { k: "medico", t: "Médico", val: (r) => r.medico },
     { k: "monto", t: "Monto a cubrir", val: (r) => r.monto, num: true, porEvento: true },
-    { k: "cvu", t: "CVU paciente", val: (r) => r.cvu, porEvento: true },
+    { k: "destino", t: "Destino", val: (r) => r.destino, porEvento: true },
     { k: "desde", t: "Desde", val: (r) => r.creado_at, tipo: "fecha", porEvento: true },
   ], []);
   const vista = useVistaTabla(rows, COLUMNAS, {
@@ -258,7 +260,7 @@ function AccionView({ rows }: { rows: AccionRow[] }) {
     <div className="space-y-3">
       <div className="rounded-lg bg-[#FFF3E0] px-4 py-2.5 text-xs" style={{ borderLeft: "3px solid #D85A30" }}>
         <span style={{ color: "#7A3A1A" }}>
-          Estos reembolsos se escalaron tras 48hs sin saldo del médico. <strong>Docto debe cubrir al paciente por transferencia CVU.</strong> La captura del CVU del paciente llega en el ticket 3A; por ahora coordinar el dato manualmente.
+          Estos reembolsos se escalaron tras 48hs sin saldo del médico. <strong>Docto le devuelve al paciente transfiriendo a mano al destino que declaró.</strong> Antes de transferir, verificá en la app de Mercado Pago que el titular que muestra coincida con el paciente. Un destino bloqueado es un cambio reciente: no se transfiere hasta que venza.
         </span>
       </div>
       <BarraTabla vista={vista} placeholder="Buscar por paciente o médico…" cuenta="casos" />
@@ -275,9 +277,20 @@ function AccionView({ rows }: { rows: AccionRow[] }) {
                 <Td>{r.medico}</Td>
                 <Td className="font-medium text-gray-900">{money(r.monto)}</Td>
                 <Td>
-                  {r.cvu
-                    ? <span className="font-mono text-xs text-gray-700">{r.cvu}</span>
-                    : <span className="text-xs text-gray-400">— pendiente (3A)</span>}
+                  {r.destino ? (
+                    <div className="space-y-0.5">
+                      <span className="font-mono text-xs text-gray-700">{r.destino}</span>
+                      {r.destino_bloqueado_hasta ? (
+                        <div className="text-xs font-medium" style={{ color: "#E24B4A" }}>
+                          Bloqueado hasta {new Date(r.destino_bloqueado_hasta).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}: cambio reciente
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400">Declarado {r.destino_declarado_hace}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">Sin destino declarado</span>
+                  )}
                 </Td>
                 <Td className="text-gray-400">{desdeHace(r.creado_at)}</Td>
               </tr>
