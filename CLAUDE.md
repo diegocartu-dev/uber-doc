@@ -177,6 +177,34 @@ rompía: activo + fecha vencida = NO cobra.
   mira `estado` y no la fecha. Arreglarlo NO suma consultas (hace que esos
   profesionales figuren no disponibles); tiene sentido con la renovación andando.
 
+## La matrícula la dice REFEPS, no el formulario (decisión Diego, 01/10/2026)
+*"Si la valida REFEPS es real."*
+
+El número de matrícula que el profesional escribe al registrarse es una **pista**
+(dice con qué jurisdicción quiere atender). El número válido es el que REFEPS
+tiene para el DNI que verificó la biometría. Fuente de verdad única:
+**`src/lib/medicos/matricula-refeps.ts`** (`cruzarMatricula`), aplicada en
+`src/lib/didit/reconciliar.ts`.
+
+- Solo cuenta una matrícula **de médico, habilitada**, que REFEPS tiene para ese
+  DNI. Una de otra profesión o inhabilitada no coincide ni se adopta nunca.
+- El número escrito es, tal cual, una de esas en la jurisdicción declarada →
+  valida. Si es suya pero de otra jurisdicción → se corrigen tipo y provincia.
+- No figura tal cual y en la jurisdicción declarada REFEPS tiene **una sola** →
+  se adopta esa, se valida en el mismo update y queda en el log. Un dígito mal
+  tipeado no llega nunca al equipo.
+- No hay una única respuesta → revisión con el motivo concreto, y en el panel
+  **«Usar esta»** sobre las matrículas de REFEPS (verifica el DNI con Didit,
+  consulta REFEPS en vivo y valida en el momento). **Nunca se tipea un número en
+  el panel ni se corrige por SQL.**
+- **Un solo lugar escribe `identidad_validada = true`:** `cerrarCruce`, con la
+  ficha releída y como condición del update. No agregar otro.
+- La adopción es **después** de la biometría: antes, el DNI es un número tipeado.
+- Un profesional ya aprobado no se corrige solo (el trigger lo devolvería a revisión).
+- **No pedir a mano lo que una fuente oficial ya entrega** — misma regla que el
+  e-mail de la cuenta de Mercado Pago (30/09). Detalle:
+  `docs/sprints/2026-10-01-la-matricula-la-dice-refeps.md`.
+
 ## Un aviso "enviado" no es un aviso recibido (hallazgo 27/08/2026)
 `whatsapp_envios.resultado = 'enviado'` significa **"Twilio aceptó la llamada a su
 API"**. No dice que le llegó al celular del profesional, ni que lo leyó. El envío
