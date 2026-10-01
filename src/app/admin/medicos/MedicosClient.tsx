@@ -9,6 +9,7 @@ import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/componen
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
+import { claveMatricula } from "@/lib/medicos/matricula-refeps";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
 
@@ -209,6 +210,10 @@ export default function MedicosClient({
     );
   }
 
+  function actualizarMatricula(medicoId: string, campos: Partial<Medico>) {
+    setMedicos((prev) => prev.map((m) => (m.id === medicoId ? { ...m, ...campos } : m)));
+  }
+
   async function handleImpersonate(userId: string, nombre: string) {
     setProcesando(userId);
     setMensaje(null);
@@ -375,7 +380,7 @@ export default function MedicosClient({
         onClose={() => setPanelMedicoId(null)}
         title={panelMedico?.nombre_completo ?? ""}
       >
-        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} onContactoActualizado={actualizarContacto} />}
+        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} onContactoActualizado={actualizarContacto} onMatriculaCorregida={actualizarMatricula} />}
       </SidePanel>
     </div>
   );
@@ -541,8 +546,9 @@ function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva
         </div>
         <p className="mt-1 text-xs text-red-700">{m.identidad_revision_motivo}</p>
         <p className="mt-1 text-xs text-red-700">
-          Compará el dato declarado contra la credencial y REFEPS; si es un typo, corregilo en la ficha y
-          el sistema valida solo en menos de 10 minutos.
+          Un número mal tipeado se corrige solo: esto es otra cosa. Abrí la ficha y mirá la credencial; si
+          la matrícula correcta es una de las que figuran en REFEPS, elegila con «Usar esta» y el sistema
+          valida solo en menos de 10 minutos.
         </p>
       </div>
     ) : (
@@ -1079,11 +1085,47 @@ function MedicoDetalle({
   medico: m,
   onImpersonate,
   onContactoActualizado,
+  onMatriculaCorregida,
 }: {
   medico: Medico;
   onImpersonate: () => void;
   onContactoActualizado?: (id: string, celular: string | null, telefono: string | null) => void;
+  onMatriculaCorregida?: (id: string, campos: Partial<Medico>) => void;
 }) {
+  const [eligiendoMatricula, setEligiendoMatricula] = useState<string | null>(null);
+  const [errorMatricula, setErrorMatricula] = useState<string | null>(null);
+  // Elegir una matrícula de REFEPS solo tiene sentido cuando el cruce de
+  // identidad quedó sin cerrar; validada la identidad, la base la congela.
+  const puedeElegirMatricula = !m.identidad_validada && !!m.identidad_revision_motivo;
+
+  async function usarMatriculaDeRefeps(mat: { numero: string; tipo: string }) {
+    setEligiendoMatricula(mat.numero);
+    setErrorMatricula(null);
+    try {
+      const res = await fetch("/api/admin/medicos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ medicoId: m.id, accion: "usar_matricula_refeps", matricula: { numero: mat.numero, tipo: mat.tipo } }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setErrorMatricula(data.error || "No se pudo cambiar la matrícula.");
+        return;
+      }
+      onMatriculaCorregida?.(m.id, {
+        tipo_matricula: data.tipo_matricula,
+        numero_matricula: data.numero_matricula,
+        provincia_matricula: data.provincia_matricula,
+        ...(data.estado_registro ? { estado_registro: data.estado_registro } : {}),
+        ...(typeof data.verificado === "boolean" ? { verificado: data.verificado } : {}),
+      });
+    } catch {
+      setErrorMatricula("Error de conexión");
+    } finally {
+      setEligiendoMatricula(null);
+    }
+  }
+
   const [validando, setValidando] = useState(false);
   const [refepsResult, setRefepsResult] = useState<Record<string, unknown> | null>(m.refeps_data);
   const [refepsValidado, setRefepsValidado] = useState(m.refeps_validado);
@@ -1160,10 +1202,21 @@ function MedicoDetalle({
                     <p key={i} className="text-xs text-green-700">
                       {mat.habilitada ? "✓" : "✗"} Matrícula {mat.numero} — {mat.tipo}
                       {mat.entidad_certificante ? ` (${mat.entidad_certificante})` : ""}
+                      {puedeElegirMatricula && mat.habilitada && claveMatricula(mat.numero) !== claveMatricula(m.numero_matricula) && (
+                        <button
+                          type="button"
+                          onClick={() => usarMatriculaDeRefeps(mat)}
+                          disabled={eligiendoMatricula !== null}
+                          className="ml-2 rounded border border-[#378ADD] px-2 py-0.5 text-xs font-medium text-[#378ADD] hover:bg-[#378ADD]/10 disabled:opacity-50"
+                        >
+                          {eligiendoMatricula === mat.numero ? "Guardando…" : "Usar esta"}
+                        </button>
+                      )}
                     </p>
                   ))}
                 </div>
               )}
+              {errorMatricula && <p className="mt-2 text-xs text-[#E24B4A]">{errorMatricula}</p>}
               {m.refeps_validado_at && (
                 <p className="mt-2 text-xs text-green-600">
                   Validado: {new Date(m.refeps_validado_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}

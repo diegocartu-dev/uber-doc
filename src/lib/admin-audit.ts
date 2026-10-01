@@ -80,6 +80,7 @@ export const ADMIN_ACTIONS = {
   REACTIVAR_MEDICO: "reactivar_medico",
   CAMBIAR_CATEGORIA_MEDICO: "cambiar_categoria_medico",
   CAMBIAR_CONTACTO_MEDICO: "cambiar_contacto_medico",
+  CORREGIR_MATRICULA_MEDICO: "corregir_matricula",
   VALIDAR_REFEPS: "validar_refeps",
 
   // Pacientes

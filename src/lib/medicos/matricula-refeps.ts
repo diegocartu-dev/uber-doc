@@ -116,6 +116,22 @@ export function cruzarMatricula(
 }
 
 /**
+ * Cómo se guarda en la ficha una matrícula elegida de REFEPS: la de CABA es la
+ * Nacional (MN, sin provincia); las demás son provinciales (MP + provincia).
+ * `null` si la jurisdicción no se reconoce o no trae número.
+ */
+export function declaradaDesdeRefeps(
+  m: MatriculaDeRefeps
+): { tipo_matricula: "MN" | "MP"; numero_matricula: string; provincia_matricula: string | null } | null {
+  const jurisdiccion = normalizarJurisdiccion(m.tipo);
+  const numero = (m.numero ?? "").trim();
+  if (!jurisdiccion || claveMatricula(numero) === "") return null;
+  return jurisdiccion === "CABA"
+    ? { tipo_matricula: "MN", numero_matricula: numero, provincia_matricula: null }
+    : { tipo_matricula: "MP", numero_matricula: numero, provincia_matricula: jurisdiccion };
+}
+
+/**
  * El slug del perfil público termina en tipo + número ("…-MN123456"). Si la
  * matrícula cambia, el slug viejo publicaría el número equivocado en la URL.
  * Devuelve el slug corregido, o `null` si no termina en el número viejo (no se

@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { claveMatricula, cruzarMatricula, jurisdiccionDeclarada, slugConMatricula } from "./matricula-refeps";
+import { claveMatricula, cruzarMatricula, declaradaDesdeRefeps, jurisdiccionDeclarada, slugConMatricula } from "./matricula-refeps";
 
 const MN = (numero: string) => ({ tipo_matricula: "MN", numero_matricula: numero, provincia_matricula: null });
 const MP = (numero: string, provincia: string | null) => ({ tipo_matricula: "MP", numero_matricula: numero, provincia_matricula: provincia });
@@ -117,4 +117,20 @@ test("el slug del perfil sigue al número corregido; lo que no reconoce no lo to
   assert.equal(slugConMatricula("ana-perez-MN128456", "MN", "128456", "123456"), "ana-perez-MN123456");
   assert.equal(slugConMatricula("ana-perez-otra-cosa", "MN", "128456", "123456"), null);
   assert.equal(slugConMatricula(null, "MN", "128456", "123456"), null);
+});
+
+test("elegir una matrícula de REFEPS: la de CABA se guarda como MN, las demás como MP + provincia", () => {
+  assert.deepEqual(declaradaDesdeRefeps({ numero: " 123456 ", tipo: "CABA", habilitada: true }), {
+    tipo_matricula: "MN",
+    numero_matricula: "123456",
+    provincia_matricula: null,
+  });
+  assert.deepEqual(declaradaDesdeRefeps({ numero: "M01234", tipo: "Misiones", habilitada: true }), {
+    tipo_matricula: "MP",
+    numero_matricula: "M01234",
+    provincia_matricula: "Misiones",
+  });
+  // Jurisdicción que no se reconoce o sin número: no se guarda nada.
+  assert.equal(declaradaDesdeRefeps({ numero: "123", tipo: "Provincial", habilitada: true }), null);
+  assert.equal(declaradaDesdeRefeps({ numero: "", tipo: "CABA", habilitada: true }), null);
 });

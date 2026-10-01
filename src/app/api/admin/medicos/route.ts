@@ -7,6 +7,7 @@ import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { enviarEmailMedicoAprobado } from "@/lib/email";
 import { camposFaltantesMedico } from "@/lib/perfil-medico";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
+import { claveMatricula, declaradaDesdeRefeps, slugConMatricula, type MatriculaDeRefeps } from "@/lib/medicos/matricula-refeps";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -360,6 +361,88 @@ export async function PATCH(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, ...cambios });
+  }
+
+  // Poner como matrícula del profesional una de las que REFEPS tiene para su DNI.
+  //
+  // POR QUÉ EXISTE: cuando el cruce de identidad no cierra, el panel decía
+  // "corregilo en la ficha" y la ficha no tenía cómo: cada caso terminaba en una
+  // corrección por SQL. Un número mal tipeado ya se resuelve solo
+  // (lib/didit/reconciliar.ts); esto es para lo que queda — declaró una
+  // jurisdicción que REFEPS no tiene, o hay más de una — donde hace falta que
+  // alguien elija. No se escribe ningún número: solo se puede elegir uno que
+  // REFEPS ya devolvió para esa persona.
+  if (accion === "usar_matricula_refeps") {
+    if (!adminUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+    const elegida = body.matricula as { numero?: unknown; tipo?: unknown } | undefined;
+    if (typeof elegida?.numero !== "string" || typeof elegida?.tipo !== "string") {
+      return NextResponse.json({ error: "Falta la matrícula elegida" }, { status: 400 });
+    }
+
+    const { data: ficha, error: errFicha } = await admin
+      .from("medicos")
+      .select("tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, refeps_data, slug")
+      .eq("id", medicoId)
+      .single();
+    if (errFicha || !ficha) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
+    if (ficha.identidad_validada === true) {
+      return NextResponse.json(
+        { error: "La identidad ya está validada: la matrícula quedó congelada y no se puede cambiar." },
+        { status: 409 }
+      );
+    }
+
+    // La elegida tiene que ser una de las que REFEPS devolvió para ESE profesional, y habilitada.
+    const deRefeps = ((ficha.refeps_data as { matriculas?: MatriculaDeRefeps[] } | null)?.matriculas ?? []) as MatriculaDeRefeps[];
+    const enRefeps = deRefeps.find(
+      (m) =>
+        m.habilitada === true &&
+        (m.tipo ?? "") === elegida.tipo &&
+        claveMatricula(m.numero) !== "" &&
+        claveMatricula(m.numero) === claveMatricula(elegida.numero as string)
+    );
+    const nueva = enRefeps ? declaradaDesdeRefeps(enRefeps) : null;
+    if (!nueva) {
+      return NextResponse.json(
+        { error: "Esa matrícula no figura habilitada en REFEPS para este profesional." },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await admin.from("medicos").update(nueva).eq("id", medicoId);
+    if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json({ error: "Esa matrícula ya está cargada en otra cuenta de Docto." }, { status: 409 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // El perfil público lleva el número en la URL. Aparte: si falla, queda el viejo.
+    if (nueva.tipo_matricula === ficha.tipo_matricula) {
+      const slugNuevo = slugConMatricula(ficha.slug, ficha.tipo_matricula, ficha.numero_matricula, nueva.numero_matricula);
+      if (slugNuevo) await admin.from("medicos").update({ slug: slugNuevo }).eq("id", medicoId);
+    }
+
+    await logAdminAction({
+      adminUserId: adminUser.id,
+      accion: ADMIN_ACTIONS.CORREGIR_MATRICULA_MEDICO,
+      recursoTipo: "medico",
+      recursoId: medicoId,
+      payloadAnterior: {
+        tipo_matricula: ficha.tipo_matricula,
+        numero_matricula: ficha.numero_matricula,
+        provincia_matricula: ficha.provincia_matricula,
+      },
+      payloadNuevo: nueva,
+      motivo: motivo || "Elegida entre las matrículas de REFEPS",
+    });
+
+    // Si estaba aprobado, el trigger de la base lo devuelve a revisión: se
+    // informa el estado real en vez de suponerlo.
+    const { data: despues } = await admin.from("medicos").select("estado_registro, verificado").eq("id", medicoId).single();
+    return NextResponse.json({ ok: true, ...nueva, estado_registro: despues?.estado_registro ?? null, verificado: despues?.verificado ?? null });
   }
 
   if (accion === "cambiar_categoria") {
