@@ -7,13 +7,17 @@ import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { enviarEmailMedicoAprobado } from "@/lib/email";
 import { camposFaltantesMedico } from "@/lib/perfil-medico";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
-import { claveMatricula, declaradaDesdeRefeps, slugConMatricula, type MatriculaDeRefeps } from "@/lib/medicos/matricula-refeps";
+import { declaradaDesdeRefeps, esMatriculaDeMedico, type MatriculaDeRefeps } from "@/lib/medicos/matricula-refeps";
+import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
 // maxDuration evita la muerte por timeout corto; los logs [aprobar/refeps] +
 // [refeps/token] + [refeps/buscar] muestran dónde y cuánto tarda la validación.
 export const maxDuration = 60;
+
+// El Bus no respondió: no es un "no figura". Ante estos no se decide nada.
+const ERRORES_SISTEMA_REFEPS = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
 
 /**
  * Gate de seguridad regulatoria: un médico REAL no puede quedar `aprobado` sin
@@ -383,7 +387,7 @@ export async function PATCH(req: NextRequest) {
 
     const { data: ficha, error: errFicha } = await admin
       .from("medicos")
-      .select("tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, refeps_data, slug")
+      .select("dni, tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, biometria_exenta, didit_status, identidad_revision_motivo, verificado, slug, es_cuenta_test")
       .eq("id", medicoId)
       .single();
     if (errFicha || !ficha) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
@@ -393,36 +397,75 @@ export async function PATCH(req: NextRequest) {
         { status: 409 }
       );
     }
+    // Solo cuando el cruce de identidad quedó sin cerrar (es para lo que existe).
+    // Fuera de ese caso, cambiar la matrícula no arregla nada y a un aprobado lo
+    // saca de la clínica.
+    if (ficha.biometria_exenta === true || ficha.didit_status !== "In Review" || !ficha.identidad_revision_motivo) {
+      return NextResponse.json(
+        { error: "Este profesional no tiene un cruce de identidad pendiente: no hay nada que corregir acá." },
+        { status: 409 }
+      );
+    }
+    // Aprobado: el trigger de la base lo devuelve a revisión al cambiarle la
+    // matrícula. Se hace solo si quien aprieta ya lo sabe.
+    if (ficha.verificado === true && body.confirmado !== true) {
+      return NextResponse.json(
+        {
+          error: "Este profesional está aprobado: al cambiarle la matrícula vuelve a revisión y hay que aprobarlo de nuevo.",
+          requiereConfirmacion: true,
+        },
+        { status: 409 }
+      );
+    }
 
-    // La elegida tiene que ser una de las que REFEPS devolvió para ESE profesional, y habilitada.
-    const deRefeps = ((ficha.refeps_data as { matriculas?: MatriculaDeRefeps[] } | null)?.matriculas ?? []) as MatriculaDeRefeps[];
-    const enRefeps = deRefeps.find(
+    // La matrícula se valida contra REFEPS EN VIVO, por el DNI de la ficha, no
+    // contra `refeps_data` guardado: esa columna puede estar vieja (un timeout
+    // la pisa sin matrículas) y no es una fuente en la que apoyar una escritura.
+    if (!ficha.dni || ficha.es_cuenta_test === true) {
+      return NextResponse.json({ error: "Este profesional no tiene un DNI consultable en REFEPS." }, { status: 400 });
+    }
+    const refeps = await validarMedicoREFEPS(ficha.dni);
+    if (!refeps.encontrado) {
+      const transitorio = !!refeps.error && ERRORES_SISTEMA_REFEPS.has(refeps.error);
+      return NextResponse.json(
+        {
+          error: transitorio
+            ? "REFEPS no respondió. No se cambió nada: probá de nuevo en un momento."
+            : "REFEPS no devolvió ningún profesional para el DNI de esta ficha.",
+        },
+        { status: transitorio ? 503 : 400 }
+      );
+    }
+    const enRefeps = ((refeps.matriculas ?? []) as MatriculaDeRefeps[]).find(
       (m) =>
         m.habilitada === true &&
+        esMatriculaDeMedico(m) &&
         (m.tipo ?? "") === elegida.tipo &&
-        claveMatricula(m.numero) !== "" &&
-        claveMatricula(m.numero) === claveMatricula(elegida.numero as string)
+        (m.numero ?? "").trim() === (elegida.numero as string).trim()
     );
     const nueva = enRefeps ? declaradaDesdeRefeps(enRefeps) : null;
     if (!nueva) {
       return NextResponse.json(
-        { error: "Esa matrícula no figura habilitada en REFEPS para este profesional." },
+        { error: "REFEPS no tiene hoy esa matrícula como de médico y habilitada para el DNI de esta ficha." },
         { status: 400 }
       );
     }
 
-    const { error } = await admin.from("medicos").update(nueva).eq("id", medicoId);
+    // Solo si la ficha sigue como se leyó: el profesional puede estar editándola.
+    let escritura = admin.from("medicos").update(nueva).eq("id", medicoId);
+    for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula"] as const) {
+      const valor = ficha[col] as string | null;
+      escritura = valor === null ? escritura.is(col, null) : escritura.eq(col, valor);
+    }
+    const { data: escritas, error } = await escritura.select("id");
     if (error) {
       if (error.code === "23505") {
         return NextResponse.json({ error: "Esa matrícula ya está cargada en otra cuenta de Docto." }, { status: 409 });
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    // El perfil público lleva el número en la URL. Aparte: si falla, queda el viejo.
-    if (nueva.tipo_matricula === ficha.tipo_matricula) {
-      const slugNuevo = slugConMatricula(ficha.slug, ficha.tipo_matricula, ficha.numero_matricula, nueva.numero_matricula);
-      if (slugNuevo) await admin.from("medicos").update({ slug: slugNuevo }).eq("id", medicoId);
+    if (!escritas?.length) {
+      return NextResponse.json({ error: "La ficha cambió mientras tanto. Recargá la página y probá de nuevo." }, { status: 409 });
     }
 
     await logAdminAction({
@@ -439,8 +482,17 @@ export async function PATCH(req: NextRequest) {
       motivo: motivo || "Elegida entre las matrículas de REFEPS",
     });
 
-    // Si estaba aprobado, el trigger de la base lo devuelve a revisión: se
-    // informa el estado real en vez de suponerlo.
+    // El slug sigue a la matrícula solo si nunca estuvo aprobado (sus links ya
+    // circulan si lo estuvo). Nunca frena.
+    await moverSlugSiNuncaSeAprobo(
+      admin,
+      medicoId,
+      ficha.slug,
+      { tipo: ficha.tipo_matricula, numero: ficha.numero_matricula },
+      { tipo: nueva.tipo_matricula, numero: nueva.numero_matricula }
+    );
+
+    // Se informa el estado real de la ficha después del cambio, no el supuesto.
     const { data: despues } = await admin.from("medicos").select("estado_registro, verificado").eq("id", medicoId).single();
     return NextResponse.json({ ok: true, ...nueva, estado_registro: despues?.estado_registro ?? null, verificado: despues?.verificado ?? null });
   }

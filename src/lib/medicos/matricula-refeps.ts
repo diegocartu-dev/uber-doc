@@ -25,6 +25,11 @@ export interface MatriculaDeRefeps {
   /** Jurisdicción que la otorgó, como la devuelve el Bus ("CABA", "Santa Fe"…). */
   tipo?: string | null;
   habilitada?: boolean | null;
+  /**
+   * Profesión a la que corresponde ("Médico", "Técnico en hemoterapia"…). REFEPS
+   * devuelve bajo un mismo DNI las matrículas de TODAS las profesiones de la persona.
+   */
+  profesion?: string | null;
 }
 
 export interface MatriculaDeclarada {
@@ -40,7 +45,9 @@ export type MotivoRevision =
   | "jurisdiccion_no_figura"
   /** La matrícula de esa jurisdicción figura, pero no está habilitada. */
   | "no_habilitada"
-  /** Hay más de una matrícula habilitada en esa jurisdicción: no se elige sola. */
+  /** La habilitada de esa jurisdicción es de otra profesión, o REFEPS no dice de cuál. */
+  | "sin_matricula_de_medico"
+  /** Hay más de una matrícula de médico habilitada en esa jurisdicción: no se elige sola. */
   | "varias_en_jurisdiccion";
 
 export type CruceMatricula =
@@ -55,6 +62,16 @@ export type CruceMatricula =
  */
 export function claveMatricula(v: string | null | undefined): string {
   return (v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+}
+
+/**
+ * ¿La matrícula es de médico? Solo esas se adoptan o se eligen: una persona
+ * puede tener además una matrícula de otra profesión, y ponerla en la ficha
+ * haría salir sus recetas con ese número. Sin dato de profesión no se adopta.
+ */
+export function esMatriculaDeMedico(m: MatriculaDeRefeps): boolean {
+  const p = (m.profesion ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  return p === "medico" || p === "medica";
 }
 
 /**
@@ -73,7 +90,7 @@ export function jurisdiccionDeclarada(d: MatriculaDeclarada): string | null {
  *  - `coincide`: el número declarado es uno de los de REFEPS (cualquier
  *    jurisdicción, habilitada o no — igual que el cruce original).
  *  - `adoptar`: no coincide, pero en la jurisdicción declarada REFEPS tiene
- *    exactamente UNA matrícula habilitada. Esa es la suya.
+ *    exactamente UNA matrícula de médico habilitada. Esa es la suya.
  *  - `revisar`: no hay una única respuesta. No se adivina.
  */
 export function cruzarMatricula(
@@ -97,21 +114,26 @@ export function cruzarMatricula(
     return { resultado: "revisar", motivo: "jurisdiccion_no_figura", jurisdiccion };
   }
 
+  const habilitadasDeEsaJurisdiccion = deEsaJurisdiccion.filter((m) => m.habilitada === true);
+  if (habilitadasDeEsaJurisdiccion.length === 0) {
+    return { resultado: "revisar", motivo: "no_habilitada", jurisdiccion };
+  }
+
   // La misma matrícula puede venir repetida (una fila por título): se cuenta
-  // por número, no por fila.
-  const habilitadas = new Map<string, string>();
-  for (const m of deEsaJurisdiccion) {
-    if (m.habilitada !== true) continue;
-    const k = claveMatricula(m.numero);
-    if (!habilitadas.has(k)) habilitadas.set(k, (m.numero ?? "").trim());
+  // una vez. Se compara el texto ENTERO, no solo los dígitos: "M1234" y "K1234"
+  // son dos matrículas distintas y entre dos no se elige sola.
+  const habilitadas = new Set<string>();
+  for (const m of habilitadasDeEsaJurisdiccion) {
+    if (!esMatriculaDeMedico(m)) continue;
+    habilitadas.add((m.numero ?? "").trim().toUpperCase().replace(/\s+/g, ""));
   }
   if (habilitadas.size === 0) {
-    return { resultado: "revisar", motivo: "no_habilitada", jurisdiccion };
+    return { resultado: "revisar", motivo: "sin_matricula_de_medico", jurisdiccion };
   }
   if (habilitadas.size > 1) {
     return { resultado: "revisar", motivo: "varias_en_jurisdiccion", jurisdiccion };
   }
-  const [numero] = [...habilitadas.values()];
+  const [numero] = [...habilitadas];
   return { resultado: "adoptar", numero, jurisdiccion };
 }
 
@@ -134,19 +156,21 @@ export function declaradaDesdeRefeps(
 /**
  * El slug del perfil público termina en tipo + número ("…-MN123456"). Si la
  * matrícula cambia, el slug viejo publicaría el número equivocado en la URL.
- * Devuelve el slug corregido, o `null` si no termina en el número viejo (no se
- * toca lo que no se reconoce).
+ * Devuelve el slug corregido, o `null` si no termina en la matrícula vieja (no
+ * se toca lo que no se reconoce). Del número nuevo van solo letras y dígitos:
+ * una barra o un espacio romperían la ruta.
  */
 export function slugConMatricula(
   slug: string | null | undefined,
-  tipo: string | null | undefined,
-  numeroViejo: string | null | undefined,
-  numeroNuevo: string
+  vieja: { tipo: string | null | undefined; numero: string | null | undefined },
+  nueva: { tipo: string; numero: string }
 ): string | null {
-  if (!slug || !tipo || !numeroViejo) return null;
-  const sufijoViejo = `-${tipo}${numeroViejo}`;
+  if (!slug || !vieja.tipo || !vieja.numero) return null;
+  const sufijoViejo = `-${vieja.tipo}${vieja.numero}`;
   if (!slug.endsWith(sufijoViejo)) return null;
-  return slug.slice(0, slug.length - sufijoViejo.length) + `-${tipo}${numeroNuevo}`;
+  const numeroLimpio = nueva.numero.replace(/[^A-Za-z0-9]/g, "");
+  if (!numeroLimpio) return null;
+  return slug.slice(0, slug.length - sufijoViejo.length) + `-${nueva.tipo}${numeroLimpio}`;
 }
 
 /** Texto para el panel cuando el cruce no se puede cerrar solo. */
@@ -159,7 +183,9 @@ export function motivoRevisionHumano(motivo: MotivoRevision, jurisdiccion: strin
       return base + `declaró una matrícula de ${jurisdiccion}, y REFEPS no tiene ninguna de esa jurisdicción para ese DNI.`;
     case "no_habilitada":
       return base + `la matrícula de ${jurisdiccion} que REFEPS tiene para ese DNI no figura habilitada.`;
+    case "sin_matricula_de_medico":
+      return base + `la matrícula habilitada de ${jurisdiccion} que REFEPS tiene para ese DNI no figura como de médico.`;
     case "varias_en_jurisdiccion":
-      return base + `REFEPS tiene más de una matrícula habilitada de ${jurisdiccion} para ese DNI y ninguna es la que declaró.`;
+      return base + `REFEPS tiene más de una matrícula de médico habilitada de ${jurisdiccion} para ese DNI y ninguna es la que declaró.`;
   }
 }
