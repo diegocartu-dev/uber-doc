@@ -2,6 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { obtenerDecisionDidit } from "./client";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { sendDoctoAlert } from "@/lib/alertas";
+import {
+  claveMatricula,
+  cruzarMatricula,
+  motivoRevisionHumano,
+  slugConMatricula,
+  type MatriculaDeRefeps,
+} from "@/lib/medicos/matricula-refeps";
 
 // ─── Reconciliación de identidad biométrica (Didit) ──────────────────────────
 // ÚNICA fuente de verdad del control anti-suplantación. La usan DOS caminos:
@@ -55,9 +62,119 @@ export type ResultadoReconciliacion =
   // Cualquier otro estado (In Progress, Declined, Expired…) → solo registramos.
   | { outcome: "no_aprobado"; diditStatus: string };
 
-// Normaliza un número (DNI/matrícula) a solo dígitos para comparar.
+// Normaliza un DNI a solo dígitos para comparar.
 function soloDigitos(v: string | null | undefined): string {
   return (v ?? "").replace(/\D/g, "");
+}
+
+type ResultadoAdopcion =
+  // La matrícula quedó confirmada (coincidía o se adoptó la de REFEPS) e
+  // identidad_validada = true ya está escrito.
+  | { resultado: "validado" }
+  // No hay una única respuesta: va a revisión con este motivo.
+  | { resultado: "revisar"; motivo: string }
+  // No se pudo leer o escribir la ficha: no se decide, la próxima corrida reintenta.
+  | { resultado: "sin_decidir" };
+
+/**
+ * El DNI ya está verificado por biometría y REFEPS respondió. Decide con la
+ * regla de `cruzarMatricula` y, si corresponde, reemplaza el número escrito por
+ * el de REFEPS y valida la identidad EN EL MISMO UPDATE (el candado de la base
+ * congela la matrícula una vez validada: después ya no se podría corregir).
+ *
+ * Deja rastro en `notas_admin`, que el equipo ve en la ficha al aprobar: qué
+ * declaró y qué quedó. `refeps_data` no sirve para eso (se pisa al revalidar) y
+ * el log de auditoría exige un administrador, que acá no hay.
+ */
+async function adoptarMatriculaDeRefeps(
+  admin: SupabaseClient,
+  medicoId: string,
+  matriculasRefeps: MatriculaDeRefeps[],
+  diditStatus: string
+): Promise<ResultadoAdopcion> {
+  const { data: ficha, error: errFicha } = await admin
+    .from("medicos")
+    .select("tipo_matricula, numero_matricula, provincia_matricula, verificado, slug, notas_admin")
+    .eq("id", medicoId)
+    .single();
+  if (errFicha || !ficha) {
+    console.error("[didit/reconciliar] no se pudo leer la ficha para cruzar la matrícula:", errFicha?.message);
+    return { resultado: "sin_decidir" };
+  }
+
+  const cruce = cruzarMatricula(ficha, matriculasRefeps);
+  if (cruce.resultado === "revisar") {
+    return { resultado: "revisar", motivo: motivoRevisionHumano(cruce.motivo, cruce.jurisdiccion) };
+  }
+
+  const ahora = new Date();
+  const validar = {
+    didit_status: diditStatus,
+    identidad_validada: true,
+    identidad_validada_at: ahora.toISOString(),
+    identidad_revision_motivo: null,
+  };
+
+  if (cruce.resultado === "coincide") {
+    // La ficha cambió entre la lectura de quien llamó y esta (p.ej. el
+    // profesional corrigió su matrícula): ya coincide, se valida sin tocarla.
+    const { error } = await admin.from("medicos").update(validar).eq("id", medicoId);
+    if (error) {
+      console.error("[didit/reconciliar] no se pudo validar la identidad:", error.message);
+      return { resultado: "sin_decidir" };
+    }
+    return { resultado: "validado" };
+  }
+
+  // Un profesional YA aprobado: cambiarle la matrícula lo devuelve solo a
+  // revisión (trigger reverificar_medico) y lo saca de la clínica. Eso no se
+  // hace sin que alguien lo mire.
+  if (ficha.verificado === true) {
+    return {
+      resultado: "revisar",
+      motivo:
+        "Didit aprobó la identidad, pero la matrícula declarada no es la que REFEPS tiene para ese DNI, y el profesional ya está aprobado: corregirla lo devuelve a revisión, así que no se hizo sola.",
+    };
+  }
+
+  const viejo = ficha.numero_matricula as string | null;
+  const fecha = ahora.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+  const nota = `${fecha} — Matrícula tomada de REFEPS: declaró ${ficha.tipo_matricula} ${viejo}; para su DNI figura ${cruce.numero} (${cruce.jurisdiccion}).`;
+  const { data: escritas, error } = await admin
+    .from("medicos")
+    .update({
+      ...validar,
+      numero_matricula: cruce.numero,
+      notas_admin: ficha.notas_admin ? `${ficha.notas_admin}\n${nota}` : nota,
+    })
+    .eq("id", medicoId)
+    // Solo si nadie la cambió mientras tanto: no se pisa una corrección ajena.
+    .eq("numero_matricula", viejo ?? "")
+    .select("id");
+  if (error) {
+    if (error.code === "23505") {
+      // Otra cuenta de Docto ya tiene esa matrícula: eso sí es para mirar.
+      return {
+        resultado: "revisar",
+        motivo:
+          "Didit aprobó la identidad, pero la matrícula que REFEPS tiene para ese DNI ya está cargada en OTRA cuenta de Docto. Puede ser un registro duplicado de la misma persona.",
+      };
+    }
+    console.error("[didit/reconciliar] no se pudo adoptar la matrícula de REFEPS:", error.message);
+    return { resultado: "sin_decidir" };
+  }
+  if (!escritas?.length) return { resultado: "sin_decidir" };
+
+  console.log(`[didit/reconciliar] matrícula tomada de REFEPS medico=${medicoId} jurisdiccion=${cruce.jurisdiccion}`);
+
+  // El perfil público lleva el número en la URL. Aparte y sin frenar nada: si el
+  // slug nuevo ya existe, queda el viejo (una URL fea no traba a nadie).
+  const slugNuevo = slugConMatricula(ficha.slug, ficha.tipo_matricula, viejo, cruce.numero);
+  if (slugNuevo) {
+    const { error: errSlug } = await admin.from("medicos").update({ slug: slugNuevo }).eq("id", medicoId);
+    if (errSlug) console.warn("[didit/reconciliar] el slug no se pudo actualizar:", errSlug.message);
+  }
+  return { resultado: "validado" };
 }
 
 /**
@@ -102,7 +219,9 @@ export async function reconciliarIdentidad(
   // 3. Si Didit aprobó, cruce anti-suplantación.
   if (decisionStatus === "Approved") {
     const dniDocto = soloDigitos(medico.dni);
-    const matriculaDocto = soloDigitos(medico.numero_matricula);
+    // Clave de comparación (dígitos, sin ceros a la izquierda): "M01234" y "1234"
+    // son la misma matrícula.
+    const matriculaDocto = claveMatricula(medico.numero_matricula);
 
     // (a) El DNI que verificó Didit debe coincidir con el DNI registrado.
     const dniCoincide = !!dniDidit && !!dniDocto && dniDidit === dniDocto;
@@ -135,7 +254,7 @@ export async function reconciliarIdentidad(
       !!refeps.encontrado &&
       !!refeps.matriculas?.length &&
       !!matriculaDocto &&
-      refeps.matriculas.some((m) => soloDigitos(m.numero) === matriculaDocto);
+      refeps.matriculas.some((m) => claveMatricula(m.numero) === matriculaDocto);
 
     if (dniCoincide && matriculaPertenece) {
       updates.identidad_validada = true;
@@ -144,6 +263,24 @@ export async function reconciliarIdentidad(
       updates.identidad_revision_motivo = null;
       await admin.from("medicos").update(updates).eq("id", medico.id);
       return { outcome: "validado", diditStatus: decisionStatus };
+    }
+
+    // El DNI es el suyo (biometría) y REFEPS respondió, pero el número que
+    // escribió no figura. Antes esto iba derecho a revisión manual, y en todos
+    // los casos reales era un dígito mal tipeado. El número lo dice REFEPS: si
+    // en la jurisdicción que declaró hay una sola matrícula habilitada, es la
+    // suya y se adopta. Regla y motivos: lib/medicos/matricula-refeps.ts.
+    let motivoMatricula: string | null = null;
+    if (dniCoincide && refeps.encontrado) {
+      const adopcion = await adoptarMatriculaDeRefeps(admin, medico.id, refeps.matriculas ?? [], decisionStatus);
+      if (adopcion.resultado === "validado") {
+        return { outcome: "validado", diditStatus: decisionStatus };
+      }
+      if (adopcion.resultado === "sin_decidir") {
+        // No se pudo leer o escribir la ficha: no se decide nada, se reintenta.
+        return { outcome: "refeps_transitorio", diditStatus: decisionStatus };
+      }
+      motivoMatricula = adopcion.motivo;
     }
 
     // Didit aprobó pero el cruce (respondido por REFEPS) no cierra → revisión
@@ -157,7 +294,8 @@ export async function reconciliarIdentidad(
     // transición (no en cada corrida de 10 min del cron).
     const motivoHumano = !dniCoincide
       ? "Didit aprobó la identidad, pero el DNI del documento escaneado no coincide con el DNI registrado en Docto."
-      : "Didit aprobó la identidad, pero la matrícula declarada no figura para ese DNI en REFEPS — suele ser un número mal tipeado en el registro.";
+      : motivoMatricula ??
+        "Didit aprobó la identidad, pero REFEPS no devolvió ningún profesional para ese DNI.";
     updates.didit_status = "In Review";
     updates.identidad_revision_motivo = motivoHumano;
     await admin.from("medicos").update(updates).eq("id", medico.id);
@@ -166,7 +304,7 @@ export async function reconciliarIdentidad(
       const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
       await sendDoctoAlert(
         `🟠 Identidad de ${nombre}: necesita TU revisión`,
-        `${nombre} completó la verificación biométrica y Didit la APROBÓ — la persona es quien dice ser. Pero el cruce automático no cierra:\n\n${motivoHumano}\n\n¿Tenés que hacer algo? Sí: entrá al panel de médicos y compará el dato declarado contra la credencial y REFEPS. Si es un typo (como el caso Williana: un dígito de matrícula), corregilo en la ficha y el sistema valida solo en menos de 10 minutos — te llega la confirmación por el panel. Nadie más va a revisar este caso: es tuyo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, dniCoincide=${dniCoincide}, matriculaPertenece=${matriculaPertenece}.`
+        `${nombre} completó la verificación biométrica y Didit la APROBÓ — la persona es quien dice ser. Pero el cruce automático no cierra:\n\n${motivoHumano}\n\n¿Tenés que hacer algo? Sí: entrá al panel de médicos y mirá la credencial y las matrículas que REFEPS tiene para esa persona. Un número mal tipeado ya no llega hasta acá (se toma solo de REFEPS): este caso no tiene una única respuesta y necesita tu criterio. Nadie más va a revisarlo: es tuyo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, dniCoincide=${dniCoincide}, matriculaPertenece=${matriculaPertenece}.`
       );
     }
     return {
