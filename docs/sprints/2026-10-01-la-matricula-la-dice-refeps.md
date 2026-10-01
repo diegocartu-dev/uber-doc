@@ -113,7 +113,26 @@ lentes (seguridad del cruce, columnas que el profesional puede escribir directo,
 correctitud, panel) y dos verificadores por hallazgo; lo de esta rama se corrigió
 en el cuarto commit. Una tercera ronda sobre el estado final encontró, entre otras
 cosas, el error de la provincia del consultorio; se corrigió con pruebas del cruce
-completo contra una base falsa que aplica las condiciones de cada escritura.
+completo contra una base falsa que aplica las condiciones de cada escritura. Una
+cuarta ronda sobre esa corrección no encontró nada grave; sus 13 hallazgos chicos
+se corrigieron en el último commit.
+
+### Extensiones de alcance (reportadas, no pedidas)
+
+Consecuencias técnicas de este cambio que tocan código vecino:
+
+- **Cron `reconciliar-identidad`:** tomaba siempre los 10 candidatos más viejos,
+  y un caso en revisión no sale de la lista hasta que alguien lo resuelve. Con 10
+  de esos, todo el que viniera después quedaba afuera para siempre; este cambio
+  depende del cron para reintentar. Ahora la ventana rota por corrida.
+- **Aprobar** ya no reenvía la bienvenida de alta a quien ya estuvo aprobado (con
+  «Usar esta», un aprobado vuelve a pendiente y hay que aprobarlo de nuevo).
+- **Un timeout de REFEPS** ya no borra las matrículas guardadas (botón del panel
+  y gate de aprobar).
+- **Jurisdicciones:** una matrícula de otra profesión ya no cuenta como lugar
+  donde puede atender, en el servidor y en lo que muestra el panel.
+- **Pantalla de auditoría:** acepta entradas sin administrador (acciones del
+  sistema) y las muestra como "Sistema".
 
 ## Decisiones abiertas para Diego
 
@@ -127,6 +146,12 @@ completo contra una base falsa que aplica las condiciones de cada escritura.
 
 ## Deuda declarada
 
+- Un aprobado al que REFEPS, para el DNI biométrico, devuelve "inactivo" queda
+  validado igual (la matrícula es suya) y no se avisa a nadie. La base no deja
+  bajarle la validación REFEPS a un aprobado; lo resuelve el gate de aprobar si
+  vuelve a pasar por ahí.
+- Si REFEPS no informa la profesión de una matrícula, para las jurisdicciones se
+  sigue contando como antes; para adoptar o elegir, no se usa.
 - El rastro de una adopción automática va al log de auditoría con actor
   "sistema", pero eso necesita que `admin_audit_log.admin_user_id` acepte vacío
   (migración pendiente, va con la de abajo). Hasta entonces queda solo la nota en
