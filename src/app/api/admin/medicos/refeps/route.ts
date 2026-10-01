@@ -4,6 +4,7 @@ import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
+import { diagnosticoSinPisar } from "@/lib/refeps/persistir-diagnostico";
 
 // El Bus FHIR es lento y buscarPorDNI reintenta ante timeout (hasta ~51s en el peor caso).
 // El default de Vercel (~15s) no alcanza y mataría la función. Igual que admin/medicos.
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   // Obtener DNI del médico
   const { data: medico, error: fetchError } = await admin
     .from("medicos")
-    .select("id, dni, nombre_completo")
+    .select("id, dni, nombre_completo, refeps_data")
     .eq("id", medicoId)
     .single();
 
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
   if (resultado.error && ERRORES_SISTEMA.has(resultado.error)) {
     await admin
       .from("medicos")
-      .update({ refeps_data: resultadoSinRaw })
+      .update({ refeps_data: diagnosticoSinPisar(medico.refeps_data, resultadoSinRaw, ahora) })
       .eq("id", medicoId);
     return NextResponse.json(
       {
