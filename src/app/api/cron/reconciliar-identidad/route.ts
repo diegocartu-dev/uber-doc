@@ -60,16 +60,23 @@ async function handler(req: Request) {
 
   // Filtro NULL-safe en JS (default de columnas booleanas nuevas puede ser NULL):
   // pendientes reales = con sesión, no validados, no exentos, no test, no terminales.
-  const candidatos = (pendientes ?? [])
-    .filter(
-      (m) =>
-        !!m.didit_session_id &&
-        !m.identidad_validada &&
-        !m.es_cuenta_test &&
-        !m.biometria_exenta &&
-        !TERMINALES.has(m.didit_status ?? "")
-    )
-    .slice(0, MAX_POR_CORRIDA);
+  const todos = (pendientes ?? []).filter(
+    (m) =>
+      !!m.didit_session_id &&
+      !m.identidad_validada &&
+      !m.es_cuenta_test &&
+      !m.biometria_exenta &&
+      !TERMINALES.has(m.didit_status ?? "")
+  );
+  // Ventana ROTATIVA, no "los 10 más viejos": un In Review nuestro (DNI que no
+  // coincide, varias matrículas…) no sale de la lista hasta que alguien lo
+  // resuelve, y con 10 de esos el corte fijo dejaba afuera PARA SIEMPRE a todo
+  // el que viniera después — justo el que quedó sin decidir o al que no le llegó
+  // el webhook. Rotando por corrida, cada candidato pasa al menos cada
+  // ceil(n / 10) corridas.
+  const corrida = Math.floor(Date.now() / (10 * 60 * 1000));
+  const inicio = todos.length > MAX_POR_CORRIDA ? (corrida * MAX_POR_CORRIDA) % todos.length : 0;
+  const candidatos = [...todos.slice(inicio), ...todos.slice(0, inicio)].slice(0, MAX_POR_CORRIDA);
 
   // OJO: sin early-return acá — aunque no haya nada que reconciliar, el bloque
   // de recordatorios de abajo tiene que correr igual (con 0 candidatos,

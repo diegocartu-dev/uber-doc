@@ -210,6 +210,18 @@ export async function PATCH(req: NextRequest) {
     const gate = await asegurarRefepsParaAprobar(admin, medicoId);
     if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
+    // ¿Ya estuvo aprobado alguna vez? (por ejemplo, volvió a pendiente porque se
+    // le corrigió la matrícula). Entonces no se le manda de nuevo la bienvenida
+    // de alta. Si no se puede saber, se manda: perder la primera es peor.
+    const { data: aprobacionesPrevias, error: errPrevias } = await admin
+      .from("admin_audit_log")
+      .select("id")
+      .eq("recurso_tipo", "medico")
+      .eq("recurso_id", medicoId)
+      .eq("accion", ADMIN_ACTIONS.APROBAR_MEDICO)
+      .limit(1);
+    const yaEstuvoAprobado = !errPrevias && (aprobacionesPrevias?.length ?? 0) > 0;
+
     const { error } = await admin
       .from("medicos")
       .update({
@@ -230,7 +242,7 @@ export async function PATCH(req: NextRequest) {
     }
     // Email de bienvenida al médico recién aprobado (founder). No bloquea ni
     // rompe la aprobación: la función captura sus propios errores.
-    await enviarEmailMedicoAprobado(medicoId);
+    if (!yaEstuvoAprobado) await enviarEmailMedicoAprobado(medicoId);
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 

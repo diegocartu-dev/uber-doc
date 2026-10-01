@@ -17,30 +17,50 @@ interface Llamada {
   filtros: Array<[string, string, unknown]>;
 }
 
-/** Base falsa de una sola ficha de médico. `antesDeEscribir` simula a alguien que la cambia en el medio. */
+/**
+ * Base falsa de una sola ficha de médico, con la semántica de PostgREST que
+ * importa acá: `eq` contra null NUNCA coincide (hace falta `is`), y un select
+ * devuelve solo las columnas pedidas. Hoy `admin_audit_log.admin_user_id` es
+ * NOT NULL: un insert sin administrador falla, como en producción.
+ * `antesDeEscribir` simula a alguien que cambia la ficha en el medio.
+ */
 function baseFalsa(inicial: Fila, opciones: { antesDeEscribir?: (f: Fila) => void } = {}) {
   const fila: Fila = { ...inicial };
   const llamadas: Llamada[] = [];
   const cumple = (filtros: Llamada["filtros"]) =>
-    filtros.every(([op, col, v]) => (op === "is" ? fila[col] === v : op === "in" ? true : fila[col] === v));
+    filtros.every(([op, col, v]) =>
+      op === "is" ? (fila[col] ?? null) === v : op === "in" ? true : op === "neq" ? v !== null && fila[col] !== v : v !== null && fila[col] === v
+    );
 
   const cliente = {
     from(tabla: string) {
       const c: Llamada = { tabla, op: "select", filtros: [] };
       let quiereFilas = false;
+      let columnas: string[] = [];
       const b = {
-        select() { if (c.op !== "select") quiereFilas = true; return b; },
+        select(cols?: string) {
+          if (c.op !== "select") quiereFilas = true;
+          else columnas = (cols ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+          return b;
+        },
         update(payload: Fila) { c.op = "update"; c.payload = payload; return b; },
         insert(payload: Fila) { c.op = "insert"; c.payload = payload; return b; },
         eq(col: string, v: unknown) { c.filtros.push(["eq", col, v]); return b; },
         is(col: string, v: unknown) { c.filtros.push(["is", col, v]); return b; },
+        neq(col: string, v: unknown) { c.filtros.push(["neq", col, v]); return b; },
         in(col: string, v: unknown) { c.filtros.push(["in", col, v]); return b; },
         limit() { return b; },
         single() { return b; },
         then(ok: (r: { data: unknown; error: unknown }) => void) {
           llamadas.push(c);
+          if (tabla === "admin_audit_log" && c.op === "insert" && c.payload?.admin_user_id == null) {
+            return Promise.resolve({ data: null, error: { code: "23502", message: "null value in column admin_user_id" } }).then(ok);
+          }
           if (tabla !== "medicos") return Promise.resolve({ data: [], error: null }).then(ok);
-          if (c.op === "select") return Promise.resolve({ data: { ...fila }, error: null }).then(ok);
+          if (c.op === "select") {
+            const pedida = Object.fromEntries(columnas.map((k) => [k, fila[k] ?? null]));
+            return Promise.resolve({ data: columnas.length ? pedida : { ...fila }, error: null }).then(ok);
+          }
           if (c.op === "update") {
             if (c.payload && "identidad_validada" in c.payload) opciones.antesDeEscribir?.(fila);
             if (!cumple(c.filtros)) return Promise.resolve({ data: quiereFilas ? [] : null, error: null }).then(ok);
@@ -93,8 +113,39 @@ test("un dígito mal tipeado: adopta la de REFEPS y valida en el MISMO update, c
   }
   // `provincia` (la del consultorio) no se toca.
   assert.ok(!("provincia" in (valida?.payload ?? {})));
-  // Quedó en el log de auditoría como acción del sistema.
+  // Se INTENTA registrar en el log como acción del sistema. Hoy ese insert falla
+  // (admin_user_id NOT NULL hasta la migración); lo que queda es la nota de arriba.
   assert.ok(llamadas.some((l) => l.tabla === "admin_audit_log" && l.op === "insert" && l.payload?.admin_user_id === null));
+});
+
+test("cuando el número ya coincide, valida sin tocar la matrícula ni condicionar por las notas", async () => {
+  const { cliente, fila, llamadas } = baseFalsa(fichaPendiente({ notas_admin: "x".repeat(5000) }));
+  const r = await aplicarDecisionAprobada(cliente, medico(fila), DNI, { refeps: refeps([med("128456", "CABA")]), alertar: false });
+  assert.equal(r.outcome, "validado");
+  assert.equal(fila.numero_matricula, "128456");
+  const valida = llamadas.find((l) => l.op === "update" && l.payload && "identidad_validada" in l.payload);
+  assert.ok(!(valida?.filtros ?? []).some(([, c]) => c === "notas_admin"), "una nota larga no debe ir en la condición");
+  assert.ok(!("numero_matricula" in (valida?.payload ?? {})));
+});
+
+test("aprobado al que REFEPS hoy devuelve inactivo: valida, pero no toca refeps_validado ni su fecha (la base exige validado para estar aprobado)", async () => {
+  const { cliente, fila, llamadas } = baseFalsa(
+    fichaPendiente({ verificado: true, estado_registro: "aprobado", refeps_validado: true, refeps_validado_at: "2026-01-01T00:00:00Z" })
+  );
+  const r = await aplicarDecisionAprobada(cliente, medico(fila), DNI, { refeps: refeps([med("128456", "CABA")], { activo: false }), alertar: false });
+  assert.equal(r.outcome, "validado");
+  const valida = llamadas.find((l) => l.op === "update" && l.payload && "identidad_validada" in l.payload);
+  assert.ok(!("refeps_validado" in (valida?.payload ?? {})));
+  assert.ok(!("refeps_validado_at" in (valida?.payload ?? {})));
+  assert.equal(fila.refeps_validado, true);
+});
+
+test("REFEPS no tiene a nadie para el DNI biométrico: revisión, y el 'no' se guarda en un no aprobado", async () => {
+  const { cliente, fila } = baseFalsa(fichaPendiente({ refeps_validado: true }));
+  const r = await aplicarDecisionAprobada(cliente, medico(fila), DNI, { refeps: { encontrado: false, error: "REGISTRO_NO_ENCONTRADO" } as ResultadoREFEPS, alertar: false });
+  assert.equal(r.outcome, "en_revision");
+  assert.equal(fila.refeps_validado, false);
+  assert.match(String(fila.identidad_revision_motivo), /REFEPS no devolvió/);
 });
 
 test("si la ficha cambia mientras se verifica, no se valida nada (y no va a revisión): se reintenta", async () => {
