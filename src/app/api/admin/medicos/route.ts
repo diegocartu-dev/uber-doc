@@ -6,15 +6,25 @@ import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { enviarEmailMedicoAprobado } from "@/lib/email";
 import { camposFaltantesMedico } from "@/lib/perfil-medico";
-import { derivarJurisdicciones } from "@/lib/jurisdicciones";
-import { declaradaDesdeRefeps, esMatriculaDeMedico, type MatriculaDeRefeps } from "@/lib/medicos/matricula-refeps";
+import { derivarJurisdicciones, normalizarJurisdiccion } from "@/lib/jurisdicciones";
+import { diagnosticoSinPisar } from "@/lib/refeps/persistir-diagnostico";
+import {
+  declaradaDesdeRefeps,
+  esUtilizable,
+  normalizarNumeroMatricula,
+  MOTIVO_DNI_NO_COINCIDE,
+  type MatriculaDeRefeps,
+} from "@/lib/medicos/matricula-refeps";
+import { obtenerDecisionDidit } from "@/lib/didit/client";
+import { aplicarDecisionAprobada, soloDigitos } from "@/lib/didit/reconciliar";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
 // maxDuration evita la muerte por timeout corto; los logs [aprobar/refeps] +
 // [refeps/token] + [refeps/buscar] muestran dónde y cuánto tarda la validación.
-export const maxDuration = 60;
+// «Usar esta» encadena Didit (hasta 15 s) y REFEPS (hasta ~51 s con reintentos).
+export const maxDuration = 120;
 
 // El Bus no respondió: no es un "no figura". Ante estos no se decide nada.
 const ERRORES_SISTEMA_REFEPS = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
@@ -35,7 +45,7 @@ async function asegurarRefepsParaAprobar(
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const { data: medico } = await admin
     .from("medicos")
-    .select("dni, refeps_validado, es_cuenta_test")
+    .select("dni, refeps_validado, es_cuenta_test, refeps_data")
     .eq("id", medicoId)
     .single();
 
@@ -69,7 +79,7 @@ async function asegurarRefepsParaAprobar(
   const ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
   if (!resultado.encontrado && resultado.error && ERRORES_SISTEMA.has(resultado.error)) {
     // Solo dejamos rastro del intento (refeps_data) para diagnóstico; NO tocamos refeps_validado.
-    await admin.from("medicos").update({ refeps_data: resultadoSinRaw }).eq("id", medicoId);
+    await admin.from("medicos").update({ refeps_data: diagnosticoSinPisar(medico.refeps_data, resultadoSinRaw, ahora) }).eq("id", medicoId);
     return {
       ok: false,
       error:
@@ -387,7 +397,9 @@ export async function PATCH(req: NextRequest) {
 
     const { data: ficha, error: errFicha } = await admin
       .from("medicos")
-      .select("dni, tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, biometria_exenta, didit_status, identidad_revision_motivo, verificado, slug, es_cuenta_test")
+      .select(
+        "dni, tipo_matricula, numero_matricula, provincia_matricula, provincia, identidad_validada, biometria_exenta, didit_status, didit_session_id, identidad_revision_motivo, verificado, verificado_at, slug, es_cuenta_test, nombre_completo"
+      )
       .eq("id", medicoId)
       .single();
     if (errFicha || !ficha) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
@@ -397,14 +409,28 @@ export async function PATCH(req: NextRequest) {
         { status: 409 }
       );
     }
-    // Solo cuando el cruce de identidad quedó sin cerrar (es para lo que existe).
-    // Fuera de ese caso, cambiar la matrícula no arregla nada y a un aprobado lo
-    // saca de la clínica.
-    if (ficha.biometria_exenta === true || ficha.didit_status !== "In Review" || !ficha.identidad_revision_motivo) {
+    // Solo cuando el cruce de identidad quedó sin cerrar POR LA MATRÍCULA (es para
+    // lo que existe). Fuera de ese caso, cambiar la matrícula no arregla nada y a
+    // un aprobado lo saca de la clínica.
+    if (
+      ficha.biometria_exenta === true ||
+      ficha.didit_status !== "In Review" ||
+      !ficha.identidad_revision_motivo ||
+      !ficha.didit_session_id
+    ) {
       return NextResponse.json(
         { error: "Este profesional no tiene un cruce de identidad pendiente: no hay nada que corregir acá." },
         { status: 409 }
       );
+    }
+    if (ficha.identidad_revision_motivo === MOTIVO_DNI_NO_COINCIDE) {
+      return NextResponse.json(
+        { error: "Lo que no coincide es el DNI, no la matrícula: primero hay que corregir el DNI." },
+        { status: 409 }
+      );
+    }
+    if (ficha.es_cuenta_test === true) {
+      return NextResponse.json({ error: "Las cuentas de prueba no se consultan contra REFEPS." }, { status: 400 });
     }
     // Aprobado: el trigger de la base lo devuelve a revisión al cambiarle la
     // matrícula. Se hace solo si quien aprieta ya lo sabe.
@@ -418,13 +444,33 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // La matrícula se valida contra REFEPS EN VIVO, por el DNI de la ficha, no
-    // contra `refeps_data` guardado: esa columna puede estar vieja (un timeout
-    // la pisa sin matrículas) y no es una fuente en la que apoyar una escritura.
-    if (!ficha.dni || ficha.es_cuenta_test === true) {
-      return NextResponse.json({ error: "Este profesional no tiene un DNI consultable en REFEPS." }, { status: 400 });
+    // El DNI que vale es el que verificó la biometría, no el de la ficha (que el
+    // profesional puede cambiar mientras no esté validado). Se le pregunta a
+    // Didit, como hace el cruce.
+    let dniDidit = "";
+    try {
+      const decision = await obtenerDecisionDidit(ficha.didit_session_id as string);
+      if (decision.status !== "Approved") {
+        return NextResponse.json(
+          { error: "Didit ya no tiene aprobada esta verificación de identidad. No se cambió nada." },
+          { status: 409 }
+        );
+      }
+      dniDidit = soloDigitos(decision.id_verifications?.[0]?.document_number);
+    } catch {
+      return NextResponse.json({ error: "Didit no respondió. No se cambió nada: probá de nuevo en un momento." }, { status: 503 });
     }
-    const refeps = await validarMedicoREFEPS(ficha.dni);
+    if (!dniDidit || dniDidit !== soloDigitos(ficha.dni)) {
+      return NextResponse.json(
+        { error: "El DNI de la ficha no es el del documento verificado: primero hay que corregir el DNI." },
+        { status: 409 }
+      );
+    }
+
+    // La matrícula se valida contra REFEPS EN VIVO por ese DNI, no contra
+    // `refeps_data` guardado: esa columna puede estar vieja (un timeout la pisa)
+    // y no es una fuente en la que apoyar una escritura.
+    const refeps = await validarMedicoREFEPS(dniDidit);
     if (!refeps.encontrado) {
       const transitorio = !!refeps.error && ERRORES_SISTEMA_REFEPS.has(refeps.error);
       return NextResponse.json(
@@ -438,22 +484,27 @@ export async function PATCH(req: NextRequest) {
     }
     const enRefeps = ((refeps.matriculas ?? []) as MatriculaDeRefeps[]).find(
       (m) =>
-        m.habilitada === true &&
-        esMatriculaDeMedico(m) &&
-        (m.tipo ?? "") === elegida.tipo &&
-        (m.numero ?? "").trim() === (elegida.numero as string).trim()
+        esUtilizable(m) &&
+        normalizarJurisdiccion(m.tipo) === normalizarJurisdiccion(elegida.tipo as string) &&
+        normalizarNumeroMatricula(m.numero) === normalizarNumeroMatricula(elegida.numero as string)
     );
     const nueva = enRefeps ? declaradaDesdeRefeps(enRefeps) : null;
     if (!nueva) {
       return NextResponse.json(
-        { error: "REFEPS no tiene hoy esa matrícula como de médico y habilitada para el DNI de esta ficha." },
+        { error: "REFEPS no tiene hoy esa matrícula como de médico y habilitada para este DNI." },
         { status: 400 }
       );
     }
 
-    // Solo si la ficha sigue como se leyó: el profesional puede estar editándola.
-    let escritura = admin.from("medicos").update(nueva).eq("id", medicoId);
-    for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula"] as const) {
+    // Solo si la ficha sigue como se leyó: el profesional puede estar editándola,
+    // y a alguien lo pueden haber aprobado mientras se consultaba REFEPS.
+    let escritura = admin
+      .from("medicos")
+      .update({ ...nueva, provincia: nueva.provincia_matricula })
+      .eq("id", medicoId)
+      .eq("identidad_validada", false)
+      .eq("verificado", ficha.verificado === true);
+    for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula", "provincia"] as const) {
       const valor = ficha[col] as string | null;
       escritura = valor === null ? escritura.is(col, null) : escritura.eq(col, valor);
     }
@@ -478,23 +529,42 @@ export async function PATCH(req: NextRequest) {
         numero_matricula: ficha.numero_matricula,
         provincia_matricula: ficha.provincia_matricula,
       },
-      payloadNuevo: nueva,
+      payloadNuevo: { ...nueva },
       motivo: motivo || "Elegida entre las matrículas de REFEPS",
     });
 
-    // El slug sigue a la matrícula solo si nunca estuvo aprobado (sus links ya
-    // circulan si lo estuvo). Nunca frena.
-    await moverSlugSiNuncaSeAprobo(
+    // El slug sigue a la matrícula solo si nunca estuvo aprobado (se decide con
+    // la ficha de ANTES: a un aprobado el trigger le acaba de borrar la aprobación).
+    await moverSlugSiNuncaSeAprobo(admin, medicoId, ficha, {
+      tipo: nueva.tipo_matricula,
+      numero: nueva.numero_matricula,
+    });
+
+    // Cierra el cruce en el momento, por el mismo camino que el webhook y el cron
+    // (el único que escribe identidad_validada), con el REFEPS que ya se consultó.
+    const cruce = await aplicarDecisionAprobada(
       admin,
-      medicoId,
-      ficha.slug,
-      { tipo: ficha.tipo_matricula, numero: ficha.numero_matricula },
-      { tipo: nueva.tipo_matricula, numero: nueva.numero_matricula }
+      {
+        id: medicoId,
+        dni: ficha.dni,
+        numero_matricula: nueva.numero_matricula,
+        identidad_validada: false,
+        nombre_completo: ficha.nombre_completo,
+        didit_status: ficha.didit_status,
+      },
+      dniDidit,
+      { refeps, alertar: false }
     );
 
-    // Se informa el estado real de la ficha después del cambio, no el supuesto.
-    const { data: despues } = await admin.from("medicos").select("estado_registro, verificado").eq("id", medicoId).single();
-    return NextResponse.json({ ok: true, ...nueva, estado_registro: despues?.estado_registro ?? null, verificado: despues?.verificado ?? null });
+    // Se informa el estado real de la ficha después, no el supuesto.
+    const { data: despues } = await admin
+      .from("medicos")
+      .select(
+        "tipo_matricula, numero_matricula, provincia_matricula, estado_registro, verificado, verificado_at, verificado_por, identidad_validada, didit_status, identidad_revision_motivo, refeps_validado, refeps_data, jurisdicciones"
+      )
+      .eq("id", medicoId)
+      .single();
+    return NextResponse.json({ ok: true, cruce: cruce.outcome, ficha: despues ?? null });
   }
 
   if (accion === "cambiar_categoria") {

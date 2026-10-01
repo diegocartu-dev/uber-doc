@@ -1,3 +1,5 @@
+import { esDeOtraProfesion } from "./refeps/profesion";
+
 // Lista canónica de las 24 jurisdicciones argentinas (23 provincias + CABA) y
 // normalización de los valores que devuelve REFEPS (`JurisdMatricula.display`, que en
 // nuestros datos llega como "CABA", "Buenos Aires", "Santa Fe", "Córdoba"…) a esa lista.
@@ -70,10 +72,13 @@ export function normalizarJurisdiccion(
   return LOOKUP.get(norm(valor)) ?? null;
 }
 
-type MatriculaREFEPS = { tipo?: string | null; habilitada?: boolean | null };
+type MatriculaREFEPS = { tipo?: string | null; habilitada?: boolean | null; profesion?: string | null };
 
 // Deriva el set de jurisdicciones HABILITADAS de un médico desde `refeps_data.matriculas`.
 // Solo cuenta las habilitadas cuyo `tipo` mapea a una jurisdicción canónica.
+// Una matrícula de OTRA profesión (REFEPS las devuelve todas bajo el mismo DNI) no
+// habilita a ejercer la medicina en esa jurisdicción y no cuenta. Sin dato de
+// profesión (validaciones anteriores al 01/10/2026) se cuenta como antes.
 // `sinResolver` = los `tipo` de matrículas habilitadas que NO mapearon (ej. "Provincial"):
 // señal para revisar/backfill manual, NUNCA para esconder al médico (fail-safe).
 export function derivarJurisdicciones(
@@ -83,6 +88,7 @@ export function derivarJurisdicciones(
   const sinResolver: string[] = [];
   for (const m of matriculas ?? []) {
     if (m?.habilitada !== true) continue;
+    if (esDeOtraProfesion(m)) continue;
     const j = normalizarJurisdiccion(m.tipo);
     if (j) set.add(j);
     else if (m.tipo) sinResolver.push(m.tipo);

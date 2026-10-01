@@ -2,33 +2,40 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { obtenerDecisionDidit } from "./client";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { sendDoctoAlert } from "@/lib/alertas";
+import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 import {
   claveMatricula,
   cruzarMatricula,
   motivoRevisionHumano,
-  type MatriculaDeRefeps,
+  MOTIVO_DNI_NO_COINCIDE,
+  MOTIVO_SIN_PROFESIONAL_EN_REFEPS,
+  type MatriculaDeclarada,
 } from "@/lib/medicos/matricula-refeps";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
 
 // ─── Reconciliación de identidad biométrica (Didit) ──────────────────────────
-// ÚNICA fuente de verdad del control anti-suplantación. La usan DOS caminos:
-//   1) el webhook (`/api/didit/webhook`) — reacción en tiempo real, y
+// ÚNICA fuente de verdad del control anti-suplantación. La usan TRES caminos:
+//   1) el webhook (`/api/didit/webhook`) — reacción en tiempo real,
 //   2) el cron de reconciliación (`/api/cron/reconciliar-identidad`) — backstop
-//      que consulta a Didit por si el webhook nunca llegó (ej: URL mal apuntada).
+//      que consulta a Didit por si el webhook nunca llegó (ej: URL mal apuntada), y
+//   3) «Usar esta» del panel admin (`/api/admin/medicos`, usar_matricula_refeps),
+//      que después de elegir la matrícula cierra el cruce en el momento.
 // Mantener la lógica acá y NO duplicarla: dos copias de un control de identidad
 // divergen con el tiempo y esa divergencia es la vulnerabilidad.
 //
-// Regla (idéntica en ambos caminos): solo marcamos `identidad_validada` si Didit
-// APROBÓ **y** el DNI que Didit verificó biométricamente coincide con el DNI
-// registrado **y** la matrícula declarada pertenece a ese DNI según REFEPS.
+// Regla: solo se marca `identidad_validada` si Didit APROBÓ **y** el DNI que
+// Didit verificó biométricamente es el de la ficha **y** la matrícula de la
+// ficha es una matrícula de médico habilitada que REFEPS tiene para ese DNI.
+// Si el número escrito no lo es, la matrícula sale de REFEPS
+// (lib/medicos/matricula-refeps.ts, decisión Diego 01/10/2026).
 // Nunca confiamos en el payload del webhook: re-consultamos la decisión autoritativa.
 
-type ResultadoREFEPS = Awaited<ReturnType<typeof validarMedicoREFEPS>>;
+export type ResultadoREFEPS = Awaited<ReturnType<typeof validarMedicoREFEPS>>;
 
 // Errores de REFEPS que son TRANSITORIOS (el Bus no respondió), NO un "no figura"
 // real. Ante estos NO decidimos el cruce — dejamos al médico retriable. Doctrina
 // del repo: "REFEPS timeout ≠ 'no figura'".
-const ERRORES_TRANSITORIOS_REFEPS = new Set([
+export const ERRORES_TRANSITORIOS_REFEPS = new Set([
   "REFEPS_TIMEOUT",
   "REFEPS_AUTH_ERROR",
   "REFEPS_ERROR_INTERNO",
@@ -54,7 +61,8 @@ export type ResultadoReconciliacion =
   | { outcome: "ya_validado"; diditStatus: string }
   // Aprobado + cruce cerrado → identidad_validada = true.
   | { outcome: "validado"; diditStatus: string }
-  // Aprobado, DNI coincide, pero el Bus REFEPS no respondió (transitorio) → NO
+  // Aprobado y DNI coincide, pero no se pudo decidir: el Bus REFEPS no respondió,
+  // o la ficha no se pudo leer/escribir, o cambió mientras se verificaba. NO
   // decidimos ni tocamos didit_status; se reintenta en la próxima corrida.
   | { outcome: "refeps_transitorio"; diditStatus: string }
   // Aprobado por Didit pero el cruce (respondido por REFEPS) NO cierra → In Review.
@@ -63,7 +71,7 @@ export type ResultadoReconciliacion =
   | { outcome: "no_aprobado"; diditStatus: string };
 
 // Normaliza un DNI a solo dígitos para comparar.
-function soloDigitos(v: string | null | undefined): string {
+export function soloDigitos(v: string | null | undefined): string {
   return (v ?? "").replace(/\D/g, "");
 }
 
@@ -77,15 +85,21 @@ type ResultadoCruce =
   // decide nada y la próxima corrida vuelve a mirar.
   | { resultado: "sin_decidir" };
 
-interface FichaCruce {
+interface FichaCruce extends MatriculaDeclarada {
   dni: string | null;
   tipo_matricula: string | null;
   numero_matricula: string | null;
   provincia_matricula: string | null;
+  provincia: string | null;
   verificado: boolean | null;
+  verificado_at: string | null;
   slug: string | null;
   notas_admin: string | null;
 }
+
+// Las columnas que el cruce lee y de las que depende: el update que valida exige
+// que sigan exactamente como se leyeron.
+const COLUMNAS_DEL_CRUCE = ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula", "provincia"] as const;
 
 /**
  * ÚNICO lugar que escribe `identidad_validada = true`.
@@ -98,25 +112,28 @@ interface FichaCruce {
  *  1. La ficha se lee de nuevo acá, y el DNI tiene que seguir siendo el que
  *     verificó la biometría.
  *  2. El cruce se decide sobre ESA lectura.
- *  3. El update lleva como condición los cuatro datos tal como se leyeron
- *     (DNI, tipo, número, provincia). Si alguno cambió en el medio, no escribe
- *     nada: nunca queda validado —y congelado por el candado de la base— un
- *     dato que nadie verificó.
+ *  3. El update lleva como condición las columnas del cruce tal como se
+ *     leyeron. Si alguna cambió en el medio, no escribe nada: nunca queda
+ *     validado —y congelado por el candado de la base— un dato que nadie verificó.
  *
- * Si corresponde adoptar la matrícula de REFEPS, el cambio de número y la
- * validación van en el MISMO update (después el candado ya no dejaría
- * corregirla). Queda la nota en `notas_admin`, que el equipo ve al aprobar.
+ * En el mismo update se guarda lo que REFEPS dijo para el DNI BIOMÉTRICO
+ * (refeps_data, refeps_validado, jurisdicciones): la validación automática del
+ * alta se hizo con el DNI tipeado, y desde acá ese es el dato que vale.
+ *
+ * Si corresponde adoptar la matrícula de REFEPS, el cambio y la validación van
+ * en el MISMO update (después el candado ya no dejaría corregirla). Queda en el
+ * log de auditoría y una nota en la ficha.
  */
 async function cerrarCruce(
   admin: SupabaseClient,
   medicoId: string,
   dniVerificado: string,
-  matriculasRefeps: MatriculaDeRefeps[],
+  refeps: ResultadoREFEPS,
   diditStatus: string
 ): Promise<ResultadoCruce> {
   const { data, error: errFicha } = await admin
     .from("medicos")
-    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, verificado, slug, notas_admin")
+    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, provincia, verificado, verificado_at, slug, notas_admin")
     .eq("id", medicoId)
     .single();
   const ficha = data as FichaCruce | null;
@@ -130,7 +147,7 @@ async function cerrarCruce(
     return { resultado: "sin_decidir" };
   }
 
-  const cruce = cruzarMatricula(ficha, matriculasRefeps);
+  const cruce = cruzarMatricula(ficha, refeps.matriculas ?? []);
   if (cruce.resultado === "revisar") {
     return { resultado: "revisar", motivo: motivoRevisionHumano(cruce.motivo, cruce.jurisdiccion) };
   }
@@ -147,22 +164,34 @@ async function cerrarCruce(
   }
 
   const ahora = new Date();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw: _raw, ...refepsSinRaw } = refeps;
+  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas);
   const cambios: Record<string, unknown> = {
     didit_status: diditStatus,
     identidad_validada: true,
     identidad_validada_at: ahora.toISOString(),
     identidad_revision_motivo: null,
+    refeps_data: refepsSinRaw,
+    refeps_validado_at: ahora.toISOString(),
+    // Solo se escribe el "sí": un "no está activo" lo resuelve el gate de
+    // aprobar, que consulta REFEPS en vivo (y a un aprobado no se le baja acá).
+    ...(refeps.encontrado && refeps.activo ? { refeps_validado: true } : {}),
+    ...(jurisdicciones.length ? { jurisdicciones } : {}),
   };
   if (cruce.resultado === "adoptar") {
     const fecha = ahora.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
-    const nota = `${fecha} — Matrícula tomada de REFEPS: declaró ${ficha.tipo_matricula} ${ficha.numero_matricula}; para su DNI figura ${cruce.numero} (${cruce.jurisdiccion}).`;
-    cambios.numero_matricula = cruce.numero;
+    const nota = `${fecha} — Matrícula tomada de REFEPS: declaró ${ficha.tipo_matricula} ${ficha.numero_matricula}${ficha.provincia_matricula ? ` (${ficha.provincia_matricula})` : ""}; para su DNI figura ${cruce.nueva.tipo_matricula} ${cruce.nueva.numero_matricula}${cruce.nueva.provincia_matricula ? ` (${cruce.nueva.provincia_matricula})` : ""}.`;
+    cambios.tipo_matricula = cruce.nueva.tipo_matricula;
+    cambios.numero_matricula = cruce.nueva.numero_matricula;
+    cambios.provincia_matricula = cruce.nueva.provincia_matricula;
+    cambios.provincia = cruce.nueva.provincia_matricula;
     cambios.notas_admin = ficha.notas_admin ? `${ficha.notas_admin}\n${nota}` : nota;
   }
 
   // Solo si la ficha sigue EXACTAMENTE como se leyó (ver punto 3 de arriba).
-  let escritura = admin.from("medicos").update(cambios).eq("id", medicoId);
-  for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula"] as const) {
+  let escritura = admin.from("medicos").update(cambios).eq("id", medicoId).eq("identidad_validada", false);
+  for (const col of COLUMNAS_DEL_CRUCE) {
     const valor = ficha[col];
     escritura = valor === null ? escritura.is(col, null) : escritura.eq(col, valor);
   }
@@ -185,16 +214,125 @@ async function cerrarCruce(
   }
 
   if (cruce.resultado === "adoptar") {
-    console.log(`[didit/reconciliar] matrícula tomada de REFEPS medico=${medicoId} jurisdiccion=${cruce.jurisdiccion}`);
-    await moverSlugSiNuncaSeAprobo(
-      admin,
-      medicoId,
-      ficha.slug,
-      { tipo: ficha.tipo_matricula, numero: ficha.numero_matricula },
-      { tipo: ficha.tipo_matricula as string, numero: cruce.numero }
-    );
+    console.log(`[didit/reconciliar] matrícula tomada de REFEPS medico=${medicoId} jurisdiccion=${cruce.jurisdiccion} por=${cruce.por}`);
+    // Rastro donde el profesional no puede escribir. `admin_user_id` vacío =
+    // lo hizo el sistema (requiere la migración que lo deja nulo; hasta
+    // entonces este insert falla, se loguea y queda la nota de la ficha).
+    const { error: errAudit } = await admin.from("admin_audit_log").insert({
+      admin_user_id: null,
+      accion: "corregir_matricula",
+      recurso_tipo: "medico",
+      recurso_id: medicoId,
+      payload_anterior: {
+        tipo_matricula: ficha.tipo_matricula,
+        numero_matricula: ficha.numero_matricula,
+        provincia_matricula: ficha.provincia_matricula,
+      },
+      payload_nuevo: cruce.nueva,
+      motivo: "Tomada de REFEPS al validar la identidad",
+      metadata: {
+        actor: "sistema",
+        por: cruce.por,
+        jurisdiccion: cruce.jurisdiccion,
+        // Cuánto se parecía lo que escribió: 0 = solo formato o jurisdicción.
+        digitos_distintos: distanciaDigitos(ficha.numero_matricula, cruce.nueva.numero_matricula),
+      },
+    });
+    if (errAudit) console.warn("[didit/reconciliar] la adopción no quedó en el log de auditoría:", errAudit.message);
+
+    await moverSlugSiNuncaSeAprobo(admin, medicoId, ficha, {
+      tipo: cruce.nueva.tipo_matricula,
+      numero: cruce.nueva.numero_matricula,
+    });
   }
   return { resultado: "validado" };
+}
+
+// Distancia de edición entre los dígitos de dos números (para el log).
+function distanciaDigitos(a: string | null | undefined, b: string | null | undefined): number {
+  const x = claveMatricula(a);
+  const y = claveMatricula(b);
+  const d: number[][] = Array.from({ length: x.length + 1 }, (_, i) => [i, ...Array(y.length).fill(0)]);
+  for (let j = 1; j <= y.length; j++) d[0][j] = j;
+  for (let i = 1; i <= x.length; i++)
+    for (let j = 1; j <= y.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+  return d[x.length][y.length];
+}
+
+/**
+ * Marca el cruce como "necesita revisión" (In Review SINTÉTICO, lo pone Docto,
+ * no Didit) con el motivo. El caso Williana (20/07) vivió días invisible porque
+ * era indistinguible del In Review real y no alertaba a nadie: por eso el motivo
+ * queda persistido (visible en el panel) y el mail al equipo sale SOLO en la
+ * transición, nunca en cada corrida del cron.
+ */
+async function marcarEnRevision(
+  admin: SupabaseClient,
+  medico: MedicoIdentidad,
+  motivo: string,
+  alertar: boolean
+): Promise<void> {
+  await admin
+    .from("medicos")
+    .update({ didit_status: "In Review", identidad_revision_motivo: motivo })
+    .eq("id", medico.id)
+    .eq("identidad_validada", false);
+
+  if (!alertar || medico.didit_status === "In Review") return;
+  const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
+  const queHacer =
+    motivo === MOTIVO_DNI_NO_COINCIDE
+      ? "entrá al panel de médicos y compará el DNI de la ficha con el del documento de la credencial. Si el de la ficha está mal tipeado, hay que corregirlo; el sistema vuelve a cruzar en la próxima pasada."
+      : "entrá al panel de médicos y mirá la credencial y las matrículas que REFEPS tiene para esa persona. Si la correcta es una de esas, elegila con «Usar esta» y la identidad queda validada en el momento.";
+  await sendDoctoAlert(
+    `🟠 Identidad de ${nombre}: necesita TU revisión`,
+    `${nombre} completó la verificación biométrica y Didit la APROBÓ — la persona es quien dice ser. Pero el cruce automático no cierra:\n\n${motivo}\n\n¿Tenés que hacer algo? Sí: ${queHacer} Este caso no se pudo resolver solo. Nadie más va a revisarlo: es tuyo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}.`
+  );
+}
+
+/**
+ * Paso del cruce con una decisión de Didit ya APROBADA en la mano. Lo usan
+ * `reconciliarIdentidad` (webhook y cron) y «Usar esta» del panel, que ya
+ * consultó REFEPS en vivo y lo pasa en `opciones.refeps` para no volver a
+ * esperar al Bus.
+ */
+export async function aplicarDecisionAprobada(
+  admin: SupabaseClient,
+  medico: MedicoIdentidad,
+  dniDidit: string,
+  opciones: { refeps?: ResultadoREFEPS; alertar: boolean }
+): Promise<ResultadoReconciliacion> {
+  const diditStatus = "Approved";
+  const dniCoincide = !!dniDidit && soloDigitos(medico.dni) === dniDidit;
+  if (!dniCoincide) {
+    await marcarEnRevision(admin, medico, MOTIVO_DNI_NO_COINCIDE, opciones.alertar);
+    return { outcome: "en_revision", diditStatus: "In Review", motivo: "dni_no_coincide" };
+  }
+
+  // Un fallo TRANSITORIO del Bus (timeout/auth/interno) no es un "no figura":
+  // marcar "In Review" por un hipo del Bus trabaría en falso a un médico legítimo.
+  let refeps = opciones.refeps;
+  if (!refeps) {
+    try {
+      refeps = await validarMedicoREFEPS(dniDidit);
+    } catch {
+      refeps = { encontrado: false, error: "REFEPS_ERROR_INTERNO" };
+    }
+  }
+  if (!refeps.encontrado && refeps.error && ERRORES_TRANSITORIOS_REFEPS.has(refeps.error)) {
+    return { outcome: "refeps_transitorio", diditStatus };
+  }
+  if (!refeps.encontrado) {
+    await marcarEnRevision(admin, medico, MOTIVO_SIN_PROFESIONAL_EN_REFEPS, opciones.alertar);
+    return { outcome: "en_revision", diditStatus: "In Review", motivo: "sin_profesional_en_refeps" };
+  }
+
+  const cruce = await cerrarCruce(admin, medico.id, dniDidit, refeps, diditStatus);
+  if (cruce.resultado === "validado") return { outcome: "validado", diditStatus };
+  if (cruce.resultado === "sin_decidir") return { outcome: "refeps_transitorio", diditStatus };
+  await marcarEnRevision(admin, medico, cruce.motivo, opciones.alertar);
+  return { outcome: "en_revision", diditStatus: "In Review", motivo: "matricula" };
 }
 
 /**
@@ -234,103 +372,21 @@ export async function reconciliarIdentidad(
     return { outcome: "ya_validado", diditStatus: decisionStatus };
   }
 
-  const updates: Record<string, unknown> = { didit_status: decisionStatus };
-
   // 3. Si Didit aprobó, cruce anti-suplantación.
   if (decisionStatus === "Approved") {
-    const dniDocto = soloDigitos(medico.dni);
-    // Clave de comparación (dígitos, sin ceros a la izquierda): "M01234" y "1234"
-    // son la misma matrícula.
-    const matriculaDocto = claveMatricula(medico.numero_matricula);
-
-    // (a) El DNI que verificó Didit debe coincidir con el DNI registrado.
-    const dniCoincide = !!dniDidit && !!dniDocto && dniDidit === dniDocto;
-
-    // (b) La matrícula declarada debe pertenecer al DNI verificado (REFEPS).
-    //     Distinguimos un fallo TRANSITORIO del Bus (timeout/auth/interno) de un
-    //     "no figura" real: ante fallo transitorio NO decidimos ni tocamos
-    //     didit_status — dejamos al médico retriable para la próxima corrida.
-    //     Marcar "In Review" por un hipo del Bus trabaría en falso a un médico
-    //     legítimo (doctrina del repo: "REFEPS timeout ≠ no figura").
-    let refeps: ResultadoREFEPS = { encontrado: false };
-    if (dniCoincide) {
-      try {
-        refeps = await validarMedicoREFEPS(dniDidit);
-      } catch {
-        refeps = { encontrado: false, error: "REFEPS_ERROR_INTERNO" };
-      }
-      if (
-        !refeps.encontrado &&
-        refeps.error &&
-        ERRORES_TRANSITORIOS_REFEPS.has(refeps.error)
-      ) {
-        // El Bus no respondió (no es un "no figura" real). No persistimos nada;
-        // el médico queda igual y la próxima corrida (o el webhook) reintenta.
-        return { outcome: "refeps_transitorio", diditStatus: decisionStatus };
-      }
-    }
-
-    const matriculaPertenece =
-      !!refeps.encontrado &&
-      !!refeps.matriculas?.length &&
-      !!matriculaDocto &&
-      refeps.matriculas.some((m) => claveMatricula(m.numero) === matriculaDocto);
-
-    // El DNI es el suyo (biometría) y REFEPS respondió para ese DNI. Si el
-    // número que escribió figura, valida. Si no figura —en todos los casos
-    // reales era un dígito mal tipeado— el número lo dice REFEPS: con una sola
-    // matrícula de médico habilitada en la jurisdicción que declaró, es la suya
-    // y se adopta. Regla y motivos: lib/medicos/matricula-refeps.ts.
-    let motivoMatricula: string | null = null;
-    if (dniCoincide && refeps.encontrado) {
-      const cruce = await cerrarCruce(admin, medico.id, dniDidit, refeps.matriculas ?? [], decisionStatus);
-      if (cruce.resultado === "validado") {
-        return { outcome: "validado", diditStatus: decisionStatus };
-      }
-      if (cruce.resultado === "sin_decidir") {
-        // La ficha no se pudo leer/escribir o cambió en el medio: no se decide
-        // nada (ni se toca didit_status); la próxima corrida vuelve a mirar.
-        return { outcome: "refeps_transitorio", diditStatus: decisionStatus };
-      }
-      motivoMatricula = cruce.motivo;
-    }
-
-    // Didit aprobó pero el cruce (respondido por REFEPS) no cierra → revisión
-    // manual, NO validar. Acá REFEPS SÍ respondió (un fallo transitorio ya
-    // retornó arriba): o el DNI no coincide, o la matrícula no pertenece / no figura.
-    //
-    // Este "In Review" es SINTÉTICO (lo pone Docto, no Didit) y necesita acción
-    // HUMANA del admin — el caso Williana (20/07) vivió días invisible porque
-    // era indistinguible del In Review real y no alertaba a nadie. Ahora:
-    // motivo persistido (visible en el panel) + mail al admin SOLO en la
-    // transición (no en cada corrida de 10 min del cron).
-    const motivoHumano = !dniCoincide
-      ? "Didit aprobó la identidad, pero el DNI del documento escaneado no coincide con el DNI registrado en Docto."
-      : motivoMatricula ??
-        "Didit aprobó la identidad, pero REFEPS no devolvió ningún profesional para ese DNI.";
-    updates.didit_status = "In Review";
-    updates.identidad_revision_motivo = motivoHumano;
-    await admin.from("medicos").update(updates).eq("id", medico.id);
-
-    if (medico.didit_status !== "In Review") {
-      const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
-      await sendDoctoAlert(
-        `🟠 Identidad de ${nombre}: necesita TU revisión`,
-        `${nombre} completó la verificación biométrica y Didit la APROBÓ — la persona es quien dice ser. Pero el cruce automático no cierra:\n\n${motivoHumano}\n\n¿Tenés que hacer algo? Sí: entrá al panel de médicos, abrí la ficha y mirá la credencial y las matrículas que REFEPS tiene para esa persona. Si la correcta es una de esas, elegila con «Usar esta». Este caso no se pudo resolver solo y necesita tu criterio. Nadie más va a revisarlo: es tuyo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, dniCoincide=${dniCoincide}, matriculaPertenece=${matriculaPertenece}.`
-      );
-    }
-    return {
-      outcome: "en_revision",
-      diditStatus: "In Review",
-      motivo: `dniCoincide=${dniCoincide} matriculaPertenece=${matriculaPertenece}`,
-    };
+    return aplicarDecisionAprobada(admin, medico, dniDidit, { alertar: true });
   }
 
   // 4. Estado no-aprobado (In Progress, Declined, Expired…) → solo registramos,
   //    con dos alertas de transición al admin (nunca repetidas por corrida):
   //    - "In Review" REAL de Didit: informativa — la revisión es de ellos, esperar.
   //    - "Declined": el verificador rechazó — revisar el caso en el panel.
-  await admin.from("medicos").update(updates).eq("id", medico.id);
+  //    El motivo de un In Review sintético anterior se limpia: ya no aplica (si
+  //    quedara, el panel confundiría un In Review real de Didit con uno nuestro).
+  await admin
+    .from("medicos")
+    .update({ didit_status: decisionStatus, identidad_revision_motivo: null })
+    .eq("id", medico.id);
   if (decisionStatus !== medico.didit_status) {
     const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
     if (decisionStatus === "In Review") {
