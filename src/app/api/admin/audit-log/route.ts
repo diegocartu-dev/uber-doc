@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Enriquecer con email del admin
-  const adminIds = [...new Set((data ?? []).map((d) => d.admin_user_id))];
+  // admin_user_id vacío = lo hizo el sistema (por ejemplo, la matrícula que el
+  // cruce de identidad toma de REFEPS). Un null en el .in() rompería la consulta.
+  const adminIds = [...new Set((data ?? []).map((d) => d.admin_user_id).filter((id): id is string => !!id))];
   const adminEmails = new Map<string, string>();
 
   if (adminIds.length > 0) {
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   const enriched = (data ?? []).map((entry) => ({
     ...entry,
-    admin_email: adminEmails.get(entry.admin_user_id) ?? "—",
+    admin_email: entry.admin_user_id ? adminEmails.get(entry.admin_user_id) ?? "—" : "Sistema",
   }));
 
   return NextResponse.json({ entries: enriched });
