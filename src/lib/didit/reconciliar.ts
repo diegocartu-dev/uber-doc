@@ -90,16 +90,62 @@ interface FichaCruce extends MatriculaDeclarada {
   tipo_matricula: string | null;
   numero_matricula: string | null;
   provincia_matricula: string | null;
-  provincia: string | null;
   verificado: boolean | null;
   verificado_at: string | null;
+  estado_registro: string | null;
   slug: string | null;
   notas_admin: string | null;
 }
 
-// Las columnas que el cruce lee y de las que depende: el update que valida exige
-// que sigan exactamente como se leyeron.
-const COLUMNAS_DEL_CRUCE = ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula", "provincia"] as const;
+// Las columnas de las que depende la decisión: el update que valida exige que
+// sigan exactamente como se leyeron. `verificado` y `estado_registro` porque a
+// un aprobado no se le corrige la matrícula sola; `notas_admin` porque se
+// reescribe con la nota de la adopción.
+const COLUMNAS_DEL_CRUCE = [
+  "dni",
+  "tipo_matricula",
+  "numero_matricula",
+  "provincia_matricula",
+  "verificado",
+  "estado_registro",
+  "notas_admin",
+] as const;
+
+/**
+ * Lo que REFEPS dijo para el DNI BIOMÉTRICO, listo para guardar. La validación
+ * automática del alta se hizo con el DNI tipeado; desde que la biometría lo
+ * confirma, este es el dato que vale. `refeps_validado` se escribe en los dos
+ * sentidos salvo para un aprobado, al que solo se le escribe el "sí" (la base
+ * exige REFEPS validado para estar aprobado; si dejó de estarlo, lo resuelve el
+ * gate de aprobar, que consulta en vivo).
+ */
+function datosRefeps(refeps: ResultadoREFEPS, estadoRegistro: string | null, ahoraIso: string): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw: _raw, ...refepsSinRaw } = refeps;
+  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas);
+  const validado = !!refeps.encontrado && !!refeps.activo;
+  return {
+    refeps_data: refepsSinRaw,
+    refeps_validado_at: ahoraIso,
+    ...(validado || estadoRegistro !== "aprobado" ? { refeps_validado: validado } : {}),
+    ...(jurisdicciones.length ? { jurisdicciones } : {}),
+  };
+}
+
+/**
+ * Cuando el cruce queda en revisión, igual se guarda lo que REFEPS dijo para el
+ * DNI biométrico: el panel arma las opciones de «Usar esta» con eso. Solo si el
+ * DNI sigue siendo el verificado y la identidad no se validó en el medio.
+ */
+async function guardarRefepsSinValidar(admin: SupabaseClient, medicoId: string, ficha: FichaCruce, refeps: ResultadoREFEPS): Promise<void> {
+  const { error } = await admin
+    .from("medicos")
+    .update(datosRefeps(refeps, ficha.estado_registro, new Date().toISOString()))
+    .eq("id", medicoId)
+    .eq("identidad_validada", false)
+    .eq("dni", ficha.dni as string);
+  if (error) console.warn("[didit/reconciliar] no se pudo guardar el REFEPS del DNI verificado:", error.message);
+}
 
 /**
  * ÚNICO lugar que escribe `identidad_validada = true`.
@@ -133,7 +179,7 @@ async function cerrarCruce(
 ): Promise<ResultadoCruce> {
   const { data, error: errFicha } = await admin
     .from("medicos")
-    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, provincia, verificado, verificado_at, slug, notas_admin")
+    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, verificado, verificado_at, estado_registro, slug, notas_admin")
     .eq("id", medicoId)
     .single();
   const ficha = data as FichaCruce | null;
@@ -149,6 +195,7 @@ async function cerrarCruce(
 
   const cruce = cruzarMatricula(ficha, refeps.matriculas ?? []);
   if (cruce.resultado === "revisar") {
+    await guardarRefepsSinValidar(admin, medicoId, ficha, refeps);
     return { resultado: "revisar", motivo: motivoRevisionHumano(cruce.motivo, cruce.jurisdiccion) };
   }
 
@@ -156,6 +203,7 @@ async function cerrarCruce(
   // revisión (trigger reverificar_medico) y lo saca de la clínica. Eso no se
   // hace sin que alguien lo mire.
   if (cruce.resultado === "adoptar" && ficha.verificado === true) {
+    await guardarRefepsSinValidar(admin, medicoId, ficha, refeps);
     return {
       resultado: "revisar",
       motivo:
@@ -164,20 +212,12 @@ async function cerrarCruce(
   }
 
   const ahora = new Date();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { raw: _raw, ...refepsSinRaw } = refeps;
-  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas);
   const cambios: Record<string, unknown> = {
     didit_status: diditStatus,
     identidad_validada: true,
     identidad_validada_at: ahora.toISOString(),
     identidad_revision_motivo: null,
-    refeps_data: refepsSinRaw,
-    refeps_validado_at: ahora.toISOString(),
-    // Solo se escribe el "sí": un "no está activo" lo resuelve el gate de
-    // aprobar, que consulta REFEPS en vivo (y a un aprobado no se le baja acá).
-    ...(refeps.encontrado && refeps.activo ? { refeps_validado: true } : {}),
-    ...(jurisdicciones.length ? { jurisdicciones } : {}),
+    ...datosRefeps(refeps, ficha.estado_registro, ahora.toISOString()),
   };
   if (cruce.resultado === "adoptar") {
     const fecha = ahora.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -185,7 +225,6 @@ async function cerrarCruce(
     cambios.tipo_matricula = cruce.nueva.tipo_matricula;
     cambios.numero_matricula = cruce.nueva.numero_matricula;
     cambios.provincia_matricula = cruce.nueva.provincia_matricula;
-    cambios.provincia = cruce.nueva.provincia_matricula;
     cambios.notas_admin = ficha.notas_admin ? `${ficha.notas_admin}\n${nota}` : nota;
   }
 
@@ -199,6 +238,7 @@ async function cerrarCruce(
   if (error) {
     if (error.code === "23505") {
       // Otra cuenta de Docto ya tiene esa matrícula: eso sí es para mirar.
+      await guardarRefepsSinValidar(admin, medicoId, ficha, refeps);
       return {
         resultado: "revisar",
         motivo:
