@@ -36,9 +36,11 @@ export interface MatriculaDeRefeps {
 export interface MatriculaDeclarada {
   tipo_matricula: string | null | undefined;
   numero_matricula: string | null | undefined;
+  /**
+   * La provincia de la MATRÍCULA. Ojo: `medicos.provincia` es otra cosa (el
+   * onboarding guarda ahí la del consultorio) y no entra en este cruce.
+   */
   provincia_matricula: string | null | undefined;
-  /** La que edita el perfil del profesional (el registro escribe las dos iguales). */
-  provincia?: string | null | undefined;
 }
 
 /** Cómo queda una matrícula en la ficha. */
@@ -105,7 +107,7 @@ export function claveMatricula(v: string | null | undefined): string {
  */
 export function jurisdiccionDeclarada(d: MatriculaDeclarada): string | null {
   if (d.tipo_matricula === "MN") return "CABA";
-  if (d.tipo_matricula === "MP") return normalizarJurisdiccion(d.provincia) ?? normalizarJurisdiccion(d.provincia_matricula);
+  if (d.tipo_matricula === "MP") return normalizarJurisdiccion(d.provincia_matricula);
   return null;
 }
 
@@ -123,14 +125,18 @@ export function declaradaDesdeRefeps(m: MatriculaDeRefeps): MatriculaEnFicha | n
     : { tipo_matricula: "MP", numero_matricula: numero, provincia_matricula: jurisdiccion };
 }
 
-/** ¿La matrícula de REFEPS es la que la ficha ya tiene (tipo, número y jurisdicción)? */
+/**
+ * ¿La ficha ya tiene ESA matrícula escrita como la tiene REFEPS (tipo, número y
+ * provincia)? Una "MP de CABA" con el número de la Nacional no lo es: REFEPS la
+ * tiene como MN.
+ */
 export function esLaDeLaFicha(declarada: MatriculaDeclarada, m: MatriculaDeRefeps): boolean {
   const enFicha = declaradaDesdeRefeps(m);
   if (!enFicha) return false;
   return (
     enFicha.tipo_matricula === declarada.tipo_matricula &&
     normalizarNumeroMatricula(enFicha.numero_matricula) === normalizarNumeroMatricula(declarada.numero_matricula) &&
-    normalizarJurisdiccion(m.tipo) === jurisdiccionDeclarada(declarada)
+    normalizarJurisdiccion(enFicha.provincia_matricula) === normalizarJurisdiccion(declarada.provincia_matricula)
   );
 }
 
@@ -143,9 +149,10 @@ export function esUtilizable(m: MatriculaDeRefeps): boolean {
  * Cruza la matrícula declarada con las que REFEPS tiene para el DNI verificado.
  *
  *  1. El número escrito es, tal cual, una matrícula de médico habilitada suya:
- *     - en la jurisdicción que declaró → `coincide`;
- *     - en UNA sola otra jurisdicción → `adoptar` esa (se corrige MN/MP o la
- *       provincia, el número queda);
+ *     - y la ficha ya la tiene escrita como REFEPS (tipo y provincia) → `coincide`;
+ *     - en la jurisdicción que declaró pero escrita distinto (una "MP de CABA"
+ *       que es la Nacional), o en UNA sola otra jurisdicción → `adoptar` esa
+ *       (se corrigen tipo y provincia, el número queda);
  *     - en varias otras → `revisar`.
  *  2. Si no figura tal cual: en la jurisdicción declarada, REFEPS tiene UNA sola
  *     matrícula de médico habilitada → `adoptar` esa. Si no, `revisar` con el
@@ -163,8 +170,17 @@ export function cruzarMatricula(
   // 1 · El número escrito, tal cual.
   if (escrito !== "") {
     const exactas = utilizables.filter((m) => normalizarNumeroMatricula(m.numero) === escrito);
-    if (exactas.some((m) => normalizarJurisdiccion(m.tipo) === jurisdiccion)) {
+    if (exactas.some((m) => esLaDeLaFicha(declarada, m))) {
       return { resultado: "coincide" };
+    }
+    const enSuJurisdiccion = exactas.find((m) => normalizarJurisdiccion(m.tipo) === jurisdiccion);
+    if (enSuJurisdiccion) {
+      return {
+        resultado: "adoptar",
+        nueva: declaradaDesdeRefeps(enSuJurisdiccion) as MatriculaEnFicha,
+        jurisdiccion: jurisdiccion as string,
+        por: "jurisdiccion",
+      };
     }
     const distintas = new Map<string, MatriculaDeRefeps>();
     for (const m of exactas) distintas.set(normalizarJurisdiccion(m.tipo) as string, m);

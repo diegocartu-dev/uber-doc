@@ -32,11 +32,12 @@ test("forma comparable: mayúsculas y sin separadores; letras y ceros a la izqui
   assert.equal(normalizarNumeroMatricula(null), "");
 });
 
-test("jurisdicción declarada: MN es CABA; MP es su provincia (la del perfil primero); MP sin provincia no se sabe", () => {
+test("jurisdicción declarada: MN es CABA; MP es la provincia DE LA MATRÍCULA (nunca la del consultorio); MP sin provincia no se sabe", () => {
   assert.equal(jurisdiccionDeclarada(MN("1")), "CABA");
   assert.equal(jurisdiccionDeclarada(MP("1", "Santa Fe")), "Santa Fe");
-  assert.equal(jurisdiccionDeclarada({ ...MP("1", "Santa Fe"), provincia: "Córdoba" }), "Córdoba");
-  assert.equal(jurisdiccionDeclarada({ ...MP("1", null), provincia: "Salta" }), "Salta");
+  // `medicos.provincia` (la del consultorio, que guarda el onboarding) no entra:
+  // ni siquiera es parte del tipo que recibe el cruce.
+  assert.equal(jurisdiccionDeclarada({ ...MP("1", "Buenos Aires"), provincia: "CABA" } as Parameters<typeof jurisdiccionDeclarada>[0]), "Buenos Aires");
   assert.equal(jurisdiccionDeclarada(MP("1", null)), null);
   assert.equal(jurisdiccionDeclarada({ tipo_matricula: "XX", numero_matricula: "1", provincia_matricula: null }), null);
 });
@@ -47,6 +48,17 @@ test("coincide: el número tal cual, de médico, habilitado, en la jurisdicción
   assert.deepEqual(cruzarMatricula(MP("2222", "Chaco"), refeps), { resultado: "coincide" });
   // Solo separadores distintos: coincide.
   assert.deepEqual(cruzarMatricula(MP("m-2222", "Misiones"), [med("M2222", "Misiones")]), { resultado: "coincide" });
+});
+
+test("coincide exige la ficha escrita como REFEPS: una 'MP de CABA' con el número de la Nacional se corrige a MN", () => {
+  assert.deepEqual(cruzarMatricula(MP("123456", "CABA"), [med("123456", "CABA")]), {
+    resultado: "adoptar",
+    nueva: { tipo_matricula: "MN", numero_matricula: "123456", provincia_matricula: null },
+    jurisdiccion: "CABA",
+    por: "jurisdiccion",
+  });
+  // MN con el número de la Nacional: coincide sin tocar nada.
+  assert.deepEqual(cruzarMatricula(MN("123456"), [med("123456", "CABA")]), { resultado: "coincide" });
 });
 
 test("el número es suyo pero declaró mal MN/MP o la provincia → se corrige la jurisdicción, no se valida tal cual", () => {

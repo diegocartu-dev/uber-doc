@@ -398,7 +398,7 @@ export async function PATCH(req: NextRequest) {
     const { data: ficha, error: errFicha } = await admin
       .from("medicos")
       .select(
-        "dni, tipo_matricula, numero_matricula, provincia_matricula, provincia, identidad_validada, biometria_exenta, didit_status, didit_session_id, identidad_revision_motivo, verificado, verificado_at, slug, es_cuenta_test, nombre_completo"
+        "dni, tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, biometria_exenta, didit_status, didit_session_id, identidad_revision_motivo, verificado, verificado_at, slug, es_cuenta_test, nombre_completo"
       )
       .eq("id", medicoId)
       .single();
@@ -432,12 +432,16 @@ export async function PATCH(req: NextRequest) {
     if (ficha.es_cuenta_test === true) {
       return NextResponse.json({ error: "Las cuentas de prueba no se consultan contra REFEPS." }, { status: 400 });
     }
-    // Aprobado: el trigger de la base lo devuelve a revisión al cambiarle la
-    // matrícula. Se hace solo si quien aprieta ya lo sabe.
-    if (ficha.verificado === true && body.confirmado !== true) {
+    // Siempre con confirmación explícita: la matrícula elegida queda congelada en
+    // el mismo clic (se valida la identidad), y a un aprobado el trigger de la
+    // base lo devuelve a revisión.
+    if (body.confirmado !== true) {
       return NextResponse.json(
         {
-          error: "Este profesional está aprobado: al cambiarle la matrícula vuelve a revisión y hay que aprobarlo de nuevo.",
+          error:
+            ficha.verificado === true
+              ? "Este profesional está aprobado: al cambiarle la matrícula vuelve a revisión y hay que aprobarlo de nuevo."
+              : "La matrícula elegida queda como la suya y no se puede cambiar después.",
           requiereConfirmacion: true,
         },
         { status: 409 }
@@ -500,11 +504,11 @@ export async function PATCH(req: NextRequest) {
     // y a alguien lo pueden haber aprobado mientras se consultaba REFEPS.
     let escritura = admin
       .from("medicos")
-      .update({ ...nueva, provincia: nueva.provincia_matricula })
+      .update({ ...nueva })
       .eq("id", medicoId)
       .eq("identidad_validada", false)
       .eq("verificado", ficha.verificado === true);
-    for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula", "provincia"] as const) {
+    for (const col of ["dni", "tipo_matricula", "numero_matricula", "provincia_matricula"] as const) {
       const valor = ficha[col] as string | null;
       escritura = valor === null ? escritura.is(col, null) : escritura.eq(col, valor);
     }
@@ -560,7 +564,7 @@ export async function PATCH(req: NextRequest) {
     const { data: despues } = await admin
       .from("medicos")
       .select(
-        "tipo_matricula, numero_matricula, provincia_matricula, estado_registro, verificado, verificado_at, verificado_por, identidad_validada, didit_status, identidad_revision_motivo, refeps_validado, refeps_data, jurisdicciones"
+        "tipo_matricula, numero_matricula, provincia_matricula, estado_registro, verificado, verificado_at, verificado_por, identidad_validada, didit_status, identidad_revision_motivo, refeps_validado, refeps_data, refeps_validado_at, jurisdicciones"
       )
       .eq("id", medicoId)
       .single();
