@@ -99,8 +99,9 @@ interface FichaCruce extends MatriculaDeclarada {
 
 // Las columnas de las que depende la decisión: el update que valida exige que
 // sigan exactamente como se leyeron. `verificado` y `estado_registro` porque a
-// un aprobado no se le corrige la matrícula sola; `notas_admin` porque se
-// reescribe con la nota de la adopción.
+// un aprobado no se le corrige la matrícula sola. `notas_admin` entra SOLO
+// cuando se adopta (se reescribe con la nota): en el resto no hace falta, y una
+// nota larga alargaría la URL del update sin límite.
 const COLUMNAS_DEL_CRUCE = [
   "dni",
   "tipo_matricula",
@@ -108,7 +109,6 @@ const COLUMNAS_DEL_CRUCE = [
   "provincia_matricula",
   "verificado",
   "estado_registro",
-  "notas_admin",
 ] as const;
 
 /**
@@ -124,10 +124,12 @@ function datosRefeps(refeps: ResultadoREFEPS, estadoRegistro: string | null, aho
   const { raw: _raw, ...refepsSinRaw } = refeps;
   const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas);
   const validado = !!refeps.encontrado && !!refeps.activo;
+  // La fecha de validación acompaña a refeps_validado: si no se escribe (un
+  // aprobado al que REFEPS hoy devuelve inactivo), tampoco se renueva la fecha.
+  const escribeValidado = validado || estadoRegistro !== "aprobado";
   return {
     refeps_data: refepsSinRaw,
-    refeps_validado_at: ahoraIso,
-    ...(validado || estadoRegistro !== "aprobado" ? { refeps_validado: validado } : {}),
+    ...(escribeValidado ? { refeps_validado: validado, refeps_validado_at: ahoraIso } : {}),
     ...(jurisdicciones.length ? { jurisdicciones } : {}),
   };
 }
@@ -230,7 +232,8 @@ async function cerrarCruce(
 
   // Solo si la ficha sigue EXACTAMENTE como se leyó (ver punto 3 de arriba).
   let escritura = admin.from("medicos").update(cambios).eq("id", medicoId).eq("identidad_validada", false);
-  for (const col of COLUMNAS_DEL_CRUCE) {
+  const condiciones: Array<keyof FichaCruce> = [...COLUMNAS_DEL_CRUCE, ...(cruce.resultado === "adoptar" ? (["notas_admin"] as const) : [])];
+  for (const col of condiciones) {
     const valor = ficha[col];
     escritura = valor === null ? escritura.is(col, null) : escritura.eq(col, valor);
   }
@@ -364,6 +367,19 @@ export async function aplicarDecisionAprobada(
     return { outcome: "refeps_transitorio", diditStatus };
   }
   if (!refeps.encontrado) {
+    // El "no" de REFEPS para el DNI biométrico también se guarda (la validación
+    // del alta se hizo con el DNI tipeado). A un aprobado no se le baja: la base
+    // exige REFEPS validado para estar aprobado; lo resuelve el gate de aprobar.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { raw: _raw, ...refepsSinRaw } = refeps;
+    const { error: errNo } = await admin
+      .from("medicos")
+      .update({ refeps_data: refepsSinRaw, refeps_validado: false, refeps_validado_at: new Date().toISOString() })
+      .eq("id", medico.id)
+      .eq("identidad_validada", false)
+      .eq("dni", medico.dni as string)
+      .neq("estado_registro", "aprobado");
+    if (errNo) console.warn("[didit/reconciliar] no se pudo guardar el 'no' de REFEPS:", errNo.message);
     await marcarEnRevision(admin, medico, MOTIVO_SIN_PROFESIONAL_EN_REFEPS, opciones.alertar);
     return { outcome: "en_revision", diditStatus: "In Review", motivo: "sin_profesional_en_refeps" };
   }
