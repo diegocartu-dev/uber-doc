@@ -9,7 +9,7 @@ import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/componen
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
-import { claveMatricula } from "@/lib/medicos/matricula-refeps";
+import { claveMatricula, declaradaDesdeRefeps, esMatriculaDeMedico } from "@/lib/medicos/matricula-refeps";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
 
@@ -212,6 +212,10 @@ export default function MedicosClient({
 
   function actualizarMatricula(medicoId: string, campos: Partial<Medico>) {
     setMedicos((prev) => prev.map((m) => (m.id === medicoId ? { ...m, ...campos } : m)));
+    // Un aprobado al que se le cambia la matrícula vuelve a pendientes: el
+    // globito del menú y la lista del servidor tienen que enterarse.
+    avisarContadoresCambiaron();
+    router.refresh();
   }
 
   async function handleImpersonate(userId: string, nombre: string) {
@@ -546,9 +550,9 @@ function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva
         </div>
         <p className="mt-1 text-xs text-red-700">{m.identidad_revision_motivo}</p>
         <p className="mt-1 text-xs text-red-700">
-          Un número mal tipeado se corrige solo: esto es otra cosa. Abrí la ficha y mirá la credencial; si
-          la matrícula correcta es una de las que figuran en REFEPS, elegila con «Usar esta» y el sistema
-          valida solo en menos de 10 minutos.
+          Este caso no se pudo resolver solo. Abrí la ficha y mirá la credencial; si la matrícula correcta
+          es una de las que figuran en REFEPS, elegila con «Usar esta» y el sistema valida la identidad en
+          su próxima pasada (corre cada 10 minutos).
         </p>
       </div>
     ) : (
@@ -1092,26 +1096,43 @@ function MedicoDetalle({
   onContactoActualizado?: (id: string, celular: string | null, telefono: string | null) => void;
   onMatriculaCorregida?: (id: string, campos: Partial<Medico>) => void;
 }) {
+  // Clave de la matrícula que se está guardando / esperando confirmación (tipo + número).
   const [eligiendoMatricula, setEligiendoMatricula] = useState<string | null>(null);
+  const [confirmarMatricula, setConfirmarMatricula] = useState<{ numero: string; tipo: string } | null>(null);
   const [errorMatricula, setErrorMatricula] = useState<string | null>(null);
+  const [matriculaCambiada, setMatriculaCambiada] = useState(false);
   // Elegir una matrícula de REFEPS solo tiene sentido cuando el cruce de
-  // identidad quedó sin cerrar; validada la identidad, la base la congela.
-  const puedeElegirMatricula = !m.identidad_validada && !!m.identidad_revision_motivo;
+  // identidad quedó sin cerrar (mismas condiciones que exige el servidor);
+  // validada la identidad, la base la congela.
+  const puedeElegirMatricula =
+    !m.identidad_validada && !m.biometria_exenta && m.didit_status === "In Review" && !!m.identidad_revision_motivo;
 
-  async function usarMatriculaDeRefeps(mat: { numero: string; tipo: string }) {
-    setEligiendoMatricula(mat.numero);
+  async function usarMatriculaDeRefeps(mat: { numero: string; tipo: string }, confirmado = false) {
+    // Aprobado: cambiarle la matrícula lo devuelve a revisión. Se pregunta antes.
+    if (m.verificado && !confirmado) {
+      setConfirmarMatricula(mat);
+      return;
+    }
+    setConfirmarMatricula(null);
+    setEligiendoMatricula(`${mat.tipo}|${mat.numero}`);
     setErrorMatricula(null);
+    setMatriculaCambiada(false);
     try {
       const res = await fetch("/api/admin/medicos", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ medicoId: m.id, accion: "usar_matricula_refeps", matricula: { numero: mat.numero, tipo: mat.tipo } }),
+        body: JSON.stringify({ medicoId: m.id, accion: "usar_matricula_refeps", matricula: { numero: mat.numero, tipo: mat.tipo }, confirmado }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        if (data.requiereConfirmacion) {
+          setConfirmarMatricula(mat);
+          return;
+        }
         setErrorMatricula(data.error || "No se pudo cambiar la matrícula.");
         return;
       }
+      setMatriculaCambiada(true);
       onMatriculaCorregida?.(m.id, {
         tipo_matricula: data.tipo_matricula,
         numero_matricula: data.numero_matricula,
@@ -1161,6 +1182,7 @@ function MedicoDetalle({
     tipo: string;
     entidad_certificante: string;
     habilitada?: boolean;
+    profesion?: string;
   }> | undefined;
 
   return (
@@ -1202,19 +1224,56 @@ function MedicoDetalle({
                     <p key={i} className="text-xs text-green-700">
                       {mat.habilitada ? "✓" : "✗"} Matrícula {mat.numero} — {mat.tipo}
                       {mat.entidad_certificante ? ` (${mat.entidad_certificante})` : ""}
-                      {puedeElegirMatricula && mat.habilitada && claveMatricula(mat.numero) !== claveMatricula(m.numero_matricula) && (
-                        <button
-                          type="button"
-                          onClick={() => usarMatriculaDeRefeps(mat)}
-                          disabled={eligiendoMatricula !== null}
-                          className="ml-2 rounded border border-[#378ADD] px-2 py-0.5 text-xs font-medium text-[#378ADD] hover:bg-[#378ADD]/10 disabled:opacity-50"
-                        >
-                          {eligiendoMatricula === mat.numero ? "Guardando…" : "Usar esta"}
-                        </button>
-                      )}
+                      {mat.profesion ? ` · ${mat.profesion}` : ""}
+                      {puedeElegirMatricula &&
+                        mat.habilitada &&
+                        // Sin dato de profesión (validaciones viejas) se ofrece igual: el servidor
+                        // vuelve a consultar REFEPS y solo acepta una matrícula de médico.
+                        (!mat.profesion || esMatriculaDeMedico(mat)) &&
+                        declaradaDesdeRefeps(mat) !== null &&
+                        claveMatricula(mat.numero) !== claveMatricula(m.numero_matricula) && (
+                          <button
+                            type="button"
+                            onClick={() => usarMatriculaDeRefeps(mat)}
+                            disabled={eligiendoMatricula !== null}
+                            className="ml-2 rounded border border-[#378ADD] px-2 py-0.5 text-xs font-medium text-[#378ADD] hover:bg-[#378ADD]/10 disabled:opacity-50"
+                          >
+                            {eligiendoMatricula === `${mat.tipo}|${mat.numero}` ? "Consultando REFEPS…" : "Usar esta"}
+                          </button>
+                        )}
                     </p>
                   ))}
                 </div>
+              )}
+              {confirmarMatricula && (
+                <div className="mt-2 rounded-lg border border-[#D85A30]/40 bg-white p-2 text-xs text-gray-700">
+                  <p>
+                    Este profesional está <strong>aprobado</strong>. Al cambiarle la matrícula a{" "}
+                    {confirmarMatricula.numero} ({confirmarMatricula.tipo}) vuelve a «pendiente» y sale de la
+                    clínica hasta que lo apruebes de nuevo.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => usarMatriculaDeRefeps(confirmarMatricula, true)}
+                      className="rounded border border-[#378ADD] px-2 py-0.5 font-medium text-[#378ADD] hover:bg-[#378ADD]/10"
+                    >
+                      Sí, cambiarla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmarMatricula(null)}
+                      className="rounded border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50"
+                    >
+                      Dejarla como está
+                    </button>
+                  </div>
+                </div>
+              )}
+              {matriculaCambiada && (
+                <p className="mt-2 text-xs text-gray-700">
+                  Matrícula cambiada. La identidad se valida sola en la próxima pasada del sistema (cada 10 minutos).
+                </p>
               )}
               {errorMatricula && <p className="mt-2 text-xs text-[#E24B4A]">{errorMatricula}</p>}
               {m.refeps_validado_at && (

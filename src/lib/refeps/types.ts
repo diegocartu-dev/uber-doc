@@ -62,6 +62,8 @@ export interface REFEPSMatricula {
   entidad_certificante: string;
   vigente_desde?: string;
   habilitada?: boolean;
+  /** Profesión de la misma qualification ("Médico", "Técnico en hemoterapia"…). */
+  profesion?: string;
 }
 
 export interface REFEPSEspecialidad {

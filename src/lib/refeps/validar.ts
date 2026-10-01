@@ -46,10 +46,14 @@ function parsearPractitioner(p: FHIRPractitioner): REFEPSResult {
         }
       }
 
-      // Qualification con identifier = matrícula
+      // Qualification con identifier = matrícula. Lleva la profesión de SU
+      // qualification: una persona con dos profesiones trae las matrículas de
+      // las dos bajo el mismo DNI, y sin esto no se distinguen.
+      const profesion = q.code?.coding?.[0]?.display ?? q.code?.text ?? undefined;
       if (q.identifier && q.identifier.length > 0) {
         for (const id of q.identifier) {
           matriculas.push({
+            ...(profesion ? { profesion } : {}),
             numero: id.value ?? "",
             tipo: jurisdiccion || extraerTipoMatricula(id.system),
             entidad_certificante: q.issuer?.display ?? "",
