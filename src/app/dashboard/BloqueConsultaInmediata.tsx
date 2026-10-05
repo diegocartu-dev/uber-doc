@@ -35,9 +35,14 @@ export default function BloqueConsultaInmediata({
   perfilCompleto = true,
   institucional = false,
 }: Props) {
-  const { disponible, turnosActivosHoy } = useDashboardMedico();
+  const { disponible, turnosActivosHoy, pendientes } = useDashboardMedico();
 
   const inactiva = !disponible || turnosActivosHoy;
+  // Un pedido vivo se muestra SIEMPRE, con el interruptor apagado inclusive.
+  // Hasta el 05/10/2026 apagar la disponibilidad reemplazaba la tarjeta por
+  // "Consulta inmediata inactiva" mientras el paciente seguía esperando y el
+  // plazo de 10 minutos seguía corriendo; prenderla la hacía "aparecer".
+  const hayPendientes = pendientes.length > 0;
 
   return (
     <div
@@ -78,12 +83,12 @@ export default function BloqueConsultaInmediata({
 
       {/* Zona urgencia / contenido */}
       <ConsultasEnCurso medicoId={medicoId} />
-      {inactiva ? (
+      {inactiva && !hayPendientes ? (
         <div className="rounded-xl px-5 py-8 text-center" style={{ background: "#f8f9fa", border: "0.5px solid #e5e7eb" }}>
           <p className="text-sm text-gray-400">Consulta inmediata inactiva</p>
         </div>
       ) : (
-        <ConsultasPendientes medicoId={medicoId} activa />
+        <ConsultasPendientes medicoId={medicoId} activa={!inactiva} />
       )}
 
       {/* Pie */}
