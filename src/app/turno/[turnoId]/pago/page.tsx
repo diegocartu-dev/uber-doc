@@ -8,10 +8,16 @@ import { getReturnUrl } from "@/lib/consultorio-url";
 
 export default async function PagoTurnoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ turnoId: string }>;
+  searchParams: Promise<{ pago?: string }>;
 }) {
   const { turnoId } = await params;
+  // Mercado Pago vuelve acá con ?pago=error (rechazado) o ?pago=pendiente: la
+  // reserva es la misma y el paciente puede reintentar con otro medio.
+  const { pago } = await searchParams;
+  const vuelta = pago === "error" ? "rechazado" : pago === "pendiente" ? "pendiente" : null;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -59,6 +65,7 @@ export default async function PagoTurnoPage({
       <main className="mx-auto max-w-lg px-6 py-10">
         <PagoPendiente
           turnoId={turnoId}
+          vuelta={vuelta}
           reservadoHasta={turno.reservado_hasta}
           returnUrl={returnUrl}
           medico={{

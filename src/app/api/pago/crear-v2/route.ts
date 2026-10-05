@@ -11,6 +11,7 @@ import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { trackEvent } from "@/lib/funnel";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { assertNoInstitucional } from "@/lib/instancia";
+import { armarPagador, CATEGORIA_MP, DESCRIPTOR_MP } from "@/lib/pagos/preferencia-mp";
 
 type TipoPago = "consulta" | "turno";
 
@@ -168,6 +169,22 @@ export async function POST(req: NextRequest) {
 
   const baseUrl = req.nextUrl.origin;
 
+  // Quién paga. Mercado Pago decide "riesgo alto" con lo que sabe del pagador:
+  // sin nombre, documento, mail ni teléfono rechazaba pagos legítimos
+  // (hallazgo 05/10/2026, lib/pagos/preferencia-mp.ts). Service role: la ficha
+  // propia del paciente con columnas que no tienen GRANT para el cliente RLS.
+  const { data: fichaPaciente } = await admin
+    .from("pacientes")
+    .select("nombre, apellido, nombre_completo, dni, telefono")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const payer = armarPagador({ email: user.email, ...(fichaPaciente ?? {}) });
+
+  // Un turno cuyo pago anterior fue rechazado vuelve a esta misma reserva para
+  // reintentar con otro medio. Si la retención de 15 min está por vencer, se
+  // estira un poco: que no se le libere el lugar mientras está en el checkout.
+  if (tipo === "turno") await extenderRetencionSiReintenta(admin, id);
+
   // (`pago_intento` ya quedó registrado arriba, antes de los gates.)
   try {
     const prefBody = {
@@ -176,11 +193,18 @@ export async function POST(req: NextRequest) {
           id,
           title: titulo,
           description: descripcion,
+          category_id: CATEGORIA_MP,
           quantity: 1,
           unit_price: monto,
           currency_id: "ARS",
         },
       ],
+      payer,
+      statement_descriptor: DESCRIPTOR_MP,
+      // Aprobado o rechazado en el acto: un pago "en revisión" no sirve para una
+      // consulta que es ahora ni para un lugar retenido 15 minutos.
+      binary_mode: true,
+      auto_return: "approved",
       marketplace_fee: marketplaceFee,
       // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
       //
@@ -421,7 +445,33 @@ async function obtenerTurno(
     titulo: medicoNombre ? `Turno programado — ${medicoNombre}` : "Turno programado",
     descripcion: `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
     redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/consentimiento`,
-    redirectFailure: `/clinica/${turno.medico_id}/turnos?pago=error`,
-    redirectPending: `/clinica/${turno.medico_id}/turnos?pago=pendiente`,
+    // De vuelta a la MISMA reserva, no al calendario: ahí el lugar propio figura
+    // tomado y el paciente sacaba otro turno (y otro, y otro) para volver a ser
+    // rechazado. La pantalla de pago muestra el motivo y deja reintentar.
+    redirectFailure: `/turno/${turnoId}/pago?pago=error`,
+    redirectPending: `/turno/${turnoId}/pago?pago=pendiente`,
   };
+}
+
+/**
+ * Reintento tras un rechazo: si la reserva sigue pendiente y le quedan menos
+ * de 5 minutos, se le dan 10 desde ahora. Solo sobre una reserva ya rechazada,
+ * nunca sobre un pago vivo ni aprobado. Falla suave: no frena el checkout.
+ */
+async function extenderRetencionSiReintenta(admin: ReturnType<typeof createAdminClient>, turnoId: string): Promise<void> {
+  const { data: t } = await admin
+    .from("turnos")
+    .select("estado, mp_status, reservado_hasta")
+    .eq("id", turnoId)
+    .maybeSingle();
+  if (!t || t.estado !== "reservado_pendiente" || t.mp_status !== "rejected") return;
+  const vence = t.reservado_hasta ? Date.parse(t.reservado_hasta) : 0;
+  if (vence - Date.now() > 5 * 60 * 1000) return;
+  const { error } = await admin
+    .from("turnos")
+    .update({ reservado_hasta: new Date(Date.now() + 10 * 60 * 1000).toISOString() })
+    .eq("id", turnoId)
+    .eq("estado", "reservado_pendiente")
+    .eq("mp_status", "rejected");
+  if (error) logWarn("[MP-V2]", "No se pudo extender la retención para reintentar", { turnoId, error: error.message });
 }
