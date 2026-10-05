@@ -31,7 +31,10 @@ export const TITULO_CANCELACION = "El paciente canceló esta consulta";
  */
 export async function avisarCancelacionDelPaciente(
   medicoId: string,
-  pacienteNombre: string
+  pacienteNombre: string,
+  // "otro": se fue con otro profesional (regla del Uber). "retiro": canceló y
+  // punto, desde la sala. Hasta el 05/10/2026 el retiro no avisaba nada.
+  motivo: "otro" | "retiro" = "otro"
 ): Promise<void> {
   const admin = createAdminClient();
 
@@ -39,7 +42,9 @@ export async function avisarCancelacionDelPaciente(
     medico_id: medicoId,
     titulo: TITULO_CANCELACION,
     mensaje:
-      `${pacienteNombre} canceló la consulta que te había solicitado y eligió atenderse con otro profesional. ` +
+      (motivo === "otro"
+        ? `${pacienteNombre} canceló la consulta que te había solicitado y eligió atenderse con otro profesional. `
+        : `${pacienteNombre} canceló la consulta que te había solicitado. `) +
       `No la había pagado, así que no hay ningún cobro involucrado y no tenés nada que hacer.\n\n` +
       `Te lo avisamos para que no la sigas esperando.`,
     // `enviada_por` en null a propósito: no la mandó un admin, la generó el
