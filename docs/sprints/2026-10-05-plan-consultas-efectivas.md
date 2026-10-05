@@ -147,6 +147,24 @@ mergear, y cada sprint se mide contra la escalera de la sección 2.
 | P4.2 Agenda viva: confirmación semanal por WhatsApp ("¿Seguís atendiendo estos horarios?"); sin respuesta, la agenda se pausa ANTES de plantar a alguien. | D4 |
 | P4.3 Panel: agenda de hoy que se refresca sola; "Iniciar turno" siempre a mano; diálogo de cancelar que diga la verdad; recordatorios del paciente honrados. | D5, D6 |
 
+### Estado (05/10, noche)
+
+Pilar 1 construido en la rama `plan/consultas-efectivas` (PR #524), un commit
+por ticket: P1.1, P1.2, P1.3, P1.4, P1.5, P1.6, P1.7, P1.8, P1.9, P1.10 (inerte
+hasta las plantillas), P1.11 y la parte de P3.2 que no necesita decisión
+("volver a pedir" crea un pedido nuevo con lo ya escrito). Falta P1.12
+(waitUntil en el resto de los avisos, rastro de entrega del push, tablero).
+Pendiente de revisión adversarial antes de mergear.
+
+### Plantillas de WhatsApp que faltan (esperan OK de Diego antes de pedirlas a Meta)
+
+Las dos van al profesional, con botón que abre su panel.
+
+- **turno_reservado** (al confirmarse el pago):
+  > Hola {{1}}. Un paciente reservó y pagó un turno con vos para **{{2}} a las {{3}}**. Lo esperás en tu panel de Docto a esa hora; quince minutos antes te volvemos a avisar.
+- **turno_15min** (15 minutos antes):
+  > Hola {{1}}. En 15 minutos empieza tu turno de las **{{3}}** ({{2}}). Entrá a tu panel de Docto: el paciente va a estar en la sala.
+
 ### Orden y ritmo
 
 1. Pilar 1 entero (sin decisiones): son bugs. Se despliega en tandas por
