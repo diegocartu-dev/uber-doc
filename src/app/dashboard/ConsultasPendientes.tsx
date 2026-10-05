@@ -46,18 +46,34 @@ function getInitials(name: string): string {
 }
 
 export default function ConsultasPendientes({ medicoId, activa }: { medicoId: string; activa?: boolean }) {
-  const { pendientes } = useDashboardMedico();
+  const { pendientes, refrescar, desconectado } = useDashboardMedico();
   const [localRemoved, setLocalRemoved] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [showRecordatorio, setShowRecordatorio] = useState(false);
+  // Error por tarjeta. Hasta el 05/10/2026 un toque que fallaba no mostraba nada:
+  // el botón volvía a "Aceptar" y el profesional tocaba de nuevo, y de nuevo.
+  const [errores, setErrores] = useState<Record<string, string>>({});
 
   // Filter out locally-accepted/rejected consultas until the next poll refreshes
   const consultas = pendientes.filter((c) => !localRemoved.has(c.id));
 
   function handleAceptar(consultaId: string) {
+    setErrores((prev) => ({ ...prev, [consultaId]: "" }));
     startTransition(async () => {
-      const result = await aceptarConsulta(consultaId);
+      let result: { success?: boolean; error?: string } | undefined;
+      try {
+        result = await aceptarConsulta(consultaId);
+      } catch {
+        result = { error: "No hubo respuesta del servidor. Revisá tu conexión y reintentá." };
+      }
+      if (result?.error) {
+        setErrores((prev) => ({ ...prev, [consultaId]: result?.error ?? "No se pudo aceptar." }));
+        // El estado real manda: si el pedido ya no existe, el poll lo saca.
+        void refrescar();
+        return;
+      }
       if (result?.success) {
+        void refrescar();
         setLocalRemoved((prev) => new Set(prev).add(consultaId));
         // NO se va al workspace. Acá había un `router.push` a la sala de video, y
         // la sala de video solo abre con la consulta `pagada` o `en_curso`: recién
@@ -72,9 +88,21 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
   }
 
   function handleRechazar(consultaId: string) {
+    setErrores((prev) => ({ ...prev, [consultaId]: "" }));
     startTransition(async () => {
-      const result = await rechazarConsulta(consultaId);
+      let result: { success?: boolean; error?: string } | undefined;
+      try {
+        result = await rechazarConsulta(consultaId);
+      } catch {
+        result = { error: "No hubo respuesta del servidor. Revisá tu conexión y reintentá." };
+      }
+      if (result?.error) {
+        setErrores((prev) => ({ ...prev, [consultaId]: result?.error ?? "No se pudo rechazar." }));
+        void refrescar();
+        return;
+      }
       if (result?.success) {
+        void refrescar();
         setLocalRemoved((prev) => new Set(prev).add(consultaId));
         setShowRecordatorio(true);
         setTimeout(() => setShowRecordatorio(false), 8000);
@@ -112,6 +140,9 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
       )}
       <div className="rounded-xl border-l-4 border-[#D85A30] bg-white p-6" style={{ borderTop: "0.5px solid #e5e7eb", borderRight: "0.5px solid #e5e7eb", borderBottom: "0.5px solid #e5e7eb" }}>
         <p className="text-sm font-medium tracking-wide text-[#D85A30]">PACIENTES EN ESPERA</p>
+        {desconectado && (
+          <p className="mt-1 text-xs text-[#D85A30]">Sin conexión con Docto: lo que ves puede estar desactualizado. Reintentando…</p>
+        )}
 
         <div className="mt-4 space-y-3">
           {consultas.map((c) => {
@@ -143,6 +174,9 @@ export default function ConsultasPendientes({ medicoId, activa }: { medicoId: st
                     <p className="mt-0.5 truncate text-sm text-gray-600 sm:text-xs">
                       {c.motivo_consulta}
                     </p>
+                  )}
+                  {errores[c.id] && (
+                    <p className="mt-1 text-sm text-[#E24B4A]" role="alert">{errores[c.id]}</p>
                   )}
                 </div>
                 {espera && <span className="hidden shrink-0 text-xs text-gray-400 sm:block">{espera}</span>}

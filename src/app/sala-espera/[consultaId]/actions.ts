@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { enviarEmailConsultaAceptada } from "@/lib/email";
 import { pushAlPaciente } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError, logInfo } from "@/lib/logger";
 
 export async function aceptarConsulta(consultaId: string) {
   const supabase = await createClient();
@@ -12,7 +13,8 @@ export async function aceptarConsulta(consultaId: string) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "No autenticado." };
+    logError("[aceptar]", "Sin sesión al aceptar", { consultaId });
+    return { error: "Tu sesión venció. Recargá la página e ingresá de nuevo." };
   }
 
   // Verificar que el médico es dueño de esta consulta
@@ -23,7 +25,8 @@ export async function aceptarConsulta(consultaId: string) {
     .single();
 
   if (!medico) {
-    return { error: "No sos médico." };
+    logError("[aceptar]", "El usuario no tiene ficha de médico", { consultaId, userId: user.id });
+    return { error: "No encontramos tu ficha de profesional. Recargá la página." };
   }
 
   // --- Bloqueo durante ventana de rejoin (Fase 1, §13.3 / §6.4 del diseño) ---
@@ -40,6 +43,7 @@ export async function aceptarConsulta(consultaId: string) {
     .maybeSingle();
 
   if (corteEnCurso) {
+    logError("[aceptar]", "Bloqueado por una consulta con corte pendiente", { consultaId, medicoId: medico.id, corte: corteEnCurso.id });
     return { error: "Tenés una consulta esperando reconexión. Retomala o esperá a que se cierre antes de tomar otra." };
   }
 
@@ -49,16 +53,28 @@ export async function aceptarConsulta(consultaId: string) {
   // un profesional se hubiera hecho cargo: la columna estaba vacía siempre.
   // Sin esta línea es imposible distinguir "no la aceptó nadie" de "la aceptó y
   // el paciente no pagó" — que es la diferencia entre una falla nuestra y ruido.
-  const { error } = await supabase
+  //
+  // Con `.select()`: un update que no toca ninguna fila NO es un error para
+  // PostgREST, y hasta el 05/10/2026 se devolvía como éxito. La tarjeta
+  // desaparecía, el profesional creía que había aceptado, y el pedido seguía
+  // 'esperando' hasta vencer (plan: docs/sprints/2026-10-05-plan-consultas-efectivas.md).
+  const { data: filas, error } = await supabase
     .from("consultas")
     .update({ estado: "aceptada", aceptada_at: new Date().toISOString() })
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
-    .eq("estado", "esperando");
+    .eq("estado", "esperando")
+    .select("id");
 
   if (error) {
-    return { error: error.message };
+    logError("[aceptar]", "El update falló", { consultaId, medicoId: medico.id, code: error.code, error: error.message });
+    return { error: "No se pudo aceptar. Reintentá en unos segundos." };
   }
+  if (!filas?.length) {
+    logError("[aceptar]", "El update no tocó ninguna fila", { consultaId, medicoId: medico.id });
+    return { error: "Esta consulta ya no está esperando: el paciente la canceló o venció el plazo." };
+  }
+  logInfo("[aceptar]", "Consulta aceptada", { consultaId, medicoId: medico.id });
 
   // AVISARLE AL PACIENTE. Hasta el 08/09 esto no existía: aceptar solo cambiaba
   // el estado, y el paciente se enteraba únicamente si tenía la pestaña abierta
