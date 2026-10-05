@@ -15,6 +15,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendDoctoAlert } from "@/lib/alertas";
+import { waitUntil } from "@vercel/functions";
+
+// Un aviso que NO llegó al profesional mientras un paciente espera es una
+// atención que se pierde en silencio (05/10/2026: un pedido murió a los 51 s
+// con el WhatsApp al profesional en "undelivered" y nadie se enteró). Twilio
+// manda estos dos estados como finales.
+const NO_LLEGO = new Set(["undelivered", "failed"]);
 
 function firmaValida(url: string, params: Record<string, string>, firma: string | null): boolean {
   const token = process.env.TWILIO_AUTH_TOKEN;
@@ -46,14 +54,52 @@ export async function POST(req: NextRequest) {
   if (!sid || !status) return NextResponse.json({ ok: true });
 
   const admin = createAdminClient();
-  await admin
+  const { data: envios } = await admin
     .from("whatsapp_envios")
     .update({
       twilio_status: status,
       twilio_status_at: new Date().toISOString(),
       twilio_status_error: params.ErrorCode ?? null,
     })
-    .eq("twilio_sid", sid);
+    .eq("twilio_sid", sid)
+    .select("medico_id, plantilla, consulta_id, turno_id");
+
+  const envio = envios?.[0];
+  if (envio?.medico_id && NO_LLEGO.has(status)) {
+    waitUntil(avisarAlEquipoQueNoLlego(envio, status, params.ErrorCode ?? null));
+  }
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Alerta al equipo con lo que necesita para actuar YA: qué profesional, qué
+ * aviso y por qué (código de Twilio). Sin nombres en el asunto: el mail viaja
+ * por fuera. Nunca lanza.
+ */
+async function avisarAlEquipoQueNoLlego(
+  envio: { medico_id: string | null; plantilla: string; consulta_id: string | null; turno_id: string | null },
+  status: string,
+  errorCode: string | null
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: medico } = await admin
+      .from("medicos")
+      .select("nombre_completo, disponible")
+      .eq("id", envio.medico_id as string)
+      .maybeSingle();
+    const quien = medico?.nombre_completo ?? "un profesional";
+    const urgente = envio.plantilla === "aceptar_paciente" || envio.plantilla === "paciente_esperando";
+    await sendDoctoAlert(
+      `${urgente ? "🔴" : "🟠"} WhatsApp a ${quien} NO llegó (${status})`,
+      `El aviso "${envio.plantilla}" a ${quien} volvió como "${status}"${errorCode ? ` (código Twilio ${errorCode})` : ""}.\n\n` +
+        (urgente
+          ? "Hay un paciente esperando y el profesional no se enteró por WhatsApp. Si figura disponible, conviene llamarlo o apagarlo desde el panel: mientras siga publicado, lo siguen eligiendo.\n\n"
+          : "No es un paciente esperando ahora, pero este profesional no recibe nuestros WhatsApp: revisá su celular en la ficha.\n\n") +
+        `Disponible ahora: ${medico?.disponible ? "sí" : "no"}.\n\n———\nDetalle técnico (para Claude): medico_id=${envio.medico_id}, consulta_id=${envio.consulta_id ?? "-"}, turno_id=${envio.turno_id ?? "-"}, plantilla=${envio.plantilla}, status=${status}, error=${errorCode ?? "-"}.`
+    );
+  } catch (e) {
+    console.error("[twilio/status] no se pudo alertar al equipo:", e instanceof Error ? e.message : e);
+  }
 }
