@@ -79,6 +79,12 @@ export function decidirAviso(params: {
   // reloj diga que sí. Es el caso de los 137 segundos.
   if (params.estaPagando) return "esta_pagando";
   if (params.yaAvisado) return "ya_avisado";
+  // Los 90 s de espera existen para no interrumpir al que está mirando la
+  // pantalla (o pagando). Si el latido ya está viejo al momento de aceptar,
+  // no hay a quién interrumpir: se manda ya. Hasta el 05/10/2026 se esperaban
+  // igual, y eran hasta 2,5 minutos regalados de un plazo de 10.
+  const latidoViejo = params.segundosDesdeLatido !== null && params.segundosDesdeLatido >= LATIDO_FRESCO_SEG;
+  if (latidoViejo) return "mandar";
   if (params.segundosDesdeAceptacion < ESPERA_AVISO_SEG) return "temprano";
   if (params.segundosDesdeLatido !== null && params.segundosDesdeLatido < LATIDO_FRESCO_SEG) {
     return "esta_mirando";

@@ -28,8 +28,17 @@ test("se fue de la pantalla y pasó el plazo del aviso: se manda", () => {
   assert.equal(decidirAviso(base), "mandar");
 });
 
-test("antes de los 90 segundos no se manda nada", () => {
+test("antes de los 90 segundos no se manda nada… si no se sabe si está mirando", () => {
   assert.equal(decidirAviso({ ...base, segundosDesdeAceptacion: ESPERA_AVISO_SEG - 1 }), "temprano");
+});
+
+test("con el latido ya viejo al aceptar, se manda en el acto: no hay a quién interrumpir", () => {
+  assert.equal(
+    decidirAviso({ ...base, segundosDesdeAceptacion: 5, segundosDesdeLatido: LATIDO_FRESCO_SEG + 1 }),
+    "mandar"
+  );
+  // Mirando hace 5 s: sigue siendo temprano.
+  assert.equal(decidirAviso({ ...base, segundosDesdeAceptacion: 5, segundosDesdeLatido: 5 }), "temprano");
 });
 
 test("está mirando la pantalla ahora: el aviso sería ruido", () => {
