@@ -118,9 +118,12 @@ export function PopupApagado() {
             Te desactivamos de Consulta Inmediata
           </p>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#555", lineHeight: 1.45 }}>
-            Pasaron 3 horas desde que te activaste. Si seguís atendiendo,
-            volvé a prender <strong>&ldquo;Disponible&rdquo;</strong> acá abajo para
-            que los pacientes te puedan elegir.
+            {/* El motivo exacto está en la campana (pasaron 3 horas, o un paciente
+                esperó sin respuesta): este cartel no lo adivina. */}
+            Fue por tiempo sin actividad o porque un paciente esperó sin respuesta:
+            el detalle está en la campana. Si seguís atendiendo, volvé a prender{" "}
+            <strong>&ldquo;Disponible&rdquo;</strong> acá abajo para que los pacientes
+            te puedan elegir.
           </p>
         </div>
         <button

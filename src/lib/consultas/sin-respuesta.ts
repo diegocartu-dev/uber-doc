@@ -193,7 +193,14 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
     // A diferencia de los avisos de arriba, esto SÍ se espera: si fallara en
     // silencio, el profesional seguiría figurando disponible sin estarlo, que es
     // el problema que se está arreglando.
-    if (await apagarConsultaInmediata(s.medico_id)) desactivados++;
+    // El aviso al profesional NO depende de que se lo haya apagado: hasta el
+    // 05/10/2026 iba adentro del apagado, y quien se había apagado a mano con
+    // un pedido pendiente nunca se enteraba de que ese paciente esperó 10
+    // minutos y fue liberado. Va a `notificaciones_medico`, que es lo que la
+    // campana del panel lee (los mensajes internos los lee solo el tablero).
+    const apagado = await apagarConsultaInmediata(s.medico_id);
+    if (apagado) desactivados++;
+    await avisarPacienteLiberado(s.medico_id, apagado);
   }
 
   if (liberadas > 0 || carrerasPerdidas > 0) {
@@ -206,6 +213,22 @@ export async function resolverSolicitudesSinRespuesta(): Promise<ResultadoSinRes
   }
 
   return { liberadas, omitidasPorProfesionalOcupado, carrerasPerdidas, desactivados };
+}
+
+/** La campana del panel: el profesional lo ve aunque no tenga push ni esté mirando. */
+async function avisarPacienteLiberado(medicoId: string, seApago: boolean): Promise<void> {
+  if (!medicoId) return;
+  const admin = createAdminClient();
+  const { error } = await admin.from("notificaciones_medico").insert({
+    medico_id: medicoId,
+    titulo: "Un paciente te esperó y lo liberamos",
+    mensaje:
+      `Un paciente te pidió una consulta inmediata y no recibió respuesta en ${PLAZO_SIN_ACEPTAR_MIN} minutos, así que lo liberamos para que pueda elegir otro profesional.` +
+      (seApago
+        ? " También te desactivamos de Consulta Inmediata: mientras figurás disponible te siguen eligiendo. Cuando estés frente a la pantalla, activate de nuevo desde tu panel."
+        : " Si vas a estar disponible, dejá el panel a la vista: cada pedido te llega por WhatsApp y acá."),
+  });
+  if (error) logError("[sin-respuesta]", "No se pudo avisar al profesional del paciente liberado", { medicoId, error: error.message });
 }
 
 /**
