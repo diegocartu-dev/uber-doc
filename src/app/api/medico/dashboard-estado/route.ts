@@ -150,12 +150,14 @@ export async function GET(req: NextRequest) {
     canal_origen: (t as { canal_origen?: string }).canal_origen ?? null,
   }));
 
-  // 4. Turnos en_curso ahora mismo → bloquear CI
+  // 4. Turnos en_curso ahora mismo → bloquear CI. Solo los de HOY: uno colgado
+  //    de otro día escondía la lista de pedidos y apagaba la disponibilidad solo.
   const { count: turnosActivosHoy } = await supabase
     .from("turnos")
     .select("id", { count: "exact", head: true })
     .eq("medico_id", medicoId)
-    .eq("estado", "en_curso");
+    .eq("estado", "en_curso")
+    .eq("fecha", hoy);
 
   return NextResponse.json({
     consultas_pendientes,

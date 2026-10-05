@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { actualizarDisponibilidad, actualizarOcultoClinica, actualizarVisibleConsultorio } from "./actions";
+import { actualizarDisponibilidad, actualizarOcultoClinica, actualizarVisibleConsultorio, rechazarConsulta } from "./actions";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 import { unlockAudio } from "@/lib/sounds";
 import InputMoneda from "@/components/ui/InputMoneda";
@@ -49,8 +49,12 @@ export default function DisponibilidadMedico({
   perfilCompleto = true,
   institucional = false,
 }: Props) {
-  const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible } = useDashboardMedico();
+  const { disponible: activo, setDisponible: setDisponibleCtx, turnosActivosHoy: bloqueado, bloquearPollDisponible, pendientes, refrescar } = useDashboardMedico();
   const [abierto, setAbierto] = useState(false);
+  // Apagarse con un paciente esperando: se pregunta antes (05/10/2026). Si se
+  // apaga igual, el pedido se rechaza en el acto para que el paciente se entere
+  // en segundos y busque otro profesional, en vez de esperar los 10 minutos.
+  const [confirmarApagado, setConfirmarApagado] = useState(false);
   const [visibleClinica, setVisibleClinica] = useState(!ocultoClinica);
   const [visibleConsultorio, setVisibleConsultorio] = useState(visibleConsultorioParticular);
   const [guardandoCanal, setGuardandoCanal] = useState(false);
@@ -91,10 +95,19 @@ export default function DisponibilidadMedico({
 
   const guardandoToggleRef = useRef(false);
 
-  async function handleToggle() {
+  async function handleToggle(opciones: { rechazarPendientes?: boolean } = {}) {
     if (guardandoToggleRef.current) return;
     if (!perfilCompleto && !activo) return; // Can't enable without complete profile
     const nuevoEstado = !activo;
+    if (!nuevoEstado && pendientes.length > 0 && !opciones.rechazarPendientes) {
+      setConfirmarApagado(true);
+      return;
+    }
+    setConfirmarApagado(false);
+    if (!nuevoEstado && opciones.rechazarPendientes) {
+      await Promise.all(pendientes.map((c) => rechazarConsulta(c.id).catch(() => null)));
+      void refrescar();
+    }
     // Activar disponibilidad es un gesto del usuario: aprovechamos para desbloquear
     // el audio en mobile (iOS exige reproducir un nodo dentro del gesto).
     if (nuevoEstado) unlockAudio();
@@ -235,6 +248,33 @@ export default function DisponibilidadMedico({
         </div>
         <span className="text-xs text-gray-400">{abierto ? "▲" : "▼"}</span>
       </div>
+
+      {confirmarApagado && (
+        <div className="px-5 pb-3">
+          <div className="rounded-lg px-3 py-3 text-sm" style={{ border: "1px solid #D85A30", background: "rgba(216, 90, 48, 0.06)" }}>
+            <p className="font-medium text-[#1a1a1a]">
+              {pendientes.length === 1 ? "Hay un paciente esperando que lo aceptes." : `Hay ${pendientes.length} pacientes esperando que los aceptes.`}
+            </p>
+            <p className="mt-1 text-gray-700">Si te apagás ahora, le avisamos que no lo vas a atender para que busque otro profesional.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmarApagado(false)}
+                className="rounded-lg bg-[#378ADD] px-3.5 py-2 text-xs font-medium text-white hover:bg-[#2e6fb5] min-h-[40px]"
+              >
+                Seguir disponible y atenderlo
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggle({ rechazarPendientes: true })}
+                className="rounded-lg border border-[#E24B4A] bg-transparent px-3.5 py-2 text-xs font-medium text-[#E24B4A] hover:bg-red-50 min-h-[40px]"
+              >
+                Rechazar y apagarme
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {bloqueado && (
         <div className="px-5 pb-3">
