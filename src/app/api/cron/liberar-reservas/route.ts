@@ -38,7 +38,11 @@ import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
  *    Estas no demoran la liberación de una reserva abandonada — solo frenan
  *    cuando MP nos AVISÓ que hay un pago en juego, y ahí no aplica "sin pago".
  * 2. Sin `pago_id`: si existe un pago asociado, hay plata en juego; que lo
- *    resuelva una persona, no este cron.
+ *    resuelva una persona, no este cron. EXCEPCIÓN: un pago RECHAZADO
+ *    (`mp_status = 'rejected'`) no movió plata. Hasta el 05/10/2026 el rechazo
+ *    escribía `pago_id` y el turno quedaba "reservado" para siempre: el lugar
+ *    nunca volvía a la oferta (casi todos los rechazos son el antifraude de
+ *    Mercado Pago, o sea pacientes que querían pagar).
  *
  * Fecha pasada → `bloqueado`, no `disponible`: un turno de ayer no debe volver
  * a aparecer como reservable.
@@ -66,7 +70,7 @@ export const GET = withCron("liberar-reservas", async () => {
     .select("id, fecha, hora_inicio, medico_id, mp_status, pago_id")
     .eq("estado", "reservado_pendiente")
     .lt("reservado_hasta", corte)
-    .is("pago_id", null);
+    .or("pago_id.is.null,mp_status.eq.rejected");
   if (errBusca) throw new Error(`buscar reservas vencidas: ${errBusca.message}`);
 
   const aLiberar = (candidatos ?? []).filter((t) => !PAGOS_VIVOS.includes(String(t.mp_status ?? "")));
@@ -76,15 +80,17 @@ export const GET = withCron("liberar-reservas", async () => {
   if (futuros.length > 0) {
     const { error } = await admin
       .from("turnos")
-      .update({ estado: "disponible", paciente_id: null, reservado_hasta: null })
-      .in("id", futuros);
+      .update({ estado: "disponible", paciente_id: null, reservado_hasta: null, pago_id: null, mp_status: null })
+      .in("id", futuros)
+      .eq("estado", "reservado_pendiente");
     if (error) throw new Error(`liberar futuros: ${error.message}`);
   }
   if (pasados.length > 0) {
     const { error } = await admin
       .from("turnos")
       .update({ estado: "bloqueado", paciente_id: null, reservado_hasta: null })
-      .in("id", pasados);
+      .in("id", pasados)
+      .eq("estado", "reservado_pendiente");
     if (error) throw new Error(`cerrar pasados: ${error.message}`);
   }
   if (aLiberar.length > 0) {
