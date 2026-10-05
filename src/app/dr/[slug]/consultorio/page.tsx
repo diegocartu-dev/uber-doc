@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { horaActualAR } from "@/app/clinica/disponibilidad";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import SetOriginSlug from "@/components/SetOriginSlug";
@@ -97,11 +98,12 @@ export default async function ConsultorioPrivadoPage({
     );
   }
 
-  // Calcular disponibilidad
-  const ahora = new Date();
-  const hh = ahora.getHours().toString().padStart(2, "0");
-  const mm = ahora.getMinutes().toString().padStart(2, "0");
-  const horaActual = `${hh}:${mm}`;
+  // Calcular disponibilidad. La franja del profesional está en hora ARGENTINA
+  // y en Vercel `new Date().getHours()` es UTC: con la franja por defecto
+  // (08–18) el consultorio decía "No disponible" de 15 a 18 hora argentina y
+  // "Disponible" de 5 a 8. El mismo bug ya se había corregido en la clínica el
+  // 01/09; acá quedó. Mismo helper, misma hora.
+  const horaActual = horaActualAR();
 
   const enHorario =
     medico.disponible &&
