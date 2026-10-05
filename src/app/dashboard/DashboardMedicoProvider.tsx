@@ -83,6 +83,10 @@ type DashboardCtx = {
    *  pantalla abierta: popup + sonido, mismo trato que un paciente nuevo. */
   avisoApagado: boolean;
   dismissAvisoApagado: () => void;
+  /** Vuelve a pedir el estado al servidor ya (después de aceptar, rechazar, etc.). */
+  refrescar: () => Promise<void>;
+  /** El poll lleva varios intentos seguidos sin respuesta: lo que se ve puede estar viejo. */
+  desconectado: boolean;
 };
 
 const defaultBloquear = { current: false };
@@ -106,6 +110,8 @@ const Ctx = createContext<DashboardCtx>({
   badgeFlash: false,
   avisoApagado: false,
   dismissAvisoApagado: () => {},
+  refrescar: async () => {},
+  desconectado: false,
 });
 
 export function useDashboardMedico() {
@@ -165,6 +171,10 @@ export default function DashboardMedicoProvider({
   const [silenciado, setSilenciadoState] = useState(false);
   const silenciadoRef = useRef(false);
   const [badgeFlash, setBadgeFlash] = useState(false);
+  // Fallos seguidos del poll (red, 401, 5xx). A partir de 3, la pantalla lo dice:
+  // hasta el 05/10/2026 un panel muerto se veía idéntico a uno vivo.
+  const fallosSeguidosRef = useRef(0);
+  const [desconectado, setDesconectado] = useState(false);
 
   const prevPendientesCount = useRef(initialPendientes.length);
   const prevTurnosCount = useRef(initialTurnosEspera.length);
@@ -254,6 +264,11 @@ export default function DashboardMedicoProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const registrarFallo = useCallback(() => {
+    fallosSeguidosRef.current += 1;
+    if (fallosSeguidosRef.current >= 3) setDesconectado(true);
+  }, []);
+
   const poll = useCallback(async () => {
     try {
       const res = await fetch("/api/medico/dashboard-estado", {
@@ -264,10 +279,16 @@ export default function DashboardMedicoProvider({
           endpoint: "/api/medico/dashboard-estado",
           timestamp: new Date().toISOString(),
         });
+        registrarFallo();
         return;
       }
-      if (!res.ok) return;
+      if (!res.ok) {
+        registrarFallo();
+        return;
+      }
       const data = await res.json();
+      fallosSeguidosRef.current = 0;
+      setDesconectado(false);
 
       setPendientes(data.consultas_pendientes);
       setEnCurso(data.consultas_en_curso);
@@ -357,9 +378,10 @@ export default function DashboardMedicoProvider({
       prevPendientesCount.current = pendientesData.length;
       prevTurnosCount.current = turnosEsperaData.length;
     } catch {
-      // silently ignore network errors
+      // Sin red: se cuenta el fallo, se reintenta en el próximo tick.
+      registrarFallo();
     }
-  }, []);
+  }, [registrarFallo]);
 
   // Polling de fallback
   useEffect(() => {
@@ -367,6 +389,36 @@ export default function DashboardMedicoProvider({
     const interval = setInterval(poll, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [poll]);
+
+  // Al volver a primer plano, recuperar el foco o la red: pedir el estado YA.
+  // En un teléfono, el intervalo de 5 s se congela con la pantalla bloqueada o
+  // la app detrás; sin esto, el profesional que vuelve desde un WhatsApp ve lo
+  // de antes hasta 5 s (o más) después.
+  useEffect(() => {
+    const alVolver = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    window.addEventListener("online", alVolver);
+    window.addEventListener("pageshow", alVolver);
+    return () => {
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+      window.removeEventListener("online", alVolver);
+      window.removeEventListener("pageshow", alVolver);
+    };
+  }, [poll]);
+
+  // El pedido ya estaba esperando al cargar (el profesional llegó desde el
+  // WhatsApp o recargó): el toast con Aceptar arriba también va, sin sonido
+  // (no hay gesto del usuario que lo habilite).
+  useEffect(() => {
+    if (postVideollamada) return;
+    if (initialPendientes.length > 0) setPopupData(getFirstWaiting(initialPendientes));
+    // Solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Realtime: dispara poll() inmediatamente al detectar cambios en consultas o turnos del médico.
   // Sin filtro en el canal porque medico_id no es PK (falla en Supabase Realtime).
@@ -443,6 +495,7 @@ export default function DashboardMedicoProvider({
       pendientes, enCurso, turnosEspera, disponible, turnosActivosHoy,
       setDisponible: handleSetDisponible, bloquearPollDisponible,
       avisoApagado, dismissAvisoApagado,
+      refrescar: poll, desconectado,
       enVideollamada, silenciado, setSilenciado,
       // Prioridad: el modal "paciente listo" suprime el toast de esperando.
       // Ambos se anulan durante una videollamada activa.
