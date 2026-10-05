@@ -8,6 +8,7 @@ import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
 import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 import { trackFunnel } from "@/lib/funnel-client";
+import { crearConsulta } from "@/app/clinica/actions";
 
 const POLL_INTERVAL = 5000;
 
@@ -72,6 +73,13 @@ type Props = {
    * "pendiente": el pago existe pero no está acreditado (cupón, revisión).
    */
   resultadoPago?: string | null;
+  /** Por qué se cerró, según el servidor (el poll lo actualiza después). */
+  motivoCierreInicial?: string | null;
+  medicoId?: string;
+  /** Si el profesional sigue disponible, "volver a pedir" tiene sentido. */
+  medicoDisponible?: boolean;
+  /** Lo que el paciente ya escribió: para volver a pedir sin rehacer nada. */
+  pedido?: { motivo: string; sintomas: string[]; tiempoSintomas: string; canal: "clinica_virtual" | "consultorio_privado" };
   isDev?: boolean;
 };
 
@@ -107,10 +115,14 @@ export default function SalaEsperaCliente({
   duracion,
   especialidad,
   posicion: posicionInicial,
-  tiempoEstimado: tiempoInicial,
+  // `tiempoEstimado` sigue en Props (lo pasa el server) pero no se muestra más (05/10/2026).
   // `createdAt` sigue en Props (lo pasa el server) pero ya no se destructura:
   // alimentaba el reloj del banner del minuto 10, que murió con el contrato fijo.
   resultadoPago = null,
+  motivoCierreInicial = null,
+  medicoId,
+  medicoDisponible = false,
+  pedido,
   isDev = false,
 }: Props) {
   // Nombre con el título que eligió el médico, calculado una sola vez: esta
@@ -123,9 +135,29 @@ export default function SalaEsperaCliente({
   const [mpStatus, setMpStatus] = useState<string | null>(mpStatusInicial);
   // Por qué se cerró. Sin esto, a quien se le venció el plazo para pagar la
   // pantalla le decía que el profesional no había llegado a tomar su consulta.
-  const [motivoCierre, setMotivoCierre] = useState<string | null>(null);
+  const [motivoCierre, setMotivoCierre] = useState<string | null>(motivoCierreInicial);
+  // "Volver a pedir" con un toque (consulta vencida con el profesional todavía
+  // disponible). Hasta el 05/10/2026 esta pantalla no tenía ninguna salida:
+  // para reintentar había que rehacer términos, triage y confirmación.
+  const [volviendoAPedir, setVolviendoAPedir] = useState(false);
+  const [errorVolver, setErrorVolver] = useState<string | null>(null);
+  async function volverAPedir() {
+    if (!medicoId || !pedido) return;
+    setVolviendoAPedir(true);
+    setErrorVolver(null);
+    try {
+      const r = await crearConsulta(medicoId, especialidad, pedido.motivo, pedido.sintomas, pedido.tiempoSintomas, pedido.canal);
+      // Si salió bien, la acción redirige a la sala nueva y no vuelve acá.
+      if (r && "error" in r && r.error) setErrorVolver(r.error);
+    } catch (e) {
+      // El redirect de Next viaja como excepción: no es un error.
+      if (e && typeof e === "object" && "digest" in e && String((e as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) throw e;
+      setErrorVolver("No se pudo volver a pedir. Probá de nuevo en un momento.");
+    } finally {
+      setVolviendoAPedir(false);
+    }
+  }
   const [posicion, setPosicion] = useState(posicionInicial);
-  const [tiempoEstimado, setTiempoEstimado] = useState(tiempoInicial);
   const [pagando, setPagando] = useState(false);
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [salaVideoUrl, setSalaVideoUrl] = useState<string | null>(null);
@@ -230,7 +262,6 @@ export default function SalaEsperaCliente({
       ) {
         soundConsultaAceptada();
         setPosicion(0);
-        setTiempoEstimado(0);
       }
       if (data.sala_video_url && !salaVideoUrlRef.current) {
         soundVideoLista();
@@ -443,7 +474,16 @@ export default function SalaEsperaCliente({
             <>
               {nombreMedico ? `${nombreMedico} aceptó tu consulta` : "Tu consulta fue aceptada"} y te
               esperó, pero el pago no se completó a tiempo.{" "}
-              <strong>No se te cobró nada.</strong> Podés pedir una nueva cuando quieras.
+              <strong>No se te cobró nada.</strong>
+            </>
+          ) : motivoCierre === "retiro_paciente" ? (
+            <>
+              Cancelaste la solicitud. <strong>No se te cobró nada.</strong>
+            </>
+          ) : motivoCierre === "cancelo_profesional" ? (
+            <>
+              {nombreMedico ? `${nombreMedico} no puede` : "El profesional no puede"} tomar tu consulta en este momento.{" "}
+              <strong>No se te cobró nada.</strong>
             </>
           ) : (
             <>
@@ -452,6 +492,22 @@ export default function SalaEsperaCliente({
             </>
           )}
         </p>
+        {motivoCierre === "sin_pago_plazo" && medicoDisponible && medicoId && pedido && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={volverAPedir}
+              disabled={volviendoAPedir}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-lg bg-[#378ADD] px-6 py-3 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50"
+            >
+              {volviendoAPedir ? "Pidiendo de nuevo…" : `Volver a pedir con ${nombreMedico || "el profesional"}`}
+            </button>
+            <p className="mt-2 text-xs text-gray-500">
+              Sigue disponible. Le llega tu pedido de nuevo, con lo que ya escribiste; cuando acepte, pagás y entrás.
+            </p>
+            {errorVolver && <p className="mt-2 text-sm text-[#E24B4A]" role="alert">{errorVolver}</p>}
+          </div>
+        )}
         <MenuAlternativas consultaId={consultaId} />
       </div>
     );
@@ -634,19 +690,15 @@ export default function SalaEsperaCliente({
           {/* La cola y el tiempo estimado solo tienen sentido mientras el médico
               no aceptó. Con la consulta aceptada y sin pagar, lo único que
               importa es el pago. */}
-          {!medicoAcepto && (
-            <>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Posición en la cola</span>
-                <span className="font-medium text-gray-900">{posicion}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Tiempo estimado</span>
-                <span className="font-medium text-gray-900">
-                  ~{tiempoEstimado} min
-                </span>
-              </div>
-            </>
+          {/* Acá iba "Posición en la cola: 1 · Tiempo estimado ~20 min" — un número
+              inventado (la duración de la consulta por una posición que para el
+              paciente siempre es 1) al lado del contrato de 10 minutos. Se sacó el
+              05/10/2026: invitaba a irse. */}
+          {!medicoAcepto && posicion > 1 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Pacientes antes que vos</span>
+              <span className="font-medium text-gray-900">{posicion - 1}</span>
+            </div>
           )}
         </div>
       </div>
