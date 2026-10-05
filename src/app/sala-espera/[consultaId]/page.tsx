@@ -7,6 +7,14 @@ import { getReturnUrl } from "@/lib/consultorio-url";
 import { capitalizarNombre } from "@/lib/utils/texto";
 import { registrarEntradaSala } from "@/lib/sala-espera";
 import { pushAlMedico } from "@/lib/push";
+import { waitUntil } from "@vercel/functions";
+
+// Estados en los que el paciente está de verdad en la sala. Una consulta
+// cancelada o terminada que se vuelve a abrir (el link del WhatsApp, Safari
+// que recarga la pestaña) NO registra entrada ni avisa: hasta el 05/10/2026 lo
+// hacía, le mandaba "paciente esperando" al profesional por una consulta
+// muerta y dejaba una fila zombie que después se le reprochaba.
+const ESTADOS_VIVOS = new Set(["esperando", "aceptada", "pagada", "en_curso"]);
 
 export default async function SalaEsperaPage({
   params,
@@ -33,7 +41,12 @@ export default async function SalaEsperaPage({
     .from("consultas")
     // `mp_status` (verificado en prod: columna existente y con GRANT SELECT para
     // `authenticated`) es lo que distingue "aceptada sin pagar" de "ya pagada".
-    .select("id, especialidad, estado, created_at, medico_id, canal_origen, mp_status")
+    // `resolucion_motivo`, `motivo_consulta`, `sintomas` y `tiempo_sintomas`:
+    // columnas con GRANT SELECT para authenticated (las 35 de consultas lo tienen,
+    // verificado en prod). El motivo de cierre viaja desde acá para que la
+    // pantalla no le diga al paciente "no llegó a tomar tu consulta" antes del
+    // primer poll; los datos del pedido sirven para volver a pedir con un toque.
+    .select("id, especialidad, estado, created_at, medico_id, canal_origen, mp_status, resolucion_motivo, motivo_consulta, sintomas, tiempo_sintomas")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -51,7 +64,7 @@ export default async function SalaEsperaPage({
   // una sola sin grant hace fallar el SELECT entero y devuelve null en silencio.
   const { data: medico } = await supabase
     .from("medicos")
-    .select("id, nombre_completo, titulo, precio_consulta, duracion_consulta")
+    .select("id, nombre_completo, titulo, precio_consulta, duracion_consulta, disponible")
     .eq("id", consulta.medico_id)
     .single();
 
@@ -62,23 +75,30 @@ export default async function SalaEsperaPage({
   // Registrar entrada en sala de espera (idempotente, fire-and-forget)
   const { data: paciente } = await supabase
     .from("pacientes").select("id, nombre_completo").eq("user_id", user.id).maybeSingle();
-  if (paciente) {
-    registrarEntradaSala({
-      pacienteId: paciente.id,
-      medicoId: consulta.medico_id,
-      consultaId: consulta.id,
-      canalOrigen: consulta.canal_origen,
-    }).catch((e) => console.error("[sala-espera] Error registrando entrada:", e));
+  if (paciente && ESTADOS_VIVOS.has(consulta.estado)) {
+    // waitUntil: en Vercel el trabajo disparado sin esperar puede no correr una
+    // vez enviada la respuesta. Registrar la entrada y avisar son justo lo que
+    // no puede perderse.
+    waitUntil(
+      registrarEntradaSala({
+        pacienteId: paciente.id,
+        medicoId: consulta.medico_id,
+        consultaId: consulta.id,
+        canalOrigen: consulta.canal_origen,
+      }).catch((e) => console.error("[sala-espera] Error registrando entrada:", e))
+    );
 
     // SIN skip por en_curso (decisión Diego 11/06): el médico debe enterarse de un
     // paciente nuevo AUNQUE esté en otra llamada — antes se salteaba y el siguiente
     // paciente quedaba invisible hasta volver al dashboard.
-    pushAlMedico(consulta.medico_id, {
-      title: "🟢 Docto",
-      body: `${paciente.nombre_completo ?? "Un paciente"} está esperando una consulta inmediata`,
-      url: "/dashboard",
-      tag: `espera-ci-${consulta.id}`,
-    }).catch(() => {});
+    waitUntil(
+      pushAlMedico(consulta.medico_id, {
+        title: "🟢 Docto",
+        body: `${paciente.nombre_completo ?? "Un paciente"} está esperando una consulta inmediata`,
+        url: "/dashboard",
+        tag: `espera-ci-${consulta.id}`,
+      }).catch(() => {})
+    );
   }
 
   // Contar posición en la cola (consultas esperando antes que esta)
@@ -123,6 +143,15 @@ export default async function SalaEsperaPage({
           posicion={posicion}
           tiempoEstimado={tiempoEstimado}
           createdAt={consulta.created_at}
+          motivoCierreInicial={consulta.resolucion_motivo ?? null}
+          medicoId={consulta.medico_id}
+          medicoDisponible={medico.disponible === true}
+          pedido={{
+            motivo: consulta.motivo_consulta ?? "",
+            sintomas: Array.isArray(consulta.sintomas) ? (consulta.sintomas as string[]) : [],
+            tiempoSintomas: consulta.tiempo_sintomas ?? "",
+            canal: consulta.canal_origen === "consultorio_privado" ? "consultorio_privado" : "clinica_virtual",
+          }}
           resultadoPago={resultadoPago ?? null}
           isDev={process.env.NODE_ENV === "development"}
         />
