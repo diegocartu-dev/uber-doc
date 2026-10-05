@@ -7,6 +7,8 @@ import { formatNombreMedico } from "@/lib/utils/texto";
 
 type Props = {
   turnoId: string;
+  /** Con qué volvió de Mercado Pago: el pago fue rechazado o quedó pendiente. */
+  vuelta?: "rechazado" | "pendiente" | null;
   reservadoHasta: string | null;
   returnUrl?: string;
   // `titulo` = "Dr."/"Dra." elegido por el médico en su registro. Opcional: sin él,
@@ -23,7 +25,7 @@ function formatFecha(f: string) {
   return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 }
 
-export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/clinica", medico, turno }: Props) {
+export default function PagoPendiente({ turnoId, vuelta = null, reservadoHasta, returnUrl = "/clinica", medico, turno }: Props) {
   const [segundosRestantes, setSegundosRestantes] = useState(() => {
     if (!reservadoHasta) return 0;
     return Math.max(0, Math.floor((new Date(reservadoHasta).getTime() - Date.now()) / 1000));
@@ -117,6 +119,18 @@ export default function PagoPendiente({ turnoId, reservadoHasta, returnUrl = "/c
 
   return (
     <div>
+      {vuelta && (
+        <div className="mb-5 rounded-xl p-4 text-sm" style={{ border: "1px solid #D85A30", background: "rgba(216, 90, 48, 0.06)", color: "#1a1a1a" }}>
+          <p className="font-medium" style={{ color: "#D85A30" }}>
+            {vuelta === "rechazado" ? "Mercado Pago no aprobó el pago" : "El pago quedó pendiente"}
+          </p>
+          <p className="mt-1 text-gray-700">
+            {vuelta === "rechazado"
+              ? "Tu lugar sigue reservado. Probá de nuevo con otra tarjeta o con dinero en cuenta de Mercado Pago: el rechazo lo decide Mercado Pago, no tu banco ni nosotros."
+              : "Tu lugar sigue reservado mientras Mercado Pago confirma. Si no se confirma en unos minutos, probá con otro medio."}
+          </p>
+        </div>
+      )}
       {/* Contador */}
       <div className="text-center">
         <p className="text-xs font-medium tracking-wide text-gray-400">COMPLETÁ TU PAGO</p>

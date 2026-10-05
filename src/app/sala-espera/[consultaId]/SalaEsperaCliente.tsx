@@ -563,7 +563,10 @@ export default function SalaEsperaCliente({
               style={{ backgroundColor: "rgba(186,117,23,0.08)", color: "#BA7517" }}
             >
               <p className="font-semibold">El pago anterior no se completó.</p>
-              <p className="mt-1">No se te cobró nada. Podés intentarlo de nuevo acá abajo.</p>
+              <p className="mt-1">
+                No se te cobró nada. Si Mercado Pago lo rechazó, probá de nuevo con otra tarjeta o con dinero en
+                cuenta: el rechazo lo decide Mercado Pago, no tu banco ni nosotros.
+              </p>
             </div>
           )}
           <button
