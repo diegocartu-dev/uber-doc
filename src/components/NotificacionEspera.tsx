@@ -20,6 +20,7 @@ function minutosEsperando(desde: string): number {
 export default function NotificacionEspera({ pacienteNombre, esperandoDesde, consultaId, tipo, onDismiss }: Props) {
   const [mins, setMins] = useState(() => minutosEsperando(esperandoDesde));
   const [visible, setVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -35,11 +36,23 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
   const href = tipo === "turno" ? `/turno/${consultaId}/video` : `/medico/consulta/${consultaId}/workspace`;
 
   function handleAceptar() {
+    setError(null);
     startTransition(async () => {
-      const result = await aceptarConsulta(consultaId);
-      if (result?.success) {
-        router.push(href);
+      let result: { success?: boolean; error?: string } | undefined;
+      try {
+        result = await aceptarConsulta(consultaId);
+      } catch {
+        result = { error: "No hubo respuesta del servidor. Reintentá." };
       }
+      if (result?.success) {
+        // Para una consulta inmediata NO se navega: recién aceptada está impaga
+        // y el workspace la rebota al panel (visto en producción). Se cierra el
+        // toast; la tarjeta "esperando el pago" ya la muestra el panel.
+        if (tipo === "turno") router.push(href);
+        else onDismiss();
+        return;
+      }
+      setError(result?.error ?? "No se pudo aceptar.");
     });
   }
 
@@ -92,6 +105,9 @@ export default function NotificacionEspera({ pacienteNombre, esperandoDesde, con
           <p style={{ fontSize: 14, color: "#888780", margin: "2px 0 0" }}>
             {mins < 1 ? "Recién ingresó" : `${mins} min en sala de espera`}
           </p>
+          {error && (
+            <p role="alert" style={{ fontSize: 13, color: "#E24B4A", margin: "4px 0 0" }}>{error}</p>
+          )}
         </div>
 
         <button

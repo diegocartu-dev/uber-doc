@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico";
 import { logDisponibilidad } from "@/lib/disponibilidad-log";
+import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { medianocheARenUTC } from "@/lib/insights/fechas";
 
 export async function actualizarDisponibilidad(data: {
@@ -248,7 +249,7 @@ export async function actualizarVisibleConsultorio(visible: boolean) {
 export async function rechazarConsulta(consultaId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "No autenticado" };
+  if (!user) return { error: "Tu sesión venció. Recargá la página e ingresá de nuevo." };
 
   const { data: medico } = await supabase
     .from("medicos")
@@ -256,16 +257,31 @@ export async function rechazarConsulta(consultaId: string) {
     .eq("user_id", user.id)
     .single();
 
-  if (!medico) return { error: "No sos médico." };
+  if (!medico) return { error: "No encontramos tu ficha de profesional. Recargá la página." };
 
-  const { error } = await supabase
+  // Toda cancelación registra quién, cuándo y por qué (regla del 19/08/2026); con
+  // `.select()` un update sin filas es un error, no un éxito (05/10/2026).
+  const { data: filas, error } = await supabase
     .from("consultas")
-    .update({ estado: "rechazada" })
+    .update({
+      estado: "rechazada",
+      resuelta_por: "medico",
+      resuelta_at: new Date().toISOString(),
+      resolucion_motivo: "cancelo_profesional",
+    })
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
-    .eq("estado", "esperando");
+    .eq("estado", "esperando")
+    .select("id");
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[rechazar] el update falló", { consultaId, medicoId: medico.id, error: error.message });
+    return { error: "No se pudo rechazar. Reintentá en unos segundos." };
+  }
+  if (!filas?.length) return { error: "Esta consulta ya no está esperando." };
+  // La sala del paciente se cierra con el pedido: si no, queda abierta hasta que
+  // un barrido la cierre como "timeout" y se lo reproche al profesional.
+  await cerrarEntradaSala({ consultaId, motivo: "cancelado_medico" }).catch(() => 0);
   return { success: true };
 }
 
