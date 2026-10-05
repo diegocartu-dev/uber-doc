@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushAlMedico } from "@/lib/push";
+import { avisarMedicoTurnoWhatsApp, fechaTurnoParaAviso } from "@/lib/whatsapp";
 import { withCron } from "@/lib/cron-guard";
 
 // ─── Recordatorio al MÉDICO, 15 min antes del turno (pedido Diego, 20/09/2026) ─
@@ -31,8 +32,11 @@ import { withCron } from "@/lib/cron-guard";
 // WhatsApp del momento, que sigue disparando aunque este aviso previo se saltee.
 
 const AR = "America/Argentina/Buenos_Aires";
+// Ventana de 3 minutos (05/10/2026): con [15,16) una corrida salteada del cron
+// dejaba al turno sin aviso. El push se deduplica por `tag` y el WhatsApp por
+// turno (whatsapp_envios), así que ampliar la ventana no repite el aviso.
 const VENTANA_MIN_DESDE = 15;
-const VENTANA_MIN_HASTA = 16;
+const VENTANA_MIN_HASTA = 18;
 
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -77,6 +81,7 @@ async function handler(req: NextRequest) {
 
   // El aviso es para el propio médico, así que no lleva su nombre.
   let enviados = 0;
+  let whatsapps = 0;
   for (const t of porAvisar) {
     const hora = String(t.hora_inicio).slice(0, 5);
     // verificarEnCurso: si ya está atendiendo a otro, no lo interrumpimos.
@@ -91,9 +96,19 @@ async function handler(req: NextRequest) {
       true,
     );
     if (sent) enviados++;
+    // WhatsApp (05/10/2026): el push no llega a un iPhone sin la app. Una vez
+    // por turno (lo deduplica whatsapp_envios); se manda aunque esté en otra
+    // llamada, es el respaldo que no depende de nada.
+    const wa = await avisarMedicoTurnoWhatsApp(t.medico_id, {
+      turnoId: t.id,
+      fecha: fechaTurnoParaAviso(t.fecha),
+      hora,
+      cuando: "15min",
+    }).catch(() => false);
+    if (wa) whatsapps++;
   }
 
-  return NextResponse.json({ ok: true, revisados: turnos.length, enviados });
+  return NextResponse.json({ ok: true, revisados: turnos.length, enviados, whatsapps });
 }
 
 export const GET = withCron("recordatorio-medico-15min", handler);

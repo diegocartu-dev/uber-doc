@@ -457,3 +457,90 @@ export async function avisarMedicoEsperandoWhatsApp(
   }
   return r.ok;
 }
+
+/**
+ * Avisos al PROFESIONAL por un TURNO pago (05/10/2026): al confirmarse el pago
+ * ("tenés un turno hoy a las 21:20") y 15 minutos antes. Hasta ahora el
+ * profesional recibía solo push (que un iPhone sin la app no muestra) y el
+ * WhatsApp salía recién cuando el paciente ya estaba en la sala, a la hora.
+ *
+ * Sin el tope de 30 minutos de "paciente esperando": acá el dedupe es por
+ * turno y plantilla (whatsapp_envios), una vez cada uno. Inerte hasta que
+ * existan las plantillas (env TWILIO_CONTENT_SID_TURNO_RESERVADO /
+ * TWILIO_CONTENT_SID_TURNO_15MIN), igual que el piloto de demanda: queda
+ * registrado como "sin_credenciales" para que el panel pueda decirlo.
+ *
+ * Variables de la plantilla: {{1}} nombre del profesional, {{2}} fecha
+ * ("sáb 5/10" u "hoy"), {{3}} hora ("21:20").
+ */
+export async function avisarMedicoTurnoWhatsApp(
+  medicoId: string,
+  turno: { turnoId: string; fecha: string; hora: string; cuando: "reservado" | "15min" },
+): Promise<boolean> {
+  const PLANTILLA = turno.cuando === "reservado" ? "turno_reservado" : "turno_15min";
+  const contentSid =
+    turno.cuando === "reservado"
+      ? process.env.TWILIO_CONTENT_SID_TURNO_RESERVADO
+      : process.env.TWILIO_CONTENT_SID_TURNO_15MIN;
+  const ctx: ContextoEnvio = { turnoId: turno.turnoId, disparador: turno.cuando === "reservado" ? "pago_turno" : "cron_15min" };
+
+  if (!(await flagWhatsappOn())) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "flag_apagado", ctx });
+    return false;
+  }
+  if (!configurado() || !contentSid) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_credenciales", ctx });
+    return false;
+  }
+
+  const supabase = createAdminClient();
+  // Una vez por turno y plantilla, cualquiera haya sido el resultado real de
+  // Twilio: insistir no arregla un celular inválido.
+  const { data: previos } = await supabase
+    .from("whatsapp_envios")
+    .select("id")
+    .eq("turno_id", turno.turnoId)
+    .eq("plantilla", PLANTILLA)
+    .in("resultado", ["enviado", "error_twilio", "sin_celular"])
+    .limit(1);
+  if (previos && previos.length > 0) return false;
+
+  const { data: medico } = await supabase
+    .from("medicos")
+    .select("nombre_completo, celular_personal")
+    .eq("id", medicoId)
+    .single();
+  if (!medico) return false;
+
+  const toE164 = normalizarTelefonoAR(medico.celular_personal);
+  if (!toE164) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  const r = await enviarTwilioDetallado(toE164, contentSid, {
+    "1": primerNombre(medico.nombre_completo),
+    "2": turno.fecha,
+    "3": turno.hora,
+  });
+  registrarEnvio({
+    medicoId,
+    plantilla: PLANTILLA,
+    resultado: r.ok ? "enviado" : "error_twilio",
+    ctx,
+    twilioSid: r.sid,
+    twilioErrorCode: r.errorCode,
+  });
+  return r.ok;
+}
+
+/** "hoy" / "mañana" / "sáb 5/10", en hora argentina, para los avisos de turno. */
+export function fechaTurnoParaAviso(fechaISO: string, ahora: Date = new Date()): string {
+  const hoy = ahora.toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
+  const manana = new Date(ahora.getTime() + 24 * 60 * 60 * 1000).toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
+  if (fechaISO === hoy) return "hoy";
+  if (fechaISO === manana) return "mañana";
+  const d = new Date(fechaISO + "T12:00:00-03:00");
+  const dias = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  return `${dias[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+}

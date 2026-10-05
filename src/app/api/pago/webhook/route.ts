@@ -5,6 +5,8 @@ import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 import { trackEvent } from "@/lib/funnel";
 import { pushAlMedico } from "@/lib/push";
+import { avisarMedicoTurnoWhatsApp, fechaTurnoParaAviso } from "@/lib/whatsapp";
+import { waitUntil } from "@vercel/functions";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { assertNoInstitucional } from "@/lib/instancia";
 import { presenciaDelPaciente, decidirReaccionADevolucion } from "@/lib/video/presencia";
@@ -389,7 +391,7 @@ async function handleApproved(
       })
       .eq("id", id)
       .eq("estado", "reservado_pendiente")
-      .select("id, medico_id, paciente_id, fecha");
+      .select("id, medico_id, paciente_id, fecha, hora_inicio");
 
     if (!updated?.length) {
       // El UPDATE no afectó filas. Distinguimos dos casos muy distintos:
@@ -431,13 +433,28 @@ async function handleApproved(
             .single();
           pacienteNombre = pac?.nombre_completo ?? pacienteNombre;
         }
+        const horaTurno = String(turnoConfirmado.hora_inicio ?? "").slice(0, 5);
+        const fechaAviso = fechaTurnoParaAviso(turnoConfirmado.fecha);
         // CON sonido (decisión Diego 11/06): el médico se entera sin mirar la app.
-        pushAlMedico(turnoConfirmado.medico_id, {
-          title: "🟢 Docto",
-          body: `${pacienteNombre} reservó un turno para el ${turnoConfirmado.fecha}`,
-          url: "/medico/agenda",
-          tag: `reserva-${id}`,
-        }).catch(() => {});
+        // Con la hora: "reservó un turno para el 2026-10-02" no decía cuándo.
+        waitUntil(
+          pushAlMedico(turnoConfirmado.medico_id, {
+            title: "🟢 Docto",
+            body: `${pacienteNombre} reservó un turno para ${fechaAviso} a las ${horaTurno}`,
+            url: "/medico/agenda",
+            tag: `reserva-${id}`,
+          }).catch(() => {})
+        );
+        // Y por WhatsApp (05/10/2026): el push no llega a un iPhone sin la app, y
+        // hasta ahora el primer WhatsApp salía recién con el paciente en la sala.
+        waitUntil(
+          avisarMedicoTurnoWhatsApp(turnoConfirmado.medico_id, {
+            turnoId: id,
+            fecha: fechaAviso,
+            hora: horaTurno,
+            cuando: "reservado",
+          }).catch(() => false)
+        );
       }
     }
   }
