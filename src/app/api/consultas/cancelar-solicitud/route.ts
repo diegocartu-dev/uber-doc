@@ -5,6 +5,8 @@ import { logInfo } from "@/lib/logger";
 import { respuestaSiAccesoDemoMuerto } from "@/lib/institucional/demo-puerta";
 import { MOTIVO } from "@/lib/consultas/clasificar";
 import { registrarEvidenciaCierre } from "@/lib/consultas/evidencia-cierre";
+import { cerrarEntradaSala } from "@/lib/sala-espera";
+import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion";
 
 // Cancelación de una solicitud de CI por el PROPIO paciente, antes de que haya
 // plata en juego (caso Lucas 04/08: esperó más de una hora una aceptación que
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: consulta } = await admin
     .from("consultas")
-    .select("id, paciente_id, estado, mp_status")
+    .select("id, paciente_id, medico_id, estado, mp_status")
     .eq("id", consultaId)
     .maybeSingle();
 
@@ -98,5 +100,14 @@ export async function POST(req: NextRequest) {
   // no puede perderse. Nunca lanza (ver el módulo), así que no puede romper el
   // cierre que ya está escrito en la base.
   await registrarEvidenciaCierre(consultaId);
+  // El retiro cierra la sala y le avisa al profesional. Hasta el 05/10/2026 no
+  // hacía ninguna de las dos cosas: al profesional le habían llegado WhatsApp y
+  // push por un pedido que murió a los segundos y nunca supo que se canceló, y
+  // la entrada de sala quedaba abierta hasta que un barrido se la reprochaba.
+  await cerrarEntradaSala({ consultaId, motivo: "cancelado_paciente" }).catch(() => 0);
+  if (consulta.medico_id) {
+    const { data: pac } = await admin.from("pacientes").select("nombre_completo").eq("user_id", user.id).maybeSingle();
+    await avisarCancelacionDelPaciente(consulta.medico_id, pac?.nombre_completo ?? "Un paciente", "retiro").catch(() => {});
+  }
   return NextResponse.json({ ok: true, estado: "cancelada" });
 }
