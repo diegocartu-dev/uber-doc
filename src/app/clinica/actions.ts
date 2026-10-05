@@ -13,6 +13,7 @@ import { avisarCancelacionDelPaciente } from "@/lib/consultas/aviso-cancelacion"
 import { logInfo } from "@/lib/logger";
 import { esInstitucional } from "@/lib/instancia";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
+import { waitUntil } from "@vercel/functions";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -220,12 +221,16 @@ export async function crearConsulta(
   }
 
   // TRIGGER A — avisar al médico por WhatsApp que un paciente solicitó una CI y debe
-  // aceptarla (recién ahí el paciente puede pagar e ingresar). Solo CI. Fire-and-forget
-  // ANTES del redirect (redirect lanza una excepción de control). Inerte sin flag/creds.
-  void avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "", {
-    consultaId: data.id,
-    disparador: "solicitud_ci",
-  }).catch(() => {});
+  // aceptarla (recién ahí el paciente puede pagar e ingresar). Solo CI. ANTES del
+  // redirect (redirect lanza una excepción de control). Inerte sin flag/creds.
+  // Con waitUntil (05/10/2026): es el aviso más importante del producto y en
+  // Vercel el trabajo que queda después de responder no está garantizado.
+  waitUntil(
+    avisarMedicoAceptarWhatsApp(medicoId, perfil?.nombre_completo ?? "", {
+      consultaId: data.id,
+      disparador: "solicitud_ci",
+    }).catch(() => false)
+  );
 
   redirect(`/sala-espera/${data.id}`);
 }
