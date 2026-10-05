@@ -5,6 +5,9 @@ import { enviarEmailConsultaAceptada } from "@/lib/email";
 import { pushAlPaciente } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo } from "@/lib/logger";
+import { waitUntil } from "@vercel/functions";
+import { avisarPacienteAceptadaWhatsApp } from "@/lib/whatsapp";
+import { LATIDO_FRESCO_SEG } from "@/lib/consultas/aceptada-sin-pago";
 
 export async function aceptarConsulta(consultaId: string) {
   const supabase = await createClient();
@@ -93,6 +96,28 @@ export async function aceptarConsulta(consultaId: string) {
   // paciente dejó de dar señales de estar mirando. El mail, en cambio, sigue
   // saliendo ya: no interrumpe, y es el respaldo del que cierra todo a los
   // diez segundos.
+  //
+  // EXCEPTO cuando ya se sabe que no está mirando (05/10/2026): si el último
+  // latido de la sala es viejo al momento de aceptar, el WhatsApp sale acá, en
+  // el acto. El cron lo ve como "ya avisado" y no lo repite. waitUntil: un
+  // server action en Vercel no garantiza el trabajo que queda después de
+  // responder.
+  waitUntil(
+    (async () => {
+      const admin = createAdminClient();
+      const { data: entradas } = await admin
+        .from("sala_espera_entradas")
+        .select("ultimo_latido_at")
+        .eq("consulta_id", consultaId)
+        .order("entrada_en", { ascending: false })
+        .limit(1);
+      const latido = entradas?.[0]?.ultimo_latido_at ? Date.parse(entradas[0].ultimo_latido_at) : NaN;
+      if (Number.isNaN(latido)) return; // sin dato: lo decide el cron
+      const segundos = (Date.now() - latido) / 1000;
+      if (segundos < LATIDO_FRESCO_SEG) return; // está mirando: no interrumpir
+      await avisarPacienteAceptadaWhatsApp(consultaId, { disparador: "aceptada_sin_pago" });
+    })().catch((e) => logError("[aceptar]", "No se pudo mandar el WhatsApp al paciente en el acto", { consultaId, error: String(e) }))
+  );
   void (async () => {
     const admin = createAdminClient();
     const { data: c } = await admin
