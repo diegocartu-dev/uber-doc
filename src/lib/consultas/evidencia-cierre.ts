@@ -43,6 +43,20 @@ export type EvidenciaCierre = {
   aviso_whatsapp_entrega: string | null;
   /** Errores del navegador del paciente registrados en esta consulta. */
   errores_cliente: number;
+  // ── Desde el 06/10/2026 (etiqueta automática de cada caída). Opcionales: la
+  //    evidencia escrita antes no los tiene, y "no sé" no es "no pasó".
+  /** ¿Nuestro servidor llegó a crear el cobro en Mercado Pago? */
+  cobro_creado?: boolean;
+  /** Nuestro servidor no dejó pagar: el motivo que registró crear-v2. */
+  rechazo_docto?: string | null;
+  /** Mercado Pago rechazó el pago: su motivo (status_detail). */
+  rechazo_mp?: string | null;
+  /** Aviso por WhatsApp al PROFESIONAL de que había un pedido ("aceptar_paciente"). */
+  aviso_medico?: string | null;
+  /** Entrega real de ese aviso según Twilio. */
+  aviso_medico_entrega?: string | null;
+  /** Cuándo la revisó el cron de caídas (y sonó, si correspondía). Marca de "ya visto". */
+  revisada_at?: string;
 };
 
 /**
@@ -67,11 +81,11 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
     // techo) para responder por una sola consulta. 12 h cubre de sobra cualquier
     // CI, incluida una que se haya quedado colgada.
     const desdeISO = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-    const [{ data: eventos }, { data: entradas }, { data: avisos }] = await Promise.all([
+    const [{ data: eventos }, { data: entradas }, { data: avisos }, { data: rechazosMp }, { data: avisosMedico }] = await Promise.all([
       admin
         .from("eventos_funnel")
         .select("evento, metadata")
-        .in("evento", ["pago_vista", "pago_toque", "pago_intento", "error_cliente"])
+        .in("evento", ["pago_vista", "pago_toque", "pago_intento", "pago_creado", "pago_rechazado", "error_cliente"])
         // Filtrado por el paciente de ESTA consulta, no solo por fecha: PostgREST
         // corta en 1000 filas por defecto, y un día con muchos `error_cliente`
         // podría empujar fuera de la ventana justo los eventos que se buscan —
@@ -87,6 +101,24 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
         .select("resultado, twilio_status")
         .eq("consulta_id", consultaId)
         .eq("plantilla", "paciente_aceptada")
+        .order("created_at", { ascending: false })
+        .limit(1),
+      // El rechazo de Mercado Pago lo registra el webhook, que no conoce al
+      // paciente (paciente_id nulo): se busca por la consulta.
+      admin
+        .from("eventos_funnel")
+        .select("metadata")
+        .eq("evento", "pago_rechazado")
+        .is("paciente_id", null)
+        .eq("metadata->>recursoId", consultaId)
+        .gte("created_at", desdeISO)
+        .order("created_at", { ascending: false })
+        .limit(1),
+      admin
+        .from("whatsapp_envios")
+        .select("resultado, twilio_status")
+        .eq("consulta_id", consultaId)
+        .eq("plantilla", "aceptar_paciente")
         .order("created_at", { ascending: false })
         .limit(1),
     ]);
@@ -109,6 +141,10 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
     const ultimoLatido = latidos.length ? Math.max(...latidos) : null;
 
     const aviso = (avisos ?? [])[0] ?? null;
+    const avisoMedico = (avisosMedico ?? [])[0] ?? null;
+    const rechazoDocto = propios.find((e) => e.evento === "pago_rechazado");
+    const motivoDocto = (rechazoDocto?.metadata as Record<string, unknown> | null)?.motivo;
+    const detalleMp = ((rechazosMp ?? [])[0]?.metadata as Record<string, unknown> | undefined)?.detalle;
 
     const evidencia: EvidenciaCierre = {
       at: new Date().toISOString(),
@@ -120,6 +156,11 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
       aviso_whatsapp: aviso?.resultado ?? null,
       aviso_whatsapp_entrega: aviso?.twilio_status ?? null,
       errores_cliente: propios.filter((e) => e.evento === "error_cliente").length,
+      cobro_creado: hubo("pago_creado"),
+      rechazo_docto: rechazoDocto ? String(motivoDocto ?? "sin motivo") : null,
+      rechazo_mp: (rechazosMp ?? []).length ? String(detalleMp ?? "sin motivo") : null,
+      aviso_medico: avisoMedico?.resultado ?? null,
+      aviso_medico_entrega: avisoMedico?.twilio_status ?? null,
     };
 
     await admin
