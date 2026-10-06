@@ -162,6 +162,9 @@ mergear, y cada sprint se mide contra la escalera de la sección 2.
   constantes en `src/lib/whatsapp.ts`. Hasta que Meta las apruebe, el envío
   falla y queda registrado en `whatsapp_envios`; no hay que tocar nada cuando
   se aprueben.
+- **Pago (06/10, PR #528):** solo con cuenta de Mercado Pago, modo binario
+  puesto, botón "Pagá con Mercado Pago", alarma por cada rechazo con el motivo
+  y registro de desde dónde paga cada paciente. Regla en CLAUDE.md.
 - **Pilares 2 a 4:** decisiones aprobadas (sección 5), sin implementar.
 
 ### Plantillas de WhatsApp de turnos (aprobadas por Diego el 05/10)
