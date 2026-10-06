@@ -53,23 +53,65 @@ export async function POST(req: NextRequest) {
   const status = params.MessageStatus ?? params.SmsStatus;
   if (!sid || !status) return NextResponse.json({ ok: true });
 
-  const admin = createAdminClient();
-  const { data: envios } = await admin
-    .from("whatsapp_envios")
-    .update({
-      twilio_status: status,
-      twilio_status_at: new Date().toISOString(),
-      twilio_status_error: params.ErrorCode ?? null,
-    })
-    .eq("twilio_sid", sid)
-    .select("medico_id, plantilla, consulta_id, turno_id");
-
-  const envio = envios?.[0];
-  if (envio?.medico_id && NO_LLEGO.has(status)) {
-    waitUntil(avisarAlEquipoQueNoLlego(envio, status, params.ErrorCode ?? null));
+  const errorCode = params.ErrorCode ?? null;
+  const r = await anotarEstado(sid, status, errorCode);
+  if (r) {
+    if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) waitUntil(avisarAlEquipoQueNoLlego(r.envio, status, errorCode));
+  } else {
+    // La fila del envío todavía no existe: se escribe DESPUÉS de mandar, y la
+    // confirmación de Twilio puede llegar antes. Así se perdieron estados de
+    // entrega reales (06/10/2026: 34 avisos "sin estado" que Twilio sí tenía,
+    // 2 de ellos sin entregar y sin alarma). Se reintenta unos segundos.
+    waitUntil(reintentarAnotar(sid, status, errorCode));
   }
 
   return NextResponse.json({ ok: true });
+}
+
+type Envio = { medico_id: string | null; plantilla: string; consulta_id: string | null; turno_id: string | null };
+
+/** Cuán avanzado es un estado. Uno anterior nunca pisa a uno posterior: con los
+ *  reintentos, un "sent" demorado puede llegar después del "delivered". */
+function rango(estado: string | null): number {
+  if (!estado) return -1;
+  if (estado === "read") return 3;
+  if (estado === "delivered" || NO_LLEGO.has(estado)) return 2;
+  if (estado === "sent") return 1;
+  return 0; // queued, accepted, scheduled, sending
+}
+
+/** null = la fila del envío todavía no existe. */
+async function anotarEstado(
+  sid: string,
+  status: string,
+  errorCode: string | null
+): Promise<{ envio: Envio; escrito: boolean } | null> {
+  const admin = createAdminClient();
+  const { data: fila } = await admin
+    .from("whatsapp_envios")
+    .select("twilio_status, medico_id, plantilla, consulta_id, turno_id")
+    .eq("twilio_sid", sid)
+    .limit(1)
+    .maybeSingle();
+  if (!fila) return null;
+  const envio: Envio = { medico_id: fila.medico_id, plantilla: fila.plantilla, consulta_id: fila.consulta_id, turno_id: fila.turno_id };
+  if (rango(fila.twilio_status) >= rango(status)) return { envio, escrito: false };
+  await admin
+    .from("whatsapp_envios")
+    .update({ twilio_status: status, twilio_status_at: new Date().toISOString(), twilio_status_error: errorCode })
+    .eq("twilio_sid", sid);
+  return { envio, escrito: true };
+}
+
+async function reintentarAnotar(sid: string, status: string, errorCode: string | null): Promise<void> {
+  for (const espera of [2_000, 5_000, 10_000]) {
+    await new Promise((r) => setTimeout(r, espera));
+    const r = await anotarEstado(sid, status, errorCode).catch(() => null);
+    if (r) {
+      if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) await avisarAlEquipoQueNoLlego(r.envio, status, errorCode);
+      return;
+    }
+  }
 }
 
 /**

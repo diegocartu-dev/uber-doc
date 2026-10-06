@@ -205,6 +205,41 @@ export async function enviarTwilio(toE164: string, contentSid: string, variables
 
 type DetalleTwilio = { ok: boolean; sid: string | null; errorCode: string | null };
 
+/**
+ * El estado de entrega de un aviso, preguntado a Twilio si nuestra base no lo
+ * tiene (06/10/2026). La confirmación de Twilio a veces llega antes de que
+ * exista la fila del envío y se pierde: de 34 avisos "sin estado", Twilio tenía
+ * el estado real de los 34. Lo que averigua lo deja escrito en la fila. Nunca
+ * lanza: si Twilio no contesta, devuelve lo que había.
+ */
+export async function estadoDeEntrega(fila: {
+  resultado: string | null;
+  twilio_sid?: string | null;
+  twilio_status: string | null;
+}): Promise<string | null> {
+  if (fila.twilio_status || fila.resultado !== "enviado" || !fila.twilio_sid || !TWILIO_SID || !TWILIO_TOKEN) {
+    return fila.twilio_status;
+  }
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages/${fila.twilio_sid}.json`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${TWILIO_SID}:${TWILIO_TOKEN}`).toString("base64")}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    const estado = ((await res.json()) as { status?: string }).status ?? null;
+    if (estado) {
+      await createAdminClient()
+        .from("whatsapp_envios")
+        .update({ twilio_status: estado, twilio_status_at: new Date().toISOString() })
+        .eq("twilio_sid", fila.twilio_sid)
+        .is("twilio_status", null);
+    }
+    return estado;
+  } catch {
+    return null;
+  }
+}
+
 /** Igual que `enviarTwilio` pero conservando el SID del mensaje y el código de
  *  error — lo que se persiste en `whatsapp_envios`. */
 async function enviarTwilioDetallado(toE164: string, contentSid: string, variables: Variables): Promise<DetalleTwilio> {
