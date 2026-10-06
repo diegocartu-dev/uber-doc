@@ -95,7 +95,9 @@ type ResultadoEnvio =
   | "flag_apagado"
   | "sin_credenciales"
   | "error_twilio"
-  | "throttled";
+  | "throttled"
+  /** Destinatario de prueba: no se manda (06/10/2026). Ver esCuentaDePrueba. */
+  | "cuenta_test";
 
 type ContextoEnvio = {
   consultaId?: string | null;
@@ -103,6 +105,28 @@ type ContextoEnvio = {
   /** Qué punto del producto disparó el aviso (ej. "solicitud_ci", "cron_repush"). */
   disparador?: string;
 };
+
+/**
+ * ¿El destinatario es una cuenta de prueba? (06/10/2026) A ninguna se le manda
+ * WhatsApp: los pacientes de prueba tienen teléfonos que NO son del equipo
+ * (verificado: ninguno es el de Diego), y la prueba de punta a punta corre
+ * contra producción. El aviso queda registrado como "cuenta_test", así la
+ * prueba igual comprueba que el camino del aviso se ejecutó. Para recibirlos
+ * a propósito: env WHATSAPP_A_CUENTAS_TEST=1.
+ */
+async function esCuentaDePrueba(p: { medicoId?: string | null; pacienteId?: string | null }): Promise<boolean> {
+  if (process.env.WHATSAPP_A_CUENTAS_TEST === "1") return false;
+  const admin = createAdminClient();
+  if (p.medicoId) {
+    const { data } = await admin.from("medicos").select("es_cuenta_test").eq("id", p.medicoId).maybeSingle();
+    if (data?.es_cuenta_test) return true;
+  }
+  if (p.pacienteId) {
+    const { data } = await admin.from("pacientes").select("es_cuenta_test").eq("id", p.pacienteId).maybeSingle();
+    if (data?.es_cuenta_test) return true;
+  }
+  return false;
+}
 
 function registrarEnvio(params: {
   /** Destinatario médico. NULL en los avisos al paciente, para no inflar los
@@ -171,6 +195,11 @@ export async function avisarDemandaProvincia(
   const toE164 = normalizarTelefonoAR(medico.celular_personal);
   if (!toE164) {
     registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  if (await esCuentaDePrueba({ medicoId })) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "cuenta_test", ctx });
     return false;
   }
 
@@ -361,6 +390,11 @@ export async function avisarPacienteAceptadaWhatsApp(
     return false;
   }
 
+  if (await esCuentaDePrueba({ pacienteId: base.pacienteId })) {
+    registrarEnvio({ ...base, resultado: "cuenta_test" });
+    return false;
+  }
+
   const r = await enviarTwilioDetallado(toE164, contentSid, {
     "1": (paciente.nombre_completo ?? "").trim().split(/\s+/)[0] || "paciente",
     "2": formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo) || "El profesional",
@@ -408,6 +442,11 @@ export async function avisarMedicoAceptarWhatsApp(
   if (!toE164) {
     console.log("[whatsapp] médico sin celular válido (aceptar):", medicoId);
     registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  if (await esCuentaDePrueba({ medicoId })) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "cuenta_test", ctx });
     return false;
   }
 
@@ -472,6 +511,11 @@ export async function avisarMedicoEsperandoWhatsApp(
   if (!toE164) {
     console.log("[whatsapp] médico sin celular válido (esperando):", medicoId);
     registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  if (await esCuentaDePrueba({ medicoId })) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "cuenta_test", ctx });
     return false;
   }
 
@@ -554,6 +598,11 @@ export async function avisarMedicoTurnoWhatsApp(
   const toE164 = normalizarTelefonoAR(medico.celular_personal);
   if (!toE164) {
     registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "sin_celular", ctx });
+    return false;
+  }
+
+  if (await esCuentaDePrueba({ medicoId })) {
+    registrarEnvio({ medicoId, plantilla: PLANTILLA, resultado: "cuenta_test", ctx });
     return false;
   }
 
