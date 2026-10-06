@@ -149,20 +149,29 @@ mergear, y cada sprint se mide contra la escalera de la sección 2.
 
 ### Estado (05/10, noche)
 
-Pilar 1 construido en la rama `plan/consultas-efectivas` (PR #524), un commit
-por ticket: P1.1, P1.2, P1.3, P1.4, P1.5, P1.6, P1.7, P1.8, P1.9, P1.10 (inerte
-hasta las plantillas), P1.11 y la parte de P3.2 que no necesita decisión
-("volver a pedir" crea un pedido nuevo con lo ya escrito). Falta P1.12
-(waitUntil en el resto de los avisos, rastro de entrega del push, tablero).
-Pendiente de revisión adversarial antes de mergear.
+- **Pilar 1: mergeado y en producción** (PR #524, un commit por ticket): P1.1
+  a P1.11, la parte de P3.2 que no necesita decisión ("volver a pedir" crea un
+  pedido nuevo con lo ya escrito) y el arreglo de `liberar-reservas` (una
+  reserva con pago rechazado vuelve a la oferta). "Tiempo estimado" ya no se
+  muestra (D6, primera mitad).
+- **P1.12 en parte:** `waitUntil` en el aviso "aceptar paciente" y alerta al
+  equipo por WhatsApp no entregado. Falta: rastro de entrega del push y la
+  medida en el tablero.
+- **Plantillas de turnos:** creadas en Twilio y enviadas a Meta el 05/10
+  (`docto_turno_reservado_v1`, `docto_turno_15min_v1`), cableadas como
+  constantes en `src/lib/whatsapp.ts`. Hasta que Meta las apruebe, el envío
+  falla y queda registrado en `whatsapp_envios`; no hay que tocar nada cuando
+  se aprueben.
+- **Pilares 2 a 4:** decisiones aprobadas (sección 5), sin implementar.
 
-### Plantillas de WhatsApp que faltan (esperan OK de Diego antes de pedirlas a Meta)
+### Plantillas de WhatsApp de turnos (aprobadas por Diego el 05/10)
 
-Las dos van al profesional, con botón que abre su panel.
+Las dos van al profesional, con botón que abre su panel. El texto que quedó en
+Twilio agrega "Lo atendés desde tu panel" y el pie habitual de Docto.
 
-- **turno_reservado** (al confirmarse el pago):
+- **docto_turno_reservado_v1** (al confirmarse el pago):
   > Hola {{1}}. Un paciente reservó y pagó un turno con vos para **{{2}} a las {{3}}**. Lo esperás en tu panel de Docto a esa hora; quince minutos antes te volvemos a avisar.
-- **turno_15min** (15 minutos antes):
+- **docto_turno_15min_v1** (15 minutos antes):
   > Hola {{1}}. En 15 minutos empieza tu turno de las **{{3}}** ({{2}}). Entrá a tu panel de Docto: el paciente va a estar en la sala.
 
 ### Orden y ritmo
@@ -180,22 +189,29 @@ escalones a la vista (aceptación, pago, atención) y, por cada atención perdid
 el escalón y el motivo. Vive en el tablero. Si un escalón no sube después de su
 pilar, el pilar no está cerrado.
 
-## 5. Decisiones para Diego
+## 5. Decisiones — APROBADAS por Diego el 05/10/2026
 
-- **D1 Presencia.** ¿A los cuántos minutos sin señal del panel se apaga sola la
-  disponibilidad, y aceptamos que el profesional la mantenga contestando un
-  WhatsApp? Propuesta: 15 min sin señal → WhatsApp "¿Seguís disponible?"; sin
-  respuesta en 5 min → apagada.
-- **D2 Llamada.** ¿Llamamos por teléfono al profesional a los 5 min de un
-  pedido sin respuesta? Sale de un número de Estados Unidos (lo que tenemos en
-  Twilio); el costo por llamada es centavos de dólar.
-- **D3 Otro profesional.** ¿Ofrecemos el pedido a otro profesional de la misma
-  especialidad y jurisdicción si a los N min nadie respondió? Siempre dicho al
-  paciente y con rótulo. Propuesta: a los 4 min, con el paciente avisado desde
-  el minuto uno.
-- **D4 Plazo de pago.** ¿El reloj arranca cuando el paciente se enteró, con
-  techo de 30 min? ¿Y puede pagar sobre la misma consulta si vuelve mientras el
-  profesional sigue disponible?
-- **D5 Turnos.** ¿Anticipación mínima de 60 min para reservar (salvo
-  profesional en línea)? ¿Confirmación semanal de agenda por WhatsApp?
-- **D6 Textos.** Sacar "Tiempo estimado"; mostrar el precio antes de pedir.
+Diego aprobó las seis propuestas tal como estaban escritas ("los 3 ok"). Lo que
+sigue es lo que se implementa; cualquier cambio de número vuelve a Diego.
+
+- **D1 Presencia — sí.** 15 min sin señal del panel → WhatsApp "¿Seguís
+  disponible?" con botón; sin respuesta en 5 min → disponibilidad apagada. La
+  clínica muestra "En línea ahora" solo con señal fresca. (P2.1)
+- **D2 Llamada — sí.** Llamada telefónica automática al profesional a los 5 min
+  de un pedido sin respuesta, desde el número de Twilio que ya tenemos. (P2.2)
+- **D3 Otro profesional — sí, a los 4 min.** El pedido se ofrece a otro
+  profesional de la misma especialidad y jurisdicción, con el paciente avisado
+  desde el minuto uno, rótulo visible y su consentimiento; nunca sustitución
+  silenciosa. (P2.3)
+- **D4 Plazo de pago — sí.** El reloj arranca cuando el paciente se enteró de
+  la aceptación, con techo de 30 min; si vuelve con el profesional todavía
+  disponible, paga sobre la misma consulta. (P3.1, P3.2)
+- **D5 Turnos — sí.** Anticipación mínima de 60 min para reservar, salvo
+  profesional con señal fresca; confirmación semanal de agenda por WhatsApp, y
+  sin respuesta la agenda se pausa antes de plantar a alguien. (P4.1, P4.2)
+- **D6 Textos — sí.** "Tiempo estimado" ya salió (#524); falta mostrar el
+  precio antes de pedir. (P3.3)
+
+Las plantillas de WhatsApp con botón que necesitan D1, D4 y D5 hay que pedirlas
+a Meta el primer día (tardan 1–2 días); sus textos van a Diego antes, como
+siempre.
