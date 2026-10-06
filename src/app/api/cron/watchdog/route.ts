@@ -40,6 +40,8 @@ const ESPERADOS: Record<string, number> = {
   // plazo se estiraba hasta 20.
   "resolver-consultas-vencidas": 3,
   "resolver-turnos-vencidos": 10,
+  // El revisor de caídas: si deja de correr, las fallas vuelven a ser invisibles.
+  "revisar-caidas": 5,
   "reconciliar-identidad": 10,
   "aviso-agenda-vencida": 1440,
   "saldo-servicios": 1440,

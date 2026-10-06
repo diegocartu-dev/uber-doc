@@ -52,6 +52,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/revisar-caidas",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/resolver-consultas-vencidas",
       "schedule": "*/3 * * * *"
     },

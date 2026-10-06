@@ -125,6 +125,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     cadencia: "cada minuto",
     autoRecupera: false,
   },
+  "revisar-caidas": {
+    nombre: "Revisor de caídas (etiqueta de cada consulta que no se atendió)",
+    queHace: "le pone a cada consulta inmediata que se cerró sin atenderse su porqué —lo decidió una persona o falló un proceso— y avisa por mail solo cuando falló un proceso",
+    impacto: "las consultas que se caen por una falla nuestra, de Mercado Pago o de WhatsApp vuelven a pasar sin que nadie se entere",
+    cadencia: "cada 5 minutos",
+    autoRecupera: false,
+  },
   "resolver-consultas-vencidas": {
     nombre: "Plazo de la consulta inmediata (30 min pagada · 10 min sin aceptar)",
     queHace: "cierra las CI pagadas que nadie tomó (reintegro del 100% si faltó el profesional, sin reintegro si faltó el paciente) y libera a los 10 min al paciente cuyo pedido nadie aceptó, desactivando de CI al profesional que no respondió",
