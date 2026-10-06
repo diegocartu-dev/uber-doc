@@ -4,6 +4,8 @@ import { useState, useEffect, useTransition } from "react";
 import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turnos/actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { trackFunnel } from "@/lib/funnel-client";
+import { origenDelNavegadorActual } from "@/lib/pagos/origen-dispositivo";
 
 type Props = {
   turnoId: string;
@@ -53,6 +55,9 @@ export default function PagoPendiente({ turnoId, vuelta = null, reservadoHasta, 
   }, [expirado, turnoId]);
 
   function handlePagar() {
+    // El toque, por beacon (sobrevive a la navegación a MP), con desde dónde
+    // paga: si se le abre o no la app de Mercado Pago depende de eso.
+    trackFunnel("pago_toque", { tipo: "turno", turnoId, ...origenDelNavegadorActual() });
     setError(null);
     startTransition(async () => {
       // Intentar cobro real con Mercado Pago (crear-v2). Si el cobro real no
