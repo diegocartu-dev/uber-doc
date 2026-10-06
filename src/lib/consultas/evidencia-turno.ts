@@ -5,6 +5,7 @@
 // junto con su marca de revisada. Sin datos personales: banderas y estados.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { estadoDeEntrega } from "@/lib/whatsapp";
 
 export type EvidenciaTurno = {
   at: string;
@@ -45,14 +46,20 @@ export async function evidenciaTurno(turnoId: string): Promise<EvidenciaTurno> {
   const [{ data: avisos }, { data: entradas }, { data: presencia }] = await Promise.all([
     admin
       .from("whatsapp_envios")
-      .select("resultado, twilio_status, created_at")
+      .select("resultado, twilio_sid, twilio_status, created_at")
       .eq("turno_id", turnoId)
       .in("plantilla", AVISOS_TURNO)
       .order("created_at", { ascending: false }),
     admin.from("sala_espera_entradas").select("id").eq("turno_id", turnoId).limit(1),
     admin.from("video_presencia").select("rol, evento").eq("recurso_id", turnoId).eq("evento", "joined"),
   ]);
-  const { aviso, entrega } = mejorAviso((avisos ?? []) as { resultado: string | null; twilio_status: string | null }[]);
+  // Lo que falte de entrega se le pregunta a Twilio (la confirmación a veces se pierde).
+  const conEstado = await Promise.all(
+    ((avisos ?? []) as { resultado: string | null; twilio_sid: string | null; twilio_status: string | null }[]).map(
+      async (a) => ({ resultado: a.resultado, twilio_status: await estadoDeEntrega(a) })
+    )
+  );
+  const { aviso, entrega } = mejorAviso(conEstado);
   const roles = new Set((presencia ?? []).map((p) => p.rol));
   return {
     at: new Date().toISOString(),

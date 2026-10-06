@@ -23,6 +23,7 @@
 //   repo es público y esto se lee desde el panel.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { estadoDeEntrega } from "@/lib/whatsapp";
 
 export type EvidenciaCierre = {
   /** Cuándo se escribió esta evidencia (ISO). */
@@ -98,7 +99,7 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
         .eq("consulta_id", consultaId),
       admin
         .from("whatsapp_envios")
-        .select("resultado, twilio_status")
+        .select("resultado, twilio_sid, twilio_status")
         .eq("consulta_id", consultaId)
         .eq("plantilla", "paciente_aceptada")
         .order("created_at", { ascending: false })
@@ -116,7 +117,7 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
         .limit(1),
       admin
         .from("whatsapp_envios")
-        .select("resultado, twilio_status")
+        .select("resultado, twilio_sid, twilio_status")
         .eq("consulta_id", consultaId)
         .eq("plantilla", "aceptar_paciente")
         .order("created_at", { ascending: false })
@@ -142,6 +143,11 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
 
     const aviso = (avisos ?? [])[0] ?? null;
     const avisoMedico = (avisosMedico ?? [])[0] ?? null;
+    // La entrega que falte se le pregunta a Twilio (la confirmación a veces se pierde).
+    const [entregaAviso, entregaMedico] = await Promise.all([
+      aviso ? estadoDeEntrega(aviso) : Promise.resolve(null),
+      avisoMedico ? estadoDeEntrega(avisoMedico) : Promise.resolve(null),
+    ]);
     const rechazoDocto = propios.find((e) => e.evento === "pago_rechazado");
     const motivoDocto = (rechazoDocto?.metadata as Record<string, unknown> | null)?.motivo;
     const detalleMp = ((rechazosMp ?? [])[0]?.metadata as Record<string, unknown> | undefined)?.detalle;
@@ -154,13 +160,13 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
       intento_llego_al_servidor: hubo("pago_intento"),
       seg_desde_ultimo_latido: ultimoLatido ? Math.round((cerradaAt - ultimoLatido) / 1000) : null,
       aviso_whatsapp: aviso?.resultado ?? null,
-      aviso_whatsapp_entrega: aviso?.twilio_status ?? null,
+      aviso_whatsapp_entrega: entregaAviso,
       errores_cliente: propios.filter((e) => e.evento === "error_cliente").length,
       cobro_creado: hubo("pago_creado"),
       rechazo_docto: rechazoDocto ? String(motivoDocto ?? "sin motivo") : null,
       rechazo_mp: (rechazosMp ?? []).length ? String(detalleMp ?? "sin motivo") : null,
       aviso_medico: avisoMedico?.resultado ?? null,
-      aviso_medico_entrega: avisoMedico?.twilio_status ?? null,
+      aviso_medico_entrega: entregaMedico,
     };
 
     await admin
