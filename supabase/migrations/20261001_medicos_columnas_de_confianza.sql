@@ -29,7 +29,7 @@
 -- identidad validada es una decisión de producto pendiente.
 --
 -- Va también en la base de la instancia institucional (se provisiona con este
--- mismo schema). NO APLICAR sin OK de Diego.
+-- mismo schema). APLICADA en producción el 05/10/2026 (OK de Diego), verificada.
 -- =============================================================================
 
 -- 1 · Nadie crea una ficha de médico con su sesión (el alta es del servidor).

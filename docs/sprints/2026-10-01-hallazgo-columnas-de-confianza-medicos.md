@@ -46,8 +46,10 @@ da ventaja hoy a nadie, porque todos los profesionales reales están en la misma
 
 ## Qué se hizo
 
-`supabase/migrations/20261001_medicos_columnas_de_confianza.sql` — **sin aplicar,
-espera el OK de Diego**:
+`supabase/migrations/20261001_medicos_columnas_de_confianza.sql` — **aplicada en
+producción el 05/10/2026 con OK de Diego y verificada** con las mismas pruebas (alta
+bloqueada, ninguna columna cambia por la sesión del profesional, flujos legítimos
+andando):
 
 1. Se borra la regla que permitía crear fichas de médico con la sesión del
    usuario y se le saca el permiso de alta a `anon` y `authenticated`. Las dos
