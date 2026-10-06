@@ -208,6 +208,14 @@ export async function POST(req: NextRequest) {
       // (handleStatusOnly), liberar-reservas no suelta un turno con pago en
       // vuelo, aceptada-sin-pago no cierra una CI con pago_id, y la sala y la
       // pantalla del turno muestran "pendiente".
+      // Solo con cuenta de Mercado Pago (decisión Diego, 06/10/2026). Medido
+      // contra la API de MP: los rechazos por antifraude eran todos pagos como
+      // invitado (tarjeta tipeada sin cuenta); con cuenta no hubo ninguno, ni
+      // pagando con tarjeta. Con "wallet_purchase" el checkout lleva directo
+      // al login de MP (o a crear la cuenta): adentro se paga con dinero en
+      // cuenta o con cualquier tarjeta. Verificado en el navegador: sin esto
+      // MP ofrece "Sin cuenta de Mercado Pago → Tarjeta"; con esto, no.
+      purpose: "wallet_purchase",
       auto_return: "approved",
       marketplace_fee: marketplaceFee,
       // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
