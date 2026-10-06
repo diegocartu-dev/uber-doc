@@ -258,7 +258,7 @@ async function handlePayment(paymentId: string): Promise<void> {
   if (status === "approved") {
     await handleApproved(admin, tipo, id, paymentId, transactionAmount, applicationFee, dateCreated, logCtx);
   } else if (status === "rejected") {
-    await handleRejected(admin, tipo, id, paymentId, logCtx);
+    await handleRejected(admin, tipo, id, paymentId, payment.status_detail ?? null, logCtx);
   } else if (status === "refunded") {
     await handleStatusOnly(admin, tipo, id, paymentId, "refunded", logCtx);
   } else if (status === "charged_back") {
@@ -527,6 +527,7 @@ async function handleRejected(
   tipo: "consulta" | "turno",
   id: string,
   paymentId: string,
+  statusDetail: string | null,
   logCtx: Record<string, unknown>
 ): Promise<void> {
   const table = tipo === "consulta" ? "consultas" : "turnos";
@@ -537,8 +538,24 @@ async function handleRejected(
     .update({ pago_id: paymentId, mp_status: "rejected" })
     .eq("id", id);
 
-  logInfo("[WEBHOOK]", "Pago rechazado", logCtx);
-  trackEvent({ evento: "pago_rechazado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId } });
+  logInfo("[WEBHOOK]", "Pago rechazado", { ...logCtx, statusDetail });
+  // El motivo queda en la huella: antes había que preguntárselo a MP pago por pago.
+  trackEvent({ evento: "pago_rechazado", pacienteId: null, metadata: { tipo, recursoId: id, paymentId, detalle: statusDetail } });
+
+  // Alarma: un paciente que intentó pagar y no pudo es un proceso que falló
+  // (regla de Diego 06/10: alarmas de procesos, no de sucesos). Desde que se
+  // paga solo con cuenta de MP un rechazo es raro, así que suena cada uno.
+  await sendDoctoAlert(
+    "Mercado Pago rechazó un pago",
+    [
+      "Un paciente intentó pagar y Mercado Pago lo rechazó.",
+      `Tipo: ${tipo}`,
+      `Atención: ${id}`,
+      `Pago MP: ${paymentId}`,
+      `Motivo (MP): ${statusDetail ?? "sin motivo informado"}`,
+      "Panel: https://www.docto.com.ar/admin/consultas",
+    ].join("\n")
+  );
 }
 
 async function handleStatusOnly(
