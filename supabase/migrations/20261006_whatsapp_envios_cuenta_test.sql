@@ -1,4 +1,5 @@
--- PENDIENTE DE APLICAR — requiere OK de Diego. Solo en la base principal.
+-- APLICADA en producción el 06/10/2026 (OK de Diego), verificada en pg_constraint.
+-- Solo en la base principal.
 --
 -- A las cuentas de prueba no se les manda WhatsApp (06/10/2026): los pacientes
 -- de prueba tienen teléfonos que no son del equipo y la prueba de punta a punta
