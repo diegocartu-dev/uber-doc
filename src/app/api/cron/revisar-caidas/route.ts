@@ -4,7 +4,7 @@ import { esInstitucional } from "@/lib/instancia";
 import { revisarCaidas } from "@/lib/consultas/caidas";
 
 /**
- * El revisor de caídas (Diego, 06/10/2026): etiqueta cada consulta inmediata que
+ * El revisor de caídas (Diego, 06/10/2026): etiqueta cada consulta inmediata y cada turno pago que
  * se cerró sin atenderse y suena SOLO si falló un proceso. Regla en
  * `@/lib/consultas/diagnostico`. Cada 5 minutos.
  *

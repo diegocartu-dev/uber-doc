@@ -127,7 +127,7 @@ export const CRONS_META: Record<string, CronMeta> = {
   },
   "revisar-caidas": {
     nombre: "Revisor de caídas (etiqueta de cada consulta que no se atendió)",
-    queHace: "le pone a cada consulta inmediata que se cerró sin atenderse su porqué —lo decidió una persona o falló un proceso— y avisa por mail solo cuando falló un proceso",
+    queHace: "le pone a cada consulta inmediata y a cada turno pago que se cerró sin atenderse su porqué —lo decidió una persona o falló un proceso— y avisa por mail solo cuando falló un proceso",
     impacto: "las consultas que se caen por una falla nuestra, de Mercado Pago o de WhatsApp vuelven a pasar sin que nadie se entere",
     cadencia: "cada 5 minutos",
     autoRecupera: false,
