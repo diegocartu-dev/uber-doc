@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { sinReservasAbandonadas } from "@/lib/insights/reservas";
-import { diagnosticarConsulta } from "@/lib/consultas/diagnostico";
+import { diagnosticarConsulta, diagnosticarTurno } from "@/lib/consultas/diagnostico";
 import { esInstitucional } from "@/lib/instancia";
 
 function fechaAR(offsetDias = 0) {
@@ -222,6 +222,15 @@ export async function GET(req: NextRequest) {
         .in("id", (consultas ?? []).map((c) => c.id));
       for (const e of evs ?? []) evidencias.set(e.id, e.cierre_evidencia);
     }
+    // Lo mismo para los turnos: la columna existe solo en la base del B2C.
+    const evidenciasTurno = new Map<string, unknown>();
+    if (!esInstitucional() && turnos.length > 0) {
+      const { data: evs } = await admin
+        .from("turnos")
+        .select("id, cierre_evidencia")
+        .in("id", turnos.map((t) => t.id));
+      for (const e of evs ?? []) evidenciasTurno.set(e.id, e.cierre_evidencia);
+    }
 
     const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnos.map((t) => t.medico_id)])];
     // `consultas.paciente_id` es el user_id; `turnos.paciente_id` es pacientes.id.
@@ -259,6 +268,7 @@ export async function GET(req: NextRequest) {
         // El "inicio" de un turno es la hora de la cita, no cuándo se reservó.
         inicio: `${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`,
         especialidad: "",
+        porque: diagnosticarTurno(t, (evidenciasTurno.get(t.id) as never) ?? null),
       })),
     ].sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
 
