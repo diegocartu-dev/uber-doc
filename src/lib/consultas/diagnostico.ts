@@ -18,6 +18,7 @@
 
 import { clasificarAtencion, MOTIVO, type FilaAtencion } from "./clasificar";
 import type { EvidenciaCierre } from "./evidencia-cierre";
+import type { EvidenciaTurno } from "./evidencia-turno";
 
 export type ClaseDiagnostico = "atendida" | "en_curso" | "suceso" | "falla" | "sin_datos";
 export type Diagnostico = { clase: ClaseDiagnostico; texto: string };
@@ -107,4 +108,59 @@ function aceptadaSinPago(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | n
   if (NO_LLEGO.has(ev.aviso_whatsapp_entrega ?? "")) return falla(t("El paciente nunca se enteró de que lo aceptaron: el aviso no le llegó"));
   if (!ev.aviso_whatsapp) return falla(t("El paciente nunca se enteró de que lo aceptaron: no estaba en la sala y no se le avisó"));
   return sinDatos(t("El paciente no volvió a la sala: el aviso salió y no sabemos si le llegó"));
+}
+
+// ── Turnos (caso "d", Diego 06/10/2026) ─────────────────────────────────────
+// "Hay que diferenciar bien ausencias (médico o paciente) de algún fallo de
+// proceso que impida acceder." Una ausencia se describe y no suena SOLO si hay
+// prueba de que al ausente le llegó el aviso y de que la otra parte estaba.
+// Si el aviso no salió o no llegó, o alguien estaba y no pudo entrar al video,
+// es falla. Si el profesional cancela un turno pago, suena (Diego, 06/10).
+
+/** Pagó de verdad: aprobado, o devuelto/contracargado después de entrar. */
+const TURNO_PAGO = new Set(["approved", "refunded", "charged_back"]);
+const TURNO_VIVO = new Set(["confirmado", "en_espera", "en_curso", "reservado_pendiente"]);
+const LLEGO = new Set(["read", "delivered"]);
+
+export function diagnosticarTurno(
+  fila: { estado: string; mp_status?: string | null },
+  ev: Partial<EvidenciaTurno> | null
+): Diagnostico {
+  const pago = TURNO_PAGO.has(fila.mp_status ?? "");
+  if (fila.estado === "completado") return { clase: "atendida", texto: "Atendido" };
+  if (TURNO_VIVO.has(fila.estado)) return { clase: "en_curso", texto: "En curso" };
+  if (fila.estado === "cancelado_paciente") return suceso("El paciente canceló el turno");
+  if (fila.estado === "cancelado_medico") {
+    return pago ? falla("Pagó y el profesional canceló el turno") : suceso("El profesional canceló el turno");
+  }
+  if (fila.estado === "ausente_medico") return ausenciaDelProfesional(ev);
+  if (fila.estado === "ausente_paciente") return ausenciaDelPaciente(ev);
+  return sinDatos(`Turno en estado "${fila.estado}": no hay regla para explicarlo`);
+}
+
+function ausenciaDelProfesional(ev: Partial<EvidenciaTurno> | null): Diagnostico {
+  if (!ev) return sinDatos("El profesional no entró y no quedó evidencia del turno");
+  if (!LLEGO.has(ev.aviso_medico_entrega ?? "")) {
+    if (NO_LLEGO.has(ev.aviso_medico_entrega ?? "")) return falla("El profesional no entró: el aviso del turno no le llegó");
+    if (!ev.aviso_medico) return falla("El profesional no entró y no se le mandó ningún aviso por WhatsApp");
+    if (ev.aviso_medico !== "enviado") return falla(`El profesional no entró: el aviso del turno no salió (${ev.aviso_medico})`);
+    return sinDatos("El profesional no entró: el aviso salió y no sabemos si le llegó");
+  }
+  if (ev.paciente_en_sala || ev.paciente_en_video) {
+    return suceso("Ausencia del profesional: le llegó el aviso y el paciente lo esperó en la sala");
+  }
+  return sinDatos("El profesional no entró y no hay registro de que el paciente haya estado en la sala");
+}
+
+function ausenciaDelPaciente(ev: Partial<EvidenciaTurno> | null): Diagnostico {
+  if (!ev) return sinDatos("El paciente no entró y no quedó evidencia del turno");
+  if (ev.paciente_en_sala && !ev.paciente_en_video) {
+    return falla("El paciente estaba en la sala de espera y no llegó a entrar al video");
+  }
+  if (ev.medico_en_video) {
+    // No registramos los recordatorios al paciente: sin eso no se puede probar
+    // que se enteró, así que no se lo da por ausente.
+    return sinDatos("El paciente no entró (el profesional estaba); no registramos si le llegó el recordatorio");
+  }
+  return sinDatos("El paciente no entró y no hay registro de que el profesional haya estado");
 }
