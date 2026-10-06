@@ -52,6 +52,10 @@ const TWILIO_FROM = normalizarFromWhatsApp(process.env.TWILIO_WHATSAPP_FROM);
 // canal de avisos y nadie lee ahí). v1: HX28f31177… / HX5b80894…
 export const PLANTILLA_ACEPTAR_PACIENTE = "HX25f4187f6a159560fe86ed3087ceb8ca"; // docto_aceptar_paciente_v2
 export const PLANTILLA_PACIENTE_ESPERANDO = "HX8023671239ec07bdd66e6e238438b81b"; // docto_paciente_esperando_v2
+// Turnos al profesional (05/10/2026). Enviadas a Meta el 05/10: hasta que las
+// apruebe, Twilio rechaza el envío y queda registrado como error_twilio.
+export const PLANTILLA_TURNO_RESERVADO = "HXa46c1e245149f4c4a0fca4e94c85ea96"; // docto_turno_reservado_v1
+export const PLANTILLA_TURNO_15MIN = "HXc46a7a0f525a06e7f0236f76e468552e"; // docto_turno_15min_v1
 export const PLANTILLA_PACIENTE_ACEPTADA = "HX92655588afc1443f60850e50b5a45828"; // docto_paciente_aceptada_v2 (al PACIENTE, 10/09/2026)
 
 // No reenviar "paciente esperando" al mismo médico dentro de esta ventana. Cubre dos
@@ -465,10 +469,9 @@ export async function avisarMedicoEsperandoWhatsApp(
  * WhatsApp salía recién cuando el paciente ya estaba en la sala, a la hora.
  *
  * Sin el tope de 30 minutos de "paciente esperando": acá el dedupe es por
- * turno y plantilla (whatsapp_envios), una vez cada uno. Inerte hasta que
- * existan las plantillas (env TWILIO_CONTENT_SID_TURNO_RESERVADO /
- * TWILIO_CONTENT_SID_TURNO_15MIN), igual que el piloto de demanda: queda
- * registrado como "sin_credenciales" para que el panel pueda decirlo.
+ * turno y plantilla (whatsapp_envios), una vez cada uno. Plantillas
+ * docto_turno_reservado_v1 y docto_turno_15min_v1 (textos aprobados por Diego
+ * el 05/10/2026, enviadas a Meta ese día).
  *
  * Variables de la plantilla: {{1}} nombre del profesional, {{2}} fecha
  * ("sáb 5/10" u "hoy"), {{3}} hora ("21:20").
@@ -478,10 +481,11 @@ export async function avisarMedicoTurnoWhatsApp(
   turno: { turnoId: string; fecha: string; hora: string; cuando: "reservado" | "15min" },
 ): Promise<boolean> {
   const PLANTILLA = turno.cuando === "reservado" ? "turno_reservado" : "turno_15min";
+  // Constante en el código (como las otras plantillas): la env solo la pisa.
   const contentSid =
     turno.cuando === "reservado"
-      ? process.env.TWILIO_CONTENT_SID_TURNO_RESERVADO
-      : process.env.TWILIO_CONTENT_SID_TURNO_15MIN;
+      ? process.env.TWILIO_CONTENT_SID_TURNO_RESERVADO || PLANTILLA_TURNO_RESERVADO
+      : process.env.TWILIO_CONTENT_SID_TURNO_15MIN || PLANTILLA_TURNO_15MIN;
   const ctx: ContextoEnvio = { turnoId: turno.turnoId, disparador: turno.cuando === "reservado" ? "pago_turno" : "cron_15min" };
 
   if (!(await flagWhatsappOn())) {
