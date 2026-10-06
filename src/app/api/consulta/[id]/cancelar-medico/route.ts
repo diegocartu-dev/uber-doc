@@ -35,7 +35,7 @@ export async function POST(
 
   const { data: consulta } = await admin
     .from("consultas")
-    .select("id, estado, medico_id, paciente_id, pago_id, mp_net_amount_medico, mp_application_fee")
+    .select("id, estado, medico_id, paciente_id, pago_id, mp_status, mp_net_amount_medico, mp_application_fee")
     .eq("id", consultaId)
     .eq("medico_id", medico.id)
     .in("estado", ["aceptada", "pagada", "en_curso"])
@@ -48,9 +48,13 @@ export async function POST(
     );
   }
 
-  // Refund total: alcanza con pago_id (MP revierte médico + comisión Docto por el split).
+  // Refund total (MP revierte médico + comisión Docto por el split). Solo si la
+  // plata entró: un pago rechazado también deja `pago_id` en la fila, y con eso
+  // solo se intentaba devolver algo que nunca se cobró, quedaba un reintegro
+  // "pendiente" en la cola y al paciente le llegaba "te devolvemos lo que
+  // pagaste" (revisión adversaria del 06/10/2026).
   let reintegroEstado: string | null = null;
-  if (consulta.pago_id) {
+  if (consulta.pago_id && consulta.mp_status === "approved") {
     reintegroEstado = await ejecutarRefund(
       consultaId,
       medico.id,
