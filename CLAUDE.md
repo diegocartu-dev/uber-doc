@@ -178,6 +178,30 @@ rompía: activo + fecha vencida = NO cobra.
   mira `estado` y no la fecha. Arreglarlo NO suma consultas (hace que esos
   profesionales figuren no disponibles); tiene sentido con la renovación andando.
 
+## Se paga solo con cuenta de Mercado Pago (decisión Diego, 06/10/2026)
+*"Vamos con MP directo, cero rechazos."*
+
+- La preferencia lleva `purpose: "wallet_purchase"`: ya no existe "pagar como
+  invitado" (tarjeta tipeada sin cuenta). Medido contra la API de MP: los
+  rechazos por antifraude eran todos de invitados; con cuenta no hubo ninguno,
+  tampoco con tarjeta. En el celular con la app de MP se abre la app con la
+  cuenta del paciente; sin la app, MP pide ingresar o crear la cuenta.
+- **`binary_mode: true` se queda.** MP dice que sacarlo sube la aprobación,
+  pero un pago aprobado tarde choca con los plazos: devolución automática de
+  la CI, turno liberado por el contador, cobro después de una cancelación. Los
+  rechazos por antifraude fueron anteriores al modo binario: no los causó.
+- El botón dice **"Pagá con Mercado Pago"** y nada más. Sin carteles ni
+  advertencias de seguridad: *"no está en ninguna web del planeta, es asustar
+  a la gente"*.
+- **Alarmas de procesos, no de sucesos.** Un paciente que intentó pagar y no
+  pudo es un proceso que falló: suena (mail al equipo con el motivo de MP) y el
+  motivo queda en `pago_rechazado.metadata.detalle`. Un paciente que decide no
+  pagar es un suceso: se describe, no suena.
+- `pago_toque` guarda desde dónde paga (plataforma, navegador o app que lo
+  contiene, Docto instalado): es el dato para saber cuántos pacientes no tienen
+  la app de MP a mano. Si el pagador usó cuenta o fue invitado lo dice MP:
+  `GET /users/{payer.id}` → `user_type`.
+
 ## La matrícula la dice REFEPS, no el formulario (decisión Diego, 01/10/2026)
 *"Si la valida REFEPS es real."*
 
