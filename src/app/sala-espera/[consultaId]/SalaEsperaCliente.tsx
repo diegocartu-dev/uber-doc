@@ -6,6 +6,7 @@ import { Video, CheckCircle, CreditCard } from "lucide-react";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { estadoPagoConsulta } from "@/lib/estado-pago-consulta";
+import { origenDelNavegadorActual } from "@/lib/pagos/origen-dispositivo";
 import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 import { trackFunnel } from "@/lib/funnel-client";
 import { crearConsulta } from "@/app/clinica/actions";
@@ -317,7 +318,7 @@ export default function SalaEsperaCliente({
   async function pagarConsulta() {
     // EL TOQUE, antes que nada. Por beacon: sobrevive aunque el resto falle o la
     // página navegue a Mercado Pago. Con esto, "tocó y no pasó nada" deja huella.
-    trackFunnel("pago_toque", { tipo: "consulta", consultaId, estado, mpStatus: mpStatus ?? "null" });
+    trackFunnel("pago_toque", { tipo: "consulta", consultaId, estado, mpStatus: mpStatus ?? "null", ...origenDelNavegadorActual() });
     setPagando(true);
     setErrorPago(null);
     try {
