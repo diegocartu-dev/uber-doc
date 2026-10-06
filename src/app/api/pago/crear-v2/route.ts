@@ -201,9 +201,13 @@ export async function POST(req: NextRequest) {
       ],
       payer,
       statement_descriptor: DESCRIPTOR_MP,
-      // Aprobado o rechazado en el acto: un pago "en revisión" no sirve para una
-      // consulta que es ahora ni para un lugar retenido 15 minutos.
-      binary_mode: true,
+      // SIN binary_mode (sacado el 06/10/2026, había entrado el 05/10). Mercado
+      // Pago documenta que el modo binario BAJA la aprobación: lo que su
+      // antifraude mandaría a revisar unos minutos, en binario lo rechaza en el
+      // acto. Un pago "en revisión" ya tiene camino: el webhook lo persiste
+      // (handleStatusOnly), liberar-reservas no suelta un turno con pago en
+      // vuelo, aceptada-sin-pago no cierra una CI con pago_id, y la sala y la
+      // pantalla del turno muestran "pendiente".
       auto_return: "approved",
       marketplace_fee: marketplaceFee,
       // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
