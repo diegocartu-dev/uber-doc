@@ -1,4 +1,5 @@
--- PENDIENTE DE APLICAR — requiere OK de Diego. Solo en la base principal: la
+-- APLICADA en producción el 06/10/2026 (OK de Diego), verificada con una prueba
+-- en transacción revertida. Solo en la base principal: la
 -- instancia institucional no tiene estas columnas.
 --
 -- La caja negra del cierre (consultas.cierre_evidencia, turnos.cierre_evidencia)
