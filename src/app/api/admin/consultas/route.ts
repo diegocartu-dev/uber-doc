@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { sinReservasAbandonadas } from "@/lib/insights/reservas";
+import { diagnosticarConsulta } from "@/lib/consultas/diagnostico";
+import { esInstitucional } from "@/lib/instancia";
 
 function fechaAR(offsetDias = 0) {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -176,9 +178,13 @@ export async function GET(req: NextRequest) {
     const desde = req.nextUrl.searchParams.get("desde");
     const hasta = req.nextUrl.searchParams.get("hasta");
 
+    // Las columnas del porqué: la etiqueta de cada caída (lib/consultas/diagnostico).
+    // `cierre_evidencia` NO va acá: la base institucional no la tiene, y una sola
+    // columna inexistente hace fallar la query entera (el Historial quedaría vacío).
+    // Se lee aparte, más abajo, y si falla el porqué sale sin evidencia.
     let query = admin
       .from("consultas")
-      .select("id, especialidad, estado, created_at, paciente_id, medico_id")
+      .select("id, especialidad, estado, created_at, paciente_id, medico_id, aceptada_at, resuelta_por, resolucion_motivo, pago_id, mp_status, sala_video_url, en_curso_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -208,6 +214,15 @@ export async function GET(req: NextRequest) {
     const [{ data: consultas }, { data: turnosRaw }] = await Promise.all([query, qTurnos]);
     const turnos = sinReservasAbandonadas(turnosRaw ?? []);
 
+    const evidencias = new Map<string, unknown>();
+    if (!esInstitucional() && (consultas ?? []).length > 0) {
+      const { data: evs } = await admin
+        .from("consultas")
+        .select("id, cierre_evidencia")
+        .in("id", (consultas ?? []).map((c) => c.id));
+      for (const e of evs ?? []) evidencias.set(e.id, e.cierre_evidencia);
+    }
+
     const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnos.map((t) => t.medico_id)])];
     // `consultas.paciente_id` es el user_id; `turnos.paciente_id` es pacientes.id.
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnos.map((t) => t.paciente_id)])].filter(Boolean);
@@ -233,6 +248,7 @@ export async function GET(req: NextRequest) {
         medico: medMap3.get(c.medico_id) ?? "—",
         paciente: pacDe3(c.paciente_id)?.nombre_completo ?? "Paciente",
         inicio: c.created_at, especialidad: c.especialidad,
+        porque: diagnosticarConsulta({ ...c, cierre_evidencia: (evidencias.get(c.id) as never) ?? null }),
       })),
       ...turnos.filter((t) => real(t.medico_id, t.paciente_id)).map((t) => ({
         id: t.id, tipo: "Turno" as const,

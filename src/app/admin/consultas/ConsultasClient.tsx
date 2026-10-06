@@ -20,7 +20,15 @@ interface ConsultaItem {
   especialidad: string;
   solicitada?: string;
   citaPara?: string | null;
+  /** El porqué de una caída (solo Historial, consultas inmediatas). */
+  porque?: { clase: "atendida" | "en_curso" | "suceso" | "falla" | "sin_datos"; texto: string } | null;
 }
+
+// Color del porqué: rojo = falló un proceso, naranja = falta el dato, gris = lo
+// decidió una persona. Punto + texto, nunca color solo.
+const COLOR_PORQUE: Record<string, string> = { falla: "#E24B4A", sin_datos: "#D85A30", suceso: "#888780" };
+const porqueVisible = (i: ConsultaItem) =>
+  i.porque && i.porque.clase !== "atendida" && i.porque.clase !== "en_curso" ? i.porque : null;
 
 const fechaHoraAR = (iso: string) =>
   new Date(iso).toLocaleString("es-AR", {
@@ -82,6 +90,7 @@ export default function ConsultasClient() {
       { k: "especialidad", t: "Especialidad", val: (i) => i.especialidad },
       { k: "estado", t: "Estado", val: (i) => i.estado },
     ];
+    if (tab === "historial") cols.push({ k: "porque", t: "Por qué", val: (i) => porqueVisible(i)?.texto ?? null });
     if (conFechas) {
       cols.push({ k: "solicitada", t: "Solicitada", val: (i) => i.solicitada ?? null, tipo: "fecha", porEvento: true });
       cols.push({ k: "cita", t: "Turno para", val: (i) => i.citaPara ?? null, tipo: "fecha", porEvento: true });
@@ -315,6 +324,18 @@ export default function ConsultasClient() {
                     <td className="px-4 py-3 text-gray-600">{item.paciente}</td>
                     <td className="px-4 py-3 text-[12px] text-gray-500">{item.especialidad}</td>
                     <td className="px-4 py-3"><EstadoChip estado={item.estado} /></td>
+                    {tab === "historial" && (
+                      <td className="px-4 py-3 text-[12px] text-gray-600">
+                        {porqueVisible(item) ? (
+                          <span className="inline-flex items-start gap-1.5">
+                            <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: COLOR_PORQUE[porqueVisible(item)!.clase] }} />
+                            {porqueVisible(item)!.texto}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                    )}
                     {tab === "hoy" ? (
                       <>
                         <td className="whitespace-nowrap px-4 py-3 text-gray-700">
