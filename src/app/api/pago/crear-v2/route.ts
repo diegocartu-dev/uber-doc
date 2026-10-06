@@ -202,8 +202,19 @@ export async function POST(req: NextRequest) {
       payer,
       statement_descriptor: DESCRIPTOR_MP,
       // Aprobado o rechazado en el acto: un pago "en revisión" no sirve para una
-      // consulta que es ahora ni para un lugar retenido 15 minutos.
+      // consulta que es ahora ni para un lugar retenido 15 minutos. Además, sin
+      // binario un pago que MP aprueba tarde choca con los plazos (devolución
+      // automática de la CI, turno liberado por el contador, cobro tras una
+      // cancelación): revisión adversaria del 06/10/2026.
       binary_mode: true,
+      // Solo con cuenta de Mercado Pago (decisión Diego, 06/10/2026). Medido
+      // contra la API de MP: los rechazos por antifraude eran todos pagos como
+      // invitado (tarjeta tipeada sin cuenta); con cuenta no hubo ninguno, ni
+      // pagando con tarjeta. En el celular con la app de MP se abre la app con
+      // la cuenta del paciente (probado en un iPhone); sin la app, MP pide
+      // ingresar o crear la cuenta. Adentro se paga con dinero en cuenta o con
+      // cualquier tarjeta. Sin esto MP ofrece "Sin cuenta → Tarjeta"; con esto, no.
+      purpose: "wallet_purchase",
       auto_return: "approved",
       marketplace_fee: marketplaceFee,
       // Sin medios de pago EN EFECTIVO (Rapipago, Pago Fácil, cajeros).
