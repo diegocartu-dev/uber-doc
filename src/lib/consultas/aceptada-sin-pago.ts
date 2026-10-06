@@ -239,8 +239,13 @@ export async function procesarAceptadasSinPago(): Promise<ResultadoAceptadasSinP
     }
     if (cierre === "cerrar") {
       // UPDATE condicionado: si entre el SELECT y el UPDATE llegó el pago (el
-      // webhook la pasa a `en_curso`), no se toca. `mp_status` es NULL en las
-      // impagas y en PostgREST `neq` excluye los NULL: por eso el OR explícito.
+      // webhook la pasa a `en_curso`), no se toca. Se cierra solo si no hay
+      // plata en vuelo: nunca hubo pago, o el último que mandó MP fue rechazado o
+      // cancelado. Hasta el 06/10/2026 se exigía `pago_id` nulo, y una consulta
+      // cuyo pago MP había rechazado quedaba `aceptada` para siempre: el
+      // profesional leía "Estamos cerrando la consulta" y nadie la cerraba. Un
+      // pago en revisión (`in_process`/`pending`) sigue sin tocarse. Si el
+      // paciente paga de nuevo DESPUÉS del cierre, el webhook devuelve la plata.
       const { data: cerrada, error: errUpd } = await admin
         .from("consultas")
         .update({
@@ -251,8 +256,7 @@ export async function procesarAceptadasSinPago(): Promise<ResultadoAceptadasSinP
         })
         .eq("id", c.id)
         .eq("estado", "aceptada")
-        .is("pago_id", null)
-        .or("mp_status.is.null,mp_status.neq.approved")
+        .or("pago_id.is.null,mp_status.in.(rejected,cancelled)")
         .select("id")
         .maybeSingle();
 

@@ -312,10 +312,17 @@ async function handleApproved(
       // sincronía. Distinguimos para no alertar en cada pago aprobado.
       const { data: ya } = await admin
         .from("consultas")
-        .select("estado, pago_id, medico_id")
+        .select("estado, pago_id, mp_status, medico_id")
         .eq("id", id)
         .maybeSingle();
       const reentregaBenigna = ya?.pago_id === paymentId && ya?.estado !== "aceptada";
+      // El pago que figura en la fila, si lo hay, no trajo plata: MP lo rechazó o
+      // lo canceló. Es el caso del paciente que pagó con otro medio después de
+      // un rechazo y la consulta ya se había cerrado (06/10/2026): antes, con un
+      // `pago_id` rechazado en la fila, el reembolso automático no corría.
+      const pagoAnteriorSinPlata =
+        !ya?.pago_id ||
+        (ya.pago_id !== paymentId && (ya.mp_status === "rejected" || ya.mp_status === "cancelled"));
 
       // LA PLATA ENTRÓ SOBRE UNA CONSULTA YA CERRADA (10/09/2026).
       // Caso: el paciente estaba adentro del checkout cuando la consulta se
@@ -328,8 +335,8 @@ async function handleApproved(
       // Ahora el rastro del pago se escribe SOBRE la fila cerrada —sin tocar su
       // estado, que ya es el correcto— y el reembolso se dispara solo. Si falla,
       // cae en `refunds_pendientes` y lo levanta el cron de reintentos.
-      if (!reentregaBenigna && ya?.estado === "cancelada" && !ya?.pago_id && ya?.medico_id) {
-        await admin
+      if (!reentregaBenigna && ya?.estado === "cancelada" && pagoAnteriorSinPlata && ya?.medico_id) {
+        const rastro = admin
           .from("consultas")
           .update({
             pago_id: paymentId,
@@ -339,8 +346,9 @@ async function handleApproved(
             mp_net_amount_medico: netAmount,
             mp_payment_created_at: dateCreated,
           })
-          .eq("id", id)
-          .is("pago_id", null);
+          .eq("id", id);
+        // Condicionado al pago que había: nunca pisa otro pago que entró entre medio.
+        await (ya.pago_id ? rastro.eq("pago_id", ya.pago_id) : rastro.is("pago_id", null));
 
         const { ejecutarRefund } = await import("@/lib/cancelaciones");
         const reintegro = await ejecutarRefund(
