@@ -632,7 +632,7 @@ export default function SalaEsperaCliente({
             className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-4 text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100 disabled:opacity-50"
             style={{ minHeight: 56 }}
           >
-            {pagando ? "Abriendo el pago..." : `Pagar consulta · ${formatPrecio(precio)}`}
+            {pagando ? "Abriendo el pago..." : `Pagá con Mercado Pago · ${formatPrecio(precio)}`}
           </button>
           {errorPago && (
             <p className="mt-3 text-sm font-medium" style={{ color: "#E24B4A" }}>

@@ -188,7 +188,7 @@ export default function PagoPendiente({ turnoId, vuelta = null, reservadoHasta, 
         isLoading={isPending}
         className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-3.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100"
       >
-        Pagar turno
+        Pagá con Mercado Pago
       </LoadingButton>
 
       <p className="mt-3 text-center text-[11px] text-gray-400">

@@ -568,7 +568,7 @@ export default function EsperaVideo({
           className="mt-6 w-full rounded-xl bg-[#378ADD] px-6 py-4 text-base font-semibold text-white shadow-sm hover:bg-[#2e6fb5] active:scale-[0.98] transition-all duration-100 disabled:opacity-50"
           style={{ minHeight: 56 }}
         >
-          {reintentando ? "Abriendo el pago..." : "Pagar consulta"}
+          {reintentando ? "Abriendo el pago..." : "Pagá con Mercado Pago"}
         </button>
       )}
 

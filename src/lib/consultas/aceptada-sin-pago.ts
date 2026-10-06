@@ -69,7 +69,7 @@ export type DecisionAviso =
  */
 export function decidirAviso(params: {
   segundosDesdeAceptacion: number;
-  /** ¿Tocó "Pagar consulta" o ya hay preferencia/pago en curso? */
+  /** ¿Tocó "Pagá con Mercado Pago" o ya hay preferencia/pago en curso? */
   estaPagando: boolean;
   /** Segundos desde el último latido de presencia; null si nunca hubo. */
   segundosDesdeLatido: number | null;
