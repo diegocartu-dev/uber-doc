@@ -261,10 +261,18 @@ export async function rechazarConsulta(consultaId: string) {
 
   // Toda cancelación registra quién, cuándo y por qué (regla del 19/08/2026); con
   // `.select()` un update sin filas es un error, no un éxito (05/10/2026).
+  //
+  // Estado "cancelada", NO "rechazada": "rechazada" no existe en el enum
+  // estado_consulta (ni en la base principal ni en la institucional), así que
+  // desde el 16/05/2026 este update fallaba SIEMPRE. Hasta el 05/10 el error se
+  // tragaba: la tarjeta desaparecía del panel, el paciente esperaba 10 minutos a
+  // la nada y el plazo le apagaba la CI al profesional por "no responder".
+  // Encontrado por la prueba de punta a punta (06/10). Quién y por qué quedan en
+  // resuelta_por + resolucion_motivo; las pantallas ya tratan las dos igual.
   const { data: filas, error } = await supabase
     .from("consultas")
     .update({
-      estado: "rechazada",
+      estado: "cancelada",
       resuelta_por: "medico",
       resuelta_at: new Date().toISOString(),
       resolucion_motivo: "cancelo_profesional",
