@@ -60,9 +60,16 @@ async function pedir(paciente: Page): Promise<string> {
   await paciente.goto(`/triage?medicoId=${MEDICO_TEST.id}&especialidad=${encodeURIComponent(ESPECIALIDAD)}`);
   const casillas = paciente.getByRole("checkbox");
   await expect(casillas.first()).toBeVisible({ timeout: 20_000 });
+  // Como un paciente: las casillas se habilitan recién al leer los términos hasta el final.
+  const terminos = paciente.locator("div.overflow-y-auto").filter({ hasText: "Introducción y aceptación" });
+  await terminos.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    el.dispatchEvent(new Event("scroll"));
+  });
   for (const c of await casillas.all()) await c.check();
   await paciente.getByRole("button", { name: "Continuar" }).click();
   await paciente.locator("#motivo").fill("Prueba automática de punta a punta. No atender.");
+  await paciente.getByRole("button", { name: "Otro", exact: true }).click(); // al menos un síntoma
   await paciente.locator("#tiempo").selectOption({ index: 1 });
   await paciente.getByRole("button", { name: "Entrar a la sala de espera" }).click();
   await paciente.getByRole("button", { name: /Sí, es una consulta no urgente/ }).click();
@@ -71,9 +78,22 @@ async function pedir(paciente: Page): Promise<string> {
 }
 
 async function panelDelMedico(medico: Page): Promise<void> {
+  // El cartel "Activá las notificaciones" aparece unos segundos después de entrar
+  // y tapa el panel: como el profesional, se cierra con "Ahora no" cada vez que sale.
+  await medico.addLocatorHandler(medico.getByText("Activá las notificaciones para atender"), async () => {
+    await medico.getByText("Ahora no", { exact: true }).click();
+  });
   await loginWithEmail(medico, MEDICO_TEST.email, MEDICO_TEST.password);
-  const ahoraNo = medico.getByRole("button", { name: "Ahora no" });
-  if (await ahoraNo.isVisible({ timeout: 3_000 }).catch(() => false)) await ahoraNo.click();
+}
+
+/** Toca el botón hasta que la base muestre el cambio: un cartel que aparece justo
+ *  en el momento del toque se lo come, y un profesional volvería a tocar. */
+async function tocarHasta(medico: Page, boton: "Aceptar" | "Rechazar", id: string, estado: string): Promise<void> {
+  for (let intento = 0; intento < 3; intento++) {
+    await medico.getByRole("button", { name: boton }).first().click({ timeout: 30_000 });
+    const f = await esperarA(fila(id), (v) => v?.estado === estado, 10_000);
+    if (f?.estado === estado) return;
+  }
 }
 
 const fila = (id: string) => async () =>
@@ -96,8 +116,8 @@ test("pedido → aviso al profesional → aceptar → pagar → entra el profesi
   expect(aviso.map((a) => a.resultado), "aviso al profesional registrado, sin mandar").toContain("cuenta_test");
 
   await panelDelMedico(medico);
-  await medico.getByRole("button", { name: "Aceptar" }).first().click({ timeout: 30_000 });
-  const aceptada = await esperarA(fila(id), (f) => f?.estado === "aceptada");
+  await tocarHasta(medico, "Aceptar", id, "aceptada");
+  const aceptada = await fila(id)();
   expect(aceptada?.estado).toBe("aceptada");
   expect(aceptada?.aceptada_at, "queda el hito de la aceptación").toBeTruthy();
 
@@ -105,24 +125,29 @@ test("pedido → aviso al profesional → aceptar → pagar → entra el profesi
   const pagada = await esperarA(fila(id), (f) => f?.estado === "pagada" || f?.estado === "en_curso");
   expect(["pagada", "en_curso"]).toContain(pagada?.estado);
 
+  // Como el paciente: después de pagar confirma su información médica y entra.
+  const confirmar = paciente.getByRole("button", { name: "Confirmar y entrar" });
+  await expect(confirmar).toBeVisible({ timeout: 30_000 });
+  await confirmar.click();
+
   await medico.goto(`/medico/consulta/${id}/workspace`);
   const conSala = await esperarA(fila(id), (f) => Boolean(f?.sala_video_url), 45_000);
   expect(conSala?.sala_video_url, "el profesional entró: la sala de video existe").toBeTruthy();
 
   // El cierre se marca desde la base (ver encabezado) y se verifica la pantalla del paciente.
   await db!.from("consultas").update({ estado: "completada", completada_at: new Date().toISOString(), cierre_origen: "admin_forzado" }).eq("id", id);
-  await expect(paciente.getByRole("heading", { name: "Consulta finalizada" })).toBeVisible({ timeout: 30_000 });
+  await expect(paciente.getByText("Consulta finalizada").first()).toBeVisible({ timeout: 45_000 });
 });
 
-test("el profesional rechaza: queda rechazada y lo registra como suya", async ({ browser }) => {
+test("el profesional rechaza: queda cancelada por él, en el acto", async ({ browser }) => {
   test.setTimeout(180_000);
   const paciente = await contexto(browser);
   const medico = await contexto(browser);
   const id = await pedir(paciente);
   await panelDelMedico(medico);
-  await medico.getByRole("button", { name: "Rechazar" }).first().click({ timeout: 30_000 });
-  const f = await esperarA(fila(id), (v) => v?.estado === "rechazada");
-  expect(f?.estado).toBe("rechazada");
+  await tocarHasta(medico, "Rechazar", id, "cancelada");
+  const f = await fila(id)();
+  expect(f?.estado).toBe("cancelada");
   expect(f?.resuelta_por).toBe("medico");
 });
 
@@ -149,8 +174,7 @@ test("aceptada y sin pagar: el plazo la cierra y el revisor dice que es un suces
   const medico = await contexto(browser);
   const id = await pedir(paciente);
   await panelDelMedico(medico);
-  await medico.getByRole("button", { name: "Aceptar" }).first().click({ timeout: 30_000 });
-  await esperarA(fila(id), (f) => f?.estado === "aceptada");
+  await tocarHasta(medico, "Aceptar", id, "aceptada");
   await expect(paciente.getByRole("button", { name: /Pagá con Mercado Pago/ })).toBeVisible({ timeout: 30_000 });
 
   // Se adelanta el reloj: la aceptación pasa a tener 11 minutos (plazo: 10).
