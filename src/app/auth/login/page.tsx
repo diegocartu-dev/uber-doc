@@ -5,6 +5,20 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Stethoscope } from "lucide-react";
+
+/**
+ * A dónde volver después del login (06/10/2026): el middleware deja `?volver=`
+ * con la página que pidió quien llegó sin sesión (por ejemplo, la sala de espera
+ * desde el link del WhatsApp). Solo rutas internas: nada de otro dominio.
+ */
+function volverSeguro(): string | null {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("volver");
+  return v && v.startsWith("/") && !v.startsWith("//") && !v.includes("://") && !v.includes("\\") ? v : null;
+}
+function destinoDespuesDelLogin(): string {
+  return volverSeguro() ?? "/dashboard";
+}
 import LoadingButton from "@/components/ui/LoadingButton";
 
 export default function LoginPage() {
@@ -25,7 +39,7 @@ export default function LoginPage() {
     const origin = window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${origin}/auth/callback` },
+      options: { redirectTo: `${origin}/auth/callback${volverSeguro() ? `?next=${encodeURIComponent(volverSeguro()!)}` : ""}` },
     });
     if (error) {
       setError(error.message);
@@ -62,7 +76,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/dashboard";
+    window.location.href = destinoDespuesDelLogin();
   }
 
   async function handleReenviarConfirmacion() {
