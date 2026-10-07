@@ -56,6 +56,13 @@ export type EvidenciaCierre = {
   aviso_medico?: string | null;
   /** Entrega real de ese aviso según Twilio. */
   aviso_medico_entrega?: string | null;
+  // ── Desde el 07/10/2026: qué pasó DESPUÉS de la aceptación con la sala.
+  /** Volvió a la sala con la sesión iniciada (lo registra el servidor). */
+  llego_con_sesion?: boolean;
+  /** Tocó el link sin sesión y lo mandamos al login (lo registra el middleware). */
+  llego_sin_sesion?: boolean;
+  /** La pantalla de la sala llegó a abrirse delante de él. */
+  sala_abierta?: boolean;
   /** Cuándo la revisó el cron de caídas (y sonó, si correspondía). Marca de "ya visto". */
   revisada_at?: string;
 };
@@ -82,7 +89,7 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
     // techo) para responder por una sola consulta. 12 h cubre de sobra cualquier
     // CI, incluida una que se haya quedado colgada.
     const desdeISO = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-    const [{ data: eventos }, { data: entradas }, { data: avisos }, { data: rechazosMp }, { data: avisosMedico }] = await Promise.all([
+    const [{ data: eventos }, { data: entradas }, { data: avisos }, { data: rechazosMp }, { data: avisosMedico }, { data: llegadas }] = await Promise.all([
       admin
         .from("eventos_funnel")
         .select("evento, metadata")
@@ -122,6 +129,14 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
         .eq("plantilla", "aceptar_paciente")
         .order("created_at", { ascending: false })
         .limit(1),
+      // Llegadas a la sala después de la aceptación: la sin sesión no tiene
+      // paciente (la escribe el middleware), así que se busca por la consulta.
+      admin
+        .from("eventos_funnel")
+        .select("evento, metadata")
+        .in("evento", ["sala_llegada", "sala_abierta"])
+        .eq("metadata->>consultaId", consultaId)
+        .gte("created_at", consulta.aceptada_at ?? desdeISO),
     ]);
 
     // Los eventos guardan la consulta con dos nombres según quién los emite: el
@@ -165,6 +180,7 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
       cobro_creado: hubo("pago_creado"),
       rechazo_docto: rechazoDocto ? String(motivoDocto ?? "sin motivo") : null,
       rechazo_mp: (rechazosMp ?? []).length ? String(detalleMp ?? "sin motivo") : null,
+      ...llegadasDespues(llegadas ?? []),
       aviso_medico: avisoMedico?.resultado ?? null,
       aviso_medico_entrega: entregaMedico,
     };
@@ -177,4 +193,19 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
   } catch {
     // Nunca romper un cierre por no poder explicarlo.
   }
+}
+
+/** Resume las llegadas a la sala posteriores a la aceptación (los robots de vista previa no cuentan). */
+export function llegadasDespues(eventos: { evento: string; metadata: unknown }[]): {
+  llego_con_sesion: boolean;
+  llego_sin_sesion: boolean;
+  sala_abierta: boolean;
+} {
+  const personas = eventos.filter((e) => !((e.metadata ?? {}) as Record<string, unknown>).robot);
+  const llegadas = personas.filter((e) => e.evento === "sala_llegada");
+  return {
+    llego_con_sesion: llegadas.some((e) => ((e.metadata ?? {}) as Record<string, unknown>).sesion === true),
+    llego_sin_sesion: llegadas.some((e) => ((e.metadata ?? {}) as Record<string, unknown>).sesion === false),
+    sala_abierta: personas.some((e) => e.evento === "sala_abierta"),
+  };
 }

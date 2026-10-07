@@ -1,6 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type EventoFunnel =
+  // Llegada a la sala de espera (06/10/2026): con o sin sesión, desde qué
+  // navegador o si fue el robot de vista previa de un link. Lo escribe el
+  // servidor; `sala_abierta` lo manda la pantalla cuando de verdad se abrió.
+  | "sala_llegada"
+  | "sala_abierta"
   | "mp_oauth_view_tab"
   | "mp_oauth_start_click"
   | "mp_oauth_callback_success"

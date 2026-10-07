@@ -100,6 +100,14 @@ function aceptadaSinPago(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | n
   if (ev.intento_llego_al_servidor) return suceso(t("El paciente no completó el pago en Mercado Pago"));
   if (ev.vio_boton) return suceso(t("El paciente vio el botón de pago y no lo tocó"));
 
+  // Desde el 07/10: ¿qué pasó cuando volvió por el link? (undefined = evidencia vieja)
+  if (ev.llego_sin_sesion && !ev.sala_abierta) {
+    return falla(t("El paciente tocó el link, le pedimos iniciar sesión y no llegó a su sala"));
+  }
+  if (ev.llego_con_sesion && ev.sala_abierta === false) {
+    return sinDatos(t("El paciente llegó a la sala pero la pantalla no dio señales: no sabemos si la vio"));
+  }
+
   // Nunca llegó a ver el botón: ¿se enteró de que lo habían aceptado?
   if ((ev.errores_cliente ?? 0) > 0) return falla(t(`La pantalla del paciente dio ${ev.errores_cliente} error(es) y no llegó a ver el botón de pago`));
   if (ev.aviso_whatsapp_entrega === "read") return suceso(t("El paciente leyó el aviso de que lo aceptaron y no volvió a la sala"));

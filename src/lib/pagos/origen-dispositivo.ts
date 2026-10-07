@@ -30,6 +30,14 @@ export function origenDispositivo(ua: string, instalada: boolean, puntosTactiles
   return { plataforma, navegador, instalada };
 }
 
+/**
+ * ¿Es el robot que arma la vista previa de un link (WhatsApp, Facebook,
+ * Telegram…)? Pide la página sin ser una persona: no cuenta como "tocó el link".
+ */
+export function esRobotDeVistaPrevia(ua: string): boolean {
+  return /WhatsApp\/|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|Discordbot|LinkedInBot|Googlebot|bingbot/i.test(ua);
+}
+
 /** Lo mismo, leído del navegador actual. Nunca rompe: sin datos, objeto vacío. */
 export function origenDelNavegadorActual(): Partial<OrigenDispositivo> {
   try {
