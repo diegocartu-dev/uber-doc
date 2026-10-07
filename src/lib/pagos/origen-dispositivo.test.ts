@@ -28,3 +28,10 @@ test("navegador: el de otra app se distingue del navegador del teléfono", () =>
 test("instalada viaja tal cual", () => {
   assert.equal(origenDispositivo(IPHONE_SAFARI, true).instalada, true);
 });
+
+import { esRobotDeVistaPrevia } from "./origen-dispositivo";
+test("el robot de vista previa de WhatsApp no es una persona", () => {
+  assert.equal(esRobotDeVistaPrevia("WhatsApp/2.24.20.79 A"), true);
+  assert.equal(esRobotDeVistaPrevia("facebookexternalhit/1.1"), true);
+  assert.equal(esRobotDeVistaPrevia(IPHONE_SAFARI), false);
+});

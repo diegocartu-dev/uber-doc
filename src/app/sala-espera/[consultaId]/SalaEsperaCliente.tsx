@@ -187,6 +187,17 @@ export default function SalaEsperaCliente({
     });
   }, [consultaId]);
 
+  // La sala se abrió de verdad delante del paciente (06/10/2026). El servidor
+  // ya registró la llegada (`sala_llegada`); si esa existe y esta no, la página
+  // se sirvió pero no llegó a funcionar o se cerró enseguida.
+  useEffect(() => {
+    trackFunnel("sala_abierta", {
+      consultaId,
+      visible: typeof document !== "undefined" && document.visibilityState === "visible",
+      ...origenDelNavegadorActual(),
+    });
+  }, [consultaId]);
+
   // Errores que hoy mueren en el navegador del paciente: excepciones sueltas y
   // promesas rechazadas sin catch mientras esta pantalla está montada.
   useEffect(() => {

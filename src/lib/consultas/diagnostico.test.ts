@@ -61,6 +61,13 @@ test("c) si canceló el profesional, igual se explica por qué el paciente no pa
   assert.equal(sinPago({ rechazo_mp: "cc_rejected_other_reason" }, { resuelta_por: "medico" }).clase, "falla");
 });
 
+test("c) volvió por el link: si le pedimos login y no llegó, es nuestra falla", () => {
+  assert.equal(sinPago({ aviso_whatsapp: "enviado", aviso_whatsapp_entrega: "read", llego_sin_sesion: true, sala_abierta: false }).clase, "falla");
+  assert.equal(sinPago({ aviso_whatsapp: "enviado", aviso_whatsapp_entrega: "read", llego_con_sesion: true, sala_abierta: false }).clase, "sin_datos");
+  // Llegó, la pantalla se abrió y no vio el botón: lo decide lo que sigue (leyó el aviso → suceso).
+  assert.equal(sinPago({ aviso_whatsapp: "enviado", aviso_whatsapp_entrega: "read", llego_con_sesion: true, sala_abierta: true }).clase, "suceso");
+});
+
 test("c) aceptada sin pagar: nunca se enteró es nuestra falla", () => {
   assert.equal(sinPago({}).texto, "El paciente nunca se enteró de que lo aceptaron: no estaba en la sala y no se le avisó");
   assert.equal(sinPago({ aviso_whatsapp: "sin_celular" }).clase, "falla");
@@ -81,4 +88,14 @@ test("suena: fallas y huecos sí, sucesos no", () => {
   assert.equal(suena({ clase: "sin_datos", texto: "" }), true);
   assert.equal(suena({ clase: "suceso", texto: "" }), false);
   assert.equal(suena({ clase: "atendida", texto: "" }), false);
+});
+
+import { llegadasDespues } from "./evidencia-cierre";
+test("llegadas: los robots no cuentan; con y sin sesión se distinguen", () => {
+  const r = llegadasDespues([
+    { evento: "sala_llegada", metadata: { sesion: false, robot: true } },
+    { evento: "sala_llegada", metadata: { sesion: false, robot: false } },
+    { evento: "sala_abierta", metadata: {} },
+  ]);
+  assert.deepEqual(r, { llego_con_sesion: false, llego_sin_sesion: true, sala_abierta: true });
 });

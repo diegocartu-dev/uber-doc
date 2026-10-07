@@ -8,6 +8,9 @@ import { capitalizarNombre } from "@/lib/utils/texto";
 import { registrarEntradaSala } from "@/lib/sala-espera";
 import { pushAlMedico } from "@/lib/push";
 import { waitUntil } from "@vercel/functions";
+import { headers } from "next/headers";
+import { trackEvent } from "@/lib/funnel";
+import { origenDispositivo, esRobotDeVistaPrevia } from "@/lib/pagos/origen-dispositivo";
 
 // Estados en los que el paciente está de verdad en la sala. Una consulta
 // cancelada o terminada que se vuelve a abrir (el link del WhatsApp, Safari
@@ -34,6 +37,21 @@ export default async function SalaEsperaPage({
 
   if (!user) {
     redirect("/auth/login");
+  }
+
+  // Llegada CON sesión (06/10/2026). La sin sesión la registra el middleware.
+  // Junto con `sala_abierta` (la manda la pantalla) separa "llegó y la pantalla
+  // funcionó" de "llegó y no pasó nada" de "nunca llegó".
+  {
+    const ua = (await headers()).get("user-agent") ?? "";
+    const origen = origenDispositivo(ua, false);
+    waitUntil(
+      trackEvent({
+        evento: "sala_llegada",
+        pacienteId: user.id,
+        metadata: { consultaId, sesion: true, robot: esRobotDeVistaPrevia(ua), plataforma: origen.plataforma, navegador: origen.navegador },
+      })
+    );
   }
 
   // Traer la consulta con datos del médico
