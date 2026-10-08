@@ -38,8 +38,17 @@ import { registrarEvidenciaCierre } from "@/lib/consultas/evidencia-cierre";
 import { MOTIVO } from "@/lib/consultas/clasificar";
 import { logError, logInfo } from "@/lib/logger";
 
-/** Minutos que tiene el paciente para pagar una consulta ya aceptada. */
+/**
+ * Minutos que tiene el paciente para pagar una consulta ya aceptada, contados
+ * DESDE QUE SE ENTERÓ (D4, aprobada por Diego el 05/10/2026): vio el botón de
+ * pago con la pantalla delante, o le llegó (o leyó) el WhatsApp de "te
+ * aceptaron". Antes corrían desde la aceptación, y el paciente que se había ido
+ * de la pantalla un instante antes perdía los 10 minutos sin saberlo.
+ */
 export const PLAZO_PAGO_MIN = 10;
+
+/** Techo absoluto desde la aceptación: si nunca se enteró, se cierra igual. */
+export const TECHO_PAGO_MIN = 30;
 
 /** Segundos desde la aceptación antes de considerar mandar el aviso. */
 export const ESPERA_AVISO_SEG = 90;
@@ -119,12 +128,35 @@ export type DecisionCierre =
 export function decidirCierre(params: {
   segundosDesdeAceptacion: number;
   estaPagando: boolean;
+  /**
+   * Segundos desde que el paciente se enteró de la aceptación. null = no hay
+   * señal de que se haya enterado (rige el techo). Sin el campo, se toma que se
+   * enteró al aceptarse (la regla anterior al 08/10).
+   */
+  segundosDesdeQueSeEntero?: number | null;
 }): DecisionCierre {
-  if (!vencioPlazo(params.segundosDesdeAceptacion)) return "en_plazo";
-  if (params.estaPagando && params.segundosDesdeAceptacion < (PLAZO_PAGO_MIN + 5) * 60) {
-    return "esperar_checkout";
-  }
+  const desdeAcept = params.segundosDesdeAceptacion;
+  const seEntero = params.segundosDesdeQueSeEntero === undefined ? desdeAcept : params.segundosDesdeQueSeEntero;
+  // El vencimiento, en segundos desde la aceptación.
+  const vence =
+    seEntero === null
+      ? TECHO_PAGO_MIN * 60
+      : Math.min(desdeAcept - seEntero + PLAZO_PAGO_MIN * 60, TECHO_PAGO_MIN * 60);
+  const pasado = desdeAcept - vence;
+  if (pasado < 0) return "en_plazo";
+  // Adentro del checkout no se le cierra encima: hasta 5 minutos más.
+  if (params.estaPagando && pasado < 5 * 60) return "esperar_checkout";
   return "cerrar";
+}
+
+/**
+ * Cuándo se enteró el paciente de que lo aceptaron (ms), o null: lo primero
+ * entre ver el botón de pago con la pantalla delante y que le llegue o lea el
+ * WhatsApp. Nada anterior a la aceptación cuenta.
+ */
+export function cuandoSeEntero(aceptadaMs: number, momentos: (number | null | undefined)[]): number | null {
+  const validos = momentos.filter((m): m is number => typeof m === "number" && Number.isFinite(m) && m >= aceptadaMs);
+  return validos.length ? Math.min(...validos) : null;
 }
 
 type Fila = {
@@ -219,10 +251,32 @@ export async function procesarAceptadasSinPago(): Promise<ResultadoAceptadasSinP
   //    si no tenía celular o Twilio lo rechazó, insistir no lo arregla.
   const { data: avisos } = await admin
     .from("whatsapp_envios")
-    .select("consulta_id")
+    .select("consulta_id, twilio_status, twilio_status_at")
     .eq("plantilla", "paciente_aceptada")
     .in("consulta_id", ids);
   const yaAvisadas = new Set((avisos ?? []).map((a) => a.consulta_id).filter(Boolean) as string[]);
+
+  // 4) ¿Cuándo se enteró? (D4, 08/10) Lo primero entre ver el botón de pago con
+  //    la pantalla delante (pago_vista con visible=true) y que le llegue o lea
+  //    el WhatsApp de "te aceptaron". Ventana: el techo del plazo.
+  const enterado = new Map<string, number[]>();
+  const anotar = (id: string, t: number) => enterado.set(id, [...(enterado.get(id) ?? []), t]);
+  for (const a of avisos ?? []) {
+    if (a.consulta_id && (a.twilio_status === "delivered" || a.twilio_status === "read") && a.twilio_status_at) {
+      anotar(a.consulta_id, new Date(a.twilio_status_at).getTime());
+    }
+  }
+  const { data: vistas } = await admin
+    .from("eventos_funnel")
+    .select("metadata, created_at")
+    .eq("evento", "pago_vista")
+    .gte("created_at", new Date(ahora - (TECHO_PAGO_MIN + 5) * 60_000).toISOString());
+  for (const v of vistas ?? []) {
+    const m = (v.metadata ?? {}) as Record<string, unknown>;
+    if (m.visible === true && typeof m.consultaId === "string" && ids.includes(m.consultaId)) {
+      anotar(m.consultaId, new Date(v.created_at).getTime());
+    }
+  }
 
   const res: ResultadoAceptadasSinPago = { ...vacio, revisadas: candidatas.length, omitidas: {} };
   const cuenta = (k: string) => { res.omitidas[k] = (res.omitidas[k] ?? 0) + 1; };
@@ -232,7 +286,13 @@ export async function procesarAceptadasSinPago(): Promise<ResultadoAceptadasSinP
     if (!Number.isFinite(seg) || seg < 0) continue;
 
     // ── Plazo vencido: se cierra y el profesional queda libre ───────────────
-    const cierre = decidirCierre({ segundosDesdeAceptacion: seg, estaPagando: pagando.has(c.id) });
+    const aceptadaMs = new Date(c.aceptada_at).getTime();
+    const seEnteroMs = cuandoSeEntero(aceptadaMs, enterado.get(c.id) ?? []);
+    const cierre = decidirCierre({
+      segundosDesdeAceptacion: seg,
+      estaPagando: pagando.has(c.id),
+      segundosDesdeQueSeEntero: seEnteroMs === null ? null : Math.floor((ahora - seEnteroMs) / 1000),
+    });
     if (cierre === "esperar_checkout") {
       cuenta("cierre_pospuesto_pagando");
       continue;

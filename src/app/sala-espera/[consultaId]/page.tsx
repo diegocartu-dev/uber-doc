@@ -64,7 +64,7 @@ export default async function SalaEsperaPage({
     // verificado en prod). El motivo de cierre viaja desde acá para que la
     // pantalla no le diga al paciente "no llegó a tomar tu consulta" antes del
     // primer poll; los datos del pedido sirven para volver a pedir con un toque.
-    .select("id, especialidad, estado, created_at, medico_id, canal_origen, mp_status, resolucion_motivo, motivo_consulta, sintomas, tiempo_sintomas")
+    .select("id, especialidad, estado, created_at, medico_id, canal_origen, mp_status, resolucion_motivo, motivo_consulta, sintomas, tiempo_sintomas, aceptada_at")
     .eq("id", consultaId)
     .eq("paciente_id", user.id)
     .single();
@@ -162,6 +162,7 @@ export default async function SalaEsperaPage({
           tiempoEstimado={tiempoEstimado}
           createdAt={consulta.created_at}
           motivoCierreInicial={consulta.resolucion_motivo ?? null}
+          aceptadaAt={consulta.aceptada_at ?? null}
           medicoId={consulta.medico_id}
           medicoDisponible={medico.disponible === true}
           pedido={{

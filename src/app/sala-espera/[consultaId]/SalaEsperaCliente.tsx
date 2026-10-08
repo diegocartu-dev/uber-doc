@@ -76,6 +76,8 @@ type Props = {
   resultadoPago?: string | null;
   /** Por qué se cerró, según el servidor (el poll lo actualiza después). */
   motivoCierreInicial?: string | null;
+  /** Cuándo la aceptó el profesional (techo del plazo de pago: 30 min desde ahí). */
+  aceptadaAt?: string | null;
   medicoId?: string;
   /** Si el profesional sigue disponible, "volver a pedir" tiene sentido. */
   medicoDisponible?: boolean;
@@ -121,6 +123,7 @@ export default function SalaEsperaCliente({
   // alimentaba el reloj del banner del minuto 10, que murió con el contrato fijo.
   resultadoPago = null,
   motivoCierreInicial = null,
+  aceptadaAt = null,
   medicoId,
   medicoDisponible = false,
   pedido,
@@ -402,6 +405,11 @@ export default function SalaEsperaCliente({
   // El paciente VIO el botón de pagar (una vez por carga). Es la otra mitad de
   // `pago_toque`: separa "vio el botón y no lo tocó" de "nunca llegó a verlo".
   const vioBotonRef = useRef(false);
+  // Hasta cuándo tiene para pagar (D4, 08/10/2026): 10 minutos desde que se
+  // enteró —el momento en que ve el botón con la pantalla delante—, con techo de
+  // 30 desde la aceptación. Es la misma regla que aplica el cierre automático.
+  const [vencePagoAt, setVencePagoAt] = useState<number | null>(null);
+
   useEffect(() => {
     if (!faltaPagar || vioBotonRef.current) return;
     // Solo cuenta si la pantalla está delante del paciente (08/10/2026): con la
@@ -412,11 +420,13 @@ export default function SalaEsperaCliente({
       if (vioBotonRef.current || document.visibilityState !== "visible") return;
       vioBotonRef.current = true;
       trackFunnel("pago_vista", { tipo: "consulta", consultaId, visible: true });
+      const techo = aceptadaAt ? Date.parse(aceptadaAt) + 30 * 60_000 : Infinity;
+      setVencePagoAt(Math.min(Date.now() + 10 * 60_000, techo));
     };
     marcar();
     document.addEventListener("visibilitychange", marcar);
     return () => document.removeEventListener("visibilitychange", marcar);
-  }, [faltaPagar, consultaId]);
+  }, [faltaPagar, consultaId, aceptadaAt]);
 
   // ── Venció el plazo de 30 minutos (cron resolver-consultas-vencidas) ───────
   // El profesional no entró: la plata vuelve entera y el paciente queda libre.
@@ -646,6 +656,18 @@ export default function SalaEsperaCliente({
                 cuenta: el rechazo lo decide Mercado Pago, no tu banco ni nosotros.
               </p>
             </div>
+          )}
+          {vencePagoAt && (
+            <p className="mt-6 text-sm font-medium" style={{ color: "#BA7517" }}>
+              Tenés hasta las{" "}
+              {new Date(vencePagoAt).toLocaleTimeString("es-AR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+                timeZone: "America/Argentina/Buenos_Aires",
+              })}{" "}
+              para pagar.
+            </p>
           )}
           <button
             disabled={pagando}

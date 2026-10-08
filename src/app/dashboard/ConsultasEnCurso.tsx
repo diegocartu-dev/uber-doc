@@ -27,6 +27,10 @@ const MINUTOS_SIN_CANCELAR = 3;
 // profesional: tiene que coincidir con PLAZO_PAGO_MIN de
 // src/lib/consultas/aceptada-sin-pago.ts, que lo fija con un test.
 const PLAZO_PAGO_MIN = 10;
+// Techo desde la aceptación (D4, 08/10/2026): los 10 minutos corren desde que el
+// paciente SE ENTERA, y esta pantalla no sabe cuándo fue; lo seguro es mostrarle
+// al profesional la hora máxima. Tiene que coincidir con TECHO_PAGO_MIN.
+const TECHO_PAGO_MIN = 30;
 
 // Margen para arrepentirse (Diego: "si tocó el botón por error"). La cancelación
 // NO se ejecuta y después se revierte: se DEMORA. Revertirla sería imposible —
@@ -202,7 +206,13 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
         // al 19/08; ahí cae a `created_at`, que en una CI está a un minuto o dos
         // de distancia y alcanza para lo único que decide: si ya pasó el margen.
         const desdeAcept = segundosDesde(c.aceptada_at ?? c.created_at) ?? 0;
-        const restanPago = PLAZO_PAGO_MIN * 60 - desdeAcept;
+        const restanPago = TECHO_PAGO_MIN * 60 - desdeAcept;
+        const horaTecho = new Date(Date.parse(c.aceptada_at ?? c.created_at) + TECHO_PAGO_MIN * 60_000).toLocaleTimeString("es-AR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: "America/Argentina/Buenos_Aires",
+        });
         // El botón de cancelar aparece recién a los 3 minutos, y SOLO se esconde
         // mientras el paciente está en la ventana de pago. Con la consulta ya
         // pagada o en curso el profesional cancela cuando quiera, como siempre.
@@ -320,7 +330,7 @@ export default function ConsultasEnCurso({ medicoId }: { medicoId: string }) {
                 <p className="mt-1 text-xs text-gray-500">
                   Le avisamos por mail y por WhatsApp.{" "}
                   {restanPago > 0
-                    ? `Si no paga en ${mmss(restanPago)}, cerramos la consulta y quedás libre — no hace falta que hagas nada.`
+                    ? `El paciente tiene ${PLAZO_PAGO_MIN} minutos para pagar desde que se entera. Si no paga, cerramos la consulta y quedás libre (a más tardar a las ${horaTecho}) — no hace falta que hagas nada.`
                     : "Estamos cerrando la consulta para dejarte libre."}
                 </p>
                 {!puedeCancelar && (

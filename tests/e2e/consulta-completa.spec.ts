@@ -72,6 +72,8 @@ async function pedir(paciente: Page): Promise<string> {
   await paciente.getByRole("button", { name: "Otro", exact: true }).click(); // al menos un síntoma
   await paciente.locator("#tiempo").selectOption({ index: 1 });
   await paciente.getByRole("button", { name: "Entrar a la sala de espera" }).click();
+  // D6: el precio se ve ANTES de pedir.
+  await expect(paciente.getByText(/Valor de la consulta/)).toBeVisible({ timeout: 10_000 });
   await paciente.getByRole("button", { name: /Sí, es una consulta no urgente/ }).click();
   await paciente.waitForURL(/\/sala-espera\/[0-9a-f-]{36}/, { timeout: 30_000 });
   return paciente.url().match(/sala-espera\/([0-9a-f-]{36})/)![1];
@@ -177,8 +179,11 @@ test("aceptada y sin pagar: el plazo la cierra y el revisor dice que es un suces
   await tocarHasta(medico, "Aceptar", id, "aceptada");
   await expect(paciente.getByRole("button", { name: /Pagá con Mercado Pago/ })).toBeVisible({ timeout: 30_000 });
 
-  // Se adelanta el reloj: la aceptación pasa a tener 11 minutos (plazo: 10).
-  await db!.from("consultas").update({ aceptada_at: new Date(Date.now() - 11 * 60_000).toISOString() }).eq("id", id);
+  // Se adelanta el reloj 11 minutos (plazo: 10 desde que se enteró, D4): la
+  // aceptación y el momento en que vio el botón de pago.
+  const hace11 = new Date(Date.now() - 11 * 60_000).toISOString();
+  await db!.from("consultas").update({ aceptada_at: hace11 }).eq("id", id);
+  await db!.from("eventos_funnel").update({ created_at: hace11 }).eq("evento", "pago_vista").eq("metadata->>consultaId", id);
   const cron = await fetch(`${BASE}/api/cron/ci-aceptada-sin-pago`, { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
   expect(cron.status).toBe(200);
   const f = await esperarA(fila(id), (v) => v?.estado === "cancelada");
