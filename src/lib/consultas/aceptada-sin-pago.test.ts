@@ -12,6 +12,8 @@ import {
   decidirAviso,
   decidirCierre,
   vencioPlazo,
+  cuandoSeEntero,
+  TECHO_PAGO_MIN,
   ESPERA_AVISO_SEG,
   LATIDO_FRESCO_SEG,
   PLAZO_PAGO_MIN,
@@ -110,4 +112,25 @@ test("venció PERO está adentro del checkout: no se le cierra encima", () => {
 
 test("la gracia del checkout tiene techo: no deja la consulta viva para siempre", () => {
   assert.equal(decidirCierre({ segundosDesdeAceptacion: 15 * 60, estaPagando: true }), "cerrar");
+});
+
+test("D4 (08/10): los 10 minutos corren desde que se enteró, con techo de 30 desde la aceptación", () => {
+  // Se enteró a los 5 min de la aceptación: a los 12 min sigue en plazo (le quedan 3).
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 12 * 60, estaPagando: false, segundosDesdeQueSeEntero: 7 * 60 }), "en_plazo");
+  // ...y a los 15 min vence.
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 15 * 60, estaPagando: false, segundosDesdeQueSeEntero: 10 * 60 }), "cerrar");
+  // Nunca se enteró: aguanta hasta el techo y ahí cierra.
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 29 * 60, estaPagando: false, segundosDesdeQueSeEntero: null }), "en_plazo");
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: TECHO_PAGO_MIN * 60, estaPagando: false, segundosDesdeQueSeEntero: null }), "cerrar");
+  // Se enteró tarde (a los 25 min): el techo manda, no le da 10 más.
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 30 * 60, estaPagando: false, segundosDesdeQueSeEntero: 5 * 60 }), "cerrar");
+  // Adentro del checkout al vencer: espera hasta 5 minutos más.
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 15 * 60 + 30, estaPagando: true, segundosDesdeQueSeEntero: 10 * 60 + 30 }), "esperar_checkout");
+  assert.equal(decidirCierre({ segundosDesdeAceptacion: 20 * 60 + 30, estaPagando: true, segundosDesdeQueSeEntero: 15 * 60 + 30 }), "cerrar");
+});
+
+test("cuándo se enteró: lo primero, y nada anterior a la aceptación", () => {
+  assert.equal(cuandoSeEntero(1000, [5000, 3000, null]), 3000);
+  assert.equal(cuandoSeEntero(1000, [500]), null);
+  assert.equal(cuandoSeEntero(1000, []), null);
 });
