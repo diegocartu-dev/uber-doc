@@ -376,6 +376,14 @@ export async function PATCH(req: NextRequest) {
     const { error } = await admin.from("medicos").update(cambios).eq("id", medicoId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // El equipo corrigió el celular: se levanta el bloqueo por WhatsApp inválido
+    // (08/10/2026). Si el número nuevo tampoco recibe, el próximo aviso lo
+    // vuelve a bloquear.
+    if (cambios.celular_personal && cambios.celular_personal !== anterior?.celular_personal) {
+      const { levantarBloqueoWhatsApp } = await import("@/lib/medicos/bloqueo-whatsapp");
+      await levantarBloqueoWhatsApp(medicoId, "admin").catch(() => false);
+    }
+
     await logAdminAction({
       adminUserId: adminUser.id,
       accion: ADMIN_ACTIONS.CAMBIAR_CONTACTO_MEDICO,

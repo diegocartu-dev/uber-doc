@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDoctoAlert } from "@/lib/alertas";
+import { esDestinatarioInvalido, bloquearPorWhatsApp } from "@/lib/medicos/bloqueo-whatsapp";
 import { waitUntil } from "@vercel/functions";
 
 // Un aviso que NO llegó al profesional mientras un paciente espera es una
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
   const errorCode = params.ErrorCode ?? null;
   const r = await anotarEstado(sid, status, errorCode);
   if (r) {
-    if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) waitUntil(avisarAlEquipoQueNoLlego(r.envio, status, errorCode));
+    if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) waitUntil(alNoLlegar(r.envio, status, errorCode));
   } else {
     // La fila del envío todavía no existe: se escribe DESPUÉS de mandar, y la
     // confirmación de Twilio puede llegar antes. Así se perdieron estados de
@@ -108,10 +109,24 @@ async function reintentarAnotar(sid: string, status: string, errorCode: string |
     await new Promise((r) => setTimeout(r, espera));
     const r = await anotarEstado(sid, status, errorCode).catch(() => null);
     if (r) {
-      if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) await avisarAlEquipoQueNoLlego(r.envio, status, errorCode);
+      if (r.escrito && r.envio.medico_id && NO_LLEGO.has(status)) await alNoLlegar(r.envio, status, errorCode);
       return;
     }
   }
+}
+
+/**
+ * Un aviso al profesional que no llegó: si WhatsApp dice que el número no puede
+ * recibir mensajes (destinatario inválido), el profesional queda bloqueado
+ * hasta que actualice el celular (Diego, 08/10/2026: "los médicos no pueden
+ * atender ni ofertar si no están en condiciones"). Y siempre, alerta al equipo.
+ */
+async function alNoLlegar(envio: Envio, status: string, errorCode: string | null): Promise<void> {
+  let bloqueado = false;
+  if (envio.medico_id && esDestinatarioInvalido(errorCode)) {
+    bloqueado = await bloquearPorWhatsApp(envio.medico_id, errorCode).catch(() => false);
+  }
+  await avisarAlEquipoQueNoLlego(envio, status, errorCode, bloqueado);
 }
 
 /**
@@ -122,7 +137,8 @@ async function reintentarAnotar(sid: string, status: string, errorCode: string |
 async function avisarAlEquipoQueNoLlego(
   envio: { medico_id: string | null; plantilla: string; consulta_id: string | null; turno_id: string | null },
   status: string,
-  errorCode: string | null
+  errorCode: string | null,
+  bloqueado = false
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -139,6 +155,9 @@ async function avisarAlEquipoQueNoLlego(
         (urgente
           ? "Hay un paciente esperando y el profesional no se enteró por WhatsApp. Si figura disponible, conviene llamarlo o apagarlo desde el panel: mientras siga publicado, lo siguen eligiendo.\n\n"
           : "No es un paciente esperando ahora, pero este profesional no recibe nuestros WhatsApp: revisá su celular en la ficha.\n\n") +
+        (bloqueado
+          ? "Quedó BLOQUEADO: fuera de la clínica, de su link propio y de la consulta inmediata, hasta que actualice el celular (lo ve en su panel). Se desbloquea solo al cambiarlo.\n\n"
+          : "") +
         `Disponible ahora: ${medico?.disponible ? "sí" : "no"}.\n\n———\nDetalle técnico (para Claude): medico_id=${envio.medico_id}, consulta_id=${envio.consulta_id ?? "-"}, turno_id=${envio.turno_id ?? "-"}, plantilla=${envio.plantilla}, status=${status}, error=${errorCode ?? "-"}.`
     );
   } catch (e) {

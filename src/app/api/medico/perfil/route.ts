@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefonoAR } from "@/lib/whatsapp";
+import { levantarBloqueoWhatsApp } from "@/lib/medicos/bloqueo-whatsapp";
 import { cambiaMatricula } from "@/lib/medicos/matricula";
 
 export async function POST(req: NextRequest) {
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     // Se comparan los valores contra los guardados: solo bloquea un cambio real.
     const { data: actual } = await admin
       .from("medicos")
-      .select("identidad_validada, tipo_matricula, numero_matricula")
+      .select("id, identidad_validada, tipo_matricula, numero_matricula, celular_personal")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -86,6 +87,12 @@ export async function POST(req: NextRequest) {
       .from("medicos")
       .update(updates)
       .eq("user_id", user.id);
+
+    // Un celular NUEVO levanta el bloqueo por WhatsApp inválido (08/10/2026): si
+    // el número nuevo tampoco recibe, el próximo aviso lo vuelve a bloquear.
+    if (!error && actual?.id && updates.celular_personal && updates.celular_personal !== actual.celular_personal) {
+      await levantarBloqueoWhatsApp(actual.id, "cambio_celular").catch(() => false);
+    }
 
     if (error) {
       // El mensaje crudo de Postgres no le dice nada a un médico.
