@@ -3,12 +3,39 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 let vapidConfigured = false;
 
+/**
+ * Las claves vienen de variables de Vercel, que pueden traer un salto de línea
+ * pegado al final (real o escrito como "\n"). El navegador lo tolera; web-push no
+ * ("Vapid public key must be a URL safe Base 64") y el error no lo atajaba nadie:
+ * ningún push del servidor salía, y el aviso de 15 minutos antes del turno cortaba
+ * la tarea entera, WhatsApp incluido (08/10/2026).
+ */
+export function limpiarClaveVapid(clave: string | undefined): string {
+  return (clave ?? "").replace(/\\n/g, "").trim();
+}
+
 function ensureVapid() {
   if (vapidConfigured) return true;
-  const pub = process.env.VAPID_PUBLIC_KEY ?? "";
-  const priv = process.env.VAPID_PRIVATE_KEY ?? "";
+  const pub = limpiarClaveVapid(process.env.VAPID_PUBLIC_KEY);
+  const priv = limpiarClaveVapid(process.env.VAPID_PRIVATE_KEY);
   if (!pub || !priv) return false;
-  webpush.setVapidDetails("mailto:soporte@docto.com.ar", pub, priv);
+  try {
+    webpush.setVapidDetails("mailto:soporte@docto.com.ar", pub, priv);
+  } catch (e) {
+    // Una clave rota no puede tirar abajo lo que viene después (el WhatsApp).
+    // Avisa al equipo una vez por día: los push están todos caídos.
+    const motivo = e instanceof Error ? e.message : String(e);
+    console.error("[push] clave VAPID inválida:", motivo);
+    void import("@/lib/alertas").then(({ sendDoctoAlertThrottled }) =>
+      sendDoctoAlertThrottled(
+        "push-vapid-invalida",
+        24,
+        "🔴 Las notificaciones push a los profesionales están caídas",
+        `La clave de las notificaciones push (VAPID) es inválida: ${motivo}\n\nNingún push sale hasta corregirla. Los WhatsApp siguen saliendo.\n\n¿Tenés que hacer algo? Sí: abrí Claude Code y decime "investigá la clave VAPID".`
+      )
+    );
+    return false;
+  }
   vapidConfigured = true;
   return true;
 }
