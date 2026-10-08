@@ -237,8 +237,8 @@ type DetalleTwilio = { ok: boolean; sid: string | null; errorCode: string | null
 /**
  * El estado de entrega de un aviso, preguntado a Twilio si nuestra base no lo
  * tiene (06/10/2026). La confirmación de Twilio a veces llega antes de que
- * exista la fila del envío y se pierde: de 34 avisos "sin estado", Twilio tenía
- * el estado real de los 34. Lo que averigua lo deja escrito en la fila. Nunca
+ * exista la fila del envío y se pierde: de los avisos "sin estado", Twilio tenía
+ * el estado real de todos. Lo que averigua lo deja escrito en la fila. Nunca
  * lanza: si Twilio no contesta, devuelve lo que había.
  */
 export async function estadoDeEntrega(fila: {

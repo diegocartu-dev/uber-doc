@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
   } else {
     // La fila del envío todavía no existe: se escribe DESPUÉS de mandar, y la
     // confirmación de Twilio puede llegar antes. Así se perdieron estados de
-    // entrega reales (06/10/2026: 34 avisos "sin estado" que Twilio sí tenía,
-    // 2 de ellos sin entregar y sin alarma). Se reintenta unos segundos.
+    // entrega reales (06/10/2026: avisos "sin estado" que Twilio sí tenía,
+    // algunos sin entregar y sin alarma). Se reintenta unos segundos.
     waitUntil(reintentarAnotar(sid, status, errorCode));
   }
 
