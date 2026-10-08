@@ -62,6 +62,26 @@ export default function PerfilClient({
   const searchParams = useSearchParams();
   const router = useRouter();
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "error" } | null>(null);
+  // Pasar a Medicina general (08/10/2026): el único cambio de especialidad que
+  // el profesional hace solo. Confirmación inline, nunca window.confirm.
+  const [confirmarGeneralista, setConfirmarGeneralista] = useState(false);
+  const [cambiandoEspecialidad, setCambiandoEspecialidad] = useState(false);
+  async function pasarAMedicinaGeneral() {
+    setCambiandoEspecialidad(true);
+    try {
+      const res = await fetch("/api/medico/especialidad-generalista", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ msg: data.error ?? "No pudimos cambiar tu especialidad.", type: "error" });
+        return;
+      }
+      setConfirmarGeneralista(false);
+      setToast({ msg: "Listo: ahora figurás en Medicina general.", type: "ok" });
+      router.refresh();
+    } finally {
+      setCambiandoEspecialidad(false);
+    }
+  }
   const [stickyError, setStickyError] = useState<string | null>(null);
   // País de la cuenta MP rechazada (llega como `pais` en la URL del callback).
   // Sticky igual que el error: la URL se limpia enseguida y el cartel tiene que
@@ -357,6 +377,42 @@ export default function PerfilClient({
                 readOnly
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500"
               />
+              {medico.especialidad !== "Medicina general" && !confirmarGeneralista && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmarGeneralista(true)}
+                  className="mt-1.5 text-xs font-medium text-[#378ADD] underline-offset-2 hover:underline"
+                >
+                  ¿Sos médico generalista? Cambiá tu especialidad a Medicina general
+                </button>
+              )}
+              {confirmarGeneralista && (
+                <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
+                  <p>
+                    Vas a figurar en <strong>Medicina general</strong> y dejar de figurar en{" "}
+                    <strong>{medico.especialidad}</strong>.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={cambiandoEspecialidad}
+                      onClick={pasarAMedicinaGeneral}
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: "#378ADD" }}
+                    >
+                      {cambiandoEspecialidad ? "Cambiando..." : "Sí, cambiar"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cambiandoEspecialidad}
+                      onClick={() => setConfirmarGeneralista(false)}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
               {especialidadesAdicionales.length > 0 && (
                 <p className="mt-1.5 text-xs text-gray-500">
                   También figurás en <strong className="text-gray-700">{especialidadesAdicionales.join(", ")}</strong>:
