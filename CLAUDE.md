@@ -233,6 +233,12 @@ tiene para el DNI que verificó la biometría. Fuente de verdad única:
   ficha releída y como condición del update. No agregar otro.
 - La adopción es **después** de la biometría: antes, el DNI es un número tipeado.
 - Un profesional ya aprobado no se corrige solo (el trigger lo devolvería a revisión).
+- **La especialidad (decisión Diego, 08/10/2026):** el profesional puede pasar
+  solo su especialidad principal a **Medicina general** desde Mi perfil, porque
+  todo médico lo es al recibirse (REFEPS lo registra como "Médico"). Cualquier otra
+  especialidad no se elige ni se cambia ahí. Hoy la especialidad declarada al
+  registrarse **no se contrasta con REFEPS**: un caso real figuraba en Geriatría
+  y REFEPS solo tenía su título de médico.
 - **No pedir a mano lo que una fuente oficial ya entrega** — misma regla que el
   e-mail de la cuenta de Mercado Pago (30/09). Detalle:
   `docs/sprints/2026-10-01-la-matricula-la-dice-refeps.md`.
