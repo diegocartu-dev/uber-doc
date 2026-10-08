@@ -3,8 +3,8 @@
  * "enviado" sin estado, preguntándoselo a Twilio (la fuente oficial).
  *
  * POR QUÉ EXISTE (06/10/2026): la confirmación de Twilio a veces llegaba antes
- * de que existiera la fila del envío y se perdía. De 34 avisos "sin estado" en
- * 60 días, Twilio tenía el estado real de los 34 (2 de ellos NO entregados,
+ * de que existiera la fila del envío y se perdía. De los avisos "sin estado",
+ * Twilio tenía el estado real de todos (algunos NO entregados,
  * sin que sonara ninguna alarma). El arreglo hacia adelante está en
  * /api/twilio/status y en estadoDeEntrega(); esto corrige lo que ya pasó.
  *
