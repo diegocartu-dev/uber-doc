@@ -101,6 +101,13 @@ Fuente de verdad: **`src/lib/consultas/encuentro-activo.ts`**. Todo guard nuevo 
 **Los plazos (actualizado 22/08/2026 — acá decía que la CI "no tiene ninguno", y era falso desde el 09/08):** el turno tiene plazo (cron `resolver-turnos-vencidos` cada 10 min, 20 de gracia → `ausente_paciente`). La consulta inmediata tiene **dos relojes distintos**, y confundirlos ya costó una madrugada:
 - **CI pagada** (#384/#388, 09/08): 30 min desde el pago, con el profesional libre. El profesional no entró → `medico_ausente` + reintegro del 100%; el paciente nunca entró → `no_show_paciente`, sin reintegro. La señal de que el profesional no entró es `sala_video_url IS NULL`, **no el estado** (un pago real salta de `aceptada` a `en_curso`; `pagada` solo la escriben las cuentas test).
 - **Pedido SIN aceptar** (#432/#435, 21-22/08): **10 min** sin respuesta → se cancela, al paciente se lo invita a elegir otro profesional, y al profesional que no respondió **se le apaga la CI** (mensaje interno + push). `resolver-consultas-vencidas` corre cada 3 min (peor caso, 13). Además **nadie recibe más de 2 recordatorios** por el mismo paciente (`sala_espera_entradas.recordatorios_enviados`), y un pedido sin contestar **ya no bloquea** el auto-apagado de disponibilidad. Caso que lo motivó: 18/08, un pedido colgado 11 h y 17 WhatsApp encadenados a una profesional dormida — `docs/sprints/2026-08-22-ci-sin-aceptar-plazo-y-tope-avisos.md`.
+- **Aceptada y sin pagar** (D4, Diego 05/10, en producción desde el 08/10): **10
+  minutos desde que el paciente SE ENTERÓ** —vio el botón de pago con la pantalla
+  delante, o le llegó o leyó el WhatsApp de "te aceptaron"—, con **techo de 30
+  minutos desde la aceptación**. Antes corrían desde la aceptación y el paciente
+  que se había ido de la pantalla un instante antes los perdía sin saberlo. La
+  sala le dice hasta qué hora tiene; el profesional ve la hora máxima. Regla en
+  `src/lib/consultas/aceptada-sin-pago.ts` (`decidirCierre`, con tests).
 - `cerrar-huerfanas` queda como barrido de última instancia, **a las 00:00 ART** (`0 3 * * *`: los crons de Vercel se programan en UTC).
 
 ## Reportes — las reservas abandonadas NO se muestran (decisión Diego, 06/08/2026)

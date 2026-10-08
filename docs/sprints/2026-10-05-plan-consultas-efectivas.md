@@ -178,7 +178,11 @@ mergear, y cada sprint se mide contra la escalera de la sección 2.
     login, y la llegada queda registrada.
   - #536: el profesional cuyo WhatsApp no recibe avisos queda bloqueado hasta
     actualizar el celular (regla en CLAUDE.md).
-- **Pilares 2 a 4:** decisiones aprobadas (sección 5), sin implementar.
+- **08/10, D4 y D6 en producción:** el plazo de pago corre desde que el paciente
+  se enteró (techo 30 min) y la sala le dice hasta qué hora tiene; el precio se ve
+  antes de pedir. Queda de D4 decirlo en el WhatsApp (cambio de plantilla, Meta) y
+  pagar sobre la misma consulta al volver ("volver a pedir" con un toque ya existe).
+- **Pilares 2 a 4:** el resto de las decisiones aprobadas (sección 5), sin implementar.
 
 ### Plantillas de WhatsApp de turnos (aprobadas por Diego el 05/10)
 
