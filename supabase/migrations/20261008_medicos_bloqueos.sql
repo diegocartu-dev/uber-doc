@@ -1,4 +1,5 @@
--- PENDIENTE DE APLICAR — requiere OK de Diego. Solo en la base principal (el
+-- APLICADA en producción el 08/10/2026 (OK de Diego), verificada (RLS activa, sin
+-- acceso para anon/authenticated, índice creado). Solo en la base principal (el
 -- bloqueo vive en el B2C; la instancia institucional no lo usa).
 --
 -- Un profesional que no está en condiciones de atender no atiende ni oferta
