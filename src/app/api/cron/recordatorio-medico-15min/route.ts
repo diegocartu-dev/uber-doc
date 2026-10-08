@@ -94,7 +94,7 @@ async function handler(req: NextRequest) {
         tag: `turno-15min-${t.id}`, // por si dos corridas caen en el borde: una sola visible
       },
       true,
-    );
+    ).catch(() => false); // una falla del push nunca frena el WhatsApp de abajo (08/10/2026)
     if (sent) enviados++;
     // WhatsApp (05/10/2026): el push no llega a un iPhone sin la app. Una vez
     // por turno (lo deduplica whatsapp_envios); se manda aunque esté en otra

@@ -44,7 +44,8 @@ export async function suscribirPush(rol: "medico" | "paciente"): Promise<boolean
   const reg = await registrarSW();
   if (!reg) return false;
 
-  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  // Sin el salto de línea que puede traer la variable de Vercel (08/10/2026).
+  const vapidKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "").replace(/\\n/g, "").trim();
   if (!vapidKey) return false;
 
   try {
