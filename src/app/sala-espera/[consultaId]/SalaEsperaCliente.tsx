@@ -404,8 +404,18 @@ export default function SalaEsperaCliente({
   const vioBotonRef = useRef(false);
   useEffect(() => {
     if (!faltaPagar || vioBotonRef.current) return;
-    vioBotonRef.current = true;
-    trackFunnel("pago_vista", { tipo: "consulta", consultaId });
+    // Solo cuenta si la pantalla está delante del paciente (08/10/2026): con la
+    // pestaña en segundo plano el botón "aparece" sin que nadie lo vea, y la
+    // etiqueta de la caída decía "vio el botón y no lo tocó" de alguien que se
+    // había ido. Si estaba oculta, se marca cuando vuelve.
+    const marcar = () => {
+      if (vioBotonRef.current || document.visibilityState !== "visible") return;
+      vioBotonRef.current = true;
+      trackFunnel("pago_vista", { tipo: "consulta", consultaId, visible: true });
+    };
+    marcar();
+    document.addEventListener("visibilitychange", marcar);
+    return () => document.removeEventListener("visibilitychange", marcar);
   }, [faltaPagar, consultaId]);
 
   // ── Venció el plazo de 30 minutos (cron resolver-consultas-vencidas) ───────

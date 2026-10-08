@@ -68,6 +68,14 @@ test("c) volvió por el link: si le pedimos login y no llegó, es nuestra falla"
   assert.equal(sinPago({ aviso_whatsapp: "enviado", aviso_whatsapp_entrega: "read", llego_con_sesion: true, sala_abierta: true }).clase, "suceso");
 });
 
+test("c) 'vio el botón' solo si estaba mirando después de la aceptación (caso 08/10)", () => {
+  // Última señal 618 s antes del cierre, aceptación 614 s antes: se fue 4 s antes de que lo aceptaran.
+  const d = sinPago({ vio_boton: true, seg_desde_ultimo_latido: 618, seg_aceptada_a_cierre: 614, aviso_whatsapp: "enviado", aviso_whatsapp_entrega: "read" });
+  assert.equal(d.texto, "El paciente leyó el aviso de que lo aceptaron y no volvió a la sala");
+  const mirando = sinPago({ vio_boton: true, seg_desde_ultimo_latido: 300, seg_aceptada_a_cierre: 614 });
+  assert.equal(mirando.texto, "El paciente vio el botón de pago y no lo tocó");
+});
+
 test("c) aceptada sin pagar: nunca se enteró es nuestra falla", () => {
   assert.equal(sinPago({}).texto, "El paciente nunca se enteró de que lo aceptaron: no estaba en la sala y no se le avisó");
   assert.equal(sinPago({ aviso_whatsapp: "sin_celular" }).clase, "falla");
