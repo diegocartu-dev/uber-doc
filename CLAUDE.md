@@ -232,9 +232,11 @@ tiene para el DNI que verificó la biometría. Fuente de verdad única:
 
 ## Un aviso "enviado" no es un aviso recibido (hallazgo 27/08/2026)
 `whatsapp_envios.resultado = 'enviado'` significa **"Twilio aceptó la llamada a su
-API"**. No dice que le llegó al celular del profesional, ni que lo leyó. El envío
-no manda `StatusCallback` y no hay webhook de Twilio, así que el estado real de
-entrega nunca entró a la base.
+API"**. No dice que le llegó al celular del profesional, ni que lo leyó. **Actualizado
+08/10/2026:** desde el 01/09 el envío manda `StatusCallback` y `/api/twilio/status`
+anota la entrega real; desde el 06/10 reintenta cuando la confirmación llega antes
+que la fila del envío (así se perdían estados), y si igual falta se le pregunta a
+Twilio (`estadoDeEntrega` en `src/lib/whatsapp.ts`).
 
 Esto pesa sobre el plazo de 10 minutos de la CI, que se fijó sin haber medido
 nunca si el aviso llega a tiempo. **Medido el 27/08: llega y se entrega en el
@@ -242,8 +244,28 @@ minuto cero, y el profesional acepta.** O sea que el plazo no era el freno — p
 eso se supo preguntándole a Twilio, no mirando nuestra base, que sigue sin saberlo.
 
 Se guarda el `twilio_sid`, así que el pasado es recuperable preguntándole a
-Twilio: `scripts/verify-avisos-whatsapp.ts`. Registrarlo hacia adelante necesita
-`StatusCallback` + webhook + columnas nuevas — pendiente.
+Twilio: `scripts/completar-estados-whatsapp.mts`.
+
+## Un profesional que no recibe los avisos no atiende ni oferta (decisión Diego, 08/10/2026)
+*"Los médicos no pueden atender ni ofertar si no están en condiciones."*
+
+- Si un aviso al profesional vuelve de Twilio con **destinatario inválido**
+  (63024: el número no tiene WhatsApp activo; 63003, 21211, 21614), queda
+  **bloqueado**: fuera de la clínica, de su link propio y de la consulta
+  inmediata, sin poder volver a prenderlas desde su panel, y ve el porqué con un
+  botón para actualizar el celular. Caso que lo motivó: el 05/10 un paciente
+  esperó y el profesional nunca recibió un solo aviso.
+- **Se levanta solo al cambiar el celular** (él en su perfil o el equipo en el
+  panel). Si el número nuevo tampoco recibe, el próximo aviso lo vuelve a bloquear.
+  Un corte de red o un aviso demorado no bloquea a nadie.
+- Fuente de verdad: **`src/lib/medicos/bloqueo-whatsapp.ts`**. El bloqueo usa las
+  columnas de visibilidad que ya existen y guarda en `medicos_bloqueos` (solo el
+  servidor) el motivo y los valores previos, para devolverlos tal cual. No se
+  agregó ninguna columna a la búsqueda de la clínica.
+- **Límite declarado:** `disponible`, `oculto_clinica` y
+  `visible_consultorio_particular` no están en el trigger de confianza. El bloqueo
+  se hace cumplir en las acciones del panel; un profesional que escribiera directo
+  contra la API podría prenderlas (latente, no probado).
 
 ## Design system
 - Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.

@@ -165,6 +165,19 @@ mergear, y cada sprint se mide contra la escalera de la sección 2.
 - **Pago (06/10, PR #528):** solo con cuenta de Mercado Pago, modo binario
   puesto, botón "Pagá con Mercado Pago", alarma por cada rechazo con el motivo
   y registro de desde dónde paga cada paciente. Regla en CLAUDE.md.
+- **06–08/10, cada caída con su porqué y lo que destapó la prueba completa:**
+  - #530: una CI con pago rechazado ya no queda trabada en "aceptada".
+  - #531 y #532: cada consulta y cada turno pago que se cae recibe su porqué
+    (suceso, falla o sin datos) y el revisor de caídas avisa solo las fallas.
+  - #533: el estado de entrega de los WhatsApp ya no se pierde; a las cuentas de
+    prueba no se les manda WhatsApp; la caja negra la escribe solo el servidor;
+    prueba de punta a punta contra producción; reporte de medición
+    (`scripts/medir-pagos.mts`).
+  - #534: "Rechazar" fallaba siempre desde el 16/05 (el estado no existía).
+  - #535: quien toca el link de su sala sin sesión vuelve a ella después del
+    login, y la llegada queda registrada.
+  - #536: el profesional cuyo WhatsApp no recibe avisos queda bloqueado hasta
+    actualizar el celular (regla en CLAUDE.md).
 - **Pilares 2 a 4:** decisiones aprobadas (sección 5), sin implementar.
 
 ### Plantillas de WhatsApp de turnos (aprobadas por Diego el 05/10)
