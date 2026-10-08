@@ -10,6 +10,8 @@ import DoctoLogo from "@/components/DoctoLogo";
 import LoadingButton from "@/components/ui/LoadingButton";
 import TerminosContent from "@/app/terminos/TerminosContent";
 import { trackFunnel } from "@/lib/funnel-client";
+import { createClient } from "@/lib/supabase/client";
+import { formatPrecio } from "@/app/clinica/disponibilidad";
 import { suscribirPush, pushSoportado, pushYaActivo, pushRechazado, esIOSSinPWA } from "@/lib/push-client";
 
 const SINTOMAS_EMERGENCIA = [
@@ -100,6 +102,20 @@ function TriageContent() {
     const llegaAlFinal = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
     if (llegaAlFinal) setScrollCompleto(true);
   }
+
+  // El precio, ANTES de pedir (D6, aprobada por Diego el 05/10): que el paciente
+  // no se entere del valor recién cuando tiene que pagar. Es el mismo dato
+  // público que muestra la clínica.
+  const [precio, setPrecio] = useState<number | null>(null);
+  useEffect(() => {
+    if (!medicoId) return;
+    createClient()
+      .from("medicos")
+      .select("precio_consulta")
+      .eq("id", medicoId)
+      .maybeSingle()
+      .then(({ data }) => setPrecio(typeof data?.precio_consulta === "number" ? data.precio_consulta : null));
+  }, [medicoId]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -603,6 +619,13 @@ function TriageContent() {
             <p className="mt-3 text-sm font-medium text-gray-900">
               ¿Tu consulta es no urgente y podés esperar la atención del médico?
             </p>
+
+            {precio != null && precio > 0 && (
+              <p className="mt-4 rounded-lg px-3 py-2.5 text-sm leading-relaxed text-gray-800" style={{ border: "1px solid #e5e7eb" }}>
+                Valor de la consulta: <strong>{formatPrecio(precio)}</strong>. Se paga con Mercado Pago recién
+                cuando el profesional te acepta.
+              </p>
+            )}
 
             {/* Por qué el navegador va a pedir permiso al tocar continuar. Sin
                 esta línea el prompt aparece de la nada y se rechaza por reflejo
