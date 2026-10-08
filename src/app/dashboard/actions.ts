@@ -6,6 +6,17 @@ import { perfilMedicoCompleto, camposFaltantesMedico } from "@/lib/perfil-medico
 import { logDisponibilidad } from "@/lib/disponibilidad-log";
 import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { medianocheARenUTC } from "@/lib/insights/fechas";
+import { bloqueoActivo } from "@/lib/medicos/bloqueo-whatsapp";
+
+const MENSAJE_BLOQUEO =
+  "No te están llegando nuestros WhatsApp, así que no te enterarías de los pacientes que te esperan. Actualizá tu celular en Mi perfil y volvés a estar disponible.";
+
+/** ¿El profesional de esta sesión tiene un bloqueo activo? (08/10/2026) */
+async function bloqueadoPorUsuario(userId: string): Promise<boolean> {
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { data } = await createAdminClient().from("medicos").select("id").eq("user_id", userId).maybeSingle();
+  return data?.id ? Boolean(await bloqueoActivo(data.id)) : false;
+}
 
 export async function actualizarDisponibilidad(data: {
   disponible: boolean;
@@ -60,6 +71,11 @@ export async function actualizarDisponibilidad(data: {
   // es la fuente de verdad. Incluye Mercado Pago conectado y firma electrónica
   // (sin eso no cobra ni firma recetas). MP/firma no viven en `medicos`: se leen
   // de `medicos_mp_accounts` (activo) y `medico_claves`. Solo al ACTIVAR.
+  // Un profesional bloqueado (su WhatsApp no recibe avisos) no puede atender
+  // (Diego, 08/10/2026). Antes que los demás requisitos: es lo primero a arreglar.
+  if (data.disponible && previo && (await bloqueoActivo(previo.id))) {
+    return { error: MENSAJE_BLOQUEO };
+  }
   if (data.disponible && previo) {
     const [mpRes, firmaRes] = await Promise.all([
       adminDb
@@ -220,6 +236,7 @@ export async function actualizarOcultoClinica(oculto: boolean) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
+  if (!oculto && (await bloqueadoPorUsuario(user.id))) return { error: MENSAJE_BLOQUEO };
 
   const { error } = await supabase
     .from("medicos")
@@ -235,6 +252,7 @@ export async function actualizarVisibleConsultorio(visible: boolean) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
+  if (visible && (await bloqueadoPorUsuario(user.id))) return { error: MENSAJE_BLOQUEO };
 
   const { error } = await supabase
     .from("medicos")

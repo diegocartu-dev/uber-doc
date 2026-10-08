@@ -24,6 +24,7 @@ import CampanaMedico from "./CampanaMedico";
 import BannerActivacion from "./BannerActivacion";
 import BannerMercadoPago from "./BannerMercadoPago";
 import BannerIdentidad from "./BannerIdentidad";
+import { bloqueoActivo } from "@/lib/medicos/bloqueo-whatsapp";
 import DocumentacionPendiente from "./DocumentacionPendiente";
 import AvisoDocumentacionPendiente from "./AvisoDocumentacionPendiente";
 import AvatarDropdown from "./AvatarDropdown";
@@ -538,6 +539,10 @@ export default async function DashboardPage({
     !medico.identidad_validada &&
     !medico.biometria_exenta;
 
+  // Bloqueo por WhatsApp inválido (08/10/2026): no atiende ni oferta hasta
+  // actualizar el celular. Se lee con service role (tabla solo del servidor).
+  const bloqueoWhatsApp = role === "medico" && medico?.id ? await bloqueoActivo(medico.id) : null;
+
   if (role === "medico" && medico) {
     const capacidadCI = (() => {
       const d = medico.disponible_desde ?? "08:00";
@@ -714,6 +719,25 @@ export default async function DashboardPage({
                 es plata cobrada por una atención que el paciente no puede probar.
                 Se autooculta si no hay nada pendiente. */}
             <DocumentacionPendiente />
+
+            {/* Bloqueado porque su WhatsApp no recibe avisos: va primero, porque
+                mientras dure no aparece en la clínica ni recibe consultas. */}
+            {bloqueoWhatsApp && (
+              <div className="mt-4 rounded-xl p-4" style={{ border: "1px solid #E24B4A", backgroundColor: "rgba(226,75,74,0.06)" }}>
+                <p className="text-[15px] font-semibold text-gray-900">No te están llegando nuestros WhatsApp</p>
+                <p className="mt-1 text-sm text-gray-700">
+                  {bloqueoWhatsApp.motivo}. Sin esos avisos no te enterarías de los pacientes que te esperan, así que
+                  por ahora no aparecés en la clínica ni podés recibir consultas.
+                </p>
+                <a
+                  href="/medico/perfil"
+                  className="mt-3 inline-block rounded-lg px-4 py-2 text-sm font-medium text-white"
+                  style={{ backgroundColor: "#378ADD" }}
+                >
+                  Actualizar mi celular
+                </a>
+              </div>
+            )}
 
             {/* Identidad: rechazada → invitación a repetir SIEMPRE (prioridad);
                 pendiente (gate activo) → banner, nunca muro. */}
