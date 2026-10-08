@@ -81,6 +81,37 @@ export const ESPECIALIDADES = [
   "Urología",
 ] as const;
 
+/**
+ * Atención general (Diego, 08/10/2026): "la idea es que esa especialidad pueda
+ * atender a todos... deben estar unidos". Para el PACIENTE son la misma puerta:
+ * el buscador de la clínica y las alternativas de un pedido que no se aceptó las
+ * tratan como una sola (un generalista no aparece rotulado como "otra
+ * especialidad" ante quien buscó Clínica médica). Los reportes siguen contando
+ * cada una por su nombre. Medicina familiar se sumó el mismo día (Diego).
+ */
+export const ATENCION_GENERAL = ["Clínica médica", "Medicina general", "Medicina general y familiar", "Medicina familiar"] as const;
+
+const normEsp = (s: string | null | undefined) =>
+  (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+export function esAtencionGeneral(especialidad: string | null | undefined): boolean {
+  const e = normEsp(especialidad);
+  return Boolean(e) && ATENCION_GENERAL.some((x) => normEsp(x) === e);
+}
+
+/** ¿Dos especialidades son la misma para el paciente? Igual nombre, o las dos de atención general. */
+export function mismaAtencion(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return normEsp(a) === normEsp(b) || (esAtencionGeneral(a) && esAtencionGeneral(b));
+}
+
+/** ¿Lo que tipeó el paciente apunta a la atención general? ("clínica", "medicina general", "generalista") */
+export function buscaAtencionGeneral(termino: string): boolean {
+  const t = normEsp(termino);
+  if (!t) return false;
+  return t.includes("generalista") || ATENCION_GENERAL.some((x) => normEsp(x).includes(t));
+}
+
 /** Lo que se guarda en `medicos.especialidades_adicionales` (jsonb: array de strings). */
 export function parsearEspecialidadesAdicionales(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];

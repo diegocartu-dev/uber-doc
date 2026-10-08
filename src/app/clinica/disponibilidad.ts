@@ -4,6 +4,7 @@
 // orden FIFO) vive acá — es por-médico, así que se conserva igual al aplanar.
 
 import { type AreaAtencion, areasCoincidenBusqueda } from "@/lib/areas-atencion";
+import { buscaAtencionGeneral, esAtencionGeneral } from "@/lib/especialidades";
 
 export type Medico = {
   id: string;
@@ -162,7 +163,10 @@ export function coincideConBusqueda(medico: Medico, termino: string): boolean {
     normalizeTexto(medico.especialidad).includes(t) ||
     (medico.especialidadesAdicionales ?? []).some((e) => normalizeTexto(e).includes(t)) ||
     normalizeTexto(medico.nombre_completo).includes(t) ||
-    areasCoincidenBusqueda(medico.areasAtencion, termino)
+    areasCoincidenBusqueda(medico.areasAtencion, termino) ||
+    // Clínica médica y Medicina general son la misma puerta (Diego, 08/10/2026).
+    (buscaAtencionGeneral(termino) &&
+      [medico.especialidad, ...(medico.especialidadesAdicionales ?? [])].some(esAtencionGeneral))
   );
 }
 

@@ -239,6 +239,13 @@ tiene para el DNI que verificó la biometría. Fuente de verdad única:
   especialidad no se elige ni se cambia ahí. Hoy la especialidad declarada al
   registrarse **no se contrasta con REFEPS**: un caso real figuraba en Geriatría
   y REFEPS solo tenía su título de médico.
+- **Clínica médica y Medicina general son la misma puerta para el paciente**
+  (Diego, 08/10/2026: *"esa especialidad puede atender a todos, deben estar
+  unidos"*). El paciente no elige especialidad para entrar a la clínica (ve a
+  todos los de su provincia); donde pesa —el buscador y las alternativas de un
+  pedido que no se aceptó— cuentan como una, junto con Medicina general y
+  familiar y Medicina familiar. Los reportes siguen separándolas. Regla en `src/lib/especialidades.ts`
+  (`ATENCION_GENERAL`, `mismaAtencion`).
 - **No pedir a mano lo que una fuente oficial ya entrega** — misma regla que el
   e-mail de la cuenta de Mercado Pago (30/09). Detalle:
   `docs/sprints/2026-10-01-la-matricula-la-dice-refeps.md`.

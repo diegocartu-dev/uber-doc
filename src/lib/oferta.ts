@@ -34,7 +34,7 @@ import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
-import { parsearEspecialidadesAdicionales } from "@/lib/especialidades";
+import { parsearEspecialidadesAdicionales, mismaAtencion } from "@/lib/especialidades";
 import {
   puedeAtenderAhora,
   habilitadoEnProvincia,
@@ -78,7 +78,8 @@ const norm = (s: string | null | undefined) => (s ?? "").trim().toLocaleLowerCas
 function atiendeEspecialidad(m: MedicoPreparado, especialidad: string | null): boolean {
   if (!especialidad) return false;
   const e = norm(especialidad);
-  return m.especialidadesTodas.some((x) => norm(x) === e);
+  // Clínica médica y Medicina general cuentan como la misma (Diego, 08/10/2026).
+  return m.especialidadesTodas.some((x) => norm(x) === e || mismaAtencion(x, especialidad));
 }
 
 /**
