@@ -72,6 +72,20 @@ function nadieAcepto(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | null)
   return sinDatos("Nadie la aceptó: el aviso salió y no sabemos si le llegó");
 }
 
+/**
+ * "Vio el botón" solo si estaba mirando DESPUÉS de la aceptación (08/10/2026):
+ * el botón aparece al aceptar, y si su última señal de presencia es anterior,
+ * el botón apareció con la pantalla en segundo plano. Caso real: se fue 4 s
+ * antes de que lo aceptaran y la etiqueta decía que lo vio y no lo tocó.
+ */
+function vioElBotonDeVerdad(ev: Partial<EvidenciaCierre>): boolean {
+  if (!ev.vio_boton) return false;
+  const latido = ev.seg_desde_ultimo_latido;
+  const aceptacion = ev.seg_aceptada_a_cierre;
+  if (latido == null || aceptacion == null) return true; // sin el dato, se respeta la señal
+  return latido <= aceptacion;
+}
+
 function aceptadaSinPago(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | null): Diagnostico {
   // Primero lo que falló al intentar pagar: si intentó y no pudo, eso explica
   // la caída aunque después haya cancelado él o el profesional.
@@ -98,7 +112,7 @@ function aceptadaSinPago(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | n
     );
   }
   if (ev.intento_llego_al_servidor) return suceso(t("El paciente no completó el pago en Mercado Pago"));
-  if (ev.vio_boton) return suceso(t("El paciente vio el botón de pago y no lo tocó"));
+  if (vioElBotonDeVerdad(ev)) return suceso(t("El paciente vio el botón de pago y no lo tocó"));
 
   // Desde el 07/10: ¿qué pasó cuando volvió por el link? (undefined = evidencia vieja)
   if (ev.llego_sin_sesion && !ev.sala_abierta) {

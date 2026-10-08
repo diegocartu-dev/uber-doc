@@ -170,7 +170,11 @@ export async function registrarEvidenciaCierre(consultaId: string): Promise<void
     const evidencia: EvidenciaCierre = {
       at: new Date().toISOString(),
       seg_aceptada_a_cierre: aceptadaAt ? Math.round((cerradaAt - aceptadaAt) / 1000) : null,
-      vio_boton: hubo("pago_vista"),
+      // Desde el 08/10 la pantalla manda `visible`; un pago_vista con la pestaña
+      // oculta no es "lo vio" (los anteriores no traen el dato: cuentan).
+      vio_boton: propios.some(
+        (e) => e.evento === "pago_vista" && ((e.metadata ?? {}) as Record<string, unknown>).visible !== false
+      ),
       toco_boton: hubo("pago_toque"),
       intento_llego_al_servidor: hubo("pago_intento"),
       seg_desde_ultimo_latido: ultimoLatido ? Math.round((cerradaAt - ultimoLatido) / 1000) : null,
