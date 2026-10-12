@@ -53,32 +53,70 @@ jobs:
         run: |
           echo "Waiting for Vercel preview for commit $PR_SHA..."
 
-          # La vista previa se busca por DOS caminos en cada vuelta:
+          # La vista previa se busca por TRES caminos en cada vuelta, y gana el
+          # primero que la encuentra:
           #
-          # 1. El aviso de Vercel a GitHub (deployments API). Es el normal:
-          #    llega en 1-1,5 min.
-          # 2. Plan B: un comentario en el PR, de alguien con permiso de
-          #    escritura, con una línea `vista-previa: https://….vercel.app`.
-          #    Existe porque el 12/10/2026 Vercel armaba la vista previa en un
-          #    minuto pero tardaba ~30 en avisarle a GitHub (incidente en su
-          #    integración con Git), y el merge quedaba trabado sin que hubiera
-          #    corrido un solo test. La URL se saca de la API de Vercel
-          #    (`npx vercel api /v6/deployments?...`, campo meta.githubCommitSha)
-          #    y se comenta en el PR; esta misma corrida la toma, y como es la
-          #    corrida del PR, el check vale para la protección de main.
-          #    Una corrida lanzada a mano (workflow_dispatch) NO sirve: GitHub no
-          #    la asocia al PR y el merge sigue bloqueado — se probó ese día.
+          # 1. VERCEL DIRECTO (el principal desde el 12/10/2026). Se le pregunta a
+          #    la API de Vercel por el deploy de este commit. No depende de que
+          #    Vercel le avise a GitHub: ese aviso es el que se trabó el 12/10
+          #    (incidente en su integración con Git) — la vista previa estaba en
+          #    un minuto y los avisos llegaban casi una hora después, o nunca, y
+          #    cada PR se comía 30 minutos de espera y fallaba sin correr un test.
+          #    Usa el secreto VERCEL_TOKEN. Si Vercel lo rechaza (venció o lo
+          #    revocaron) se avisa con un warning visible y siguen los otros dos:
+          #    nunca queda trabado sin que nadie sepa por qué.
+          #    Si Vercel dice que el build FALLÓ, se corta acá: no hay vista previa
+          #    que esperar.
+          # 2. El aviso de Vercel a GitHub (deployments API). El de siempre.
+          # 3. Un comentario en el PR, de alguien con permiso de escritura, con una
+          #    línea `vista-previa: https://….vercel.app` (plan manual, por si los
+          #    dos de arriba fallan a la vez).
           #
-          # La URL del plan B se acepta solo si es del equipo de Docto en Vercel
-          # y si su /api/health dice que sirve EXACTAMENTE este commit: no se
-          # puede aprobar un PR probando otro código.
+          # Toda URL que no venga del aviso de GitHub se acepta solo si su
+          # /api/health dice que sirve EXACTAMENTE este commit: no se puede
+          # aprobar un PR probando otro código.
           #
           # Hasta 30 minutos (180 × 10 s). Sin vista previa, falla.
           verificar_sha() {
             curl -fsS --max-time 15 -H "x-vercel-protection-bypass: $BYPASS" "${1%/}/api/health" 2>/dev/null | jq -r '.sha // empty'
           }
 
+          clave_rechazada_avisada=""
+
           for i in $(seq 1 180); do
+            # ── 1. Vercel directo ──────────────────────────────────────────────
+            if [ -n "$VERCEL_TOKEN" ]; then
+              RESP=$(curl -sS --max-time 15 -w '\n%{http_code}' \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_TEAM_ID&target=preview&limit=50" 2>/dev/null || true)
+              CODE=$(printf '%s' "$RESP" | tail -n1)
+              CUERPO=$(printf '%s' "$RESP" | sed '$d')
+              if [ "$CODE" = "200" ]; then
+                ESTADO=$(printf '%s' "$CUERPO" | jq -r --arg sha "$PR_SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)] | .[0].readyState // empty' 2>/dev/null)
+                URL_V=$(printf '%s' "$CUERPO" | jq -r --arg sha "$PR_SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)] | .[0].url // empty' 2>/dev/null)
+                if [ "$ESTADO" = "READY" ] && [ -n "$URL_V" ]; then
+                  SHA_V=$(verificar_sha "https://$URL_V")
+                  if [ "$SHA_V" = "$PR_SHA" ]; then
+                    echo "url=https://$URL_V" >> "$GITHUB_OUTPUT"
+                    echo "Preview ready (Vercel directo, verificada por /api/health): https://$URL_V"
+                    exit 0
+                  fi
+                  echo "Vercel directo: https://$URL_V está lista pero sirve '${SHA_V:-?}', no $PR_SHA — se sigue esperando"
+                elif [ "$ESTADO" = "ERROR" ] || [ "$ESTADO" = "CANCELED" ]; then
+                  echo "::error::Vercel no pudo armar la vista previa de este commit (estado $ESTADO). Mirá el build en Vercel: no hay nada que esperar."
+                  exit 1
+                elif [ -n "$ESTADO" ]; then
+                  echo "Vercel directo: vista previa en $ESTADO ($i/180)"
+                fi
+              elif [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+                if [ -z "$clave_rechazada_avisada" ]; then
+                  echo "::warning::Vercel rechazó la clave VERCEL_TOKEN (HTTP $CODE): venció o la revocaron. El control sigue por el aviso de GitHub, que puede tardar. Hay que crear una nueva y cargarla en los secretos del repo."
+                  clave_rechazada_avisada=1
+                fi
+              fi
+            fi
+
+            # ── 2. El aviso de Vercel a GitHub ─────────────────────────────────
             # El repo tiene DOS proyectos Vercel conectados (el marketplace y la
             # instancia institucional), así que Vercel desambigua los entornos:
             # ya no existe "Preview" a secas, sino "Preview - uber-doc" y
@@ -104,7 +142,7 @@ jobs:
               echo "No deployment found yet — waiting... ($i/180)"
             fi
 
-            # Plan B: el último comentario "vista-previa:" de alguien con permiso.
+            # ── 3. Plan manual: el último comentario "vista-previa:" ───────────
             URL_B=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments?per_page=100" \
               --jq '[.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR") | .body | capture("vista-previa: *(?<u>https://[a-z0-9-]+-diegocartu-devs-projects\\.vercel\\.app)") | .u] | last // empty' 2>/dev/null)
             if [ -n "$URL_B" ]; then
@@ -128,6 +166,11 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_REPO: ${{ github.repository }}
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          # Camino 1. Los dos ids no son secretos (Vercel los documenta así); la
+          # clave sí, y sin ella este camino se saltea solo.
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: prj_Hl1HHLiy3G0Pj0TEE4ow6rsiZOe7
+          VERCEL_TEAM_ID: team_HVhngjNbDhN22ZFXl8ldRAgu
 
       - name: Set test URL
         id: test-url
