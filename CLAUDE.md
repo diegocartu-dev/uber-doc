@@ -1,519 +1,105 @@
 # Docto — Plataforma de Telemedicina Argentina
 
-## Qué es Docto
-Plataforma de telemedicina que conecta pacientes con médicos para consultas virtuales inmediatas y programadas. Target: Argentina primero, luego LATAM.
+> **Al arrancar:** leé `DECISIONES.md` §1 ("Pendientes de Diego") y nombrá en una línea lo que toque a la tarea. Este archivo tiene solo **reglas vigentes**. El porqué y la historia de cada una están en `DECISIONES.md`, en `docs/sprints/` y en la versión larga anterior (`docs/archivo/CLAUDE-version-larga-2026-10-12.md`).
 
-## Equipo y roles
-- **Diego** — CEO, fundador, domain expert. Toma decisiones de producto y negocio. NO codea.
-- **Claude (Cortana)** — Tech Lead, Arquitecto General y Coordinador.
-- **Claude Code** — Desarrollador ejecutor. Implementa código, hace push a GitHub.
-- **Agentes** en `.claude/agents/`: @sofia (UX), @marcos (Eng), @elena (PM), @roberto (QA).
+## Qué es y quién es quién
+Telemedicina: consultas inmediatas (CI) y turnos programados con médicos. Argentina primero, después LATAM. Dos instancias con el mismo código: el marketplace (docto.com.ar) y la institucional (marca blanca, `INSTITUCIONAL=true`).
+- **Diego**: CEO y fundador. Decide producto y negocio. No codea ni toca la terminal.
+- **Cortana** (Claude, fuera del repo): tech lead, arquitectura y coordinación.
+- **Claude Code**: implementa, prueba, mergea y despliega.
+- **Agentes** en `.claude/agents/`: @sofia (UX), @marcos (ingeniería), @elena (PM), @roberto (QA y seguridad); marketing y crecimiento: @lucia, @julia, @tomas, @fede, @micaela. @carolina (legal) en pausa desde el 09/08: lo legal va directo a Diego.
 
-## Stack
-- Frontend: Next.js (App Router)
-- Backend/DB: Supabase (PostgreSQL + RLS + Realtime)
-- Video: LiveKit (`@livekit/components-react` + `livekit-client` + `livekit-server-sdk`)
-- Pagos: Mercado Pago (OAuth + split comisiones en produccion)
-- Hosting: Vercel (auto-deploy desde GitHub)
-- Repo: github.com/diegocartu-dev/uber-doc
-- Producción: uber-doc.vercel.app
-- Dominio: docto.com.ar
+## Stack y accesos
+- Next.js (App Router) · Supabase (Postgres + RLS + Realtime) · LiveKit · Mercado Pago (OAuth + split) · Vercel (deploy desde GitHub) · Twilio (WhatsApp) · Resend (mail).
+- Repo **público**: github.com/diegocartu-dev/uber-doc. Producción: docto.com.ar. Webhooks SIEMPRE a `www.` (el apex redirige 307 y el aviso se pierde).
+- Bases: principal `irpupskopjahbqqvckue`, institucional `ygoenedpeyzwsfblgjsy`. SQL y DDL por la Supabase Management API (`POST https://api.supabase.com/v1/projects/<ref>/database/query`, con `SUPABASE_ACCESS_TOKEN` de `.env.local`).
+- Push a main = deploy de los DOS proyectos Vercel (`uber-doc` e `instancia-institucional`). `vercel.json` es uno solo: los crons corren en los dos.
 
-## Reglas de desarrollo
-- SIEMPRE diseñar y validar arquitectura antes de implementar.
-- Supabase RLS activo. Usar supabaseAdmin para bypass.
-- **Grants de columna (NO confundir con RLS de fila):** `medicos` tiene columnas SIN `GRANT SELECT` para `authenticated` (PII/internas: `celular_personal`, `dni`, `cuit`, `email_personal`, `refeps_*`, `notas_admin`, etc.). Si un `SELECT` con el cliente RLS incluye **una sola** de esas columnas, PostgREST falla la query ENTERA (`permission denied for column`) y devuelve `null` SILENCIOSO. Para leer la **fila propia** con columnas sensibles, usar **service role** (`createAdminClient`) filtrando por `user_id`, NUNCA el cliente RLS. NO grantear PII a `authenticated`: la policy pública de `medicos` la expondría a cualquier paciente. Caso real: outage del dashboard médico 19-24/06 (ver `docs/sprints/2026-06-24-outage-dashboard-medico-y-diagnostico-oferta.md`).
-- **Columnas de confianza de `medicos` (hallazgo 01/10/2026):** la clave pública de Supabase está en el navegador, así que todo lo que la RLS y los grants permiten, un profesional lo puede hacer directo, salteando la aplicación. El trigger `proteger_verificacion_medico` revierte, para la sesión del usuario, todo lo que decide plata, ruteo o verificación (categoría, jurisdicciones, especialidades, REFEPS, identidad, DNI y matrícula, notas del equipo, entre otras), y **nadie crea fichas de médico con su sesión** (el alta es del servidor). **Columna nueva de ese tipo → se suma al trigger en la misma migración.** Escritura nueva del profesional → con service role filtrando por su `user_id`, nunca con el cliente RLS: si la columna está protegida, el cliente RLS "guarda" y el valor no cambia, en silencio. Detalle: `docs/sprints/2026-10-01-hallazgo-columnas-de-confianza-medicos.md`.
-- **Cron nuevo = cuatro lugares (12/10/2026):** la ruta `src/app/api/cron/<nombre>/route.ts` con `withCron("<nombre>")`, su schedule en `vercel.json`, su intervalo en `src/lib/crons-esperados.ts` (watchdog) y su ficha en `src/lib/crons-meta.ts`. `tests/unit/crons-agendados.test.ts` no deja mergear si falta uno. Hora del turno = hora argentina: nunca `getHours()`/`toISOString().slice(0,10)` del servidor (UTC) para comparar contra `turnos.fecha`/`hora_inicio`; usar `fechaAR` o el desfase `-03:00` explícito. Caso: el recordatorio de 10 min al paciente, escrito en marzo, nunca agendado y además con la hora corrida 3 h — `docs/sprints/2026-10-12-recordatorio-10m-nunca-agendado.md`.
-- Realtime: filtros en non-PK fallan. Escuchar sin filtros, filtrar en JS.
-- Video LiveKit: Safari OK, Chrome iPhone revisar.
-- UX simple para médico de 70 años.
-- Todo se prueba en docto.com.ar, NUNCA en localhost.
-- Push a main = redeploy automático en Vercel.
-- Simplificación bold > debugging incremental.
-- NO usar `window.confirm()` ni `window.alert()` — Chrome los suprime en páginas con iframes cross-origin. Usar dialogs React inline con zIndex alto.
-- Migraciones SQL: usar la Supabase Management API con SUPABASE_ACCESS_TOKEN (guardado en .env.local) para ejecutar DDL directo. Endpoint: `POST https://api.supabase.com/v1/projects/irpupskopjahbqqvckue/database/query`. Nunca pedir a Diego que toque la terminal.
-- Storage buckets: verificar con `npx tsx scripts/verify-storage-buckets.ts` post-deploy. Buckets críticos: avatars (público), credenciales-medicos, consultas-temp, firmas-medicos (privados).
+## Reglas base
+- **No suponer, no rellenar (23/08).** Lo no verificado se dice "no sé" o no se dice. Un hueco declarado es información; uno tapado es una mentira que se lee bien. Vale para informes, commits, PRs y "¿ya está?". Suponer no ahorra trabajo: lo multiplica. Ninguna excepción por apuro.
+- **Verificar contra producción real:** variables de Vercel (`npx vercel env pull`), base de producción, endpoints en vivo. Nunca `.env.local`, documentación ni memoria. Antes de llamar "problema" a algo, verificar que ese código corre en producción y buscar si fue una decisión (en `DECISIONES.md`, en los docs, en el código).
+- **Auditoría de seguridad = evidencia empírica:** comando exacto, output real y clasificación (explotable hoy / latente / buena práctica). Leer código o policies sin probar no alcanza para disparar fixes.
+- **Repo público:** nunca nombres, mails, teléfonos, DNI/CUIT, IDs de consultas o turnos, montos ni resultados de la base de producción (conteos, estados) en código, comentarios, commits, PRs, issues ni docs. Los casos se describen en genérico ("una paciente", "un reclamo del 01/08"). Todo prompt delegado lleva esta regla.
+- **Se prueba en docto.com.ar**, nunca en localhost, con las cuentas de prueba (`es_cuenta_test`), que simulan siempre el pago. Nunca se cuentan cuentas de prueba en un análisis.
+- **Diseñar y validar la arquitectura antes de implementar.**
+- **UX para un médico de 70 años.** Simplificación bold > debugging incremental.
 
-## No suponer, no rellenar (regla base — Diego, 23/08/2026)
+## Protocolo de trabajo
+- **Norma suprema (12/10): terminado = en producción y verificado.** Sin pedir permiso: migración aplicada en las bases que correspondan y verificada; PR mergeado con los checks en verde (nunca `--admin`, nunca saltear la protección de main); deploy esperado y verificado en vivo (endpoint, `cron_runs`, logs); reporte en 2-5 líneas con el SQL aplicado. Siguen necesitando el OK de Diego: mensajes a pacientes o profesionales reales, texto nuevo que cambie lo que se les promete, decisiones de producto o de plata.
+- **Un commit por ticket.** Una extensión de alcance se reporta siempre; la aprueba Diego.
+- **Gates:** lo que mueve plata o toca crons lleva revisión independiente antes del merge. Si un ticket tiene gate (Roberto, Sofía, Diego), espera su OK.
+- **En una tarea, se hace la tarea.** Un hallazgo ajeno va a `DECISIONES.md` y se menciona en una línea al final. Solo interrumpe si pierde consultas hoy, y verificado.
+- **Una decisión pendiente nunca vive en un comentario del código:** va a `DECISIONES.md` §1, con fecha.
+- **Documentar al cierre:** nada está cerrado hasta que el repo lo dice. Reporte en `docs/sprints/`, decisión en `DECISIONES.md`, hallazgo legal en `docs/legal/`, validación importante en el doc del tema (con referencia en `DECISIONES.md`). `ROADMAP_OPERATIVO.md` y `STATUS_REAL` son historia y ya no se actualizan.
+- **Control de PRs y Vercel (12/10):** el gate le pregunta directo a la API de Vercel (secreto `VERCEL_TOKEN`) y verifica por `/api/health` que la vista previa sirva ese commit; si Vercel dice que el build falló, corta al instante. Si la clave vence o la revocan, aparece un warning amarillo y el control sigue por el aviso de GitHub: crear otra en Vercel (Account Settings → Tokens) y cargarla en los secretos del repo como `VERCEL_TOKEN`. Plan manual: comentar en el PR `vista-previa: https://….vercel.app` (la URL sale de `npx vercel api "/v6/deployments?projectId=<id>&teamId=<id>&target=preview"`, campo `meta.githubCommitSha`). Lanzar el workflow a mano NO sirve: GitHub no lo asocia al PR. Si producción no se publica después del merge, pedirle a Vercel por la misma API que construya `main` en los dos proyectos. El repo tiene auto-merge (rebase).
 
-**Nada que se afirme sobre el estado del sistema puede ser una suposición.** Si un dato no se verificó, se dice que no se verificó, o no se dice. Si falta un dato en el medio de una explicación, **se dice que falta**: un hueco declarado es información, uno tapado es una mentira que se lee bien.
+## Reglas técnicas
+- **RLS activo.** `createAdminClient` (service role) para el bypass.
+- **Rol del usuario:** `src/lib/auth/rol.ts` (`resolverRol`, `guardRutaPaciente`), precedencia admin > médico > paciente. Nunca deducir el rol a mano.
+- **Grants de columna ≠ RLS de fila.** `medicos` tiene columnas sin `GRANT SELECT` para `authenticated` (PII e internas: `celular_personal`, `dni`, `cuit`, `email_personal`, `refeps_*`, `notas_admin`…). Si un SELECT con el cliente RLS incluye una sola, PostgREST falla la query ENTERA y devuelve `null` en silencio. Fila propia con columnas sensibles → service role filtrando por `user_id`. Nunca grantear PII a `authenticated`. El error es `permission denied for column`. **Nunca agregar columnas nuevas a SELECTs que ya andan en producción:** van en archivos nuevos o en los que se modifican a propósito, y verificando que la columna exista en las dos bases y tenga su grant (PostgREST también falla la query entera si la columna no existe). Caso del grant faltante: outage del dashboard médico, 19-24/06.
+- **Columnas de confianza de `medicos` (01/10).** La clave pública está en el navegador: lo que la RLS y los grants permiten, el profesional lo puede hacer directo. `proteger_verificacion_medico` revierte para la sesión del usuario todo lo que decide plata, ruteo o verificación, y nadie crea fichas de médico con su sesión. Columna nueva de ese tipo → al trigger en la misma migración. Escritura nueva del profesional → service role filtrando por su `user_id` (con el cliente RLS, una columna protegida "se guarda" y no cambia).
+- **Tabla compartida = dos migraciones.** Si la toca código que corre en los dos deploys (un cron, una lib compartida, una ruta sin gate de `esInstitucional()`), la migración se aplica también en la base institucional y se anota en `supabase/migrations-institucional/` con su número (caso: `repush-esperando` en 500 el 22/08).
+- **Instancia institucional:** el modo sale de `esInstitucional()` (`src/lib/instancia.ts`); a un componente cliente el flag le llega por prop desde un server component; `esInstitucionalClient()` (`NEXT_PUBLIC_INSTITUCIONAL`) existe pero se prefiere el prop, y si se usa, las dos variables se setean juntas en el mismo deploy. Ninguna pantalla del paciente institucional linkea al B2C sin `rebotePaciente`.
+- **Cron nuevo = cuatro lugares (12/10):** la ruta `src/app/api/cron/<nombre>/route.ts` con `export const GET = withCron("<nombre>", handler)`, el schedule en `vercel.json`, el intervalo en `src/lib/crons-esperados.ts` (watchdog) y la ficha en `src/lib/crons-meta.ts`. `tests/unit/crons-agendados.test.ts` no deja mergear si falta uno. Solo para el B2C → `CRONS_CAPA_C` (`cortarSiInstitucional`); solo institucional → `CRONS_SOLO_INSTITUCIONALES` (`cortarSiB2C`).
+- **La hora es argentina (UTC-3 fijo).** Nunca `getHours()` ni `toISOString().slice(0,10)` del servidor (UTC) contra `turnos.fecha` u `hora_inicio`: usar `fechaAR` (`src/lib/insights/fechas.ts`) o el desfase `-03:00` explícito. Los schedules de Vercel están en UTC.
+- **Supabase y Resend no lanzan excepciones:** devuelven `{ data, error }`. Siempre mirar `error`. Los mails pasan por `conRetry` (`src/lib/email.ts`), que convierte el error en excepción.
+- **Realtime:** los filtros en columnas que no son PK fallan; escuchar sin filtro y filtrar en JS. Nunca depender solo de Realtime para una transición crítica: polling de respaldo.
+- **Nunca `window.confirm()` ni `window.alert()`:** Chrome los suprime en páginas con iframes cross-origin. Diálogos React inline con zIndex alto.
+- **Imágenes:** `comprimirImagen` siempre antes de subir (Vercel corta en ~4,5 MB con un 413).
+- **Storage:** verificar con `npx tsx scripts/verify-storage-buckets.ts` después del deploy. Críticos: avatars (público), credenciales-medicos, consultas-temp y firmas-medicos (privados).
+- **Beta Gate** (`src/middleware.ts`, detalle en `docs/REGISTRO_BETA_GATE.md`): `BETA_PASSWORD` vacía = TODO el sitio caído (loop de redirección), nunca "abierto". El registro está abierto desde el 10/06 (`BETA_PROTECTED` vacío); para volver a cerrarlo se re-agregan rutas ahí. Cambiar una env var exige un deploy fresco (`git push` o `vercel --prod`), nunca `vercel redeploy`. Cada preview necesita `BETA_PASSWORD` (si no, loopea y el E2E muere): setearla en "All Preview" en el dashboard; por branch, la branch tiene que existir en el remoto antes del `vercel env add`.
+- **REFEPS, gate duro (10/06):** un médico real no queda `aprobado` sin `refeps_validado=true` (`asegurarRefepsParaAprobar` + constraint `medicos_aprobado_requiere_refeps`; las cuentas de prueba están exentas). Un timeout del Bus no es "no figura". REFEPS corre real (`SISA_MODE=produccion`); el cobro real general depende del flag `pago_marketplace`.
 
-Vale para todo: informes, diagnósticos, mensajes de commit, PRs, y la respuesta a "¿ya está?".
+## Reglas de producto
+Cada regla tiene un helper que es la única fuente de verdad: el código nuevo usa ese helper, nunca una lista de estados escrita a mano. Fecha y porqué de cada una: `DECISIONES.md` §5.
 
-**Por qué, y este es el argumento que manda:** suponer no ahorra trabajo, lo multiplica. No es una regla de prolijidad ni de honestidad abstracta — es que cada suposición se paga después, siempre más cara. Las que Diego alcanza a detectar cuestan una ronda entera de trabajo extra; las que no, salen como bugs, retrabajo o fallas de sistema.
+- **Una atención por vez, la regla del Uber (09/08)** · `src/lib/consultas/encuentro-activo.ts` (`buscarEncuentroActivo`). Si pagó, esa atención es la suya y la pantalla lo lleva ahí. Si no pagó, es libre de irse. Bloquean: consulta `pagada` o `en_curso`, turno `en_espera` o `en_curso`. No bloquean: consulta `esperando` o `aceptada`, ni un turno agendado. Impago con el mismo profesional = volver (redirect, sin carteles). Con otro profesional = se le pregunta antes de cancelar, y al profesional le llega "El paciente canceló esta consulta" (cartel de 5 min + campana). La liberación no se fuerza: la hace el vencimiento.
+- **Plazos de la consulta inmediata:**
+  - Pedido sin aceptar: 10 min y se cancela (`resolver-consultas-vencidas`, cada 3 min; peor caso 13); al paciente se lo invita a elegir otro y al profesional se le apaga la CI (mensaje interno + push). Nadie recibe más de 2 recordatorios por el mismo paciente (`sala_espera_entradas.recordatorios_enviados`). Un pedido sin contestar no frena el auto-apagado de la disponibilidad (`apagar-disponibilidad`, cada 30 min).
+  - Aceptada sin pagar (D4, 08/10): 10 min desde que el paciente **se enteró** (vio el botón con la pantalla delante, o le llegó o leyó el WhatsApp), con techo de 30 min desde la aceptación. La sala le dice hasta qué hora tiene; el profesional ve la hora máxima · `src/lib/consultas/aceptada-sin-pago.ts` (`decidirCierre`, con tests).
+  - Pagada: 30 min con el profesional libre. No entró el profesional → `medico_ausente` + 100 % de reintegro. No entró el paciente → `no_show_paciente`, sin reintegro. La señal de que el profesional no entró es `sala_video_url IS NULL`, no el estado: un pago real salta de `aceptada` a `en_curso` (`pagada` solo la escriben las cuentas de prueba).
+  - Turno: `resolver-turnos-vencidos` cada 10 min, 20 min de gracia → `ausente_paciente`. `cerrar-huerfanas` es el barrido final, a las 00:00 ART.
+- **El pago es fundacional (10/08):** sin pago no hay turno. `reservado_pendiente` dura 15 min y `liberar-reservas` (cada 10 min) lo libera, sin gracia; nunca toca un turno con pago vivo o `pago_id`. En pantalla se llama "Pendiente de pago", nunca "Pagado" ni un monto a secas.
+- **Las reservas abandonadas no se muestran (06/08)** · `src/lib/insights/reservas.ts` (`esReservaAbandonada`, `esReservaViva`, `sinReservasAbandonadas` para listados, `soloActividadReal` para KPIs). Abandonada (retención vencida, sin pago) = no se muestra ni se cuenta en ningún reporte, y no se borra. Viva = se lista como "Reservando…" y no cuenta en KPIs. Todo reporte sobre `turnos` trae `reservado_hasta` y `mp_status`. La plata nunca se filtra: ninguna exclusión saca una fila `approved`.
+- **Un pedido no es una consulta hasta que lo aceptan (19/08)** · `src/lib/consultas/clasificar.ts` (`clasificarAtencion`, `clasificarTurno`, `esConsulta`, `esAtencionReal`). El hito es `aceptada_at`, que escribe `aceptarConsulta`. Toda cancelación registra `resuelta_por` + `resuelta_at` + `resolucion_motivo`. En turnos la frontera es el pago. Un reembolso cuenta como pago hecho (el ingreso lo mide `src/lib/insights/plata.ts`, solo `approved`). Sin registro no se inventa culpable: `sin_datos`. Los estados no cambian; la clasificación se computa al leer. Antes del 19/08 la aceptación es deducida (`origenAceptacion`).
+- **Por qué se cayó cada atención** · `src/lib/consultas/diagnostico.ts` y `caidas.ts`: suceso, falla o sin datos. El revisor de caídas (cada 5 min) avisa solo las fallas y la falta de evidencia. Suenan los procesos que fallan, no lo que una persona decide (06/10).
+- **Una sala sin paciente no es una atención (30/09)** · `src/lib/video/presencia.ts` (presencia en `video_presencia`). Si el paciente nunca entró y nadie tocó "Finalizar", `room_finished` (y también `cerrar-huerfanas`) devuelve el turno a `confirmado`, nunca a `en_espera` (eso hacía que el cron sancionara a quien sí entró). Sin filas de presencia no se revierte nada: "no sé" no es "no entró". Una devolución hecha fuera de Docto (`refunded` sin `reintegro_estado`) marca el reintegro, avisa al equipo si la atención estaba viva o figuraba hecha, y la anula solo si figuraba hecha sin paciente y sin nada escrito. `ejecutarRefund` marca `pendiente` antes de llamar a MP, y si MP dice que el pago ya estaba devuelto no encola. Deuda: la consulta inmediata no se revierte.
+- **Para decir "puede cobrar", `estado` no alcanza (27/08)** · `src/lib/mp-cuenta.ts` (`estadoCuentaMp`, test en `mp-cuenta.test.ts`: activo + fecha vencida = no cobra), nunca `estado === 'activo'` a mano. La renovación vive en `src/lib/mp-token.ts` (el checkout se auto-repara y el cron `renovar-tokens-mp` corre cada 6 h). Solo un 4xx marca la cuenta, y antes se relee: MP rota el refresh token.
+- **Se paga solo con cuenta de Mercado Pago (06/10):** `purpose: "wallet_purchase"` y `binary_mode: true` (se queda: un pago aprobado tarde choca con los plazos). El botón dice "Pagá con Mercado Pago" y nada más, sin carteles de seguridad. Un rechazo suena (mail al equipo con el motivo, en `pago_rechazado.metadata.detalle`); que el paciente decida no pagar se describe, no suena. `pago_toque` guarda desde dónde paga; si el pagador usó cuenta o fue invitado lo dice MP (`GET /users/{payer.id}` → `user_type`).
+- **Reembolsos** · política en `POLITICA_REEMBOLSOS_DOCTO.md`. Si la falla es nuestra, la plata sale de Docto, no del neto del profesional (09/08). No se compensa de oficio: se actúa si el paciente reclama (12/10). Un refund total revierte el coste por uso.
+- **Reprogramación (B2C):** solo el paciente reprograma; el profesional no reprograma turnos ya otorgados. En la instancia institucional reprograma la institución.
+- **La matrícula la dice REFEPS (01/10)** · `src/lib/medicos/matricula-refeps.ts` (`cruzarMatricula`), aplicada en `src/lib/didit/reconciliar.ts`. Lo tipeado es una pista. Solo cuenta una matrícula de médico, habilitada, que REFEPS tenga para el DNI verificado por biometría; una de otra profesión o inhabilitada no coincide ni se adopta nunca. Si el número es suyo pero de otra jurisdicción, se corrigen tipo y provincia. Si en la jurisdicción declarada hay una sola, se adopta, se valida en el mismo update y queda en el log; siempre después de la biometría (antes, el DNI es un número tipeado). Si no hay una única respuesta: revisión con el motivo y «Usar esta» en el panel. Nunca se tipea un número en el panel ni se corrige por SQL. Un solo lugar escribe `identidad_validada = true`: `cerrarCruce`, con la ficha releída y como condición del update. No agregar otro. Un profesional ya aprobado no se corrige solo.
+- **No pedir a mano lo que una fuente oficial entrega (30/09, 01/10):** manda REFEPS o Mercado Pago.
+- **Especialidades (08/10)** · `src/lib/especialidades.ts` (`ATENCION_GENERAL`, `mismaAtencion`). El profesional puede pasar su especialidad principal a Medicina general desde Mi perfil; ninguna otra se elige ahí. El paciente no elige especialidad para entrar a la clínica (ve a todos los de su provincia); donde pesa —el buscador y las alternativas de un pedido no aceptado— Clínica médica, Medicina general, Medicina general y familiar y Medicina familiar cuentan como una. Los reportes las separan. El ruteo por jurisdicción se mantiene (Res. 3316/2023, ratificado el 24/08).
+- **Un aviso "enviado" no es un aviso recibido (27/08):** `whatsapp_envios.resultado = 'enviado'` solo dice que Twilio aceptó el pedido. La entrega real la anota `/api/twilio/status` (StatusCallback a `www.`); si falta, se le pregunta a Twilio (`estadoDeEntrega`, en `src/lib/whatsapp.ts`). Se guarda el `twilio_sid`: el pasado se recupera con `scripts/completar-estados-whatsapp.mts`.
+- **Un profesional que no recibe los avisos no atiende ni oferta (08/10)** · `src/lib/medicos/bloqueo-whatsapp.ts`. Destinatario inválido (63024, 63003, 21211, 21614) → bloqueado: fuera de la clínica, de su link propio y de la CI, sin poder volver a prenderlas desde su panel (ahí se hace cumplir). Ve el porqué y un botón para actualizar el celular. Se levanta solo al cambiar el celular (él en su perfil o el equipo en el panel); si el número nuevo tampoco recibe, el próximo aviso lo vuelve a bloquear. Un corte de red o un aviso demorado no bloquea a nadie. Usa las columnas de visibilidad que ya existen (no se sumó ninguna a la búsqueda de la clínica). El motivo y los valores previos se guardan en `medicos_bloqueos` (solo el servidor), para devolverlos tal cual.
+- **Avisos.** Al paciente: recordatorio 24 h y 10 min antes, por mail y notificación de Docto (sin WhatsApp por ahora), respetando lo que eligió al reservar · `src/lib/turnos/recordatorio-paciente.ts`. No corren en la instancia institucional. Al profesional, por WhatsApp: aceptar una CI, paciente esperando, turno reservado y 15 min antes del turno.
+- **Las correcciones de proceso no se le avisan al profesional (23/08)** si no tocan contenido, identidad y matrícula del profesional, ni la fecha del acto (sellado diferido; rectificación de la identidad del paciente, camino 5 de `documento.ts`).
+- **Firma de documentos** · `src/lib/firma/documento.ts`: firma por sesión del profesional al finalizar (ninguna norma exige OTP por documento), sellado diferido, rescate del borrador, rectificación de identidad. Regla dura: la firma nunca bloquea la entrega del documento.
+- **Comunicación:** se dice "coste por uso de la plataforma", nunca "comisión". Los mails desde la bandeja los firma "Valentina", sin explicación técnica. Copy nuevo para usuarios: se propone y se espera el OK de Diego.
 
-Los tres casos del 23/08/2026, todos del mismo día:
-
-| Se supuso | Qué costó |
-|---|---|
-| "alguien corrigió la ficha de la paciente" (nadie sabía quién) | análisis forense sobre transacciones de Postgres para averiguar algo que se podía haber dicho "no sé" |
-| que aplicar una migración era un comando | alarma a las 4:20, el cron de avisos caído un día entero en la otra instancia, y un PR extra |
-| que partir un campo del formulario no rompía nada | el gate de CI en rojo, un segundo commit y una segunda espera |
-
-Ninguna ahorró un segundo. **Decir "no sé" cuesta cero y no frena nada** — por eso esta regla no admite excepción por apuro: no hay ninguna situación en la que salga más caro cumplirla.
-
-Las reglas de abajo (evidencia empírica, verificación contra producción, verificar el estado final) son casos particulares de esta.
-
-## Auditoría de seguridad — Regla de evidencia empírica
-Toda auditoría de seguridad (puntual o integral) debe incluir evidencia empírica reproducible por hallazgo: el comando exacto que reproduce el problema, el output real, y clasificación clara entre "explotable hoy" / "vulnerabilidad latente" / "buena práctica pendiente". Reportes basados solo en lectura de código o policies sin tests reales no son accionables y no disparan sprints de fixes.
-
-## Verificación contra producción real
-Cualquier status, auditoría o reporte de estado debe verificar contra el entorno productivo real: Vercel env vars de producción (`npx vercel env pull`), DB de producción (queries con service role key), endpoints en vivo. NO contra archivos `.env.local`, NO contra documentación, NO de memoria.
-
-Suposiciones derivadas de archivos locales o lectura de documentación sin confirmar contra producción son inválidas y deben rehacerse.
-
-Casos detectados que motivan esta regla:
-- **28/05/2026 — Auditoría Roberto:** Reportó hallazgos críticos basados en lectura de policies RLS sin probar empíricamente contra producción. Tests manuales de Diego mostraron que los hallazgos no eran reproducibles.
-- **28/05/2026 — Status report Marcos:** Reportó REFEPS en `SISA_MODE=simulacion` basado en `.env.local`. Producción tenía `SISA_MODE=produccion` en Vercel desde hacía 5 días, con validaciones reales ejecutadas y persistidas en DB.
-
-## Protocolo de sprint
-
-### Norma suprema: lo terminado se impacta (Diego, 12/10/2026)
-*"Quiero que cuando terminamos algo lo impactes por norma suprema sin mi consentimiento. Porque si lo dimos por terminado es que está ok."*
-
-**Terminado = en producción y verificado.** No existe "listo, falta mergear", "falta aplicar la migración", "falta correr el script" ni "falta que Vercel lo agende". Cuando un trabajo pasó sus pruebas (y su revisión independiente si mueve plata o toca crons), el implementador, **sin pedir permiso**:
-1. aplica las migraciones en las bases que correspondan (las dos si el código corre en las dos) y verifica la columna o el cambio en la base;
-2. mergea el PR cuando los checks están en verde (nunca `--admin`, nunca saltear la branch protection);
-3. espera el deploy de producción y verifica en vivo que lo nuevo corre (endpoint, `cron_runs`, logs);
-4. reporta qué quedó, con el SQL aplicado, en 2-5 líneas.
-
-Siguen necesitando el OK de Diego: mensajes a pacientes o profesionales reales, texto nuevo de cara a ellos que cambie lo que se les promete, y decisiones de producto o de plata (reintegros, cobros). Todo lo demás, si está terminado, se impacta.
-
-Por qué: el 12/10 se descubrió que el recordatorio de 10 minutos al paciente estaba escrito desde marzo y nunca se había agendado. Un trabajo "terminado" que no llegó a producción es peor que uno sin hacer: parece hecho.
-
-**El control de PRs no depende del aviso de Vercel a GitHub (12/10/2026):** el 12/10 ese aviso se trabó (incidente en su integración con Git) — la vista previa estaba en un minuto y el aviso llegaba casi una hora después o nunca, y cada PR esperaba 30 min y fallaba sin correr un test. Desde entonces el control **le pregunta directo a la API de Vercel** por el deploy del commit (secreto `VERCEL_TOKEN`, lo creó Diego en Vercel) y verifica por `/api/health` que sirva ese commit: la espera es lo que tarda Vercel en armar (1-2 min). Si Vercel dice que el build falló, corta al instante. **Si la clave vence o la revocan**, el control lo dice con un warning amarillo en la corrida y sigue por el aviso de GitHub: hay que crear otra en Vercel (Account Settings → Tokens, alcance el equipo) y cargarla en los secretos del repo como `VERCEL_TOKEN`. Plan manual si fallan los dos: comentar en el PR `vista-previa: https://….vercel.app` (la URL sale de `npx vercel api "/v6/deployments?projectId=<id>&teamId=<id>&target=preview"`, campo `meta.githubCommitSha`). Lanzar el workflow a mano NO sirve: GitHub no lo asocia al PR. Si después del merge producción no se publica, se le pide a Vercel por la misma API que construya `main` (los dos proyectos: `uber-doc` e `instancia-institucional`).
-
-- **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
-- **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
-- **Extensión de alcance se reporta SIEMPRE.** Aunque sea consecuencia técnica obligatoria de otro ticket, se documenta en el reporte con razonamiento. La decisión de aprobar la extensión la toma Diego, no el implementador.
-
-## Documentación al cierre
-Cada vez que se termina algo (sprint, decisión de producto, hallazgo, fix, validación), se documenta en el archivo correspondiente del repo ANTES de considerarse cerrado. La memoria de Diego no es la fuente de verdad. El repo lo es.
-
-Reglas concretas:
-- **Cierre de sprint** → reporte en repo (`docs/sprints/` o donde corresponda)
-- **Decisión de producto** → registrar en CLAUDE.md o ROADMAP_OPERATIVO.md según alcance
-- **Hallazgo regulatorio o legal** → documento en `docs/legal/` o referencia cruzada en CLAUDE.md
-- **Validación importante** (ej: REFEPS de Sofía Fasce) → registrar en STATUS_REAL o doc específico
-- **Cambio de estado de un item del ROADMAP** → actualizar ROADMAP_OPERATIVO.md en el mismo commit que cierra el trabajo
-
-Un sprint o tarea NO se considera cerrado hasta que la documentación esté actualizada. "Hecho" sin doc = no hecho a efectos del registro.
-
-## Una atención por vez — la regla del Uber (decisión Diego, 09/08/2026)
-*"Como usar un Uber y querer pedir otro."*
-
-**Si el paciente YA PAGÓ**, esa atención es la suya: no puede abrir otra, y la pantalla lo lleva ahí en vez de mostrarle un cartel. **Si todavía NO pagó**, es libre de dejar a ese profesional y elegir otro — igual que cancelarle a un chofer antes de que llegue.
-
-Fuente de verdad: **`src/lib/consultas/encuentro-activo.ts`**. Todo guard nuevo que pregunte "¿el paciente ya está en una atención?" usa `buscarEncuentroActivo`, no una lista de estados escrita a mano.
-
-- **Bloquean** (hay plata comprometida): consulta en `pagada` o `en_curso`; turno en `en_espera` o `en_curso`.
-- **No bloquean**: consulta en `esperando` o `aceptada` (pedida sin pagar), y **cualquier turno agendado** (`confirmado`, `reservado_pendiente`). Un turno para el jueves no es un viaje en progreso y no impide una consulta inmediata hoy.
-- **Impago con el MISMO profesional** = volver, no pedir de nuevo: redirect a su sala de espera, sin carteles.
-- **Impago con OTRO profesional** = se le pregunta antes de cancelar (nunca callado: puede haber entrado por error), y al profesional que queda esperando le llega *"El paciente canceló esta consulta"* — cartel de 5 minutos que se va solo, más la fila permanente en la campana. Sin ese aviso se reproduce el problema de las reservas abandonadas descrito abajo.
-- **La liberación no se fuerza**: cuando el paciente no asiste o vence el plazo, el encuentro cambia de estado y deja de figurar. No hay código de vencimiento en el guard.
-
-**Historia del bug (no repetirlo):** el guard viejo de `crearConsulta` miraba `["esperando","aceptada","en_curso"]` y **se olvidaba de `pagada`** — tenía las dos mitades al revés: bloqueaba a los impagos (que deberían poder irse) y dejaba pasar a los pagos (los únicos a blindar). Encima el mensaje se pintaba arriba de un formulario largo, fuera de la vista del paciente, y sin ningún link a su consulta.
-
-**Los plazos (actualizado 22/08/2026 — acá decía que la CI "no tiene ninguno", y era falso desde el 09/08):** el turno tiene plazo (cron `resolver-turnos-vencidos` cada 10 min, 20 de gracia → `ausente_paciente`). La consulta inmediata tiene **dos relojes distintos**, y confundirlos ya costó una madrugada:
-- **CI pagada** (#384/#388, 09/08): 30 min desde el pago, con el profesional libre. El profesional no entró → `medico_ausente` + reintegro del 100%; el paciente nunca entró → `no_show_paciente`, sin reintegro. La señal de que el profesional no entró es `sala_video_url IS NULL`, **no el estado** (un pago real salta de `aceptada` a `en_curso`; `pagada` solo la escriben las cuentas test).
-- **Pedido SIN aceptar** (#432/#435, 21-22/08): **10 min** sin respuesta → se cancela, al paciente se lo invita a elegir otro profesional, y al profesional que no respondió **se le apaga la CI** (mensaje interno + push). `resolver-consultas-vencidas` corre cada 3 min (peor caso, 13). Además **nadie recibe más de 2 recordatorios** por el mismo paciente (`sala_espera_entradas.recordatorios_enviados`), y un pedido sin contestar **ya no bloquea** el auto-apagado de disponibilidad. Caso que lo motivó: 18/08, un pedido colgado 11 h y 17 WhatsApp encadenados a una profesional dormida — `docs/sprints/2026-08-22-ci-sin-aceptar-plazo-y-tope-avisos.md`.
-- **Aceptada y sin pagar** (D4, Diego 05/10, en producción desde el 08/10): **10
-  minutos desde que el paciente SE ENTERÓ** —vio el botón de pago con la pantalla
-  delante, o le llegó o leyó el WhatsApp de "te aceptaron"—, con **techo de 30
-  minutos desde la aceptación**. Antes corrían desde la aceptación y el paciente
-  que se había ido de la pantalla un instante antes los perdía sin saberlo. La
-  sala le dice hasta qué hora tiene; el profesional ve la hora máxima. Regla en
-  `src/lib/consultas/aceptada-sin-pago.ts` (`decidirCierre`, con tests).
-- `cerrar-huerfanas` queda como barrido de última instancia, **a las 00:00 ART** (`0 3 * * *`: los crons de Vercel se programan en UTC).
-
-## Reportes — las reservas abandonadas NO se muestran (decisión Diego, 06/08/2026)
-Cuando un paciente toma un turno, el slot queda en `reservado_pendiente` con `reservado_hasta` = ahora + ~15 min (retención para pagar). Si paga, el webhook de MP lo pasa a `confirmado` con `mp_status='approved'`. Si no paga, la retención vence y el lugar se libera.
-
-**El pago es fundacional (decisión Diego, 10/08/2026):** *"el pago es fundacional para decir este paciente consume este turno"*. Sin pago, a los 15 minutos el lugar vuelve a la oferta — la liberación la hace el cron `liberar-reservas` (cada 10 min), **sin margen de gracia** (había 45 min extra "por si un pago de MP aprueba tarde"; Diego los sacó: es una rareza que no justifica oferta invisible, y desde #375 el checkout solo ofrece medios instantáneos). El cron nunca toca un turno con estado de pago vivo o `pago_id`. En pantallas, un `reservado_pendiente` se llama **"Pendiente de pago"** — nunca "Pagado" ni un monto a secas: ese monto es el precio del lugar, no plata que entró.
-
-**Decisión de Diego:** *"si la reserva fue por ese motivo perezoso y está liberado el turno, yo NO debo ver eso en los reportes. Guardalo en la base si querés, pero no es algo que nadie necesite ver: las vueltas que da un paciente indeciso."* Caso que la motivó: un paciente reservó las 14:30, se arrepintió, reservó las 15:00, y finalmente reservó las 15:30 y pagó — el panel mostraba TRES solicitudes cuando hubo UNA.
-
-Reglas:
-- **Reserva abandonada** = `reservado_pendiente` + retención vencida + sin pago (ni acreditado ni en vuelo). **No se muestra ni se cuenta en NINGÚN reporte** (`/insights` y `/admin`). **No se borra de la base.**
-- **Reserva viva** = retención vigente y todavía sin pago acreditado. Se puede **listar** con etiqueta clara ("Reservando…"), pero **no cuenta como actividad real** en KPIs ni totales.
-- Fuente de verdad única: **`src/lib/insights/reservas.ts`** (`esReservaAbandonada` / `esReservaViva` / `sinReservasAbandonadas` para listados / `soloActividadReal` para KPIs). Todo reporte nuevo que toque `turnos` usa estos helpers, y su `SELECT` debe traer `reservado_hasta` y `mp_status`.
-- **La plata nunca se filtra:** ninguna de las dos exclusiones puede sacar una fila con `mp_status='approved'`, y todas las métricas de dinero filtran por `approved`. Delta de importes: cero.
-- **Deuda conocida:** el badge "N pendientes" de la agenda del médico (`src/app/medico/agenda/PanelDerecho.tsx`) sigue contando reservas muertas. No se tocó porque su query usa el cliente RLS y sumarle columnas tiene el riesgo de grants documentado arriba.
-
-## Un pedido NO es una consulta hasta que lo aceptan (decisión Diego, 19/08/2026)
-*"Sino es consulta, es Intento de consulta o Búsqueda."*
-
-La frontera entre un **intento** y una **consulta** es que **un profesional la acepte**. Antes de eso el paciente buscó y pidió, pero del otro lado todavía no hubo nadie. Contar los intentos como consultas mezcla la demanda con lo que efectivamente entregamos, y esconde el número que importa: **cuántos pedidos acepta un profesional** — el termómetro directo de la oferta.
-
-Aceptada, la consulta tiene dos caminos —paga o no paga— y si paga, tres desenlaces.
-
-```
-Búsqueda → Elección → Intento ──┬── nadie lo aceptó   (falla de OFERTA, nuestra)
-                                └── se retiró          (ruido normal del paciente)
-                     Consulta ──┬── abandono           (aceptada, sin pagar: se fue
-                                │                       o se cayó en el checkout de MP)
-                                └── pagada ──┬── atendida
-                                             ├── el profesional no sostuvo
-                                             └── el paciente no llegó
-```
-
-Fuente de verdad única: **`src/lib/consultas/clasificar.ts`** (`clasificarAtencion` para CI, `clasificarTurno` para turnos, `esConsulta` / `esAtencionReal` para KPIs). Todo reporte o filtro nuevo que necesite decir "esto fue una consulta" usa esos helpers, **nunca** una lista de estados escrita a mano.
-
-- **El hito es `aceptada_at`**, que escribe `aceptarConsulta`. Sin él no hay clasificación: `aceptada` es un estado de PASO y al terminar la consulta no queda rastro de que alguien se hiciera cargo.
-- **Toda cancelación registra `resuelta_por` + `resuelta_at` + `resolucion_motivo`.** Los tres caminos (el paciente se retira, el paciente se va con otro profesional, el profesional cancela) hacían `update({estado:'cancelada'})` a secas y el porqué se perdía.
-- **El turno no tiene aceptación**: la agenda publicada ES la aceptación. Ahí la frontera es el **pago** (coherente con "el pago es fundacional", 10/08). Sus estados ya distinguen quién dejó caer la atención, así que se traducen en vez de deducirse.
-- **Un reembolso cuenta como pago hecho**: para devolver la plata, primero entró. Tratar `refunded` como "no pagó" clasificaría una consulta cobrada y devuelta como abandono. El *ingreso* lo sigue midiendo `lib/insights/plata.ts`, que filtra solo por `approved`.
-- **Sin registro no se inventa un culpable**: una consulta paga y cancelada sin `resuelta_por` cae en `sin_datos`, no en "el paciente no llegó".
-- **Los estados NO cambian.** Hay ~20 archivos que los interpretan (guard de "una atención por vez", crons, pantallas del paciente y del profesional). La clasificación vive en columnas que se escriben ADEMÁS del estado y se computa al leer.
-
-**Límite del histórico:** las filas anteriores al 19/08/2026 no tienen el hito. Se infiere —el pago y la sala sólo existen después de aceptar, así que cualquiera prueba la aceptación— pero el caso inverso es indistinguible: sin pago ni sala, "no la aceptó nadie" y "la aceptó y no pagó" son la misma fila. Por eso la clasificación expone `origenAceptacion` y el tablero marca esos desenlaces como **deducidos**.
-
-**Consecuencia esperada:** el total de "consultas" BAJA respecto de lo que mostraba el tablero antes. Lo que se fue son los pedidos que nunca tuvieron a nadie del otro lado, que ahora se cuentan como intentos en vez de figurar como si hubieran sido atenciones.
-
-## Cobros — `estado` NO alcanza para decir "puede cobrar" (hallazgo 27/08/2026)
-El permiso de Mercado Pago de un profesional **vence solo**, y hasta el 27/08 nada
-lo renovaba: el `refresh_token` se guardaba en el alta de OAuth y no se leía en
-ningún lado del repo.
-
-Peor que el vencimiento era cómo se descubría. `medicos_mp_accounts.estado` pasa
-a `expirado` **dentro del checkout** (`api/pago/crear-v2`), o sea con el paciente
-ya pidiendo la consulta y por apretar Pagar. Hasta ese instante la fila dice
-`activo`. Cualquiera que preguntara solo por `estado` —el gate de disponibilidad,
-el panel de admin— veía en verde justo al profesional que no podía cobrar: se
-publicaba, aceptaba consultas, y el pago moría con 422 al final del flujo, sin
-aviso para nadie. Mismo desenlace que el caso 07/08 (cuenta de otro país) por
-otra puerta: disponible, aceptando, incobrable.
-
-Fuente de verdad única: **`src/lib/mp-cuenta.ts`** (`estadoCuentaMp`). Todo lugar
-que pregunte "¿este profesional puede cobrar?" usa ese helper, **nunca**
-`estado === 'activo'` a mano. Tiene test (`mp-cuenta.test.ts`) con el caso que
-rompía: activo + fecha vencida = NO cobra.
-
-- La renovación vive en **`src/lib/mp-token.ts`**. El checkout se auto-repara y
-  el cron `renovar-tokens-mp` (cada 6 h) la adelanta.
-- **Un rechazo de MP no es lo mismo que una falla de red:** solo un 4xx marca la
-  cuenta; un timeout o un 5xx no tocan el estado, o un hipo de su API apagaría
-  los cobros de gente sana.
-- **MP rota el refresh token** en cada renovación: dos renovaciones simultáneas
-  hacen que la segunda reciba 4xx. Antes de marcar una cuenta se relee — si quedó
-  vigente, fue una carrera, no una falla.
-- **Deuda conocida:** el gate de disponibilidad (`dashboard/actions.ts`) todavía
-  mira `estado` y no la fecha. Arreglarlo NO suma consultas (hace que esos
-  profesionales figuren no disponibles); tiene sentido con la renovación andando.
-
-## Se paga solo con cuenta de Mercado Pago (decisión Diego, 06/10/2026)
-*"Vamos con MP directo, cero rechazos."*
-
-- La preferencia lleva `purpose: "wallet_purchase"`: ya no existe "pagar como
-  invitado" (tarjeta tipeada sin cuenta). Medido contra la API de MP: los
-  rechazos por antifraude eran todos de invitados; con cuenta no hubo ninguno,
-  tampoco con tarjeta. En el celular con la app de MP se abre la app con la
-  cuenta del paciente; sin la app, MP pide ingresar o crear la cuenta.
-- **`binary_mode: true` se queda.** MP dice que sacarlo sube la aprobación,
-  pero un pago aprobado tarde choca con los plazos: devolución automática de
-  la CI, turno liberado por el contador, cobro después de una cancelación. Los
-  rechazos por antifraude fueron anteriores al modo binario: no los causó.
-- El botón dice **"Pagá con Mercado Pago"** y nada más. Sin carteles ni
-  advertencias de seguridad: *"no está en ninguna web del planeta, es asustar
-  a la gente"*.
-- **Alarmas de procesos, no de sucesos.** Un paciente que intentó pagar y no
-  pudo es un proceso que falló: suena (mail al equipo con el motivo de MP) y el
-  motivo queda en `pago_rechazado.metadata.detalle`. Un paciente que decide no
-  pagar es un suceso: se describe, no suena.
-- `pago_toque` guarda desde dónde paga (plataforma, navegador o app que lo
-  contiene, Docto instalado): es el dato para saber cuántos pacientes no tienen
-  la app de MP a mano. Si el pagador usó cuenta o fue invitado lo dice MP:
-  `GET /users/{payer.id}` → `user_type`.
-
-## La matrícula la dice REFEPS, no el formulario (decisión Diego, 01/10/2026)
-*"Si la valida REFEPS es real."*
-
-El número de matrícula que el profesional escribe al registrarse es una **pista**
-(dice con qué jurisdicción quiere atender). El número válido es el que REFEPS
-tiene para el DNI que verificó la biometría. Fuente de verdad única:
-**`src/lib/medicos/matricula-refeps.ts`** (`cruzarMatricula`), aplicada en
-`src/lib/didit/reconciliar.ts`.
-
-- Solo cuenta una matrícula **de médico, habilitada**, que REFEPS tiene para ese
-  DNI. Una de otra profesión o inhabilitada no coincide ni se adopta nunca.
-- El número escrito es, tal cual, una de esas en la jurisdicción declarada →
-  valida. Si es suya pero de otra jurisdicción → se corrigen tipo y provincia.
-- No figura tal cual y en la jurisdicción declarada REFEPS tiene **una sola** →
-  se adopta esa, se valida en el mismo update y queda en el log. Un dígito mal
-  tipeado no llega nunca al equipo.
-- No hay una única respuesta → revisión con el motivo concreto, y en el panel
-  **«Usar esta»** sobre las matrículas de REFEPS (verifica el DNI con Didit,
-  consulta REFEPS en vivo y valida en el momento). **Nunca se tipea un número en
-  el panel ni se corrige por SQL.**
-- **Un solo lugar escribe `identidad_validada = true`:** `cerrarCruce`, con la
-  ficha releída y como condición del update. No agregar otro.
-- La adopción es **después** de la biometría: antes, el DNI es un número tipeado.
-- Un profesional ya aprobado no se corrige solo (el trigger lo devolvería a revisión).
-- **La especialidad (decisión Diego, 08/10/2026):** el profesional puede pasar
-  solo su especialidad principal a **Medicina general** desde Mi perfil, porque
-  todo médico lo es al recibirse (REFEPS lo registra como "Médico"). Cualquier otra
-  especialidad no se elige ni se cambia ahí. Hoy la especialidad declarada al
-  registrarse **no se contrasta con REFEPS**: un caso real figuraba en Geriatría
-  y REFEPS solo tenía su título de médico.
-- **Clínica médica y Medicina general son la misma puerta para el paciente**
-  (Diego, 08/10/2026: *"esa especialidad puede atender a todos, deben estar
-  unidos"*). El paciente no elige especialidad para entrar a la clínica (ve a
-  todos los de su provincia); donde pesa —el buscador y las alternativas de un
-  pedido que no se aceptó— cuentan como una, junto con Medicina general y
-  familiar y Medicina familiar. Los reportes siguen separándolas. Regla en `src/lib/especialidades.ts`
-  (`ATENCION_GENERAL`, `mismaAtencion`).
-- **No pedir a mano lo que una fuente oficial ya entrega** — misma regla que el
-  e-mail de la cuenta de Mercado Pago (30/09). Detalle:
-  `docs/sprints/2026-10-01-la-matricula-la-dice-refeps.md`.
-
-## Un aviso "enviado" no es un aviso recibido (hallazgo 27/08/2026)
-`whatsapp_envios.resultado = 'enviado'` significa **"Twilio aceptó la llamada a su
-API"**. No dice que le llegó al celular del profesional, ni que lo leyó. **Actualizado
-08/10/2026:** desde el 01/09 el envío manda `StatusCallback` y `/api/twilio/status`
-anota la entrega real; desde el 06/10 reintenta cuando la confirmación llega antes
-que la fila del envío (así se perdían estados), y si igual falta se le pregunta a
-Twilio (`estadoDeEntrega` en `src/lib/whatsapp.ts`).
-
-Esto pesa sobre el plazo de 10 minutos de la CI, que se fijó sin haber medido
-nunca si el aviso llega a tiempo. **Medido el 27/08: llega y se entrega en el
-minuto cero, y el profesional acepta.** O sea que el plazo no era el freno — pero
-eso se supo preguntándole a Twilio, no mirando nuestra base, que sigue sin saberlo.
-
-Se guarda el `twilio_sid`, así que el pasado es recuperable preguntándole a
-Twilio: `scripts/completar-estados-whatsapp.mts`.
-
-## Un profesional que no recibe los avisos no atiende ni oferta (decisión Diego, 08/10/2026)
-*"Los médicos no pueden atender ni ofertar si no están en condiciones."*
-
-- Si un aviso al profesional vuelve de Twilio con **destinatario inválido**
-  (63024: el número no tiene WhatsApp activo; 63003, 21211, 21614), queda
-  **bloqueado**: fuera de la clínica, de su link propio y de la consulta
-  inmediata, sin poder volver a prenderlas desde su panel, y ve el porqué con un
-  botón para actualizar el celular. Caso que lo motivó: el 05/10 un paciente
-  esperó y el profesional nunca recibió un solo aviso.
-- **Se levanta solo al cambiar el celular** (él en su perfil o el equipo en el
-  panel). Si el número nuevo tampoco recibe, el próximo aviso lo vuelve a bloquear.
-  Un corte de red o un aviso demorado no bloquea a nadie.
-- Fuente de verdad: **`src/lib/medicos/bloqueo-whatsapp.ts`**. El bloqueo usa las
-  columnas de visibilidad que ya existen y guarda en `medicos_bloqueos` (solo el
-  servidor) el motivo y los valores previos, para devolverlos tal cual. No se
-  agregó ninguna columna a la búsqueda de la clínica.
-- **Límite declarado:** `disponible`, `oculto_clinica` y
-  `visible_consultorio_particular` no están en el trigger de confianza. El bloqueo
-  se hace cumplir en las acciones del panel; un profesional que escribiera directo
-  contra la API podría prenderlas (latente, no probado).
+## Video — LiveKit
+`@livekit/components-react` (`LiveKitRoom`) + `livekit-client`; los tokens los genera `livekit-server-sdk` en `src/app/api/livekit/token/route.ts`, salas en `src/app/api/livekit/crear-sala/route.ts`, webhook en `src/app/api/livekit/webhook/route.ts`. Daily.co ya no se usa (`DAILY_API_KEY` es legacy sin uso).
+- El médico finaliza → diálogo React inline → desconecta → `router.push('/dashboard')` inmediato. El guardado de documentos y el `completada` corren en segundo plano: nunca bloquear el redirect.
+- El paciente detecta el cierre por polling cada 5 s a `/api/consulta-estado`, con flag en `useRef`. Nunca `estado` en las dependencias del efecto de polling: mata el intervalo justo cuando más se necesita.
+- iOS exige un gesto del usuario para pedir mic y cámara: pantalla pre-join en `SalaConsultaPaciente`, nunca `audio={true}` con connect directo. Safari iOS bloquea `window.open()` después de un `await`: usar `<a href target="_blank">`. Los mensajes de permisos son por plataforma (`instruccionesPermiso()`).
+- Safari anda; Chrome en iPhone, revisar.
 
 ## Design system
-- Verde #1D9E75 — SOLO para indicadores de estado (dots EN CURSO, badge Disponible, badge Activa). NUNCA en botones, marcos, ni controles UI.
-- Azul #378ADD — Botones de acción, marcos de cards, toggles, links interactivos, CTAs secundarios.
-- Naranja #D85A30 (alerta)
-- Gris #888780 (bloqueado, links secundarios)
-- Rojo #E24B4A (cancelado/error) — Botones de cancelar: borde rojo, fondo transparente.
-- Amarillo #BA7517 (pendiente)
-- Tipografía: Inter en todo el producto, incluyendo PDFs.
+- Verde #1D9E75: SOLO indicadores de estado (EN CURSO, Disponible, Activa). Nunca botones, marcos ni controles.
+- Azul #378ADD: acciones, marcos de cards, toggles, links, CTAs secundarios.
+- Naranja #D85A30 alerta · Gris #888780 bloqueado y links secundarios · Rojo #E24B4A cancelado o error (botón de cancelar: borde rojo, fondo transparente) · Amarillo #BA7517 pendiente.
+- Inter en todo el producto, PDFs incluidos.
 
-## Mandato de tablas y listados (regla de la casa — Diego, 08/09/2026)
+## Mandato de tablas y listados (08/09): toda pantalla que liste cosas
+1. Toda tabla tiene buscador: todas las columnas visibles, sin distinguir mayúsculas ni acentos, varias palabras = Y.
+2. Toda columna ordena con un clic: ascendente → descendente → por defecto. La flecha `↕` se ve siempre. Orden humano (`Base 2` antes que `Base 10`).
+3. Filtro por columna tipo Excel: embudo con los valores y su conteo, con buscador propio si hay más de ocho. Por defecto lleva embudo; solo lo que crece sin techo (fecha, monto, duración, id) se declara `porEvento` y lleva solo orden.
+4. Lo más nuevo arriba (sin fecha de alta, por id, y se anota la deuda). Desvíos solo con el motivo escrito en el código: la agenda del día (mañana → noche), los rankings (por su cifra) y la fila de espera (quien lleva más).
+5. Lo que no se usa va al fondo, plegado: `Históricos (N)`, baja lógica. Se abre solo si el buscador encuentra algo adentro.
+6. Todo en castellano y una palabra por cosa. Estados = punto de color + texto.
+7. La vista filtrada viaja en la URL, nunca en el navegador.
 
-Nació en OverCall y se pega igual en todos nuestros proyectos. **Aplica a toda pantalla
-que liste cosas**, exista ya o se cree mañana. No es una sugerencia.
+Trampas: `Number(null)` es 0; los vacíos van al final ordene como ordene; normalizar a NFD antes de sacar diacríticos; desempatar por id en tablas que se refrescan. El panel del embudo se dibuja fuera de la tabla (portal + posición fija).
 
-### Las siete reglas
-
-1. **Toda tabla tiene buscador.** Sin importar cuántas filas haya hoy: la tabla de 8 filas
-   tiene 400 en dos años. Busca sobre todas las columnas visibles, sin distinguir mayúsculas
-   ni acentos (`atencion` encuentra `Atención`). Varias palabras separadas por espacio
-   funcionan como Y.
-2. **Toda columna ordena, con un clic en su nombre.** Tres estados: ascendente →
-   descendente → vuelve al orden por defecto. La flecha se ve siempre apagada (`↕`) y en
-   color cuando la columna está ordenada. El orden de texto es el que espera una persona:
-   `Base 2` antes que `Base 10`, la `ñ` en su lugar.
-3. **Filtro por columna, tipo Excel.** Un embudo abre los valores que existen en esa columna
-   con su conteo, para destildar. Con más de ocho valores el panel trae su propio buscador.
-   **El default es LLEVAR embudo**: sólo se declaran a mano las que no lo llevan.
-
-   | El valor… | Ejemplos en Docto | Lleva |
-   |---|---|---|
-   | lo crea alguien (catálogo finito) | profesional, paciente, especialidad, provincia, estado, canal, motor | embudo + orden |
-   | lo genera cada evento (crece sin techo) | fecha y hora, monto, duración, id, minutos de espera | sólo orden |
-
-4. **Lo más nuevo arriba. Siempre.** Si no hay fecha de alta se usa el id y se anota la
-   deuda. Una pantalla se desvía **sólo con el motivo escrito en el código**. Los desvíos
-   vigentes: la agenda del día va de la mañana a la noche; los rankings van por su cifra
-   (deuda, facturado, tasa); la fila de gente esperando va por quien lleva más tiempo.
-5. **Lo que no se usa va al fondo, plegado.** Sección `Históricos (N)` al final de la MISMA
-   tabla, con el contador siempre visible. Baja lógica, nunca destructiva. **Si el buscador
-   encuentra algo adentro, la sección se abre sola**: si no, el buscador mentiría.
-6. **Todo en castellano, y una sola palabra por cosa.** Nada de `Search`, `Filter`, `Sort`.
-   La misma cosa se llama igual en todas las pantallas. Los estados se muestran como
-   **punto de color + texto**, nunca color solo: el color acompaña, la palabra informa.
-7. **La vista filtrada viaja en la URL.** Se comparte por WhatsApp y sobrevive a un F5. NO
-   se guarda en el navegador: un filtro invisible de ayer es un "¿por qué no veo a Fulano?"
-   que nadie explica.
-
-### Cuatro trampas, porque ya nos mordieron
-
-1. **`Number(null)` da cero, no "vacío".** Sin chequearlo, una celda vacía se ordena como 0
-   y aparece primera.
-2. **Los vacíos van al final ordene como ordene.** Hay que sacarlos de la comparación, no
-   multiplicarlos por el signo.
-3. **Quitar acentos sin normalizar primero borra la letra.** Normalizar a NFD y recién ahí
-   sacar los diacríticos por rango `\u0300-\u036f`.
-4. **En una tabla que se refresca sola, los empates hacen temblar la lista.** El desempate
-   va por una clave estable (el id).
-
-Y una de dibujo: el panel del embudo se dibuja **fuera de la tabla** (portal + posición
-fija). Adentro, la tarjeta con scroll lo recorta y la cabecera le pone todo en mayúsculas.
-
-### Qué NO hacer
-
-- **No** poner el buscador "sólo en las tablas grandes". Todas.
-- **No** poner embudo en una columna que crece sin techo: sería una lista tan larga como la
-  tabla. Para eso está el buscador.
-- **No** hacer un componente por pantalla. Si aplicar esto a una pantalla lleva más de
-  treinta líneas, el componente está mal hecho.
-- **No** borrar para "limpiar la lista". Se archiva.
-- **No** dar por terminada una pantalla con tabla sin buscador, sin flechas y sin filtro.
-
-### Dónde vive en Docto
-
-| Qué | Dónde |
-|---|---|
-| Lógica pura (orden, filtros, búsqueda, URL) | `src/lib/tabla.ts` |
-| Sus pruebas (44) | `tests/unit/tabla.test.ts` |
-| Componente (hook + barra + cabeza + históricos + anchos) | `src/components/tabla/TablaDatos.tsx` |
-| Estilos que necesitan CSS de verdad | `src/app/globals.css`, sección "vista de tabla" |
-| Ejemplo aplicado | `src/app/admin/medicos/MedicosClient.tsx` |
-
-Los dos archivos de lógica son **copia textual de OverCall**: sincronizar sigue siendo
-copiar y pegar. El componente acepta `tono: "claro" | "oscuro"` — el panel de admin es
-claro, el tablero `/insights` es oscuro.
-
-Así se aplica a una pantalla, y esto es todo lo que hay que escribir:
-
-```tsx
-const COLUMNAS: Columna<Fila>[] = useMemo(() => [
-  { k: "medico", t: "Profesional", val: (f) => f.medico },
-  { k: "estado", t: "Estado", val: (f) => f.estadoLabel, rango: CICLO_ESTADO },
-  { k: "alta",   t: "Alta",   val: (f) => f.created_at, tipo: "fecha", porEvento: true },
-], []);
-const vista = useVistaTabla(filas, COLUMNAS, {
-  clave: (f) => f.id,
-  defecto: (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
-});
-<BarraTabla vista={vista} placeholder="Buscar profesional…" cuenta="profesionales" />
-<table><CabezaTabla vista={vista} /><tbody>{vista.filas.map(fila)}</tbody></table>
-```
-
-`porEvento` es lo único que se declara a mano. Todo lo demás nace con embudo.
-
-**Desvío declarado:** el tablero (`src/app/admin/tablero/motor.js`) tiene su propio motor en
-JavaScript plano. Cumple las siete reglas menos una: su filtro por columna es un desplegable
-o un campo de texto, no el panel de casillas con conteo.
-
-**No aplica:** `/admin/padron` no es un listado sino la vista previa de un archivo que se
-está importando. Sus filas son las líneas del archivo, no registros guardados.
-
-## Arquitectura de video — LiveKit
-
-> **Nota (28/05/2026):** Migrado de Daily.co a LiveKit. El código ya NO usa Daily.co.
-> `@daily-co/daily-js` fue eliminado. DAILY_API_KEY en .env.local es legacy sin uso.
-
-### Integración actual
-Los componentes de video usan **LiveKit React SDK** (`@livekit/components-react`) con `LiveKitRoom` + tracks de `livekit-client`. Backend genera tokens con `livekit-server-sdk` en `src/app/api/livekit/token/route.ts`. Salas se crean via `src/app/api/livekit/crear-sala/route.ts`. Webhook LiveKit en `src/app/api/livekit/webhook/route.ts`.
-
-### Flujo de finalización del médico
-1. Médico toca "Finalizar consulta" → dialog React inline (NO `window.confirm`)
-2. Confirma → desconecta de la sala LiveKit
-3. `router.push('/dashboard')` — redirect inmediato sin esperar Supabase
-4. Guardado de documentos + update estado `completada` ocurre en background (fire-and-forget IIFE)
-5. Si el guardado falla, el médico ya está en el dashboard — falla silenciosamente
-
-### Flujo de detección del paciente
-1. **Polling** cada 5s a `/api/consulta-estado` → detecta `completada` → muestra pantalla de cierre con documentos
-2. El polling usa `useRef` (yaRedirigioRef) como flag, NO estado en dep array — si `estado` estuviera en deps, el useEffect se destruiría al cambiar y la guard lo mataría
-
-### Problemas conocidos y aprendizajes
-- **`window.confirm()` + iframe cross-origin = SILENCIOSAMENTE SUPRIMIDO** en Chrome/HTTPS. El confirm devuelve `false` sin mostrar nada. Toda confirmación destructiva debe usar dialog React.
-- **Supabase client no lanza excepciones**: devuelve `{data, error}`. Siempre verificar `error` antes de asumir éxito.
-- **iOS exige gesto del usuario para el prompt de mic/cám** (Safari y PWA). `getUserMedia` fuera de un toque (ej: `audio={true}` al conectar LiveKitRoom) se deniega EN SILENCIO y WebKit cachea la denegación para toda la sesión — después ningún toggle funciona. Fix (10/06/2026): pantalla pre-join en `SalaConsultaPaciente` cuyo botón pide el permiso dentro del gesto; recién después se monta LiveKitRoom. Android PWA necesita lo contrario (pedido temprano) — el pre-join resuelve ambos. NO volver a `audio={true}` con connect directo.
-- **`window.open()` después de un `await` = bloqueado en Safari iOS** (queda fuera del gesto). Para abrir PDFs/archivos usar `<a href target="_blank">` nativo (fix en `DescargarPDF.tsx`, 10/06/2026).
-- **Una sala sin paciente NO es una atención (30/09/2026).** `room_finished` cerraba como `completado` cualquier turno `en_curso`, y un turno pasa a `en_curso` cuando el profesional entra a la sala — sin exigir paciente ni cercanía al horario. Caso real: una profesional entró por error a la sala de un turno de la mañana siguiente, salió a los segundos, el turno quedó "atendido" y ella devolvió la plata desde su propia cuenta de MP. Ahora, si el paciente nunca entró (`video_presencia`) y nadie tocó "Finalizar", el turno vuelve a `confirmado` (nunca a `en_espera`: eso hacía que el cron sancionara como "plantada" a quien sí entró), también desde `cerrar-huerfanas`; **sin filas de presencia no se revierte nada** ("no sé" no es "no entró"). Una devolución hecha fuera de Docto (`refunded` sin `reintegro_estado`) marca el reintegro, avisa al equipo si la atención estaba viva o figuraba hecha, y la anula solo si figuraba hecha sin paciente y sin nada escrito; `ejecutarRefund` marca `pendiente` ANTES de llamar a MP para que el webhook no confunda una devolución nuestra con una externa, y si MP dice que el pago ya estaba devuelto no encola (antes: diez reintentos, escalado y el paciente cobraba dos veces). Fuente de verdad: `src/lib/video/presencia.ts`. Deuda: la consulta inmediata no se revierte (su `en_curso` lo escribe el pago, no la sala). Doc: `docs/sprints/2026-09-30-hallazgo-devolucion-externa-y-cierre-sin-paciente.md`.
-- **Mensajes de error de permisos deben ser por plataforma**: iOS no tiene candadito ni barra de direcciones en PWA. Usar `instruccionesPermiso()` de `SalaConsultaPaciente.tsx`.
-
-### Lo que NO se debe hacer
-- NUNCA depender solo de Realtime para transiciones críticas del paciente — siempre polling como respaldo
-- NUNCA poner `estado` como dependencia del useEffect de polling — mata el interval justo cuando más se necesita
-- NUNCA hacer el guardado de documentos bloqueante para el redirect del médico — fire-and-forget
-
-## Sprint Perfil Médico + Receta (pendiente de implementar)
-
-### Contexto
-Las specs están completas (diseño de Sofía aprobado). La migración 040 ya fue aplicada en Supabase. La rama `elastic-perlman` tiene una implementación pero fue descartada por regresiones. Hay que reimplementar desde main limpio.
-
-### Migración 040 (ya aplicada en DB)
-```sql
-ALTER TABLE pacientes
-  ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE,
-  ADD COLUMN IF NOT EXISTS sexo_dni TEXT CHECK (sexo_dni IN ('masculino', 'femenino')),
-  ADD COLUMN IF NOT EXISTS tiene_cobertura BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS obra_social TEXT,
-  ADD COLUMN IF NOT EXISTS nro_afiliado TEXT,
-  ADD COLUMN IF NOT EXISTS perfil_medico_completado BOOLEAN DEFAULT false;
-```
-
-### Pantalla "Tu información médica"
-- Ruta: `/consulta/[id]/info-medica` (CI) y `/turno/[turnoId]/info-medica` (turnos)
-- Aparece después del pago, antes de sala de espera
-- 3 estados: A (primera vez), B (datos completos — confirmación rápida), C (datos parciales)
-- Campos: fecha_nacimiento (date picker nativo), sexo_dni (dos botones táctiles 50/50), toggle cobertura médica con animación
-- Estado B no hace POST innecesario — solo confirma y redirige
-- CTA sticky bottom en mobile
-
-### PDF de receta actualizado
-- Tipografía Inter (no Georgia)
-- Botón explícito "Imprimir / Guardar como PDF" visible en pantalla, oculto en @media print
-- Bloque paciente con datos nuevos (sexo, fecha nacimiento, cobertura)
-- Espacio QR reservado (placeholder sin QR real — SISA/REFEPS pendiente)
-- Marca de agua DUPLICADO si fue generado más de una vez
-
-### Regla de implementación
-Los SELECTs que incluyan columnas nuevas (`fecha_nacimiento`, `sexo_dni`, etc.) SOLO deben estar en archivos nuevos o en archivos que se modifican explícitamente para este sprint. NUNCA agregar columnas nuevas a SELECTs existentes que funcionan en producción — Supabase PostgREST falla si la columna no existe y el redirect al dashboard rompe toda la página.
-
-## Beta Gate — bloqueo de registro (NO volver a confundir)
-Mecanismo en `src/middleware.ts` → `passesBetaGuard`, controlado por la env var **`BETA_PASSWORD`** (cookie `docto_beta_access`). Fuente de verdad completa: **`docs/REGISTRO_BETA_GATE.md`**.
-- **`BETA_PASSWORD` vacía = TODO el sitio caído** (loop de redirección), NO "abierto". Nunca dejarla vacía en prod.
-- Seteada = beta cerrada: solo `/auth/register` y `/auth/registro-medico` piden la contraseña. Hoy `DoctoTest2026!`.
-- **Cambiar una env var requiere DEPLOY FRESCO** (`vercel --prod`/`git push`), nunca `vercel redeploy`.
-- **Previews:** cada preview necesita `BETA_PASSWORD` o loopea y el CI E2E muere. Fix permanente: setear "All Preview" en el dashboard de Vercel. Por-branch: la branch debe existir en el remoto ANTES del `vercel env add`.
-
-## Estado actual (24 Junio 2026)
-- MVP completo. Flujos core (CI + turnos + pagos + video + receta) en produccion.
-- Firma electronica completa: Olas 1-5 mergeadas, auditoria Roberto OK, firma manuscrita OK.
-- REFEPS real: Bus FHIR en produccion (SISA_MODE=produccion). **Gate duro (10/06/2026): un médico real NO puede quedar `aprobado` sin `refeps_validado=true`, jamás.** Las acciones `aprobar`/`reactivar` en `/api/admin/medicos` validan contra REFEPS en el momento (`asegurarRefepsParaAprobar`) y bloquean si la matrícula no figura encontrada+activa. Backstop a nivel DB: constraint `medicos_aprobado_requiere_refeps` (cuentas `es_cuenta_test` exentas). El botón "Validar REFEPS" del panel admin sigue para re-validar.
-- Vademecum CNPM: 16.878 medicamentos oficiales con lazy-load y deteccion dual de controlados.
-- Receta estructurada Rp/IFA: formato AAIP/ReNaPDiS compliant.
-- **LANZADO AL PÚBLICO (10/06/2026):** registro abierto (`BETA_PROTECTED` vacío en middleware; `BETA_PASSWORD` sigue seteada — fail-closed, NUNCA vaciarla) + cobro real general ON (`pago_marketplace` activo desde 10/06 19:15 ART). Prueba real de pagos validada (3 consultas con plata real, split OK: médico ~$27k, Docto $1.500/consulta a GREBA). Cuentas test SIEMPRE simulan el pago (guard en crear-v2). Para re-cerrar beta: re-agregar rutas a `BETA_PROTECTED`.
-- **Sprint 07/06/2026 — Evoluciones + HC + Orden + Alertas:** evolución auto-compuesta determinística (formato `tema: contenido`) + validación humana ("Revisé y confirmo"); "Mis pacientes" + timeline unificado CI+turnos; **unificación de canales** (`WorkspaceConsulta` channel-aware — los turnos guardan igual que CI); panel HC durante la llamada + reorden Documentar + campo Orden (`documentos.tipo='orden'`); pantalla de cierre del paciente sin preview; alertas del médico (sonido + popup "paciente listo" para CI pagada y turno en sala de espera). Detalle: `docs/sprints/2026-06-07-evoluciones-hc-orden-alertas.md`.
-- **Maratón 23/06/2026 (15 PRs #199-#213):** Dashboard CEO `/insights` (datos coherentes + toggle "Solo reales"), funnel del paciente instrumentado, **guard de rol central** (`src/lib/auth/rol.ts`, admin>médico>paciente), médicos no-validados grisados en la clínica, Matrícula Nacional como requisito + aviso en registro, canal de notificaciones admin→médico, reembolsos (refund total revierte el fee + bug del fee corregido), landing cita Ley 27.802. (Falta el doc de sprint dedicado.)
-- **24/06/2026 — Outage dashboard médico + diagnóstico de oferta:** un grant de columna faltante (`celular_personal`) tiraba a TODOS los médicos a la vista de paciente y trababa el toggle "disponible" → causa real del colapso de oferta (0 médicos disponibles). Fixes PR #214 (auto-apagar disponibilidad 4h), #215 (mail bienvenida sin "fundador/5%"), #216 (dashboard/actions/onboarding vía service role + guard). Campaña de reactivación a 6 médicas. Detalle: `docs/sprints/2026-06-24-outage-dashboard-medico-y-diagnostico-oferta.md`.
-- Ver docs/STATUS_REAL_2026-05-28.md para estado detallado con evidencia por item.
-- Ver ROADMAP_OPERATIVO.md para progreso Tier 1 (4/15 completados, 27%).
-- **Camino al lanzamiento:** `docs/CAMINO_A_LANZAMIENTO_V1.md` — **COMPLETADO 10/06/2026**. Prueba real de pagos OK, registro abierto, cobro real general ON. Queda: prueba con 2 testers externos (`docs/PRUEBA_PRE_LANZAMIENTO.md`) y separación GREBA→SRL (las comisiones hoy caen en GREBA).
-
-## Repositorio PÚBLICO — nunca publicar datos de personas reales
-`github.com/diegocartu-dev/uber-doc` es **público**. En código, comentarios,
-mensajes de commit, PRs, comentarios de PR e issues **NUNCA** van: nombres de
-pacientes o médicos reales, emails, teléfonos, DNI/CUIT, IDs de consultas o
-turnos, montos cobrados, ni resultados de consultas a la base de producción
-(conteos de filas, estados de médicos, etc.).
-
-Los casos reales se describen en genérico: "una paciente", "un médico", "un
-reclamo del 01/08". El detalle con nombres vive en la conversación con Diego y
-en el panel admin, nunca en el repo.
-
-Vale también para los agentes: todo prompt de trabajo delegado debe incluir esta
-regla. Incidente que la motiva (07/08/2026): agentes publicaron en PRs el nombre
-de un paciente con el monto que pagó, y el DNI real de un médico quedó escrito
-en `docs/pruebas/`. Corregido, pero el historial de git conserva las versiones
-viejas: por eso lo importante es no escribirlo nunca.
+Dónde: lógica en `src/lib/tabla.ts` (tests en `tests/unit/tabla.test.ts`), componente en `src/components/tabla/TablaDatos.tsx` (`useVistaTabla`, `BarraTabla`, `CabezaTabla`; `tono: "claro"` en el admin, `"oscuro"` en `/insights`), estilos en `src/app/globals.css` (sección "vista de tabla"), ejemplo en `src/app/admin/medicos/MedicosClient.tsx`. Es copia textual de OverCall. No: buscador "solo en las tablas grandes", embudo en una columna que crece sin techo, un componente por pantalla, borrar para limpiar la lista, ni dar por terminada una pantalla con tabla sin buscador, flechas y filtro. Si aplicarlo a una pantalla lleva más de treinta líneas, el componente está mal hecho. Desvío declarado: `src/app/admin/tablero/motor.js` (su filtro por columna es un desplegable). No aplica a `/admin/padron`.
