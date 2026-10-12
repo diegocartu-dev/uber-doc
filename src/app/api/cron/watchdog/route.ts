@@ -31,6 +31,10 @@ const ESPERADOS: Record<string, number> = {
   // Aviso al médico 15 min antes del turno: corre cada minuto. Del que un médico
   // no se pierda un paciente depende que este cron esté vivo, así que se vigila.
   "recordatorio-medico-15min": 1,
+  // Recordatorio al PACIENTE 10 min antes del turno. Estuvo escrito y sin
+  // agendar desde marzo hasta el 12/10: nadie lo vigilaba, así que nadie supo
+  // que no corría.
+  "recordatorios-10min": 1,
   "apagar-disponibilidad": 30,
   "validar-refeps-pendientes": 10,
   // Faltaba: el cron que resuelve las CI vencidas —el que dispara reembolsos y

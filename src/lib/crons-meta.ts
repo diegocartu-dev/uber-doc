@@ -260,6 +260,15 @@ export const CRONS_META: Record<string, CronMeta> = {
     accion:
       "Puede esperar: la tarea vuelve a intentarlo mañana y cierra igual el mes que faltó. Si el mismo mes falla varios días seguidos, abrí Claude Code y decime: \"investigá el cierre mensual de la facturación\".",
   },
+  "recordatorios-10min": {
+    nombre: "Recordatorio al paciente 10 minutos antes del turno",
+    queHace: "le avisa al paciente con turno pagado, por mail y notificación, que su consulta empieza en 10 minutos y que entre a la sala",
+    impacto: "el paciente que reservó y pagó no recibe el aviso de que ya empieza; si no se acuerda solo, el profesional lo espera y la consulta se pierde (caso 12/10)",
+    cadencia: "cada minuto",
+    // Como su par del profesional (recordatorio-medico-15min): una ventana de
+    // aviso perdida NO se recupera sola, el turno pasa.
+    autoRecupera: false,
+  },
   watchdog: {
     nombre: "Guardián de tareas automáticas",
     queHace: "vigila que todas las demás tareas automáticas sigan corriendo y te avisa si alguna se calla",
