@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailRecordatorio24h } from "@/lib/email";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import { fechaAR } from "@/lib/insights/fechas";
 
 async function handler(req: NextRequest) {
@@ -10,6 +11,8 @@ async function handler(req: NextRequest) {
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const corte = cortarSiInstitucional("recordatorios");
+  if (corte) return corte;
 
   const supabase = createAdminClient();
 
