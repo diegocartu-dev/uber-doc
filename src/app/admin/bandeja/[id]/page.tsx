@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DetalleCorreoClient from "./DetalleCorreoClient";
 import { direccionPropiaDe } from "@/lib/correo";
+import type { ContactoSara } from "@/lib/bandeja/sara";
 
 // Detalle de un correo. Abrirlo lo marca leído. /admin/layout ya gatea isAdmin.
 // SEGURIDAD: el HTML recibido NUNCA se renderiza — texto plano o HTML desetiquetado.
@@ -43,6 +44,10 @@ export default async function DetalleCorreoPage({ params }: { params: Promise<{ 
     (c.cuerpo_html ? desetiquetar(c.cuerpo_html as string) : "") ||
     "(sin cuerpo — solo llegaron los metadatos)";
 
+  // Un contacto de Sara no es un mail: no se le "responde" a Sara, se le escribe a
+  // la persona que dejó el contacto, al mail que dio.
+  const sara = c.origen === "sara" ? (c.datos as ContactoSara | null) : null;
+
   const adjuntos = Array.isArray(c.adjuntos)
     ? (c.adjuntos as { filename?: string; name?: string }[]).map((a) => a.filename ?? a.name ?? "adjunto").filter(Boolean)
     : [];
@@ -61,6 +66,8 @@ export default async function DetalleCorreoPage({ params }: { params: Promise<{ 
         errorEnvio: (c.error_envio as string) ?? null,
         adjuntos,
         responderDesde: direccionPropiaDe(c.para as string | null),
+        responderA: sara ? sara.mail : ((c.de as string) ?? ""),
+        sara,
       }}
       respuestas={(respuestas ?? []).map((r) => ({
         id: r.id as string,
