@@ -91,5 +91,13 @@ PR mergeado, deploy verificado en producción. Detalle en `CLAUDE.md`,
   **Decidido (Diego, 12/10):** no se hace nada hasta que el paciente reclame;
   puede haberse dado él mismo por ausente. Si reclama, el aviso que le faltó
   era nuestro.
-- WhatsApp al paciente 10 minutos antes: necesita una plantilla nueva
-  aprobada por Meta; el texto se le propone a Diego antes de pedirla.
+
+## En carpeta (Diego, 12/10: "dejalo todo como está")
+
+Opciones evaluadas y NO aplicadas. Quedan acá por si hace falta usarlas.
+
+| Opción | Qué haría | Por qué no por ahora | Qué hace falta |
+|---|---|---|---|
+| WhatsApp al paciente 10 min antes del turno | sumar el canal que sí mira la gente | Diego: alcanza con el mail (más la notificación de Docto, gratis) | plantilla nueva en Meta (UTILITY). Texto propuesto: *"Hola {{1}}, tu consulta con {{2}} empieza a las {{3}}. Entrá a la sala para que te atienda."* + botón a `/turno/{{4}}/espera`. Costo medido 12/10: USD 0,026 de Meta + 0,005 de Twilio por mensaje |
+| Hora límite de pago en el WhatsApp de "te aceptaron" (resto de D4) | que el paciente sepa hasta cuándo tiene | la sala ya la muestra al abrirla | plantilla nueva en Meta con la hora como variable |
+| Link directo a Mercado Pago en ese WhatsApp | un toque menos | el botón actual ("Pagar e ingresar") ya abre la sala con el botón de MP, y la sala revisa antes si la consulta sigue en pie. Directo a MP, el que toca tarde paga una consulta cerrada y hay que devolverle. Verificado 12/10: ningún caso real de pago sobre consulta cerrada (alertas desde el 13/09; el webhook devuelve solo desde el 10/09). Un turno del 07/10 pagó 3 min después de vencida la reserva y se salvó porque el lugar todavía no se había liberado | crear la preferencia de MP al aceptar, con vencimiento igual al plazo |
