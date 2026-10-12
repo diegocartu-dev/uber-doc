@@ -48,7 +48,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await resend.emails.send({
+    // El SDK de Resend NO lanza: un rechazo vuelve en `error`. Sin mirarlo, la
+    // ruta respondía "código enviado" y el profesional esperaba un código que
+    // no iba a llegar, sin poder firmar la receta (hallazgo 12/10/2026).
+    const { error: errorEnvio } = await resend.emails.send({
       from: "Docto <no-reply@docto.com.ar>",
       to: user.email!,
       subject: "Código de verificación para firma — Docto",
@@ -70,6 +73,7 @@ export async function POST(req: NextRequest) {
         </div>
       `,
     });
+    if (errorEnvio) throw new Error(errorEnvio.message ?? "Resend rechazó el envío");
   } catch (emailErr) {
     console.error("[2fa] error enviando email OTP:", emailErr instanceof Error ? emailErr.message : "unknown error");
     return NextResponse.json(
