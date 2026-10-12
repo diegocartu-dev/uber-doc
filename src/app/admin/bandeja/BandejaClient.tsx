@@ -4,8 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import { BarraTabla, CabezaTabla, Historicos, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Inbox, Send, PenLine, Loader2 } from "lucide-react";
+import { Inbox, Send, PenLine, Loader2, UserPlus } from "lucide-react";
 import { enviarCorreo } from "./actions";
+import { etiquetaTipo, procedencia, type ContactoSara } from "@/lib/bandeja/sara";
 
 interface Correo {
   id: string;
@@ -20,7 +21,12 @@ interface Correo {
   errorEnvio: string | null;
   esRespuesta: boolean;
   ruido?: boolean;
+  /** "sara" = un contacto que dejó Sara (api/bandeja/sara). Va en su pestaña, nunca en Recibidos. */
+  origen: "correo" | "sara";
+  sara: ContactoSara | null;
 }
+
+type Pestana = "entrada" | "salida" | "sara";
 
 function fechaCorta(iso: string): string {
   return new Date(iso).toLocaleString("es-AR", {
@@ -39,9 +45,22 @@ function estadoDe(c: Correo): string {
   return c.leido ? "Atendido" : "Sin leer";
 }
 
-export default function BandejaClient({ correos }: { correos: Correo[] }) {
+// Punto de color + texto: el color acompaña, la palabra informa.
+function EstadoPunto({ estado }: { estado: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: estado === "No salió" ? "#E24B4A" : estado === "Sin atender" ? "#BA7517" : estado === "Sin leer" ? "#378ADD" : "#1D9E75" }}
+      />
+      {estado}
+    </span>
+  );
+}
+
+export default function BandejaClient({ correos, tabInicial }: { correos: Correo[]; tabInicial: Pestana }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"entrada" | "salida">("entrada");
+  const [tab, setTabEstado] = useState<Pestana>(tabInicial);
   const [redactar, setRedactar] = useState(false);
   const [para, setPara] = useState("");
   const [desde, setDesde] = useState<"contacto" | "soporte">("contacto");
@@ -51,18 +70,48 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
   const [enviado, setEnviado] = useState(false);
   const [pendiente, startTransition] = useTransition();
 
-  const entradas = useMemo(() => correos.filter((c) => c.direccion === "entrada"), [correos]);
+  // La pestaña viaja en la URL (?buzon=sara), como la vista de la tabla: el link se
+  // comparte y sobrevive a un F5. replaceState, igual que el hook de la tabla.
+  function setTab(t: Pestana) {
+    setTabEstado(t);
+    const p = new URLSearchParams(window.location.search);
+    if (t === "sara") p.set("buzon", "sara");
+    else p.delete("buzon");
+    const qs = p.toString();
+    window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+  }
+
+  const entradas = useMemo(() => correos.filter((c) => c.direccion === "entrada" && c.origen !== "sara"), [correos]);
   const enviados = useMemo(() => correos.filter((c) => c.direccion === "salida"), [correos]);
+  const deSara = useMemo(() => correos.filter((c) => c.origen === "sara"), [correos]);
   // El contador de "sin leer" es de gente real: no cuenta el ruido plegado.
   const sinLeer = entradas.filter((c) => !c.leido && !c.ruido).length;
-  const visibles = useMemo(() => (tab === "entrada" ? entradas : enviados), [tab, entradas, enviados]);
+  const sinLeerSara = deSara.filter((c) => !c.leido).length;
+  const visibles = useMemo(
+    () => (tab === "entrada" ? entradas : tab === "salida" ? enviados : deSara),
+    [tab, entradas, enviados, deSara],
+  );
 
   // Las notificaciones automáticas (LinkedIn y parecidas) ya no se esconden detrás de un
   // interruptor: son un VALOR de la columna Tipo, con su embudo. Se ven cuántas son, se
   // sacan de un clic, y el buscador las encuentra igual — antes quedaban invisibles y el
   // buscador habría mentido sobre ellas (Diego 03/08 las quiso fuera de la vista; el
   // embudo cumple lo mismo sin ocultarlas del buscador).
-  const COLUMNAS: Columna<Correo>[] = useMemo(() => [
+  //
+  // Sara tiene sus propias columnas, y TODAS con claves que no usa el correo (también
+  // estado y fecha): un filtro puesto en Recibidos no esconde contactos de Sara mientras
+  // el contador de la pestaña sigue diciendo que hay.
+  const COLUMNAS: Columna<Correo>[] = useMemo(() => tab === "sara" ? [
+    {
+      k: "contacto", t: "Contacto", val: (c) => c.sara?.nombre ?? "",
+      busca: (c) => [c.sara?.nombre, c.sara?.mail, c.sara?.telefono].filter(Boolean).join(" "),
+    },
+    { k: "clase", t: "Tipo", val: (c) => (c.sara ? etiquetaTipo(c.sara.tipo) : "") },
+    { k: "procedencia", t: "Institución o profesión", val: (c) => (c.sara ? procedencia(c.sara) : "") },
+    { k: "interes", t: "Interés", val: (c) => c.sara?.interes ?? "", porEvento: true },
+    { k: "s_estado", t: "Estado", val: (c) => estadoDe(c), rango: CICLO_ESTADO },
+    { k: "s_fecha", t: "Recibido", val: (c) => c.creadoEn, tipo: "fecha", porEvento: true },
+  ] : [
     { k: "quien", t: tab === "entrada" ? "De" : "Para", val: (c) => (c.direccion === "entrada" ? c.de : c.para) },
     { k: "asunto", t: "Asunto", val: (c) => c.asunto, porEvento: true },
     { k: "buzon", t: "Buzón", val: (c) => ((c.para || "").toLowerCase().includes("soporte@") ? "soporte@" : "contacto@") },
@@ -91,8 +140,42 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
     [vista.filas, partirRuido],
   );
 
+  // Un contacto de Sara: quién es, de dónde viene y qué quiere. El mail va debajo del
+  // nombre; el teléfono y todo lo demás, en el detalle.
+  function filaSara(c: Correo) {
+    const s = c.sara;
+    const sinLeerEste = !c.leido;
+    return (
+      <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+        <td className="px-4 py-3">
+          <Link href={`/admin/bandeja/${c.id}`} className="block">
+            <span className={"block truncate " + (sinLeerEste ? "font-bold text-gray-900" : "text-gray-700")}>
+              {s?.nombre || "(sin nombre)"}
+            </span>
+            {s?.mail && <span className="block truncate text-[11px] text-gray-400">{s.mail}</span>}
+          </Link>
+        </td>
+        <td className="px-4 py-3 text-[12px] text-gray-500">{s ? etiquetaTipo(s.tipo) : ""}</td>
+        <td className="px-4 py-3">
+          <Link
+            href={`/admin/bandeja/${c.id}`}
+            className={"block truncate " + (sinLeerEste ? "font-semibold text-gray-800" : "text-gray-500")}
+          >
+            {s ? procedencia(s) : ""}
+          </Link>
+        </td>
+        <td className="max-w-[320px] px-4 py-3 text-[12px] text-gray-500">
+          <span className="block truncate" title={s?.interes}>{s?.interes}</span>
+        </td>
+        <td className="px-4 py-3"><EstadoPunto estado={estadoDe(c)} /></td>
+        <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">{fechaCorta(c.creadoEn)}</td>
+      </tr>
+    );
+  }
+
   // Una sola definición de la fila: la usan la tabla principal y la sección "Otros".
   function filaCorreo(c: Correo) {
+    if (c.origen === "sara") return filaSara(c);
     const sinLeerEste = !c.leido && c.direccion === "entrada";
     const estado = estadoDe(c);
     return (
@@ -121,16 +204,7 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
         <td className="px-4 py-3 text-[12px] text-gray-500">
           {c.sistema ? "Automático" : "De una persona"}
         </td>
-        <td className="px-4 py-3">
-          {/* Punto de color + texto: el color acompaña, la palabra informa. */}
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-700">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: estado === "No salió" ? "#E24B4A" : estado === "Sin atender" ? "#BA7517" : estado === "Sin leer" ? "#378ADD" : "#1D9E75" }}
-            />
-            {estado}
-          </span>
-        </td>
+        <td className="px-4 py-3"><EstadoPunto estado={estado} /></td>
         <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">{fechaCorta(c.creadoEn)}</td>
       </tr>
     );
@@ -173,6 +247,17 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
           }`}
         >
           <Send size={15} /> Enviados
+        </button>
+        <button
+          onClick={() => setTab("sara")}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+            tab === "sara" ? "bg-[#378ADD] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <UserPlus size={15} /> Sara
+          {sinLeerSara > 0 && (
+            <span className="rounded-full bg-white/20 px-1.5 text-xs font-bold">{sinLeerSara}</span>
+          )}
         </button>
         <button
           onClick={() => setRedactar(!redactar)}
@@ -239,8 +324,10 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
 
       <BarraTabla
         vista={vista}
-        placeholder={tab === "entrada" ? "Buscar en lo recibido…" : "Buscar en lo enviado…"}
-        cuenta="correos"
+        placeholder={
+          tab === "entrada" ? "Buscar en lo recibido…" : tab === "salida" ? "Buscar en lo enviado…" : "Buscar en lo que dejó Sara…"
+        }
+        cuenta={tab === "sara" ? "contactos" : "correos"}
         enHistoricos={otros.length}
       />
 
@@ -257,7 +344,9 @@ export default function BandejaClient({ correos }: { correos: Correo[] }) {
                     ? "Nada coincide con lo buscado."
                     : tab === "entrada"
                       ? "Todavía no llegó ningún correo."
-                      : "Todavía no enviaste ningún correo."}
+                      : tab === "salida"
+                        ? "Todavía no enviaste ningún correo."
+                        : "Sara todavía no dejó ningún contacto."}
                 </td>
               </tr>
             )}

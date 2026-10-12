@@ -37,6 +37,12 @@ import { assertNoInstitucional } from "@/lib/instancia";
 //    como borrador —exactamente lo que se mandaría— y no sale ningún mail.
 //    Es el interruptor para entrenarlo sin riesgo y prenderlo cuando se confíe.
 //
+// ── LO QUE ESTA RUTA NO VE: EL BUZÓN DE SARA ────────────────────────────────
+// Los contactos que deja Sara (api/bandeja/sara) viven en la misma tabla con
+// `origen = 'sara'`. Los cuatro verbos filtran `origen = 'correo'`: para esta
+// ruta esas filas no existen. Son texto que escribió cualquiera a través de un
+// modelo, y no tienen que llegarle a otro modelo que puede mandar mails.
+//
 // ── LO QUE ESTA RUTA NO RESUELVE ────────────────────────────────────────────
 // El contenido de estos mails incluye datos personales de pacientes y
 // profesionales, y sale hacia un tercero. Eso exige que el proveedor esté
@@ -129,6 +135,7 @@ export async function GET(req: NextRequest) {
       .from("correos")
       .select(CAMPOS)
       .eq("direccion", "entrada")
+      .eq("origen", "correo")
       .eq("atendido", false)
       .order("creado_en", { ascending: false })
       .limit(300);
@@ -149,6 +156,7 @@ export async function GET(req: NextRequest) {
       .from("correos")
       .select(CAMPOS)
       .eq("id", id)
+      .eq("origen", "correo")
       .maybeSingle();
 
     // Un fallo de base NO es un correo inexistente. Sin este corte, los dos se
@@ -212,6 +220,7 @@ async function quienEscribio(
     .from("correos")
     .select("id, de, direccion, resend_id")
     .eq("id", correoId)
+    .eq("origen", "correo")
     .maybeSingle();
 
   if (errCorreo) return NextResponse.json({ error: "No se pudo leer el correo" }, { status: 502 });
@@ -412,6 +421,7 @@ export async function POST(req: NextRequest) {
     .from("correos")
     .select("id, de, para, asunto, direccion, resend_id, remitente_user_id")
     .eq("id", correoId)
+    .eq("origen", "correo")
     .maybeSingle();
 
   if (errOriginal) return NextResponse.json({ error: "No se pudo leer el correo" }, { status: 502 });

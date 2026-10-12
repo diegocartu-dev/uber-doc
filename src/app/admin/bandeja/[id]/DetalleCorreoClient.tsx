@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Paperclip, Reply, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Paperclip, Phone, Reply, X } from "lucide-react";
 import { enviarCorreo, marcarAtendido } from "../actions";
 import { comprimirImagen } from "@/lib/imagenes/comprimir";
+import { normalizarTelefonoAR } from "@/lib/telefono";
+import { etiquetaTipo, type ContactoSara } from "@/lib/bandeja/sara";
 
 // Adjunto ya listo para viajar en la server action. Las imágenes pasan SIEMPRE
 // por comprimirImagen antes de convertirse a base64: un screenshot de iPhone
@@ -41,6 +43,9 @@ interface Correo {
   errorEnvio: string | null;
   adjuntos: string[];
   responderDesde: "contacto" | "soporte";
+  /** A quién sale la respuesta: el remitente del mail, o el mail que dio el contacto de Sara. */
+  responderA: string;
+  sara: ContactoSara | null;
 }
 
 interface Respuesta {
@@ -83,6 +88,52 @@ function CuerpoLegible({ texto }: { texto: string }) {
   );
 }
 
+// La ficha de un contacto de Sara: los datos tal como los dejó, y cómo llegarle.
+function FichaSara({ s }: { s: ContactoSara }) {
+  // WhatsApp solo si el número se puede llevar a un celular argentino. Si no (un fijo
+  // raro, un número de afuera), queda el "Llamar", que funciona con lo que vino.
+  const whatsapp = normalizarTelefonoAR(s.telefono);
+  const filas: [string, ReactNode][] = [
+    ["Tipo", etiquetaTipo(s.tipo)],
+    ["Nombre", s.nombre],
+    ...(s.institucion ? [["Institución", s.institucion] as [string, ReactNode]] : []),
+    ...(s.profesion ? [["Profesión", s.profesion] as [string, ReactNode]] : []),
+    ["Mail", s.mail],
+    [
+      "Teléfono",
+      <span key="tel" className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>{s.telefono}</span>
+        <a href={`tel:${s.telefono.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1 text-[#378ADD] hover:underline">
+          <Phone size={13} /> Llamar
+        </a>
+        {whatsapp && (
+          <a
+            href={`https://wa.me/${whatsapp.replace("+", "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#378ADD] hover:underline"
+          >
+            WhatsApp
+          </a>
+        )}
+      </span>,
+    ],
+    ["Interés", s.interes || "—"],
+    ["Aceptó ser contactado/a", "Sí"],
+    ["Lo recibió Sara", fechaLarga(s.recibido)],
+  ];
+  return (
+    <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 border-t border-gray-100 pt-4 text-[15px] sm:grid-cols-[180px_1fr]">
+      {filas.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-sm text-gray-500">{k}</dt>
+          <dd className="break-words text-gray-800">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function fechaLarga(iso: string): string {
   return new Date(iso).toLocaleString("es-AR", {
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -94,8 +145,12 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
   const router = useRouter();
   const [responder, setResponder] = useState(false);
   const [cuerpo, setCuerpo] = useState("");
+  // A un contacto de Sara no se le contesta un mail que nunca escribió: el asunto
+  // interno ("Institución · …") no tiene que llegarle. Se arranca de "Docto".
   const [asunto, setAsunto] = useState(
-    correo.asunto.toLowerCase().startsWith("re:") ? correo.asunto : `Re: ${correo.asunto}`
+    correo.sara
+      ? "Docto"
+      : correo.asunto.toLowerCase().startsWith("re:") ? correo.asunto : `Re: ${correo.asunto}`
   );
   const [error, setError] = useState<string | null>(null);
   const [adjuntos, setAdjuntos] = useState<AdjuntoLocal[]>([]);
@@ -129,7 +184,7 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
     setError(null);
     startTransition(async () => {
       const r = await enviarCorreo({
-        para: correo.de,
+        para: correo.responderA,
         asunto,
         cuerpo,
         desde: correo.responderDesde,
@@ -156,7 +211,10 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
 
   return (
     <div className="p-6 lg:p-8">
-      <Link href="/admin/bandeja" className="inline-flex items-center gap-1 text-sm text-[#378ADD] hover:underline">
+      <Link
+        href={correo.sara ? "/admin/bandeja?buzon=sara" : "/admin/bandeja"}
+        className="inline-flex items-center gap-1 text-sm text-[#378ADD] hover:underline"
+      >
         <ArrowLeft size={14} /> Volver a la Bandeja
       </Link>
 
@@ -199,9 +257,13 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
           </p>
         )}
 
-        <div className="mt-4 whitespace-pre-wrap break-words border-t border-gray-100 pt-4 text-[15px] leading-relaxed text-gray-800">
-          <CuerpoLegible texto={correo.cuerpo} />
-        </div>
+        {correo.sara ? (
+          <FichaSara s={correo.sara} />
+        ) : (
+          <div className="mt-4 whitespace-pre-wrap break-words border-t border-gray-100 pt-4 text-[15px] leading-relaxed text-gray-800">
+            <CuerpoLegible texto={correo.cuerpo} />
+          </div>
+        )}
 
         {correo.adjuntos.length > 0 && (
           <div className="mt-4 border-t border-gray-100 pt-3">
@@ -238,12 +300,12 @@ export default function DetalleCorreoClient({ correo, respuestas }: { correo: Co
               onClick={() => setResponder(true)}
               className="flex items-center gap-1.5 rounded-lg bg-[#378ADD] px-4 py-2 text-sm font-medium text-white"
             >
-              <Reply size={15} /> Responder
+              <Reply size={15} /> {correo.sara ? "Escribirle" : "Responder"}
             </button>
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-gray-500">
-                Para: <span className="font-medium text-gray-700">{correo.de}</span>
+                Para: <span className="font-medium text-gray-700">{correo.responderA}</span>
                 {" · "}desde <span className="font-medium text-gray-700">{correo.responderDesde}@docto.com.ar</span>
               </p>
               <input

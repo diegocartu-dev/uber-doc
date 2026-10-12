@@ -50,3 +50,35 @@ mail a *@docto.com.ar
 - Prospección: pocos mails por día y personalizados — el volumen masivo
   quema la reputación del dominio (consejo transmitido de Validdar).
 - El aviso por mail a Diego es apagable (en `src/lib/correo.ts`).
+
+## Buzón de Sara (12/10/2026)
+
+Pedido de AC Ai (`AC Ai/ac-ai/docs/pedido-docto-buzon-sara.md`), decidido por
+Diego: Sara —la secretaria de pacientes que atiende AC Ai— deja en el panel los
+contactos que tiene que seguir una persona (una institución interesada, un
+profesional que el registro todavía no admite). Diego: *"claramente no sería un
+mail"*, y que **no se mezcle con soporte**: van en la pestaña **Sara** de la
+Bandeja (`/admin/bandeja?buzon=sara`), con su propio contador de sin leer.
+
+- **Misma tabla, otro origen.** `correos.origen = 'sara'` (el resto es
+  `'correo'`), los datos validados en `correos.datos` y el id de Sara en
+  `id_externo` (único por origen: un reintento no duplica). El día que un solo
+  agente atienda soporte y Sara, unificar es sacar un filtro, no mover datos.
+- **La puerta:** `POST /api/bandeja/sara`, de un solo verbo (escribir un
+  contacto). Clave propia guardada como sha256 en `claves_externas`; un error de
+  base responde 401, no regala acceso. Rotar = insertar una nueva y poner
+  `activa = false` en la vieja. En la instancia institucional responde 404.
+- **Las reglas** (`src/lib/bandeja/sara.ts`, con tests) son las del buzón de la
+  demo de Sara: sin `acepta_contacto: true` no entra nada, mail con forma de
+  mail, teléfono con al menos 8 dígitos, interés con tope de 300. Todo campo
+  fuera del contrato se descarta. Que no viajen datos de salud lo garantiza Sara.
+- **Grokbot no lo ve:** los cuatro verbos de `api/bandeja/bot` filtran
+  `origen = 'correo'`. Un texto que escribió cualquiera a través de un modelo no
+  tiene que llegarle a otro modelo que puede mandar mails.
+- **En el detalle** no hay "Responder" a Sara: "Escribirle" sale al mail que dio
+  la persona (desde contacto@, queda en el hilo y marca el contacto atendido),
+  más "Llamar" y WhatsApp cuando el número se puede llevar a celular argentino.
+- **Migración** `20261012_buzon_sara.sql`, aplicada en las DOS bases (espejo
+  `migrations-institucional/034_buzon_sara.sql`; la página
+  de la Bandeja también existe en la instancia y lee estas columnas).
+- **Contrato para AC Ai:** `docs/respuesta-docto-buzon-sara.md`.
