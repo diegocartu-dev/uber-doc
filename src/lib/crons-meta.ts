@@ -269,6 +269,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     // aviso perdida NO se recupera sola, el turno pasa.
     autoRecupera: false,
   },
+  "demo-cerrar-abiertas": {
+    nombre: "Limpieza de reuniones de demostración (instancia institucional)",
+    queHace: "borra los datos de las reuniones de demostración que quedaron abiertas más de 24 horas",
+    impacto: "quedan en la base de la provincia los nombres y celulares de quienes fueron a una demostración, más fichas y pacientes de utilería",
+    cadencia: "cada hora",
+    autoRecupera: true,
+  },
   watchdog: {
     nombre: "Guardián de tareas automáticas",
     queHace: "vigila que todas las demás tareas automáticas sigan corriendo y te avisa si alguna se calla",
