@@ -60,18 +60,17 @@ async function latido(key: string, ok: boolean, error?: string): Promise<void> {
       const nombre = meta?.nombre ?? `Tarea "${key}"`;
       // "Se recuperó" no quiere decir que no se perdió nada (Diego, 12/10/2026:
       // "dice después que se recuperó, pero en el momento perdemos pacientes").
-      // Una tarea de aviso que estuvo caída no manda después lo que no mandó:
-      // el mail dice desde cuándo y, si es de las que no se recuperan solas, que
+      // Una tarea de avisos que estuvo caída no manda después lo que no mandó:
+      // el mail dice desde cuándo y, si es de avisos (`pierdeLoNoHecho`), que
       // hay que revisar qué se perdió en ese lapso.
       const lapso = ultimoOkPrevio
         ? ` Estuvo sin correr bien desde ${horaArgentina(new Date(ultimoOkPrevio))} hs.`
         : "";
-      const queHacer =
-        meta && !meta.autoRecupera
-          ? `\n\nOJO: lo que tenía que hacer en ese lapso NO se hace solo ahora. Impacto: ${meta.impacto}. Abrí Claude Code y decime: "revisá qué se perdió mientras falló el cron ${key}".`
-          : " No tenés que hacer nada.";
+      const queHacer = meta?.pierdeLoNoHecho
+        ? `\n\nOJO: puede que algunos avisos de ese lapso no hayan salido, y no se mandan después. Impacto: ${meta.impacto}. Abrí Claude Code y decime: "revisá qué se perdió mientras falló el cron ${key}".`
+        : " No tenés que hacer nada.";
       await sendDoctoAlert(
-        meta && !meta.autoRecupera
+        meta?.pierdeLoNoHecho
           ? `✅ Tarea recuperada — revisar lo que se perdió: ${nombre}`
           : `✅ Tarea recuperada: ${nombre}`,
         `${nombre} volvió a correr bien (${horaArgentina()} hs).${lapso}${queHacer}\n\n———\nDetalle técnico (para Claude): cron ${key}, corrida OK registrada tras alerta previa${ultimoOkPrevio ? `; último OK anterior ${ultimoOkPrevio}` : ""}.`

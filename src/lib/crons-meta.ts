@@ -32,6 +32,15 @@ export interface CronMeta {
    * sin aviso para siempre), y correrlo a mano el mismo día todavía la salva.
    */
   accion?: string;
+  /**
+   * true = tarea de AVISOS: lo que tenía que mandar mientras estuvo caída no se
+   * manda después (el turno ya pasó, el paciente ya se fue). El mail verde de
+   * recuperación lo dice y pide revisar. NO confundir con `autoRecupera: false`,
+   * que solo quiere decir "frecuente, avisá ya": un cron que resuelve vencidos
+   * se pone al día solo al volver, y decirle a Diego que perdió algo sería una
+   * alarma falsa (revisión adversarial del 12/10/2026).
+   */
+  pierdeLoNoHecho?: boolean;
 }
 
 export const CRONS_META: Record<string, CronMeta> = {
@@ -57,6 +66,7 @@ export const CRONS_META: Record<string, CronMeta> = {
     autoRecupera: false,
     accion:
       "Sí, avisá HOY: esta tarea busca los turnos de mañana con fecha exacta, así que la tanda salteada no se recupera sola — pero si se corre a mano antes de medianoche, esos pacientes todavía reciben su recordatorio. Abrí Claude Code y decime: \"investigá el cron recordatorios y corré la tanda perdida\".",
+    pierdeLoNoHecho: true,
   },
   "recordatorio-medico-15min": {
     nombre: "Aviso al médico 15 min antes del turno",
@@ -68,6 +78,7 @@ export const CRONS_META: Record<string, CronMeta> = {
     // caídas, y una ventana de aviso perdida NO se recupera sola. El mail tiene
     // que decir "avisá ahora", no "esperá que se recupera".
     autoRecupera: false,
+    pierdeLoNoHecho: true,
   },
   "limpieza-estudios-temp": {
     nombre: "Limpieza de archivos temporales",
@@ -103,6 +114,7 @@ export const CRONS_META: Record<string, CronMeta> = {
     impacto: "un médico puede no enterarse de que lo esperan → riesgo de plantón con plata de por medio (caso Romina)",
     cadencia: "cada 10 minutos",
     autoRecupera: false,
+    pierdeLoNoHecho: true,
   },
   "apagar-disponibilidad": {
     nombre: "Apagado automático de disponibilidad",
@@ -124,6 +136,7 @@ export const CRONS_META: Record<string, CronMeta> = {
     impacto: "el paciente que se fue de la pantalla no se entera de que lo aceptaron, y el profesional queda esperando indefinidamente a alguien que no va a pagar (le sacamos el botón de cancelar los primeros 3 minutos contra la promesa de que esto lo libera)",
     cadencia: "cada minuto",
     autoRecupera: false,
+    pierdeLoNoHecho: true,
   },
   "revisar-caidas": {
     nombre: "Revisor de caídas (etiqueta de cada consulta que no se atendió)",
@@ -268,6 +281,7 @@ export const CRONS_META: Record<string, CronMeta> = {
     // Como su par del profesional (recordatorio-medico-15min): una ventana de
     // aviso perdida NO se recupera sola, el turno pasa.
     autoRecupera: false,
+    pierdeLoNoHecho: true,
   },
   "demo-cerrar-abiertas": {
     nombre: "Limpieza de reuniones de demostración (instancia institucional)",
