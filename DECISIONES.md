@@ -30,7 +30,7 @@ Cómo se usa:
 
 ### Pedidos de la agencia de marketing (12/10), para el relanzamiento del 15/10
 
-Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pendientes-producto.md` (y la auditoría web del mismo día). La agencia no toca este repo: los implementa esta sesión cuando Diego los pase.
+Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pendientes-producto.md`, la auditoría web del mismo día y `~/EMPRESA SE MARKETING/campanas/docto/2026-10-relanzamiento-ig/revision-legal.md` §8. La agencia no toca este repo: los implementa esta sesión cuando Diego los pase.
 
 | Prioridad | Qué |
 |---|---|
@@ -42,6 +42,10 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 | 🟠 | `/medicos` dice que Nova confecciona recetas dictadas: Nova hace solo agenda. |
 | 🟠 | Mockups de la home con matrícula ficticia, "~4 min" y un precio. |
 | 🟡 | El resto de la auditoría web (orden de `/medicos`, certificado en el hero, FAQ del médico). |
+| 🟠 (revisión legal del relanzamiento, §8) | **Política de privacidad:** no identifica la razón social ni el domicilio del responsable de los datos (Ley 25.326, art. 6), no declara a Twilio ni el reconocimiento de voz del dictado. |
+| 🟠 (ídem) | **Términos vs. código:** los T&C dicen que si el médico cancela "elegís vos: reprogramás o te reembolsamos", pero el código reembolsa directo (`TerminosContent.tsx` vs. `cancelaciones.ts`). Hay que alinearlos (decisión de Diego: cuál de los dos manda). |
+| 🟠 (ídem) | **Reintegro manual:** cuando el médico no tiene saldo o token, el reintegro termina en una transferencia manual y la carga del CVU del paciente no está hecha (`api/admin/reembolsos`). Para sostener "la plata vuelve sola", en esos casos Docto tiene que poder pagar. Ligado al plan de pagos en pausa (1.11). |
+| — (ídem) | El comprobante para pedir reintegro a la obra social no existe (solo queda el registro de pago de Mercado Pago): no se promete. |
 
 ## 2. Aprobado y sin implementar (no espera decisión: espera trabajo)
 
