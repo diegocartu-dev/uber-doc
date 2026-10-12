@@ -22,14 +22,26 @@ function resend(): Resend {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function conRetry<T>(
+export async function conRetry<T>(
   fn: () => Promise<T>,
   contexto: string,
   maxReintentos = 2
 ): Promise<T> {
   for (let intento = 1; intento <= maxReintentos; intento++) {
     try {
-      return await fn();
+      const resultado = await fn();
+      // El SDK de Resend NO lanza: un rechazo vuelve como `{ data: null, error }`.
+      // Sin este chequeo, este reintento no reintentaba nunca y un mail
+      // rechazado se logueaba como "enviado" (hallazgo 12/10/2026). Se convierte
+      // en excepción para que corra la misma lógica de abajo: 4xx no se
+      // reintenta; 5xx, 429 y "sin respuesta" (statusCode null) sí.
+      const errorResend = (resultado as { error?: { message?: string; statusCode?: number | null } | null } | null)?.error;
+      if (errorResend) {
+        throw Object.assign(new Error(errorResend.message ?? "Resend rechazó el envío"), {
+          statusCode: errorResend.statusCode ?? undefined,
+        });
+      }
+      return resultado;
     } catch (err) {
       const status = (err as any)?.statusCode ?? (err as any)?.status;
       if (status && status >= 400 && status < 500 && status !== 429) {
@@ -279,6 +291,9 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
 
     const ics = generarICS(datos, "REQUEST");
 
+    // La clave va en las OPCIONES del envío (encabezado del pedido a Resend).
+    // Antes iba en `headers` del mail, que es un encabezado del correo: Resend
+    // no la leía y no deduplicaba nada.
     const idempotencyKey = `${turnoId}-confirmado`;
 
     await conRetry(
@@ -287,9 +302,8 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
         to: datos.pacienteEmail,
         subject: `Turno confirmado con ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} — ${formatearFecha(datos.fecha)}`,
         html,
-        headers: { "Idempotency-Key": idempotencyKey },
         attachments: [{ filename: "turno-docto.ics", content: Buffer.from(ics).toString("base64") }],
-      }),
+      }, { idempotencyKey }),
       turnoId
     );
 
@@ -345,9 +359,8 @@ export async function enviarEmailTurnoCancelado(
         to: datos.pacienteEmail,
         subject: asunto,
         html,
-        headers: { "Idempotency-Key": idempotencyKey },
         attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
-      }),
+      }, { idempotencyKey }),
       turnoId
     );
 
@@ -403,9 +416,8 @@ export async function enviarEmailTurnoAusenteMedico(turnoId: string): Promise<vo
         to: datos.pacienteEmail,
         subject: asunto,
         html,
-        headers: { "Idempotency-Key": `${turnoId}-ausente-medico` },
         attachments: [{ filename: "cancelacion-docto.ics", content: Buffer.from(ics).toString("base64") }],
-      }),
+      }, { idempotencyKey: `${turnoId}-ausente-medico` }),
       turnoId
     );
 
@@ -478,8 +490,7 @@ export async function enviarEmailConsultaAceptada(consultaId: string): Promise<v
         to: user.email!,
         subject: `${medicoConArt} acept\u00f3 tu consulta — falta el pago para empezar`,
         html,
-        headers: { "Idempotency-Key": `${consulta.id}-aceptada` },
-      }),
+      }, { idempotencyKey: `${consulta.id}-aceptada` }),
       consulta.id
     );
     console.log("[email] consulta aceptada enviada:", consulta.id);
@@ -519,13 +530,18 @@ export async function enviarDocumentoMedico(params: {
     <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">&mdash; Docto</p>
   `);
 
-  await resend().emails.send({
-    from: FROM,
-    to: pacienteEmail,
-    subject: `${sujetoMedico} te envió un documento de tu consulta`,
-    html,
-    attachments: [{ filename: archivo.filename, content: archivo.content }],
-  });
+  // Por conRetry: si Resend lo rechaza, el error sube a la ruta, que responde
+  // 500 y no anota el documento como enviado. Antes se anotaba igual.
+  await conRetry(
+    () => resend().emails.send({
+      from: FROM,
+      to: pacienteEmail,
+      subject: `${sujetoMedico} te envió un documento de tu consulta`,
+      html,
+      attachments: [{ filename: archivo.filename, content: archivo.content }],
+    }),
+    "documento-medico"
+  );
 
   console.log("[email] documento médico enviado a:", pacienteEmail);
 }
@@ -618,12 +634,15 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
       ${boton("Ver mi turno", urlSala, AZUL)}
     `);
 
-    await resend().emails.send({
-      from: FROM,
-      to: datos.pacienteEmail,
-      subject: `Recordatorio: consulta mañana con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}`,
-      html,
-    });
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: datos.pacienteEmail,
+        subject: `Recordatorio: consulta mañana con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}`,
+        html,
+      }, { idempotencyKey: `recordatorio-24h/${turnoId}` }),
+      turnoId
+    );
 
     console.log("[email] recordatorio 24h enviado:", turnoId);
   } catch (err) {
@@ -851,12 +870,15 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
       </p>
       <p style="margin:16px 0 0;font-size:14px;color:#6b7280;">&mdash; El equipo de Docto</p>`;
 
-    await resend().emails.send({
-      from: FROM,
-      to: email,
-      subject: "Verificá tu identidad para empezar a recibir pacientes",
-      html: wrapHtml("Verificación de identidad pendiente", contenido),
-    });
+    await conRetry(
+      () => resend().emails.send({
+        from: FROM,
+        to: email,
+        subject: "Verificá tu identidad para empezar a recibir pacientes",
+        html: wrapHtml("Verificación de identidad pendiente", contenido),
+      }),
+      "recordatorio-identidad"
+    );
   } catch (e) {
     console.error("[email] recordatorio identidad falló:", e instanceof Error ? e.message : e);
   }
