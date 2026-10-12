@@ -7,6 +7,20 @@ on:
     # 3AM Argentina (UTC-3) = 6AM UTC
     - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      # Plan B para el gate de un PR cuando Vercel arma la vista previa pero no
+      # se lo avisa a GitHub (12/10/2026: incidente en su integración con Git;
+      # el gate esperaba un aviso que no llegaba y el merge quedaba trabado).
+      # Se lanza sobre la rama del PR con la URL de SU vista previa:
+      #   gh workflow run playwright.yml --ref <rama> -f preview_url=https://….vercel.app
+      # El check queda sobre el último commit de la rama, con el mismo nombre que
+      # pide la protección de main. Antes de correr nada, el paso "Verificar que
+      # la vista previa es de este commit" exige que /api/health de esa URL
+      # responda el mismo SHA: no se puede aprobar un PR probando otro código.
+      preview_url:
+        description: "Vista previa del PR (https://…vercel.app). Vacío = corrida contra producción"
+        required: false
+        default: ""
 
 permissions:
   deployments: read
@@ -91,10 +105,30 @@ jobs:
           PR_SHA: ${{ github.event.pull_request.head.sha }}
           GH_REPO: ${{ github.repository }}
 
+      - name: Verificar que la vista previa es de este commit
+        if: github.event_name == 'workflow_dispatch' && inputs.preview_url != ''
+        run: |
+          if [[ ! "$DISPATCH_URL" =~ ^https://[a-z0-9-]+\.vercel\.app/?$ ]]; then
+            echo "::error::preview_url no es una URL de Vercel: $DISPATCH_URL"
+            exit 1
+          fi
+          SHA_VISTA=$(curl -fsS -H "x-vercel-protection-bypass: $BYPASS" "${DISPATCH_URL%/}/api/health" | jq -r '.sha // empty')
+          if [ "$SHA_VISTA" != "$GITHUB_SHA" ]; then
+            echo "::error::La vista previa sirve el commit '$SHA_VISTA' y esta corrida es de '$GITHUB_SHA'"
+            exit 1
+          fi
+          echo "Vista previa verificada: sirve $GITHUB_SHA"
+        env:
+          DISPATCH_URL: ${{ inputs.preview_url }}
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
       - name: Set test URL
         id: test-url
         run: |
-          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_URL" ]; then
+            echo "base_url=${DISPATCH_URL%/}" >> "$GITHUB_OUTPUT"
+            echo "Testing against preview (lanzado a mano): $DISPATCH_URL"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
             if [[ ! "$PREVIEW_URL" =~ ^https://.*\.vercel\.app/?$ ]]; then
               echo "::error::Preview URL does not match expected Vercel domain: $PREVIEW_URL"
               exit 1
@@ -108,6 +142,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          DISPATCH_URL: ${{ inputs.preview_url }}
           FALLBACK_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
 
       - name: Reset cuentas de prueba
@@ -135,14 +170,14 @@ jobs:
           retention-days: 14
 
       - name: Cleanup datos de prueba
-        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.preview_url == ''))
         run: node scripts/sereno-cleanup.mjs
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Reportar resultado a /admin/sereno
-        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.preview_url == ''))
         run: node scripts/sereno-report.mjs
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
