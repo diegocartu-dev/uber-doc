@@ -24,6 +24,7 @@ Plataforma de telemedicina que conecta pacientes con médicos para consultas vir
 - Supabase RLS activo. Usar supabaseAdmin para bypass.
 - **Grants de columna (NO confundir con RLS de fila):** `medicos` tiene columnas SIN `GRANT SELECT` para `authenticated` (PII/internas: `celular_personal`, `dni`, `cuit`, `email_personal`, `refeps_*`, `notas_admin`, etc.). Si un `SELECT` con el cliente RLS incluye **una sola** de esas columnas, PostgREST falla la query ENTERA (`permission denied for column`) y devuelve `null` SILENCIOSO. Para leer la **fila propia** con columnas sensibles, usar **service role** (`createAdminClient`) filtrando por `user_id`, NUNCA el cliente RLS. NO grantear PII a `authenticated`: la policy pública de `medicos` la expondría a cualquier paciente. Caso real: outage del dashboard médico 19-24/06 (ver `docs/sprints/2026-06-24-outage-dashboard-medico-y-diagnostico-oferta.md`).
 - **Columnas de confianza de `medicos` (hallazgo 01/10/2026):** la clave pública de Supabase está en el navegador, así que todo lo que la RLS y los grants permiten, un profesional lo puede hacer directo, salteando la aplicación. El trigger `proteger_verificacion_medico` revierte, para la sesión del usuario, todo lo que decide plata, ruteo o verificación (categoría, jurisdicciones, especialidades, REFEPS, identidad, DNI y matrícula, notas del equipo, entre otras), y **nadie crea fichas de médico con su sesión** (el alta es del servidor). **Columna nueva de ese tipo → se suma al trigger en la misma migración.** Escritura nueva del profesional → con service role filtrando por su `user_id`, nunca con el cliente RLS: si la columna está protegida, el cliente RLS "guarda" y el valor no cambia, en silencio. Detalle: `docs/sprints/2026-10-01-hallazgo-columnas-de-confianza-medicos.md`.
+- **Cron nuevo = cuatro lugares (12/10/2026):** la ruta `src/app/api/cron/<nombre>/route.ts` con `withCron("<nombre>")`, su schedule en `vercel.json`, su intervalo en `src/lib/crons-esperados.ts` (watchdog) y su ficha en `src/lib/crons-meta.ts`. `tests/unit/crons-agendados.test.ts` no deja mergear si falta uno. Hora del turno = hora argentina: nunca `getHours()`/`toISOString().slice(0,10)` del servidor (UTC) para comparar contra `turnos.fecha`/`hora_inicio`; usar `fechaAR` o el desfase `-03:00` explícito. Caso: el recordatorio de 10 min al paciente, escrito en marzo, nunca agendado y además con la hora corrida 3 h — `docs/sprints/2026-10-12-recordatorio-10m-nunca-agendado.md`.
 - Realtime: filtros en non-PK fallan. Escuchar sin filtros, filtrar en JS.
 - Video LiveKit: Safari OK, Chrome iPhone revisar.
 - UX simple para médico de 70 años.
@@ -67,6 +68,20 @@ Casos detectados que motivan esta regla:
 - **28/05/2026 — Status report Marcos:** Reportó REFEPS en `SISA_MODE=simulacion` basado en `.env.local`. Producción tenía `SISA_MODE=produccion` en Vercel desde hacía 5 días, con validaciones reales ejecutadas y persistidas en DB.
 
 ## Protocolo de sprint
+
+### Norma suprema: lo terminado se impacta (Diego, 12/10/2026)
+*"Quiero que cuando terminamos algo lo impactes por norma suprema sin mi consentimiento. Porque si lo dimos por terminado es que está ok."*
+
+**Terminado = en producción y verificado.** No existe "listo, falta mergear", "falta aplicar la migración", "falta correr el script" ni "falta que Vercel lo agende". Cuando un trabajo pasó sus pruebas (y su revisión independiente si mueve plata o toca crons), el implementador, **sin pedir permiso**:
+1. aplica las migraciones en las bases que correspondan (las dos si el código corre en las dos) y verifica la columna o el cambio en la base;
+2. mergea el PR cuando los checks están en verde (nunca `--admin`, nunca saltear la branch protection);
+3. espera el deploy de producción y verifica en vivo que lo nuevo corre (endpoint, `cron_runs`, logs);
+4. reporta qué quedó, con el SQL aplicado, en 2-5 líneas.
+
+Siguen necesitando el OK de Diego: mensajes a pacientes o profesionales reales, texto nuevo de cara a ellos que cambie lo que se les promete, y decisiones de producto o de plata (reintegros, cobros). Todo lo demás, si está terminado, se impacta.
+
+Por qué: el 12/10 se descubrió que el recordatorio de 10 minutos al paciente estaba escrito desde marzo y nunca se había agendado. Un trabajo "terminado" que no llegó a producción es peor que uno sin hacer: parece hecho.
+
 - **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
 - **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
 - **Extensión de alcance se reporta SIEMPRE.** Aunque sea consecuencia técnica obligatoria de otro ticket, se documenta en el reporte con razonamiento. La decisión de aprobar la extensión la toma Diego, no el implementador.
