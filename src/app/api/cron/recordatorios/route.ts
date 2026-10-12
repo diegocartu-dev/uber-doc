@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarEmailRecordatorio24h } from "@/lib/email";
 import { logInfo, logError } from "@/lib/logger";
 import { withCron } from "@/lib/cron-guard";
+import { fechaAR } from "@/lib/insights/fechas";
 
 async function handler(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -12,9 +13,12 @@ async function handler(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const manana = new Date();
-  manana.setDate(manana.getDate() + 1);
-  const fechaManana = manana.toISOString().slice(0, 10);
+  // "Mañana" en hora ARGENTINA. Con la fecha del servidor (UTC) daba bien a la
+  // hora agendada (09:00 ART = 12:00 UTC, mismo día), pero corrido a mano
+  // después de las 21:00 ART —que es lo que la alerta de este cron le pide a
+  // Diego cuando se saltea— ya era el día siguiente en UTC y buscaba los turnos
+  // de pasado mañana: la tanda perdida seguía perdida (hallazgo 12/10/2026).
+  const fechaManana = fechaAR(-1);
 
   const { data: turnos, error } = await supabase
     .from("turnos")
