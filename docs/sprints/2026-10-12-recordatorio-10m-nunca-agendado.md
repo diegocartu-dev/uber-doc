@@ -41,7 +41,30 @@ Mismo barrido, otros dos crons agendados que el watchdog no vigilaba:
 | El recordatorio de 24 h calcula "mañana" en hora argentina (corrido a mano después de las 21:00 buscaba pasado mañana) | `api/cron/recordatorios` |
 | El mail verde de "tarea recuperada" dice desde cuándo falló y, si la tarea no se recupera sola, que hay que revisar qué se perdió | `lib/cron-guard.ts` |
 
-Migración aplicada en las dos bases: `20261012_turnos_recordatorio_10m.sql`.
+Migración aplicada en las dos bases: `20261012_turnos_recordatorio_10m.sql`
+(B2C) y su espejo `migrations-institucional/033_turnos_recordatorio_10m.sql`.
+
+### Lo que agregó la revisión adversarial
+
+- **Los dos recordatorios al paciente no corren en la instancia institucional**
+  (pasan a la Capa C). Ahí mandarían un mail de Docto con link a la sala del
+  B2C, y a los pacientes del padrón cargados sin mail, al alias sin buzón. El
+  de 24 h nunca había procesado un turno en esa base: el corte no saca nada hoy.
+- El mail de "tarea recuperada" pide revisar lo perdido **solo** en las tareas
+  de avisos (`pierdeLoNoHecho` en `CRONS_META`), no en las que se ponen al día
+  solas al volver.
+- La agenda recuerda los turnos que ya estuvieron en sala (si el profesional lo
+  empezó desde el celular, la PC no dice "todavía no entró") y dice "te
+  avisamos" sin nombrar el WhatsApp, que tiene un freno de 30 min.
+- El mail de 10 min lleva clave de idempotencia; el test de crons exige
+  `export const GET = withCron(...)`.
+- `recordatorio_10m_at` no prueba que el aviso llegó: se marca antes de mandar
+  y también cuando el paciente no lo pidió.
+
+Queda una observación sin cambio: el link del recordatorio lleva a la sala de
+espera 10 minutos antes, así que el "paciente esperando" le llega al
+profesional antes de la hora y `repush-esperando` cuenta la espera desde ahí.
+Es lo mismo que pasa hoy con cualquier paciente que entra temprano.
 
 ## Barrido de agujeros de la misma familia
 
