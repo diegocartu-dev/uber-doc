@@ -28,6 +28,21 @@ Cómo se usa:
 | 1.12 | 10/06 | **Separación GREBA → SRL.** Las comisiones caen en GREBA; la app en las tiendas también espera la SRL. | — | — |
 | 1.13 | 10/06 | **¿Se hizo la prueba con 2 testers externos?** Quedó como pendiente del lanzamiento. | `docs/PRUEBA_PRE_LANZAMIENTO.md` | sin registro de que se haya hecho |
 
+### Pedidos de la agencia de marketing (12/10), para el relanzamiento del 15/10
+
+Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pendientes-producto.md` (y la auditoría web del mismo día). La agencia no toca este repo: los implementa esta sesión cuando Diego los pase.
+
+| Prioridad | Qué |
+|---|---|
+| 🔴 antes del 15/10 | La sala del paciente dice que el médico "está grabando" sus indicaciones cuando dicta → "está dictando" (`src/app/consulta/[id]/sala/SalaConsultaPaciente.tsx`). La marca dice, con razón, que las videollamadas no se graban. |
+| 🔴 antes del 15/10 | Redirección `docto.com.ar/ig` → home con UTMs del relanzamiento (link de la bio de Instagram). |
+| 🔴 si se usa la frase "ni Docto puede aprobar a alguien que no figure" | Revalidar contra REFEPS a todos los médicos aprobados antes del 05/10 (hasta esa fecha se podía crear una ficha con `refeps_validado=true` sin consultar REFEPS). |
+| 🟠 | Recetas sin CUIR (Res. MS 2214/2025, art. 6): la columna `cuir` está vacía "hasta integración". |
+| 🟠 | `/medicos` dice "comisión" → "coste por uso de la plataforma". |
+| 🟠 | `/medicos` dice que Nova confecciona recetas dictadas: Nova hace solo agenda. |
+| 🟠 | Mockups de la home con matrícula ficticia, "~4 min" y un precio. |
+| 🟡 | El resto de la auditoría web (orden de `/medicos`, certificado en el hero, FAQ del médico). |
+
 ## 2. Aprobado y sin implementar (no espera decisión: espera trabajo)
 
 - **Plan de consultas efectivas** (`docs/sprints/2026-10-05-plan-consultas-efectivas.md`, decisiones del 05/10):
