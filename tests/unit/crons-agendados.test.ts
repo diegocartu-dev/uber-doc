@@ -10,7 +10,8 @@
 // mergear.
 //
 // Para cada carpeta de src/app/api/cron/<nombre>/route.ts exige:
-//   1. que se registre con withCron("<nombre>") — el latido se escribe con esa clave;
+//   1. que exporte GET = withCron("<nombre>") — Vercel llama con GET y el latido
+//      se escribe con esa clave;
 //   2. que esté en vercel.json (si no, Vercel nunca la llama);
 //   3. que esté en ESPERADOS con el intervalo que dice su schedule (si no, el
 //      watchdog no se entera cuando deja de correr);
@@ -59,9 +60,11 @@ test("hay crons para revisar (si esto falla, se movió la carpeta)", () => {
 for (const nombre of carpetas) {
   test(`cron ${nombre}: registrado, agendado, vigilado y con ficha`, () => {
     const fuente = readFileSync(join(dirCron, nombre, "route.ts"), "utf8");
+    // GET y no otro verbo: Vercel invoca los crons con GET. Una ruta que solo
+    // exportara POST pasaría un `includes("withCron(")` y respondería 405.
     assert.ok(
-      fuente.includes(`withCron("${nombre}"`),
-      `${nombre}: tiene que exportar GET = withCron("${nombre}", handler) — sin eso no escribe su latido`
+      fuente.includes(`export const GET = withCron("${nombre}"`),
+      `${nombre}: tiene que exportar GET = withCron("${nombre}", handler) — sin eso Vercel no la llama bien o no escribe su latido`
     );
 
     const schedule = agendados.get(nombre);
