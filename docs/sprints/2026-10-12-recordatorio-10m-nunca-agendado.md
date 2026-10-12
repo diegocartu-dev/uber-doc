@@ -87,8 +87,9 @@ PR mergeado, deploy verificado en producción. Detalle en `CLAUDE.md`,
 
 ## Pendiente de Diego
 
-- El caso del 12/10: reprogramar sin costo o devolver la consulta a cargo de
-  Docto (si la falla es nuestra, la plata sale de Docto). El aviso que le
-  faltó al paciente era nuestro.
+- ~~El caso del 12/10: reprogramar sin costo o devolver la consulta.~~
+  **Decidido (Diego, 12/10):** no se hace nada hasta que el paciente reclame;
+  puede haberse dado él mismo por ausente. Si reclama, el aviso que le faltó
+  era nuestro.
 - WhatsApp al paciente 10 minutos antes: necesita una plantilla nueva
   aprobada por Meta; el texto se le propone a Diego antes de pedirla.
