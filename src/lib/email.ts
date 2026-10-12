@@ -659,6 +659,10 @@ export async function enviarEmailRecordatorio10m(turnoId: string): Promise<boole
       to: datos.pacienteEmail,
       subject: `Tu consulta con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}`,
       html,
+    }, {
+      // Si Resend lo aceptó pero la respuesta se perdió, el cron devuelve la
+      // marca y reintenta: con la misma clave Resend no lo manda dos veces.
+      idempotencyKey: `recordatorio-10m/${turnoId}`,
     });
     if (error) {
       console.error("[email] recordatorio 10m rechazado:", turnoId, error.message);
