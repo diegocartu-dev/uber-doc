@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { capitalizarNombre } from "@/lib/utils/texto";
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 type Turno = {
   id: string;
@@ -29,7 +30,18 @@ function formatFechaCorta(f: string) {
 }
 
 export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Turno[]; proximosTurnos?: TurnoProximo[] }) {
-  const [alertas, setAlertas] = useState<{ id: string; nombre: string; hora: string; minutos: number }[]>([]);
+  // Dos momentos de un turno confirmado (= pagado) cuyo paciente todavía no
+  // entró: "antes" (faltan 15 min o menos) y "no_entro" (ya es la hora). El
+  // segundo nació el 12/10/2026: una profesional esperó a un paciente que nunca
+  // abrió la sala y la pantalla no le decía nada — el botón «Iniciar turno»
+  // solo aparece cuando el paciente entra, y no sabía que eso era lo que faltaba.
+  const [alertas, setAlertas] = useState<
+    { id: string; nombre: string; hora: string; minutos: number; tipo: "antes" | "no_entro"; cierre: string }[]
+  >([]);
+  // Los que ya entraron a la sala los trae el sondeo del panel (cada 5 s): la
+  // lista de hoy viene del servidor y no se entera sola.
+  const { turnosEspera } = useDashboardMedico();
+  const enSala = turnosEspera.map((t) => t.id).join(",");
 
   // Verificar alertas de 15 minutos cada 30 segundos
   useEffect(() => {
@@ -38,14 +50,23 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
       const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
       const nuevas: typeof alertas = [];
 
+      const yaEntraron = new Set(enSala.split(",").filter(Boolean));
       for (const t of turnos) {
-        if (t.estado !== "confirmado") continue;
+        if (t.estado !== "confirmado" || yaEntraron.has(t.id)) continue;
         const [h, m] = t.hora_inicio.split(":").map(Number);
         const minTurno = h * 60 + m;
         const diff = minTurno - minAhora;
+        // El cron resolver-turnos-vencidos cierra el turno sin paciente pasados
+        // 20 minutos del FIN (su GRACIA_MIN). Hasta ahí se avisa.
+        const [hf, mf] = t.hora_fin.split(":").map(Number);
+        const minCierre = hf * 60 + mf + 20;
+        const cierre = `${String(Math.floor(minCierre / 60) % 24).padStart(2, "0")}:${String(minCierre % 60).padStart(2, "0")}`;
+        const base = { id: t.id, nombre: capitalizarNombre(t.paciente_nombre), hora: t.hora_inicio.slice(0, 5), minutos: diff, cierre };
 
         if (diff > 0 && diff <= 15) {
-          nuevas.push({ id: t.id, nombre: capitalizarNombre(t.paciente_nombre), hora: t.hora_inicio.slice(0, 5), minutos: diff });
+          nuevas.push({ ...base, tipo: "antes" });
+        } else if (diff <= 0 && minAhora <= minCierre) {
+          nuevas.push({ ...base, tipo: "no_entro" });
         }
       }
 
@@ -60,7 +81,7 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
     checkAlertas();
     const interval = setInterval(checkAlertas, 30000);
     return () => clearInterval(interval);
-  }, [turnos]);
+  }, [turnos, enSala]);
 
   // OJO: acá vivía un `new Notification(...)` legacy (30/03) que en Chrome Android tira
   // TypeError SIEMPRE (constructor prohibido desde Chrome 42 — usar showNotification del
@@ -118,9 +139,16 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
           <div className="flex items-center gap-2">
             <span className="text-lg">⏰</span>
             <p className="text-base font-medium" style={{ color: "#D85A30" }}>
-              Turno con {a.nombre} a las {a.hora} — en {a.minutos} minutos
+              {a.tipo === "antes"
+                ? `Turno con ${a.nombre} a las ${a.hora} — en ${a.minutos} minutos`
+                : `${a.nombre} todavía no entró a la sala (turno de las ${a.hora})`}
             </p>
           </div>
+          <p className="mt-2 text-sm text-gray-600">
+            {a.tipo === "antes"
+              ? "Cuando entre a la sala te avisamos por WhatsApp y acá aparece el botón «Iniciar turno»."
+              : `Te avisamos por WhatsApp apenas entre, y acá aparece el botón «Iniciar turno». Si no entra, no tenés que hacer nada: el turno se cierra solo después de las ${a.cierre}.`}
+          </p>
         </div>
       ))}
 
