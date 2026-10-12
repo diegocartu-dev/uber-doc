@@ -31,13 +31,15 @@ async function latido(key: string, ok: boolean, error?: string): Promise<void> {
     // mail verde de recuperación (pedido Diego 18/07: cerrar el ciclo del
     // mail rojo explícitamente, no por ausencia de más mails).
     let estabaAlertado = false;
+    let ultimoOkPrevio: string | null = null;
     if (ok) {
       const { data: prev } = await admin
         .from("cron_runs")
-        .select("last_alerted_at")
+        .select("last_alerted_at, last_ok_at")
         .eq("cron_key", key)
         .maybeSingle();
       estabaAlertado = Boolean(prev?.last_alerted_at);
+      ultimoOkPrevio = (prev?.last_ok_at as string | null) ?? null;
     }
 
     await admin.from("cron_runs").upsert({
@@ -56,9 +58,23 @@ async function latido(key: string, ok: boolean, error?: string): Promise<void> {
     if (ok && estabaAlertado) {
       const meta = CRONS_META[key];
       const nombre = meta?.nombre ?? `Tarea "${key}"`;
+      // "Se recuperó" no quiere decir que no se perdió nada (Diego, 12/10/2026:
+      // "dice después que se recuperó, pero en el momento perdemos pacientes").
+      // Una tarea de aviso que estuvo caída no manda después lo que no mandó:
+      // el mail dice desde cuándo y, si es de las que no se recuperan solas, que
+      // hay que revisar qué se perdió en ese lapso.
+      const lapso = ultimoOkPrevio
+        ? ` Estuvo sin correr bien desde ${horaArgentina(new Date(ultimoOkPrevio))} hs.`
+        : "";
+      const queHacer =
+        meta && !meta.autoRecupera
+          ? `\n\nOJO: lo que tenía que hacer en ese lapso NO se hace solo ahora. Impacto: ${meta.impacto}. Abrí Claude Code y decime: "revisá qué se perdió mientras falló el cron ${key}".`
+          : " No tenés que hacer nada.";
       await sendDoctoAlert(
-        `✅ Tarea recuperada: ${nombre}`,
-        `${nombre} volvió a correr bien (${horaArgentina()} hs). No tenés que hacer nada.\n\n———\nDetalle técnico (para Claude): cron ${key}, corrida OK registrada tras alerta previa.`
+        meta && !meta.autoRecupera
+          ? `✅ Tarea recuperada — revisar lo que se perdió: ${nombre}`
+          : `✅ Tarea recuperada: ${nombre}`,
+        `${nombre} volvió a correr bien (${horaArgentina()} hs).${lapso}${queHacer}\n\n———\nDetalle técnico (para Claude): cron ${key}, corrida OK registrada tras alerta previa${ultimoOkPrevio ? `; último OK anterior ${ultimoOkPrevio}` : ""}.`
       );
     }
   } catch {
