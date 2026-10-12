@@ -19,7 +19,8 @@ jobs:
   test:
     name: Etapa 1 — Tests críticos
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 45 y no 20: la espera de la vista previa puede llevar hasta 30 (abajo).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +50,12 @@ jobs:
         run: |
           echo "Waiting for Vercel preview for commit $PR_SHA..."
 
-          for i in $(seq 1 30); do
+          # Hasta 30 minutos (180 × 10 s). Normalmente Vercel registra la vista
+          # previa en GitHub en 1-1,5 min, pero el 12/10/2026, con incidentes
+          # abiertos en Vercel (integración con Git) y en GitHub (Actions), tardó
+          # ~30 min y con 5 min de espera el gate fallaba sin haber corrido un
+          # solo test. Esperar más no abre nada: sin vista previa, sigue fallando.
+          for i in $(seq 1 180); do
             # El repo tiene DOS proyectos Vercel conectados (el marketplace y la
             # instancia institucional), así que Vercel desambigua los entornos:
             # ya no existe "Preview" a secas, sino "Preview - uber-doc" y
@@ -70,15 +76,15 @@ jobs:
                 echo "Preview ready: $URL"
                 exit 0
               fi
-              echo "Deploy found (id=$DEPLOY_ID), status=$STATUS — waiting... ($i/30)"
+              echo "Deploy found (id=$DEPLOY_ID), status=$STATUS — waiting... ($i/180)"
             else
-              echo "No deployment found yet — waiting... ($i/30)"
+              echo "No deployment found yet — waiting... ($i/180)"
             fi
 
             sleep 10
           done
 
-          echo "::error::Timeout waiting for Vercel preview deployment (5 min)"
+          echo "::error::Timeout waiting for Vercel preview deployment (30 min)"
           exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
