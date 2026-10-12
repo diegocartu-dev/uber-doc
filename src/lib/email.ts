@@ -631,6 +631,47 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
   }
 }
 
+/**
+ * Recordatorio de 10 minutos antes del turno (cron `recordatorios-10min`).
+ * Dice la HORA y no "en 10 minutos": un mail se puede leer tarde. Devuelve si
+ * salió, para que el cron lo cuente.
+ */
+export async function enviarEmailRecordatorio10m(turnoId: string): Promise<boolean> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "recordatorio_10m"); return false; }
+  try {
+    const datos = await obtenerDatosTurno(turnoId);
+    if (!datos) return false;
+
+    const urlSala = `${BASE_URL}/turno/${turnoId}/espera`;
+    const conQuien = medicoConArticulo(datos.medicoNombre, datos.medicoTitulo);
+    const html = wrapHtml("Tu turno empieza en minutos — Docto", `
+      <div style="margin-bottom:20px;">${chip("Tu turno está por empezar", AZUL)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu turno empieza a las ${formatearHora(datos.hora_inicio)}</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+        Hola ${datos.pacienteNombre}. Tu consulta con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}. Entr&aacute; a la sala virtual: cuando entres, le avisamos para que te atienda.
+      </p>
+      ${boton("Entrar a la sala", urlSala, AZUL)}
+      ${detalleTurno(datos)}
+    `);
+
+    const { error } = await resend().emails.send({
+      from: FROM,
+      to: datos.pacienteEmail,
+      subject: `Tu consulta con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}`,
+      html,
+    });
+    if (error) {
+      console.error("[email] recordatorio 10m rechazado:", turnoId, error.message);
+      return false;
+    }
+    console.log("[email] recordatorio 10m enviado:", turnoId);
+    return true;
+  } catch (err) {
+    console.error("[email] enviarEmailRecordatorio10m falló:", err);
+    return false;
+  }
+}
+
 export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void> {
   if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "medico_aprobado"); return; }
   try {

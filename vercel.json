@@ -20,6 +20,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/recordatorios-10min",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/limpieza-estudios-temp",
       "schedule": "0 6 * * *"
     },
