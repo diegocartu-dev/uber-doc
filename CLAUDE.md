@@ -82,6 +82,8 @@ Siguen necesitando el OK de Diego: mensajes a pacientes o profesionales reales, 
 
 Por qué: el 12/10 se descubrió que el recordatorio de 10 minutos al paciente estaba escrito desde marzo y nunca se había agendado. Un trabajo "terminado" que no llegó a producción es peor que uno sin hacer: parece hecho.
 
+**Si Vercel no le avisa a GitHub (pasó el 12/10, con incidente en su integración con Git):** el gate espera hasta 30 min la vista previa; no hay que esperar a Vercel. Se saca la URL de la vista previa del commit con `npx vercel api "/v6/deployments?projectId=<id>&teamId=<id>&target=preview"` (campo `meta.githubCommitSha`) y se comenta en el PR una línea `vista-previa: https://….vercel.app`. La corrida del PR la toma sola, verifica por `/api/health` que sirva ese mismo commit y corre los tests. Lanzar el workflow a mano NO sirve: GitHub no lo asocia al PR. Si después del merge producción no se publica, se le pide a Vercel por la misma API que construya `main` (los dos proyectos: `uber-doc` e `instancia-institucional`).
+
 - **Un commit por ticket.** Sin excepción. Permite revertir tickets individuales si algo rompe.
 - **No merge sin OK explícito de los gates de auditoría.** Si un ticket tiene gate (Roberto, Sofía, Diego), el código espera en rama hasta recibir OK. Tickets sin gate pueden ir a main independientemente.
 - **Extensión de alcance se reporta SIEMPRE.** Aunque sea consecuencia técnica obligatoria de otro ticket, se documenta en el reporte con razonamiento. La decisión de aprobar la extensión la toma Diego, no el implementador.
