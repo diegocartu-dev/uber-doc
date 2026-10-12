@@ -16,7 +16,7 @@
 import { NextResponse } from "next/server";
 import { esInstitucional } from "@/lib/instancia";
 
-/** Los cinco de la Capa C. La lista está acá para que el test la recorra. */
+/** Los crons de la Capa C. La lista está acá para que el test la recorra. */
 export const CRONS_CAPA_C = [
   "liberar-reservas", // sin pago no existe `reservado_pendiente` que liberar
   "recuperar-registros", // el alta es provisionada: no hay registro abandonado
@@ -24,6 +24,14 @@ export const CRONS_CAPA_C = [
   "saldo-servicios", // los saldos los vigila el deploy B2C (evita alertas dobles)
   "verificar-cuentas-mp", // nadie conecta cuentas de MP
   "renovar-tokens-mp", // sin cuentas de MP no hay token que renovar
+  // Los dos recordatorios al paciente (12/10/2026). Mandan un mail de Docto con
+  // el link a la sala del B2C, donde el turno de la instancia no existe, y a los
+  // pacientes del padrón cargados sin mail les llegaría al alias sin buzón
+  // (rebote garantizado, que ensucia al remitente de todos los mails del B2C).
+  // En la instancia los avisos al paciente son de la institución (avisos.ts).
+  // El de 24 h nunca había procesado un turno en la base de la instancia.
+  "recordatorios",
+  "recordatorios-10min",
 ] as const;
 
 export type CronCapaC = (typeof CRONS_CAPA_C)[number];

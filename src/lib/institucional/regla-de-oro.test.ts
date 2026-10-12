@@ -72,7 +72,7 @@ beforeEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("(a) los 6 crons de Capa C siguen su camino B2C", () => {
-  assert.equal(CRONS_CAPA_C.length, 6);
+  assert.equal(CRONS_CAPA_C.length, 8);
   for (const key of CRONS_CAPA_C) {
     assert.equal(cortarSiInstitucional(key), null, `${key} NO puede cortar en B2C`);
   }

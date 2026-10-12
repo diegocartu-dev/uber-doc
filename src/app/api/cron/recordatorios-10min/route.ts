@@ -4,6 +4,7 @@ import { pushAlPaciente } from "@/lib/push";
 import { enviarEmailRecordatorio10m } from "@/lib/email";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { withCron } from "@/lib/cron-guard";
+import { cortarSiInstitucional } from "@/lib/institucional/capa-c";
 import {
   minutosParaElTurno,
   tocaRecordatorio10m,
@@ -29,6 +30,11 @@ import {
 // reintenta, hasta la hora del turno.
 
 async function handler() {
+  // En la instancia institucional no va (ver CRONS_CAPA_C): mail de Docto con
+  // link al B2C, y alias sin buzón para los pacientes del padrón.
+  const corte = cortarSiInstitucional("recordatorios-10min");
+  if (corte) return corte;
+
   const supabase = createAdminClient();
   const ahoraMs = Date.now();
 
