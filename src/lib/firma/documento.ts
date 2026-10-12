@@ -1035,7 +1035,7 @@ async function snapshotFirmante(medicoId: string): Promise<Record<string, unknow
 
   // Aceptación de T&C del médico: es donde consta que su click constituye su
   // firma electrónica. HOY NO EXISTE — verificado en producción 07/08/2026:
-  // `aceptaciones_legales` solo tiene filas `datos_sensibles` (1.108), ningún
+  // `aceptaciones_legales` solo tiene filas `datos_sensibles`, ningún
   // camino de la app inserta `tyc_medico` y `versiones_textos_legales` no tiene
   // esa versión. O sea: este bloque va a devolver `null` en el 100% de las
   // firmas hasta que exista el texto y el punto de aceptación.
