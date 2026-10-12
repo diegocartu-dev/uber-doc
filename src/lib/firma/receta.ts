@@ -1,15 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  hashSHA256,
-  firmar,
-  verificar,
-  desencriptarClavePrivada,
-} from "./crypto";
-
-// Fix I-5: Ventana ampliada a 5 minutos, consistente con OTP_EXPIRY_MS.
-// Antes era 2 min midiendo desde created_at — provocaba rechazos falsos
-// cuando el médico tardaba >2min en ingresar el OTP pero <5min (válido).
-const OTP_VENTANA_MS = 5 * 60 * 1000;
+import { hashSHA256, verificar } from "./crypto";
 
 // Fix 3.3: JSON.stringify no garantiza orden de keys.
 // JSONB en PostgreSQL puede reordenar keys al almacenar.
@@ -35,160 +25,12 @@ function canonicalJSON(value: unknown): string {
 
 export { canonicalJSON };
 
-type FirmaResult = {
-  ok: true;
-  hash: string;
-  firma: string;
-  firmado_at: string;
-} | {
-  ok: false;
-  error: string;
-};
-
-// Fix C-3 / 5.4: Parámetros opcionales para logging de no-repudio
-export async function firmarReceta(
-  recetaId: string,
-  medicoId: string,
-  otpId: string,
-  meta?: { ip?: string; userAgent?: string }
-): Promise<FirmaResult> {
-  const supabase = createAdminClient();
-
-  // Fix 5.1: Verificar OTP válido antes de firmar
-  const { data: otp } = await supabase
-    .from("otp_firma")
-    .select("id, medico_id, usado, consulta_id, turno_id, created_at, consumido_para_receta_id")
-    .eq("id", otpId)
-    .single();
-
-  if (!otp) {
-    return { ok: false, error: "OTP no encontrado" };
-  }
-
-  if (!otp.usado) {
-    return { ok: false, error: "OTP no fue validado" };
-  }
-
-  if (otp.medico_id !== medicoId) {
-    return { ok: false, error: "OTP no pertenece a este médico" };
-  }
-
-  // Fix I-1: OTP one-time-use — cada OTP solo puede firmar UNA receta
-  if (otp.consumido_para_receta_id) {
-    return { ok: false, error: "Este código ya fue usado para firmar otra receta" };
-  }
-
-  const otpAge = Date.now() - new Date(otp.created_at).getTime();
-  if (otpAge > OTP_VENTANA_MS) {
-    return { ok: false, error: "OTP expirado para firma" };
-  }
-
-  const { data: receta } = await supabase
-    .from("recetas")
-    .select("id, medico_id, estado, datos_prescripcion, firma_digital, consulta_id, turno_id")
-    .eq("id", recetaId)
-    .single();
-
-  if (!receta) {
-    return { ok: false, error: "Receta no encontrada" };
-  }
-
-  if (receta.medico_id !== medicoId) {
-    return { ok: false, error: "No autorizado" };
-  }
-
-  if (receta.firma_digital) {
-    return { ok: false, error: "Receta ya firmada" };
-  }
-
-  if (receta.estado !== "borrador") {
-    return { ok: false, error: "Solo se pueden firmar recetas en borrador" };
-  }
-
-  if (!receta.consulta_id && !receta.turno_id) {
-    return { ok: false, error: "Receta sin consulta ni turno asociado" };
-  }
-
-  // Verificar scope: el OTP debe corresponder a la misma consulta/turno
-  if (receta.consulta_id && otp.consulta_id !== receta.consulta_id) {
-    return { ok: false, error: "OTP no corresponde a esta consulta" };
-  }
-  if (receta.turno_id && otp.turno_id !== receta.turno_id) {
-    return { ok: false, error: "OTP no corresponde a este turno" };
-  }
-
-  // Fix I-3: Solo usar clave activa (no revocada)
-  const { data: claves } = await supabase
-    .from("medico_claves")
-    .select("id, clave_publica, clave_privada_enc")
-    .eq("medico_id", medicoId)
-    .eq("activa", true)
-    .single();
-
-  if (!claves) {
-    return { ok: false, error: "Médico sin claves de firma activas" };
-  }
-
-  const contenido = canonicalJSON(receta.datos_prescripcion);
-  const hash = hashSHA256(contenido);
-  const clavePrivada = desencriptarClavePrivada(claves.clave_privada_enc);
-  const firma = firmar(hash, clavePrivada);
-  const firmadoAt = new Date().toISOString();
-
-  const firmaDigital = {
-    hash,
-    firma,
-    algoritmo: "RSA-SHA256",
-    firmado_at: firmadoAt,
-    medico_id: medicoId,
-    otp_id: otpId,
-  };
-
-  const { data: updated, error: updateError } = await supabase
-    .from("recetas")
-    .update({
-      firma_digital: firmaDigital,
-      hash_pdf: hash,
-      estado: "emitida",
-      fecha_emision: firmadoAt,
-    })
-    .eq("id", recetaId)
-    .eq("medico_id", medicoId)
-    .eq("estado", "borrador")
-    .select("id");
-
-  if (updateError || !updated || updated.length === 0) {
-    return { ok: false, error: "La receta ya fue firmada o cambió de estado" };
-  }
-
-  // Fix I-1: Marcar OTP como consumido para esta receta (atómico)
-  // Roberto: verificar resultado — unique index en DB es el guard real,
-  // pero logueamos si el UPDATE falla por TOCTOU.
-  const { error: otpConsumoError } = await supabase
-    .from("otp_firma")
-    .update({ consumido_para_receta_id: recetaId })
-    .eq("id", otpId)
-    .is("consumido_para_receta_id", null);
-
-  if (otpConsumoError) {
-    console.error("[firma] OTP consumption failed (receta already signed via .eq estado guard):", otpConsumoError.message);
-  }
-
-  // Fix C-3 / 5.4: Registro inmutable en firma_logs (no-repudio)
-  await supabase.from("firma_logs").insert({
-    receta_id: recetaId,
-    medico_id: medicoId,
-    hash,
-    algoritmo: "RSA-SHA256",
-    firmado_at: firmadoAt,
-    otp_id: otpId,
-    ip: meta?.ip ?? null,
-    user_agent: meta?.userAgent ?? null,
-    clave_id: claves.id,
-  });
-
-  return { ok: true, hash, firma, firmado_at: firmadoAt };
-}
+// `firmarReceta` (firma de la tabla `recetas` con código por mail) se borró el
+// 12/10/2026: ninguna pantalla la llamaba y en producción nunca se emitió un
+// código (`otp_firma` vacía). Las recetas se firman en `documento.ts`, por la
+// sesión del profesional. Acá queda la verificación pública de las recetas
+// viejas de `recetas` (`/api/verificar/[id]`) y `canonicalJSON`, que usa todo
+// el motor de firma.
 
 type VerificacionResult = {
   valida: boolean;
