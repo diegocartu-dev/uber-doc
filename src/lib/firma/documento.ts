@@ -3,10 +3,10 @@
 // Firma electrónica de documentos médicos (receta / certificado / indicaciones /
 // orden) sobre la tabla `documentos`.
 //
-// Cuatro caminos de atribución, mismo motor criptográfico (hash canónico SHA-256
+// Caminos de atribución, mismo motor criptográfico (hash canónico SHA-256
 // + RSA-SHA256 con la clave del médico) y mismo registro de no-repudio:
 //
-//   1. `firmarDocumento(...)`      — segundo factor OTP (art. 5 Ley 25.506 + 2FA).
+//   1. (borrado el 12/10/2026) firma con código por mail: nunca se usó.
 //   2. `firmarDocumentoPorSesion(...)` — atribución por sesión autenticada del
 //      médico en el instante en que toca "Finalizar consulta" con el contenido
 //      a la vista. Es el acto de voluntad; la firma se ejecuta server-side.
@@ -48,9 +48,6 @@ import {
 } from "./identidad";
 import { formatNombreMedico } from "@/lib/utils/texto";
 import { cuentasDeDemostracion, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
-
-// Consistente con el flujo de receta (OTP_EXPIRY_MS).
-const OTP_VENTANA_MS = 5 * 60 * 1000;
 
 const ALGORITMO = "RSA-SHA256";
 const REINTENTOS_CADENA = 4;
@@ -367,117 +364,12 @@ async function sellarDocumento(
   return { ok: true, hash, firma, firmado_at: firmadoAt };
 }
 
-// ─── Camino 1 — firma con OTP (segundo factor) ────────────────────────────────
-
-export async function firmarDocumento(
-  documentoId: string,
-  medicoId: string,
-  otpId: string,
-  meta: { ip: string; userAgent: string }
-): Promise<FirmaResult> {
-  const supabase = createAdminClient();
-
-  // 1. OTP válido, del médico, NO consumido (ni para receta ni para documento), en ventana.
-  const { data: otp } = await supabase
-    .from("otp_firma")
-    .select(
-      "id, medico_id, usado, consulta_id, turno_id, created_at, consumido_para_receta_id, consumido_para_documento_id"
-    )
-    .eq("id", otpId)
-    .single();
-
-  if (!otp) return { ok: false, error: "OTP no encontrado" };
-  if (!otp.usado) return { ok: false, error: "OTP no fue validado" };
-  if (otp.medico_id !== medicoId) return { ok: false, error: "OTP no pertenece a este médico" };
-  if (otp.consumido_para_receta_id || otp.consumido_para_documento_id) {
-    return { ok: false, error: "Este código ya fue usado para firmar otro documento" };
-  }
-  if (Date.now() - new Date(otp.created_at).getTime() > OTP_VENTANA_MS) {
-    return { ok: false, error: "OTP expirado para firma" };
-  }
-
-  // 2. Documento del médico, sin firmar, con consulta/turno asociado.
-  const { data: doc } = await supabase
-    .from("documentos")
-    .select(COLUMNAS_FIRMABLES)
-    .eq("id", documentoId)
-    .single<DocFirmable & { firma_digital: unknown; consulta_id: string | null; turno_id: string | null }>();
-
-  if (!doc) return { ok: false, error: "Documento no encontrado" };
-  if (doc.medico_id !== medicoId) return { ok: false, error: "No autorizado" };
-  if (doc.firma_digital) return { ok: false, error: "Documento ya firmado" };
-  if (!esTipoFirmable(doc.tipo)) {
-    return { ok: false, error: `Tipo no firmable: ${doc.tipo}` };
-  }
-  if (!doc.consulta_id && !doc.turno_id) {
-    return { ok: false, error: "Documento sin consulta ni turno asociado" };
-  }
-
-  // 3. Scope del OTP: misma consulta/turno que el documento.
-  if (doc.consulta_id && otp.consulta_id !== doc.consulta_id) {
-    return { ok: false, error: "OTP no corresponde a esta consulta" };
-  }
-  if (doc.turno_id && otp.turno_id !== doc.turno_id) {
-    return { ok: false, error: "OTP no corresponde a este turno" };
-  }
-
-  // 4. Clave activa (no revocada) del médico.
-  const { data: claves } = await supabase
-    .from("medico_claves")
-    .select("id, clave_publica, clave_privada_enc")
-    .eq("medico_id", medicoId)
-    .eq("activa", true)
-    .single();
-
-  if (!claves) return { ok: false, error: "Médico sin claves de firma activas" };
-
-  // 5. Congelar la identidad que el PDF imprime. Sin snapshot NO se firma: un
-  //    sello sobre datos vivos afirmaría integridad que no cubre.
-  const identidad = await construirIdentidadDocumento(medicoId, doc.paciente_id);
-  if (!identidad) {
-    return { ok: false, error: "No se pudo congelar la identidad del documento" };
-  }
-
-  const firmante = await snapshotFirmante(medicoId);
-  if (!firmante) {
-    // No se pudo determinar de qué mundo es la ficha. Ver `snapshotFirmante`:
-    // el nombre que se escriba acá no se puede corregir nunca.
-    return { ok: false, error: "No se pudo registrar el firmante. Probá de nuevo en unos segundos." };
-  }
-  const contexto = await contextoDocumento(doc, {
-    consulta_id: doc.consulta_id,
-    turno_id: doc.turno_id,
-  });
-
-  // 6. Firmar + persistir + loguear.
-  const resultado = await sellarDocumento(doc, identidad, claves, {
-    metodo_atribucion: "otp",
-    otp_id: otpId,
-    ip: meta.ip,
-    user_agent: meta.userAgent,
-    firmante,
-    contexto: { ...contexto, otp_validado: true },
-  });
-
-  if (!resultado.ok) return resultado;
-
-  // 7. Consumir OTP (one-time-use, atómico vía guards .is null).
-  const { error: otpConsumoError } = await supabase
-    .from("otp_firma")
-    .update({ consumido_para_documento_id: documentoId })
-    .eq("id", otpId)
-    .is("consumido_para_documento_id", null)
-    .is("consumido_para_receta_id", null);
-
-  if (otpConsumoError) {
-    console.error(
-      "[firma-doc] OTP consumption failed (doc ya firmado vía guard is firma_digital):",
-      otpConsumoError.message
-    );
-  }
-
-  return resultado;
-}
+// ─── Camino 1 — firma con código por mail: BORRADO (12/10/2026) ──────────────
+// `firmarDocumento(…, otpId)` exigía un código de 6 dígitos mandado por mail.
+// Ninguna pantalla lo llamaba y en producción nunca se emitió un código
+// (`otp_firma` vacía): se borró junto con /api/2fa y ModalOTPFirma. La columna
+// `firma_logs.otp_id` y el método "otp" quedan en el tipo porque son parte del
+// esquema de la base.
 
 // ─── Camino 2 — firma por atribución de sesión del médico ────────────────────
 
