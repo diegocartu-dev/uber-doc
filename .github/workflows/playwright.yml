@@ -7,24 +7,13 @@ on:
     # 3AM Argentina (UTC-3) = 6AM UTC
     - cron: "0 6 * * *"
   workflow_dispatch:
-    inputs:
-      # Plan B para el gate de un PR cuando Vercel arma la vista previa pero no
-      # se lo avisa a GitHub (12/10/2026: incidente en su integración con Git;
-      # el gate esperaba un aviso que no llegaba y el merge quedaba trabado).
-      # Se lanza sobre la rama del PR con la URL de SU vista previa:
-      #   gh workflow run playwright.yml --ref <rama> -f preview_url=https://….vercel.app
-      # El check queda sobre el último commit de la rama, con el mismo nombre que
-      # pide la protección de main. Antes de correr nada, el paso "Verificar que
-      # la vista previa es de este commit" exige que /api/health de esa URL
-      # responda el mismo SHA: no se puede aprobar un PR probando otro código.
-      preview_url:
-        description: "Vista previa del PR (https://…vercel.app). Vacío = corrida contra producción"
-        required: false
-        default: ""
 
 permissions:
   deployments: read
   contents: read
+  # Para leer el comentario "vista-previa:" del plan B (ver el paso de espera).
+  pull-requests: read
+  issues: read
 
 env:
   PLAYWRIGHT_BASE_URL: ${{ vars.PLAYWRIGHT_BASE_URL || 'https://uber-doc.vercel.app' }}
@@ -64,11 +53,31 @@ jobs:
         run: |
           echo "Waiting for Vercel preview for commit $PR_SHA..."
 
-          # Hasta 30 minutos (180 × 10 s). Normalmente Vercel registra la vista
-          # previa en GitHub en 1-1,5 min, pero el 12/10/2026, con incidentes
-          # abiertos en Vercel (integración con Git) y en GitHub (Actions), tardó
-          # ~30 min y con 5 min de espera el gate fallaba sin haber corrido un
-          # solo test. Esperar más no abre nada: sin vista previa, sigue fallando.
+          # La vista previa se busca por DOS caminos en cada vuelta:
+          #
+          # 1. El aviso de Vercel a GitHub (deployments API). Es el normal:
+          #    llega en 1-1,5 min.
+          # 2. Plan B: un comentario en el PR, de alguien con permiso de
+          #    escritura, con una línea `vista-previa: https://….vercel.app`.
+          #    Existe porque el 12/10/2026 Vercel armaba la vista previa en un
+          #    minuto pero tardaba ~30 en avisarle a GitHub (incidente en su
+          #    integración con Git), y el merge quedaba trabado sin que hubiera
+          #    corrido un solo test. La URL se saca de la API de Vercel
+          #    (`npx vercel api /v6/deployments?...`, campo meta.githubCommitSha)
+          #    y se comenta en el PR; esta misma corrida la toma, y como es la
+          #    corrida del PR, el check vale para la protección de main.
+          #    Una corrida lanzada a mano (workflow_dispatch) NO sirve: GitHub no
+          #    la asocia al PR y el merge sigue bloqueado — se probó ese día.
+          #
+          # La URL del plan B se acepta solo si es del equipo de Docto en Vercel
+          # y si su /api/health dice que sirve EXACTAMENTE este commit: no se
+          # puede aprobar un PR probando otro código.
+          #
+          # Hasta 30 minutos (180 × 10 s). Sin vista previa, falla.
+          verificar_sha() {
+            curl -fsS --max-time 15 -H "x-vercel-protection-bypass: $BYPASS" "${1%/}/api/health" 2>/dev/null | jq -r '.sha // empty'
+          }
+
           for i in $(seq 1 180); do
             # El repo tiene DOS proyectos Vercel conectados (el marketplace y la
             # instancia institucional), así que Vercel desambigua los entornos:
@@ -95,6 +104,19 @@ jobs:
               echo "No deployment found yet — waiting... ($i/180)"
             fi
 
+            # Plan B: el último comentario "vista-previa:" de alguien con permiso.
+            URL_B=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq '[.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR") | .body | capture("vista-previa: *(?<u>https://[a-z0-9-]+-diegocartu-devs-projects\\.vercel\\.app)") | .u] | last // empty' 2>/dev/null)
+            if [ -n "$URL_B" ]; then
+              SHA_B=$(verificar_sha "$URL_B")
+              if [ "$SHA_B" = "$PR_SHA" ]; then
+                echo "url=$URL_B" >> "$GITHUB_OUTPUT"
+                echo "Preview ready (plan B, verificada por /api/health): $URL_B"
+                exit 0
+              fi
+              echo "Plan B: $URL_B sirve '${SHA_B:-?}', no $PR_SHA — se ignora"
+            fi
+
             sleep 10
           done
 
@@ -103,32 +125,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_REPO: ${{ github.repository }}
-
-      - name: Verificar que la vista previa es de este commit
-        if: github.event_name == 'workflow_dispatch' && inputs.preview_url != ''
-        run: |
-          if [[ ! "$DISPATCH_URL" =~ ^https://[a-z0-9-]+\.vercel\.app/?$ ]]; then
-            echo "::error::preview_url no es una URL de Vercel: $DISPATCH_URL"
-            exit 1
-          fi
-          SHA_VISTA=$(curl -fsS -H "x-vercel-protection-bypass: $BYPASS" "${DISPATCH_URL%/}/api/health" | jq -r '.sha // empty')
-          if [ "$SHA_VISTA" != "$GITHUB_SHA" ]; then
-            echo "::error::La vista previa sirve el commit '$SHA_VISTA' y esta corrida es de '$GITHUB_SHA'"
-            exit 1
-          fi
-          echo "Vista previa verificada: sirve $GITHUB_SHA"
-        env:
-          DISPATCH_URL: ${{ inputs.preview_url }}
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Set test URL
         id: test-url
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_URL" ]; then
-            echo "base_url=${DISPATCH_URL%/}" >> "$GITHUB_OUTPUT"
-            echo "Testing against preview (lanzado a mano): $DISPATCH_URL"
-          elif [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PREVIEW_URL" ]; then
             if [[ ! "$PREVIEW_URL" =~ ^https://.*\.vercel\.app/?$ ]]; then
               echo "::error::Preview URL does not match expected Vercel domain: $PREVIEW_URL"
               exit 1
@@ -142,7 +146,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
-          DISPATCH_URL: ${{ inputs.preview_url }}
           FALLBACK_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
 
       - name: Reset cuentas de prueba
@@ -170,14 +173,14 @@ jobs:
           retention-days: 14
 
       - name: Cleanup datos de prueba
-        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.preview_url == ''))
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: node scripts/sereno-cleanup.mjs
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Reportar resultado a /admin/sereno
-        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.preview_url == ''))
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: node scripts/sereno-report.mjs
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
