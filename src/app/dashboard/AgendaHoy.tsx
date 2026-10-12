@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { capitalizarNombre } from "@/lib/utils/texto";
 import { useDashboardMedico } from "./DashboardMedicoProvider";
 
@@ -40,7 +40,11 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
   >([]);
   // Los que ya entraron a la sala los trae el sondeo del panel (cada 5 s): la
   // lista de hoy viene del servidor y no se entera sola.
+  // Se ACUMULAN: un turno sale de `turnosEspera` cuando pasa a en_curso, y si el
+  // profesional lo empezó desde el celular, esta pantalla (en la PC) seguiría
+  // viéndolo `confirmado` y diría "todavía no entró" en plena consulta.
   const { turnosEspera } = useDashboardMedico();
+  const vistosEnSala = useRef(new Set<string>());
   const enSala = turnosEspera.map((t) => t.id).join(",");
 
   // Verificar alertas de 15 minutos cada 30 segundos
@@ -50,7 +54,8 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
       const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
       const nuevas: typeof alertas = [];
 
-      const yaEntraron = new Set(enSala.split(",").filter(Boolean));
+      for (const id of enSala.split(",").filter(Boolean)) vistosEnSala.current.add(id);
+      const yaEntraron = vistosEnSala.current;
       for (const t of turnos) {
         if (t.estado !== "confirmado" || yaEntraron.has(t.id)) continue;
         const [h, m] = t.hora_inicio.split(":").map(Number);
@@ -146,8 +151,8 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
           </div>
           <p className="mt-2 text-sm text-gray-600">
             {a.tipo === "antes"
-              ? "Cuando entre a la sala te avisamos por WhatsApp y acá aparece el botón «Iniciar turno»."
-              : `Te avisamos por WhatsApp apenas entre, y acá aparece el botón «Iniciar turno». Si no entra, no tenés que hacer nada: el turno se cierra solo después de las ${a.cierre}.`}
+              ? "Cuando entre a la sala te avisamos y acá aparece el botón «Iniciar turno»."
+              : `Te avisamos apenas entre, y acá aparece el botón «Iniciar turno». Si no entra, no tenés que hacer nada: el turno se cierra solo después de las ${a.cierre}.`}
           </p>
         </div>
       ))}
