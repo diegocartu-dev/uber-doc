@@ -125,7 +125,6 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Utilizar la plataforma para fines distintos a la consulta médica legítima.</li>
         <li>Intentar acceder a datos de otros usuarios o vulnerar la seguridad del sistema.</li>
         <li>Hostigar, amenazar o faltar el respeto a los profesionales de la salud.</li>
-        <li>Solicitar prescripciones de medicamentos controlados de forma reiterada y sin justificación clínica.</li>
       </ul>
 
       <h2>10. Limitación de responsabilidad</h2>
