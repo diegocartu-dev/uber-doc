@@ -1450,7 +1450,7 @@ async function evaluarRectificacionInterna(
     return {
       apto: false,
       motivo: "constancia_texto_firmado",
-      detalle: "La constancia lleva el nombre y el DNI del paciente dentro del texto firmado: re-sellarla no los corrige. Hay que emitir una constancia nueva.",
+      detalle: "La constancia lleva el nombre y el DNI del paciente dentro del texto firmado: re-sellarla no los corrige. Cómo se corrige una constancia está pendiente de decisión (DECISIONES.md 1.14).",
     };
   }
   if (!doc.firma_digital) {

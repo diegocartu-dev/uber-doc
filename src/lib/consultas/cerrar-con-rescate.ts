@@ -387,9 +387,10 @@ async function ejecutarRescate(
   const admin = createAdminClient();
   const tabla = args.tipo === "turno" ? "turnos" : "consultas";
 
-  // Ojo: NO se selecciona `rescate_borrador` (columna de la migración 20260808).
+  // Ojo: acá NO se selecciona `rescate_borrador` (columna de la migración 20260808).
   // Si el código sale antes que la migración, un SELECT que la incluya rompe la
   // query ENTERA en PostgREST y el rescate no correría nunca. Ver CLAUDE.md.
+  // (El repaso de arriba sí la lee desde el 13/10: verificada en las dos bases.)
   const { data: registro, error: errRegistro } = await admin
     .from(tabla)
     .select("id, estado, paciente_id, medico_id, doc_borrador, evolucion, completada_at")
@@ -875,7 +876,7 @@ async function avisarAlMedico(info: RescateInfo, contexto: ContextoEncuentro): P
     cuerpo =
       `${hola}Tu sesión con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.\n\n` +
       (info.evolucion_guardada ? "Guardamos la evolución que habías escrito.\n\n" : "") +
-      `La constancia de atención no se emite sola: si el paciente la necesita, emitila desde Documentación pendiente.`;
+      `La constancia de atención no se emite sola. Si el paciente entró a la sesión, la vas a ver en Documentación pendiente para emitirla.`;
   } else {
     titulo = "Tu consulta se cerró sola";
     severidad = "info";
