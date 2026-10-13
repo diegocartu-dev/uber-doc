@@ -85,6 +85,9 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - Tres variables VAPID en Vercel tienen un salto de línea pegado (el código lo limpia).
 - `verificarFirmaDocumento` (`src/lib/firma/documento.ts`) no tiene llamadores.
 
+- **La clínica escondía profesionales (13/10, cerrado el mismo día).** La clínica y el menú de rescate miraban solo los primeros 500 turnos libres de todos, que con las agendas actuales alcanzaban apenas hasta el día siguiente: quien tenía la consulta inmediata apagada y turnos recién desde pasado mañana no aparecía. Ahora se pide el turno libre más cercano de cada profesional (`proximo_turno_libre_por_medico`, en las dos bases; `lib/turnos/proximo-libre.ts`). Lo encontró la revisión de psicólogos F2.
+- **Un paciente puede confirmarse un turno sin pagar (13/10, en arreglo).** Probado en una transacción que se deshizo, con cuentas de prueba: con su propia sesión, un paciente logueado pasa un turno libre a `confirmado` con `mp_status = 'approved'` por un UPDATE directo (la policy "Pacientes actualizan sus turnos" y el permiso de UPDATE sobre todas las columnas lo dejan). Rompe "sin pago no hay turno". Se cierra con un trigger que deja a la sesión del paciente solo las transiciones que la aplicación usa.
+
 ## 5. Decisiones vigentes — índice
 
 Las reglas operativas están en `CLAUDE.md`; acá, la fecha y dónde está el porqué.

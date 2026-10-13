@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { proximoTurnoLibrePorMedico } from "@/lib/turnos/proximo-libre";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
@@ -124,21 +125,14 @@ export default async function ClinicaPage() {
   //
   // Se calcula DESPUÉS de traer los turnos, así que este bloque va abajo.
 
-  // Turnos disponibles en clínica virtual: traemos fecha + hora_inicio para poder
-  // ordenar los médicos por "turno libre más cercano" (decisión §11.2). Mismo
-  // filtro que ya andaba en producción (estado disponible, canal clinica_virtual,
-  // fecha >= hoy); solo se amplían las columnas seleccionadas de la misma tabla.
+  // Turnos disponibles en clínica virtual: el más cercano DE CADA profesional, para
+  // saber quién tiene agenda y ordenar por "turno libre más cercano" (decisión §11.2).
+  // Mismo filtro de siempre (estado disponible, canal clinica_virtual, fecha >= hoy).
+  // Antes eran los primeros 500 de todos, y eso dejaba fuera de la clínica a quien
+  // tenía turnos recién desde pasado mañana (13/10/2026, lib/turnos/proximo-libre).
   const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
   const hoy = `${ahoraAR.getFullYear()}-${(ahoraAR.getMonth() + 1).toString().padStart(2, "0")}-${ahoraAR.getDate().toString().padStart(2, "0")}`;
-  const { data: turnosDisponibles } = await supabase
-    .from("turnos")
-    .select("medico_id, fecha, hora_inicio")
-    .eq("estado", "disponible")
-    .eq("canal_origen", "clinica_virtual")
-    .gte("fecha", hoy)
-    .order("fecha", { ascending: true })
-    .order("hora_inicio", { ascending: true })
-    .limit(500);
+  const turnosDisponibles = await proximoTurnoLibrePorMedico(supabase, hoy);
 
   // Cola en espera por médico (decisión §11.3): "pacientes en sala de espera
   // INCLUYENDO al que está siendo atendido" = consultas en estado esperando +
