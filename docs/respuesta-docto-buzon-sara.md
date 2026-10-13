@@ -89,9 +89,19 @@ atienden (consulta inmediata o solo turnos), qué documentos emiten y cómo
 aparecen en la clínica. Mientras tanto, la conducta de Sara es la correcta: el
 psicólogo deja su contacto en el buzón.
 
-## 3. Controlados en términos y condiciones — en curso
+## 3. Controlados en términos y condiciones — hecho (12/10/2026)
 
-El bloqueo existe en el código. Los textos que lo cuentan (términos del paciente
-y del profesional, y el cartel que ve el profesional al intentar recetar uno) se
-van a reescribir para que digan que **no se recetan por Docto**, no que vienen
-"próximamente". El texto lo aprueba Diego antes de publicarse.
+Decisión de Diego: un **término aparte, con su propio tilde, corto y directo**,
+sin reescribir el resto de los T&C:
+
+> **Medicamentos controlados**
+> Por Docto se puede recetar cualquier medicamento, excepto psicotrópicos y
+> estupefacientes (Leyes 19.303 y 17.818). Esos no se recetan por la plataforma.
+
+Los antibióticos no entran en la limitación. Es **dinámico**: se le muestra solo
+a quien todavía no lo aceptó. El paciente lo tilda antes de pagar (triage de la
+consulta inmediata y confirmación del turno); el profesional al registrarse, y
+los ya registrados desde un aviso de su panel que pueden posponer. El cartel que
+ve el profesional al elegir un psicotrópico o estupefaciente dejó de decir
+"próximamente": dice que no se receta por Docto. Para Sara: la frase de arriba
+es la que vale.
