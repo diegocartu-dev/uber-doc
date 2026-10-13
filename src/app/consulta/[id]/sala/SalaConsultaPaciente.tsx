@@ -319,7 +319,7 @@ function formatTimer(seg: number): string {
 
 export default function SalaConsultaPaciente({
   consultaId,
-  roomName,
+  roomName: roomNameInicial,
   medicoNombre,
   medicoTitulo,
   especialidad,
@@ -344,6 +344,15 @@ export default function SalaConsultaPaciente({
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || "";
 
   const [estado, setEstado] = useState<string>("en_curso");
+  // LA SALA PUEDE NO EXISTIR TODAVÍA (13/10/2026). `sala_video_url` la escribe
+  // el profesional al abrir su espacio de trabajo, y un pago real pone la
+  // consulta `en_curso` ANTES de eso: el paciente llega acá con `roomName`
+  // null, el token nunca se pedía y veía una ruedita para siempre, mientras el
+  // profesional lo esperaba del otro lado y terminaba cancelando. Caso real,
+  // dos veces seguidas con la misma paciente, el 13/10. Ahora la sala es
+  // estado: el polling y Realtime la traen apenas existe, y recién ahí se pide
+  // el token. Mientras tanto, el paciente ve qué está pasando.
+  const [roomName, setRoomName] = useState<string | null>(roomNameInicial);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
   const [videoVisible, setVideoVisible] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -560,7 +569,8 @@ export default function SalaConsultaPaciente({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: tabla, filter: `id=eq.${consultaId}` },
         (payload) => {
-          const row = payload.new as { estado: string };
+          const row = payload.new as { estado: string; sala_video_url?: string | null };
+          if (row.sala_video_url) setRoomName((prev) => prev ?? row.sala_video_url ?? null);
           if (!row.estado) return;
           setEstado(row.estado);
           if (row.estado === estadoCompletado) {
@@ -588,6 +598,10 @@ export default function SalaConsultaPaciente({
         });
         if (!res.ok) return;
         const data = await res.json();
+        // La sala recién creada por el profesional: habilita el pedido del token.
+        if (typeof data.sala_video_url === "string" && data.sala_video_url) {
+          setRoomName((prev) => prev ?? data.sala_video_url);
+        }
         // Mientras estamos en rejoin: reflejar el reloj de servidor.
         // - desconectado_at === null + estado en_curso → el servidor detectó la
         //   reconexión (o nunca arrancó el reloj): el contador desaparece.
@@ -1094,7 +1108,9 @@ export default function SalaConsultaPaciente({
                     />
                   </svg>
                   <p className="mt-3 text-sm text-white/50">
-                    Conectando video...
+                    {roomName
+                      ? "Conectando video..."
+                      : `${nombreMedico} está iniciando la videollamada. Esperá un momento: vas a entrar automáticamente.`}
                   </p>
                 </>
               )}
@@ -1106,7 +1122,7 @@ export default function SalaConsultaPaciente({
             style={{ borderTop: "0.5px solid rgba(255,255,255,0.1)" }}
           >
             <p className="text-xs text-white/40">
-              Conectando...
+              {roomName ? "Conectando..." : "Esperando al profesional…"}
             </p>
             <button
               type="button"

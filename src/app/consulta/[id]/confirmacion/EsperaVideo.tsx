@@ -393,11 +393,19 @@ export default function EsperaVideo({
           <span className="text-4xl font-bold text-white">&#10003;</span>
         </div>
 
+        {/* `en_curso` lo pone el pago acreditado, no el video: hasta que el
+            profesional abre la sala (`salaUrl`), "ya está lista" era falso y
+            mandaba al paciente a una ruedita sin fin (caso 13/10/2026). La sala
+            del paciente ahora espera sola a que exista; acá solo se dice la verdad. */}
         <h1 className="mt-6 text-2xl font-bold text-gray-900">
-          {nombreMedico ? `¡${nombreMedico} te está esperando!` : "¡Te están esperando!"}
+          {salaUrl
+            ? nombreMedico ? `¡${nombreMedico} te está esperando!` : "¡Te están esperando!"
+            : "¡Listo, ya pagaste!"}
         </h1>
         <p className="mt-2 text-gray-600">
-          Tu videollamada ya está lista
+          {salaUrl
+            ? "Tu videollamada ya está lista"
+            : `${nombreMedico || "El profesional"} está iniciando la videollamada. Entrá y esperá un momento: te conecta sola.`}
         </p>
 
         <InfoCard medicoNombre={nombreMedico} especialidad={especialidad} duracionConsulta={duracionConsulta}>
