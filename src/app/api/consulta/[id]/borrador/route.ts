@@ -67,7 +67,7 @@ export async function PATCH(
         const droga = (med as Record<string, string>).droga ?? (med as Record<string, string>).nombre ?? "";
         if (esControlado(droga)) {
           return NextResponse.json(
-            { error: "Este medicamento es un psicotrópico o estupefaciente: no se receta por Docto." },
+            { error: "Este medicamento es un psicotrópico o estupefaciente: no se puede recetar por Docto." },
             { status: 422 }
           );
         }
@@ -78,7 +78,7 @@ export async function PATCH(
       for (const palabra of palabras) {
         if (palabra.length >= 4 && esControlado(palabra)) {
           return NextResponse.json(
-            { error: "El texto incluye un psicotrópico o estupefaciente: no se receta por Docto." },
+            { error: "El texto incluye un psicotrópico o estupefaciente: no se puede recetar por Docto." },
             { status: 422 }
           );
         }
