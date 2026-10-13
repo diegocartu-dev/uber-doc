@@ -6,6 +6,10 @@ import { crearAgendaModelo } from "@/lib/agenda/crear-agenda";
 import { esInstitucional } from "@/lib/instancia";
 import { profesionalSigueHabilitado } from "@/lib/institucional/demo-puerta";
 
+// Duración sugerida de una sesión de psicología (Diego, 13/10/2026); la agenda
+// ofrece el mismo 50 en su selector.
+const DURACION_SESION_PSICOLOGIA_MIN = 50;
+
 export async function POST(req: NextRequest) {
   try {
     if (!(await getFlag("nova_ai"))) {
@@ -94,6 +98,18 @@ export async function POST(req: NextRequest) {
       //
       // En B2C `esInstitucional()` es false y esto no ejecuta nada.
       let duracionMinutos = typeof duracion === "number" && duracion > 0 ? duracion : medico.duracion_consulta;
+      // Psicología (13/10/2026): `duracion_consulta` es la de la consulta
+      // inmediata, que un psicólogo nunca configuró (null). Sin esto, un pedido
+      // sin duración terminaba en "La duración del turno debe ser un número
+      // positivo". Se usa la sesión sugerida, 50 min (la misma que ofrece la
+      // agenda). Query propia por la profesión: el SELECT de arriba no se toca.
+      // Para un médico no cambia nada: entra solo si no hay duración de dónde sacar.
+      if (!(typeof duracionMinutos === "number" && duracionMinutos > 0)) {
+        const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+        if ((await profesionDeLaFicha(supabase, { medicoId: medicoDbId })) === "psicologo") {
+          duracionMinutos = DURACION_SESION_PSICOLOGIA_MIN;
+        }
+      }
       let duracionPisada = false;
       if (esInstitucional()) {
         const { getConfigInstitucion } = await import("@/lib/institucional/config");
