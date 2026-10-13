@@ -55,7 +55,7 @@ export default async function DetalleAtencionPage({
   const { data: at } = await admin.from(tabla).select("*").eq("id", id).maybeSingle();
   if (!at) notFound();
 
-  const [{ data: medico }, { data: docs }, { data: refund }] = await Promise.all([
+  const [{ data: medico }, { data: docs }, { data: refund }, { data: presencia }] = await Promise.all([
     admin
       .from("medicos")
       .select("id, nombre_completo, especialidad, email_personal, celular_personal, telefono, jurisdicciones, estado_registro, disponible")
@@ -63,7 +63,18 @@ export default async function DetalleAtencionPage({
       .maybeSingle(),
     admin.from("documentos").select("tipo, created_at").eq(esTurno ? "turno_id" : "consulta_id", id),
     admin.from("refunds_pendientes").select("estado, neto_medico, application_fee").eq("tipo", esTurno ? "turno" : "consulta").eq("recurso_id", id).maybeSingle(),
+    // Quién entró de verdad a la videollamada (`video_presencia`, lib/video/presencia).
+    // `en_curso_at` NO es eso: en una consulta inmediata lo escribe el pago al
+    // acreditarse. La ficha decía "Video iniciado" sobre una paciente que nunca
+    // entró (caso 13/10/2026, dos veces).
+    admin.from("video_presencia").select("rol, evento, ocurrido_at").eq("tipo", esTurno ? "turno" : "consulta").eq("recurso_id", id).order("ocurrido_at", { ascending: true }),
   ]);
+
+  const entroMedico = (presencia ?? []).find((p) => p.rol === "medico" && p.evento === "joined")?.ocurrido_at ?? null;
+  const entroPaciente = (presencia ?? []).find((p) => p.rol === "paciente" && p.evento === "joined")?.ocurrido_at ?? null;
+  // "Nunca entró" solo con evidencia: hubo presencia (alguien entró) y la atención ya cerró.
+  const cerradaEn = (at.completada_at ?? at.resuelta_at ?? null) as string | null;
+  const pacienteNuncaEntro = (presencia ?? []).length > 0 && !entroPaciente && !!cerradaEn ? cerradaEn : null;
 
   // consultas.paciente_id = user_id; turnos.paciente_id = pacientes.id → doble intento.
   let paciente = null as null | Record<string, unknown>;
@@ -93,7 +104,10 @@ export default async function DetalleAtencionPage({
         },
         { hora: fmtHora(at.mp_payment_created_at), label: `Reserva pagada (${fmtARS(at.monto)})` },
         { hora: at.fecha ? `${String(at.fecha).split("-").reverse().slice(0, 2).join("/")} ${String(at.hora_inicio).slice(0, 5)}` : null, label: "Cita programada" },
-        { hora: fmtHora(at.en_curso_at), label: "Video iniciado" },
+        { hora: fmtHora(at.en_curso_at), label: "El profesional abrió la videollamada" },
+        { hora: fmtHora(entroMedico), label: "El profesional entró a la videollamada" },
+        { hora: fmtHora(entroPaciente), label: "El paciente entró a la videollamada" },
+        { hora: fmtHora(pacienteNuncaEntro), label: "El paciente nunca entró a la videollamada" },
         { hora: fmtHora(at.desconectado_at), label: "Corte de conexión (sin retorno)" },
         { hora: fmtHora(at.completada_at), label: `Cierre — ${CIERRE_LABEL[at.cierre_origen as string] ?? "sin firma (anterior al 04/08)"}` },
       ]
@@ -107,7 +121,12 @@ export default async function DetalleAtencionPage({
         { hora: fmtHora(at.created_at), label: "Solicitada" },
         { hora: fmtHora(at.aceptada_at), label: "Aceptada por el médico" },
         { hora: fmtHora(at.mp_payment_created_at), label: `Pagada (${fmtARS(at.monto)})` },
-        { hora: fmtHora(at.en_curso_at), label: "Video iniciado" },
+        // Un pago real salta de `aceptada` a `en_curso` al acreditarse: esto es
+        // "puede entrar", no "entró". Quién entró lo dicen las dos filas siguientes.
+        { hora: fmtHora(at.en_curso_at), label: "Habilitada para entrar a la videollamada" },
+        { hora: fmtHora(entroMedico), label: "El profesional entró a la videollamada" },
+        { hora: fmtHora(entroPaciente), label: "El paciente entró a la videollamada" },
+        { hora: fmtHora(pacienteNuncaEntro), label: "El paciente nunca entró a la videollamada" },
         { hora: fmtHora(at.desconectado_at), label: "Corte de conexión (sin retorno)" },
         { hora: fmtHora(at.completada_at), label: `Cierre — ${CIERRE_LABEL[at.cierre_origen as string] ?? "sin firma (anterior al 04/08)"}` },
       ];
