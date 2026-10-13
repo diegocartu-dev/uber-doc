@@ -430,7 +430,7 @@ function TriageContent() {
                 </p>
                 <div className="mt-3 rounded-lg bg-red-100 p-4">
                   <p className="text-center text-lg font-bold text-red-800">
-                    Llamá al 107 (SAME) o 911 de inmediato
+                    Llamá al 107 (SAME) o 911, o al servicio de emergencias de tu zona, de inmediato
                   </p>
                 </div>
                 <p className="mt-3 text-xs text-red-600">
@@ -631,7 +631,7 @@ function TriageContent() {
               Docto <strong>NO</strong> es un servicio de emergencias
               médicas. Si tu situación es urgente o sentís que empeora, no
               esperes — llamá al <strong>107</strong> (SAME) o al{" "}
-              <strong>911</strong> de inmediato.
+              <strong>911</strong>, o al servicio de emergencias de tu zona, de inmediato.
             </p>
             <p className="mt-3 text-sm leading-relaxed text-gray-700">
               Este servicio es para consultas médicas no urgentes que pueden
