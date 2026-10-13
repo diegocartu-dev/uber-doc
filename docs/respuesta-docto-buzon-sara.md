@@ -79,15 +79,17 @@ cuando entra un contacto: el equipo lo ve en la pestaña, con su contador de sin
 leer. Que no viajen datos de salud ni el motivo de consulta de un paciente lo
 garantiza Sara; Docto solo acota los campos y el largo.
 
-## 2. Psicólogos en el registro — pendiente de decisiones de Diego
+## 2. Psicólogos en el registro — decidido, en construcción (13/10/2026)
 
-No es abrir un filtro. Detrás de la validación de matrícula, el producto supone
-que el profesional es médico: la clínica muestra a todos los profesionales de la
-provincia sin elegir especialidad, la receta y la orden de estudios no aplican a
-un psicólogo, y los documentos dicen "médico". Hace falta que Diego decida cómo
-atienden (consulta inmediata o solo turnos), qué documentos emiten y cómo
-aparecen en la clínica. Mientras tanto, la conducta de Sara es la correcta: el
-psicólogo deja su contacto en el buzón.
+Diego decidió cómo entran:
+- atienden **solo con turno** (nunca consulta inmediata);
+- emiten la **evolución** en la historia clínica y una **constancia de atención**; nunca receta, orden de estudios, certificado ni indicaciones;
+- aparecen en una **sección propia "Psicología"** de la clínica, con título **"Lic."**;
+- **solo pacientes adultos** al principio;
+- la matrícula se valida con **REFEPS**, como la del médico, con la profesión de psicología;
+- **coste por uso** igual que los médicos.
+
+Mientras se construye, la conducta de Sara sigue siendo la correcta: el psicólogo deja su contacto en el buzón. Docto avisa en este documento cuando el registro esté abierto para ellos.
 
 ## 3. Controlados en términos y condiciones — hecho (12/10/2026)
 
