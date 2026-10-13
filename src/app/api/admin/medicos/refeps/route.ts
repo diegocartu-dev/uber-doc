@@ -4,6 +4,7 @@ import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
+import { profesionDe } from "@/lib/refeps/profesion";
 import { diagnosticoSinPisar } from "@/lib/refeps/persistir-diagnostico";
 
 // El Bus FHIR es lento y buscarPorDNI reintenta ante timeout (hasta ~51s en el peor caso).
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   // Obtener DNI del médico
   const { data: medico, error: fetchError } = await admin
     .from("medicos")
-    .select("id, dni, nombre_completo, refeps_data")
+    .select("id, dni, nombre_completo, refeps_data, profesion")
     .eq("id", medicoId)
     .single();
 
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
   if (resultado.encontrado && resultado.activo) {
     // Alcance para el ruteo por jurisdicción (Regla A): provincias de matrículas habilitadas.
     // Solo se persiste si viene con contenido, para no pisar un set válido con vacío (fail-safe).
-    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas);
+    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
     // Guardar resultado exitoso (sin raw)
     const { error: updateError } = await admin
       .from("medicos")

@@ -40,6 +40,51 @@ Lleva lo que pide el Decreto 905/1995 para las certificaciones del psicólogo (n
 
 ## Plan de construcción
 
-Se arma detrás de un interruptor: el registro de psicólogos se abre recién cuando esté todo, y ahí se le avisa a Sara (en `docs/respuesta-docto-buzon-sara.md`).
+Se arma detrás de un interruptor (flag `registro_psicologos`, apagado): cada fase se mergea y queda dormida; el registro se abre recién cuando están todas, y ahí se le avisa a Sara (`docs/respuesta-docto-buzon-sara.md`, `src/lib/bandeja/sara.ts`).
 
-(El detalle por ticket se completa con el inventario de todo lo que hoy supone que el profesional es médico.)
+Inventario del 13/10: ~150 lugares que suponen que el profesional es médico, en registro, REFEPS, consulta inmediata, clínica, documentos, textos, edad y admin. Lo más delicado:
+- **No hay columna de profesión**: todo se infiere de `especialidad` (texto libre) y `titulo`.
+- **Un psicólogo validado hoy aparecería en TODAS las provincias**: `derivarJurisdicciones` descarta las matrículas que no son de médico y `habilitadoEnProvincia` lee "sin jurisdicciones" como "en todas".
+- **Los permisos de `medicos` son por columna** (verificado en producción): la columna nueva necesita su GRANT SELECT o la clínica se cae entera (caída del 22/06).
+- **El tipo de documento** admite hoy receta, indicaciones, certificado y orden (verificado en producción): la constancia es un tipo nuevo.
+- **La fecha de nacimiento del paciente** la declara él (sin verificar) y un trigger viejo rellena `2000-01-01`.
+
+### F1 — Base y registro · ✅ 13/10 (en producción, dormida detrás del flag)
+- `medicos.profesion` (`medico` | `psicologo`, por defecto `medico`): con GRANT SELECT, en el trigger de columnas de confianza y en la re-verificación; y una restricción en la base: un psicólogo nunca queda `disponible` (consulta inmediata).
+- "Psicología" en el catálogo de especialidades (no en el buscador de la landing ni en "atención general").
+- Registro: elegir profesión (solo con el flag prendido); el psicólogo, título "Lic." y especialidad fija; textos neutros; sin el término de controlados (no receta).
+- REFEPS por profesión: el médico solo con matrícula de médico, el psicólogo solo con la de psicología; jurisdicciones derivadas según su profesión (cierra el "todas las provincias"); «Usar esta» igual. Se reconoce la profesión de forma tolerante hasta ver el texto real.
+- Matrícula única **por profesión** (hallado al construir): el índice único de la base no dejaba registrar a un psicólogo con el mismo número y provincia que un médico, y los colegios numeran cada uno por su lado.
+- "Pasar a Medicina general" (Mi perfil): oculto y rechazado para el psicólogo.
+
+Qué quedó hecho:
+- Migración `20261013_medicos_profesion.sql` (espejo institucional `036`), aplicada en las dos bases y probada en transacciones que se deshicieron: el GRANT de lectura existe; la sesión del profesional no se cambia la profesión (el trigger la devuelve); cambiarla con service role invalida REFEPS y devuelve a revisión; un psicólogo no puede quedar `disponible` ni con consulta inmediata en su link; una profesión inventada se rechaza; misma matrícula en la misma profesión se rechaza y en distinta profesión se acepta. Todas las fichas existentes quedaron `medico`.
+- Flag `registro_psicologos` sembrado apagado en las dos bases.
+- Código: `lib/refeps/profesion.ts` (`profesionDe`, `esMatriculaDe`), `derivarJurisdicciones` y `cruzarMatricula` con la profesión de la ficha (por defecto médico: para los médicos no cambia nada), y la profesión pasada en el alta automática de REFEPS, en la reconciliación de identidad, en las dos rutas de REFEPS del admin y en «Usar esta». Tests en `matricula-refeps.test.ts`.
+- Registro: con el flag prendido aparece "Profesión: Médico/a · Psicólogo/a". El psicólogo queda Lic. · Psicología, sin el término de controlados. Con el flag apagado (hoy) el formulario es el de siempre.
+
+**Textos nuevos para que apruebe Diego antes de abrir** (los ve solo un psicólogo, con el flag prendido):
+- Selector: "Profesión" · "Médico/a" · "Psicólogo/a"; y "Título y especialidad: Lic. · Psicología".
+- "Estos datos aparecen impresos en tus constancias." (el médico sigue viendo "recetas").
+- Credencial: "…el que emite el Ministerio o el Colegio de Psicólogos" y "Subí la foto de tu credencial profesional para continuar."
+- Declaración: "…soy responsable de mis actos profesionales como profesional independiente" (el médico sigue con "actos médicos").
+- Firma: "Aparece impresa en cada constancia que emitas."
+
+### F2 — Cómo atiende y cómo aparece
+- Nada de consulta inmediata: rechazada en `actualizarDisponibilidad` (y la restricción de F1 en la base), fuera de `puedeAtenderAhora`, del rescate, del aviso de demanda y del consultorio privado; el panel no le muestra los bloques de consulta inmediata.
+- El aviso del término de controlados del panel no se le muestra (no receta).
+- Agenda: duración de 50 minutos disponible.
+- Clínica: sección "Psicología" separada de los médicos (y "lo más pronto" de los médicos no ofrece psicólogos, ni al revés).
+- Solo adultos: `reservarTurno` (y el pago) rechazan un turno de psicología si el paciente es menor según su fecha de nacimiento; el área "adolescencia" no se le ofrece al psicólogo. Límite declarado: la fecha la declara el paciente.
+
+### F3 — Documentos
+- Tipo `constancia` (CHECK en las dos bases), firmable, con el texto aprobado; el PDF sin bloque de diagnóstico.
+- El espacio de trabajo del psicólogo: solo evolución y constancia (sin el relleno automático de "indicaciones").
+- La identidad congelada en la firma suma profesión y jurisdicción (versión nueva del snapshot).
+
+### F4 — Textos y avisos
+- "Médico" → "profesional" en todo el recorrido del turno (pantallas, mails, push) y en el panel; consentimiento informado con las líneas de salud mental (números verificados antes de publicar); mail de bienvenida sin consulta inmediata.
+- Admin: la profesión como columna con embudo.
+
+### F5 — Abrir
+- Prender el flag, registrar al primer psicólogo real (confirma el texto de REFEPS) y avisarle a Sara.

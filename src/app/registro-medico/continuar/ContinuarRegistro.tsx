@@ -11,7 +11,8 @@ import { completarRegistroMedico } from "@/app/auth/registro-medico/actions";
 import FirmaCanvas, { type FirmaCanvasHandle } from "@/components/firma/FirmaCanvas";
 import LoadingButton from "@/components/ui/LoadingButton";
 import ModalTerminos from "@/components/ModalTerminos";
-import { ESPECIALIDADES } from "@/lib/especialidades";
+import { ESPECIALIDADES, ESPECIALIDAD_PSICOLOGIA } from "@/lib/especialidades";
+import type { Profesion } from "@/lib/refeps/profesion";
 
 
 const PROVINCIAS = [
@@ -63,6 +64,7 @@ type Borrador = {
   tipoMatricula: string;
   numeroMatricula: string;
   tieneMatriculaExtra: boolean;
+  profesion?: Profesion;
 };
 
 // Errores del server que en realidad pertenecen a un campo del PASO 1. Cuando
@@ -104,8 +106,19 @@ function BloqueHeader({ titulo, subtitulo }: { titulo: string; subtitulo: string
 // (Fase A) y confirmó el mail → llega acá YA LOGUEADO. Completa datos + credencial
 // → se crea la ficha de `medicos` → biometría (/registro-medico/identidad).
 // La cuenta (nombre/email/password) ya existe: acá NO se pide de nuevo.
-export default function ContinuarRegistro({ nombre, userId }: { nombre: string; userId: string }) {
+export default function ContinuarRegistro({
+  nombre,
+  userId,
+  admitePsicologos = false,
+}: {
+  nombre: string;
+  userId: string;
+  /** Flag `registro_psicologos` (13/10/2026): hasta que se abra, todos se registran como médicos. */
+  admitePsicologos?: boolean;
+}) {
   const [paso, setPaso] = useState(1);
+  const [profesion, setProfesion] = useState<Profesion>("medico");
+  const esPsicologo = admitePsicologos && profesion === "psicologo";
   const [tipoMatricula, setTipoMatricula] = useState(""); // nada prellenado
   const [tieneMatriculaExtra, setTieneMatriculaExtra] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,8 +150,8 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
   const camposPendientesRef = useRef<Record<string, string> | null>(null);
   // Espejo de los estados que el autosave lee desde un listener montado UNA vez
   // (evita closures viejas sin tener que re-atar el listener en cada render).
-  const estadoRef = useRef({ paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra });
-  estadoRef.current = { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
+  const estadoRef = useRef({ paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra, profesion });
+  estadoRef.current = { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra, profesion };
 
   // Junta los campos de texto/select del form (uncontrolled: la verdad vive en el
   // DOM) + los estados controlados, y persiste el borrador. Archivos, firma y
@@ -147,7 +160,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
   function guardarBorrador() {
     const form = formRef.current;
     if (!form) return;
-    const { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra } = estadoRef.current;
+    const { paso, tipoMatricula, numeroMatricula, tieneMatriculaExtra, profesion } = estadoRef.current;
     const campos: Record<string, string> = {};
     for (const el of Array.from(form.elements)) {
       if (el instanceof HTMLInputElement && (el.type === "text" || el.type === "tel") && el.name) {
@@ -158,7 +171,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
     }
     const hayAlgo = Object.values(campos).some((v) => v.trim() !== "") || tieneMatriculaExtra;
     if (!hayAlgo) return; // no crear borradores vacíos con solo abrir la página
-    const borrador: Borrador = { uid: userId, guardadoEn: Date.now(), paso, campos, tipoMatricula, numeroMatricula, tieneMatriculaExtra };
+    const borrador: Borrador = { uid: userId, guardadoEn: Date.now(), paso, campos, tipoMatricula, numeroMatricula, tieneMatriculaExtra, profesion };
     try {
       localStorage.setItem(BORRADOR_KEY, JSON.stringify(borrador));
     } catch {
@@ -208,6 +221,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
       if (typeof b.tipoMatricula === "string") setTipoMatricula(b.tipoMatricula);
       if (typeof b.numeroMatricula === "string") setNumeroMatricula(b.numeroMatricula);
       if (b.tieneMatriculaExtra === true) setTieneMatriculaExtra(true);
+      if (b.profesion === "psicologo") setProfesion("psicologo");
       setBorradorRestaurado(true); // banner discreto en el paso 1
       trackFunnel("registro_medico_paso", { paso: 1, borrador_restaurado: true });
     } catch {
@@ -234,7 +248,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
       }
     }
     if (Object.keys(pendientes).length === 0) camposPendientesRef.current = null;
-  }, [borradorRestaurado, tipoMatricula, tieneMatriculaExtra]);
+  }, [borradorRestaurado, tipoMatricula, tieneMatriculaExtra, profesion]);
 
   // Autosave con debounce (~800ms): un solo listener a nivel form — los eventos
   // "input"/"change" de todos los campos burbujean hasta acá.
@@ -400,14 +414,14 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
   // al paso de firma (spec Sofía 20/07: el submit real ocurre en el paso 3).
   function validarPaso2(): boolean {
     if (!fotoCredencial) {
-      reportarError("paso2", "Subí la foto de tu credencial médica para continuar.");
+      reportarError("paso2", esPsicologo ? "Subí la foto de tu credencial profesional para continuar." : "Subí la foto de tu credencial médica para continuar.");
       return false;
     }
     if (!checkTerminos || !checkMatricula) {
       reportarError("paso2", "Aceptá los términos y la declaración de matrícula para continuar.");
       return false;
     }
-    if (necesitaControlados && !checkControlados) {
+    if (necesitaControlados && !esPsicologo && !checkControlados) {
       reportarError("paso2", "Aceptá el término de medicamentos controlados para continuar.");
       return false;
     }
@@ -598,23 +612,63 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
             {/* 1 · Tus datos profesionales */}
             <div className="space-y-3">
               <BloqueHeader titulo="Tus datos profesionales" subtitulo="Con esto validamos tu matrícula y te mostramos a los pacientes." />
-              <div>
-                <label htmlFor="titulo" className={labelClass}>Título profesional</label>
-                <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
-                  <option value="" disabled>Elegí tu título</option>
-                  <option value="Dr.">Dr.</option>
-                  <option value="Dra.">Dra.</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
-                <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
-                  <option value="" disabled>Seleccioná tu especialidad</option>
-                  {ESPECIALIDADES.map((esp) => (
-                    <option key={esp} value={esp}>{esp}</option>
-                  ))}
-                </select>
-              </div>
+              {admitePsicologos && (
+                <div>
+                  <p className={labelClass}>Profesión</p>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Profesión">
+                    {([
+                      ["medico", "Médico/a"],
+                      ["psicologo", "Psicólogo/a"],
+                    ] as const).map(([valor, texto]) => (
+                      <button
+                        key={valor}
+                        type="button"
+                        role="radio"
+                        aria-checked={profesion === valor}
+                        onClick={() => setProfesion(valor)}
+                        className="min-h-[48px] rounded-[var(--radius-md)] border px-3 text-sm font-medium"
+                        style={
+                          profesion === valor
+                            ? { borderColor: "#378ADD", color: "#378ADD", backgroundColor: "#378ADD0D" }
+                            : { borderColor: "#D1D5DB", color: "#374151" }
+                        }
+                      >
+                        {texto}
+                      </button>
+                    ))}
+                  </div>
+                  <input type="hidden" name="profesion" value={profesion} />
+                </div>
+              )}
+              {esPsicologo ? (
+                <div>
+                  {/* Psicólogo (13/10/2026): título y especialidad fijos, los pone el alta. */}
+                  <p className={labelClass}>Título y especialidad</p>
+                  <p className="text-sm text-gray-700">Lic. · {ESPECIALIDAD_PSICOLOGIA}</p>
+                  <input type="hidden" name="titulo" value="Lic." />
+                  <input type="hidden" name="especialidad" value={ESPECIALIDAD_PSICOLOGIA} />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label htmlFor="titulo" className={labelClass}>Título profesional</label>
+                    <select id="titulo" name="titulo" required className={inputClass} defaultValue="">
+                      <option value="" disabled>Elegí tu título</option>
+                      <option value="Dr.">Dr.</option>
+                      <option value="Dra.">Dra.</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="especialidad" className={labelClass}>Especialidad</label>
+                    <select id="especialidad" name="especialidad" required className={inputClass} defaultValue="">
+                      <option value="" disabled>Seleccioná tu especialidad</option>
+                      {ESPECIALIDADES.map((esp) => (
+                        <option key={esp} value={esp}>{esp}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <div className="flex gap-3">
                 <div className="w-40">
                   <label htmlFor="tipo_matricula" className={labelClass}>Matrícula</label>
@@ -696,7 +750,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
 
             {/* 2 · Tu consultorio */}
             <div className="space-y-3">
-              <BloqueHeader titulo="Tu consultorio" subtitulo="Estos datos aparecen impresos en tus recetas." />
+              <BloqueHeader titulo="Tu consultorio" subtitulo={esPsicologo ? "Estos datos aparecen impresos en tus constancias." : "Estos datos aparecen impresos en tus recetas."} />
               <div>
                 <label htmlFor="domicilio_consultorio" className={labelClass}>Domicilio del consultorio</label>
                 <input id="domicilio_consultorio" name="domicilio_consultorio" type="text" required className={inputClass} placeholder="Av. Rivadavia 4500, CABA" />
@@ -789,7 +843,7 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
               <p className="font-medium text-gray-900">¿Qué es la credencial?</p>
               <ul className="mt-2 space-y-1.5">
-                <li className="flex items-start gap-2 text-gray-600"><CheckCircle size={16} className="mt-0.5 shrink-0 text-[#1D9E75]" /><span>El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio Médico).</span></li>
+                <li className="flex items-start gap-2 text-gray-600"><CheckCircle size={16} className="mt-0.5 shrink-0 text-[#1D9E75]" /><span>{esPsicologo ? "El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio de Psicólogos)." : "El carnet o certificado de tu matrícula profesional (el que emite el Ministerio o el Colegio Médico)."}</span></li>
                 <li className="flex items-start gap-2 text-gray-600"><X size={16} className="mt-0.5 shrink-0 text-[#E24B4A]" /><span>No es tu DNI ni tu CV ni tu título.</span></li>
                 <li className="flex items-start gap-2 text-gray-600"><Lightbulb size={16} className="mt-0.5 shrink-0 text-[#BA7517]" /><span>Que se lea completa: tu nombre y el número de matrícula, sin reflejos.</span></li>
               </ul>
@@ -821,26 +875,29 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
                 />
                 <span className="text-sm text-gray-700">
                   Declaro que la información de mi matrícula profesional es
-                  verídica y que soy responsable de mis actos médicos como{" "}
+                  verídica y que soy responsable de mis actos {esPsicologo ? "profesionales" : "médicos"} como{" "}
                   <button type="button" onClick={() => setModalMatricula(true)} className="font-medium underline" style={{ color: "#378ADD" }}>
                     profesional independiente
                   </button>
                 </span>
               </label>
             </div>
-            {necesitaControlados && (
+            {/* El psicólogo no receta: el término de controlados no es para él. */}
+            {necesitaControlados && !esPsicologo && (
               <TerminoControlados aceptado={checkControlados} onChange={setCheckControlados} />
             )}
             {checkTerminos && <input type="hidden" name="terminos_aceptados" value="true" />}
             {checkMatricula && <input type="hidden" name="declaracion_matricula" value="true" />}
-            {necesitaControlados && checkControlados && <input type="hidden" name="controlados_aceptados" value="true" />}
+            {necesitaControlados && !esPsicologo && checkControlados && <input type="hidden" name="controlados_aceptados" value="true" />}
           </div>
 
           {/* ── Paso 3: Tu firma (spec Sofía 20/07 — "todo de un tirón") ── */}
           <div className={paso === 3 ? "space-y-4" : "hidden"}>
             <p className="text-sm text-gray-600">
-              Aparece impresa en cada receta, certificado e indicación que
-              emitas. Firmá en el recuadro como lo hacés en papel.
+              {esPsicologo
+                ? "Aparece impresa en cada constancia que emitas."
+                : "Aparece impresa en cada receta, certificado e indicación que emitas."}{" "}
+              Firmá en el recuadro como lo hacés en papel.
             </p>
             <FirmaCanvas
               ref={firmaRef}

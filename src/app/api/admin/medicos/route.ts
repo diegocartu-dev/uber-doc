@@ -8,6 +8,7 @@ import { enviarEmailMedicoAprobado } from "@/lib/email";
 import { camposFaltantesMedico } from "@/lib/perfil-medico";
 import { derivarJurisdicciones, normalizarJurisdiccion } from "@/lib/jurisdicciones";
 import { diagnosticoSinPisar } from "@/lib/refeps/persistir-diagnostico";
+import { nombreProfesion, profesionDe } from "@/lib/refeps/profesion";
 import {
   declaradaDesdeRefeps,
   esUtilizable,
@@ -45,7 +46,7 @@ async function asegurarRefepsParaAprobar(
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const { data: medico } = await admin
     .from("medicos")
-    .select("dni, refeps_validado, es_cuenta_test, refeps_data")
+    .select("dni, refeps_validado, es_cuenta_test, refeps_data, profesion")
     .eq("id", medicoId)
     .single();
 
@@ -92,7 +93,7 @@ async function asegurarRefepsParaAprobar(
     // Alcance del médico para el ruteo por jurisdicción (Regla A): las provincias de sus
     // matrículas HABILITADAS, derivadas de REFEPS. Solo se persiste si viene con contenido,
     // para no pisar con vacío un set ya válido (fail-safe). Si viene vacío se loguea.
-    const { jurisdicciones, sinResolver } = derivarJurisdicciones(resultado.matriculas);
+    const { jurisdicciones, sinResolver } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
     if (jurisdicciones.length === 0) {
       console.warn(`[aprobar/refeps] médico ${medicoId} sin jurisdicción canónica derivable (sinResolver=${JSON.stringify(sinResolver)})`);
     }
@@ -137,7 +138,7 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from("medicos")
-    .select("id, nombre_completo, email, dni, tipo_matricula, numero_matricula, provincia_matricula, especialidad, foto_credencial_url, estado_registro, created_at, cuit, user_id, domicilio, verificado, verificado_at, verificado_por, disponible, notas_admin, slug, categoria, refeps_validado, refeps_data, refeps_validado_at, jurisdicciones, identidad_validada, identidad_validada_at, didit_status, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url")
+    .select("id, nombre_completo, email, dni, tipo_matricula, numero_matricula, provincia_matricula, especialidad, foto_credencial_url, estado_registro, created_at, cuit, user_id, domicilio, verificado, verificado_at, verificado_por, disponible, notas_admin, slug, categoria, refeps_validado, refeps_data, refeps_validado_at, jurisdicciones, identidad_validada, identidad_validada_at, didit_status, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, profesion")
     .eq("es_cuenta_test", false)
     .order("created_at", { ascending: true });
 
@@ -418,7 +419,7 @@ export async function PATCH(req: NextRequest) {
     const { data: ficha, error: errFicha } = await admin
       .from("medicos")
       .select(
-        "dni, tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, biometria_exenta, didit_status, didit_session_id, identidad_revision_motivo, verificado, verificado_at, slug, es_cuenta_test, nombre_completo"
+        "dni, tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, biometria_exenta, didit_status, didit_session_id, identidad_revision_motivo, verificado, verificado_at, slug, es_cuenta_test, nombre_completo, profesion"
       )
       .eq("id", medicoId)
       .single();
@@ -506,16 +507,17 @@ export async function PATCH(req: NextRequest) {
         { status: transitorio ? 503 : 400 }
       );
     }
+    const profesion = profesionDe(ficha.profesion);
     const enRefeps = ((refeps.matriculas ?? []) as MatriculaDeRefeps[]).find(
       (m) =>
-        esUtilizable(m) &&
+        esUtilizable(m, profesion) &&
         normalizarJurisdiccion(m.tipo) === normalizarJurisdiccion(elegida.tipo as string) &&
         normalizarNumeroMatricula(m.numero) === normalizarNumeroMatricula(elegida.numero as string)
     );
     const nueva = enRefeps ? declaradaDesdeRefeps(enRefeps) : null;
     if (!nueva) {
       return NextResponse.json(
-        { error: "REFEPS no tiene hoy esa matrícula como de médico y habilitada para este DNI." },
+        { error: `REFEPS no tiene hoy esa matrícula como de ${nombreProfesion(profesion)} y habilitada para este DNI.` },
         { status: 400 }
       );
     }
