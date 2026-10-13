@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin-auth";
 import { esInstitucional } from "@/lib/instancia";
+import { getFlag } from "@/lib/feature-flags";
 import LandingNav from "@/components/landing/LandingNav";
 import Buscador from "@/components/landing/Buscador";
 import { PhoneMockupHero, PhoneMockupInmediata, PhoneMockupTurnos } from "@/components/landing/PhoneMockup";
@@ -470,7 +471,7 @@ export default async function Home({
         </div>
       </section>
 
-      <Footer />
+      <Footer conPsicologos={await getFlag("registro_psicologos")} />
 
       {/* Responsive overrides + animations */}
       <style>{`

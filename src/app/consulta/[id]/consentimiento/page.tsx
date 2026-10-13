@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ConsentimientoInformado from "@/components/ConsentimientoInformado";
+import { VERSION_CONSENTIMIENTO_MEDICO } from "@/lib/legal/consentimiento-version";
 
 function sanitizeRedirect(url: string | undefined, fallback: string): string {
   if (!url) return fallback;
@@ -41,7 +42,7 @@ export default async function ConsentimientoConsultaPage({
     .select("id")
     .eq("paciente_id", user.id)
     .eq("consulta_id", consultaId)
-    .eq("texto_version", "v1")
+    .eq("texto_version", VERSION_CONSENTIMIENTO_MEDICO)
     .limit(1)
     .maybeSingle();
 

@@ -88,7 +88,12 @@ export default function PagoPendiente({ turnoId, vuelta = null, reservadoHasta, 
       const result = await confirmarPagoTurno(turnoId);
       if (result?.error) { setError(result.error); return; }
       setPagado(true);
-      setTimeout(() => { window.location.href = `/turno/${turnoId}/confirmacion`; }, 1500);
+      // El mismo camino que la vuelta de Mercado Pago (crear-v2, back_url
+      // success): info médica → consentimiento → confirmación. Así el pago
+      // simulado de las cuentas de prueba recorre lo mismo que un pago real.
+      setTimeout(() => {
+        window.location.href = `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/consentimiento`;
+      }, 1500);
     });
   }
 

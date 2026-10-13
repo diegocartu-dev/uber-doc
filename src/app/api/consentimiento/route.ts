@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
-import {
-  VERSION_CONSENTIMIENTO_MEDICO,
-  esVersionConsentimientoValida,
-  versionConsentimiento,
-} from "@/lib/legal/consentimiento-version";
+import { VERSION_CONSENTIMIENTO_MEDICO, esVersionConsentimientoValida } from "@/lib/legal/consentimiento-version";
+import { versionConsentimientoDelTurno } from "@/lib/legal/consentimiento-turno";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -44,25 +40,24 @@ export async function POST(req: NextRequest) {
   let version: string = VERSION_CONSENTIMIENTO_MEDICO;
 
   if (turnoId) {
-    // `turnos.paciente_id` es `pacientes.id`, no el user_id (asimetría de esquema).
-    // Comparar contra user.id dejaba sin registrar todo consentimiento de turno.
-    const [{ data: turno }, { data: paciente }] = await Promise.all([
-      supabase.from("turnos").select("paciente_id, medico_id").eq("id", turnoId).single(),
-      supabase.from("pacientes").select("id").eq("user_id", user.id).maybeSingle(),
-    ]);
-
-    if (!turno || !paciente || turno.paciente_id !== paciente.id) {
-      return NextResponse.json({ error: "Turno no encontrado" }, { status: 403 });
+    // La misma lectura que la página que muestra el texto (versionConsentimientoDelTurno).
+    const { data: paciente } = await supabase.from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
+    const delTurno = paciente
+      ? await versionConsentimientoDelTurno(createAdminClient(), turnoId, paciente.id)
+      : ({ ok: false, motivo: "no_es_suyo" } as const);
+    if (!delTurno.ok) {
+      return delTurno.motivo === "no_es_suyo"
+        ? NextResponse.json({ error: "Turno no encontrado" }, { status: 403 })
+        : NextResponse.json({ error: "No se pudo leer el turno", recargar: true }, { status: 503 });
     }
-    if (turno.medico_id) {
-      version = versionConsentimiento(await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id }));
-    }
+    version = delTurno.version;
   }
 
-  // Si el cliente dice qué versión mostró, tiene que ser la misma que la del
-  // servidor; si no, el registro mentiría.
+  // El cliente dice qué versión mostró: tiene que ser la misma que la del
+  // servidor; si no, el registro mentiría. 409 + recargar: la pantalla vuelve a
+  // pedir el texto vigente en vez de quedar trabada.
   if (textoVersion != null && (!esVersionConsentimientoValida(textoVersion) || textoVersion !== version)) {
-    return NextResponse.json({ error: "La versión del texto no coincide" }, { status: 400 });
+    return NextResponse.json({ error: "La versión del texto no coincide", recargar: true }, { status: 409 });
   }
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;

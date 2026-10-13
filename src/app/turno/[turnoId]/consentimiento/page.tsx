@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ConsentimientoInformado from "@/components/ConsentimientoInformado";
-import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
-import { versionConsentimiento } from "@/lib/legal/consentimiento-version";
+import { versionConsentimientoDelTurno } from "@/lib/legal/consentimiento-turno";
 
 function sanitizeRedirect(url: string | undefined, fallback: string): string {
   if (!url) return fallback;
@@ -29,30 +28,19 @@ export default async function ConsentimientoTurnoPage({
 
   const destino = sanitizeRedirect(redirectUrl, `/turno/${turnoId}/confirmacion`);
 
-  const { data: turno } = await supabase
-    .from("turnos")
-    .select("paciente_id")
-    .eq("id", turnoId)
-    .single();
-
-  // `turnos.paciente_id` es `pacientes.id`, NO el user_id (asimetría de esquema,
-  // la misma que en toda la app). Hasta el 13/10/2026 esto comparaba contra
-  // user.id, así que un paciente real con un turno pago rebotaba al inicio y
-  // nunca veía ni firmaba el consentimiento del turno (en producción no había
-  // ningún consentimiento con turno_id). Hallazgo conocido desde mayo (B.3).
+  // De quién es el turno y qué texto le toca: lo mismo que lee la API al guardar
+  // (versionConsentimientoDelTurno). Hasta el 13/10/2026 esta página comparaba
+  // `turnos.paciente_id` (que es `pacientes.id`) contra el user_id, así que el
+  // paciente de un turno pago rebotaba al inicio y nunca veía el consentimiento
+  // del turno. Hallazgo conocido desde mayo (B.3).
   const { data: paciente } = await supabase.from("pacientes").select("id").eq("user_id", user.id).maybeSingle();
-  if (!turno || !paciente || turno.paciente_id !== paciente.id) {
-    redirect("/");
-  }
-
-  // El texto (y su versión) depende de la profesión del profesional del turno:
-  // psicología tiene el suyo ("psi-v1"). Query aparte para el medico_id (el
-  // SELECT de arriba no se toca) y profesión con service role.
-  const { data: turnoMedico } = await supabase.from("turnos").select("medico_id").eq("id", turnoId).maybeSingle();
-  const profesion = turnoMedico?.medico_id
-    ? await profesionDeLaFicha(createAdminClient(), { medicoId: turnoMedico.medico_id })
-    : "medico";
-  const version = versionConsentimiento(profesion);
+  if (!paciente) redirect("/");
+  const delTurno = await versionConsentimientoDelTurno(createAdminClient(), turnoId, paciente.id);
+  if (!delTurno.ok && delTurno.motivo === "no_es_suyo") redirect("/");
+  // Si no se pudo saber qué texto le toca, no se adivina y no se lo frena: sigue
+  // a la confirmación (el consentimiento del turno no bloquea la atención).
+  if (!delTurno.ok) redirect(destino);
+  const { version, profesion } = delTurno;
 
   const { data: existing } = await supabase
     .from("consentimientos_informados")
@@ -69,6 +57,9 @@ export default async function ConsentimientoTurnoPage({
 
   return (
     <ConsentimientoInformado
+      // La versión como key: si el texto cambia y la página se recarga, el tilde
+      // y el "leí hasta el final" arrancan de cero.
+      key={version}
       turnoId={turnoId}
       redirect={destino}
       profesion={profesion}

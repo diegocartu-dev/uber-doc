@@ -9,6 +9,10 @@
 // calcular al guardar (no confía en la que manda el cliente).
 //
 // Cuando cambie un texto, sube SU versión ("v2" / "psi-v2"), no la del otro.
+// El test de al lado fija el texto de cada versión: cambiarlo sin decidir la
+// versión no se puede mergear. "v1" tiene dos redacciones: la del 20/05/2026 y
+// la del 13/10/2026, que sumó "o al servicio de emergencias de tu zona" sin
+// subir versión (DECISIONES.md, 13/10).
 
 import { profesionDe } from "@/lib/refeps/profesion";
 

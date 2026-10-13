@@ -13,6 +13,7 @@ import {
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Footer from "@/components/Footer";
+import { getFlag } from "@/lib/feature-flags";
 
 export default async function MedicosLanding() {
   const supabase = await createClient();
@@ -30,6 +31,10 @@ export default async function MedicosLanding() {
     if (medico) redirect("/dashboard");
   }
 
+  // Lo que la landing dice de psicología aparece recién con el flag prendido
+  // (doc legal §5 y §6): hasta entonces nadie puede registrarse como psicólogo.
+  const conPsicologos = await getFlag("registro_psicologos");
+
   const formas = [
     {
       icon: Building2,
@@ -45,7 +50,7 @@ export default async function MedicosLanding() {
       promesaColor: "#1D9E75",
       title: "Consulta Inmediata",
       promesa: "Te ponés disponible y atendés al instante",
-      descripcion: "Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran. Solo para médicos: en psicología se atiende con turno.",
+      descripcion: `Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran.${conPsicologos ? " Solo para médicos: en psicología se atiende con turno." : ""}`,
     },
     {
       icon: Calendar,
@@ -258,12 +263,20 @@ export default async function MedicosLanding() {
               </h3>
             </div>
             <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--color-text-secondary)" }}>
-              <p style={{ margin: "0 0 14px" }}>
-                Armá tu agenda, consultá tus turnos del día o, si sos médico,
-                dictá una receta en voz alta: Nova la confecciona y, cuando
-                confirmás, queda firmada electrónicamente. En psicología, la
-                constancia de atención se emite al cerrar la sesión.
-              </p>
+              {conPsicologos ? (
+                <p style={{ margin: "0 0 14px" }}>
+                  Armá tu agenda, consultá tus turnos del día o, si sos médico,
+                  dictá una receta en voz alta: Nova la confecciona y, cuando
+                  confirmás, queda firmada electrónicamente. En psicología, la
+                  constancia de atención se emite al cerrar la sesión.
+                </p>
+              ) : (
+                <p style={{ margin: "0 0 14px" }}>
+                  Armá tu agenda, consultá tus turnos del día o dictá una receta
+                  en voz alta. Nova la confecciona y, cuando confirmás, queda
+                  firmada electrónicamente.
+                </p>
+              )}
               <p style={{ margin: "10px 0 0", fontWeight: 600, color: "var(--color-text-primary)", fontSize: 14 }}>
                 Vos solo atendés.
               </p>
@@ -420,7 +433,7 @@ export default async function MedicosLanding() {
         </div>
       </section>
 
-      <Footer />
+      <Footer conPsicologos={conPsicologos} />
 
       <style>{`
         .medicos-hero-h1 { white-space: pre-line; }

@@ -17,7 +17,9 @@ const footerCols = [
   { title: "Legal", links: ["Términos", "Privacidad", "Botón de arrepentimiento"] },
 ];
 
-export default function Footer() {
+// `conPsicologos`: el flag `registro_psicologos` (13/10/2026). Mientras está
+// apagado no hay psicólogos y el pie no los nombra (doc legal §4 y §6).
+export default function Footer({ conPsicologos = false }: { conPsicologos?: boolean }) {
   return (
     <footer style={{
       background: "var(--color-bg-tertiary)",
@@ -37,7 +39,7 @@ export default function Footer() {
               </span>
             </div>
             <p style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: "16px 0 20px", maxWidth: 280 }}>
-              Plataforma de telemedicina argentina. Conectamos pacientes con médicos y psicólogos para consultas virtuales.
+              Plataforma de telemedicina argentina. Conectamos pacientes con {conPsicologos ? "médicos y psicólogos" : "médicos"} para consultas virtuales.
             </p>
           </div>
           {footerCols.map((c) => (
