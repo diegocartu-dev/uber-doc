@@ -120,7 +120,7 @@ test("una matrícula de OTRA profesión nunca coincide ni se adopta, aunque el n
   const tecnico = { numero: "5555", tipo: "CABA", habilitada: true, profesion: "Técnico en hemoterapia" };
   assert.deepEqual(cruzarMatricula(MN("5555"), [tecnico]), {
     resultado: "revisar",
-    motivo: "sin_matricula_de_medico",
+    motivo: "sin_matricula_de_su_profesion",
     jurisdiccion: "CABA",
   });
   // Médico + otra profesión en la misma jurisdicción: se adopta la de médico.
@@ -228,4 +228,48 @@ test("un timeout de REFEPS no borra las matrículas que ya estaban guardadas", (
   // Sin respuesta previa útil, se guarda el intento como antes.
   assert.deepEqual(diagnosticoSinPisar(null, intento, "x"), intento);
   assert.deepEqual(diagnosticoSinPisar({ error: "REFEPS_TIMEOUT" }, intento, "x"), intento);
+});
+
+// ─── Psicólogos (13/10/2026) ───────────────────────────────────────────────
+// La ficha dice su profesión; vale SOLO la matrícula de esa profesión. El texto
+// exacto con el que REFEPS nombra la psicología no está verificado: se aceptan
+// las formas razonables y nunca la psicología social (otra carrera).
+const psi = (numero: string, tipo: string, profesion = "Licenciado en Psicología", habilitada = true) => ({ numero, tipo, habilitada, profesion });
+
+test("psicólogo: su matrícula de psicología coincide o se adopta; la de médico nunca", () => {
+  const refeps = [med("111111", "CABA"), psi("5555", "Córdoba")];
+  assert.deepEqual(cruzarMatricula(MP("5555", "Córdoba"), refeps, "psicologo"), { resultado: "coincide" });
+  // Un dígito mal tipeado en Córdoba: se adopta la única de psicología de ahí.
+  assert.equal(cruzarMatricula(MP("5565", "Córdoba"), refeps, "psicologo").resultado, "adoptar");
+  // Escribió el número de su matrícula de médico: para un psicólogo no vale.
+  assert.deepEqual(cruzarMatricula(MN("111111"), refeps, "psicologo"), {
+    resultado: "revisar",
+    motivo: "sin_matricula_de_su_profesion",
+    jurisdiccion: "CABA",
+  });
+  // Y al revés: un médico con la de psicología tampoco.
+  assert.equal(cruzarMatricula(MP("5555", "Córdoba"), refeps).resultado, "revisar");
+  assert.equal(cruzarMatricula(MP("5555", "Córdoba"), refeps, "medico").resultado, "revisar");
+});
+
+test("psicología: se reconocen las formas razonables; la psicología social y lo que no es psicología, no", () => {
+  for (const p of ["Psicólogo", "Psicóloga", "PSICOLOGO/A", "Licenciada en Psicología", "Lic. en Psicologia"]) {
+    assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "coincide", p);
+  }
+  for (const p of ["Psicólogo Social", "Psicopedagogo", "Médico", ""]) {
+    assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "revisar", p);
+  }
+});
+
+test("psicólogo: sus jurisdicciones salen de sus matrículas de psicología (antes quedaban vacías = todas las provincias)", () => {
+  const refeps = [med("111111", "CABA"), psi("5555", "Córdoba"), psi("6666", "Salta", "Psicóloga", false)];
+  assert.deepEqual(derivarJurisdicciones(refeps, "psicologo").jurisdicciones, ["Córdoba"]);
+  assert.deepEqual(derivarJurisdicciones(refeps).jurisdicciones, ["CABA"]);
+  assert.equal(esDeOtraProfesion(med("1", "CABA"), "psicologo"), true);
+  assert.equal(esDeOtraProfesion(psi("1", "CABA"), "psicologo"), false);
+});
+
+test("el motivo de revisión nombra la profesión de la ficha", () => {
+  assert.match(motivoRevisionHumano("sin_matricula_de_su_profesion", "Córdoba", "psicologo"), /de psicólogo\.$/);
+  assert.match(motivoRevisionHumano("sin_matricula_de_su_profesion", "Córdoba"), /de médico\.$/);
 });

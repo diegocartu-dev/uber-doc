@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validarMedicoREFEPS } from "./validar";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
+import { profesionDe } from "./profesion";
 
 // Validación REFEPS automática + persistencia, compartida por el registro del médico
 // (waitUntil post-alta) y el cron de reintento. El admin debe encontrarse al médico YA
@@ -26,7 +27,7 @@ export async function validarYPersistirRefeps(medicoId: string): Promise<Resulta
 
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, dni, refeps_validado, refeps_data, es_cuenta_test")
+    .select("id, dni, refeps_validado, refeps_data, es_cuenta_test, profesion")
     .eq("id", medicoId)
     .single();
   if (!medico?.dni) return "sin_dni";
@@ -54,7 +55,8 @@ export async function validarYPersistirRefeps(medicoId: string): Promise<Resulta
   }
 
   if (resultado.encontrado && resultado.activo) {
-    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas);
+    // Las jurisdicciones salen de las matrículas de SU profesión (13/10/2026).
+    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
     await admin
       .from("medicos")
       .update({

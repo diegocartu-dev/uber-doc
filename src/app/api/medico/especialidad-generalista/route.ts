@@ -25,10 +25,14 @@ export async function POST() {
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, especialidad, especialidades_adicionales")
+    .select("id, especialidad, especialidades_adicionales, profesion")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) return NextResponse.json({ error: "No encontramos tu ficha de profesional." }, { status: 404 });
+  // Un psicólogo no es médico generalista (13/10/2026): su especialidad es fija.
+  if (medico.profesion === "psicologo") {
+    return NextResponse.json({ error: "Este cambio es solo para médicos." }, { status: 403 });
+  }
   if (medico.especialidad === GENERALISTA) return NextResponse.json({ ok: true, especialidad: GENERALISTA });
 
   const adicionales = ((medico.especialidades_adicionales ?? []) as string[]).filter((e) => e !== GENERALISTA);

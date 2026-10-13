@@ -12,13 +12,14 @@ import { derivarJurisdicciones, normalizarJurisdiccion } from "@/lib/jurisdiccio
 import {
   declaradaDesdeRefeps,
   esLaDeLaFicha,
-  esMatriculaDeMedico,
+  esMatriculaDe,
   etiquetaMatricula,
   normalizarNumeroMatricula,
   MOTIVO_DNI_NO_COINCIDE,
   MOTIVO_SIN_PROFESIONAL_EN_REFEPS,
   type MatriculaDeRefeps,
 } from "@/lib/medicos/matricula-refeps";
+import { profesionDe } from "@/lib/refeps/profesion";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
 
@@ -52,6 +53,8 @@ interface Medico {
   refeps_data: Record<string, unknown> | null;
   refeps_validado_at: string | null;
   jurisdicciones: string[] | null;
+  /** 'medico' | 'psicologo' (13/10/2026): qué matrícula de REFEPS vale. */
+  profesion?: string | null;
   identidad_validada: boolean | null;
   biometria_exenta: boolean | null;
   didit_status: string | null;
@@ -495,11 +498,11 @@ function estadoRefeps(m: Pick<Medico, "refeps_validado" | "refeps_data">): "ok" 
 // Jurisdicciones habilitadas para mostrar: preferir la columna derivada; si no, sacarlas
 // de las matrículas habilitadas del resultado REFEPS, normalizadas a la lista canónica
 // (sin normalizar podría mostrar "Provincial", que no es una jurisdicción).
-function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Record<string, unknown> | null }): string[] {
+function jurisdiccionesDe(m: { jurisdicciones: string[] | null; refeps_data: Record<string, unknown> | null; profesion?: string | null }): string[] {
   if (m.jurisdicciones?.length) return m.jurisdicciones;
   // Misma derivación que el servidor (una matrícula de otra profesión no cuenta).
   const mats = (m.refeps_data as { matriculas?: Array<{ tipo?: string; habilitada?: boolean; profesion?: string }> } | null)?.matriculas;
-  return derivarJurisdicciones(mats).jurisdicciones;
+  return derivarJurisdicciones(mats, profesionDe(m.profesion)).jurisdicciones;
 }
 
 // Estado REFEPS resuelto de antemano (la validación corre sola al registrarse + cron cada
@@ -623,7 +626,7 @@ function BloqueRefeps({
         setError(data.error || "Error desconocido");
         return;
       }
-      const juris = derivarJurisdicciones(data.resultado?.matriculas).jurisdicciones;
+      const juris = derivarJurisdicciones(data.resultado?.matriculas, profesionDe(m.profesion)).jurisdicciones;
       onResultado(data.refeps_validado, data.resultado ?? null, juris);
     } catch {
       setError("Error de conexión");
@@ -1161,12 +1164,12 @@ function BloqueElegirMatricula({
 
   const deRefeps = ((m.refeps_data as { matriculas?: MatriculaDeRefeps[] } | null)?.matriculas ?? []) as MatriculaDeRefeps[];
   // Sin dato de profesión (validaciones anteriores) se ofrece igual: el servidor
-  // vuelve a consultar REFEPS y solo acepta una matrícula de médico habilitada.
+  // vuelve a consultar REFEPS y solo acepta una matrícula habilitada de SU profesión.
   const unicas = new Map<string, MatriculaDeRefeps>();
   for (const mat of deRefeps) {
     if (
       mat.habilitada === true &&
-      (!mat.profesion || esMatriculaDeMedico(mat)) &&
+      (!mat.profesion || esMatriculaDe(profesionDe(m.profesion), mat)) &&
       declaradaDesdeRefeps(mat) !== null &&
       !esLaDeLaFicha(m, mat)
     ) {
@@ -1339,7 +1342,7 @@ function MedicoDetalle({
       }
       setRefepsResult(data.resultado);
       setRefepsValidado(data.refeps_validado);
-      onRefepsActualizado?.(!!data.refeps_validado, data.resultado ?? null, derivarJurisdicciones(data.resultado?.matriculas).jurisdicciones);
+      onRefepsActualizado?.(!!data.refeps_validado, data.resultado ?? null, derivarJurisdicciones(data.resultado?.matriculas, profesionDe(m.profesion)).jurisdicciones);
     } catch {
       setRefepsError("Error de conexión");
     } finally {

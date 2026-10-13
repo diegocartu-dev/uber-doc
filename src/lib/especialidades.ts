@@ -82,6 +82,13 @@ export const ESPECIALIDADES = [
 ] as const;
 
 /**
+ * La especialidad de un psicólogo (Diego, 13/10/2026): una sola y fija, la pone
+ * el alta. No está en ESPECIALIDADES (la lista de la que elige un médico) ni en
+ * la atención general: en la clínica los psicólogos tienen su propia sección.
+ */
+export const ESPECIALIDAD_PSICOLOGIA = "Psicología";
+
+/**
  * Atención general (Diego, 08/10/2026): "la idea es que esa especialidad pueda
  * atender a todos... deben estar unidos". Para el PACIENTE son la misma puerta:
  * el buscador de la clínica y las alternativas de un pedido que no se aceptó las

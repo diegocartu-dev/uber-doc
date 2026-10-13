@@ -3,6 +3,7 @@ import { obtenerDecisionDidit } from "./client";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
+import { profesionDe } from "@/lib/refeps/profesion";
 import {
   claveMatricula,
   cruzarMatricula,
@@ -95,6 +96,8 @@ interface FichaCruce extends MatriculaDeclarada {
   estado_registro: string | null;
   slug: string | null;
   notas_admin: string | null;
+  /** 'medico' | 'psicologo': qué matrícula de REFEPS vale (13/10/2026). */
+  profesion: string | null;
 }
 
 // Las columnas de las que depende la decisión: el update que valida exige que
@@ -109,6 +112,7 @@ const COLUMNAS_DEL_CRUCE = [
   "provincia_matricula",
   "verificado",
   "estado_registro",
+  "profesion",
 ] as const;
 
 /**
@@ -119,10 +123,11 @@ const COLUMNAS_DEL_CRUCE = [
  * exige REFEPS validado para estar aprobado; si dejó de estarlo, lo resuelve el
  * gate de aprobar, que consulta en vivo).
  */
-function datosRefeps(refeps: ResultadoREFEPS, estadoRegistro: string | null, ahoraIso: string): Record<string, unknown> {
+function datosRefeps(refeps: ResultadoREFEPS, ficha: FichaCruce, ahoraIso: string): Record<string, unknown> {
+  const estadoRegistro = ficha.estado_registro;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw: _raw, ...refepsSinRaw } = refeps;
-  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas);
+  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas, profesionDe(ficha.profesion));
   const validado = !!refeps.encontrado && !!refeps.activo;
   // La fecha de validación acompaña a refeps_validado: si no se escribe (un
   // aprobado al que REFEPS hoy devuelve inactivo), tampoco se renueva la fecha.
@@ -142,7 +147,7 @@ function datosRefeps(refeps: ResultadoREFEPS, estadoRegistro: string | null, aho
 async function guardarRefepsSinValidar(admin: SupabaseClient, medicoId: string, ficha: FichaCruce, refeps: ResultadoREFEPS): Promise<void> {
   const { error } = await admin
     .from("medicos")
-    .update(datosRefeps(refeps, ficha.estado_registro, new Date().toISOString()))
+    .update(datosRefeps(refeps, ficha, new Date().toISOString()))
     .eq("id", medicoId)
     .eq("identidad_validada", false)
     .eq("dni", ficha.dni as string);
@@ -181,7 +186,7 @@ async function cerrarCruce(
 ): Promise<ResultadoCruce> {
   const { data, error: errFicha } = await admin
     .from("medicos")
-    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, verificado, verificado_at, estado_registro, slug, notas_admin")
+    .select("dni, tipo_matricula, numero_matricula, provincia_matricula, verificado, verificado_at, estado_registro, slug, notas_admin, profesion")
     .eq("id", medicoId)
     .single();
   const ficha = data as FichaCruce | null;
@@ -195,10 +200,11 @@ async function cerrarCruce(
     return { resultado: "sin_decidir" };
   }
 
-  const cruce = cruzarMatricula(ficha, refeps.matriculas ?? []);
+  const profesion = profesionDe(ficha.profesion);
+  const cruce = cruzarMatricula(ficha, refeps.matriculas ?? [], profesion);
   if (cruce.resultado === "revisar") {
     await guardarRefepsSinValidar(admin, medicoId, ficha, refeps);
-    return { resultado: "revisar", motivo: motivoRevisionHumano(cruce.motivo, cruce.jurisdiccion) };
+    return { resultado: "revisar", motivo: motivoRevisionHumano(cruce.motivo, cruce.jurisdiccion, profesion) };
   }
 
   // Un profesional YA aprobado: cambiarle la matrícula lo devuelve solo a
@@ -219,7 +225,7 @@ async function cerrarCruce(
     identidad_validada: true,
     identidad_validada_at: ahora.toISOString(),
     identidad_revision_motivo: null,
-    ...datosRefeps(refeps, ficha.estado_registro, ahora.toISOString()),
+    ...datosRefeps(refeps, ficha, ahora.toISOString()),
   };
   if (cruce.resultado === "adoptar") {
     const fecha = ahora.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });

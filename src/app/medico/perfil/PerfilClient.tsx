@@ -41,6 +41,8 @@ interface Medico {
   firma_manuscrita_url: string | null;
   celular_personal: string | null;
   email_personal: string | null;
+  /** 'medico' | 'psicologo' (13/10/2026). */
+  profesion?: string | null;
 }
 
 export default function PerfilClient({
@@ -377,7 +379,7 @@ export default function PerfilClient({
                 readOnly
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500"
               />
-              {medico.especialidad !== "Medicina general" && !confirmarGeneralista && (
+              {medico.especialidad !== "Medicina general" && medico.profesion !== "psicologo" && !confirmarGeneralista && (
                 <button
                   type="button"
                   onClick={() => setConfirmarGeneralista(true)}

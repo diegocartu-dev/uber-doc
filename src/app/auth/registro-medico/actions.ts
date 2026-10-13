@@ -11,6 +11,9 @@ import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
 import { provisionarClaves } from "@/lib/firma/claves";
 import { esInstitucional } from "@/lib/instancia";
 import { registrarAceptacionControlados } from "@/lib/legal/controlados";
+import { getFlag } from "@/lib/feature-flags";
+import { ESPECIALIDAD_PSICOLOGIA } from "@/lib/especialidades";
+import type { Profesion } from "@/lib/refeps/profesion";
 
 // ─── Rediseño 14/07/2026 — registro en DOS fases ─────────────────────────────
 // FASE A `iniciarRegistroMedico`: crea la CUENTA con lo mínimo (nombre + email +
@@ -211,8 +214,16 @@ export async function completarRegistroMedico(formData: FormData) {
     (user.user_metadata?.full_name as string) || (formData.get("nombre_completo") as string) || ""
   );
   const email = user.email ?? "";
-  const titulo = formData.get("titulo") as string;
-  const especialidad = formData.get("especialidad") as string;
+  // Profesión (13/10/2026, docs/sprints/2026-10-13-psicologos.md): psicólogo
+  // solo con el flag abierto; si no, como siempre, médico. Al psicólogo el
+  // título y la especialidad se los pone el alta, no el formulario.
+  const pideSerPsicologo = (formData.get("profesion") as string) === "psicologo";
+  const profesion: Profesion = pideSerPsicologo && (await getFlag("registro_psicologos")) ? "psicologo" : "medico";
+  if (pideSerPsicologo && profesion !== "psicologo") {
+    return { error: "Por ahora Docto registra solo médicos." };
+  }
+  const titulo = profesion === "psicologo" ? "Lic." : (formData.get("titulo") as string);
+  const especialidad = profesion === "psicologo" ? ESPECIALIDAD_PSICOLOGIA : (formData.get("especialidad") as string);
   const tipo_matricula = formData.get("tipo_matricula") as string;
   const numero_matricula = formData.get("numero_matricula") as string;
   const provincia = formData.get("provincia") as string | null;
@@ -244,7 +255,8 @@ export async function completarRegistroMedico(formData: FormData) {
   // Término aparte de medicamentos controlados (Diego, 12/10/2026). No se exige
   // acá: una pestaña con la pantalla anterior no lo manda, y el registro no se
   // pierde por eso (el aviso del panel se lo vuelve a pedir).
-  const controladosAceptados = (formData.get("controlados_aceptados") as string) === "true";
+  // El psicólogo no receta: no se le registra.
+  const controladosAceptados = profesion === "medico" && (formData.get("controlados_aceptados") as string) === "true";
 
   if (!titulo || !especialidad || !tipo_matricula || !numero_matricula || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
@@ -252,8 +264,11 @@ export async function completarRegistroMedico(formData: FormData) {
   if (!terminosAceptados || !declaracionMatricula) {
     return { error: "Debés aceptar los términos y la declaración de matrícula." };
   }
-  if (titulo !== "Dr." && titulo !== "Dra.") {
+  if (profesion === "medico" && titulo !== "Dr." && titulo !== "Dra.") {
     return { error: "El título profesional debe ser Dr. o Dra." };
+  }
+  if (profesion === "medico" && especialidad === ESPECIALIDAD_PSICOLOGIA) {
+    return { error: "Elegí tu especialidad médica." };
   }
   if (tipo_matricula === "MP" && !provincia) {
     return { error: "Seleccioná la provincia de tu matrícula provincial." };
@@ -269,10 +284,12 @@ export async function completarRegistroMedico(formData: FormData) {
     return { error: "El DNI no coincide con los dígitos centrales del CUIT." };
   }
 
-  // Duplicado de matrícula
+  // Duplicado de matrícula, dentro de su profesión (los colegios de médicos y de
+  // psicólogos numeran cada uno por su lado; el índice único de la base igual).
   let dup = supabaseAdmin
     .from("medicos")
     .select("id")
+    .eq("profesion", profesion)
     .eq("tipo_matricula", tipo_matricula)
     .eq("numero_matricula", numero_matricula);
   dup = tipo_matricula === "MP" && provincia
@@ -287,7 +304,7 @@ export async function completarRegistroMedico(formData: FormData) {
   // definitivo con user_id. Extensión whitelisteada + tope de tamaño server-side.
   const fotoFile = formData.get("foto_credencial") as File | null;
   if (!fotoFile || fotoFile.size === 0) {
-    return { error: "Subí la foto de tu credencial médica para continuar." };
+    return { error: profesion === "psicologo" ? "Subí la foto de tu credencial profesional para continuar." : "Subí la foto de tu credencial médica para continuar." };
   }
   if (fotoFile.size > 5 * 1024 * 1024) {
     return { error: "La credencial no puede superar 5 MB." };
@@ -359,6 +376,7 @@ export async function completarRegistroMedico(formData: FormData) {
   const ahora = new Date().toISOString();
   const nuevoMedico = {
     user_id: user.id,
+    profesion,
     titulo,
     nombre_completo,
     email,

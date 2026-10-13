@@ -13,16 +13,16 @@
 // ficha —tipo, número y provincia— sale de REFEPS.
 //
 // Lo que este cruce impide —validarse con la identidad propia y quedarse con la
-// matrícula de otro, o con una que no es de médico— sigue impedido: solo vale
-// una matrícula de médico, habilitada, que REFEPS tiene para el DNI que acaba
-// de probar quién es.
+// matrícula de otro, o con una que no es de su profesión— sigue impedido: solo
+// vale una matrícula de SU profesión (médico o psicólogo, `medicos.profesion`),
+// habilitada, que REFEPS tiene para el DNI que acaba de probar quién es.
 //
 // Este archivo es puro (sin base ni red) para poder probarlo entero.
 
 import { normalizarJurisdiccion } from "../jurisdicciones";
-import { esMatriculaDeMedico } from "../refeps/profesion";
+import { esMatriculaDe, esMatriculaDeMedico, nombreProfesion, type Profesion } from "../refeps/profesion";
 
-export { esMatriculaDeMedico };
+export { esMatriculaDe, esMatriculaDeMedico };
 
 export interface MatriculaDeRefeps {
   numero?: string | null;
@@ -58,14 +58,14 @@ export type MotivoRevision =
   /** Las matrículas de esa jurisdicción figuran, pero ninguna habilitada. */
   | "no_habilitada"
   /** La habilitada de esa jurisdicción es de otra profesión, o REFEPS no dice de cuál. */
-  | "sin_matricula_de_medico"
-  /** Hay más de una matrícula de médico habilitada en esa jurisdicción: no se elige sola. */
+  | "sin_matricula_de_su_profesion"
+  /** Hay más de una matrícula de su profesión habilitada en esa jurisdicción: no se elige sola. */
   | "varias_en_jurisdiccion"
   /** El número escrito figura en más de una jurisdicción, ninguna la declarada. */
   | "numero_en_varias_jurisdicciones";
 
 export type CruceMatricula =
-  /** La ficha ya tiene exactamente una matrícula de médico habilitada suya. */
+  /** La ficha ya tiene exactamente una matrícula de su profesión, habilitada y suya. */
   | { resultado: "coincide" }
   /**
    * La ficha se corrige a `nueva`. `por`: "jurisdiccion" si el número era el
@@ -140,30 +140,32 @@ export function esLaDeLaFicha(declarada: MatriculaDeclarada, m: MatriculaDeRefep
   );
 }
 
-/** Matrícula de médico, habilitada, con número y jurisdicción reconocibles. */
-export function esUtilizable(m: MatriculaDeRefeps): boolean {
-  return m.habilitada === true && esMatriculaDeMedico(m) && declaradaDesdeRefeps(m) !== null;
+/** Matrícula de `profesion`, habilitada, con número y jurisdicción reconocibles. */
+export function esUtilizable(m: MatriculaDeRefeps, profesion: Profesion = "medico"): boolean {
+  return m.habilitada === true && esMatriculaDe(profesion, m) && declaradaDesdeRefeps(m) !== null;
 }
 
 /**
  * Cruza la matrícula declarada con las que REFEPS tiene para el DNI verificado.
+ * Solo cuentan las de `profesion` (la de la ficha).
  *
- *  1. El número escrito es, tal cual, una matrícula de médico habilitada suya:
+ *  1. El número escrito es, tal cual, una matrícula habilitada suya de su profesión:
  *     - y la ficha ya la tiene escrita como REFEPS (tipo y provincia) → `coincide`;
  *     - en la jurisdicción que declaró pero escrita distinto (una "MP de CABA"
  *       que es la Nacional), o en UNA sola otra jurisdicción → `adoptar` esa
  *       (se corrigen tipo y provincia, el número queda);
  *     - en varias otras → `revisar`.
  *  2. Si no figura tal cual: en la jurisdicción declarada, REFEPS tiene UNA sola
- *     matrícula de médico habilitada → `adoptar` esa. Si no, `revisar` con el
+ *     matrícula habilitada de su profesión → `adoptar` esa. Si no, `revisar` con el
  *     motivo concreto.
  */
 export function cruzarMatricula(
   declarada: MatriculaDeclarada,
-  deRefeps: MatriculaDeRefeps[] | null | undefined
+  deRefeps: MatriculaDeRefeps[] | null | undefined,
+  profesion: Profesion = "medico"
 ): CruceMatricula {
   const todas = (deRefeps ?? []).filter((m) => normalizarNumeroMatricula(m?.numero) !== "");
-  const utilizables = todas.filter(esUtilizable);
+  const utilizables = todas.filter((m) => esUtilizable(m, profesion));
   const jurisdiccion = jurisdiccionDeclarada(declarada);
   const escrito = normalizarNumeroMatricula(declarada.numero_matricula);
 
@@ -193,7 +195,7 @@ export function cruzarMatricula(
     }
   }
 
-  // 2 · No figura tal cual: la única de médico habilitada de su jurisdicción.
+  // 2 · No figura tal cual: la única habilitada de su profesión en su jurisdicción.
   if (!jurisdiccion) {
     return { resultado: "revisar", motivo: "jurisdiccion_declarada_desconocida", jurisdiccion: null };
   }
@@ -205,17 +207,17 @@ export function cruzarMatricula(
     return { resultado: "revisar", motivo: "no_habilitada", jurisdiccion };
   }
   // La misma matrícula puede venir repetida (una fila por título): se cuenta una vez.
-  const medicas = new Map<string, MatriculaDeRefeps>();
+  const deSuProfesion = new Map<string, MatriculaDeRefeps>();
   for (const m of deEsa) {
-    if (esUtilizable(m)) medicas.set(normalizarNumeroMatricula(m.numero), m);
+    if (esUtilizable(m, profesion)) deSuProfesion.set(normalizarNumeroMatricula(m.numero), m);
   }
-  if (medicas.size === 0) {
-    return { resultado: "revisar", motivo: "sin_matricula_de_medico", jurisdiccion };
+  if (deSuProfesion.size === 0) {
+    return { resultado: "revisar", motivo: "sin_matricula_de_su_profesion", jurisdiccion };
   }
-  if (medicas.size > 1) {
+  if (deSuProfesion.size > 1) {
     return { resultado: "revisar", motivo: "varias_en_jurisdiccion", jurisdiccion };
   }
-  const [m] = [...medicas.values()];
+  const [m] = [...deSuProfesion.values()];
   return { resultado: "adoptar", nueva: declaradaDesdeRefeps(m) as MatriculaEnFicha, jurisdiccion, por: "numero" };
 }
 
@@ -253,9 +255,14 @@ export function slugConMatricula(
 }
 
 /** Texto para el panel cuando el cruce no se puede cerrar solo. */
-export function motivoRevisionHumano(motivo: MotivoRevision, jurisdiccion: string | null): string {
+export function motivoRevisionHumano(
+  motivo: MotivoRevision,
+  jurisdiccion: string | null,
+  profesion: Profesion = "medico"
+): string {
   const base = "Didit aprobó la identidad, pero la matrícula no se pudo confirmar sola: ";
   const cual = nombreJurisdiccion(jurisdiccion);
+  const de = nombreProfesion(profesion);
   switch (motivo) {
     case "jurisdiccion_declarada_desconocida":
       return base + "no declaró de qué provincia es su matrícula y el número no figura en REFEPS para ese DNI.";
@@ -263,10 +270,10 @@ export function motivoRevisionHumano(motivo: MotivoRevision, jurisdiccion: strin
       return base + `declaró una ${cual}, y REFEPS no tiene ninguna de esa jurisdicción para ese DNI.`;
     case "no_habilitada":
       return base + `la ${cual} que REFEPS tiene para ese DNI no figura habilitada.`;
-    case "sin_matricula_de_medico":
-      return base + `la ${cual} habilitada que REFEPS tiene para ese DNI no figura como de médico.`;
+    case "sin_matricula_de_su_profesion":
+      return base + `la ${cual} habilitada que REFEPS tiene para ese DNI no figura como de ${de}.`;
     case "varias_en_jurisdiccion":
-      return base + `REFEPS tiene más de una ${cual} de médico habilitada para ese DNI y ninguna es la que declaró.`;
+      return base + `REFEPS tiene más de una ${cual} de ${de} habilitada para ese DNI y ninguna es la que declaró.`;
     case "numero_en_varias_jurisdicciones":
       return base + "el número que declaró figura en más de una jurisdicción para ese DNI, y en ninguna de ellas es la que declaró.";
   }

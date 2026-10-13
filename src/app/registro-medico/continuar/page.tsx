@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ContinuarRegistro from "./ContinuarRegistro";
+import { getFlag } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -26,5 +27,8 @@ export default async function ContinuarRegistroPage() {
 
   const nombre = (user.user_metadata?.full_name as string) || "";
 
-  return <ContinuarRegistro nombre={nombre} userId={user.id} />;
+  // Psicólogos (13/10/2026): el registro los admite recién cuando se abra el flag.
+  const admitePsicologos = await getFlag("registro_psicologos");
+
+  return <ContinuarRegistro nombre={nombre} userId={user.id} admitePsicologos={admitePsicologos} />;
 }

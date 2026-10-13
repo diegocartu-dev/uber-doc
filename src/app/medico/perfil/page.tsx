@@ -54,7 +54,7 @@ export default async function PerfilMedicoPage() {
   // funcionan en producción). Con service role, filtrada por user_id.
   const { data: areasRow } = await admin
     .from("medicos")
-    .select("areas_atencion, especialidades_adicionales")
+    .select("areas_atencion, especialidades_adicionales, profesion")
     .eq("user_id", user.id)
     .maybeSingle();
   const areasAtencion = parsearAreasAtencion(areasRow?.areas_atencion);
@@ -63,6 +63,8 @@ export default async function PerfilMedicoPage() {
   // "en mi perfil figura solo lo que yo puse" con la segunda especialidad ya
   // cargada. Misma query admin (la columna no tiene GRANT para authenticated).
   const especialidadesAdicionales = parsearEspecialidadesAdicionales(areasRow?.especialidades_adicionales);
+  // Profesión (13/10/2026): un psicólogo no se pasa a Medicina general.
+  const profesion = (areasRow as { profesion?: string | null } | null)?.profesion ?? null;
 
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
@@ -76,7 +78,7 @@ export default async function PerfilMedicoPage() {
     <div className="min-h-full bg-[#f8f9fa]">
       <Suspense fallback={<div className="mx-auto max-w-2xl px-6 py-8" />}>
         <PerfilClient
-          medico={medicoConPrivado}
+          medico={{ ...medicoConPrivado, profesion }}
           mpAccount={mpAccount}
           userEmail={user.email ?? ""}
           areasAtencion={areasAtencion}
