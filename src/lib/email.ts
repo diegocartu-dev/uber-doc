@@ -2,6 +2,8 @@ import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlag } from "@/lib/feature-flags";
 import { formatNombreMedico, articuloMedico } from "@/lib/utils/texto";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { esPsicologia, etiquetaProfesional, nombreAtencion, type Profesion } from "@/lib/medicos/vocabulario";
 
 async function emailsActivos(): Promise<boolean> {
   try {
@@ -114,6 +116,8 @@ type DatosTurno = {
   medicoTitulo: string | null;
   medicoEspecialidad: string;
   medicoSlug: string | null;
+  /** Médico o psicólogo (13/10/2026). Leído en query aparte: el SELECT de arriba no se toca. */
+  profesion: Profesion;
 };
 
 async function obtenerDatosTurno(turnoId: string): Promise<DatosTurno | null> {
@@ -127,11 +131,13 @@ async function obtenerDatosTurno(turnoId: string): Promise<DatosTurno | null> {
 
   if (!turno) return null;
 
-  const [{ data: paciente }, { data: medico }] = await Promise.all([
+  const [{ data: paciente }, { data: medico }, profesion] = await Promise.all([
     supabase.from("pacientes").select("nombre_completo, user_id").eq("id", turno.paciente_id).single(),
     // Solo se suma `titulo` a este SELECT. Nada más: una columna sin GRANT tira
     // abajo la query ENTERA en PostgREST y el mail se perdería en silencio.
     supabase.from("medicos").select("nombre_completo, titulo, especialidad, slug").eq("id", turno.medico_id).single(),
+    // La profesión va en su propia query (nunca sumada al SELECT de arriba).
+    profesionDeLaFicha(supabase, { medicoId: turno.medico_id }),
   ]);
 
   if (!paciente || !medico) return null;
@@ -150,6 +156,7 @@ async function obtenerDatosTurno(turnoId: string): Promise<DatosTurno | null> {
     medicoTitulo: medico.titulo ?? null,
     medicoEspecialidad: medico.especialidad ?? "",
     medicoSlug: medico.slug ?? null,
+    profesion,
   };
 }
 
@@ -167,8 +174,9 @@ function generarICS(datos: DatosTurno, method: "REQUEST" | "CANCEL"): string {
   const now = formatICalDate(new Date().toISOString());
   const start = formatICalDate(fechaHoraToISO(datos.fecha, datos.hora_inicio));
   const end = formatICalDate(fechaHoraToISO(datos.fecha, datos.hora_fin));
+  const atencion = capitalizarInicio(nombreAtencion(datos.profesion));
   const summary = escapeICalText(
-    `Consulta con ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} - Docto`
+    `${atencion} con ${formatNombreMedico(datos.medicoNombre, datos.medicoTitulo)} - Docto`
   );
   const url = `${BASE_URL}/turno/${datos.id}/espera`;
 
@@ -192,7 +200,7 @@ function generarICS(datos: DatosTurno, method: "REQUEST" | "CANCEL"): string {
   ];
 
   if (method === "REQUEST") {
-    lines.push("BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Consulta en 1 hora", "END:VALARM");
+    lines.push("BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${atencion} en 1 hora`, "END:VALARM");
   }
 
   lines.push("END:VEVENT", "END:VCALENDAR");
@@ -224,7 +232,13 @@ function chip(texto: string, color: string): string {
   return `<span style="display:inline-block;padding:4px 12px;background:${color}1a;color:${color};border:1px solid ${color}40;border-radius:20px;font-size:12px;font-weight:600;">${texto}</span>`;
 }
 
-function wrapHtml(titulo: string, contenido: string): string {
+/**
+ * Cabecera común. `profesion` es opcional a propósito: sin ella (o con médico)
+ * la cabecera dice lo de siempre, así ningún mail de médico cambia. Solo el
+ * paciente de un psicólogo, o el psicólogo, lee "Psicología online".
+ */
+function wrapHtml(titulo: string, contenido: string, profesion?: Profesion | null): string {
+  const lema = esPsicologia(profesion) ? "Psicolog&iacute;a online" : "Consultas m&eacute;dicas online";
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>${titulo}</title></head>
@@ -234,7 +248,7 @@ function wrapHtml(titulo: string, contenido: string): string {
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;border:1px solid ${BORDE};overflow:hidden;">
   <tr><td style="background:${AZUL};padding:24px 32px;">
     <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.5px;">Docto</p>
-    <p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.8);">Consultas m&eacute;dicas online</p>
+    <p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.8);">${lema}</p>
   </td></tr>
   <tr><td style="padding:32px;">${contenido}</td></tr>
   <tr><td style="padding:20px 32px;background:${GRIS_CLARO};border-top:1px solid ${BORDE};">
@@ -256,7 +270,7 @@ function detalleTurno(datos: DatosTurno): string {
     </td></tr>
     <tr><td style="padding:16px 20px;">
       <table cellpadding="0" cellspacing="0" width="100%">
-        ${fila("M&eacute;dico", formatNombreMedico(datos.medicoNombre, datos.medicoTitulo))}
+        ${fila(etiquetaProfesional(datos.profesion), formatNombreMedico(datos.medicoNombre, datos.medicoTitulo))}
         ${fila("Especialidad", datos.medicoEspecialidad)}
         ${fila("Fecha", formatearFecha(datos.fecha))}
         ${fila("Hora", formatearHora(datos.hora_inicio))}
@@ -278,7 +292,7 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
     const html = wrapHtml("Turno confirmado — Docto", `
       <div style="margin-bottom:20px;">${chip("Turno confirmado", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu turno est&aacute; reservado</h1>
-      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hola ${datos.pacienteNombre}, tu consulta fue confirmada.</p>
+      <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Hola ${datos.pacienteNombre}, tu ${nombreAtencion(datos.profesion)} fue confirmada.</p>
       ${detalleTurno(datos)}
       <p style="margin:24px 0 0;font-size:14px;color:#6b7280;">
         Algunos minutos antes del turno, ingres&aacute; a la sala virtual desde el bot&oacute;n de abajo o desde tu panel en <a href="${BASE_URL}" style="color:${AZUL};">docto.com.ar</a>.
@@ -287,7 +301,7 @@ export async function enviarEmailTurnoConfirmado(turnoId: string): Promise<void>
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
         El archivo .ics adjunto te permite agregar este turno a tu calendario.
       </p>
-    `);
+    `, datos.profesion);
 
     const ics = generarICS(datos, "REQUEST");
 
@@ -344,7 +358,7 @@ export async function enviarEmailTurnoCancelado(
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
         El archivo .ics adjunto cancela el evento en tu calendario autom&aacute;ticamente.
       </p>
-    `);
+    `, datos.profesion);
 
     const ics = generarICS(datos, "CANCEL");
     const asunto = porMedico
@@ -399,13 +413,16 @@ export async function enviarEmailTurnoAusenteMedico(turnoId: string): Promise<vo
       </p>
       ${detalleTurno(datos)}
       <p style="margin:24px 0 0;font-size:14px;color:#6b7280;">
-        Si necesit&aacute;s atenderte, hay profesionales disponibles para consulta inmediata o con turnos pr&oacute;ximos.
+        ${esPsicologia(datos.profesion)
+          // En psicología no existe la consulta inmediata: solo turnos.
+          ? "Si necesit&aacute;s atenderte, hay otros profesionales de Psicolog&iacute;a con turnos pr&oacute;ximos."
+          : "Si necesit&aacute;s atenderte, hay profesionales disponibles para consulta inmediata o con turnos pr&oacute;ximos."}
       </p>
       ${boton("Ver profesionales disponibles", `${BASE_URL}/clinica`, AZUL)}
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
         El archivo .ics adjunto quita el turno de tu calendario autom&aacute;ticamente.
       </p>
-    `);
+    `, datos.profesion);
 
     const ics = generarICS(datos, "CANCEL");
     const asunto = `Tu turno del ${formatearFecha(datos.fecha)} no pudo realizarse — devoluci\u00f3n del 100% en curso`;
@@ -564,13 +581,22 @@ export async function enviarEmailDocumentacionDisponible(params: {
   try {
     const supabase = createAdminClient();
 
-    const [{ data: paciente }, { data: medico }] = await Promise.all([
+    const [{ data: paciente }, { data: medico }, profesion] = await Promise.all([
       supabase.from("pacientes").select("nombre_completo, user_id").eq("id", params.pacienteId).maybeSingle(),
       // `titulo` y nada más — ver la nota del SELECT de obtenerDatosTurno.
       supabase.from("medicos").select("nombre_completo, titulo").eq("id", params.medicoId).maybeSingle(),
+      // Query aparte: la profesión decide "consulta" o "sesión" (13/10/2026).
+      profesionDeLaFicha(supabase, { medicoId: params.medicoId }),
     ]);
 
     if (!paciente || !medico) return;
+
+    // Psicología: lo único que se emite es la constancia de atención, y la
+    // atención es una sesión. El push hermano (completar-documentacion) ya lo
+    // dice así; el mail decía "documentación de tu consulta".
+    const esSesion = esPsicologia(profesion);
+    const queHay = esSesion ? "la constancia de atenci&oacute;n de tu sesi&oacute;n" : "la documentaci&oacute;n de tu consulta";
+    const asunto = esSesion ? "Ya está disponible la constancia de atención de tu sesión" : "Ya está disponible la documentación de tu consulta";
 
     const { data: { user } } = await supabase.auth.admin.getUserById(paciente.user_id);
     if (!user?.email) return;
@@ -589,24 +615,24 @@ export async function enviarEmailDocumentacionDisponible(params: {
           .join("")}</ul>`
       : "";
 
-    const html = wrapHtml("Documentaci&oacute;n de tu consulta — Docto", `
-      <div style="margin-bottom:20px;">${chip("Documentaci&oacute;n disponible", AZUL)}</div>
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Ya ten&eacute;s la documentaci&oacute;n de tu consulta</h1>
+    const html = wrapHtml(esSesion ? "Constancia de atenci&oacute;n de tu sesi&oacute;n — Docto" : "Documentaci&oacute;n de tu consulta — Docto", `
+      <div style="margin-bottom:20px;">${chip(esSesion ? "Constancia disponible" : "Documentaci&oacute;n disponible", AZUL)}</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Ya ten&eacute;s ${queHay}</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#6b7280;">
-        Hola ${paciente.nombre_completo}, ${medicoConArticulo(medico.nombre_completo, medico.titulo)} complet&oacute; la documentaci&oacute;n de tu consulta y ya la pod&eacute;s ver y descargar.
+        Hola ${paciente.nombre_completo}, ${medicoConArticulo(medico.nombre_completo, medico.titulo)} complet&oacute; ${esSesion ? "la documentaci&oacute;n de tu sesi&oacute;n" : "la documentaci&oacute;n de tu consulta"} y ya la pod&eacute;s ver y descargar.
       </p>
       ${listaHtml}
       ${boton("Ver mis documentos", `${BASE_URL}/mis-consultas`, AZUL)}
       <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">
         Si ten&eacute;s alguna duda sobre lo que recibiste, escribinos a soporte@docto.com.ar.
       </p>
-    `);
+    `, profesion);
 
     await conRetry(
       () => resend().emails.send({
         from: FROM,
         to: user.email!,
-        subject: "Ya está disponible la documentación de tu consulta",
+        subject: asunto,
         html,
       }),
       `documentacion_disponible:${params.pacienteId}`
@@ -625,21 +651,23 @@ export async function enviarEmailRecordatorio24h(turnoId: string): Promise<void>
     if (!datos) return;
 
     const urlSala = `${BASE_URL}/turno/${turnoId}/espera`;
-    const html = wrapHtml("Recordatorio: consulta mañana — Docto", `
+    // "consulta" / "sesión" (psicología), igual que en la pantalla del turno.
+    const atencion = nombreAtencion(datos.profesion);
+    const html = wrapHtml(`Recordatorio: ${atencion} mañana — Docto`, `
       <div style="margin-bottom:20px;">${chip("Recordatorio 24 hs", AZUL)}</div>
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Recordatorio: consulta ma&ntilde;ana</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Recordatorio: ${atencion} ma&ntilde;ana</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
         Hola ${datos.pacienteNombre}. Ma&ntilde;ana a las ${formatearHora(datos.hora_inicio)} ten&eacute;s turno con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}. Asegurate de tener buena conexi&oacute;n y un lugar tranquilo.
       </p>
       ${detalleTurno(datos)}
       ${boton("Ver mi turno", urlSala, AZUL)}
-    `);
+    `, datos.profesion);
 
     await conRetry(
       () => resend().emails.send({
         from: FROM,
         to: datos.pacienteEmail,
-        subject: `Recordatorio: consulta mañana con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}`,
+        subject: `Recordatorio: ${atencion} mañana con ${medicoConArticulo(datos.medicoNombre, datos.medicoTitulo)}`,
         html,
       }, { idempotencyKey: `recordatorio-24h/${turnoId}` }),
       turnoId
@@ -664,20 +692,21 @@ export async function enviarEmailRecordatorio10m(turnoId: string): Promise<boole
 
     const urlSala = `${BASE_URL}/turno/${turnoId}/espera`;
     const conQuien = medicoConArticulo(datos.medicoNombre, datos.medicoTitulo);
+    const atencion = nombreAtencion(datos.profesion);
     const html = wrapHtml("Tu turno empieza en minutos — Docto", `
       <div style="margin-bottom:20px;">${chip("Tu turno está por empezar", AZUL)}</div>
       <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Tu turno empieza a las ${formatearHora(datos.hora_inicio)}</h1>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
-        Hola ${datos.pacienteNombre}. Tu consulta con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}. Entr&aacute; a la sala virtual: cuando entres, le avisamos para que te atienda.
+        Hola ${datos.pacienteNombre}. Tu ${atencion} con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}. Entr&aacute; a la sala virtual: cuando entres, le avisamos para que te atienda.
       </p>
       ${boton("Entrar a la sala", urlSala, AZUL)}
       ${detalleTurno(datos)}
-    `);
+    `, datos.profesion);
 
     const { error } = await resend().emails.send({
       from: FROM,
       to: datos.pacienteEmail,
-      subject: `Tu consulta con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}`,
+      subject: `Tu ${atencion} con ${conQuien} empieza a las ${formatearHora(datos.hora_inicio)}`,
       html,
     }, {
       // Si Resend lo aceptó pero la respuesta se perdió, el cron devuelve la
@@ -716,6 +745,11 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     if (!email) { console.warn("[email] médico sin email, no se envía bienvenida:", medicoId); return; }
     const destinatario = email;
 
+    // Psicología (13/10/2026): no tiene consulta inmediata ni "ponerse
+    // disponible", y la guía en PDF habla de recetas. Query aparte: el SELECT
+    // de arriba no se toca. Para un médico todo queda igual que hasta hoy.
+    const psicologia = esPsicologia(await profesionDeLaFicha(supabase, { medicoId }));
+
     const linkConsultorio = medico.slug ? `docto.com.ar/dr/${medico.slug}` : "docto.com.ar/dr/tu-nombre";
 
     // Dónde está habilitado a atender (jurisdicciones REFEPS). Encuadre de alcance
@@ -751,22 +785,24 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
         <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Conect&aacute; tu Mercado Pago</strong> (Perfil &rarr; Cobros) &mdash; es donde vas a recibir tus honorarios, directo a tu cuenta.</li>
         <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Arm&aacute; tu agenda con Nova</strong>, tu asistente &mdash; contale cu&aacute;ndo y a cu&aacute;nto quer&eacute;s atender, y ella crea los turnos por vos.</li>
-        <li style="margin-bottom:10px;"><strong style="color:${GRIS};">Ponete disponible</strong> desde tu panel cuando tengas un rato libre &mdash; ah&iacute; los pacientes ya te encuentran.</li>
+        ${psicologia
+          ? `<li style="margin-bottom:10px;"><strong style="color:${GRIS};">Public&aacute; tu agenda</strong> &mdash; los pacientes reservan d&iacute;a y hora y vos los esper&aacute;s en tu panel a esa hora.</li>`
+          : `<li style="margin-bottom:10px;"><strong style="color:${GRIS};">Ponete disponible</strong> desde tu panel cuando tengas un rato libre &mdash; ah&iacute; los pacientes ya te encuentran.</li>`}
       </ul>
-      <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Tus tres formas de atender:</p>
+      <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:${GRIS};">Tus ${psicologia ? "dos" : "tres"} formas de atender:</p>
       <ul style="margin:0 0 24px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
-        <li style="margin-bottom:10px;">⚡ <strong style="color:${GRIS};">Consulta Inmediata</strong> &mdash; te pon&eacute;s disponible y el paciente se conecta al instante. Ideal para los huecos libres.</li>
+        ${psicologia ? "" : `<li style="margin-bottom:10px;">⚡ <strong style="color:${GRIS};">Consulta Inmediata</strong> &mdash; te pon&eacute;s disponible y el paciente se conecta al instante. Ideal para los huecos libres.</li>`}
         <li style="margin-bottom:10px;">📅 <strong style="color:${GRIS};">Turnos Programados</strong> &mdash; abr&iacute;s tu agenda y reservan d&iacute;a y hora. Confirmaci&oacute;n y recordatorios, autom&aacute;ticos.</li>
         <li style="margin-bottom:10px;">🩺 <strong style="color:${GRIS};">Consultorio Particular</strong> &mdash; tu link propio (${linkConsultorio}) copialo para atender a tus pacientes en tu consultorio virtual privado.</li>
       </ul>
       <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.55;">
-        Vas a ver que Docto es <strong>muy intuitivo</strong> &mdash; en un par de consultas ya va a ser tu plataforma de trabajo preferida. Cualquier cosa, estamos.
+        Vas a ver que Docto es <strong>muy intuitivo</strong> &mdash; en un par de ${psicologia ? "sesiones" : "consultas"} ya va a ser tu plataforma de trabajo preferida. Cualquier cosa, estamos.
       </p>
       <p style="margin:0 0 4px;font-size:15px;color:#6b7280;">&iexcl;Gracias por sumarte al equipo!</p>
       <p style="margin:0;font-size:15px;color:#6b7280;">&mdash; El equipo de Docto</p>
       ${boton("Ir a mi panel", `${BASE_URL}/dashboard`, AZUL)}
-      <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Adjuntamos una gu&iacute;a r&aacute;pida de Docto en PDF para que empieces con todo.</p>
-    `);
+      ${psicologia ? "" : `<p style="margin:24px 0 0;font-size:13px;color:#9ca3af;">Adjuntamos una gu&iacute;a r&aacute;pida de Docto en PDF para que empieces con todo.</p>`}
+    `, psicologia ? "psicologo" : undefined);
 
     await conRetry(
       () => resend().emails.send({
@@ -774,7 +810,9 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
         to: destinatario,
         subject: "¡Te damos la bienvenida a Docto! Tu cuenta ya está activa",
         html,
-        attachments: [{ filename: "Bienvenida a Docto.pdf", path: `${BASE_URL}/guia-docto.pdf` }],
+        // La guía habla de recetas y de "médicos": al psicólogo no se le adjunta
+        // (cuando exista una propia, va acá).
+        ...(psicologia ? {} : { attachments: [{ filename: "Bienvenida a Docto.pdf", path: `${BASE_URL}/guia-docto.pdf` }] }),
       }),
       `medico-aprobado-${medicoId}`
     );
@@ -810,15 +848,21 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
     // Faltantes REALES del médico (decisión Diego 13/07: no avisar "un paso" si
     // le faltan tres — misma fuente de verdad que el dashboard: MP = cuenta
     // activa en medicos_mp_accounts, firma = fila en medico_claves).
-    const [mpRes, firmaRes] = await Promise.all([
+    const [mpRes, firmaRes, profesion] = await Promise.all([
       supabase.from("medicos_mp_accounts").select("estado").eq("medico_id", medicoId).eq("estado", "activo").maybeSingle(),
       supabase.from("medico_claves").select("id").eq("medico_id", medicoId).eq("activa", true).maybeSingle(),
+      // Query aparte (13/10/2026): decide "consultas"/"sesiones" y qué firma el psicólogo.
+      profesionDeLaFicha(supabase, { medicoId }),
     ]);
     const faltaMp = !mpRes.data;
     const faltaFirma = !firmaRes.data;
     const soloIdentidad = !faltaMp && !faltaFirma;
+    const atenciones = esPsicologia(profesion) ? "sesiones" : "consultas";
 
-    const nombre = (medico.nombre_completo as string | null)?.trim().split(/\s+/)[0] ?? "Doctor/a";
+    // Sin nombre no se adivina tratamiento ("Doctor/a" le hablaba en masculino a
+    // una médica y no le cabe a un psicólogo): el saludo queda "Hola" a secas.
+    const primerNombre = (medico.nombre_completo as string | null)?.trim().split(/\s+/)[0] || "";
+    const saludo = primerNombre ? `Hola, ${primerNombre}` : "Hola";
 
     // Variante solo-identidad: párrafo completo (aprobado). Variante multi:
     // recortado — el "3 minutos + DNI y cámara" ya está en el bullet (gate Sofía).
@@ -828,19 +872,19 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
         protege a tus pacientes y a tu matr&iacute;cula: confirma que quien atiende sos
         realmente vos. Lleva unos 3 minutos &mdash; solo necesit&aacute;s tu DNI y la
         c&aacute;mara de tu tel&eacute;fono o computadora. Hasta completarla, tu perfil no se
-        muestra en la cl&iacute;nica virtual y los pacientes no pueden reservar consultas con vos.
+        muestra en la cl&iacute;nica virtual y los pacientes no pueden reservar ${atenciones} con vos.
       </p>`;
     const bloqueIdentidadBreve = `
       <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
         La <strong>verificaci&oacute;n de identidad</strong> es un requisito de seguridad que
         protege a tus pacientes y a tu matr&iacute;cula: confirma que quien atiende sos
         realmente vos. Hasta completarla, tu perfil no se muestra en la cl&iacute;nica
-        virtual y los pacientes no pueden reservar consultas con vos.
+        virtual y los pacientes no pueden reservar ${atenciones} con vos.
       </p>`;
 
     const contenido = soloIdentidad
       ? `
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Hola, ${nombre}</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">${saludo}</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
         Tu cuenta en Docto est&aacute; activa, pero te falta un paso para que los pacientes puedan encontrarte:
         la <strong>verificaci&oacute;n de identidad</strong>.
@@ -853,15 +897,15 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
       </p>
       <p style="margin:16px 0 0;font-size:14px;color:#6b7280;">&mdash; El equipo de Docto</p>`
       : `
-      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">Hola, ${nombre}</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">${saludo}</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">
         Tu cuenta en Docto est&aacute; activa, pero todav&iacute;a te faltan estos pasos para
         empezar a recibir pacientes:
       </p>
       <ul style="margin:0 0 16px;padding-left:20px;font-size:15px;color:#6b7280;line-height:1.6;">
         <li style="margin-bottom:8px;"><strong>Verificar tu identidad</strong> &mdash; unos 3 minutos, con tu DNI y la c&aacute;mara.</li>
-        ${faltaMp ? '<li style="margin-bottom:8px;"><strong>Conectar Mercado Pago</strong> &mdash; para que recibas el cobro de tus consultas.</li>' : ""}
-        ${faltaFirma ? '<li style="margin-bottom:8px;"><strong>Cargar tu firma</strong> &mdash; para recetas y documentos.</li>' : ""}
+        ${faltaMp ? `<li style="margin-bottom:8px;"><strong>Conectar Mercado Pago</strong> &mdash; para que recibas el cobro de tus ${atenciones}.</li>` : ""}
+        ${faltaFirma ? `<li style="margin-bottom:8px;"><strong>Cargar tu firma</strong> &mdash; para ${esPsicologia(profesion) ? "la constancia de atenci&oacute;n" : "recetas y documentos"}.</li>` : ""}
       </ul>
       ${bloqueIdentidadBreve}
       ${boton("Completar mi cuenta", `${BASE_URL}/medico/onboarding`, AZUL)}
@@ -876,7 +920,7 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
         from: FROM,
         to: email,
         subject: "Verificá tu identidad para empezar a recibir pacientes",
-        html: wrapHtml("Verificación de identidad pendiente", contenido),
+        html: wrapHtml("Verificación de identidad pendiente", contenido, profesion),
       }),
       "recordatorio-identidad"
     );

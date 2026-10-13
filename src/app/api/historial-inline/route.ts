@@ -86,7 +86,8 @@ export async function GET(req: NextRequest) {
       nombres = new Map((pacs ?? []).map((p) => [p.id, p.nombre_completo]));
     }
 
-    const sinDocs = await idsSinDocumentacion(data.map((t) => t.id), "turno");
+    // Con `medicoId`: una sesión de psicología con evolución no queda badgeada.
+    const sinDocs = await idsSinDocumentacion(data.map((t) => t.id), "turno", medicoId);
 
     return NextResponse.json(data.map((t) => ({
       id: t.id,

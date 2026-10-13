@@ -10,6 +10,8 @@ import { sendDoctoAlert } from "@/lib/alertas";
 import { logInfo, logError } from "@/lib/logger";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { correspondeRefund } from "@/lib/instancia";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -131,7 +133,7 @@ export async function ejecutarRefund(
   // Distingue la causa para poder priorizar: saldo (se resuelve solo) vs otro error
   // (no se arregla reintentando → requiere acción manual ya).
   const causa = result.insufficientFunds
-    ? "Médico sin saldo en MP. Se reintenta cada 24h y a las 48h Docto cubre al paciente por CVU. Suele resolverse solo cuando el médico cobra otra consulta — no requiere acción inmediata."
+    ? "Profesional sin saldo en MP. Se reintenta cada 24h y a las 48h Docto cubre al paciente por CVU. Suele resolverse solo cuando el profesional cobra otra atención — no requiere acción inmediata."
     : `Error de Mercado Pago (NO es saldo): "${result.error}". NO se resuelve solo reintentando — requiere revisión manual ahora.`;
   await sendDoctoAlert(
     "[REFUND] Reembolso no procesó al primer intento",
@@ -422,6 +424,30 @@ export async function resolverNoShowMedico(
 
   if (!turno || turno.estado !== "en_espera") return { ok: false, reembolso: null };
 
+  // Quién no atendió, con su propio título, igual que el mail de abajo
+  // ("La Dra. García no pudo atender…", "Lic. Ana Pérez no pudo atender…").
+  // Hasta el 13/10/2026 el mensaje y el push decían "El médico" también a la
+  // paciente de una médica. Dos lecturas aparte, con service role: el SELECT del
+  // turno no se toca, y si fallan queda el texto genérico según la profesión.
+  const [{ data: quien }, profesion] = await Promise.all([
+    supabase.from("medicos").select("nombre_completo, titulo").eq("id", turno.medico_id).maybeSingle(),
+    profesionDeLaFicha(supabase, { medicoId: turno.medico_id }),
+  ]);
+  const nombreQuien = (quien?.nombre_completo ?? "").trim();
+  const conTitulo = nombreQuien ? formatNombreMedico(nombreQuien, quien?.titulo) : "";
+  const art = nombreQuien ? articuloMedico(quien?.titulo) : "";
+  // Médicos: el texto de siempre ("El médico no pudo…"); regla de oro de F4, a
+  // los médicos no les cambia nada. Psicología: con nombre y "Lic." (sin
+  // artículo: no se adivina el género), o "Tu profesional" si no hay nombre.
+  const sujeto = !esPsicologia(profesion)
+    ? "El médico"
+    : conTitulo
+      ? `${art ? `${art.charAt(0).toUpperCase()}${art.slice(1)} ` : ""}${conTitulo}`
+      : "Tu profesional";
+  const motivoCancelacion = esPsicologia(profesion)
+    ? "Profesional ausente — no atendió el turno"
+    : "Médico ausente — no atendió el turno";
+
   let reintegroEstado: ReintegroEstado = null;
   // ¿Hay plata que devolver? (spec institucional §6.3, gate #401) En la
   // instancia el turno nació 'confirmado' sin pago: se resuelve a
@@ -446,7 +472,7 @@ export async function resolverNoShowMedico(
     .update({
       estado: "ausente_medico",
       resolucion_motivo: "medico_ausente",
-      motivo_cancelacion: "Médico ausente — no atendió el turno",
+      motivo_cancelacion: motivoCancelacion,
       ...(reintegroEstado === "reembolsado" ? { reintegro_estado: "reembolsado" } : {}),
     })
     .eq("id", turnoId)
@@ -490,11 +516,11 @@ export async function resolverNoShowMedico(
       turnoId,
       turno.paciente_id,
       turno.medico_id,
-      `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
+      `${sujeto} no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`
     );
     pushAlPaciente(turno.paciente_id, {
       title: "🔴 Docto",
-      body: `El médico no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
+      body: `${sujeto} no pudo atender tu turno del ${formatearFechaCorta(turno.fecha)}.${reembolsoMsg}`,
       url: "/mis-consultas",
       tag: `noshow-${turnoId}`,
     }).catch(() => {});
@@ -706,12 +732,13 @@ export async function avisarMedicoPorPlantada(
   // `categoria` en la misma lectura: el aviso solo menciona la condición de
   // fundador si efectivamente la tiene (a un tradicional no se le advierte que
   // puede perder algo que ya no tiene).
-  const { data: med } = await admin
-    .from("medicos")
-    .select("nombre_completo, categoria")
-    .eq("id", medicoId)
-    .maybeSingle();
-  const primerNombre = (med?.nombre_completo ?? "").split(" ")[0] || "Doctor/a";
+  const [{ data: med }, profesionPlantada] = await Promise.all([
+    admin.from("medicos").select("nombre_completo, categoria").eq("id", medicoId).maybeSingle(),
+    // Query aparte: "sesión" para el psicólogo que dejó plantado un turno.
+    profesionDeLaFicha(admin, { medicoId }),
+  ]);
+  // Sin nombre, "Hola" a secas: "Doctor/a" no le cabe a un psicólogo (13/10/2026).
+  const primerNombre = (med?.nombre_completo ?? "").trim().split(/\s+/)[0] || "";
   const esFounder = med?.categoria === "founder";
 
   const queEsperaba =
@@ -721,7 +748,7 @@ export async function avisarMedicoPorPlantada(
   const titulo =
     canal === "turno" ? "Un paciente te esperó en su turno" : "Un paciente pagó y te esperó";
   const cuerpo =
-    `Hola ${primerNombre}. Un paciente te esperó ${queEsperaba} y la consulta no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
+    `Hola${primerNombre ? ` ${primerNombre}` : ""}. Un paciente te esperó ${queEsperaba} y la ${canal === "turno" && esPsicologia(profesionPlantada) ? "sesión" : "consulta"} no ocurrió, así que le devolvimos el 100% de lo que pagó.` +
     " Pausamos la publicación de tus turnos libres para que no le pase lo mismo a otro paciente — los reactivás con un toque desde tu agenda cuando puedas volver a atender. Tus turnos ya reservados siguen en pie." +
     (seApago
       ? " También te desactivamos de Consulta Inmediata."
