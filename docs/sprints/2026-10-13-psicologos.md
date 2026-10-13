@@ -87,11 +87,20 @@ Revisión independiente antes del merge (13/10): con el flag apagado no cambia n
 - Rescate (alternativas cuando algo se cae): solo profesionales de la misma profesión que el que se cayó.
 - Solo adultos: `reservarTurno` rechaza un turno de psicología si el paciente es menor según su fecha de nacimiento (ese es el paso previo obligatorio al pago); el psicólogo no puede declarar el área "adolescencia" (ni se le muestra). Límite declarado: la fecha la escribe el paciente y no se verifica; sin fecha no se le niega a nadie. La instancia institucional asigna turnos por otro camino y no tiene esta regla (no hay psicólogos ahí).
 
+Revisión independiente de F2 (13/10): no cambia nada hoy para médicos ni pacientes, salvo la opción "50 minutos" en la agenda, que se ve en cuanto se mergea. Corregido en el mismo PR:
+- Nova le ofrecía al psicólogo "Prender consulta inmediata" (el widget y el prompt): ya no.
+- El link propio (`/dr/…`) del psicólogo decía "No disponible en este momento" y "Consulta $ 0": ahora muestra solo "Agendar turno".
+- Un menor que entraba por link directo veía el calendario de un psicólogo: ahora vuelve a la clínica.
+- Si la lectura de la profesión fallara, la clínica separa por la especialidad ("Psicología", que es fija).
+- Los turnos de cada sección cuentan solo en su sección.
+Quedan para F4 (textos): la descripción del cobro en Mercado Pago ("Consulta virtual de 20 minutos" sale de la duración de la consulta inmediata), textos de "Cómo atendés" pensados para médicos, el "No disponible" de la barra del panel, y un aviso en la búsqueda de la sección Médicos cuando alguien busca "psicólogo".
+La revisión encontró además dos problemas que ya existían y se arreglaron aparte el mismo día: la clínica escondía profesionales (#554) y un paciente podía confirmarse un turno sin pagar (#555).
+
 **Textos nuevos de F2 para que apruebe Diego antes de abrir:**
 - Clínica: "Médicos" · "Psicología"; "Psicólogos habilitados para tu jurisdicción"; "N psicólogos habilitados en {provincia}"; "No encontramos psicólogos para …".
 - Panel: "Agendas y tu consultorio privado" (subtítulo del acceso a "Cómo atendés").
 - Mensajes: "En psicología se atiende solo con turno: la consulta inmediata no está disponible."; "La atención psicológica en Docto es solo para mayores de 18 años."; "Por ahora la atención psicológica en Docto es solo para adultos."
-- Agenda: "50 minutos".
+- Agenda: "50 minutos" (este se ve apenas se mergea, para todos).
 
 ### F3 — Documentos
 - Tipo `constancia` (CHECK en las dos bases), firmable, con el texto aprobado; el PDF sin bloque de diagnóstico.

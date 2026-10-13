@@ -7,6 +7,8 @@ type Props = {
   especialidad: string;
   slug: string;
   puedeInmediata: boolean;
+  /** Psicología (13/10/2026): solo "Agendar turno". */
+  soloTurnos?: boolean;
 };
 
 export default function ConsultorioPrivadoClient({
@@ -14,12 +16,14 @@ export default function ConsultorioPrivadoClient({
   especialidad,
   slug,
   puedeInmediata,
+  soloTurnos = false,
 }: Props) {
   const router = useRouter();
 
   return (
     <div className="mt-5 space-y-3">
       {/* Consulta ahora — redirige al triage con canal consultorio_privado */}
+      {!soloTurnos && (
       <button
         disabled={!puedeInmediata}
         onClick={() => {
@@ -32,6 +36,7 @@ export default function ConsultorioPrivadoClient({
       >
         Consulta ahora
       </button>
+      )}
 
       {/* Agendar turno */}
       <button
