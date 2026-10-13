@@ -315,7 +315,9 @@ async function enviarTwilioDetallado(toE164: string, contentSid: string, variabl
   }
 }
 
-const primerNombre = (n: string | null | undefined): string => (n ?? "").trim().split(/\s+/)[0] || "Doctor/a";
+// Sin nombre (caso raro: el registro lo exige), un saludo neutro: "Doctor/a" no
+// le cabe a un psicólogo y las plantillas sirven para las dos profesiones (13/10/2026).
+const primerNombre = (n: string | null | undefined): string => (n ?? "").trim().split(/\s+/)[0] || "profesional";
 
 /**
  * TRIGGER C — el profesional ACEPTÓ la consulta inmediata. Es el único momento

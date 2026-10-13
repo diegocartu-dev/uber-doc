@@ -11,6 +11,8 @@
 // el badge del historial, para que el agujero se vea en horas y no en cinco días.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 /**
  * Tipos que cuentan como "documentación entregada al paciente".
@@ -121,35 +123,8 @@ export async function atencionesSinDocumentacion(medicoId: string): Promise<Aten
   const conDocsTurno = new Set((docsTurnoRes.data ?? []).map((d) => d.turno_id).filter(Boolean) as string[]);
 
   const pendientesConsulta = consultas.filter((c) => !conDocsConsulta.has(c.id));
-  let pendientesTurno = turnos.filter((t) => !conDocsTurno.has(t.id));
-
-  // Psicología (13/10/2026): la sesión queda documentada con su evolución. La
-  // constancia es opcional (el profesional puede no emitirla), así que una
-  // sesión sin constancia pero con evolución no está "pendiente". Salvo una: la
-  // que se cerró sola (el rescate guardó solo la evolución) con el paciente
-  // adentro de la sala. Esa sí queda acá, porque es la puerta para emitirle la
-  // constancia (el aviso del rescate lo dice). Query propia.
-  if (pendientesTurno.length > 0) {
-    const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
-    if ((await profesionDeLaFicha(admin, { medicoId })) === "psicologo") {
-      const { data: conEvolucion } = await admin
-        .from("turnos")
-        .select("id, evolucion, rescate_borrador")
-        .in("id", pendientesTurno.map((t) => t.id));
-      const { presenciaDelPaciente } = await import("@/lib/video/presencia");
-      const documentados = new Set<string>();
-      for (const t of conEvolucion ?? []) {
-        if (!(typeof t.evolucion === "string" && t.evolucion.trim())) continue;
-        const cerradaSola = (t.rescate_borrador as { resultado?: string } | null)?.resultado === "solo_evolucion";
-        if (cerradaSola) {
-          const turno = pendientesTurno.find((p) => p.id === t.id);
-          if ((await presenciaDelPaciente("turno", t.id as string, turno?.iniciado_en ?? null)) === "entro") continue;
-        }
-        documentados.add(t.id as string);
-      }
-      pendientesTurno = pendientesTurno.filter((t) => !documentados.has(t.id));
-    }
-  }
+  const sesionesDocumentadas = await turnosDocumentadosPorEvolucion(admin, medicoId, turnos.filter((t) => !conDocsTurno.has(t.id)).map((t) => t.id));
+  const pendientesTurno = turnos.filter((t) => !conDocsTurno.has(t.id) && !sesionesDocumentadas.has(t.id));
 
   if (pendientesConsulta.length === 0 && pendientesTurno.length === 0) return [];
 
@@ -209,12 +184,55 @@ export async function atencionesSinDocumentacion(medicoId: string): Promise<Aten
 }
 
 /**
+ * Psicología (13/10/2026): la sesión queda documentada con su evolución. La
+ * constancia es opcional (el profesional puede no emitirla), así que una sesión
+ * sin constancia pero con evolución no está "pendiente". Salvo una: la que se
+ * cerró sola (el rescate guardó solo la evolución) con el paciente adentro de
+ * la sala. Esa sí queda pendiente, porque es la puerta para emitirle la
+ * constancia (el aviso del rescate lo dice).
+ *
+ * Devuelve los ids de `turnoIds` que cuentan como documentados por esta regla.
+ * Para un médico (o si la profesión no se pudo leer) devuelve vacío: nada
+ * cambia. Una sola regla para el aviso del dashboard y el badge del historial.
+ * Queries propias: ningún SELECT de los que ya andan se toca.
+ */
+async function turnosDocumentadosPorEvolucion(
+  admin: SupabaseClient,
+  medicoId: string,
+  turnoIds: string[]
+): Promise<Set<string>> {
+  const documentados = new Set<string>();
+  if (turnoIds.length === 0) return documentados;
+  if ((await profesionDeLaFicha(admin, { medicoId })) !== "psicologo") return documentados;
+
+  const { data: conEvolucion } = await admin
+    .from("turnos")
+    .select("id, evolucion, rescate_borrador, iniciado_en")
+    .in("id", turnoIds);
+  const { presenciaDelPaciente } = await import("@/lib/video/presencia");
+  for (const t of conEvolucion ?? []) {
+    if (!(typeof t.evolucion === "string" && t.evolucion.trim())) continue;
+    const cerradaSola = (t.rescate_borrador as { resultado?: string } | null)?.resultado === "solo_evolucion";
+    if (cerradaSola) {
+      if ((await presenciaDelPaciente("turno", t.id as string, (t.iniciado_en as string | null) ?? null)) === "entro") continue;
+    }
+    documentados.add(t.id as string);
+  }
+  return documentados;
+}
+
+/**
  * Versión acotada para marcar filas de un historial ya cargado: dado un set de
  * ids, devuelve cuáles NO tienen ningún documento clínico entregado.
+ *
+ * `medicoId` (opcional) aplica la regla de psicología a los turnos: sin él, un
+ * psicólogo veía badgeada toda sesión con evolución y sin constancia, aunque el
+ * aviso del dashboard no la contara.
  */
 export async function idsSinDocumentacion(
   ids: string[],
-  canal: "consulta" | "turno"
+  canal: "consulta" | "turno",
+  medicoId?: string
 ): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const admin = createAdminClient();
@@ -234,5 +252,10 @@ export async function idsSinDocumentacion(
   const conDocs = new Set(
     (data ?? []).map((d) => (d as unknown as Record<string, string | null>)[columna]).filter(Boolean) as string[]
   );
-  return new Set(ids.filter((id) => !conDocs.has(id)));
+  const sinDocs = ids.filter((id) => !conDocs.has(id));
+  if (canal !== "turno" || !medicoId || sinDocs.length === 0) return new Set(sinDocs);
+
+  // Mismo fail-safe: si la regla de psicología falla, el badge queda como hoy.
+  const documentados = await turnosDocumentadosPorEvolucion(admin, medicoId, sinDocs).catch(() => new Set<string>());
+  return new Set(sinDocs.filter((id) => !documentados.has(id)));
 }

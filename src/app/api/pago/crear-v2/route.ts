@@ -10,6 +10,8 @@ import { logInfo, logError, logWarn } from "@/lib/logger";
 import { sanitizeMpError } from "@/lib/mp-error-sanitizer";
 import { trackEvent } from "@/lib/funnel";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 import { assertNoInstitucional } from "@/lib/instancia";
 import { armarPagador, CATEGORIA_MP, DESCRIPTOR_MP } from "@/lib/pagos/preferencia-mp";
 
@@ -421,7 +423,7 @@ async function obtenerTurno(
 
   const { data: turno } = await admin
     .from("turnos")
-    .select("id, estado, medico_id, monto, fecha, hora_inicio")
+    .select("id, estado, medico_id, monto, fecha, hora_inicio, hora_fin")
     .eq("id", turnoId)
     .eq("paciente_id", paciente.id)
     .single();
@@ -446,7 +448,16 @@ async function obtenerTurno(
     .single();
 
   const medicoNombre = formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo);
-  const duracion = medico?.duracion_consulta ?? 20;
+  // Psicología (13/10/2026): el ítem dice "Sesión de psicología", no "Consulta
+  // virtual". Query aparte: el SELECT de arriba no se toca.
+  const psicologia = esPsicologia(await profesionDeLaFicha(admin, { medicoId: turno.medico_id }));
+  // La duración del TURNO es la del lugar reservado (hora_fin − hora_inicio), no
+  // la de la consulta inmediata del profesional: el checkout decía "20 minutos"
+  // para un turno de 30, y para una sesión de psicología de 50 (que no tiene
+  // consulta inmediata) habría dicho 20. Si el lugar no trae horas, lo de antes.
+  const aMin = (h: string) => { const [hh, mm] = String(h).split(":").map(Number); return hh * 60 + mm; };
+  const duracionTurno = turno.hora_inicio && turno.hora_fin ? aMin(turno.hora_fin) - aMin(turno.hora_inicio) : NaN;
+  const duracion = Number.isFinite(duracionTurno) && duracionTurno > 0 ? duracionTurno : (medico?.duracion_consulta ?? 20);
 
   return {
     medicoId: turno.medico_id,
@@ -454,7 +465,9 @@ async function obtenerTurno(
     // Si no pudimos leer al médico, el ítem queda sin nombre en vez de decir
     // "Médico" a secas: el paciente ya sabe con quién sacó el turno.
     titulo: medicoNombre ? `Turno programado — ${medicoNombre}` : "Turno programado",
-    descripcion: `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
+    descripcion: psicologia
+      ? `Sesión de psicología de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`
+      : `Consulta virtual de ${duracion} minutos — ${turno.fecha} ${turno.hora_inicio}`,
     redirectSuccess: `/turno/${turnoId}/info-medica?redirect=/turno/${turnoId}/consentimiento`,
     // De vuelta a la MISMA reserva, no al calendario: ahí el lugar propio figura
     // tomado y el paciente sacaba otro turno (y otro, y otro) para volver a ser

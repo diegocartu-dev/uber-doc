@@ -245,7 +245,7 @@ async function marcarRevisionManual(admin: Admin, r: RefundPendiente, motivo: st
       `Tipo: ${r.tipo}\nRecurso: ${r.recurso_id}\nMédico: ${r.medico_id}\nPago: ${r.pago_id}\n` +
       `Motivo: ${motivo}\n\n` +
       `Acción: revisar el estado del pago en MP y resolver manualmente. NO se registró ` +
-      `deuda del médico automáticamente para este caso.`
+      `deuda del profesional automáticamente para este caso.`
   );
 }
 
@@ -281,10 +281,10 @@ async function escalarPorDeuda(admin: Admin, r: RefundPendiente, ahora: Date): P
 
   await sendDoctoAlert(
     "[REFUND] Escalado a cobertura manual CVU",
-    `Un refund lleva 48hs sin resolverse (médico sin saldo).\n\n` +
+    `Un refund lleva 48hs sin resolverse (profesional sin saldo).\n\n` +
       `Tipo: ${r.tipo}\nRecurso: ${r.recurso_id}\nMédico: ${r.medico_id}\n` +
       `Monto a cubrir: $${montoTotal}\n\n` +
-      `Acción: transferir al paciente por CVU desde el admin. La deuda del médico ` +
+      `Acción: transferir al paciente por CVU desde el admin. La deuda del profesional ` +
       `ya quedó registrada en medicos_deuda y se recuperará vía marketplace_fee.`
   );
 
