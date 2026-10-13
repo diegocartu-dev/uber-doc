@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { confirmarPagoTurno, expirarTurno } from "@/app/clinica/[medicoId]/turnos/actions";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { etiquetaProfesional } from "@/lib/medicos/vocabulario";
 import { trackFunnel } from "@/lib/funnel-client";
 import { origenDelNavegadorActual } from "@/lib/pagos/origen-dispositivo";
 
@@ -15,7 +16,8 @@ type Props = {
   returnUrl?: string;
   // `titulo` = "Dr."/"Dra." elegido por el médico en su registro. Opcional: sin él,
   // formatNombreMedico muestra el nombre pelado en vez de inventar un tratamiento.
-  medico: { nombre: string; titulo?: string | null; especialidad: string; duracion: number };
+  /** `profesion` (13/10/2026): sin dato es médico y la etiqueta no cambia. */
+  medico: { nombre: string; titulo?: string | null; especialidad: string; duracion: number; profesion?: string | null };
   turno: { fecha: string; horaInicio: string; horaFin: string; monto: number };
 };
 
@@ -149,7 +151,7 @@ export default function PagoPendiente({ turnoId, vuelta = null, reservadoHasta, 
       <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-500">Médico</span>
+            <span className="text-gray-500">{etiquetaProfesional(medico.profesion)}</span>
             <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre, medico.titulo)}</span>
           </div>
           <div className="flex justify-between">

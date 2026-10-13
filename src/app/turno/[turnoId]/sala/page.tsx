@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { rebotePaciente } from "@/lib/instancia";
 import SalaConsultaPaciente from "@/app/consulta/[id]/sala/SalaConsultaPaciente";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 export default async function SalaTurnoPage({
   params,
@@ -56,6 +58,8 @@ export default async function SalaTurnoPage({
     .select("nombre_completo, titulo, especialidad")
     .eq("id", turno.medico_id)
     .single();
+  // Profesión de la ficha (13/10/2026) en query propia: el SELECT de arriba no se toca.
+  const profesion = await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id });
 
   return (
     <SalaConsultaPaciente
@@ -69,6 +73,7 @@ export default async function SalaTurnoPage({
       medicoTitulo={medico?.titulo ?? null}
       especialidad={medico?.especialidad ?? ""}
       tipo="turno"
+      profesion={profesion}
       // En la instancia `/documentos` no existe (404 de cuerpo vacío): los
       // documentos se leen en SU pantalla, la del enlace.
       destinoDocumentos={rebotePaciente("/documentos", `/turno/${turnoId}/acceso`)}

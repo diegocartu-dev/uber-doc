@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import PagoPendiente from "./PagoPendiente";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 export default async function PagoTurnoPage({
   params,
@@ -53,6 +55,8 @@ export default async function PagoTurnoPage({
     .select("nombre_completo, especialidad, duracion_consulta, titulo")
     .eq("id", turno.medico_id)
     .single();
+  // Profesión de la ficha (13/10/2026) en query propia: el SELECT de arriba no se toca.
+  const profesion = await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id });
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
@@ -69,8 +73,11 @@ export default async function PagoTurnoPage({
           reservadoHasta={turno.reservado_hasta}
           returnUrl={returnUrl}
           medico={{
-            nombre: medico?.nombre_completo ?? "Médico",
+            // Sin ficha, nombre vacío (formatNombreMedico lo tolera): "Médico" no sirve
+            // de nombre para una psicóloga.
+            nombre: medico?.nombre_completo ?? "",
             titulo: medico?.titulo ?? null,
+            profesion,
             especialidad: medico?.especialidad ?? "",
             duracion: medico?.duracion_consulta ?? 20,
           }}

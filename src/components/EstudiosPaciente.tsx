@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 
 type ArchivoSubido = {
   name: string;
@@ -17,6 +18,8 @@ type LinkSubido = {
 
 type Props = {
   consultaId: string;
+  /** Profesión de la ficha (13/10/2026): sin dato es médico y los textos no cambian. */
+  profesion?: string | null;
 };
 
 function formatSize(bytes: number): string {
@@ -25,7 +28,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function EstudiosPaciente({ consultaId }: Props) {
+export default function EstudiosPaciente({ consultaId, profesion = null }: Props) {
+  // Con un psicólogo no son "estudios para tu médico": son archivos para tu profesional.
+  const psicologia = esPsicologia(profesion);
+  const mensajeSubido = psicologia
+    ? "Tu archivo está disponible para tu profesional. Se eliminará automáticamente cuando finalice la sesión."
+    : "Tu estudio está disponible para tu médico. Se eliminará automáticamente cuando finalice la consulta.";
   const [archivos, setArchivos] = useState<ArchivoSubido[]>([]);
   const [links, setLinks] = useState<LinkSubido[]>([]);
   const [subiendo, setSubiendo] = useState(false);
@@ -58,7 +66,7 @@ export default function EstudiosPaciente({ consultaId }: Props) {
       const data = await res.json();
       if (data.ok) {
         setArchivos((prev) => [...prev, data.archivo]);
-        setMensaje("Tu estudio está disponible para tu médico. Se eliminará automáticamente cuando finalice la consulta.");
+        setMensaje(mensajeSubido);
       } else {
         setError(data.error || "Error al subir archivo.");
       }
@@ -100,7 +108,7 @@ export default function EstudiosPaciente({ consultaId }: Props) {
         setLinkUrl("");
         setLinkNombre("");
         setShowLinkForm(false);
-        setMensaje("Tu estudio está disponible para tu médico. Se eliminará automáticamente cuando finalice la consulta.");
+        setMensaje(mensajeSubido);
       } else {
         setError(data.error || "Error al agregar link.");
       }
@@ -144,7 +152,7 @@ export default function EstudiosPaciente({ consultaId }: Props) {
   return (
     <div className="mt-6">
       <p className="text-xs font-medium tracking-wide text-gray-400">
-        ESTUDIOS PARA TU MÉDICO
+        {psicologia ? "ARCHIVOS PARA TU PROFESIONAL" : "ESTUDIOS PARA TU MÉDICO"}
       </p>
 
       {/* Acciones */}

@@ -13,6 +13,7 @@ import {
 import { Track, DisconnectReason } from "livekit-client";
 import { createClient } from "@/lib/supabase/client";
 import EstudiosPaciente from "@/components/EstudiosPaciente";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 import { formatNombreMedico } from "@/lib/utils/texto";
 // Detección de plataforma + instrucciones de permiso por plataforma. Vivían acá;
 // se movieron a @/lib/media/permisos SIN cambios para que la pantalla del
@@ -58,6 +59,12 @@ type Props = {
    * no tiene una LISTA de consultas a la que volver: tiene UNA pantalla.
    */
   salida?: { href: string; texto: string };
+  /**
+   * Profesión de la ficha (13/10/2026, psicólogos F4). Sin dato es médico y
+   * ningún texto cambia. Con un psicólogo, el cierre habla de la constancia de
+   * atención (lo único que emite) y no de "recetas y documentos".
+   */
+  profesion?: string | null;
 };
 
 // `nombreMedico` ya viene formateado con el título del médico. Lo necesitamos acá
@@ -327,6 +334,7 @@ export default function SalaConsultaPaciente({
   horaInicio,
   destinoDocumentos = "/documentos",
   salida = { href: "/mis-consultas", texto: "Volver a mis consultas" },
+  profesion = null,
 }: Props) {
   // Nombre ya formateado con el título que eligió el médico. Una sola vez acá:
   // esta pantalla lo repite en cinco estados distintos.
@@ -338,6 +346,8 @@ export default function SalaConsultaPaciente({
   // nombre ni género. No se pone un texto tipo "tu médico" porque el formateador
   // lo capitaliza como si fuera un nombre propio y sale «Tu Médico».
   const nombreMedico = formatNombreMedico(medicoNombre, medicoTitulo) || "El profesional";
+  // Psicología: la constancia de atención es opcional, el texto no la da por hecha.
+  const psicologia = esPsicologia(profesion);
   // Estado completado difiere entre consultas ("completada") y turnos ("completado")
   const estadoCompletado = tipo === "turno" ? "completado" : "completada";
   const router = useRouter();
@@ -690,7 +700,9 @@ export default function SalaConsultaPaciente({
                 Tu consulta con {nombreMedico} ha finalizado
               </p>
               <p className="mt-3 text-sm text-gray-500">
-                Tus recetas y documentos quedaron guardados.
+                {psicologia
+                  ? "Si te dejaron una constancia de atención, ya la podés ver en tus documentos."
+                  : "Tus recetas y documentos quedaron guardados."}
               </p>
             </div>
 
@@ -730,7 +742,9 @@ export default function SalaConsultaPaciente({
             </div>
             <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
             <p className="mt-2 text-gray-600">
-              En unos minutos vas a encontrar acá tus recetas y documentos.
+              {psicologia
+                ? "En unos minutos vas a encontrar acá tu constancia de atención, si la emitieron."
+                : "En unos minutos vas a encontrar acá tus recetas y documentos."}
             </p>
             <a
               href={destinoDocumentos}
@@ -1184,7 +1198,7 @@ export default function SalaConsultaPaciente({
             </button>
           </div>
           <div className="px-4 pb-6">
-            <EstudiosPaciente consultaId={consultaId} />
+            <EstudiosPaciente consultaId={consultaId} profesion={profesion} />
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 
 type PacienteData = {
   nombre_completo: string | null;
@@ -19,6 +20,8 @@ type Props = {
   paciente: PacienteData;
   redirect: string;
   editUrl: string;
+  /** Profesión de la ficha (13/10/2026): sin dato es médico y los textos no cambian. */
+  profesion?: string | null;
 };
 
 const MESES = [
@@ -32,8 +35,10 @@ function formatFecha(fecha: string | null): string {
   return `${parseInt(dia)} de ${MESES[parseInt(mes) - 1]} de ${anio}`;
 }
 
-export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUrl }: Props) {
+export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUrl, profesion = null }: Props) {
   const router = useRouter();
+  // Con un psicólogo no hay recetas: estos datos arman la constancia de atención.
+  const psicologia = esPsicologia(profesion);
 
   // Resolve display name: FK name > obra_social_otra > legacy obra_social
   const obraSocialDisplay =
@@ -53,8 +58,12 @@ export default function InfoMedicaForm({ paciente, redirect: redirectUrl, editUr
               <circle cx="16" cy="18" r="2"/>
             </svg>
           </div>
-          <h1 className="mt-4 text-lg font-medium text-gray-900">Tu información médica</h1>
-          <p className="mt-1.5 text-sm text-gray-400">Estos datos se usan para confeccionar tus recetas y documentos médicos automáticamente. Si algo está mal, editalo antes de entrar a la consulta.</p>
+          <h1 className="mt-4 text-lg font-medium text-gray-900">{psicologia ? "Tus datos" : "Tu información médica"}</h1>
+          <p className="mt-1.5 text-sm text-gray-400">
+            {psicologia
+              ? "Estos datos se usan para confeccionar tu constancia de atención. Si algo está mal, editalo antes de entrar a la sesión."
+              : "Estos datos se usan para confeccionar tus recetas y documentos médicos automáticamente. Si algo está mal, editalo antes de entrar a la consulta."}
+          </p>
         </div>
 
         <div className="mt-8 rounded-xl bg-[#f8f9fa] p-5 space-y-3 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>

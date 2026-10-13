@@ -6,6 +6,8 @@ import EsperaTurno from "./EsperaTurno";
 import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 import { registrarEntradaSala } from "@/lib/sala-espera";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 export default async function EsperaTurnoPage({
   params,
@@ -56,6 +58,8 @@ export default async function EsperaTurnoPage({
     .select("nombre_completo, especialidad, titulo")
     .eq("id", turno.medico_id)
     .single();
+  // Profesión de la ficha (13/10/2026) en query propia: el SELECT de arriba no se toca.
+  const profesion = await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id });
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
@@ -71,9 +75,11 @@ export default async function EsperaTurnoPage({
       <main className="mx-auto max-w-lg px-6 py-16">
         <EsperaTurno
           turnoId={turnoId}
-          medicoNombre={medico?.nombre_completo ?? "Médico"}
+          // Sin ficha, nombre vacío: el componente cae a "El profesional", que vale para todos.
+          medicoNombre={medico?.nombre_completo ?? ""}
           medicoTitulo={medico?.titulo ?? null}
           medicoEspecialidad={medico?.especialidad ?? ""}
+          profesion={profesion}
           horaInicio={turno.hora_inicio}
           returnUrl={returnUrl}
         />

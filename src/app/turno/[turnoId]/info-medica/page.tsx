@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import InfoMedicaForm from "@/components/InfoMedicaForm";
 import { tieneNombreYApellido } from "@/lib/pacientes/nombre";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 export default async function InfoMedicaTurnoPage({
   params,
@@ -55,9 +57,17 @@ export default async function InfoMedicaTurnoPage({
     obraSocialNombre = os?.nombre ?? null;
   }
 
+  // Profesión del profesional del turno (13/10/2026): con un psicólogo el paso
+  // habla de la constancia y no de recetas. Lectura propia, con service role;
+  // si el turno no se lee, se trata como médico y nada cambia.
+  const { data: turno } = await supabase.from("turnos").select("medico_id").eq("id", turnoId).maybeSingle();
+  const profesion = turno?.medico_id
+    ? await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id })
+    : null;
 
   return (
     <InfoMedicaForm
+      profesion={profesion}
       paciente={{
         ...paciente,
         obra_social_nombre: obraSocialNombre,

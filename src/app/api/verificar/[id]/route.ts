@@ -4,6 +4,7 @@ import { verificarDocumento, type EstadoVerificacion } from "@/lib/firma/documen
 import { createAdminClient } from "@/lib/supabase/admin";
 import { documentoEsDemo, NOMBRE_UTILERIA } from "@/lib/institucional/demo";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 // ─── Rate limiting por IP ────────────────────────────────────────────────────
 // Fix 2.1: Limitar consultas para evitar enumeración de recetas
@@ -100,10 +101,21 @@ export async function GET(
         // base de la instancia) y el campo VIAJA SOLO CUANDO ES VERDADERO: en
         // el B2C la respuesta sale idéntica, sin una clave de más.
         const demostracion = await documentoEsDemo(id);
+        // Profesión del firmante (13/10/2026): query propia con service role,
+        // sin tocar el SELECT de `datosMinimosMedico`. Viaja SOLO cuando es
+        // psicología, igual que `demostracion`: para un documento de médico la
+        // respuesta sale idéntica a la de siempre.
+        const profesion = doc.medico_id
+          ? await profesionDeLaFicha(createAdminClient(), { medicoId: doc.medico_id })
+          : "medico";
         return {
           estado: doc.estado,
           verificada: doc.estado === "verificada",
           ...(demostracion ? { demostracion: true as const } : {}),
+          ...(profesion === "psicologo" ? { profesion } : {}),
+          // Tipo del documento (receta, certificado, constancia…): la página
+          // lo usa para nombrarlo bien. Nunca el contenido.
+          ...(doc.tipo ? { tipo: doc.tipo } : {}),
           alterada: doc.estado === "alterada",
           firmado_at: doc.datos?.firmado_at,
           // Fecha de EMISIÓN. Va siempre, no solo en el sellado diferido: la
@@ -187,6 +199,10 @@ type RespuestaVerificacion = {
    * Solo aparece cuando es `true`: en el B2C la respuesta no cambia en nada.
    */
   demostracion?: true;
+  /** Firmante psicólogo (13/10/2026). Solo aparece cuando lo es. */
+  profesion?: "psicologo";
+  /** Tipo del documento (`documentos.tipo`). Solo en el camino `documentos`. */
+  tipo?: string;
   alterada?: boolean;
   /** Instante REAL del sello criptográfico. Nunca una fecha anterior a la real. */
   firmado_at?: string;

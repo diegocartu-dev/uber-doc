@@ -1159,6 +1159,13 @@ export type VerificacionDocumento = {
   estado: EstadoVerificacion;
   medico_id: string | null;
   /**
+   * Tipo del documento (`documentos.tipo`: receta, certificado, constancia…).
+   * La página pública lo necesita para no llamar "receta" ni "acto médico" a
+   * la constancia de atención de un psicólogo (13/10/2026). Solo el tipo: nada
+   * del contenido sale de acá.
+   */
+  tipo: string | null;
+  /**
    * Fecha de EMISIÓN del documento (`documentos.created_at`). La página pública
    * muestra siempre las dos fechas —emisión y sello— también cuando coinciden:
    * así el sellado diferido no es un caso especial que salta a la vista, y que
@@ -1207,6 +1214,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     return {
       estado: "no_encontrado",
       medico_id: null,
+      tipo: null,
       emitido_at: null,
       sellado_diferido: false,
       datos: null,
@@ -1217,6 +1225,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
     return {
       estado: "sin_sello",
       medico_id: doc.medico_id,
+      tipo: doc.tipo ?? null,
       emitido_at: doc.created_at,
       sellado_diferido: false,
       datos: null,
@@ -1305,6 +1314,7 @@ export async function verificarDocumento(documentoId: string): Promise<Verificac
 
   const comun = {
     medico_id: fd.medico_id,
+    tipo: doc.tipo ?? null,
     emitido_at: doc.created_at,
     sellado_diferido: fd.metodo_atribucion === METODO_SELLADO_DIFERIDO,
     rectificacion,

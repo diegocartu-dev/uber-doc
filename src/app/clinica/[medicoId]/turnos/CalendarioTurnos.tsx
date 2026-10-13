@@ -7,6 +7,7 @@ import { reservarTurno, limpiarReservasExpiradas } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { etiquetaProfesional } from "@/lib/medicos/vocabulario";
 
 type Turno = { id: string; fecha: string; hora_inicio: string; hora_fin: string; monto: number };
 // `titulo` viaja desde el perfil del médico ("Dr."/"Dra."). Es opcional: si no llega,
@@ -26,12 +27,15 @@ export default function CalendarioTurnos({
   medico,
   canalOrigen = "clinica_virtual",
   sinTerminoControlados = false,
+  profesion = null,
 }: {
   turnos: Turno[];
   medico: Medico;
   canalOrigen?: "clinica_virtual" | "consultorio_privado";
   /** Turno de psicología (13/10/2026): el psicólogo no receta, el término no va. */
   sinTerminoControlados?: boolean;
+  /** Profesión de la ficha (13/10/2026): sin dato es médico y nada cambia. */
+  profesion?: string | null;
 }) {
   // Mes/año inicial del calendario también en hora AR (borde de mes con TZ corrida).
   const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -302,7 +306,7 @@ export default function CalendarioTurnos({
 
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Médico</span>
+              <span className="text-gray-500">{etiquetaProfesional(profesion)}</span>
               <span className="font-medium text-gray-900">{formatNombreMedico(medico.nombre, medico.titulo)}</span>
             </div>
             <div className="flex justify-between">

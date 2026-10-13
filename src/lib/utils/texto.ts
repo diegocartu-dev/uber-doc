@@ -31,13 +31,16 @@ export function capitalizarNombre(texto: string): string {
  * guardado desde el registro; lo que faltaba era usarlo. Un nombre sin título es
  * neutro; un título equivocado es un error con nombre y apellido.
  *
- * Si el nombre YA viene con "Dr."/"Dra." adentro, se respeta y no se duplica.
+ * Si el nombre YA viene con "Dr."/"Dra."/"Lic." adentro, se respeta y no se
+ * duplica. "Lic." es el título de psicología (13/10/2026): el registro lo fija
+ * solo, y una ficha cargada como "Lic. Ana García" no puede salir "Lic. Lic.".
  *
  * Ejemplos:
  *   formatNombreMedico("Ana García", "Dra.")     → "Dra. Ana García"
  *   formatNombreMedico("Carlos López", "Dr.")    → "Dr. Carlos López"
  *   formatNombreMedico("Ana García")             → "Ana García"     ← sin inventar
  *   formatNombreMedico("Dra. Ana García")        → "Dra. Ana García"
+ *   formatNombreMedico("Lic. Ana García", "Lic.") → "Lic. Ana García"
  */
 export function formatNombreMedico(nombre: string, titulo?: string | null): string {
   if (!nombre) return "";
@@ -45,9 +48,10 @@ export function formatNombreMedico(nombre: string, titulo?: string | null): stri
   // El punto es OPCIONAL a propósito: hay fichas cargadas como "Dr Pedro Ruiz",
   // sin punto, y con el guard viejo (que lo exigía) salían duplicadas —
   // "Dr. Dr Pedro Ruiz"— en la caja PROFESIONAL de la receta y en los mails.
-  // Ojo: "Drago Pérez" NO matchea, porque después del prefijo se exige un espacio.
-  if (/^Dra?\.?\s/i.test(trimmed)) return capitalizarNombre(trimmed);
-  if (/^Dra?\./i.test(trimmed)) return capitalizarNombre(trimmed.replace(/^(Dra?\.)/i, "$1 "));
+  // Ojo: "Drago Pérez" NO matchea, porque después del prefijo se exige un espacio
+  // (y "Licia Ruiz" tampoco, por lo mismo).
+  if (/^(Dra?|Lic)\.?\s/i.test(trimmed)) return capitalizarNombre(trimmed);
+  if (/^(Dra?|Lic)\./i.test(trimmed)) return capitalizarNombre(trimmed.replace(/^((?:Dra?|Lic)\.)/i, "$1 "));
   const prefijo = (titulo ?? "").trim();
   return prefijo ? `${prefijo} ${capitalizarNombre(trimmed)}` : capitalizarNombre(trimmed);
 }
@@ -60,6 +64,12 @@ export function formatNombreMedico(nombre: string, titulo?: string | null): stri
  * García", que es correcta en vez de arriesgar un "el" equivocado. Ojo al
  * armarla: hay que contemplar el espacio, `${articuloMedico(t)}${...}` con el
  * espacio adentro del helper no sirve para el arranque de una oración.
+ *
+ * "Lic." (psicología, 13/10/2026) también devuelve "" A PROPÓSITO: el título es
+ * neutro y la ficha no guarda el género del profesional, así que no hay de dónde
+ * sacar "el" o "la". Las frases quedan "tenés turno con Lic. Ana García", sin
+ * artículo y correctas. Si algún día se quiere el artículo, hay que guardar el
+ * género en el registro: es una decisión de producto, no de este helper.
  */
 export function articuloMedico(titulo?: string | null): "el" | "la" | "" {
   const t = (titulo ?? "").trim().toLowerCase();
