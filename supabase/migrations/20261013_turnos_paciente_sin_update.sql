@@ -1,0 +1,22 @@
+-- =============================================================================
+-- La sesión del paciente ya no escribe `turnos` (13/10/2026).
+--
+-- Probado en producción, en una transacción que se deshizo y con cuentas de
+-- prueba: con su propia sesión (la clave pública está en el navegador), un
+-- paciente logueado pasaba un turno libre a `confirmado` con
+-- `mp_status = 'approved'` por un UPDATE directo, sin pagar. La policy
+-- "Pacientes actualizan sus turnos" dejaba tocar cualquier turno `disponible`
+-- con solo `paciente_id` propio como condición, y el permiso de UPDATE cubre
+-- todas las columnas. Rompía "sin pago no hay turno".
+--
+-- Los únicos dos lugares de la aplicación que escribían con esa sesión
+-- (reservarTurno y la confirmación simulada de cuentas de prueba) pasaron a
+-- service role con las mismas condiciones; las cancelaciones y las
+-- reprogramaciones ya iban por el servidor. Sin la policy, la RLS le niega al
+-- paciente todo UPDATE. La de los médicos queda igual.
+--
+-- Se aplica DESPUÉS de que el deploy con el código nuevo esté en producción
+-- (antes, la reserva fallaría). Va también a la base institucional (038).
+-- =============================================================================
+
+DROP POLICY IF EXISTS "Pacientes actualizan sus turnos" ON public.turnos;
