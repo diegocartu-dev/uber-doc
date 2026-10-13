@@ -208,6 +208,10 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
 }
 
 export async function confirmarPagoTurno(turnoId: string) {
+  // Misma Capa B que reservarTurno: en la instancia los turnos los asigna el otorgador.
+  if (esInstitucional()) {
+    return { error: "No disponible." };
+  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
