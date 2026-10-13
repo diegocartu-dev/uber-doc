@@ -2,17 +2,26 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { versionConsentimiento } from "@/lib/legal/consentimiento-version";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
+import { REMITIR_EMERGENCIAS } from "@/lib/legal/lineas-emergencia";
 
 type Props = {
   consultaId?: string;
   turnoId?: string;
   redirect: string;
+  /**
+   * Profesión del profesional de la atención (13/10/2026). Psicología muestra
+   * SU texto ("psi-v1"); sin el dato, el texto médico de siempre ("v1"). La
+   * versión que se guarda la recalcula el servidor: acá solo se muestra.
+   */
+  profesion?: string | null;
 };
 
-const TEXTO_VERSION = "v1";
-
-export default function ConsentimientoInformado({ consultaId, turnoId, redirect }: Props) {
+export default function ConsentimientoInformado({ consultaId, turnoId, redirect, profesion = null }: Props) {
   const router = useRouter();
+  const psicologia = esPsicologia(profesion);
+  const textoVersion = versionConsentimiento(profesion);
   const [aceptado, setAceptado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -42,7 +51,7 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect 
         body: JSON.stringify({
           consultaId: consultaId ?? null,
           turnoId: turnoId ?? null,
-          textoVersion: TEXTO_VERSION,
+          textoVersion,
         }),
       });
       if (!res.ok) {
@@ -68,7 +77,7 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect 
             </svg>
           </div>
           <h1 className="mt-4 text-lg font-medium text-gray-900">Consentimiento informado</h1>
-          <p className="mt-1.5 text-sm text-gray-400">Leé el siguiente texto antes de iniciar tu consulta.</p>
+          <p className="mt-1.5 text-sm text-gray-400">{psicologia ? "Leé el siguiente texto antes de iniciar tu sesión." : "Leé el siguiente texto antes de iniciar tu consulta."}</p>
         </div>
 
         <div
@@ -76,6 +85,37 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect 
           className="mt-6 overflow-y-auto rounded-xl bg-[#f8f9fa] p-5 text-sm leading-relaxed text-gray-700"
           style={{ maxHeight: "45vh", border: "0.5px solid #e5e7eb" }}
         >
+          {psicologia ? (
+            // ── Atención psicológica a distancia ("psi-v1", aprobado por Diego el 13/10/2026) ──
+            // Texto propio: nada de examen físico, diagnóstico ni recetas; secreto
+            // profesional; y emergencias sin números (regla del 13/10).
+            <>
+              <p className="font-semibold text-gray-900 mb-3">
+                Consentimiento informado para atención psicológica a distancia
+              </p>
+
+              <p className="mb-3">Antes de iniciar tu sesión, es importante que leas y aceptes lo siguiente:</p>
+
+              <p className="mb-2"><strong>Modalidad de atención.</strong> La sesión que estás por realizar se lleva a cabo a distancia, mediante videollamada, a través de la plataforma Docto, con un profesional de la psicología matriculado. No implica la presencia física del profesional.</p>
+
+              <p className="mb-2"><strong>Limitaciones de la atención a distancia.</strong> La atención psicológica por videollamada tiene limitaciones propias de la distancia: el profesional no puede intervenir en persona ni acompañarte físicamente si durante la sesión te sentís mal, y la comunicación depende de la calidad de la conexión y de la privacidad del lugar desde donde te conectás. Elegí un espacio tranquilo y privado.</p>
+
+              <p className="mb-2"><strong>Alcance.</strong> En Docto la atención psicológica es solo para personas mayores de 18 años. El profesional no emite recetas, órdenes de estudios ni certificados médicos. Si necesitás una evaluación médica o un tratamiento con medicación, te va a orientar para que consultes a un médico.</p>
+
+              <p className="mb-2"><strong>Derivación.</strong> El profesional puede determinar, según su criterio profesional, que tu situación requiere atención presencial, una evaluación médica o psiquiátrica, o un dispositivo de mayor contención. En ese caso te lo va a indicar durante la sesión y podrá orientarte sobre los pasos a seguir.</p>
+
+              <p className="mb-2"><strong>Registro de datos y secreto profesional.</strong> Los datos de la sesión —la evolución que registra el profesional en tu historia clínica y la constancia de atención, si se emite— se almacenarán en la plataforma conforme a la Ley 25.326 de Protección de Datos Personales. Los datos de salud son tratados como datos sensibles con las máximas medidas de seguridad. Lo que compartas en la sesión está protegido por el secreto profesional; la constancia de atención no incluye contenido clínico. Docto se encuentra inscripto ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505-APN-DNPDP#AAIP y ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) como Plataforma 0270.</p>
+
+              <p className="mb-2"><strong>Derecho a interrumpir.</strong> Podés interrumpir o abandonar la sesión en cualquier momento, sin necesidad de justificación.</p>
+
+              <p className="mb-2 rounded-lg bg-blue-50 p-3 text-sm font-medium text-gray-800"><strong>Esto NO es un servicio de emergencias ni de atención en crisis.</strong> Docto es una plataforma de atención electiva, con turno. Si estás pensando en hacerte daño, si sentís que no podés mantenerte a salvo o si alguien está en peligro, no esperes al turno: {REMITIR_EMERGENCIAS}.</p>
+
+              <p className="mb-2"><strong>Videollamada no grabada.</strong> La videollamada no es grabada ni almacenada por Docto.</p>
+
+              <p className="mb-0 text-xs text-gray-500">Marco legal: Ley 23.277 (ejercicio profesional de la psicología) y su Decreto 905/1995, Ley 26.657 (Salud Mental), Ley 26.529 (arts. 5 y 6), Ley 27.553 (art. 7), Ley 25.326.</p>
+            </>
+          ) : (
+            <>
           <p className="font-semibold text-gray-900 mb-3">
             Consentimiento informado para teleconsulta médica
           </p>
@@ -92,11 +132,13 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect 
 
           <p className="mb-2"><strong>Derecho a interrumpir.</strong> Podés interrumpir o abandonar la teleconsulta en cualquier momento, sin necesidad de justificación.</p>
 
-          <p className="mb-2 rounded-lg bg-blue-50 p-3 text-sm font-medium text-gray-800"><strong>Esto NO es un servicio de emergencias.</strong> Docto es una plataforma de telemedicina electiva. Ante una emergencia o urgencia médica, llamá al SAME (107) o dirigite al centro de salud más cercano.</p>
+          <p className="mb-2 rounded-lg bg-blue-50 p-3 text-sm font-medium text-gray-800"><strong>Esto NO es un servicio de emergencias.</strong> Docto es una plataforma de telemedicina electiva. Ante una emergencia o urgencia médica, llamá al SAME (107) o al servicio de emergencias de tu zona, o dirigite al centro de salud más cercano.</p>
 
           <p className="mb-2"><strong>Videollamada no grabada.</strong> La videollamada no es grabada ni almacenada por Docto.</p>
 
           <p className="mb-0 text-xs text-gray-500">Marco legal: Ley 27.553 (art. 7), Ley 26.529 (arts. 5 y 6), Resolución 581/2022 de la Secretaría de Calidad en Salud.</p>
+            </>
+          )}
         </div>
 
         <label className={`mt-5 flex items-start gap-3 cursor-pointer ${!scrollCompleto ? "opacity-40 pointer-events-none" : ""}`}>
@@ -108,7 +150,9 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect 
             className="mt-0.5 h-5 w-5 rounded border-gray-300 text-[#378ADD] focus:ring-[#378ADD]"
           />
           <span className="text-sm text-gray-700">
-            Declaro que comprendí las condiciones de esta teleconsulta y presto mi consentimiento informado para realizarla.
+            {psicologia
+              ? "Declaro que comprendí las condiciones de esta sesión de atención psicológica a distancia y presto mi consentimiento informado para realizarla."
+              : "Declaro que comprendí las condiciones de esta teleconsulta y presto mi consentimiento informado para realizarla."}
           </span>
         </label>
         {!scrollCompleto && (
