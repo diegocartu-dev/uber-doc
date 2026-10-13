@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Stethoscope, ShieldCheck } from "lucide-react";
 
 const linkMap: Record<string, string> = {
-  "Buscar médico": "/clinica",
+  "Buscar profesional": "/clinica",
   "Consulta inmediata": "/clinica",
   "Mis consultas": "/mis-consultas",
   "Sumate a Docto": "/auth/registro-medico",
@@ -12,8 +12,8 @@ const linkMap: Record<string, string> = {
 };
 
 const footerCols = [
-  { title: "Pacientes", links: ["Buscar médico", "Consulta inmediata", "Mis consultas"] },
-  { title: "Médicos", links: ["Sumate a Docto"] },
+  { title: "Pacientes", links: ["Buscar profesional", "Consulta inmediata", "Mis consultas"] },
+  { title: "Profesionales", links: ["Sumate a Docto"] },
   { title: "Legal", links: ["Términos", "Privacidad", "Botón de arrepentimiento"] },
 ];
 
@@ -37,7 +37,7 @@ export default function Footer() {
               </span>
             </div>
             <p style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--color-text-secondary)", margin: "16px 0 20px", maxWidth: 280 }}>
-              Plataforma de telemedicina argentina. Conectamos pacientes con médicos para consultas virtuales.
+              Plataforma de telemedicina argentina. Conectamos pacientes con médicos y psicólogos para consultas virtuales.
             </p>
           </div>
           {footerCols.map((c) => (

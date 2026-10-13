@@ -1,3 +1,5 @@
+import { REMITIR_EMERGENCIAS } from "@/lib/legal/lineas-emergencia";
+
 export default function TerminosContent({ hideTitle = false }: { hideTitle?: boolean }) {
   return (
     <article className="prose prose-sm prose-gray max-w-none">
@@ -7,13 +9,13 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
             Términos y Condiciones de Uso
           </h1>
           <p className="text-center text-sm text-gray-500">
-            Versión vigente desde el 1 de junio de 2026
+            Versión vigente desde el 13 de octubre de 2026
           </p>
         </>
       )}
 
       <div className="my-6 rounded-lg bg-blue-50 p-4 text-sm font-medium text-gray-800">
-        IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un servicio de emergencias ni urgencias médicas. Ante una urgencia o emergencia, llamá al SAME (107) o concurrí al centro de salud más cercano.
+        IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un servicio de emergencias, urgencias ni atención en crisis. Ante una urgencia o emergencia, llamá al SAME (107) o {REMITIR_EMERGENCIAS}. Ante una crisis de salud mental, no esperes al turno: {REMITIR_EMERGENCIAS}.
       </div>
 
       <h2>1. Introducción y aceptación</h2>
@@ -23,8 +25,8 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
 
       <h2>2. Naturaleza del servicio y limitaciones</h2>
       <h3>2.1 Qué es Docto</h3>
-      <p>Docto es una plataforma tecnológica que facilita la conexión entre pacientes y profesionales de la salud habilitados para realizar consultas médicas a distancia mediante videoconferencia, en el marco de la Ley 27.553 de Recetas Digitales y demás normativa aplicable.</p>
-      <p>Docto actúa como intermediario tecnológico. La relación médico-paciente se establece exclusivamente entre el profesional y el paciente. Docto no ejerce la medicina ni presta servicios médicos directamente.</p>
+      <p>Docto es una plataforma tecnológica que facilita la conexión entre pacientes y profesionales de la salud habilitados —médicos y psicólogos— para realizar consultas y sesiones a distancia mediante videoconferencia, en el marco de la Ley 27.553 de Recetas Digitales y demás normativa aplicable a cada profesión.</p>
+      <p>Docto actúa como intermediario tecnológico. La relación profesional-paciente se establece exclusivamente entre el profesional y el paciente. Docto no ejerce la medicina ni la psicología, ni presta servicios de salud directamente.</p>
       <h3>2.2 Lo que Docto NO es</h3>
       <p><strong>Docto NO es un servicio de emergencias ni urgencias médicas.</strong></p>
       <p>Docto no debe ser utilizado en ninguna de las siguientes situaciones:</p>
@@ -35,18 +37,19 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Cuadros que requieran atención presencial inmediata.</li>
         <li>Crisis de salud mental con riesgo para la integridad del paciente o terceros.</li>
       </ul>
-      <p>En cualquiera de los casos anteriores, el paciente deberá llamar al número de emergencias de su localidad (107 en AMBA), llamar a una ambulancia o concurrir al hospital o guardia más cercano.</p>
+      <p>En cualquiera de los casos anteriores, llamá al número de emergencias de tu localidad (107 en AMBA) o {REMITIR_EMERGENCIAS}. Ante una crisis de salud mental o pensamientos de hacerte daño, no esperes al turno: {REMITIR_EMERGENCIAS}.</p>
       <h3>2.3 Alcance de las consultas</h3>
-      <p>Las consultas realizadas a través de Docto son de carácter electivo y complementario a la atención médica presencial. El profesional de la salud determinará, según su criterio clínico, si la consulta puede resolverse de forma remota o si el paciente requiere atención presencial.</p>
+      <p>Las consultas realizadas a través de Docto son de carácter electivo y complementario a la atención presencial. El profesional determinará, según su criterio profesional, si la consulta puede resolverse de forma remota o si el paciente requiere atención presencial.</p>
       <p>Docto no garantiza diagnósticos, resultados de tratamientos ni la disponibilidad permanente de profesionales en ninguna especialidad.</p>
 
-      <h2>3. Salud y atención médica</h2>
+      <h2>3. Salud y atención profesional</h2>
       <h3>3.1 Naturaleza de la teleconsulta y sus límites</h3>
       <p>La teleconsulta en Docto es un acto médico real: un profesional habilitado te atiende a distancia por videollamada, evalúa tu caso y puede diagnosticar, indicar tratamiento o emitir una receta cuando corresponda.</p>
+      <p>Cuando te atiende un psicólogo, la sesión es un acto profesional de atención psicológica a distancia: el profesional no emite recetas, órdenes de estudios ni certificados médicos, y puede orientarte a una consulta médica o presencial si tu situación lo requiere. La atención psicológica en Docto es solo para mayores de 18 años.</p>
       <p>Tiene límites propios de la atención a distancia. Hay situaciones que no pueden resolverse por telemedicina y requieren atención presencial: cuadros que necesitan examen físico, estudios complementarios, procedimientos, o cualquier situación donde el profesional, según su criterio clínico, considere que no puede atenderte con seguridad de forma remota. En esos casos el profesional te lo va a indicar y te va a derivar a una consulta presencial. La decisión sobre si tu caso puede resolverse de forma remota o necesita atención presencial es siempre del profesional que te atiende.</p>
       <h3>3.2 Consentimiento informado y autonomía</h3>
       <p>Tenés derecho a recibir, antes y durante la consulta, información clara, suficiente y adecuada a tu capacidad de comprensión sobre tu estado de salud, el procedimiento propuesto, sus beneficios, riesgos y las alternativas disponibles (Ley 26.529).</p>
-      <p>Sobre esa información, tenés derecho a aceptar o rechazar los tratamientos o procedimientos indicados, así como a revocar tu decisión posteriormente. La atención por videollamada implica además tu consentimiento para que el acto médico se realice de forma remota; podés interrumpir la teleconsulta en cualquier momento.</p>
+      <p>Sobre esa información, tenés derecho a aceptar o rechazar los tratamientos o procedimientos indicados, así como a revocar tu decisión posteriormente. La atención por videollamada implica además tu consentimiento para que el acto profesional (médico o psicológico) se realice de forma remota; podés interrumpir la teleconsulta en cualquier momento.</p>
       <p>Tenés derecho a tu historia clínica: es tuya, podés acceder a ella y solicitar una copia. Los documentos que se generen en tu consulta (receta, indicaciones, constancias) quedan disponibles para vos en la plataforma.</p>
       <h3>3.3 Confidencialidad y secreto profesional</h3>
       <p>Todo lo que compartas en una consulta está protegido por el secreto profesional y por la confidencialidad de tus datos de salud. El profesional que te atiende y Docto están obligados a no revelar la información vinculada a tu atención, salvo en los casos en que la ley lo exija expresamente o cuando vos lo autorices. Tus datos de salud son datos sensibles y reciben el máximo nivel de protección (ver §8, Privacidad y protección de datos personales).</p>
@@ -65,7 +68,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <p>Los profesionales de la salud que operan en Docto son profesionales independientes habilitados por los organismos competentes (Ministerio de Salud, colegios profesionales u organismos equivalentes). Docto verifica la matrícula vigente de cada profesional a través del sistema SISA/REFEPS antes de habilitar su perfil.</p>
       <p>Los profesionales son exclusivamente responsables de:</p>
       <ul>
-        <li>El contenido de sus diagnósticos, indicaciones terapéuticas y recetas.</li>
+        <li>El contenido de sus diagnósticos, indicaciones terapéuticas, recetas, evoluciones y constancias.</li>
         <li>El ejercicio ético y legal de su profesión.</li>
         <li>La determinación de si una consulta puede resolverse en forma remota.</li>
         <li>La derivación del paciente cuando la situación clínica lo requiera.</li>
@@ -92,18 +95,21 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <h3>6.4 Derecho de revocación (compras a distancia)</h3>
       <p>Como contratás a distancia, la ley te reconoce el derecho de revocar la operación dentro de los 10 días corridos (art. 34, Ley 24.240). Ese derecho no aplica a las consultas de Docto, porque se trata de un servicio que se agenda y presta en una fecha y hora determinadas elegidas por vos, supuesto expresamente excluido de la revocación. La cancelación y los reembolsos de tu consulta se rigen por la política de cancelaciones de §6.2.</p>
 
-      <h2>7. Recetas y documentos médicos digitales</h2>
+      <h2>7. Recetas y documentos digitales</h2>
       <h3>7.1 Recetas digitales</h3>
       <p>Las recetas emitidas a través de Docto son recetas digitales con validez legal en todo el territorio nacional, en el marco de la Ley 27.553 y el Decreto 63/2024. Las recetas incluyen la firma electrónica del profesional y el código de identificación correspondiente.</p>
       <p>La emisión de una receta es una decisión exclusiva del profesional interviniente. Docto no puede garantizar que toda consulta resulte en la emisión de una receta. El paciente no tiene derecho a exigir la prescripción de medicamentos específicos.</p>
       <p>Docto se encuentra inscripto ante el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270, y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
 
       <h3>7.2 Otros documentos médicos</h3>
-      <p>Además de la receta, el profesional puede emitir a través de Docto otros documentos —indicaciones médicas, órdenes de estudios y certificados médicos— firmados electrónicamente. Cada documento se emite bajo la exclusiva responsabilidad profesional del médico interviniente, quien decide su contenido y procedencia. Docto provee la plataforma de emisión, no interviene en el criterio clínico.</p>
+      <p>Además de la receta, el profesional puede emitir a través de Docto otros documentos —indicaciones médicas, órdenes de estudios y certificados médicos— firmados electrónicamente. Cada documento se emite bajo la exclusiva responsabilidad profesional del profesional interviniente, quien decide su contenido y procedencia. Docto provee la plataforma de emisión, no interviene en el criterio clínico.</p>
 
       <h3>7.3 Certificados médicos de reposo laboral</h3>
       <p>A través de Docto el profesional interviniente puede emitir certificados de reposo o licencia laboral, firmados electrónicamente. El certificado consigna el diagnóstico, el tratamiento indicado y los días de reposo, según el criterio del profesional. La Ley 27.802 y su Decreto reglamentario 407/2026 regulan, entre otros aspectos, el artículo 210 de la Ley de Contrato de Trabajo, relativo al control del estado de salud del trabajador.</p>
       <p><strong>Derecho de control del empleador.</strong> El artículo 210 de la Ley de Contrato de Trabajo reconoce al empleador la facultad de verificar el estado de salud del trabajador mediante un control a cargo del facultativo que aquél designe. La emisión de un certificado a través de Docto no sustituye, limita ni excluye ese derecho de control del empleador, ni la eventual intervención de una junta médica cuando corresponda. El trabajador es responsable de presentar el certificado a su empleador en los plazos y formas que su relación laboral exija.</p>
+
+      <h3>7.4 Constancia de atención psicológica</h3>
+      <p>Cuando te atiende un psicólogo, el profesional puede emitir una constancia de atención firmada electrónicamente, que acredita que asististe a una sesión en una fecha y hora determinadas. La constancia no incluye contenido clínico, protegido por el secreto profesional. Su emisión es una decisión del profesional y requiere que hayas participado de la sesión.</p>
 
       <h2>8. Privacidad y protección de datos personales</h2>
       <p>El tratamiento de datos personales en Docto se realiza conforme a la Ley 25.326 de Protección de Datos Personales y las disposiciones de la Agencia de Acceso a la Información Pública (AAIP).</p>
@@ -114,7 +120,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Row Level Security en la base de datos — cada usuario solo accede a sus propios datos.</li>
         <li>Autenticación segura mediante contraseña y Google OAuth.</li>
       </ul>
-      <p>Los datos no son vendidos ni cedidos a terceros con fines comerciales. El titular de los datos puede ejercer sus derechos de acceso, rectificación, actualización y supresión enviando un correo a soporte@docto.com.ar. Los datos clínicos (diagnósticos, recetas, indicaciones, historia clínica) se conservan por un plazo mínimo de 10 años desde la última actuación, conforme al art. 18 de la Ley 26.529. Los datos de perfil e identificación se conservan por 5 años desde la última actividad o hasta que el titular solicite su supresión. Para más información, consultá nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
+      <p>Los datos no son vendidos ni cedidos a terceros con fines comerciales. El titular de los datos puede ejercer sus derechos de acceso, rectificación, actualización y supresión enviando un correo a soporte@docto.com.ar. Los datos clínicos (diagnósticos, recetas, indicaciones, evoluciones, historia clínica) se conservan por un plazo mínimo de 10 años desde la última actuación, conforme al art. 18 de la Ley 26.529. Los datos de perfil e identificación se conservan por 5 años desde la última actividad o hasta que el titular solicite su supresión. Para más información, consultá nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
 
       <h2>9. Conducta del usuario y usos prohibidos</h2>
       <p>Al utilizar Docto, el usuario se compromete a no:</p>
@@ -122,7 +128,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Proporcionar información falsa sobre su identidad o estado de salud.</li>
         <li>Suplantar la identidad de otra persona.</li>
         <li>Grabar, reproducir o distribuir el contenido de las videoconsultas sin consentimiento expreso del profesional.</li>
-        <li>Utilizar la plataforma para fines distintos a la consulta médica legítima.</li>
+        <li>Utilizar la plataforma para fines distintos a la atención de salud legítima.</li>
         <li>Intentar acceder a datos de otros usuarios o vulnerar la seguridad del sistema.</li>
         <li>Hostigar, amenazar o faltar el respeto a los profesionales de la salud.</li>
       </ul>
@@ -130,8 +136,8 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       <h2>10. Limitación de responsabilidad</h2>
       <p>Docto no será responsable por:</p>
       <ul>
-        <li>Las decisiones clínicas, diagnósticos o tratamientos indicados por los profesionales de la salud.</li>
-        <li>Los resultados de los tratamientos médicos seguidos por el paciente.</li>
+        <li>Las decisiones clínicas, diagnósticos, tratamientos o intervenciones indicados por los profesionales de la salud.</li>
+        <li>Los resultados de los tratamientos o procesos terapéuticos seguidos por el paciente.</li>
         <li>Daños derivados del uso incorrecto de la plataforma o de la información proporcionada por el usuario.</li>
         <li>Interrupciones del servicio por causas de fuerza mayor o fallas de terceros proveedores.</li>
         <li>El uso de la plataforma en situaciones de emergencia o urgencia.</li>
@@ -163,7 +169,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <br />
         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
         <br />
-        Última actualización: junio de 2026
+        Última actualización: octubre de 2026
       </div>
     </article>
   );
