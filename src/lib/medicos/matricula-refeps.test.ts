@@ -253,11 +253,12 @@ test("psicólogo: su matrícula de psicología coincide o se adopta; la de médi
   assert.equal(cruzarMatricula(MP("5555", "Córdoba"), refeps, "medico").resultado, "revisar");
 });
 
-test("psicología: lista cerrada; la psicología social, los técnicos, los títulos de especialista y lo que no es psicología, no", () => {
-  for (const p of ["Psicólogo", "Psicóloga", "PSICOLOGO/A", "Licenciada en Psicología", "Lic. en Psicologia"]) {
+test("psicología: los dos textos del catálogo de REFEPS (códigos 5 y 6) y sus variantes; el resto del catálogo con 'psic', no", () => {
+  // Catálogo público de REFEPS, verificado el 13/10/2026.
+  for (const p of ["Psicólogo", "Licenciado en psicología", "Psicóloga", "PSICOLOGO/A", "Licenciada en Psicología", "Lic. en Psicologia"]) {
     assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "coincide", p);
   }
-  for (const p of ["Psicólogo Social", "Psicopedagogo", "Técnico en Psicología", "Especialista en Psicología Clínica", "Médico", ""]) {
+  for (const p of ["Psicopedagogo", "Licenciado en psicopedagogía", "Licenciado en psicomotrocidad", "Psicomotricista", "Técnico en psicomotricidad", "Técnico psicogerontología", "Profesor en psicomotricidad", "Técnico en Psicopedagogía", "Psicólogo Social", "Técnico en Psicología", "Especialista en Psicología Clínica", "Médico", ""]) {
     assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "revisar", p);
   }
 });

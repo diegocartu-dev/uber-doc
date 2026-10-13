@@ -34,7 +34,7 @@ Lleva lo que pide el Decreto 905/1995 para las certificaciones del psicólogo (n
 
 ## Lo que no está verificado
 
-- **El texto exacto con el que REFEPS devuelve la profesión de psicología.** El código de hoy solo reconoce "Médico". Se confirma con el primer psicólogo real que se registre (o un DNI de prueba que pase Diego).
+- ~~El texto exacto con el que REFEPS devuelve la profesión de psicología.~~ **Verificado el 13/10** contra el catálogo público de REFEPS (SISA → Codificaciones públicas → REFEPS → Profesiones matriculadas): son dos, el código 5 "Psicólogo" y el código 6 "Licenciado en psicología", las dos con profesión de referencia "Psicólogo". Psicopedagogos, psicomotricistas y técnicos quedan afuera. `lib/refeps/profesion.ts` reconoce exactamente eso.
 - **Que el Decreto 905/1995 siga vigente y alcance a la atención por videollamada.** Es la referencia más directa que se encontró; conviene que lo mire el abogado.
 - **Números de las líneas de emergencia** que se muestren en las pantallas de psicología: se verifican antes de publicarlos.
 
