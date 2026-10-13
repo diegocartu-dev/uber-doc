@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validarMedicoREFEPS } from "./validar";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 import { profesionDe } from "./profesion";
+import { refepsValida } from "@/lib/medicos/matricula-refeps";
 
 // Validación REFEPS automática + persistencia, compartida por el registro del médico
 // (waitUntil post-alta) y el cron de reintento. El admin debe encontrarse al médico YA
@@ -54,9 +55,10 @@ export async function validarYPersistirRefeps(medicoId: string): Promise<Resulta
     return "error_sistema";
   }
 
-  if (resultado.encontrado && resultado.activo) {
+  const profesion = profesionDe(medico.profesion);
+  if (refepsValida(resultado, profesion)) {
     // Las jurisdicciones salen de las matrículas de SU profesión (13/10/2026).
-    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
+    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesion);
     await admin
       .from("medicos")
       .update({
@@ -69,7 +71,8 @@ export async function validarYPersistirRefeps(medicoId: string): Promise<Resulta
     return "validado";
   }
 
-  // "No" real: no encontrado, matrícula inactiva o sin matrícula registrada.
+  // "No" real: no encontrado, matrícula inactiva, sin matrícula registrada o
+  // (psicólogo) sin una matrícula de psicología habilitada.
   await admin
     .from("medicos")
     .update({

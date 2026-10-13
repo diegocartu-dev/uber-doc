@@ -52,6 +52,13 @@ export default async function AdminMedicosPage() {
   }
   const cuentaPorMedico = new Map(cuentasMp.map((c) => [c.medico_id, c]));
 
+  // Profesión (13/10/2026): qué matrícula de REFEPS vale para «Usar esta» y las
+  // jurisdicciones. Query APARTE por la misma razón que la de cobros: si fallara,
+  // el panel sigue con sus médicos y la profesión cae en "médico" (la de todas
+  // las fichas anteriores).
+  const { data: profesiones } = await admin.from("medicos").select("id, profesion");
+  const profesionPorMedico = new Map((profesiones ?? []).map((p) => [p.id as string, p.profesion as string | null]));
+
   const medicosConCobros = (medicos ?? []).map((m) => {
     const cuenta = cuentaPorMedico.get(m.id);
     // Una sola regla para "puede cobrar", en `@/lib/mp-cuenta`: `estado` solo
@@ -59,6 +66,7 @@ export default async function AdminMedicosPage() {
     const cobros = estadoCuentaMp(cuenta);
     return {
       ...m,
+      profesion: profesionPorMedico.get(m.id) ?? null,
       mpConectado: cobros === "conectado",
       mpVencido: cobros === "expirado",
       mpSinCuenta: cobros === "no_conectado",

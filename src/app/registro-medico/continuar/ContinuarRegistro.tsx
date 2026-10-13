@@ -625,7 +625,12 @@ export default function ContinuarRegistro({
                         type="button"
                         role="radio"
                         aria-checked={profesion === valor}
-                        onClick={() => setProfesion(valor)}
+                        onClick={() => {
+                          setProfesion(valor);
+                          // Un clic no dispara "input"/"change": se agenda el autosave a mano.
+                          if (debounceRef.current) clearTimeout(debounceRef.current);
+                          debounceRef.current = setTimeout(guardarBorrador, BORRADOR_DEBOUNCE_MS);
+                        }}
                         className="min-h-[48px] rounded-[var(--radius-md)] border px-3 text-sm font-medium"
                         style={
                           profesion === valor

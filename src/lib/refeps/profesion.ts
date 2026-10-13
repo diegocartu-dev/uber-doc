@@ -35,12 +35,24 @@ function normalizar(p: string | null | undefined): string {
 }
 
 // Psicología: el texto exacto con el que REFEPS la devuelve NO está verificado
-// (13/10/2026; se confirma con el primer psicólogo real). Mientras tanto se
-// reconoce cualquier profesión que nombre la psicología ("Psicólogo/a",
-// "Licenciado/a en Psicología"), salvo la psicología social, que es otra
-// carrera y no habilita a ejercer la psicología.
+// (13/10/2026; se confirma con el primer psicólogo real). Lista CERRADA, como la
+// de médico: un texto con "psicolog" que no esté acá ("Técnico en psicología",
+// "Psicólogo social", un título de especialista) no es la matrícula de un
+// psicólogo, y la ficha va a revisión con el texto crudo a la vista. Si el texto
+// real de REFEPS es otro, se suma acá.
+const PROFESIONES_PSICOLOGIA = new Set([
+  "psicologo",
+  "psicologa",
+  "psicologo/a",
+  "psicologia",
+  "licenciado en psicologia",
+  "licenciada en psicologia",
+  "licenciado/a en psicologia",
+  "lic. en psicologia",
+  "lic en psicologia",
+]);
 function esTextoDePsicologia(n: string): boolean {
-  return n.includes("psicolog") && !n.includes("social");
+  return PROFESIONES_PSICOLOGIA.has(n);
 }
 
 /** `true` solo si la profesión informada es `profesion`. Sin dato → `false`. */

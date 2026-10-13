@@ -12,6 +12,7 @@ import { nombreProfesion, profesionDe } from "@/lib/refeps/profesion";
 import {
   declaradaDesdeRefeps,
   esUtilizable,
+  refepsValida,
   normalizarNumeroMatricula,
   MOTIVO_DNI_NO_COINCIDE,
   type MatriculaDeRefeps,
@@ -89,11 +90,12 @@ async function asegurarRefepsParaAprobar(
     };
   }
 
-  if (resultado.encontrado && resultado.activo) {
+  const profesion = profesionDe(medico.profesion);
+  if (refepsValida(resultado, profesion)) {
     // Alcance del médico para el ruteo por jurisdicción (Regla A): las provincias de sus
     // matrículas HABILITADAS, derivadas de REFEPS. Solo se persiste si viene con contenido,
     // para no pisar con vacío un set ya válido (fail-safe). Si viene vacío se loguea.
-    const { jurisdicciones, sinResolver } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
+    const { jurisdicciones, sinResolver } = derivarJurisdicciones(resultado.matriculas, profesion);
     if (jurisdicciones.length === 0) {
       console.warn(`[aprobar/refeps] médico ${medicoId} sin jurisdicción canónica derivable (sinResolver=${JSON.stringify(sinResolver)})`);
     }
@@ -121,7 +123,9 @@ async function asegurarRefepsParaAprobar(
 
   const detalle = !resultado.encontrado
     ? "la matrícula/DNI no figura en REFEPS"
-    : "la matrícula figura INACTIVA en REFEPS";
+    : !resultado.activo
+      ? "la matrícula figura INACTIVA en REFEPS"
+      : `REFEPS no tiene una matrícula de ${nombreProfesion(profesion)} habilitada para ese DNI`;
   return {
     ok: false,
     error: `No se puede aprobar: ${detalle}. Verificá los datos del médico (DNI/matrícula) antes de aprobar.`,

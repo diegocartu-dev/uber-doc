@@ -63,6 +63,15 @@ Qué quedó hecho:
 - Código: `lib/refeps/profesion.ts` (`profesionDe`, `esMatriculaDe`), `derivarJurisdicciones` y `cruzarMatricula` con la profesión de la ficha (por defecto médico: para los médicos no cambia nada), y la profesión pasada en el alta automática de REFEPS, en la reconciliación de identidad, en las dos rutas de REFEPS del admin y en «Usar esta». Tests en `matricula-refeps.test.ts`.
 - Registro: con el flag prendido aparece "Profesión: Médico/a · Psicólogo/a". El psicólogo queda Lic. · Psicología, sin el término de controlados. Con el flag apagado (hoy) el formulario es el de siempre.
 
+Revisión independiente antes del merge (13/10): con el flag apagado no cambia nada para los médicos. Lo que encontró para antes de abrir, ya corregido en el mismo PR:
+- El panel de admin no recibía la profesión: «Usar esta» le habría ofrecido a un psicólogo sus matrículas de médico y escondido las de psicología.
+- Cambiar la profesión con la identidad ya validada no volvía a cruzar la matrícula (quedaba congelada la de la otra profesión): ahora la base lo rechaza (`profesion_congelada`), igual que la matrícula.
+- `refeps_validado` miraba solo que la persona figure y esté activa: a un psicólogo ahora le exige además una matrícula de psicología habilitada (`refepsValida`).
+- El reconocimiento de la psicología pasó a lista cerrada (como la de médico): "Técnico en psicología", "Psicólogo social" o un título de especialista no cuentan. Si el texto real de REFEPS es otro, va a revisión y se suma a la lista.
+- Mismo nombre y misma matrícula en dos profesiones chocaba en el slug del perfil: ahora se desempata en el medio ("…-2-MP5555").
+- Queda menor: si el flag se apaga en medio de un registro de psicólogo, el error aparece en el último paso y hay que recargar.
+- No usar `OVERRIDE_FLAG_REGISTRO_PSICOLOGOS` en las vistas previas: comparten la base de producción y crearían psicólogos reales.
+
 **Textos nuevos para que apruebe Diego antes de abrir** (los ve solo un psicólogo, con el flag prendido):
 - Selector: "Profesión" · "Médico/a" · "Psicólogo/a"; y "Título y especialidad: Lic. · Psicología".
 - "Estos datos aparecen impresos en tus constancias." (el médico sigue viendo "recetas").
