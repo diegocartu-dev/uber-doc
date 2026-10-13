@@ -10,6 +10,7 @@ import {
 import JurisdiccionScreen from "./JurisdiccionScreen";
 import ListadoMedicos from "./ListadoMedicos";
 import { guardarProvincia } from "./actions";
+import { ESPECIALIDAD_PSICOLOGIA } from "@/lib/especialidades";
 
 // Orquesta el flujo de la Clínica con ruteo por jurisdicción:
 //   1) Pantalla de provincia (SIEMPRE primero — "validar cada vez"). provinciaGuardada
@@ -61,9 +62,20 @@ export default function ClinicaFlow({
   }
 
   const habilitados = medicos.filter((m) => habilitadoEnProvincia(m, provincia));
-  const deMedicina = habilitados.filter((m) => m.profesion !== "psicologo");
-  const dePsicologia = mostrarPsicologia ? habilitados.filter((m) => m.profesion === "psicologo") : [];
+  // Sin el dato de profesión (si la lectura falló), la especialidad lo dice: la
+  // del psicólogo es fija ("Psicología") y viene de la query que llena la lista.
+  const esDePsicologia = (m: Medico) =>
+    m.profesion ? m.profesion === "psicologo" : m.especialidad === ESPECIALIDAD_PSICOLOGIA;
+  const deMedicina = habilitados.filter((m) => !esDePsicologia(m));
+  const dePsicologia = mostrarPsicologia ? habilitados.filter(esDePsicologia) : [];
   const actual = dePsicologia.length > 0 && seccion === "psicologia" ? "psicologia" : "medicos";
+
+  const listado = actual === "psicologia" ? dePsicologia : deMedicina;
+  // Los turnos de la otra profesión no cuentan en esta sección (ni en la foto de la
+  // oferta). Por profesión y no por provincia: la foto siempre contó todo el país.
+  const idsDelListado = new Set(
+    medicos.filter((m) => (actual === "psicologia") === esDePsicologia(m)).map((m) => m.id)
+  );
 
   const selector =
     dePsicologia.length > 0 ? (
@@ -97,9 +109,9 @@ export default function ClinicaFlow({
       seccion={actual}
       selectorSeccion={selector}
       provincia={provincia}
-      medicos={actual === "psicologia" ? dePsicologia : deMedicina}
+      medicos={listado}
       consultasEspera={consultasEspera}
-      turnosClinicaVirtual={turnosClinicaVirtual}
+      turnosClinicaVirtual={turnosClinicaVirtual.filter((t) => idsDelListado.has(t.medico_id))}
       medicosEnTurno={medicosEnTurno}
       flagCiActiva={flagCiActiva}
       flagTurnosActivos={flagTurnosActivos}

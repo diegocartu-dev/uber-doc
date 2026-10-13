@@ -416,6 +416,11 @@ export async function POST(req: NextRequest) {
       .eq("user_id", medico_id)
       .single();
 
+    // Psicología (13/10/2026): solo con turno. Query propia (no se toca el SELECT de arriba).
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+    const esPsicologo = medicoRow ? (await profesionDeLaFicha(createAdminClient(), { medicoId: medicoRow.id })) === "psicologo" : false;
+
     if (!medicoRow) {
       return new Response(
         JSON.stringify({ error: "Perfil médico no encontrado" }),
@@ -739,7 +744,9 @@ Perfil: ${JSON.stringify(perfilNova)}
 Agenda de hoy: ${agendaResumen}
 Turnos disponibles hoy: ${slotsResumen}
 Próximos 45 días (resumen): ${proximosResumen}${ocupadoResumen ? `\nFranjas ya ocupadas: ${ocupadoResumen}` : ""}${franjas ? `\nFranjas con más chance (de mejor a peor): ${franjas.orden.join(", ")}` : ""}${medicoRow.slug ? `\nSu enlace personal (Consultorio Particular): docto.com.ar/dr/${medicoRow.slug}` : ""}
-Disponibilidad inmediata: ${medicoRow.disponible ? "PRENDIDA" : "APAGADA"}`;
+${esPsicologo
+  ? "Profesión: psicología. En psicología se atiende solo con turno: la consulta inmediata no existe para este profesional. Nunca se la ofrezcas ni la menciones, y si te la pide, le explicás que en psicología se atiende solo con turno."
+  : `Disponibilidad inmediata: ${medicoRow.disponible ? "PRENDIDA" : "APAGADA"}`}`;
 
     // --- Claude API con streaming ---
 

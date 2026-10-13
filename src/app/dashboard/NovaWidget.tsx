@@ -51,6 +51,7 @@ export default function NovaWidget({
   turnosHoy,
   tieneAgenda,
   disponibleAhora,
+  ofreceConsultaInmediata = true,
 }: {
   nombreMedico: string;
   /** Título que la médica eligió en su registro (`medicos.titulo`). Sin esto el
@@ -62,6 +63,8 @@ export default function NovaWidget({
   tieneAgenda: boolean;
   /** Consulta inmediata prendida. Es el canal que más consultas trae. */
   disponibleAhora: boolean;
+  /** Falso para psicología (13/10/2026): ahí se atiende solo con turno y no hay nada que prender. */
+  ofreceConsultaInmediata?: boolean;
 }) {
   const router = useRouter();
   const saludo = getSaludo();
@@ -76,7 +79,7 @@ export default function NovaWidget({
         boton: "Armar mi agenda",
         pregunta: "Quiero armar mi agenda",
       }
-    : !disponibleAhora
+    : ofreceConsultaInmediata && !disponibleAhora
     ? {
         estado: "sin_ci",
         texto: "Tiene turnos cargados. Si quiere, le prendo la consulta inmediata para atender también a quien la busque ahora mismo.",

@@ -63,6 +63,13 @@ export default async function TurnosPage({
   // Turno de psicología (13/10/2026): sin el término de controlados (el psicólogo no receta).
   const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
   const esPsicologia = (await profesionDeLaFicha(createAdminClient(), { medicoId })) === "psicologo";
+  // Psicología, solo adultos: un menor no ve el calendario (la clínica tampoco le
+  // muestra la sección; la reserva igual lo rechaza).
+  if (esPsicologia) {
+    const { esMenorDeEdad } = await import("@/lib/pacientes/edad");
+    const { fechaAR } = await import("@/lib/insights/fechas");
+    if (esMenorDeEdad(paciente?.fecha_nacimiento as string | null | undefined, fechaAR())) redirect("/clinica");
+  }
 
   // Enforcement del canal privado (Roberto, gate 15/07): consultorio apagado =
   // su calendario privado tampoco se ve por URL directa.

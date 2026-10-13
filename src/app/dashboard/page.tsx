@@ -715,6 +715,7 @@ export default async function DashboardPage({
                 turnosHoy={turnosHoy.length}
                 tieneAgenda={tieneAgendaFutura}
                 disponibleAhora={!!medico.disponible}
+                ofreceConsultaInmediata={!esPsicologo}
               />
             )}
 

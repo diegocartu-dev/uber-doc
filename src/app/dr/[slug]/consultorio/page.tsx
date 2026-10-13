@@ -115,6 +115,10 @@ export default async function ConsultorioPrivadoPage({
   // Diego 15/07). Reemplaza el gate legacy por modalidad_atencion, que quedaba
   // NULL en médicos del registro nuevo y les negaba CI acá para siempre.
   const puedeInmediata = enHorario && medico.ci_en_consultorio === true;
+  // Psicología (13/10/2026): solo con turno. Sin el estado de "disponible ahora"
+  // ni el valor y la duración de la consulta inmediata (no tiene).
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  const soloTurnos = (await profesionDeLaFicha(supabaseAdmin, { medicoId: medico.id })) === "psicologo";
 
   // Contar pacientes en espera
   const { data: consultasEspera } = await supabase
@@ -191,6 +195,7 @@ export default async function ConsultorioPrivadoPage({
               >
                 {medico.especialidad}
               </p>
+              {!soloTurnos && (
               <div className="mt-1.5 flex items-center gap-1.5">
                 <span
                   className={`inline-block h-2.5 w-2.5 rounded-full ${enHorario ? "animate-pulse" : ""}`}
@@ -203,10 +208,12 @@ export default async function ConsultorioPrivadoPage({
                   {enHorario ? "Disponible ahora" : "No disponible en este momento"}
                 </span>
               </div>
+              )}
             </div>
           </div>
 
-          {/* Precio + duración */}
+          {/* Precio + duración (de la consulta inmediata: no aplica a psicología) */}
+          {!soloTurnos && (
           <div
             className="mt-5 flex items-center justify-between rounded-[var(--radius-md)] px-4 py-3"
             style={{ backgroundColor: "var(--color-bg-tertiary)" }}
@@ -224,6 +231,7 @@ export default async function ConsultorioPrivadoPage({
               </p>
             </div>
           </div>
+          )}
 
           {/* Cola de espera */}
           {puedeInmediata && enEspera > 0 && (
@@ -241,6 +249,7 @@ export default async function ConsultorioPrivadoPage({
             especialidad={medico.especialidad}
             slug={medico.slug}
             puedeInmediata={puedeInmediata}
+            soloTurnos={soloTurnos}
           />
         </div>
 
