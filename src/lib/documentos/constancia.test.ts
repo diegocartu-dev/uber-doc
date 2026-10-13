@@ -41,3 +41,10 @@ test("matrícula: la provincial con su provincia; la nacional dice Nacional", ()
 test("nada clínico: no menciona diagnóstico ni motivo", () => {
   assert.doesNotMatch(textoConstancia(base), /diagn|motivo|tratamiento/i);
 });
+
+test("normaliza lo que viene de la ficha: mayúsculas, espacios, DNI con puntos, mn en minúscula", () => {
+  const t = textoConstancia({ ...base, pacienteNombre: "  ANA   PRUEBA ", pacienteDni: "30.111.222", profesionalNombre: "LAURA   EJEMPLO", matriculaTipo: "mn", matriculaProvincia: null });
+  assert.match(t, /^Dejo constancia de que Ana Prueba, DNI 30111222,/);
+  assert.match(t, /\nLic\. Laura Ejemplo\n/);
+  assert.match(t, /Matrícula MN 5555 — Nacional/);
+});

@@ -1552,12 +1552,8 @@ export default function WorkspaceConsulta({
         // del paciente con nombre + DNI cuando no lo hay (`src/lib/pdf/receta.ts`),
         // y además es DERIVABLE de DNI + sexo — lo deriva `cuilDePaciente` al
         // armar el snapshot de identidad del documento.
-        // Psicología: solo la constancia, y solo si quedó tildada. Nada de
-        // relleno: sin constancia, la atención queda con su evolución.
-        if (esPsicologia) {
-          if (emitirConstancia && psicologia?.textoConstancia)
-            docs.push({ tipo: "constancia", contenido: psicologia.textoConstancia });
-        }
+        // Psicología: ningún documento desde acá. La constancia la emite el
+        // servidor después del cierre (más abajo), y nada de relleno.
         if (!esPsicologia && receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
         if (!esPsicologia && indicaciones.trim())
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
@@ -1705,12 +1701,30 @@ export default function WorkspaceConsulta({
           body: JSON.stringify({ consultaId, tipo }),
         }).catch(() => {});
 
-        fetch("/api/push/notificar-documentos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ pacienteId, consultaId, tipo }),
-        }).catch(() => {});
+        // Psicología (13/10/2026): la constancia la emite y la firma el servidor,
+        // que además controla que el paciente haya entrado a la sesión. El aviso
+        // al paciente sale solo si de verdad recibió algo.
+        let avisarPaciente = !esPsicologia;
+        if (esPsicologia && emitirConstancia) {
+          const r = await fetch(`/api/turno/${consultaId}/constancia`, {
+            method: "POST",
+            credentials: "include",
+            keepalive: true,
+          })
+            .then((res) => res.json())
+            .catch(() => null);
+          avisarPaciente = r?.ok === true;
+          if (!avisarPaciente) console.warn("[finalizar] constancia no emitida:", r?.motivo ?? "sin respuesta");
+        }
+
+        if (avisarPaciente) {
+          fetch("/api/push/notificar-documentos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ pacienteId, consultaId, tipo }),
+          }).catch(() => {});
+        }
       } catch (err) {
         // Background: acá no hay pantalla donde mostrar el error porque el
         // médico ya está en el dashboard. Por eso el aviso viaja al dashboard

@@ -12,6 +12,8 @@
 //
 // Puro (sin base ni red) para poder probarlo entero.
 
+import { capitalizarNombre } from "@/lib/utils/texto";
+
 export const TITULO_CONSTANCIA = "CONSTANCIA DE ATENCIÓN";
 
 export type DatosConstancia = {
@@ -37,7 +39,7 @@ function fechaLarga(fecha: string): string {
 
 /** "MP 5555 — Córdoba" / "MN 12345 — Nacional". */
 export function matriculaConJurisdiccion(tipo: string, numero: string, provincia: string | null): string {
-  const t = (tipo ?? "").trim();
+  const t = (tipo ?? "").trim().toUpperCase();
   const n = (numero ?? "").trim();
   const jurisdiccion = t === "MN" ? "Nacional" : (provincia ?? "").trim();
   return jurisdiccion ? `${t} ${n} — ${jurisdiccion}`.trim() : `${t} ${n}`.trim();
@@ -47,12 +49,12 @@ export function matriculaConJurisdiccion(tipo: string, numero: string, provincia
 export function textoConstancia(d: DatosConstancia): string {
   const hora = (d.hora ?? "").slice(0, 5);
   return [
-    `Dejo constancia de que ${d.pacienteNombre.trim()}, DNI ${d.pacienteDni.trim()}, asistió a una sesión de atención psicológica por videollamada el ${fechaLarga(d.fecha)} a las ${hora} hs.`,
+    `Dejo constancia de que ${capitalizarNombre(d.pacienteNombre)}, DNI ${d.pacienteDni.replace(/\D/g, "")}, asistió a una sesión de atención psicológica por videollamada el ${fechaLarga(d.fecha)} a las ${hora} hs.`,
     "",
-    `Lic. ${d.profesionalNombre.trim()}`,
+    `Lic. ${capitalizarNombre(d.profesionalNombre)}`,
     "Licenciado/a en Psicología",
     `Matrícula ${matriculaConJurisdiccion(d.matriculaTipo, d.matriculaNumero, d.matriculaProvincia)}`,
-    `Domicilio profesional: ${d.domicilio.trim()}`,
+    `Domicilio profesional: ${d.domicilio.trim().replace(/\s+/g, " ")}`,
     "",
     "Firmado electrónicamente en Docto.",
   ].join("\n");

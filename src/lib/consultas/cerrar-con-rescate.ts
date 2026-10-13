@@ -99,6 +99,12 @@ export type ResultadoRescate =
   | "sin_contenido"
   /** Ya existían documentos de este encuentro: no se duplica (idempotencia). */
   | "ya_tenia_documentos"
+  /**
+   * Psicología (13/10/2026): se guarda la evolución y nada más. La constancia
+   * no se emite sola (dice que el paciente asistió): el profesional la emite
+   * desde "completar documentación". No es una falla: no avisa al equipo.
+   */
+  | "solo_evolucion"
   /** No se pudo leer el encuentro. */
   | "registro_no_encontrado"
   /** Algo falló. El cierre YA ocurrió igual. */
@@ -320,7 +326,7 @@ export async function rescatarLoEscritoQueNuncaSeEntrego(opts?: {
 
     const { data, error } = await admin
       .from(tabla)
-      .select("id, doc_borrador")
+      .select("id, doc_borrador, rescate_borrador")
       .eq("estado", estadoCerrado)
       .eq("mp_status", "approved")
       .not("doc_borrador", "is", null)
@@ -340,6 +346,9 @@ export async function rescatarLoEscritoQueNuncaSeEntrego(opts?: {
     for (const fila of data ?? []) {
       if (candidatos.length >= limite) break;
       if (!hayContenidoClinico((fila.doc_borrador ?? {}) as BorradorClinico)) continue;
+      // Psicología ya rescatada (solo la evolución): no hay nada más que emitir
+      // desde el borrador, y repetirla cada noche era repetir el aviso.
+      if ((fila.rescate_borrador as { resultado?: string } | null)?.resultado === "solo_evolucion") continue;
 
       const { data: docs, error: errDocs } = await admin
         .from("documentos")
@@ -450,6 +459,21 @@ async function ejecutarRescate(
     return info;
   }
 
+  // ── Psicología (13/10/2026): solo la evolución ──────────────────────────────
+  // Nada de documentos desde el borrador: el psicólogo no emite receta,
+  // indicaciones, certificado ni orden, y el relleno con el diagnóstico sería
+  // mandarle al paciente el diagnóstico como "indicaciones médicas". La
+  // constancia tampoco sale sola: dice que el paciente asistió.
+  {
+    const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+    if (registro.medico_id && (await profesionDeLaFicha(admin, { medicoId: registro.medico_id })) === "psicologo") {
+      const info: RescateInfo = { ...base, resultado: "solo_evolucion", evolucion_guardada: evolucionGuardada };
+      await registrarRescate(admin, tabla, args.id, info, borrador);
+      if (avisarATodos) await avisarAlMedico(info, contexto);
+      return info;
+    }
+  }
+
   // ── Sin contenido: no se inventa nada, pero se avisa igual ──────────────────
   if (!hayContenidoClinico(borrador)) {
     const info: RescateInfo = {
@@ -476,17 +500,7 @@ async function ejecutarRescate(
     return { ...base, resultado: "error", detalle, evolucion_guardada: evolucionGuardada };
   }
 
-  // Psicología (13/10/2026): el rescate solo guarda la evolución. La constancia
-  // no se emite sola (el profesional la emite desde "completar documentación"),
-  // y el relleno de "indicaciones" con el diagnóstico nunca va: sería mandarle
-  // al paciente el diagnóstico como indicaciones médicas.
-  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
-  const esPsicologia = registro.medico_id
-    ? (await profesionDeLaFicha(admin, { medicoId: registro.medico_id })) === "psicologo"
-    : false;
-  const { filas, certificadoOmitidoSinDias } = esPsicologia
-    ? { filas: [] as FilaDocumento[], certificadoOmitidoSinDias: false }
-    : armarDocumentos(borrador);
+  const { filas, certificadoOmitidoSinDias } = armarDocumentos(borrador);
 
   if (filas.length === 0) {
     // Se llega acá cuando lo ÚNICO escrito era algo que no se puede emitir:
@@ -855,6 +869,13 @@ async function avisarAlMedico(info: RescateInfo, contexto: ContextoEncuentro): P
     cuerpo =
       `${hola}Tu consulta con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.` +
       bloqueFaltantes;
+  } else if (info.resultado === "solo_evolucion") {
+    titulo = "Tu sesión se cerró sola";
+    severidad = "info";
+    cuerpo =
+      `${hola}Tu sesión con ${contexto.pacienteNombre} terminó sin que pudieras tocar "Finalizar": ${porque}.\n\n` +
+      (info.evolucion_guardada ? "Guardamos la evolución que habías escrito.\n\n" : "") +
+      `La constancia de atención no se emite sola: si el paciente la necesita, emitila desde Documentación pendiente.`;
   } else {
     titulo = "Tu consulta se cerró sola";
     severidad = "info";

@@ -1395,7 +1395,13 @@ export type MotivoNoRectificable =
   | "sin_identidad_en_firma"
   | "sin_ficha"
   | "sin_cambios"
-  | "sin_claves";
+  | "sin_claves"
+  /**
+   * Constancia de atención (psicología, 13/10/2026): el nombre y el DNI del
+   * paciente van DENTRO del texto firmado, no en el bloque de identidad. Re-sellar
+   * no los corregiría; hay que emitir una constancia nueva.
+   */
+  | "constancia_texto_firmado";
 
 export type CambiosIdentidad = Record<string, { antes: unknown; despues: unknown }>;
 
@@ -1440,6 +1446,13 @@ async function evaluarRectificacionInterna(
     .maybeSingle<DocSellable>();
 
   if (!doc) return { apto: false, motivo: "no_encontrado", detalle: "No existe el documento" };
+  if (doc.tipo === "constancia") {
+    return {
+      apto: false,
+      motivo: "constancia_texto_firmado",
+      detalle: "La constancia lleva el nombre y el DNI del paciente dentro del texto firmado: re-sellarla no los corrige. Hay que emitir una constancia nueva.",
+    };
+  }
   if (!doc.firma_digital) {
     return {
       apto: false,
