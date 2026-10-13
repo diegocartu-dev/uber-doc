@@ -1,0 +1,88 @@
+diff --git a/src/app/terminos-medico/TerminosMedicoContent.tsx b/src/app/terminos-medico/TerminosMedicoContent.tsx
+index f8e38984..9457460c 100644
+--- a/src/app/terminos-medico/TerminosMedicoContent.tsx
++++ b/src/app/terminos-medico/TerminosMedicoContent.tsx
+@@ -7,22 +7,22 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
+             Términos y Condiciones para Profesionales de la Salud
+           </h1>
+           <p className="text-center text-sm text-gray-500">
+-            Versión vigente desde el 29 de mayo de 2026
++            Versión vigente desde el 13 de octubre de 2026
+           </p>
+         </>
+       )}
+ 
+       <h2>1. Objeto y naturaleza de la relación</h2>
+       <p><strong>Docto</strong> es una plataforma tecnológica de telemedicina inscripta en el Registro Nacional de Plataformas Digitales de Salud (ReNaPDiS) bajo el N° 0270 y ante la Agencia de Acceso a la Información Pública (AAIP) bajo el legajo RL-2026-36086505.</p>
+-      <p>Al registrarte como profesional de la salud en Docto, adherís a estos Términos y Condiciones. Esta adhesión no genera relación de dependencia, asociación, sociedad ni vínculo laboral de ningún tipo entre vos y Docto. Actuás como profesional independiente y ejercés la medicina bajo tu propia matrícula, responsabilidad y criterio clínico.</p>
+-      <p>Docto actúa exclusivamente como intermediario tecnológico: facilita la conexión entre vos y los pacientes, provee la infraestructura para la videoconsulta, y gestiona el procesamiento de pagos. Docto no ejerce la medicina ni interviene en las decisiones clínicas.</p>
++      <p>Al registrarte como profesional de la salud en Docto, adherís a estos Términos y Condiciones. Esta adhesión no genera relación de dependencia, asociación, sociedad ni vínculo laboral de ningún tipo entre vos y Docto. Actuás como profesional independiente y ejercés tu profesión —medicina o psicología— bajo tu propia matrícula, responsabilidad y criterio profesional.</p>
++      <p>Docto actúa exclusivamente como intermediario tecnológico: facilita la conexión entre vos y los pacientes, provee la infraestructura para la videoconsulta, y gestiona el procesamiento de pagos. Docto no ejerce la medicina ni la psicología, ni interviene en las decisiones clínicas o terapéuticas.</p>
+ 
+       <h2>2. Requisitos para operar en la plataforma</h2>
+       <p>Al registrarte y al mantener tu perfil activo en Docto, declarás y garantizás que:</p>
+       <ul>
+         <li>Contás con título habilitante y matrícula profesional vigente, emitida por la autoridad competente de tu jurisdicción.</li>
+         <li>Tu matrícula no se encuentra suspendida, cancelada ni sujeta a restricciones que impidan el ejercicio de tu profesión.</li>
+-        <li>Cumplís con los requisitos legales para el ejercicio de la telemedicina conforme a la Ley 27.553 y la normativa aplicable.</li>
++        <li>Cumplís con los requisitos legales para el ejercicio de tu profesión a distancia conforme a la Ley 27.553 y la normativa aplicable a tu profesión (para psicología, la Ley 23.277 y su reglamentación).</li>
+         <li>Los datos de matrícula, especialidad y formación que proporcionás son verídicos y están actualizados.</li>
+         <li>Contás con seguro de responsabilidad profesional vigente o asumís personalmente la responsabilidad derivada de tu ejercicio profesional.</li>
+       </ul>
+@@ -31,21 +31,23 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
+       <p>Es tu responsabilidad informar a Docto cualquier cambio en el estado de tu matrícula dentro de las 48 horas de producido.</p>
+ 
+       <h2>3. Responsabilidad profesional</h2>
+-      <p>Toda decisión clínica adoptada durante una teleconsulta — incluyendo diagnósticos, indicaciones terapéuticas, prescripción de medicamentos y derivaciones — es de tu exclusiva responsabilidad profesional.</p>
+-      <p>Docto no responde por actos médicos, omisiones profesionales ni por los resultados de los tratamientos indicados. La relación médico-paciente se establece exclusivamente entre vos y el paciente.</p>
++      <p>Toda decisión clínica o terapéutica adoptada durante una teleconsulta o sesión — incluyendo diagnósticos, indicaciones, prescripción de medicamentos (solo médicos), evoluciones, constancias y derivaciones — es de tu exclusiva responsabilidad profesional.</p>
++      <p>Docto no responde por actos profesionales, omisiones ni por los resultados de los tratamientos o procesos terapéuticos. La relación profesional-paciente se establece exclusivamente entre vos y el paciente.</p>
+       <p>Te comprometés a:</p>
+       <ul>
+-        <li>Ejercer tu profesión conforme a las normas éticas, legales y de buena práctica médica vigentes.</li>
++        <li>Ejercer tu profesión conforme a las normas éticas, legales y de buena práctica de tu profesión vigentes.</li>
+         <li>Evaluar en cada caso si la consulta puede resolverse de forma remota o si el paciente requiere atención presencial, y en ese caso indicarlo expresamente.</li>
+-        <li>No utilizar la plataforma para atender emergencias ni urgencias médicas.</li>
+-        <li>Completar la documentación clínica de cada consulta (diagnóstico, indicaciones y, si corresponde, receta) antes de finalizarla.</li>
++        <li>No utilizar la plataforma para atender emergencias, urgencias ni situaciones de crisis; ante una, orientar al paciente al servicio de emergencias de su zona o a la guardia más cercana.</li>
++        <li>Completar la documentación clínica de cada atención antes de finalizarla: en medicina, diagnóstico, indicaciones y, si corresponde, receta; en psicología, la evolución y, si corresponde, la constancia de atención.</li>
+       </ul>
++      <p><strong>Psicología: alcance.</strong> Si sos psicólogo, atendés únicamente con turno programado (la consulta inmediata no está disponible para tu profesión), solo a pacientes mayores de 18 años, y no emitís recetas, órdenes de estudios ni certificados médicos a través de la plataforma.</p>
+ 
+-      <h2>4. Recetas digitales y firma electrónica</h2>
++      <h2>4. Documentos digitales y firma electrónica</h2>
+       <p>Las recetas emitidas a través de Docto son recetas digitales en los términos de la Ley 27.553 y el Decreto 63/2024.</p>
+       <p>Al emitir recetas en la plataforma, utilizás firma electrónica conforme al art. 5 de la Ley 25.506. Esto significa que la receta se firma con tu identidad verificada en la plataforma (usuario autenticado + matrícula validada), sin requerir un certificado de firma digital emitido por un certificador licenciado.</p>
+-      <p>Al aceptar estos Términos, prestás tu consentimiento para el uso de firma electrónica en todos los documentos que generes en la plataforma, incluyendo recetas, indicaciones médicas e informes.</p>
++      <p>Al aceptar estos Términos, prestás tu consentimiento para el uso de firma electrónica en todos los documentos que generes en la plataforma, incluyendo recetas, indicaciones, informes, certificados y constancias de atención.</p>
+       <p>La emisión de cada receta es una decisión exclusivamente tuya. Docto no puede obligarte a prescribir ni condicionar el contenido de una prescripción.</p>
++      <p><strong>Constancia de atención (psicología).</strong> Podés emitir una constancia de atención, firmada electrónicamente, que acredita la asistencia del paciente a una sesión en una fecha y hora determinadas, sin contenido clínico. Su emisión es una decisión tuya; la plataforma la habilita solo cuando registró la participación del paciente en la sesión.</p>
+ 
+       <h2>5. Comisión por intermediación</h2>
+       <div className="rounded-lg bg-blue-50 p-4 text-sm text-gray-800">
+@@ -72,14 +74,14 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
+       <h2>8. Protección de datos personales</h2>
+       <p>Al atender pacientes a través de Docto, accedés a datos de salud que son datos sensibles conforme a la Ley 25.326 (art. 2). Te comprometés a:</p>
+       <ul>
+-        <li>Tratar los datos de los pacientes exclusivamente para la finalidad de la atención médica.</li>
++        <li>Tratar los datos de los pacientes exclusivamente para la finalidad de la atención de salud que prestás.</li>
+         <li>No copiar, descargar ni almacenar datos de pacientes fuera de la plataforma, salvo lo estrictamente necesario para la continuidad asistencial y conforme a la normativa vigente.</li>
+         <li>Mantener el secreto profesional respecto de toda información obtenida durante las consultas.</li>
+       </ul>
+       <p>Para más información, consultá nuestra <a href="/privacidad" className="underline">Política de Privacidad</a>.</p>
+ 
+       <h2>9. Suspensión y baja del perfil</h2>
+-      <p>Podés solicitar la baja de tu perfil en cualquier momento enviando un correo a soporte@docto.com.ar. La baja no genera penalidad ni cargo alguno. Las consultas pendientes al momento de la baja deberán ser atendidas o reprogramadas.</p>
++      <p>Podés solicitar la baja de tu perfil en cualquier momento enviando un correo a soporte@docto.com.ar. La baja no genera penalidad ni cargo alguno. Las consultas y sesiones pendientes al momento de la baja deberán ser atendidas o reprogramadas.</p>
+       <p>Docto podrá suspender o dar de baja tu perfil en los siguientes casos:</p>
+       <ul>
+         <li>Matrícula vencida, suspendida o inhabilitada.</li>
+@@ -108,7 +110,7 @@ export default function TerminosMedicoContent({ hideTitle = false }: { hideTitle
+         <br />
+         AAIP RL-2026-36086505 | ReNaPDiS Plataforma 0270 | soporte@docto.com.ar
+         <br />
+-        Última actualización: mayo de 2026
++        Última actualización: octubre de 2026
+       </div>
+     </article>
+   );
