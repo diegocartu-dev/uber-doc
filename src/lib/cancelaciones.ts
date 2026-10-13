@@ -11,7 +11,7 @@ import { logInfo, logError } from "@/lib/logger";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
 import { correspondeRefund } from "@/lib/instancia";
 import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
-import { esPsicologia } from "@/lib/medicos/vocabulario";
+import { esPsicologia, nombreAtencion } from "@/lib/medicos/vocabulario";
 
 type ResultadoCancelacion = {
   ok: boolean;
@@ -424,11 +424,10 @@ export async function resolverNoShowMedico(
 
   if (!turno || turno.estado !== "en_espera") return { ok: false, reembolso: null };
 
-  // Quién no atendió, con su propio título, igual que el mail de abajo
-  // ("La Dra. García no pudo atender…", "Lic. Ana Pérez no pudo atender…").
-  // Hasta el 13/10/2026 el mensaje y el push decían "El médico" también a la
-  // paciente de una médica. Dos lecturas aparte, con service role: el SELECT del
-  // turno no se toca, y si fallan queda el texto genérico según la profesión.
+  // Quién no atendió. Para un médico, el texto de siempre ("El médico no
+  // pudo…"); para psicología, el nombre con "Lic." (13/10/2026). Dos lecturas
+  // aparte, con service role: el SELECT del turno no se toca, y si fallan queda
+  // el texto genérico según la profesión.
   const [{ data: quien }, profesion] = await Promise.all([
     supabase.from("medicos").select("nombre_completo, titulo").eq("id", turno.medico_id).maybeSingle(),
     profesionDeLaFicha(supabase, { medicoId: turno.medico_id }),
@@ -506,7 +505,7 @@ export async function resolverNoShowMedico(
   if (turno.paciente_id) {
     const reembolsoMsg =
       reintegroEstado === "reembolsado"
-        ? " Te reembolsamos la consulta."
+        ? ` Te reembolsamos la ${nombreAtencion(profesion)}.`
         : reintegroEstado
           ? " Tu reembolso está en proceso."
           : "";
@@ -761,7 +760,7 @@ export async function avisarMedicoPorPlantada(
     // recién cuando le llega. Vocabulario fijado por Diego: "coste por uso de la
     // plataforma", NUNCA "comisión".
     (esFounder
-      ? " Te recordamos que tu condición de fundador —el 5% de coste por uso de la plataforma, en lugar del 10% general— se sostiene atendiendo las consultas que los pacientes ya pagaron."
+      ? ` Te recordamos que tu condición de fundador —el 5% de coste por uso de la plataforma, en lugar del 10% general— se sostiene atendiendo las ${canal === "turno" && esPsicologia(profesionPlantada) ? "sesiones" : "consultas"} que los pacientes ya pagaron.`
       : "");
 
   await admin.from("mensajes_internos_medicos").insert({

@@ -148,7 +148,14 @@ Cambia también para médicos o sus pacientes (pocos; Diego puede vetar cualquie
 - Cobro en Mercado Pago de un turno: la duración real del lugar reservado (antes decía siempre "20 minutos").
 - Alertas internas al equipo: "Médico sin saldo" → "Profesional sin saldo".
 - La respuesta pública de `/api/verificar` suma dos campos de datos (`tipo`, `profesion`), sin contenido.
+- Las descripciones de las herramientas de Nova (las lee solo el modelo, ningún usuario): "médico" → "profesional" y la duración admite 50 (la agenda ya lo ofrece a todos).
+- Pantalla "Pendiente de pago" de un turno: la duración es la del lugar reservado, igual que el ítem de Mercado Pago (antes decía la de la consulta inmediata).
+- `/admin/consultas`: la cabecera "Médico" pasa a "Profesional" (solo el equipo).
+- `formatNombreMedico`: un nombre cargado como "Lic. …" ya no recibe "Dr." delante (caso que el registro casi no permite).
+- Consultorio particular, cartel de fundador: decía "comisión", palabra prohibida por la regla de vocabulario de Diego; ahora "coste por uso de la plataforma".
 (Los agentes habían cambiado para todos el popup de notificaciones y el aviso de no-show del profesional; se revirtieron a condicionales.)
+
+Revisión adversarial (5 lentes + regla de oro, 13/10): 1 "rompe hoy" (las descripciones de Nova, declaradas arriba), 6 "al abrir" y 16 menores, todos corregidos en el mismo PR: "consulta"/"sesión" coherente en todo el flujo del paciente de psicología (sala de espera, cierre de la videollamada, push, reembolso, aviso de plantada), duración real en la pantalla de pago, "Lic. —" en el admin, la tabla de profesionales con 9 columnas, y un aviso en el log cuando la lectura de la profesión falla (se asume médico).
 
 Lo que los agentes dejaron sin hacer, con motivo (decisiones de producto o fuera de alcance):
 - [paciente-turno] verificar/BuscarDocumentoClient.tsx "Verificar un documento médico" (y verificar/page.tsx, verificar/[id]/page.tsx metadata, PieLegal.tsx "documentos médicos" / — No tienen documento a mano y el texto actual es correcto para todos los usuarios de hoy (todos médicos): sería un cambio neutro para todos sin justificación de error, y PieLegal/metadata no son de mi grupo. Propuesta par
@@ -177,8 +184,8 @@ Lo que los agentes dejaron sin hacer, con motivo (decisiones de producto o fuera
 - `src/app/turno/[turnoId]/pago/PagoPendiente.tsx` · paciente de psicólogo (detalle del turno a pagar): «Profesional»
 - `src/app/turno/[turnoId]/confirmacion/page.tsx` · paciente de psicólogo (tarjeta de turno confirmado): «Profesional»
 - `src/app/turno/[turnoId]/espera/EsperaTurno.tsx` · paciente de psicólogo (tarjeta de la sala de espera): «Profesional»
-- `src/components/BotonPush.tsx` · TODOS los pacientes (popup de notificaciones tras confirmar turno / CI): «¿Querés que te avisemos cuando te estén esperando en la sala?»
-- `src/components/BotonPush.tsx` · TODOS los pacientes (variante botón, texto al pie): «Te avisamos cuando te estén esperando para atenderte.»
+- `src/components/BotonPush.tsx` · paciente de psicólogo (popup de notificaciones tras confirmar el turno): «¿Querés que te avisemos cuando te estén esperando en la sala?»
+- `src/components/BotonPush.tsx` · paciente de psicólogo (variante botón, texto al pie): «Te avisamos cuando te estén esperando para atenderte.»
 - `src/app/consulta/[id]/sala/SalaConsultaPaciente.tsx` · paciente de psicólogo (cierre de la videollamada, sala finalizada): «Si te dejaron una constancia de atención, ya la podés ver en tus documentos.»
 - `src/app/consulta/[id]/sala/SalaConsultaPaciente.tsx` · paciente de psicólogo (cierre de la videollamada, pantalla de documentos): «En unos minutos vas a encontrar acá tu constancia de atención, si la emitieron.»
 - `src/components/EstudiosPaciente.tsx` · paciente de psicólogo (panel de archivos dentro de la videollamada): «ARCHIVOS PARA TU PROFESIONAL»

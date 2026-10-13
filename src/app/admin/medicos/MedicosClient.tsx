@@ -369,7 +369,7 @@ export default function MedicosClient({
                 <tbody>
                   {vista.filas.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
                         {vista.hay ? "Nada coincide con lo buscado." : "No hay profesionales en esta pestaña."}
                       </td>
                     </tr>
@@ -986,7 +986,7 @@ function MedicoFila({
       </tr>
       {m.notas_admin && (
         <tr>
-          <td colSpan={8} className="px-3 pb-2.5">
+          <td colSpan={9} className="px-3 pb-2.5">
             <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
               <span className="font-medium text-gray-600">Nota:</span> {m.notas_admin}
             </p>

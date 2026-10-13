@@ -5,7 +5,7 @@ import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { CheckCircle, XCircle, Video } from "lucide-react";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
-import { etiquetaProfesional } from "@/lib/medicos/vocabulario";
+import { etiquetaProfesional, nombreAtencion } from "@/lib/medicos/vocabulario";
 
 type Props = {
   turnoId: string;
@@ -31,6 +31,8 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
     ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreMedico}`
     // Sin nombre (dato faltante) cae al mismo genérico que usa el resto del copy legal.
     : "El profesional";
+  // "consulta" para médicos, "sesión" para psicología: el mismo flujo, una palabra.
+  const atencion = nombreAtencion(profesion);
   const [estado, setEstado] = useState<Estado>("esperando");
   // El médico está atendiendo a OTRO paciente: la demora es legítima y hay que decírselo
   // al que espera (decisión Diego 08/07 — el motor de no-show tampoco resuelve mientras
@@ -146,9 +148,9 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
       <h1 className="mt-6 text-xl font-bold text-gray-900">
         {/* Los títulos que hablaban de "el médico" ahora usan el título real cuando lo
             hay, y una frase sin género cuando no lo hay. */}
-        {estado === "esperando" ? (medicoOcupado ? `${sujetoMedico} está atendiendo otra consulta` : "Esperando el inicio de tu consulta...")
-          : estado === "iniciando" ? "¡Tu consulta está por empezar!"
-          : estado === "finalizado" ? "Tu consulta ha finalizado"
+        {estado === "esperando" ? (medicoOcupado ? `${sujetoMedico} está atendiendo otra ${atencion}` : `Esperando el inicio de tu ${atencion}...`)
+          : estado === "iniciando" ? `¡Tu ${atencion} está por empezar!`
+          : estado === "finalizado" ? `Tu ${atencion} ha finalizado`
           : estado === "cancelado" ? `${sujetoMedico} canceló el turno`
           : estado === "ausente" ? `${sujetoMedico} no pudo atenderte`
           : "Entrando a la videollamada..."}
@@ -160,10 +162,10 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
               // Sin nombre acá: ya está en el título y en la card de abajo (gate Sofía).
               // Frase sin género para no depender del título; lo que de verdad tranquiliza
               // es "tu turno sigue reservado".
-              ? "Todavía hay otra consulta en curso. Tu turno sigue reservado y arranca apenas termine. Gracias por esperar."
+              ? `Todavía hay otra ${atencion} en curso. Tu turno sigue reservado y arranca apenas termine. Gracias por esperar.`
               // El título ya dice que estamos esperando: acá va lo que el paciente
               // necesita saber (que no tiene que hacer nada), no la misma frase de nuevo.
-              : "Ya avisamos que estás en la sala. Entrás automáticamente apenas se inicie la consulta.")
+              : `Ya avisamos que estás en la sala. Entrás automáticamente apenas se inicie la ${atencion}.`)
           : estado === "iniciando" ? "Preparando la videollamada..."
           : estado === "finalizado" ? "Los documentos están disponibles en tu perfil. Redirigiendo..."
           // Presente-neutro ("te devolvemos"): verdadero tanto si el refund ya procesó
@@ -216,7 +218,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
                 }}
               >
                 {estado === "esperando"
-                  ? (medicoOcupado ? "Atendiendo otra consulta" : "En espera")
+                  ? (medicoOcupado ? `Atendiendo otra ${atencion}` : "En espera")
                   : estado === "iniciando" ? "Consulta lista"
                   : estado === "ausente" ? "Cancelado — con reembolso"
                   : estado === "cancelado" ? "Cancelado"

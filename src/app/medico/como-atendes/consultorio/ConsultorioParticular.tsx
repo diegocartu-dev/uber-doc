@@ -150,8 +150,8 @@ export default function ConsultorioParticular({ slug, modelos, comisionPct, visi
             {esFounder ? (
               <p className="mt-1.5 text-[13px] text-gray-500">
                 <strong className="text-gray-700">¡Felicitaciones por tu categoría de {esPsicologo ? "Profesional" : "Médico"} Fundador!</strong>{" "}
-                Docto te descuenta una comisión de solo el <strong className="text-gray-700">{comisionPct}%</strong> por
-                consulta realizada; el resto va directo a tu Mercado Pago.
+                Docto retiene solo el <strong className="text-gray-700">{comisionPct}%</strong> como coste por uso de la
+                plataforma por {esPsicologo ? "sesión" : "consulta"} realizada; el resto va directo a tu Mercado Pago.
               </p>
             ) : (
               <p className="mt-1.5 text-[13px] text-gray-500">
