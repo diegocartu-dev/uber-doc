@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { proximoTurnoLibrePorMedico } from "@/lib/turnos/proximo-libre";
+import { esMenorDeEdad } from "@/lib/pacientes/edad";
+import { fechaAR } from "@/lib/insights/fechas";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
@@ -181,8 +183,11 @@ export default async function ClinicaPage() {
   // Jurisdicciones de cada médico (ruteo Regla A) — leídas con SERVICE ROLE. La columna
   // `medicos.jurisdicciones` no tiene GRANT SELECT para `authenticated`: con el cliente RLS,
   // PostgREST fallaría la query entera (permission denied) y rompería la página.
-  const { data: jurisRows } = await supabaseAdmin.from("medicos").select("id, jurisdicciones");
+  // La profesión viaja por acá (13/10/2026): misma query admin, columna verificada en
+  // las dos bases. Los psicólogos tienen su propia sección en la clínica.
+  const { data: jurisRows } = await supabaseAdmin.from("medicos").select("id, jurisdicciones, profesion");
   const jurisMap = new Map<string, string[]>((jurisRows ?? []).map((j) => [j.id, (j.jurisdicciones ?? []) as string[]]));
+  const profesionMap = new Map<string, string | null>((jurisRows ?? []).map((j) => [j.id, (j.profesion ?? null) as string | null]));
 
   // Áreas de atención declaradas por el médico (ej: "Atiende adolescentes (10 a 19 años)").
   // Query PROPIA y con service role a propósito: la columna es nueva y el SELECT de arriba
@@ -208,11 +213,13 @@ export default async function ClinicaPage() {
   );
 
   // Provincia guardada del paciente (solo para pre-seleccionar; se valida igual cada vez).
+  // Con la fecha de nacimiento: psicología es solo para adultos (Diego, 13/10/2026).
   const { data: provinciaRow } = await supabaseAdmin
     .from("pacientes")
-    .select("provincia")
+    .select("provincia, fecha_nacimiento")
     .eq("user_id", user.id)
     .maybeSingle();
+  const pacienteMenor = esMenorDeEdad(provinciaRow?.fecha_nacimiento as string | null | undefined, fechaAR());
 
   // Quién tiene al menos un turno ofertable: el que no hace consulta inmediata
   // igual aparece si ofrece agenda.
@@ -223,6 +230,7 @@ export default async function ClinicaPage() {
       ...m,
       ciBloqueadaPorTurno: medicosCiBloqueada.has(m.id),
       jurisdicciones: jurisMap.get(m.id) ?? [],
+      profesion: profesionMap.get(m.id) ?? null,
       areasAtencion: areasMap.get(m.id) ?? [],
       especialidadesAdicionales: adicionalesVisibles(m.especialidad, adicionalesMap.get(m.id) ?? []),
     }))
@@ -244,6 +252,7 @@ export default async function ClinicaPage() {
       <main>
         <ClinicaFlow
           provinciaGuardada={provinciaRow?.provincia ?? null}
+          mostrarPsicologia={!pacienteMenor}
           medicos={medicosConEstado}
           consultasEspera={consultasEspera ?? []}
           turnosClinicaVirtual={turnosOfertables}

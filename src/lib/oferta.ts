@@ -28,6 +28,10 @@
 //   rotule ("no hay X en línea; estos profesionales de Clínica Médica pueden
 //   orientarte"). Jamás mezclar sin decirlo. Cuenta la principal Y las
 //   adicionales (#451).
+// - Profesión (13/10/2026): solo profesionales de la MISMA profesión que el que
+//   se cayó. A quien pidió un médico no se le ofrece un psicólogo, ni al revés
+//   (en la clínica tienen secciones separadas). Un psicólogo nunca tiene
+//   consulta inmediata, así que su rescate son solo turnos.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { proximoTurnoLibrePorMedico } from "@/lib/turnos/proximo-libre";
@@ -36,6 +40,7 @@ import { identidadHabilitada } from "@/lib/perfil-medico";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import { normalizarJurisdiccion } from "@/lib/jurisdicciones";
 import { parsearEspecialidadesAdicionales, mismaAtencion } from "@/lib/especialidades";
+import { profesionDe, type Profesion } from "@/lib/refeps/profesion";
 import {
   puedeAtenderAhora,
   habilitadoEnProvincia,
@@ -94,15 +99,18 @@ export function seleccionarAlternativas(params: {
   jurisdiccion: string;
   especialidad: string | null;
   excluirMedicoId: string | null;
+  /** La del profesional que se cayó. Por defecto médico. */
+  profesion?: Profesion;
   maxCI?: number;
   maxTurnos?: number;
 }): Alternativas {
   const { jurisdiccion, especialidad, excluirMedicoId } = params;
+  const profesion = params.profesion ?? "medico";
   const maxCI = params.maxCI ?? 2;
   const maxTurnos = params.maxTurnos ?? 2;
 
   const elegibles = params.medicos.filter(
-    (m) => m.id !== excluirMedicoId && habilitadoEnProvincia(m, jurisdiccion)
+    (m) => m.id !== excluirMedicoId && habilitadoEnProvincia(m, jurisdiccion) && profesionDe(m.profesion) === profesion
   );
   const porId = new Map(elegibles.map((m) => [m.id, m]));
 
@@ -172,6 +180,8 @@ export async function alternativasVivas(params: {
   especialidad: string | null;
   excluirMedicoId: string | null;
   pacienteEsTest: boolean;
+  /** La del profesional que se cayó (13/10/2026). Por defecto médico. */
+  profesion?: Profesion;
   maxCI?: number;
   maxTurnos?: number;
 }): Promise<Alternativas> {
@@ -193,7 +203,7 @@ export async function alternativasVivas(params: {
       // columnas que terminan whitelisted en los tipos públicos de arriba.
       admin
         .from("medicos")
-        .select("id, especialidad, especialidades_adicionales, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test, jurisdicciones, agenda_pausada_at")
+        .select("id, especialidad, especialidades_adicionales, modalidad_atencion, nombre_completo, titulo, disponible, disponible_desde, disponible_hasta, disponible_desde_at, precio_consulta, duracion_consulta, foto_url, identidad_validada, biometria_exenta, es_cuenta_test, jurisdicciones, agenda_pausada_at, profesion")
         .eq("oculto_clinica", false)
         .eq("verificado", true)
         .eq("estado_registro", "aprobado")
@@ -251,6 +261,7 @@ export async function alternativasVivas(params: {
       }),
     ciBloqueadaPorTurno: ciBloqueada.has(m.id),
     jurisdicciones: (m.jurisdicciones ?? []) as string[],
+    profesion: m.profesion,
     especialidadesTodas: [m.especialidad, ...parsearEspecialidadesAdicionales(m.especialidades_adicionales)],
     enEspera: enEsperaPorMedico.get(m.id) ?? 0,
   }));
@@ -264,6 +275,7 @@ export async function alternativasVivas(params: {
     jurisdiccion,
     especialidad: params.especialidad,
     excluirMedicoId: params.excluirMedicoId,
+    profesion: params.profesion,
     maxCI: params.maxCI,
     maxTurnos: params.maxTurnos,
   });

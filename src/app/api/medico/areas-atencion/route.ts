@@ -61,10 +61,15 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient();
     const { data: medico } = await admin
       .from("medicos")
-      .select("id")
+      .select("id, profesion")
       .eq("user_id", user.id)
       .maybeSingle();
     if (!medico) return NextResponse.json({ error: "Solo un médico puede editar sus áreas" }, { status: 403 });
+    // Psicología es solo para adultos (Diego, 13/10/2026): la única área que existe
+    // (adolescencia) no es para el psicólogo. Sí puede guardar la lista vacía.
+    if (medico.profesion === "psicologo" && parsed.areas.length > 0) {
+      return NextResponse.json({ error: "Por ahora la atención psicológica en Docto es solo para adultos." }, { status: 400 });
+    }
 
     const { error } = await admin
       .from("medicos")

@@ -10,6 +10,9 @@ import { identidadHabilitada } from "@/lib/perfil-medico";
 import { esInstitucional } from "@/lib/instancia";
 import { waitUntil } from "@vercel/functions";
 import { registrarAceptacionControlados } from "@/lib/legal/controlados";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { esMenorDeEdad } from "@/lib/pacientes/edad";
+import { fechaAR } from "@/lib/insights/fechas";
 
 /**
  * @deprecated No hace nada y NUNCA hizo nada: corre con el cliente RLS del
@@ -61,6 +64,20 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
     .from("medicos").select("agenda_pausada_at").eq("id", turno.medico_id).maybeSingle();
   if (medicoPausa?.agenda_pausada_at) {
     return { error: "Este turno ya no está disponible." };
+  }
+
+  // Psicología, solo adultos (Diego, 13/10/2026). Con SERVICE ROLE: la profesión
+  // y la fecha de nacimiento se leen del servidor, no del cliente. Límite
+  // declarado: la fecha la escribe el paciente y no se verifica.
+  {
+    const admin = createAdminClient();
+    const [profesion, { data: pacNac }] = await Promise.all([
+      profesionDeLaFicha(admin, { medicoId: turno.medico_id }),
+      admin.from("pacientes").select("fecha_nacimiento").eq("id", paciente.id).maybeSingle(),
+    ]);
+    if (profesion === "psicologo" && esMenorDeEdad(pacNac?.fecha_nacimiento as string | null | undefined, fechaAR())) {
+      return { error: "La atención psicológica en Docto es solo para mayores de 18 años." };
+    }
   }
 
   // Guard de canal (sprint cómo-atendés 15/07): el slot pertenece a UN canal —

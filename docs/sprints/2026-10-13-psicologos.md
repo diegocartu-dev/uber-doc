@@ -79,12 +79,19 @@ Revisión independiente antes del merge (13/10): con el flag apagado no cambia n
 - Declaración: "…soy responsable de mis actos profesionales como profesional independiente" (el médico sigue con "actos médicos").
 - Firma: "Aparece impresa en cada constancia que emitas."
 
-### F2 — Cómo atiende y cómo aparece
-- Nada de consulta inmediata: rechazada en `actualizarDisponibilidad` (y la restricción de F1 en la base), fuera de `puedeAtenderAhora`, del rescate, del aviso de demanda y del consultorio privado; el panel no le muestra los bloques de consulta inmediata.
-- El aviso del término de controlados del panel no se le muestra (no receta).
-- Agenda: duración de 50 minutos disponible.
-- Clínica: sección "Psicología" separada de los médicos (y "lo más pronto" de los médicos no ofrece psicólogos, ni al revés).
-- Solo adultos: `reservarTurno` (y el pago) rechazan un turno de psicología si el paciente es menor según su fecha de nacimiento; el área "adolescencia" no se le ofrece al psicólogo. Límite declarado: la fecha la declara el paciente.
+### F2 — Cómo atiende y cómo aparece · ✅ 13/10 (dormida: sin psicólogos registrados no se ve nada)
+- Nada de consulta inmediata. La base ya lo impide desde F1 (`disponible` y `ci_en_consultorio` siempre falsos), así que `puedeAtenderAhora`, la clínica, el triage y el link propio nunca le ofrecen consulta inmediata. Además: `actualizarDisponibilidad` responde con un mensaje; el panel no muestra el bloque de consulta inmediata, ni los carteles de "Falta el valor de tu consulta" y "Activá la consulta inmediata"; "Cómo atendés" no muestra la tarjeta y su pantalla de configuración lo devuelve al hub; el aviso de demanda (piloto en pausa) solo va a médicos.
+- El aviso del término de controlados del panel y el del calendario de reserva no se muestran en psicología (no receta).
+- Agenda: se suma la duración de 50 minutos (para todos; no cambia nada de lo existente).
+- Clínica: si en la provincia hay psicólogos, aparece el selector "Médicos · Psicología". La lista de médicos ya no los incluye, y "lo más pronto" tampoco. En la sección de psicología no hay leyenda de disponibilidad, ni botón de consulta inmediata, ni precio de consulta inmediata: solo "Agendar turno". Un paciente menor no ve la sección.
+- Rescate (alternativas cuando algo se cae): solo profesionales de la misma profesión que el que se cayó.
+- Solo adultos: `reservarTurno` rechaza un turno de psicología si el paciente es menor según su fecha de nacimiento (ese es el paso previo obligatorio al pago); el psicólogo no puede declarar el área "adolescencia" (ni se le muestra). Límite declarado: la fecha la escribe el paciente y no se verifica; sin fecha no se le niega a nadie. La instancia institucional asigna turnos por otro camino y no tiene esta regla (no hay psicólogos ahí).
+
+**Textos nuevos de F2 para que apruebe Diego antes de abrir:**
+- Clínica: "Médicos" · "Psicología"; "Psicólogos habilitados para tu jurisdicción"; "N psicólogos habilitados en {provincia}"; "No encontramos psicólogos para …".
+- Panel: "Agendas y tu consultorio privado" (subtítulo del acceso a "Cómo atendés").
+- Mensajes: "En psicología se atiende solo con turno: la consulta inmediata no está disponible."; "La atención psicológica en Docto es solo para mayores de 18 años."; "Por ahora la atención psicológica en Docto es solo para adultos."
+- Agenda: "50 minutos".
 
 ### F3 — Documentos
 - Tipo `constancia` (CHECK en las dos bases), firmable, con el texto aprobado; el PDF sin bloque de diagnóstico.

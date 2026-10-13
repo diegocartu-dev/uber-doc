@@ -8,6 +8,12 @@ import { cerrarEntradaSala } from "@/lib/sala-espera";
 import { medianocheARenUTC } from "@/lib/insights/fechas";
 import { bloqueoActivo } from "@/lib/medicos/bloqueo-whatsapp";
 
+// Psicólogos (Diego, 13/10/2026): solo con turno, nunca consulta inmediata. La
+// base también lo impide (medicos_psicologo_sin_consulta_inmediata); esto le da
+// al profesional un mensaje en vez del error de la base.
+const MENSAJE_PSICOLOGIA_SIN_CI =
+  "En psicología se atiende solo con turno: la consulta inmediata no está disponible.";
+
 const MENSAJE_BLOQUEO =
   "No te están llegando nuestros WhatsApp, así que no te enterarías de los pacientes que te esperan. Actualizá tu celular en Mi perfil y volvés a estar disponible.";
 
@@ -62,9 +68,13 @@ export async function actualizarDisponibilidad(data: {
   const adminDb = createAdminClient();
   const { data: previo } = await adminDb
     .from("medicos")
-    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test, precio_consulta, duracion_consulta, disponible_desde, disponible_hasta")
+    .select("id, disponible, nombre_completo, especialidad, tipo_matricula, numero_matricula, telefono, celular_personal, domicilio_consultorio, foto_url, firma_manuscrita_url, es_cuenta_test, precio_consulta, duracion_consulta, disponible_desde, disponible_hasta, profesion")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if ((data.disponible || data.ci_en_consultorio === true) && previo?.profesion === "psicologo") {
+    return { error: MENSAJE_PSICOLOGIA_SIN_CI };
+  }
 
   // Gate duro: no se puede activar la disponibilidad (atender) sin el onboarding
   // completo. Defensa en profundidad — el cliente ya lo bloquea, pero el server

@@ -71,6 +71,8 @@ export async function POST(_req: NextRequest) {
       .eq("estado_registro", "aprobado")
       .eq("oculto_clinica", false)
       .eq("avisos_demanda_optin", true)
+      // Es un aviso para prender la consulta inmediata: nunca a un psicólogo (13/10/2026).
+      .eq("profesion", "medico")
       .eq("disponible", false)
       .eq("es_cuenta_test", pac.es_cuenta_test === true),
     admin.from("medicos_mp_accounts").select("medico_id, estado, expires_at"),

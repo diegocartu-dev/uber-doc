@@ -35,6 +35,9 @@ export type Medico = {
   // la que agrupa en los reportes sigue siendo `especialidad`, una sola.
   // Opcional a propósito: sin el dato el listado funciona igual que siempre.
   especialidadesAdicionales?: string[];
+  // 'medico' | 'psicologo' (13/10/2026): los psicólogos van en su propia sección
+  // de la clínica. Opcional: sin el dato, médico (todas las fichas anteriores).
+  profesion?: string | null;
 };
 
 export type ConsultaEspera = { medico_id: string };
