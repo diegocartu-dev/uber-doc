@@ -200,21 +200,32 @@ pero ambiguo — en la práctica es solo electrónica.
 
 ---
 
-### 2.3 CUIR (Código Único de Identificación de Receta)
+### 2.3 CUIR (Clave Única de Identificación de Receta)
 
-**Norma:** Decreto 63/2024 art. 8.
+**Norma:** Res. MS 2214/2025, art. 6 (Boletín Oficial del 21/07/2025, rige
+desde el día siguiente; art. 8: 45 días corridos para adecuarse): "Toda
+prescripción deberá consignar una Clave Única de Identificación de Receta
+(CUIR)", según su Anexo IV. La CUIR se arma con el número de la plataforma
+(0270, módulo 1) y el del repositorio que la registra (módulo 2, lo otorga la
+DNSISA). Fuente: https://www.argentina.gob.ar/normativa/nacional/norma-415349/texto
 
-**Estado real:** El sistema de asignación de CUIR del Ministerio 
-de Salud **NO está operativo a nivel nacional** (mayo 2026). No 
-hay API ni proceso de asignación masiva implementado.
+**Estado real (verificado el 13/10/2026):** las recetas de Docto **no llevan
+CUIR** (`recetas.cuir` vacía). La vía elegida es Farmalink como repositorio:
+pedido de homologación el 16/05, credenciales de prueba el 04/06, token de
+prueba funcionando el 11/06 (`docs/farmalink-integracion.md`). Desde entonces
+el paso que sigue es de Docto: construir `altaReceta`, guardar la CUIR que
+devuelve e imprimirla en el PDF; después, homologación y producción. Ni en el
+Gmail ni en la bandeja de soporte@ hay correos de Farmalink posteriores al
+05/06, ni reclamos de pacientes por una receta rechazada en farmacia.
 
-**En código:** Docto usa su propio número `REC-YYYY-XXXXXXXX`. 
-No hay integración con CUIR nacional.
+**Qué significa:** la resolución no declara nula una receta sin CUIR ni fija
+una sanción, y Docto es una plataforma inscripta (ReNaPDiS 0270), con firma y
+matrícula verificada. Pero el dato es obligatorio y falta: mientras no esté, en
+publicidad no se dice "receta válida" ni "aceptada en farmacias" (criterio de
+la agencia, `~/EMPRESA SE MARKETING/marcas/docto/reglas-y-claims.md`).
 
-**Riesgo:** Nulo en práctica actual. Ninguna farmacia exige CUIR 
-porque el sistema no existe.
-
-**Bloqueante:** NO. Dejar placeholder para cuando se active.
+**Superado:** lo que este mapa decía en mayo de 2026 ("el sistema de CUIR no
+está operativo, riesgo nulo, no bloqueante").
 
 ---
 
