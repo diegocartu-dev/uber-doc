@@ -10,6 +10,7 @@ import { waitUntil } from "@vercel/functions";
 import { validarYPersistirRefeps } from "@/lib/refeps/persistir";
 import { provisionarClaves } from "@/lib/firma/claves";
 import { esInstitucional } from "@/lib/instancia";
+import { registrarAceptacionControlados } from "@/lib/legal/controlados";
 
 // ─── Rediseño 14/07/2026 — registro en DOS fases ─────────────────────────────
 // FASE A `iniciarRegistroMedico`: crea la CUENTA con lo mínimo (nombre + email +
@@ -240,6 +241,10 @@ export async function completarRegistroMedico(formData: FormData) {
 
   const terminosAceptados = (formData.get("terminos_aceptados") as string) === "true";
   const declaracionMatricula = (formData.get("declaracion_matricula") as string) === "true";
+  // Término aparte de medicamentos controlados (Diego, 12/10/2026). No se exige
+  // acá: una pestaña con la pantalla anterior no lo manda, y el registro no se
+  // pierde por eso (el aviso del panel se lo vuelve a pedir).
+  const controladosAceptados = (formData.get("controlados_aceptados") as string) === "true";
 
   if (!titulo || !especialidad || !tipo_matricula || !numero_matricula || !cuit || !domicilio_consultorio || !celular_personal || !dni) {
     return { error: "Todos los campos obligatorios deben estar completos." };
@@ -432,6 +437,10 @@ export async function completarRegistroMedico(formData: FormData) {
         )
       );
     }
+  }
+
+  if (controladosAceptados) {
+    waitUntil(registrarAceptacionControlados({ userId: user.id }));
   }
 
   // Ficha creada → paso final: validación biométrica.

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import TerminoControlados from "@/components/legal/TerminoControlados";
+import { necesitaAceptarControlados } from "@/lib/legal/controlados-acciones";
 import { comprimirImagen, comprimirImagenesDeFormData, pesoTotal } from "@/lib/imagenes/comprimir";
 import { trackFunnel } from "@/lib/funnel-client";
 import { normalizarTelefonoAR } from "@/lib/telefono";
@@ -110,6 +112,18 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
   const [loading, setLoading] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
   const [checkMatricula, setCheckMatricula] = useState(false);
+  const [checkControlados, setCheckControlados] = useState(false);
+  // Dinámico (Diego, 12/10/2026): el término aparece solo si este usuario
+  // todavía no lo aceptó. Mientras se averigua (o si falla), no se muestra ni
+  // se exige: nunca frenar una consulta por esto.
+  const [necesitaControlados, setNecesitaControlados] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    necesitaAceptarControlados()
+      .then((n) => { if (vivo) setNecesitaControlados(n); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalMatricula, setModalMatricula] = useState(false);
   const [fotoCredencial, setFotoCredencial] = useState<File | null>(null);
@@ -391,6 +405,10 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
     }
     if (!checkTerminos || !checkMatricula) {
       reportarError("paso2", "Aceptá los términos y la declaración de matrícula para continuar.");
+      return false;
+    }
+    if (necesitaControlados && !checkControlados) {
+      reportarError("paso2", "Aceptá el término de medicamentos controlados para continuar.");
       return false;
     }
     return true;
@@ -810,8 +828,12 @@ export default function ContinuarRegistro({ nombre, userId }: { nombre: string; 
                 </span>
               </label>
             </div>
+            {necesitaControlados && (
+              <TerminoControlados aceptado={checkControlados} onChange={setCheckControlados} />
+            )}
             {checkTerminos && <input type="hidden" name="terminos_aceptados" value="true" />}
             {checkMatricula && <input type="hidden" name="declaracion_matricula" value="true" />}
+            {necesitaControlados && checkControlados && <input type="hidden" name="controlados_aceptados" value="true" />}
           </div>
 
           {/* ── Paso 3: Tu firma (spec Sofía 20/07 — "todo de un tirón") ── */}

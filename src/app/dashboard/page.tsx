@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import LinkNav from "@/components/ui/LinkNav";
 import AppNavbar from "@/components/AppNavbar";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
+import AvisoControladosMedico from "./AvisoControladosMedico";
 import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
 import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
@@ -657,6 +658,8 @@ export default async function DashboardPage({
           <PopupPagada />
           <PopupApagado />
           <AvisoCancelacionPaciente />
+          {/* Término de controlados para quien ya estaba registrado (12/10/2026). Solo B2C: la instancia es marca blanca. */}
+          {!esInstitucional() && <AvisoControladosMedico />}
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
             <div className="mx-auto max-w-7xl px-4 lg:px-6">
