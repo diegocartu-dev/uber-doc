@@ -8,6 +8,9 @@ import StatusBadge from "../components/StatusBadge";
 import ConfirmDialog from "../components/ConfirmDialog";
 import PacientesEsperando from "./PacientesEsperando";
 import CancelacionesTab from "./CancelacionesTab";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
+import { formatNombreMedico } from "@/lib/utils/texto";
+import { ESPECIALIDAD_PSICOLOGIA } from "@/lib/especialidades";
 
 interface ConsultaItem {
   id: string;
@@ -18,6 +21,8 @@ interface ConsultaItem {
   paciente: string;
   inicio: string;
   especialidad: string;
+  /** 'medico' | 'psicologo' (13/10/2026). Sin dato = médico, como toda fila anterior. */
+  profesion?: string | null;
   solicitada?: string;
   citaPara?: string | null;
   /** El porqué de una caída (solo Historial, consultas inmediatas). */
@@ -27,6 +32,13 @@ interface ConsultaItem {
 // Color del porqué: rojo = falló un proceso, naranja = falta el dato, gris = lo
 // decidió una persona. Punto + texto, nunca color solo.
 const COLOR_PORQUE: Record<string, string> = { falla: "#E24B4A", sin_datos: "#D85A30", suceso: "#888780" };
+// Cómo se nombra al profesional en la fila (13/10/2026, psicólogos). Para un
+// médico es el nombre tal cual estaba: la API no manda su título y acá nunca se
+// inventó un "Dr.". Un psicólogo lleva "Lic." y, como atiende solo con turno (que
+// no guarda especialidad), la columna Especialidad dice "Psicología".
+const nombreProfesional = (i: ConsultaItem) => (esPsicologia(i.profesion) ? formatNombreMedico(i.medico, "Lic.") : i.medico);
+const especialidadDe = (i: ConsultaItem) => i.especialidad || (esPsicologia(i.profesion) ? ESPECIALIDAD_PSICOLOGIA : "");
+
 const porqueVisible = (i: ConsultaItem) =>
   i.porque && i.porque.clase !== "atendida" && i.porque.clase !== "en_curso" ? i.porque : null;
 
@@ -85,9 +97,9 @@ export default function ConsultasClient() {
   const COLUMNAS: Columna<ConsultaItem>[] = useMemo(() => {
     const cols: Columna<ConsultaItem>[] = [
       { k: "tipo", t: "Tipo", val: (i) => (i.tipo === "CI" ? "CI" : i.canal === "consultorio" ? "Turno consultorio" : "Turno clínica") },
-      { k: "medico", t: "Médico", val: (i) => i.medico },
+      { k: "medico", t: "Profesional", val: (i) => nombreProfesional(i) },
       { k: "paciente", t: "Paciente", val: (i) => i.paciente },
-      { k: "especialidad", t: "Especialidad", val: (i) => i.especialidad },
+      { k: "especialidad", t: "Especialidad", val: (i) => especialidadDe(i) },
       { k: "estado", t: "Estado", val: (i) => i.estado },
     ];
     if (tab === "historial") cols.push({ k: "porque", t: "Por qué", val: (i) => porqueVisible(i)?.texto ?? null });
@@ -158,12 +170,12 @@ export default function ConsultasClient() {
 
   function exportCsv() {
     const header = tab === "hoy"
-      ? "ID,Tipo,Canal,Estado,Médico,Paciente,Solicitada,Turno para,Especialidad\n"
-      : "ID,Tipo,Estado,Médico,Paciente,Inicio,Especialidad\n";
+      ? "ID,Tipo,Canal,Estado,Profesional,Paciente,Solicitada,Turno para,Especialidad\n"
+      : "ID,Tipo,Estado,Profesional,Paciente,Inicio,Especialidad\n";
     const rows = items.map((i) =>
       (tab === "hoy"
-        ? [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.canal ?? ""), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.solicitada ?? ""), csvEscape(i.citaPara ?? ""), csvEscape(i.especialidad)]
-        : [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.estado), csvEscape(i.medico), csvEscape(i.paciente), csvEscape(i.inicio), csvEscape(i.especialidad)]
+        ? [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.canal ?? ""), csvEscape(i.estado), csvEscape(nombreProfesional(i)), csvEscape(i.paciente), csvEscape(i.solicitada ?? ""), csvEscape(i.citaPara ?? ""), csvEscape(especialidadDe(i))]
+        : [csvEscape(i.id), csvEscape(i.tipo), csvEscape(i.estado), csvEscape(nombreProfesional(i)), csvEscape(i.paciente), csvEscape(i.inicio), csvEscape(especialidadDe(i))]
       ).join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
@@ -283,7 +295,7 @@ export default function ConsultasClient() {
         </div>
       ) : (
         <>
-        <BarraTabla vista={vista} placeholder="Buscar por médico, paciente, especialidad…" cuenta="atenciones" />
+        <BarraTabla vista={vista} placeholder="Buscar por profesional, paciente, especialidad…" cuenta="atenciones" />
         {/* El scroll vive acá, con tope de alto: la cabecera se pega al borde de ESTE
             cuadro y los títulos no se pierden al scrollear la página. */}
         <div className="overflow-auto rounded-xl bg-white max-h-[72vh]" style={{ border: "1px solid #e5e7eb" }}>
@@ -320,9 +332,9 @@ export default function ConsultasClient() {
                         {item.tipo === "CI" ? "CI" : item.canal === "consultorio" ? "Turno consult." : "Turno clínica"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.medico}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{nombreProfesional(item)}</td>
                     <td className="px-4 py-3 text-gray-600">{item.paciente}</td>
-                    <td className="px-4 py-3 text-[12px] text-gray-500">{item.especialidad}</td>
+                    <td className="px-4 py-3 text-[12px] text-gray-500">{especialidadDe(item)}</td>
                     <td className="px-4 py-3"><EstadoChip estado={item.estado} /></td>
                     {tab === "historial" && (
                       <td className="px-4 py-3 text-[12px] text-gray-600">
