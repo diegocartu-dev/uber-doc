@@ -73,7 +73,7 @@ function Colapsable({
   );
 }
 
-function EntradaCard({ e }: { e: EntradaEvolucion }) {
+function EntradaCard({ e, esPsicologo = false }: { e: EntradaEvolucion; esPsicologo?: boolean }) {
   const [medAbierta, setMedAbierta] = useState(false);
   const [indAbierta, setIndAbierta] = useState(false);
 
@@ -111,32 +111,38 @@ function EntradaCard({ e }: { e: EntradaEvolucion }) {
           </Seccion>
         )}
 
-        {/* Medicación e indicaciones: colapsables en mobile */}
-        <Seccion label="Medicación">
-          <Colapsable
-            abierto={medAbierta}
-            onToggle={() => setMedAbierta((v) => !v)}
-            resumen={e.medicacion ? "Ver medicación" : "Sin receta"}
-          >
-            <p className="mt-1 whitespace-pre-line text-sm text-gray-700">{medTexto}</p>
-          </Colapsable>
-        </Seccion>
+        {/* Medicación e indicaciones: colapsables en mobile. Psicología no receta ni
+            da indicaciones (13/10/2026): a un psicólogo no se le muestran. */}
+        {!esPsicologo && (
+          <>
+            <Seccion label="Medicación">
+              <Colapsable
+                abierto={medAbierta}
+                onToggle={() => setMedAbierta((v) => !v)}
+                resumen={e.medicacion ? "Ver medicación" : "Sin receta"}
+              >
+                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">{medTexto}</p>
+              </Colapsable>
+            </Seccion>
 
-        <Seccion label="Indicaciones">
-          <Colapsable
-            abierto={indAbierta}
-            onToggle={() => setIndAbierta((v) => !v)}
-            resumen={e.indicaciones ? "Ver indicaciones" : "Sin indicaciones"}
-          >
-            <p className="mt-1 whitespace-pre-line text-sm text-gray-700">{indTexto}</p>
-          </Colapsable>
-        </Seccion>
+            <Seccion label="Indicaciones">
+              <Colapsable
+                abierto={indAbierta}
+                onToggle={() => setIndAbierta((v) => !v)}
+                resumen={e.indicaciones ? "Ver indicaciones" : "Sin indicaciones"}
+              >
+                <p className="mt-1 whitespace-pre-line text-sm text-gray-700">{indTexto}</p>
+              </Colapsable>
+            </Seccion>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-export default function EvolucionesTimeline({ entradas }: { entradas: EntradaEvolucion[] }) {
+// `esPsicologo` (13/10/2026, psicólogos F4): oculta Medicación e Indicaciones. Por defecto, médico.
+export default function EvolucionesTimeline({ entradas, esPsicologo = false }: { entradas: EntradaEvolucion[]; esPsicologo?: boolean }) {
   if (entradas.length === 0) return null;
 
   return (
@@ -144,7 +150,7 @@ export default function EvolucionesTimeline({ entradas }: { entradas: EntradaEvo
       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Evoluciones</p>
       <div className="mt-4 space-y-6">
         {entradas.map((e) => (
-          <EntradaCard key={e.id} e={e} />
+          <EntradaCard key={e.id} e={e} esPsicologo={esPsicologo} />
         ))}
       </div>
     </div>

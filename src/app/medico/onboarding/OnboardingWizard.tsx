@@ -11,6 +11,7 @@ import FirmaManuscrita from "@/app/medico/perfil/FirmaManuscrita";
 import { createClient } from "@/lib/supabase/client";
 import { CONSENTIMIENTO_IDENTIDAD_TEXTO } from "@/lib/didit/consentimiento";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 
 const C = {
   azul: "#378ADD",
@@ -56,6 +57,12 @@ type Props = {
   mpPais: string | null; // país de la cuenta MP rechazada por no ser argentina (ej: "Brasil")
   /** Si la cuenta puede ver los videos de capacitación. Decide si aparece el link del cierre. */
   mostrarVideos: boolean;
+  /**
+   * Profesión de la ficha (13/10/2026, psicólogos F4). Opcional: sin ella el
+   * wizard habla de recetas, como siempre. Un psicólogo firma constancias de
+   * atención, y el domicilio figura en ellas.
+   */
+  profesion?: string | null;
 };
 
 // Estado del biométrico derivado del didit_status (espejo de mapEstado de
@@ -80,6 +87,7 @@ const CIERRE = TOTAL + 1; // paso 7 con 6 pasos
 
 export default function OnboardingWizard(props: Props) {
   const router = useRouter();
+  const psicologia = esPsicologia(props.profesion);
 
   // Cómo lo nombra el wizard: "Dra. García" / "Dr. García", o "García" pelado si
   // no hay título cargado. `formatNombreMedico` nunca inventa el tratamiento.
@@ -235,8 +243,8 @@ export default function OnboardingWizard(props: Props) {
               ["💳", "Conectá Mercado Pago", "para cobrar tus consultas"],
               ["📱", "Tu celular personal", "para avisarte cuando un paciente te espera"],
               ["📸", "Foto de perfil", "para que el paciente te reconozca"],
-              ["✍️", "Firma", "para tus recetas"],
-              ["🏥", "Domicilio del consultorio", "requisito para la receta electrónica"],
+              ["✍️", "Firma", psicologia ? "para tus constancias de atención" : "para tus recetas"],
+              ["🏥", "Domicilio del consultorio", psicologia ? "figura en tu constancia de atención" : "requisito para la receta electrónica"],
               ["🛡️", "Verificá tu identidad", "para proteger a tus pacientes"],
             ].map(([ic, t, sub]) => (
               <div key={t} className="flex items-start gap-3">
@@ -326,9 +334,9 @@ export default function OnboardingWizard(props: Props) {
         {paso === 1 && <PasoMP {...props} hecho={hechos.mp} onSkip={() => { if (ORDEN.slice(1).some((k) => !hechos[k] && k !== "biometrico")) avanzar(1); else setPaso(CIERRE); }} onDone={() => { marcar("mp"); avanzar(1); }} />}
         {paso === 2 && <PasoCelular inicial={props.celularInicial} hecho={hechos.celular} onDone={() => { marcar("celular"); avanzar(2); }} />}
         {paso === 3 && <PasoFoto fotoUrl={props.fotoUrl} onDone={() => { marcar("foto"); avanzar(3); }} />}
-        {paso === 4 && <PasoFirma firmaUrl={props.firmaUrl} onDone={() => { marcar("firma"); avanzar(4); }} />}
-        {paso === 5 && <PasoDomicilio inicial={props.domicilioInicial} provinciaInicial={props.provinciaInicial} onDone={() => { marcar("domicilio"); avanzar(5); }} />}
-        {paso === 6 && <PasoBiometrico estado={estadoBio} onFinalizar={() => setPaso(CIERRE)} />}
+        {paso === 4 && <PasoFirma firmaUrl={props.firmaUrl} psicologia={psicologia} onDone={() => { marcar("firma"); avanzar(4); }} />}
+        {paso === 5 && <PasoDomicilio inicial={props.domicilioInicial} provinciaInicial={props.provinciaInicial} psicologia={psicologia} onDone={() => { marcar("domicilio"); avanzar(5); }} />}
+        {paso === 6 && <PasoBiometrico estado={estadoBio} psicologia={psicologia} onFinalizar={() => setPaso(CIERRE)} />}
       </div>
     </Marco>
   );
@@ -532,7 +540,7 @@ function PasoFoto({ fotoUrl, onDone }: { fotoUrl: string | null; onDone: () => v
 }
 
 // ════════ PASO 4 — FIRMA ════════
-function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () => void }) {
+function PasoFirma({ firmaUrl, psicologia = false, onDone }: { firmaUrl: string | null; psicologia?: boolean; onDone: () => void }) {
   // "Continuar" no se habilita hasta que la imagen de firma esté efectivamente
   // guardada (vía el botón propio de FirmaManuscrita) — evita avanzar con la
   // firma manuscrita vacía. Si ya había firma, arranca lista.
@@ -558,8 +566,8 @@ function PasoFirma({ firmaUrl, onDone }: { firmaUrl: string | null; onDone: () =
   };
 
   return (
-    <Centro icono="✍️" titulo="Tu firma para las recetas" sub={firmaUrl ? "Tu firma ya está cargada. Revisala y continuá — vamos a activar tu firma electrónica." : "Dibujá tu firma o subí una foto, y tocá «Guardar firma». Después continuás."}>
-      <FirmaManuscrita firmaUrl={firmaUrl} onGuardada={() => setFirmaLista(true)} />
+    <Centro icono="✍️" titulo={psicologia ? "Tu firma para las constancias" : "Tu firma para las recetas"} sub={firmaUrl ? "Tu firma ya está cargada. Revisala y continuá — vamos a activar tu firma electrónica." : "Dibujá tu firma o subí una foto, y tocá «Guardar firma». Después continuás."}>
+      <FirmaManuscrita firmaUrl={firmaUrl} esPsicologo={psicologia} onGuardada={() => setFirmaLista(true)} />
       {error && <p className="text-center text-sm" style={{ color: C.rojo }}>{error}</p>}
       <CTA onClick={continuar} disabled={!firmaLista || provisionando}>{provisionando ? "Activando…" : "Continuar"}</CTA>
     </Centro>
@@ -574,7 +582,7 @@ const PROVINCIAS = [
   "Santa Cruz", "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán",
 ];
 
-function PasoDomicilio({ inicial, provinciaInicial, onDone }: { inicial: string; provinciaInicial: string; onDone: () => void }) {
+function PasoDomicilio({ inicial, provinciaInicial, psicologia = false, onDone }: { inicial: string; provinciaInicial: string; psicologia?: boolean; onDone: () => void }) {
   const [calle, setCalle] = useState(inicial);
   const [ciudad, setCiudad] = useState("");
   const [provincia, setProvincia] = useState(provinciaInicial);
@@ -608,7 +616,7 @@ function PasoDomicilio({ inicial, provinciaInicial, onDone }: { inicial: string;
 
   const inputCls = "w-full rounded-xl border px-4 py-3 text-base outline-none focus:ring-2";
   return (
-    <Centro icono="🏥" titulo="Domicilio del consultorio" sub="Requisito para la receta electrónica. Aunque atiendas solo de forma virtual, la receta necesita un domicilio profesional registrado.">
+    <Centro icono="🏥" titulo="Domicilio del consultorio" sub={psicologia ? "Figura en la constancia de atención. Aunque atiendas solo de forma virtual, la constancia necesita un domicilio profesional registrado." : "Requisito para la receta electrónica. Aunque atiendas solo de forma virtual, la receta necesita un domicilio profesional registrado."}>
       <input value={calle} onChange={(e) => setCalle(e.target.value)} placeholder="Calle y número" className={inputCls} style={{ borderColor: "#D1D5DB" }} />
       <input value={ciudad} onChange={(e) => setCiudad(e.target.value)} placeholder="Ciudad / Localidad" className={inputCls} style={{ borderColor: "#D1D5DB" }} />
       <select value={provincia} onChange={(e) => setProvincia(e.target.value)} className={inputCls} style={{ borderColor: "#D1D5DB", appearance: "none" }}>
@@ -625,7 +633,7 @@ function PasoDomicilio({ inicial, provinciaInicial, onDone }: { inicial: string;
 // Decisión de Diego: async, no bloqueante. El médico dispara Didit y vuelve;
 // la validación se completa por webhook + polling. NINGÚN estado salvo
 // `aprobada` traba el cierre. El polling vive en el componente padre.
-function PasoBiometrico({ estado, onFinalizar }: { estado: EstadoBio; onFinalizar: () => void }) {
+function PasoBiometrico({ estado, psicologia = false, onFinalizar }: { estado: EstadoBio; psicologia?: boolean; onFinalizar: () => void }) {
   const [aceptado, setAceptado] = useState(false);
   const [verConsentimiento, setVerConsentimiento] = useState(false);
   const [intentoSinAceptar, setIntentoSinAceptar] = useState(false);
@@ -732,7 +740,7 @@ function PasoBiometrico({ estado, onFinalizar }: { estado: EstadoBio; onFinaliza
     <Centro
       icono="🛡️"
       titulo="Verificá tu identidad"
-      sub="Confirmamos que sos el titular de la matrícula que registraste. Esto protege a tus pacientes de la suplantación de identidad y respalda cada receta que firmás con tu nombre."
+      sub={`Confirmamos que sos el titular de la matrícula que registraste. Esto protege a tus pacientes de la suplantación de identidad y respalda cada ${psicologia ? "constancia" : "receta"} que firmás con tu nombre.`}
     >
       <div className="space-y-3 rounded-xl p-4" style={{ border: `1px solid ${C.azul}33` }}>
         {[

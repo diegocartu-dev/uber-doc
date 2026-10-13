@@ -31,10 +31,14 @@ function tiempoRelativo(iso: string): string {
   return `hace ${anios} ${anios === 1 ? "año" : "años"}`;
 }
 
-function lineaSecundaria(p: PacienteResumen): string {
+function lineaSecundaria(p: PacienteResumen, esPsicologo: boolean): string {
   const partes: string[] = [];
   if (p.edad != null) partes.push(`${p.edad} años`);
-  partes.push(`${p.nAtenciones} consulta${p.nAtenciones === 1 ? "" : "s"}`);
+  // Psicología atiende sesiones, no consultas (13/10/2026). Para médicos, igual que siempre.
+  const unidad = esPsicologo
+    ? p.nAtenciones === 1 ? "sesión" : "sesiones"
+    : p.nAtenciones === 1 ? "consulta" : "consultas";
+  partes.push(`${p.nAtenciones} ${unidad}`);
   if (p.ultimoMotivo && p.ultimoMotivo.trim()) partes.push(p.ultimoMotivo.trim());
   return partes.join(" · ");
 }
@@ -50,7 +54,7 @@ function ChipCronica() {
   );
 }
 
-export default function MisPacientesClient({ pacientes }: { pacientes: PacienteResumen[] }) {
+export default function MisPacientesClient({ pacientes, esPsicologo = false }: { pacientes: PacienteResumen[]; esPsicologo?: boolean }) {
   const [q, setQ] = useState("");
 
   const mostrarSearch = pacientes.length > 8;
@@ -139,7 +143,7 @@ export default function MisPacientesClient({ pacientes }: { pacientes: PacienteR
                   <p className="truncate text-sm font-medium text-gray-900">{p.nombre}</p>
                   {p.tieneCronica && <ChipCronica />}
                 </div>
-                <p className="mt-0.5 truncate text-xs text-gray-500">{lineaSecundaria(p)}</p>
+                <p className="mt-0.5 truncate text-xs text-gray-500">{lineaSecundaria(p, esPsicologo)}</p>
               </div>
               <span className="shrink-0 text-xs text-gray-400">{tiempoRelativo(p.ultimaFecha)}</span>
               <ChevronRight size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "#d1d5db" }} />

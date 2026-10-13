@@ -23,7 +23,9 @@ const SKIP_KEY = "docto_push_modal_skip";
  * aparecer en la próxima), para no dejar a nadie bloqueado si su dispositivo
  * tiene un problema.
  */
-export default function ModalPushMedico() {
+// `esPsicologo` (13/10/2026, psicólogos F4): el psicólogo no tiene consulta inmediata,
+// así que el aviso le habla de turnos. Para los médicos el texto no cambia.
+export default function ModalPushMedico({ esPsicologo = false }: { esPsicologo?: boolean } = {}) {
   const [estado, setEstado] = useState<Estado>("oculto");
   const [activando, setActivando] = useState(false);
   const [fallo, setFallo] = useState(false);
@@ -95,7 +97,7 @@ export default function ModalPushMedico() {
             </div>
 
             <p className="mt-3 text-sm leading-relaxed text-gray-600">
-              Cuando un paciente pide una consulta, <strong>te avisamos al teléfono</strong> — no
+              {esPsicologo ? "Cuando un paciente reserva un turno o entra a la sala" : "Cuando un paciente pide una consulta"}, <strong>te avisamos al teléfono</strong> — no
               hace falta que estés mirando Docto. Sin esto, no te enterás de los pacientes
               que te esperan.
             </p>

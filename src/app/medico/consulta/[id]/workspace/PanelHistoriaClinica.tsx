@@ -18,7 +18,7 @@ import type { EntradaEvolucion } from "@/app/medico/paciente/[pacienteId]/Evoluc
 // sí reusa el tipo `EntradaEvolucion`.
 // ---------------------------------------------------------------------------
 
-function EntradaCompacta({ e }: { e: EntradaEvolucion }) {
+function EntradaCompacta({ e, esPsicologia = false }: { e: EntradaEvolucion; esPsicologia?: boolean }) {
   const [abierta, setAbierta] = useState(false);
 
   // Resumen colapsado de la evolución (1-2 líneas). Si no hay evolución,
@@ -75,29 +75,36 @@ function EntradaCompacta({ e }: { e: EntradaEvolucion }) {
               <p className="mt-0.5 text-sm text-gray-700">{e.diagnostico}</p>
             </div>
           )}
-          <div className={e.diagnostico ? "" : "pt-3"}>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              Receta
-            </p>
-            <p className="mt-0.5 whitespace-pre-line text-sm text-gray-700">
-              {e.medicacion?.trim() || "Sin receta"}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              Indicaciones
-            </p>
-            <p className="mt-0.5 whitespace-pre-line text-sm text-gray-700">
-              {e.indicaciones?.trim() || "Sin indicaciones"}
-            </p>
-          </div>
+          {/* Psicología no receta ni da indicaciones (13/10/2026): esos dos bloques
+              dirían "Sin receta" en cada sesión. Quedan evolución y diagnóstico. */}
+          {!esPsicologia && (
+            <>
+              <div className={e.diagnostico ? "" : "pt-3"}>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  Receta
+                </p>
+                <p className="mt-0.5 whitespace-pre-line text-sm text-gray-700">
+                  {e.medicacion?.trim() || "Sin receta"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  Indicaciones
+                </p>
+                <p className="mt-0.5 whitespace-pre-line text-sm text-gray-700">
+                  {e.indicaciones?.trim() || "Sin indicaciones"}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-export default function PanelHistoriaClinica({ entradas }: { entradas: EntradaEvolucion[] }) {
+// `esPsicologia` (13/10/2026, psicólogos F4): sin receta ni indicaciones, y "sesión" en vez de "consulta". Por defecto, médico.
+export default function PanelHistoriaClinica({ entradas, esPsicologia = false }: { entradas: EntradaEvolucion[]; esPsicologia?: boolean }) {
   return (
     <div className="p-5">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -106,12 +113,12 @@ export default function PanelHistoriaClinica({ entradas }: { entradas: EntradaEv
 
       {entradas.length === 0 ? (
         <p className="mt-8 text-center text-sm text-gray-400">
-          Primera consulta con este paciente.
+          Primera {esPsicologia ? "sesión" : "consulta"} con este paciente.
         </p>
       ) : (
         <div className="mt-4 space-y-3">
           {entradas.map((e) => (
-            <EntradaCompacta key={e.id} e={e} />
+            <EntradaCompacta key={e.id} e={e} esPsicologia={esPsicologia} />
           ))}
         </div>
       )}

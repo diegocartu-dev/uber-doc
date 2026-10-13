@@ -29,7 +29,9 @@ function formatFechaCorta(f: string) {
   return `${dias[d.getDay()]} ${d.getDate()} de ${MESES_CORTO[d.getMonth()]}`;
 }
 
-export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Turno[]; proximosTurnos?: TurnoProximo[] }) {
+// `esPsicologo` solo cambia el título de la pestaña (13/10/2026, psicólogos F4):
+// para los médicos la pantalla sigue igual.
+export default function AgendaHoy({ turnos, proximosTurnos = [], esPsicologo = false }: { turnos: Turno[]; proximosTurnos?: TurnoProximo[]; esPsicologo?: boolean }) {
   // Dos momentos de un turno confirmado (= pagado) cuyo paciente todavía no
   // entró: "antes" (faltan 15 min o menos) y "no_entro" (ya es la hora). El
   // segundo nació el 12/10/2026: una profesional esperó a un paciente que nunca
@@ -80,13 +82,14 @@ export default function AgendaHoy({ turnos, proximosTurnos = [] }: { turnos: Tur
       // Badge en título del navegador
       const enEspera = turnos.filter((t) => t.estado === "en_espera").length;
       const totalAlertas = nuevas.length + enEspera;
-      document.title = totalAlertas > 0 ? `(${totalAlertas}) Docto — Médico` : "Docto — Médico";
+      const tituloBase = esPsicologo ? "Docto — Psicología" : "Docto — Médico";
+      document.title = totalAlertas > 0 ? `(${totalAlertas}) ${tituloBase}` : tituloBase;
     }
 
     checkAlertas();
     const interval = setInterval(checkAlertas, 30000);
     return () => clearInterval(interval);
-  }, [turnos, enSala]);
+  }, [turnos, enSala, esPsicologo]);
 
   // OJO: acá vivía un `new Notification(...)` legacy (30/03) que en Chrome Android tira
   // TypeError SIEMPRE (constructor prohibido desde Chrome 42 — usar showNotification del

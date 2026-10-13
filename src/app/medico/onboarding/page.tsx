@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esInstitucional } from "@/lib/instancia";
 import { puedeVerCapacitacion } from "@/lib/capacitacion";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import OnboardingWizard from "./OnboardingWizard";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,12 @@ export default async function OnboardingPage({
     adminDb.from("medico_claves").select("id").eq("medico_id", medico.id).maybeSingle(),
   ]);
 
+  // Profesión en query propia (13/10/2026, psicólogos F4): el SELECT de arriba
+  // arma el wizard y no se toca. Decide el vocabulario (constancia vs receta) y
+  // si se ofrece el link a los videos, que hoy son de consulta inmediata y receta.
+  const profesion = await profesionDeLaFicha(adminDb, { medicoId: medico.id });
+  const esPsicologo = profesion === "psicologo";
+
   // El biométrico cuenta como hecho si quedó validado o si la cuenta está exenta.
   const biometricoHecho = !!medico.identidad_validada || !!medico.biometria_exenta;
   const pasos = {
@@ -108,7 +115,8 @@ export default async function OnboardingPage({
       // sin aprobar. La baja no está en el SELECT de arriba y no se le suma: ese
       // SELECT arma el wizard y no se toca. Un dado de baja que llegara acá vería
       // el link y aterrizaría en la pantalla sin la sección, que no rompe nada.
-      mostrarVideos={!esInstitucional() && puedeVerCapacitacion(medico)}
+      mostrarVideos={!esInstitucional() && !esPsicologo && puedeVerCapacitacion(medico)}
+      profesion={profesion}
     />
   );
 }

@@ -8,6 +8,7 @@ import { Stethoscope } from "lucide-react";
 import SetOriginSlug from "@/components/SetOriginSlug";
 import ConsultorioLoginClient from "./ConsultorioLoginClient";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { parsearAreasAtencion, textosAreas } from "@/lib/areas-atencion";
 import { parsearEspecialidadesAdicionales, adicionalesVisibles } from "@/lib/especialidades";
@@ -68,6 +69,15 @@ export default async function ConsultorioPublicoPage({
     .select("areas_atencion, especialidades_adicionales")
     .eq("slug", slug)
     .maybeSingle();
+  // Profesión en query propia (13/10/2026, psicólogos F4), con el mismo criterio
+  // que la de arriba: el SELECT que decide si la página existe no se toca. El
+  // SELECT principal no trae el id, así que se busca por slug. Si falla, médico.
+  const { data: profesionRow } = await supabaseAdmin
+    .from("medicos")
+    .select("profesion")
+    .eq("slug", slug)
+    .maybeSingle();
+  const psicologia = esPsicologia((profesionRow as { profesion?: string | null } | null)?.profesion);
   const areas = textosAreas(parsearAreasAtencion(areasRow?.areas_atencion));
   const especialidadesExtra = adicionalesVisibles(
     medico.especialidad,
@@ -154,7 +164,7 @@ export default async function ConsultorioPublicoPage({
           className="mt-6 text-sm leading-relaxed"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Ingresá para solicitar una consulta o agendar un turno.
+          {psicologia ? "Ingresá para agendar un turno." : "Ingresá para solicitar una consulta o agendar un turno."}
         </p>
 
         <ConsultorioLoginClient slug={slug} />

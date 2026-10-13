@@ -1173,7 +1173,7 @@ export default function WorkspaceConsulta({
   // Helper: validar campos obligatorios antes de finalizar
   function validarCamposObligatorios(): boolean {
     if (!diagnostico.trim()) {
-      setError("Completá el diagnóstico antes de finalizar la consulta.");
+      setError(`Completá el diagnóstico antes de finalizar la ${esPsicologia ? "sesión" : "consulta"}.`);
       setDiagError(true);
       setModo("escritura");
       setTimeout(() => diagRef.current?.focus(), 350);
@@ -1828,12 +1828,12 @@ export default function WorkspaceConsulta({
             <p className="truncate text-sm font-medium text-white">{consulta.paciente_nombre}</p>
             <p className="mt-0.5 text-xs text-white/50">
               {cierre?.cerradaAt
-                ? `Consulta finalizada el ${new Date(cierre.cerradaAt).toLocaleDateString("es-AR", {
+                ? `${esPsicologia ? "Sesión" : "Consulta"} finalizada el ${new Date(cierre.cerradaAt).toLocaleDateString("es-AR", {
                     day: "numeric",
                     month: "long",
                     timeZone: "America/Argentina/Buenos_Aires",
                   })}`
-                : "Consulta finalizada"}
+                : esPsicologia ? "Sesión finalizada" : "Consulta finalizada"}
             </p>
           </div>
           <button
@@ -2143,7 +2143,7 @@ export default function WorkspaceConsulta({
             createdAt={horaInicio}
           />
         ) : modo === "hc" ? (
-          <PanelHistoriaClinica entradas={evolucionesPrevias} />
+          <PanelHistoriaClinica entradas={evolucionesPrevias} esPsicologia={esPsicologia} />
         ) : (
         <div className={`p-5 ${modoCompletar ? "mx-auto w-full max-w-2xl" : ""}`}>
           {/* ─── Modo completar: qué es esta pantalla, en una frase ───────── */}
@@ -2758,7 +2758,7 @@ export default function WorkspaceConsulta({
                 marginBottom: "8px",
               }}
             >
-              {modoCompletar ? "Enviar al paciente" : "Finalizar consulta"}
+              {modoCompletar ? "Enviar al paciente" : esPsicologia ? "Finalizar sesión" : "Finalizar consulta"}
             </h3>
             <p
               style={{
@@ -2942,11 +2942,11 @@ export default function WorkspaceConsulta({
                   minHeight: "44px",
                 }}
               >
-                {faltanObligatorios ? "Finalizar y documentar" : "Finalizar consulta"}
+                {faltanObligatorios ? "Finalizar y documentar" : esPsicologia ? "Finalizar sesión" : "Finalizar consulta"}
               </button>
             </div>
             <p style={{ fontSize: "12px", color: "#888780", marginTop: "16px", textAlign: "center" }}>
-              Si nadie vuelve en 2 minutos, la consulta se cierra automáticamente.
+              Si nadie vuelve en 2 minutos, la {esPsicologia ? "sesión" : "consulta"} se cierra automáticamente.
             </p>
           </div>
         </div>

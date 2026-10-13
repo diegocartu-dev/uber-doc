@@ -8,9 +8,10 @@ import { comprimirImagen } from "@/lib/imagenes/comprimir";
 interface Props {
   firmaUrl: string | null; // path en storage, no URL pública
   onGuardada?: () => void; // opcional: avisa al padre (wizard) cuando la firma se guardó
+  esPsicologo?: boolean; // 13/10/2026 (psicólogos F4): la firma va en constancias, no en recetas. Por defecto, médico.
 }
 
-export default function FirmaManuscrita({ firmaUrl, onGuardada }: Props) {
+export default function FirmaManuscrita({ firmaUrl, onGuardada, esPsicologo = false }: Props) {
   const [modo, setModo] = useState<"dibujar" | "subir">("dibujar");
   const [guardando, setGuardando] = useState(false);
   const [firmaGuardada, setFirmaGuardada] = useState(!!firmaUrl);
@@ -257,7 +258,7 @@ export default function FirmaManuscrita({ firmaUrl, onGuardada }: Props) {
           <>
             {!firmaGuardada && !previewSrc && (
               <p className="mb-3 text-sm text-gray-500">
-                Tu firma aparece en cada receta que emitas. Podés cambiarla
+                Tu firma aparece en cada {esPsicologo ? "constancia de atención" : "receta"} que emitas. Podés cambiarla
                 cuando quieras.
               </p>
             )}
