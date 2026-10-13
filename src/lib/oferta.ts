@@ -30,6 +30,7 @@
 //   adicionales (#451).
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { proximoTurnoLibrePorMedico } from "@/lib/turnos/proximo-libre";
 import { getFlag } from "@/lib/feature-flags";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
@@ -200,15 +201,9 @@ export async function alternativasVivas(params: {
       admin.from("medicos_mp_accounts").select("medico_id, estado, expires_at"),
       admin.from("consultas").select("medico_id").in("estado", ["esperando", "en_curso"]),
       admin.from("turnos").select("medico_id, hora_inicio, hora_fin").in("estado", ["confirmado", "en_espera", "en_curso"]).eq("fecha", hoy),
-      admin
-        .from("turnos")
-        .select("medico_id, fecha, hora_inicio")
-        .eq("estado", "disponible")
-        .eq("canal_origen", "clinica_virtual")
-        .gte("fecha", hoy)
-        .order("fecha", { ascending: true })
-        .order("hora_inicio", { ascending: true })
-        .limit(500),
+      // El más cercano de cada profesional (antes, los primeros 500 de todos:
+      // dejaba afuera a quien tenía turnos recién desde pasado mañana).
+      proximoTurnoLibrePorMedico(admin, hoy).then((data) => ({ data })),
     ]);
 
   // ¿Puede cobrar? El vencido se auto-renueva en el checkout; el no-conectado no.
