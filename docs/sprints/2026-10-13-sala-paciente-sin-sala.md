@@ -19,6 +19,6 @@ Desde el 06/10 el pago es instantáneo (solo cuenta de Mercado Pago + `binary_mo
 - Verificado en producción con cuentas de prueba (consulta sintética `en_curso` sin sala): con la sala sin crear, el mensaje de espera y ningún pedido de token; al escribirse `sala_video_url`, en menos de 8 s pide el token y muestra "Activar cámara y micrófono".
 - #561: la ficha del admin deja de decir "Video iniciado" por el pago: dice quién entró a la videollamada y cuándo, desde `video_presencia`, y "El paciente nunca entró" cuando hay evidencia.
 
-## Pendiente de Diego
-- Los dos textos nuevos son provisorios (DECISIONES.md 1.15).
-- Las dos consultas de hoy ya están reembolsadas. Si se le quiere escribir a la paciente o a la profesional, es decisión de Diego (mensajes a personas reales).
+## Cierre (13/10, Diego)
+- Los dos textos quedan como están.
+- A la paciente se le escribió el mismo día desde soporte@, firmado por Valentina (queda en la Bandeja): disculpas, la devolución de los dos pagos, que lo que le impidió entrar ya está resuelto y que la esperamos cuando necesite una consulta médica. El texto pasó por tres lentes de revisión antes de salir (tono, verdad, claridad): se evitó "tu conexión", que sonaba a que la falla era de su internet.
