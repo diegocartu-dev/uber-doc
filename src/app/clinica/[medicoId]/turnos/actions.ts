@@ -8,6 +8,8 @@ import { getFlag } from "@/lib/feature-flags";
 import { transaccionEsDeTest } from "@/lib/pago-test";
 import { identidadHabilitada } from "@/lib/perfil-medico";
 import { esInstitucional } from "@/lib/instancia";
+import { waitUntil } from "@vercel/functions";
+import { registrarAceptacionControlados } from "@/lib/legal/controlados";
 
 /**
  * @deprecated No hace nada y NUNCA hizo nada: corre con el cliente RLS del
@@ -25,7 +27,7 @@ export async function limpiarReservasExpiradas() {
   return;
 }
 
-export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual") {
+export async function reservarTurno(turnoId: string, recordatorios: { cuando: string; canal: string }, canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual", aceptaControlados = false) {
   // Capa B (modo institucional): un server action se invoca por POST con header
   // Next-Action a CUALQUIER ruta del deploy — el 404 de Capa A sobre /clinica
   // NO lo neutraliza, y este action hace UPDATE de un slot (no lo frena el
@@ -173,6 +175,11 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
     .eq("estado", "disponible");
 
   if (error) return { error: `Error al reservar: ${error.message}` };
+  // El tilde del término de controlados, con este turno (antes de pagar). Si no
+  // vino (pestaña con la pantalla anterior), la reserva sigue igual.
+  if (aceptaControlados) {
+    waitUntil(registrarAceptacionControlados({ userId: user.id, turnoId }));
+  }
   return { success: true, turnoId };
 }
 
