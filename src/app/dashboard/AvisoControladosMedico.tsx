@@ -12,10 +12,15 @@ import {
   necesitaAceptarControlados,
   aceptarControladosDesdeElPanel,
 } from "@/lib/legal/controlados-acciones";
+import { useDashboardMedico } from "./DashboardMedicoProvider";
 
 const POSPUESTO = "docto_controlados_pospuesto";
 
 export default function AvisoControladosMedico() {
+  // Un pedido de consulta o un paciente listo mandan: mientras haya uno a la
+  // vista, este aviso no se dibuja (su capa tapaba el botón "Aceptar" del
+  // pedido; revisión adversarial del 12/10). Vuelve cuando se resuelven.
+  const { popupData, popupListo } = useDashboardMedico();
   const [visible, setVisible] = useState(false);
   const [aceptado, setAceptado] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -34,7 +39,7 @@ export default function AvisoControladosMedico() {
     return () => { vivo = false; };
   }, []);
 
-  if (!visible) return null;
+  if (!visible || popupData || popupListo) return null;
 
   function masTarde() {
     try {
@@ -56,7 +61,7 @@ export default function AvisoControladosMedico() {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <TerminoControlados aceptado={aceptado} onChange={setAceptado} />
         {error && (

@@ -407,7 +407,7 @@ export default function CalendarioTurnos({
       {/* Modal de confirmación */}
       {mostrarConfirmacion && turnoSeleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <p className="text-sm font-medium text-gray-900">
               Confirmá tu turno
             </p>
