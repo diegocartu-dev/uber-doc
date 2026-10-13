@@ -202,7 +202,13 @@ export async function crearConsulta(
     return { cambioDeProfesional: encuentro };
   }
 
-  const { data, error } = await supabase
+  // Con SERVICE ROLE (13/10/2026): la sesión del paciente ya no escribe
+  // `consultas`. Con su sesión podía, por un INSERT directo desde el navegador,
+  // crear una consulta que ya figuraba "pagada" (la policy no miraba el estado;
+  // probado en una transacción que se deshizo). Todo lo que la policy exigía
+  // —el paciente es el de la sesión, el médico disponible, verificado, aprobado
+  // y del mismo carril (prueba o real)— ya se controla arriba.
+  const { data, error } = await createAdminClient()
     .from("consultas")
     .insert({
       paciente_id: user.id,
