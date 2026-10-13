@@ -2,7 +2,7 @@
 --
 -- "Por Docto se puede recetar cualquier medicamento, excepto psicotrópicos y
 -- estupefacientes (Leyes 19.303 y 17.818)." Lo tildan el paciente antes de
--- pagar cada consulta y el profesional una vez. Cada tilde queda en
+-- pagar y el profesional, una vez por versión del texto (es dinámico). Cada tilde queda en
 -- aceptaciones_legales con la versión exacta del texto (código:
 -- src/lib/legal/controlados.ts).
 --

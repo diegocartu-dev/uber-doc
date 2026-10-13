@@ -67,6 +67,12 @@ async function pedir(paciente: Page): Promise<string> {
     el.dispatchEvent(new Event("scroll"));
   });
   for (const c of await casillas.all()) await c.check();
+  // El término de controlados es dinámico: aparece (después de preguntarle al
+  // servidor) solo si la cuenta no lo aceptó. Si aparece, se tilda.
+  const controlados = paciente.getByRole("checkbox", { name: /Medicamentos controlados/ });
+  if (await controlados.waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false)) {
+    await controlados.check();
+  }
   await paciente.getByRole("button", { name: "Continuar" }).click();
   await paciente.locator("#motivo").fill("Prueba automática de punta a punta. No atender.");
   await paciente.getByRole("button", { name: "Otro", exact: true }).click(); // al menos un síntoma

@@ -7,8 +7,8 @@
 // aparte del resto de los T&C y con su propio tilde.
 //
 // Lo tildan:
-//   - el paciente, antes de pagar cada consulta (triage de la consulta
-//     inmediata y confirmación de la reserva del turno);
+//   - el paciente, antes de pagar (triage de la consulta inmediata y
+//     confirmación de la reserva del turno);
 //   - el profesional al registrarse, y los ya registrados una vez desde su panel
 //     (pueden posponerlo: se les vuelve a mostrar hasta que lo tilden).
 //
@@ -27,18 +27,23 @@ import { CONTROLADOS_TIPO, CONTROLADOS_VERSION } from "./controlados-texto";
 export * from "./controlados-texto";
 
 async function versionId(): Promise<string | null> {
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("versiones_textos_legales")
     .select("id")
     .eq("tipo", CONTROLADOS_TIPO)
     .eq("version", CONTROLADOS_VERSION)
     .maybeSingle();
+  if (error) {
+    console.error("[controlados] no se pudo leer la versión del término:", error.message);
+    return null;
+  }
   return data?.id ?? null;
 }
 
 /**
- * Registra un tilde real del término. Una fila por acto: el paciente tilda en
- * cada consulta (con su consulta o su turno), el profesional una vez.
+ * Registra un tilde real del término. Una fila por acto, con la consulta o el
+ * turno en el que se tildó. Como el término es dinámico (se muestra solo a quien
+ * no aceptó la versión vigente), en la práctica es una vez por persona y versión.
  *
  * Nunca lanza ni frena el flujo que lo llama: la casilla ya se exigió en la
  * pantalla, y una consulta no se pierde porque falle el registro. Si falla, lo
