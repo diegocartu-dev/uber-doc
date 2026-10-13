@@ -26,6 +26,7 @@ Telemedicina: consultas inmediatas (CI) y turnos programados con médicos. Argen
 
 ## Protocolo de trabajo
 - **Norma suprema (12/10): terminado = en producción y verificado.** Sin pedir permiso: migración aplicada en las bases que correspondan y verificada; PR mergeado con los checks en verde (nunca `--admin`, nunca saltear la protección de main); deploy esperado y verificado en vivo (endpoint, `cron_runs`, logs); reporte en 2-5 líneas con el SQL aplicado. Siguen necesitando el OK de Diego: mensajes a pacientes o profesionales reales, texto nuevo que cambie lo que se les promete, decisiones de producto o de plata.
+- **Congelamiento hasta el 22/10/2026 inclusive (Diego, 13/10):** una semana después del relanzamiento del 15/10. Nada nuevo: solo se arregla lo que hace perder consultas, verificado. Los hallazgos van a `DECISIONES.md` §4 y no se le traen a Diego; a Diego no se le trae ninguna decisión nueva salvo que él vaya a hacer algo que la necesite.
 - **Un commit por ticket.** Una extensión de alcance se reporta siempre; la aprueba Diego.
 - **Gates:** lo que mueve plata o toca crons lleva revisión independiente antes del merge. Si un ticket tiene gate (Roberto, Sofía, Diego), espera su OK.
 - **En una tarea, se hace la tarea.** Un hallazgo ajeno va a `DECISIONES.md` y se menciona en una línea al final. Solo interrumpe si pierde consultas hoy, y verificado.
