@@ -5,6 +5,9 @@ import DoctoLogo from "@/components/DoctoLogo";
 import { getReturnUrl } from "@/lib/consultorio-url";
 import BotonPush from "@/components/BotonPush";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import { etiquetaProfesional } from "@/lib/medicos/vocabulario";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -41,6 +44,9 @@ export default async function ConfirmacionTurnoPage({
     .eq("id", turno.medico_id)
     .single();
 
+  // Profesión de la ficha (13/10/2026) en query propia: el SELECT de arriba no se toca.
+  const profesion = await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id });
+
   const recordatorios = turno.recordatorios as { cuando?: string; canal?: string } | null;
 
   return (
@@ -64,8 +70,8 @@ export default async function ConfirmacionTurnoPage({
         <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "0.5px solid #e5e7eb" }}>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Médico</span>
-              <span className="font-medium text-gray-900">{formatNombreMedico(medico?.nombre_completo ?? "Médico", medico?.titulo)}</span>
+              <span className="text-gray-500">{etiquetaProfesional(profesion)}</span>
+              <span className="font-medium text-gray-900">{formatNombreMedico(medico?.nombre_completo ?? "", medico?.titulo)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Especialidad</span>
@@ -103,7 +109,7 @@ export default async function ConfirmacionTurnoPage({
           </p>
         </div>
 
-        <BotonPush rol="paciente" variante="popup" />
+        <BotonPush rol="paciente" variante="popup" profesion={profesion} />
 
         <div className="mt-6 space-y-3">
           {(() => {

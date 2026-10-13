@@ -117,7 +117,7 @@ export default async function DocumentosPage() {
     const med = medicosMap.get(d.medico_id);
     return {
       ...d,
-      medico_nombre: med?.nombre_completo ?? "Médico",
+      medico_nombre: med?.nombre_completo ?? "Profesional",
       // Título elegido por el profesional ("Dr." / "Dra."). Sin esto la lista de
       // documentos le decía "Dr." a todas las médicas que firmaron la receta.
       medico_titulo: med?.titulo ?? null,

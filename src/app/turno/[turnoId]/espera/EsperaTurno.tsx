@@ -5,6 +5,7 @@ import MenuAlternativas from "@/components/rescate/MenuAlternativas";
 import { soundConsultaAceptada, soundVideoLista, unlockAudio } from "@/lib/sounds";
 import { CheckCircle, XCircle, Video } from "lucide-react";
 import { articuloMedico, formatNombreMedico } from "@/lib/utils/texto";
+import { etiquetaProfesional } from "@/lib/medicos/vocabulario";
 
 type Props = {
   turnoId: string;
@@ -13,13 +14,15 @@ type Props = {
   // muestra el nombre pelado y arma las frases sin artículo, en vez de adivinar género.
   medicoTitulo?: string | null;
   medicoEspecialidad: string;
+  /** Profesión de la ficha (13/10/2026): sin dato es médico y la etiqueta no cambia. */
+  profesion?: string | null;
   horaInicio: string;
   returnUrl?: string;
 };
 
 type Estado = "esperando" | "iniciando" | "redirigiendo" | "finalizado" | "cancelado" | "ausente";
 
-export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medicoEspecialidad, horaInicio, returnUrl = "/dashboard" }: Props) {
+export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medicoEspecialidad, profesion = null, horaInicio, returnUrl = "/dashboard" }: Props) {
   const nombreMedico = formatNombreMedico(medicoNombre, medicoTitulo);
   // Sujeto listo para arrancar una oración: "La Dra. García", "El Dr. López", o el
   // nombre solo si no sabemos el título. Nunca "El" a ciegas.
@@ -188,7 +191,7 @@ export default function EsperaTurno({ turnoId, medicoNombre, medicoTitulo, medic
       <div className="mt-8 rounded-xl bg-white p-6 text-left" style={{ border: "0.5px solid #e5e7eb" }}>
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Médico</span>
+            <span className="text-gray-500">{etiquetaProfesional(profesion)}</span>
             <span className="font-medium text-gray-900">{nombreMedico}</span>
           </div>
           <div className="flex justify-between text-sm">

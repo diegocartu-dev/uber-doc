@@ -23,6 +23,10 @@ type VerificacionResponse = {
   motivo?: string;
   /** El documento salió de una cuenta de DEMOSTRACIÓN (modo demo institucional). */
   demostracion?: boolean;
+  /** Firmante psicólogo (13/10/2026). Solo viaja cuando lo es. */
+  profesion?: "psicologo";
+  /** Tipo del documento (receta, certificado, constancia…). */
+  tipo?: string;
   medico?: {
     nombre: string;
     especialidad: string;
@@ -153,12 +157,19 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
   // si está alterado — lo primero que hay que saber de un papel de demo es que
   // es de demo.
   const avisoDemo = data?.demostracion ? <AvisoDemostracion /> : null;
+  // Constancia de atención (psicología, 13/10/2026): no hay "acto médico" ni
+  // "información médica". Para cualquier otro documento el texto es el de siempre.
+  const esConstancia = data?.tipo === "constancia" || data?.profesion === "psicologo";
+  const actoProfesional = esConstancia ? "la de la atención" : "la del acto médico";
+  const infoDelPaciente = esConstancia ? "información clínica" : "información médica";
 
   if (estado === "cargando") {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm" style={{ border: "0.5px solid #e5e7eb" }}>
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#378ADD]" />
-        <p className="mt-4 text-sm text-gray-500">Verificando receta...</p>
+        {/* "documento" y no "receta": acá también llegan certificados, órdenes y
+            la constancia de atención de un psicólogo. */}
+        <p className="mt-4 text-sm text-gray-500">Verificando documento...</p>
       </div>
     );
   }
@@ -418,7 +429,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
               Este documento se emitió antes de que Docto aplicara el sello
               electrónico en forma automática. El sello se agregó después, sobre
               el mismo contenido que el profesional emitió y entregó ese día: por
-              eso las dos fechas son distintas. La primera es la del acto médico;
+              eso las dos fechas son distintas. La primera es {actoProfesional};
               la segunda, la del sello que permite verificarlo en esta página. El
               documento no fue modificado.
             </p>
@@ -437,7 +448,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
               sellarse con la firma del profesional. El contenido clínico que el
               profesional emitió no fue modificado. El sello electrónico de arriba
               corresponde al documento completo y rectificado; la fecha de
-              emisión es la del acto médico original.
+              emisión es {esConstancia ? "la de la atención original" : "la del acto médico original"}.
             </p>
           )}
         </div>
@@ -446,7 +457,7 @@ export default function VerificarRecetaClient({ recetaId }: { recetaId: string }
       {/* Legal */}
       <p className="mt-4 text-center text-[11px] leading-relaxed text-gray-400">
         Firmado electrónicamente en los términos del art. 5 de la Ley 25.506.
-        Esta página no muestra información médica del paciente por razones de
+        Esta página no muestra {infoDelPaciente} del paciente por razones de
         privacidad.
       </p>
     </div>

@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   if (medico?.id === consulta.medico_id) {
     esMedico = true;
     identity = `medico-${medico!.id}`;
-    displayName = formatNombreMedico(medico!.nombre_completo, medico!.titulo) || "Medico";
+    displayName = formatNombreMedico(medico!.nombre_completo, medico!.titulo) || "Profesional";
   }
 
   if (!esPaciente && !esMedico) {

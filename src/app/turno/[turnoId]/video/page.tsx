@@ -81,12 +81,13 @@ export default async function VideoTurnoPage({
     // "te está esperando" evita además el adjetivo con género de "está listo/a".
     const nombreMedico = formatNombreMedico(medicoData?.nombre_completo ?? "", medicoData?.titulo);
     const articulo = articuloMedico(medicoData?.titulo);
+    // Sin nombre, frase neutra (como crear-sala): no se dice "tu médico" a ciegas.
     const sujeto = nombreMedico
       ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreMedico}`
-      : "Tu médico";
+      : "";
     pushAlPaciente(turno.paciente_id, {
       title: "🟢 Docto",
-      body: `${sujeto} ya te está esperando. Ingresá ahora a tu consulta.`,
+      body: sujeto ? `${sujeto} ya te está esperando. Ingresá ahora a tu consulta.` : "Ya te están esperando. Ingresá ahora a tu consulta.",
       url: `/turno/${turnoId}/espera`,
       tag: `inicio-${turnoId}`,
     }).catch(() => {});

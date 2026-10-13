@@ -137,6 +137,7 @@ export default async function TurnosPage({
           }}
           canalOrigen={canalOrigen}
           sinTerminoControlados={esPsicologia}
+          profesion={esPsicologia ? "psicologo" : "medico"}
         />
       </main>
     </div>

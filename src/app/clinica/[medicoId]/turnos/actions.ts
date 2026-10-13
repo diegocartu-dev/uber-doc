@@ -11,6 +11,7 @@ import { esInstitucional } from "@/lib/instancia";
 import { waitUntil } from "@vercel/functions";
 import { registrarAceptacionControlados } from "@/lib/legal/controlados";
 import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { nombreAtencion } from "@/lib/medicos/vocabulario";
 import { esMenorDeEdad } from "@/lib/pacientes/edad";
 import { fechaAR } from "@/lib/insights/fechas";
 
@@ -306,9 +307,11 @@ export async function entrarSalaEspera(turnoId: string) {
   // SIN skip por en_curso (decisión Diego 11/06): el médico debe enterarse de un
   // paciente esperando AUNQUE esté en otra llamada — antes se salteaba y el
   // siguiente paciente quedaba invisible hasta que el médico volviera al dashboard.
+  // Psicología (13/10/2026): "tu sesión"; para un médico, "tu consulta" como siempre.
+  const profesion = await profesionDeLaFicha(supabaseAdmin, { medicoId: turno.medico_id });
   pushAlMedico(turno.medico_id, {
     title: "🟢 Docto",
-    body: `${pacNombre?.nombre_completo ?? "Un paciente"} está esperando tu consulta`,
+    body: `${pacNombre?.nombre_completo ?? "Un paciente"} está esperando tu ${nombreAtencion(profesion)}`,
     url: "/dashboard",
     tag: `espera-${turnoId}`,
   }).catch(() => {});

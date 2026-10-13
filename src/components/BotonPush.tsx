@@ -1,17 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { esPsicologia } from "@/lib/medicos/vocabulario";
 import { pushSoportado, pushYaActivo, pushRechazado, esIOSSinPWA, suscribirPush } from "@/lib/push-client";
 
 type Props = {
   rol: "medico" | "paciente";
+  /** Profesión del profesional de la atención (13/10/2026): para psicología el
+   *  texto no dice "tu médico". Sin el dato, el texto de siempre. */
+  profesion?: string | null;
   variante?: "boton" | "popup";
   onResult?: (ok: boolean) => void;
 };
 
 type Estado = "cargando" | "push-listo" | "ios-sin-pwa" | "no-soportado" | "ya-activo" | "rechazado";
 
-export default function BotonPush({ rol, variante = "boton", onResult }: Props) {
+export default function BotonPush({ rol, variante = "boton", onResult, profesion = null }: Props) {
+  const psicologia = esPsicologia(profesion);
   const [estado, setEstado] = useState<Estado>("cargando");
   const [activando, setActivando] = useState(false);
   const [descartado, setDescartado] = useState(false);
@@ -80,7 +85,7 @@ export default function BotonPush({ rol, variante = "boton", onResult }: Props) 
     return (
       <div className="mt-4 rounded-xl bg-[#f8f9fa] p-4" style={{ border: "0.5px solid #e5e7eb" }}>
         <p className="text-sm font-medium text-gray-900">
-          ¿Querés que te avisemos cuando tu médico esté listo?
+          {psicologia ? "¿Querés que te avisemos cuando te estén esperando en la sala?" : "¿Querés que te avisemos cuando tu médico esté listo?"}
         </p>
         <div className="mt-3 flex gap-3">
           <button
@@ -113,7 +118,7 @@ export default function BotonPush({ rol, variante = "boton", onResult }: Props) 
       <p className="mt-2 text-center text-xs text-gray-400">
         {rol === "medico"
           ? "Solo te avisamos cuando tenés un paciente esperando y estás libre."
-          : "Te avisamos cuando tu médico esté listo para atenderte."}
+          : psicologia ? "Te avisamos cuando te estén esperando para atenderte." : "Te avisamos cuando tu médico esté listo para atenderte."}
       </p>
     </div>
   );
