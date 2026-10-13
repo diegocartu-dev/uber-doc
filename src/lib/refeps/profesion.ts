@@ -34,12 +34,16 @@ function normalizar(p: string | null | undefined): string {
     .replace(/\s+/g, " ");
 }
 
-// Psicología: el texto exacto con el que REFEPS la devuelve NO está verificado
-// (13/10/2026; se confirma con el primer psicólogo real). Lista CERRADA, como la
-// de médico: un texto con "psicolog" que no esté acá ("Técnico en psicología",
-// "Psicólogo social", un título de especialista) no es la matrícula de un
-// psicólogo, y la ficha va a revisión con el texto crudo a la vista. Si el texto
-// real de REFEPS es otro, se suma acá.
+// Psicología. VERIFICADO el 13/10/2026 contra el catálogo público de REFEPS
+// (SISA → Codificaciones públicas → REFEPS → "Profesiones matriculadas"): las
+// únicas dos profesiones de psicología son el código 5 "Psicólogo" y el código 6
+// "Licenciado en psicología", las dos con profesión de referencia "Psicólogo".
+// Todo lo demás que contiene "psic" es OTRA profesión y no entra: Psicopedagogo,
+// Licenciado en psicopedagogía, Psicomotricista, Técnico en psicomotricidad,
+// Técnico psicogerontología, Profesor en psicomotricidad, Técnico en
+// psicopedagogía. Lista CERRADA, como la de médico: un texto que no esté acá
+// manda la ficha a revisión con el texto crudo a la vista. Las variantes en
+// femenino y abreviadas quedan por si el Bus las devuelve así.
 const PROFESIONES_PSICOLOGIA = new Set([
   "psicologo",
   "psicologa",
