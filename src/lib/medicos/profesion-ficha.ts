@@ -12,6 +12,10 @@ export async function profesionDeLaFicha(
   filtro: { userId: string } | { medicoId: string }
 ): Promise<Profesion> {
   const q = admin.from("medicos").select("profesion");
-  const { data } = await ("userId" in filtro ? q.eq("user_id", filtro.userId) : q.eq("id", filtro.medicoId)).maybeSingle();
+  const { data, error } = await ("userId" in filtro ? q.eq("user_id", filtro.userId) : q.eq("id", filtro.medicoId)).maybeSingle();
+  // Ante un error se cae a "médico" (lo que son todas las fichas anteriores), pero
+  // queda escrito: un psicólogo tratado como médico por una lectura rota no se
+  // nota en ningún otro lado.
+  if (error) console.warn("[profesion-ficha] no se pudo leer la profesión, se asume médico:", error.message);
   return profesionDe((data as { profesion?: string | null } | null)?.profesion);
 }

@@ -694,10 +694,10 @@ export default function SalaConsultaPaciente({
                 </svg>
               </div>
               <h1 className="mt-6 text-2xl font-bold text-gray-900">
-                Consulta finalizada
+                {psicologia ? "Sesión finalizada" : "Consulta finalizada"}
               </h1>
               <p className="mt-2 text-gray-600">
-                Tu consulta con {nombreMedico} ha finalizado
+                Tu {psicologia ? "sesión" : "consulta"} con {nombreMedico} ha finalizado
               </p>
               <p className="mt-3 text-sm text-gray-500">
                 {psicologia
@@ -740,7 +740,7 @@ export default function SalaConsultaPaciente({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">{psicologia ? "Sesión finalizada" : "Consulta finalizada"}</h1>
             <p className="mt-2 text-gray-600">
               {psicologia
                 ? "En unos minutos vas a encontrar acá tu constancia de atención, si la emitieron."
@@ -780,7 +780,7 @@ export default function SalaConsultaPaciente({
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
               </svg>
             </div>
-            <h1 className="mt-6 text-2xl font-bold text-gray-900">Consulta finalizada</h1>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">{psicologia ? "Sesión finalizada" : "Consulta finalizada"}</h1>
             <p className="mt-2 text-gray-600">
               Cargando tus documentos…
             </p>
@@ -1154,7 +1154,7 @@ export default function SalaConsultaPaciente({
       {showSalirDialog && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-gray-900">¿Salir de la consulta?</h2>
+            <h2 className="text-lg font-bold text-gray-900">{psicologia ? "¿Salir de la sesión?" : "¿Salir de la consulta?"}</h2>
             <p className="mt-2 text-sm text-gray-600">
               Si salís ahora, vas a abandonar la videollamada. Esta acción no se puede deshacer.
             </p>

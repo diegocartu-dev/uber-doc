@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { nombreAtencion } from "@/lib/medicos/vocabulario";
 import { createClient } from "@/lib/supabase/server";
 import WorkspaceConsulta from "@/app/medico/consulta/[id]/workspace/WorkspaceConsulta";
 import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
@@ -81,13 +84,14 @@ export default async function VideoTurnoPage({
     // "te está esperando" evita además el adjetivo con género de "está listo/a".
     const nombreMedico = formatNombreMedico(medicoData?.nombre_completo ?? "", medicoData?.titulo);
     const articulo = articuloMedico(medicoData?.titulo);
-    // Sin nombre, frase neutra (como crear-sala): no se dice "tu médico" a ciegas.
+    // Sin nombre, frase neutra: no se dice "tu médico" a ciegas. "sesión" en psicología.
     const sujeto = nombreMedico
       ? `${articulo ? `${articulo[0].toUpperCase()}${articulo.slice(1)} ` : ""}${nombreMedico}`
       : "";
+    const atencionPush = nombreAtencion(await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id }));
     pushAlPaciente(turno.paciente_id, {
       title: "🟢 Docto",
-      body: sujeto ? `${sujeto} ya te está esperando. Ingresá ahora a tu consulta.` : "Ya te están esperando. Ingresá ahora a tu consulta.",
+      body: sujeto ? `${sujeto} ya te está esperando. Ingresá ahora a tu ${atencionPush}.` : `Ya te están esperando. Ingresá ahora a tu ${atencionPush}.`,
       url: `/turno/${turnoId}/espera`,
       tag: `inicio-${turnoId}`,
     }).catch(() => {});
@@ -159,10 +163,8 @@ export default async function VideoTurnoPage({
 
   // Psicología (13/10/2026): solo evolución y constancia. El texto de la
   // constancia lo arma el servidor; sin datos completos, `null`.
-  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
   const { textoConstanciaDelTurno } = await import("@/lib/documentos/constancia-datos");
-  const { createAdminClient: adminParaPsicologia } = await import("@/lib/supabase/admin");
-  const adminPsicologia = adminParaPsicologia();
+  const adminPsicologia = createAdminClient();
   const psicologia =
     (await profesionDeLaFicha(adminPsicologia, { medicoId: medicoData!.id })) === "psicologo"
       ? { textoConstancia: await textoConstanciaDelTurno(adminPsicologia, turnoId) }

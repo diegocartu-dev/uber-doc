@@ -36,7 +36,8 @@ const COLOR_PORQUE: Record<string, string> = { falla: "#E24B4A", sin_datos: "#D8
 // médico es el nombre tal cual estaba: la API no manda su título y acá nunca se
 // inventó un "Dr.". Un psicólogo lleva "Lic." y, como atiende solo con turno (que
 // no guarda especialidad), la columna Especialidad dice "Psicología".
-const nombreProfesional = (i: ConsultaItem) => (esPsicologia(i.profesion) ? formatNombreMedico(i.medico, "Lic.") : i.medico);
+const nombreProfesional = (i: ConsultaItem) =>
+  esPsicologia(i.profesion) && i.medico && i.medico !== "—" ? formatNombreMedico(i.medico, "Lic.") : i.medico;
 const especialidadDe = (i: ConsultaItem) => i.especialidad || (esPsicologia(i.profesion) ? ESPECIALIDAD_PSICOLOGIA : "");
 
 const porqueVisible = (i: ConsultaItem) =>

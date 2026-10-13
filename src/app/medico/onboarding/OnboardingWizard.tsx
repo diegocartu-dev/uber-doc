@@ -240,7 +240,7 @@ export default function OnboardingWizard(props: Props) {
           </p>
           <div className="mt-6 space-y-3 rounded-xl p-4" style={{ border: `1px solid ${C.azul}33` }}>
             {[
-              ["💳", "Conectá Mercado Pago", "para cobrar tus consultas"],
+              ["💳", "Conectá Mercado Pago", psicologia ? "para cobrar tus sesiones" : "para cobrar tus consultas"],
               ["📱", "Tu celular personal", "para avisarte cuando un paciente te espera"],
               ["📸", "Foto de perfil", "para que el paciente te reconozca"],
               ["✍️", "Firma", psicologia ? "para tus constancias de atención" : "para tus recetas"],
@@ -331,7 +331,7 @@ export default function OnboardingWizard(props: Props) {
     <Marco>
       <Progreso />
       <div className="flex-1">
-        {paso === 1 && <PasoMP {...props} hecho={hechos.mp} onSkip={() => { if (ORDEN.slice(1).some((k) => !hechos[k] && k !== "biometrico")) avanzar(1); else setPaso(CIERRE); }} onDone={() => { marcar("mp"); avanzar(1); }} />}
+        {paso === 1 && <PasoMP psicologia={psicologia} {...props} hecho={hechos.mp} onSkip={() => { if (ORDEN.slice(1).some((k) => !hechos[k] && k !== "biometrico")) avanzar(1); else setPaso(CIERRE); }} onDone={() => { marcar("mp"); avanzar(1); }} />}
         {paso === 2 && <PasoCelular inicial={props.celularInicial} hecho={hechos.celular} onDone={() => { marcar("celular"); avanzar(2); }} />}
         {paso === 3 && <PasoFoto fotoUrl={props.fotoUrl} onDone={() => { marcar("foto"); avanzar(3); }} />}
         {paso === 4 && <PasoFirma firmaUrl={props.firmaUrl} psicologia={psicologia} onDone={() => { marcar("firma"); avanzar(4); }} />}
@@ -343,7 +343,7 @@ export default function OnboardingWizard(props: Props) {
 }
 
 // ════════ PASO 1 — MERCADO PAGO ════════
-function PasoMP({ hecho, mpError, mpPais, onSkip, onDone }: { hecho: boolean; mpError: string | null; mpPais: string | null; onSkip: () => void; onDone: () => void }) {
+function PasoMP({ hecho, mpError, mpPais, onSkip, onDone, psicologia = false }: { hecho: boolean; mpError: string | null; mpPais: string | null; onSkip: () => void; onDone: () => void; psicologia?: boolean }) {
   const errores: Record<string, { titulo: string; texto: string }> = {
     credentials_mismatch: {
       titulo: "No pudimos conectar tu cuenta",
@@ -373,7 +373,7 @@ function PasoMP({ hecho, mpError, mpPais, onSkip, onDone }: { hecho: boolean; mp
     );
   }
   return (
-    <Centro icono="💳" titulo="Conectá Mercado Pago" sub="Es donde vas a recibir el pago de cada consulta. La plata va directo a tu cuenta — Docto nunca la toca.">
+    <Centro icono="💳" titulo="Conectá Mercado Pago" sub={`Es donde vas a recibir el pago de cada ${psicologia ? "sesión" : "consulta"}. La plata va directo a tu cuenta — Docto nunca la toca.`}>
       {err && (
         <div className="rounded-xl p-3 text-sm" style={{ backgroundColor: "#FEF2F2", color: C.rojo }}>
           <p className="font-semibold">{err.titulo}</p>

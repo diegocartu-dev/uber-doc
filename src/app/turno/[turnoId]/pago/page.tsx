@@ -57,6 +57,9 @@ export default async function PagoTurnoPage({
     .single();
   // Profesión de la ficha (13/10/2026) en query propia: el SELECT de arriba no se toca.
   const profesion = await profesionDeLaFicha(createAdminClient(), { medicoId: turno.medico_id });
+  const aMin = (h: string) => { const [hh, mm] = String(h).split(":").map(Number); return hh * 60 + mm; };
+  const minutosTurno = turno.hora_inicio && turno.hora_fin ? aMin(turno.hora_fin) - aMin(turno.hora_inicio) : NaN;
+  const duracionTurno = Number.isFinite(minutosTurno) && minutosTurno > 0 ? minutosTurno : null;
 
   return (
     <div className="min-h-full bg-[#f8f9fa]">
@@ -79,7 +82,10 @@ export default async function PagoTurnoPage({
             titulo: medico?.titulo ?? null,
             profesion,
             especialidad: medico?.especialidad ?? "",
-            duracion: medico?.duracion_consulta ?? 20,
+            // La duración del TURNO es la del lugar reservado (hora_fin − hora_inicio),
+            // igual que el ítem de Mercado Pago (crear-v2): antes decía la de la
+            // consulta inmediata del profesional, "20 min" para un turno de 30.
+            duracion: duracionTurno ?? medico?.duracion_consulta ?? 20,
           }}
           turno={{
             fecha: turno.fecha,
