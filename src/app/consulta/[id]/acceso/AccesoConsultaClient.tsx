@@ -47,6 +47,7 @@ const NOMBRE_DOC: Record<string, string> = {
   orden: "Orden médica",
   certificado: "Certificado",
   indicaciones: "Indicaciones",
+  constancia: "Constancia de atención",
   derivacion: "Derivación",
 };
 

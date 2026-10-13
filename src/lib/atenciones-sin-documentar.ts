@@ -18,7 +18,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * clínicos que el médico redacta y revisa. `documento_medico` (tracking de un
  * archivo adjunto enviado aparte) NO cuenta como documentación de la atención.
  */
-export const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden"] as const;
+export const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden", "constancia"] as const;
 
 /** Ventana hacia atrás. Más allá de esto la reparación deja de ser razonable. */
 const DIAS_VENTANA = 180;

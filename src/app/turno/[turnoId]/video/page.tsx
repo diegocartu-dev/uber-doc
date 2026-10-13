@@ -67,7 +67,7 @@ export default async function VideoTurnoPage({
           .from("documentos")
           .select("id, tipo, created_at")
           .eq("turno_id", turnoId)
-          .in("tipo", ["receta", "indicaciones", "certificado", "orden"])
+          .in("tipo", ["receta", "indicaciones", "certificado", "orden", "constancia"])
           .order("created_at", { ascending: true })
       ).data ?? []
     : [];
@@ -156,8 +156,20 @@ export default async function VideoTurnoPage({
     }
   }
 
+  // Psicología (13/10/2026): solo evolución y constancia. El texto de la
+  // constancia lo arma el servidor; sin datos completos, `null`.
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  const { textoConstanciaDelTurno } = await import("@/lib/documentos/constancia-datos");
+  const { createAdminClient: adminParaPsicologia } = await import("@/lib/supabase/admin");
+  const adminPsicologia = adminParaPsicologia();
+  const psicologia =
+    (await profesionDeLaFicha(adminPsicologia, { medicoId: medicoData!.id })) === "psicologo"
+      ? { textoConstancia: await textoConstanciaDelTurno(adminPsicologia, turnoId) }
+      : null;
+
   return (
     <WorkspaceConsulta
+      psicologia={psicologia}
       consultaId={turnoId}
       medicoId={medicoData!.id}
       tipo="turno"

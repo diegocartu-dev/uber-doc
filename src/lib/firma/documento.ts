@@ -88,7 +88,8 @@ type MetodoAtribucion =
  * firmarlas haría que /verificar diga "Documento verificado" sobre un nombre de
  * archivo que nadie revisó como documento firmado.
  */
-export const TIPOS_FIRMABLES = ["receta", "indicaciones", "certificado", "orden"] as const;
+// "constancia": la constancia de atención del psicólogo (13/10/2026).
+export const TIPOS_FIRMABLES = ["receta", "indicaciones", "certificado", "orden", "constancia"] as const;
 
 export function esTipoFirmable(tipo: string | null | undefined): boolean {
   return !!tipo && (TIPOS_FIRMABLES as readonly string[]).includes(tipo);
