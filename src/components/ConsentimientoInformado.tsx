@@ -55,6 +55,15 @@ export default function ConsentimientoInformado({ consultaId, turnoId, redirect,
         }),
       });
       if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.recargar) {
+          // El texto vigente no es el que está en pantalla (o no se pudo leer):
+          // se vuelve a pedir y el paciente lo lee antes de aceptar.
+          setErrorMsg("Actualizamos el texto. Leelo de nuevo antes de aceptar.");
+          setEnviando(false);
+          router.refresh();
+          return;
+        }
         setErrorMsg("No se pudo registrar el consentimiento. Intentá de nuevo.");
         setEnviando(false);
         return;

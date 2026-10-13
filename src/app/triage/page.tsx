@@ -673,6 +673,9 @@ function TriageContent() {
               >
                 Es una urgencia — llamar al 107
               </a>
+              <p className="-mt-1 text-center text-xs text-gray-500">
+                O comunicate con el servicio de emergencias de tu zona.
+              </p>
               <button
                 onClick={() => setMostrarConfirmacion(false)}
                 className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"

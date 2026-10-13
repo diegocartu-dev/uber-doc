@@ -15,7 +15,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
       )}
 
       <div className="my-6 rounded-lg bg-blue-50 p-4 text-sm font-medium text-gray-800">
-        IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un servicio de emergencias, urgencias ni atención en crisis. Ante una urgencia o emergencia, llamá al SAME (107) o {REMITIR_EMERGENCIAS}. Ante una crisis de salud mental, no esperes al turno: {REMITIR_EMERGENCIAS}.
+        IMPORTANTE: Docto es una plataforma de telemedicina electiva. No es un servicio de emergencias, urgencias ni atención en crisis. Ante una urgencia o emergencia, llamá al SAME (107), comunicate con el servicio de emergencias de tu zona o concurrí al centro de salud más cercano. Ante una crisis de salud mental, {REMITIR_EMERGENCIAS}.
       </div>
 
       <h2>1. Introducción y aceptación</h2>
@@ -37,7 +37,7 @@ export default function TerminosContent({ hideTitle = false }: { hideTitle?: boo
         <li>Cuadros que requieran atención presencial inmediata.</li>
         <li>Crisis de salud mental con riesgo para la integridad del paciente o terceros.</li>
       </ul>
-      <p>En cualquiera de los casos anteriores, llamá al número de emergencias de tu localidad (107 en AMBA) o {REMITIR_EMERGENCIAS}. Ante una crisis de salud mental o pensamientos de hacerte daño, no esperes al turno: {REMITIR_EMERGENCIAS}.</p>
+      <p>En cualquiera de los casos anteriores, el paciente deberá llamar al número de emergencias de su localidad (107 en AMBA) o comunicarse con el servicio de emergencias de su zona, llamar a una ambulancia o concurrir al hospital o guardia más cercano. Ante una crisis de salud mental o pensamientos de hacerse daño, el paciente puede además comunicarse con el servicio de emergencias de su zona o dirigirse a la guardia más cercana.</p>
       <h3>2.3 Alcance de las consultas</h3>
       <p>Las consultas realizadas a través de Docto son de carácter electivo y complementario a la atención presencial. El profesional determinará, según su criterio profesional, si la consulta puede resolverse de forma remota o si el paciente requiere atención presencial.</p>
       <p>Docto no garantiza diagnósticos, resultados de tratamientos ni la disponibilidad permanente de profesionales en ninguna especialidad.</p>

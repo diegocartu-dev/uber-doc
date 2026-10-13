@@ -1,11 +1,17 @@
-// Emergencias: lo que Docto dice en todos sus textos (consentimiento, términos,
-// pantallas). UNA sola frase, en un solo lugar.
+// Emergencias: el remate que llevan los textos de Docto (consentimiento,
+// términos, pantallas).
 //
 // Regla de Diego (13/10/2026): Docto no atiende emergencias en ninguna
 // especialidad. Los textos NUEVOS no publican números de teléfono (no sabemos
 // si están actualizados); los que ya estaban publicados (107 / 911) se quedan,
 // y TODO texto de emergencias remite además al servicio de emergencias de la
 // zona del paciente o a la guardia más cercana.
+//
+// Los textos nuevos en voseo usan REMITIR_EMERGENCIAS tal cual. Los que ya
+// tenían un número (triage, consentimiento médico) o van en tercera persona
+// (§2.2 de los términos del paciente) llevan su propia redacción, pero siempre
+// con "servicio de emergencias de tu/su zona": lo controla
+// tests/unit/emergencias-zona.test.ts.
 
 /** El remate que cierra cualquier frase de emergencias (sin números). */
 export const REMITIR_EMERGENCIAS =
