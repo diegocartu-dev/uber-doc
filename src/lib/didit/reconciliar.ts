@@ -10,6 +10,7 @@ import {
   motivoRevisionHumano,
   MOTIVO_DNI_NO_COINCIDE,
   MOTIVO_SIN_PROFESIONAL_EN_REFEPS,
+  refepsValida,
   type MatriculaDeclarada,
 } from "@/lib/medicos/matricula-refeps";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
@@ -127,8 +128,9 @@ function datosRefeps(refeps: ResultadoREFEPS, ficha: FichaCruce, ahoraIso: strin
   const estadoRegistro = ficha.estado_registro;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw: _raw, ...refepsSinRaw } = refeps;
-  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas, profesionDe(ficha.profesion));
-  const validado = !!refeps.encontrado && !!refeps.activo;
+  const profesion = profesionDe(ficha.profesion);
+  const { jurisdicciones } = derivarJurisdicciones(refeps.matriculas, profesion);
+  const validado = refepsValida(refeps, profesion);
   // La fecha de validación acompaña a refeps_validado: si no se escribe (un
   // aprobado al que REFEPS hoy devuelve inactivo), tampoco se renueva la fecha.
   const escribeValidado = validado || estadoRegistro !== "aprobado";

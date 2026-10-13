@@ -365,13 +365,25 @@ export async function completarRegistroMedico(formData: FormData) {
     }
   }
 
-  const slug = nombre_completo
+  const slugBase = nombre_completo
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
     .trim()
-    .replace(/\s+/g, "-") + "-" + tipo_matricula + numero_matricula;
+    .replace(/\s+/g, "-");
+  const slugMatricula = "-" + tipo_matricula + numero_matricula;
+  // Desde el 13/10 la misma matrícula puede existir en dos profesiones (los
+  // colegios numeran cada uno por su lado): con el mismo nombre, el slug chocaba
+  // y el registro decía "Esta matrícula ya está registrada". El desempate va en
+  // el medio, porque el slug tiene que seguir terminando en la matrícula
+  // (slugConMatricula lo corrige si REFEPS la cambia): "ana-perez-2-MP5555".
+  let slug = slugBase + slugMatricula;
+  for (let n = 2; n <= 9; n++) {
+    const { data: ocupado } = await supabaseAdmin.from("medicos").select("id").eq("slug", slug).maybeSingle();
+    if (!ocupado) break;
+    slug = `${slugBase}-${n}${slugMatricula}`;
+  }
 
   const ahora = new Date().toISOString();
   const nuevoMedico = {

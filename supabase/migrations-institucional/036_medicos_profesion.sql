@@ -84,9 +84,16 @@ BEGIN
     NEW.verificado_por := NULL;
   END IF;
 
-  -- 13/10/2026: REFEPS y la aprobación valen para una profesión. Si cambia,
-  -- REFEPS se vuelve a validar (con la matrícula de la profesión nueva) y,
-  -- si estaba aprobado, vuelve a revisión.
+  -- 13/10/2026: REFEPS, la matrícula y la aprobación valen para una profesión.
+  -- Con la identidad validada, la matrícula ya quedó congelada (candado de
+  -- arriba) y el cruce no vuelve a correr: cambiar la profesión dejaría a la
+  -- persona con la matrícula y las provincias de la otra. Se rechaza igual que
+  -- la matrícula. Antes de validar la identidad, REFEPS se vuelve a validar con
+  -- la profesión nueva y, si estaba aprobado, vuelve a revisión.
+  IF OLD.profesion IS DISTINCT FROM NEW.profesion AND OLD.identidad_validada = true THEN
+    RAISE EXCEPTION 'profesion_congelada: la profesión no se puede modificar una vez validada la identidad'
+      USING ERRCODE = 'check_violation';
+  END IF;
   IF OLD.profesion IS DISTINCT FROM NEW.profesion THEN
     NEW.refeps_validado := false;
     IF OLD.verificado = true OR NEW.estado_registro = 'aprobado' THEN

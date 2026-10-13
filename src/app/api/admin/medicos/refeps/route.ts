@@ -5,6 +5,7 @@ import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { validarMedicoREFEPS } from "@/lib/refeps/validar";
 import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 import { profesionDe } from "@/lib/refeps/profesion";
+import { refepsValida } from "@/lib/medicos/matricula-refeps";
 import { diagnosticoSinPisar } from "@/lib/refeps/persistir-diagnostico";
 
 // El Bus FHIR es lento y buscarPorDNI reintenta ante timeout (hasta ~51s en el peor caso).
@@ -78,10 +79,12 @@ export async function POST(req: NextRequest) {
   // encontrado && activo — MISMO criterio que el gate de aprobar (#246) y persistir.ts.
   // Con solo `encontrado`, una matrícula INACTIVA quedaba refeps_validado=true y el gate
   // de aprobar la dejaba pasar por el early-return (hallazgo Roberto, PR #250).
-  if (resultado.encontrado && resultado.activo) {
+  // Psicólogo (13/10/2026): además, una matrícula de psicología habilitada (refepsValida).
+  const profesion = profesionDe(medico.profesion);
+  if (refepsValida(resultado, profesion)) {
     // Alcance para el ruteo por jurisdicción (Regla A): provincias de matrículas habilitadas.
     // Solo se persiste si viene con contenido, para no pisar un set válido con vacío (fail-safe).
-    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesionDe(medico.profesion));
+    const { jurisdicciones } = derivarJurisdicciones(resultado.matriculas, profesion);
     // Guardar resultado exitoso (sin raw)
     const { error: updateError } = await admin
       .from("medicos")

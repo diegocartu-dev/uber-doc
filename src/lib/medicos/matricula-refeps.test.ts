@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   cruzarMatricula,
+  refepsValida,
   declaradaDesdeRefeps,
   esLaDeLaFicha,
   esMatriculaDeMedico,
@@ -252,11 +253,11 @@ test("psicólogo: su matrícula de psicología coincide o se adopta; la de médi
   assert.equal(cruzarMatricula(MP("5555", "Córdoba"), refeps, "medico").resultado, "revisar");
 });
 
-test("psicología: se reconocen las formas razonables; la psicología social y lo que no es psicología, no", () => {
+test("psicología: lista cerrada; la psicología social, los técnicos, los títulos de especialista y lo que no es psicología, no", () => {
   for (const p of ["Psicólogo", "Psicóloga", "PSICOLOGO/A", "Licenciada en Psicología", "Lic. en Psicologia"]) {
     assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "coincide", p);
   }
-  for (const p of ["Psicólogo Social", "Psicopedagogo", "Médico", ""]) {
+  for (const p of ["Psicólogo Social", "Psicopedagogo", "Técnico en Psicología", "Especialista en Psicología Clínica", "Médico", ""]) {
     assert.equal(cruzarMatricula(MP("5555", "Salta"), [psi("5555", "Salta", p)], "psicologo").resultado, "revisar", p);
   }
 });
@@ -272,4 +273,14 @@ test("psicólogo: sus jurisdicciones salen de sus matrículas de psicología (an
 test("el motivo de revisión nombra la profesión de la ficha", () => {
   assert.match(motivoRevisionHumano("sin_matricula_de_su_profesion", "Córdoba", "psicologo"), /de psicólogo\.$/);
   assert.match(motivoRevisionHumano("sin_matricula_de_su_profesion", "Córdoba"), /de médico\.$/);
+});
+
+test("REFEPS valida: al médico como siempre; al psicólogo, solo con una matrícula de psicología habilitada", () => {
+  const base = { encontrado: true, activo: true };
+  assert.equal(refepsValida({ ...base, matriculas: [] }), true);
+  assert.equal(refepsValida({ ...base, matriculas: [med("1", "CABA")] }, "psicologo"), false);
+  assert.equal(refepsValida({ ...base, matriculas: [psi("1", "Córdoba", "Psicólogo Social")] }, "psicologo"), false);
+  assert.equal(refepsValida({ ...base, matriculas: [psi("1", "Córdoba", "Psicóloga", false)] }, "psicologo"), false);
+  assert.equal(refepsValida({ ...base, matriculas: [psi("1", "Córdoba")] }, "psicologo"), true);
+  assert.equal(refepsValida({ encontrado: true, activo: false, matriculas: [psi("1", "Córdoba")] }, "psicologo"), false);
 });

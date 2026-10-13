@@ -146,6 +146,22 @@ export function esUtilizable(m: MatriculaDeRefeps, profesion: Profesion = "medic
 }
 
 /**
+ * ¿REFEPS valida a este profesional (`refeps_validado`)? Para un médico, como
+ * siempre: figura y está activo. Para un psicólogo, además, tiene que tener al
+ * menos una matrícula de psicología habilitada y con jurisdicción reconocible
+ * (13/10/2026): figurar en REFEPS con otra profesión no lo habilita a ejercer
+ * la psicología, y sin jurisdicción quedaría visible en todas las provincias.
+ */
+export function refepsValida(
+  resultado: { encontrado?: boolean | null; activo?: boolean | null; matriculas?: MatriculaDeRefeps[] | null },
+  profesion: Profesion = "medico"
+): boolean {
+  if (!resultado.encontrado || !resultado.activo) return false;
+  if (profesion === "medico") return true;
+  return (resultado.matriculas ?? []).some((m) => esUtilizable(m, profesion));
+}
+
+/**
  * Cruza la matrícula declarada con las que REFEPS tiene para el DNI verificado.
  * Solo cuentan las de `profesion` (la de la ficha).
  *
