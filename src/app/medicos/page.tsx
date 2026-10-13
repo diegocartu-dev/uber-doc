@@ -36,7 +36,7 @@ export default async function MedicosLanding() {
       color: "#D85A30",
       promesaColor: "#D85A30",
       title: "Consultorio Particular",
-      promesa: "Tus pacientes te eligen a vos, no a \u201Cun médico disponible\u201D",
+      promesa: "Tus pacientes te eligen a vos, no a \u201Cun profesional disponible\u201D",
       descripcion: "Tu link personal, tu perfil, tu agenda, tus honorarios.",
     },
     {
@@ -45,7 +45,7 @@ export default async function MedicosLanding() {
       promesaColor: "#1D9E75",
       title: "Consulta Inmediata",
       promesa: "Te ponés disponible y atendés al instante",
-      descripcion: "Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran.",
+      descripcion: "Activás disponibilidad cuando tenés tiempo libre. Los pacientes te encuentran. Solo para médicos: en psicología se atiende con turno.",
     },
     {
       icon: Calendar,
@@ -259,9 +259,10 @@ export default async function MedicosLanding() {
             </div>
             <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--color-text-secondary)" }}>
               <p style={{ margin: "0 0 14px" }}>
-                Armá tu agenda, consultá tus turnos del día o dictá una receta
-                en voz alta. Nova la confecciona y, cuando confirmás, queda
-                firmada electrónicamente.
+                Armá tu agenda, consultá tus turnos del día o, si sos médico,
+                dictá una receta en voz alta: Nova la confecciona y, cuando
+                confirmás, queda firmada electrónicamente. En psicología, la
+                constancia de atención se emite al cerrar la sesión.
               </p>
               <p style={{ margin: "10px 0 0", fontWeight: 600, color: "var(--color-text-primary)", fontSize: 14 }}>
                 Vos solo atendés.
