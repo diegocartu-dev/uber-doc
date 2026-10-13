@@ -6,7 +6,9 @@ Convenciones:
 - **Hoy** = lo que dice el archivo en `main` al 13/10 (números de línea de esa versión).
 - **Propuesta** = texto completo listo para pegar cuando es corto; para los T&C, redacción sugerida para que el abogado la revise, no para publicar tal cual.
 - **Decide** = Diego (copy y producto) · Abogado (alcance legal, marco normativo) · Diego + abogado.
-- **[número verificado]** = marcador. Ningún número de línea de salud mental se afirma en este doc ni se publica sin verificarlo antes contra la fuente oficial (ya anotado en "Lo que no está verificado" del sprint).
+- **[número verificado]** = marcador que quedó SIN uso: Diego decidió el 13/10 que Docto no atiende emergencias en ninguna especialidad y **no publica números de teléfono de emergencia** (no sabemos si están actualizados). Todo texto remite "al servicio de emergencias de tu zona o a la guardia más cercana" (`src/lib/legal/lineas-emergencia.ts`). Donde abajo dice "[número verificado]" o "SAME (107)" / "911", el texto publicado dice eso.
+
+**Estado (13/10, tarde):** Diego aprobó todo ("ok lo legal"). Implementado en la rama `feat/psicologos-f5-legal`: §1 consentimiento de psicología (`psi-v1`, versión fijada por el servidor), §2 T&C del paciente, §3 T&C del profesional por el camino A, §4 pie y §5 landing. Hallazgo al implementar §1: la página y la API del consentimiento de TURNO comparaban `turnos.paciente_id` (que es `pacientes.id`) contra el `user_id`, así que ningún paciente de turno llegaba a firmar (en producción no había ni un consentimiento con `turno_id`, con 25 turnos pagos reales); corregido en el mismo PR: desde ahora el paciente de un turno pago ve y firma el consentimiento, como estaba diseñado.
 
 ---
 
