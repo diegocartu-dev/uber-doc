@@ -1,5 +1,55 @@
 # Integración Farmalink — Preparación y plan
 
+> ## Estado al 13/10/2026 — ARRANCAR ACÁ
+>
+> **Por qué es urgente:** la Res. MS 2214/2025, art. 6, exige la CUIR en toda
+> receta, y la CUIR la da el repositorio donde se registra. Para pacientes
+> particulares es el Repositorio Nacional de Recetas sin Cobertura (Res. MS
+> 5744/2024), que opera Farmalink; según Farmalink, desde el 01/08/2025 las
+> farmacias validan ahí esas recetas. Las recetas de Docto no llevan CUIR todavía
+> (ver `COMPLIANCE_MAP_DOCTO.md` §2.3). Diego, 13/10: urgente, fuera del
+> congelamiento.
+>
+> **Hecho el 13/10:**
+> - Token de prueba verificado otra vez (200, 12 h).
+> - Cliente de la API en `src/lib/farmalink/cliente.ts` (token en headers y en
+>   caché, `altaReceta` / `consultaReceta` / `bajaReceta`, errores como dato), con
+>   tests. Todavía no está conectado a la emisión de recetas.
+> - Formato de `altaReceta` descubierto contra el sandbox (el validador devuelve
+>   el primer campo que falta): `infoCabeceraRq` exige `idOrganizacion`,
+>   `tipoOrganizacion` e `ipOrigen`; `puntoEmisor.id` es un entero;
+>   `recElectronica` exige `fechaVigenciaDesde`, `fechaVigenciaHasta` y
+>   `tipoTratamiento`; `afiliado` es `oneOf` (`numeroDocumento` o
+>   `numeroPasaporte`) y exige `apellido`, `datosOfuscado`, `fechaNacimiento`,
+>   `nombre`, `sexo`, `tipoDocumento`, y `credencial` con `codEntidad`, `pan` y
+>   `plan`.
+> - **Bloqueo:** con ese formato completo, el alta responde `5009 – ERROR DE
+>   SEGURIDAD`: faltan los valores de organización y punto emisor que asigna
+>   Farmalink. Se los pedimos por mail el 13/10 (mismo hilo, desde soporte@),
+>   junto con la confirmación de que la respuesta trae la CUIR y la rehabilitación
+>   del catálogo (el usuario no logra iniciar sesión).
+>
+> **Lo que falta del lado de Docto, conteste lo que conteste Farmalink:**
+> - La receta se guarda como texto (`documentos.contenido`); la tabla `recetas`
+>   nunca se escribió. La lista estructurada de medicamentos vive solo en
+>   `doc_borrador` y se borra al cerrar la consulta: hay que guardarla.
+> - Del profesional faltan como dato sexo y fecha de nacimiento (Didit los trae;
+>   no se guardan) y nombre y apellido separados (están en `refeps_data`).
+> - No hay CIE-10 (el diagnóstico es texto libre) ni códigos de producto o droga
+>   en el vademécum (`src/data/vademecum.json`).
+> - Dónde va la CUIR: columna nueva en `documentos`, escrita solo por el
+>   servidor, y en el PDF (`src/lib/pdf/receta.ts`, pie de 125 pt; las huellas
+>   del golden test cambian). Si llega después del sello, queda fuera del
+>   contenido firmado: decidirlo a conciencia.
+> - Enganche: después del sellado (`firmarDocumentoPorSesion` /
+>   `firmarDocumentoPorRescate` en `src/lib/firma/documento.ts`), con service
+>   role; cubre los cuatro caminos que crean recetas. Regla de oro de abajo:
+>   si Farmalink falla, la receta se entrega igual.
+>
+> Lo que sigue de este documento es la preparación de mayo-junio. Quedó
+> desactualizado en tres cosas: la tabla `recetas` no está en uso, no existe un
+> QR reservado en el PDF y no hay CIE-10 ni códigos CNPM.
+
 > **Propósito:** dejar todo mapeado para ser eficientes cuando el equipo de
 > seguridad de Farmalink nos contacte con los accesos a TEST. Incluye lo que
 > tenemos de nuestro lado **y** lo que probablemente nos pidan.

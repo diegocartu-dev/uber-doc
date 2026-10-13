@@ -94,6 +94,8 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 ## 5. Decisiones vigentes — índice
 
+- **13/10 — La CUIR queda fuera del congelamiento.** Diego: "esto es urgente". Se integra Farmalink (repositorio de recetas de pacientes particulares) para que cada receta lleve su CUIR. Estado y plan: `docs/farmalink-integracion.md` (arriba de todo).
+
 - **13/10 — Congelamiento hasta el 22/10 inclusive.** Diego: "no quiero más cambios ni hallazgos que decidir"; le propuse no sumar nada nuevo hasta una semana después del relanzamiento del 15/10, salvo lo que haga perder consultas, y respondió "me parece lo mejor". Los hallazgos van a §4 sin traérselos. Regla en `CLAUDE.md` (Protocolo de trabajo).
 
 - **13/10 — Psicólogos, textos y constancia (Diego: "aprueba los textos y dejar la constancia, ok lo legal").** Los textos de F1-F4 quedan como están (listados en `docs/sprints/2026-10-13-psicologos.md`); la constancia queda como está: tildada por defecto, con su texto aprobado (incluida la línea "Firmado electrónicamente en Docto."), y sin registro de que el paciente entró no se emite; lo legal propuesto en `docs/sprints/2026-10-13-psicologos-textos-legales.md` se implementa (consentimiento `psi-v1`, T&C del paciente neutros, y pie y landing condicionados al flag `registro_psicologos`, como decía el doc; los T&C del profesional esperan 1.15). Quedan sin decidir, no bloquean: si el paciente puede leer el borrador y la evolución de su propio turno por la API, y cómo se corrige una constancia con el nombre o el DNI mal.
