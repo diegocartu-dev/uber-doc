@@ -14,11 +14,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import { presenciaDelPaciente } from "@/lib/video/presencia";
-import { textoConstanciaDelTurno } from "./constancia-datos";
+import { armarTextoConstanciaDelTurno } from "./constancia-datos";
 
 export type MotivoSinConstancia =
   | "no_es_psicologia"
   | "turno_ajeno"
+  | "turno_no_cerrado"
+  | "reembolsado"
+  | "no_habilitado"
   | "ya_emitida"
   | "paciente_no_entro"
   | "sin_datos_de_presencia"
@@ -38,6 +41,10 @@ export function textoMotivoSinConstancia(m: MotivoSinConstancia): string {
       return "La constancia no se emitió: falta tu domicilio profesional o tu matrícula, o el DNI del paciente.";
     case "ya_emitida":
       return "La constancia ya se había emitido.";
+    case "reembolsado":
+      return "La constancia no se emitió: la sesión se reembolsó.";
+    case "no_habilitado":
+      return "La constancia no se emitió: tu cuenta no está habilitada para emitir documentación.";
     default:
       return "La constancia no se pudo emitir. Probá de nuevo en un momento.";
   }
@@ -53,11 +60,24 @@ export async function emitirConstanciaDelTurno(
 
   const { data: turno, error: errTurno } = await admin
     .from("turnos")
-    .select("medico_id, paciente_id, iniciado_en")
+    .select("medico_id, paciente_id, iniciado_en, estado, reintegro_estado")
     .eq("id", args.turnoId)
     .maybeSingle();
   if (errTurno) return { ok: false, motivo: "error" };
   if (!turno || turno.medico_id !== args.medicoId || !turno.paciente_id) return { ok: false, motivo: "turno_ajeno" };
+  // Mismas guardas que "completar documentación": la sesión terminó, no se
+  // devolvió la plata, y el profesional está habilitado (aprobado y con REFEPS).
+  if (turno.estado !== "completado") return { ok: false, motivo: "turno_no_cerrado" };
+  if (turno.reintegro_estado === "reembolsado") return { ok: false, motivo: "reembolsado" };
+  const { data: habil, error: errHabil } = await admin
+    .from("medicos")
+    .select("estado_registro, refeps_validado, es_cuenta_test")
+    .eq("id", args.medicoId)
+    .maybeSingle();
+  if (errHabil) return { ok: false, motivo: "error" };
+  if (!habil || habil.estado_registro !== "aprobado" || !(habil.refeps_validado === true || habil.es_cuenta_test === true)) {
+    return { ok: false, motivo: "no_habilitado" };
+  }
 
   const { data: previa, error: errPrevia } = await admin
     .from("documentos")
@@ -72,8 +92,9 @@ export async function emitirConstanciaDelTurno(
   if (presencia === "no_entro") return { ok: false, motivo: "paciente_no_entro" };
   if (presencia === "sin_datos") return { ok: false, motivo: "sin_datos_de_presencia" };
 
-  const texto = await textoConstanciaDelTurno(admin, args.turnoId);
-  if (!texto) return { ok: false, motivo: "faltan_datos" };
+  const armado = await armarTextoConstanciaDelTurno(admin, args.turnoId);
+  if (!armado.ok) return { ok: false, motivo: armado.motivo === "error" ? "error" : "faltan_datos" };
+  const texto = armado.texto;
 
   const ahora = new Date().toISOString();
   const { data: fila, error } = await admin

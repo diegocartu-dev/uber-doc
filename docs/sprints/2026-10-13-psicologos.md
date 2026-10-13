@@ -119,6 +119,14 @@ Revisión independiente de F3 (13/10): con el flag apagado no cambia nada para l
 - **Rectificación de identidad:** no se ofrece para una constancia (el nombre y el DNI van dentro del texto firmado; hay que emitir una nueva).
 - El texto normaliza nombres, DNI y tipo de matrícula; una MP sin provincia no se emite.
 
+Segunda revisión (13/10), corregido:
+- **La constancia la guarda solo el servidor** (`20261013_documentos_constancia_solo_servidor.sql` + espejo `044`, aplicada y probada en las dos bases): la sesión del profesional ya no puede insertar una constancia directo (se salteaba el control de presencia); los médicos siguen guardando sus documentos igual.
+- La emisión exige además: sesión terminada, no reembolsada y profesional habilitado (aprobado y con REFEPS), las mismas guardas que "completar documentación".
+- Si la constancia no sale (el paciente no entró, no hay registro, faltan datos, error), el profesional recibe un aviso en su bandeja; si es un error, también el equipo.
+- Una sesión cerrada sola, con el paciente adentro y sin constancia, queda en "Documentación pendiente" para emitirla.
+- Un error de la base ya no se informa como "faltan datos".
+- La rectificación de una constancia queda como decisión pendiente (1.14 de `DECISIONES.md`): el nombre y el DNI van en el texto firmado y hay una sola constancia por turno.
+
 **Para que decida Diego antes de abrir:** los cinco puntos de la decisión 1.14 de `DECISIONES.md` (constancia tildada por defecto, qué hacer sin registro de presencia, sacar "Firmado electrónicamente en Docto.", lectura del borrador por el paciente) y estos textos nuevos: la casilla "Emitir la constancia de atención para el paciente"; "La constancia de atención no se puede emitir: falta tu domicilio profesional o tu matrícula, o el DNI del paciente."; los motivos de `textoMotivoSinConstancia`; el aviso "Tu sesión se cerró sola…"; el push "Ya podés ver la constancia de atención de tu sesión."; "Constancia de atención" en las listas. La matrícula nacional se escribe "MN 12345 — Nacional".
 
 Queda para F4: `/verificar` dice "Verificando receta" y habla de "acto médico".

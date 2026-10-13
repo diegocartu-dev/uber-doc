@@ -125,17 +125,28 @@ export async function atencionesSinDocumentacion(medicoId: string): Promise<Aten
 
   // Psicología (13/10/2026): la sesión queda documentada con su evolución. La
   // constancia es opcional (el profesional puede no emitirla), así que una
-  // sesión sin constancia pero con evolución no está "pendiente". Query propia.
+  // sesión sin constancia pero con evolución no está "pendiente". Salvo una: la
+  // que se cerró sola (el rescate guardó solo la evolución) con el paciente
+  // adentro de la sala. Esa sí queda acá, porque es la puerta para emitirle la
+  // constancia (el aviso del rescate lo dice). Query propia.
   if (pendientesTurno.length > 0) {
     const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
     if ((await profesionDeLaFicha(admin, { medicoId })) === "psicologo") {
       const { data: conEvolucion } = await admin
         .from("turnos")
-        .select("id, evolucion")
+        .select("id, evolucion, rescate_borrador")
         .in("id", pendientesTurno.map((t) => t.id));
-      const documentados = new Set(
-        (conEvolucion ?? []).filter((t) => typeof t.evolucion === "string" && t.evolucion.trim()).map((t) => t.id as string)
-      );
+      const { presenciaDelPaciente } = await import("@/lib/video/presencia");
+      const documentados = new Set<string>();
+      for (const t of conEvolucion ?? []) {
+        if (!(typeof t.evolucion === "string" && t.evolucion.trim())) continue;
+        const cerradaSola = (t.rescate_borrador as { resultado?: string } | null)?.resultado === "solo_evolucion";
+        if (cerradaSola) {
+          const turno = pendientesTurno.find((p) => p.id === t.id);
+          if ((await presenciaDelPaciente("turno", t.id as string, turno?.iniciado_en ?? null)) === "entro") continue;
+        }
+        documentados.add(t.id as string);
+      }
       pendientesTurno = pendientesTurno.filter((t) => !documentados.has(t.id));
     }
   }
