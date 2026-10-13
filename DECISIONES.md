@@ -92,7 +92,7 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 ## 5. Decisiones vigentes — índice
 
-- **13/10 — La sala del paciente espera a que exista la sala** (#560). Un pago real deja la consulta lista para entrar antes de que el profesional abra la sala; la pantalla del paciente la espera y se conecta sola, con un aviso mientras tanto. Textos aprobados por Diego el 13/10 tal como están. A la paciente del caso se le escribió el mismo día desde soporte@ (disculpas, resuelto, la esperamos). Detalle: `docs/sprints/2026-10-13-sala-paciente-sin-sala.md`.
+- **13/10 — La sala del paciente espera a que exista la sala** (#560). Un pago real deja la consulta lista para entrar antes de que el profesional abra la sala; la pantalla del paciente la espera y se conecta sola, con un aviso mientras tanto. Textos aprobados por Diego el 13/10 tal como están. A la paciente y a la profesional del caso se les escribió el mismo día desde soporte@ (disculpas, resuelto; a la profesional, además, gracias por esperar). Detalle: `docs/sprints/2026-10-13-sala-paciente-sin-sala.md`.
 
 Las reglas operativas están en `CLAUDE.md`; acá, la fecha y dónde está el porqué.
 

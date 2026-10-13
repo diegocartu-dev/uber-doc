@@ -22,3 +22,4 @@ Desde el 06/10 el pago es instantáneo (solo cuenta de Mercado Pago + `binary_mo
 ## Cierre (13/10, Diego)
 - Los dos textos quedan como están.
 - A la paciente se le escribió el mismo día desde soporte@, firmado por Valentina (queda en la Bandeja): disculpas, la devolución de los dos pagos, que lo que le impidió entrar ya está resuelto y que la esperamos cuando necesite una consulta médica. El texto pasó por tres lentes de revisión antes de salir (tono, verdad, claridad): se evitó "tu conexión", que sonaba a que la falla era de su internet.
+- A la profesional también se le escribió el mismo día desde soporte@ (Valentina): que no fue culpa suya ni de la paciente, disculpas por el tiempo perdido, la falla ya corregida, y gracias por esperar y volver a aceptarla. Sin mencionar plata (no se compensa de oficio). Mismas tres lentes de revisión.
