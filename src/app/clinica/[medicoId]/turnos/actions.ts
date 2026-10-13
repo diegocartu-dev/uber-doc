@@ -178,7 +178,12 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
   // instantáneo de la simulación. Si el hold vence, el turno vuelve a disponible.
   const reservadoHasta = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-  const { error } = await supabase
+  // Con SERVICE ROLE y después de todos los controles de arriba (13/10/2026): la
+  // sesión del paciente ya no escribe `turnos`. Con su sesión podía, por un
+  // UPDATE directo desde el navegador, pasar un turno libre a "confirmado" y
+  // "aprobado" sin pagar (probado en una transacción que se deshizo). La
+  // condición de estado sigue en el UPDATE: dos pacientes a la vez, uno gana.
+  const { data: reservado, error } = await createAdminClient()
     .from("turnos")
     .update({
       estado: "reservado_pendiente",
@@ -189,9 +194,11 @@ export async function reservarTurno(turnoId: string, recordatorios: { cuando: st
       // canal pedido, que permitía "mover" un turno privado a la clínica.
     })
     .eq("id", turnoId)
-    .eq("estado", "disponible");
+    .eq("estado", "disponible")
+    .select("id");
 
   if (error) return { error: `Error al reservar: ${error.message}` };
+  if (!reservado || reservado.length === 0) return { error: "Este turno ya no está disponible." };
   // El tilde del término de controlados, con este turno (antes de pagar). Si no
   // vino (pestaña con la pantalla anterior), la reserva sigue igual.
   if (aceptaControlados) {
@@ -238,13 +245,17 @@ export async function confirmarPagoTurno(turnoId: string) {
     }
   }
 
-  const { error } = await supabase
+  // Con SERVICE ROLE (13/10/2026, ver reservarTurno), y solo el turno de ESTE paciente.
+  const { data: confirmado, error } = await createAdminClient()
     .from("turnos")
     .update({ estado: "confirmado", reservado_hasta: null })
     .eq("id", turnoId)
-    .eq("estado", "reservado_pendiente");
+    .eq("paciente_id", paciente.id)
+    .eq("estado", "reservado_pendiente")
+    .select("id");
 
   if (error) return { error: `Error al confirmar: ${error.message}` };
+  if (!confirmado || confirmado.length === 0) return { error: "Este turno ya no está en estado pendiente." };
 
   enviarEmailTurnoConfirmado(turnoId).catch(console.error);
 
