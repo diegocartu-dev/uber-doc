@@ -121,7 +121,24 @@ export async function atencionesSinDocumentacion(medicoId: string): Promise<Aten
   const conDocsTurno = new Set((docsTurnoRes.data ?? []).map((d) => d.turno_id).filter(Boolean) as string[]);
 
   const pendientesConsulta = consultas.filter((c) => !conDocsConsulta.has(c.id));
-  const pendientesTurno = turnos.filter((t) => !conDocsTurno.has(t.id));
+  let pendientesTurno = turnos.filter((t) => !conDocsTurno.has(t.id));
+
+  // Psicología (13/10/2026): la sesión queda documentada con su evolución. La
+  // constancia es opcional (el profesional puede no emitirla), así que una
+  // sesión sin constancia pero con evolución no está "pendiente". Query propia.
+  if (pendientesTurno.length > 0) {
+    const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+    if ((await profesionDeLaFicha(admin, { medicoId })) === "psicologo") {
+      const { data: conEvolucion } = await admin
+        .from("turnos")
+        .select("id, evolucion")
+        .in("id", pendientesTurno.map((t) => t.id));
+      const documentados = new Set(
+        (conEvolucion ?? []).filter((t) => typeof t.evolucion === "string" && t.evolucion.trim()).map((t) => t.id as string)
+      );
+      pendientesTurno = pendientesTurno.filter((t) => !documentados.has(t.id));
+    }
+  }
 
   if (pendientesConsulta.length === 0 && pendientesTurno.length === 0) return [];
 

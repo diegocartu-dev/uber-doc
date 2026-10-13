@@ -30,6 +30,8 @@ export async function textoConstanciaDelTurno(admin: SupabaseClient, turnoId: st
   if (!paciente?.nombre_completo || !paciente.dni || !medico.nombre_completo || !medico.tipo_matricula || !medico.numero_matricula || !domicilio) {
     return null;
   }
+  // Una matrícula provincial sin su provincia no dice dónde puede ejercer.
+  if (medico.tipo_matricula.toUpperCase() === "MP" && !(medico.provincia_matricula ?? "").trim()) return null;
   return textoConstancia({
     pacienteNombre: paciente.nombre_completo,
     pacienteDni: paciente.dni,

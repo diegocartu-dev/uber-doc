@@ -233,7 +233,7 @@ export default async function DocumentosPage() {
                             {(() => { const Icon = tipoIconMap[doc.tipo] ?? FileText; return <Icon size={16} strokeWidth={1.75} style={{ color: "var(--color-text-secondary)" }} />; })()}
                             <div>
                               <p className="text-sm font-medium text-gray-900">
-                                {tipoLabel[doc.tipo] ?? doc.tipo} — {doc.diagnostico}
+                                {tipoLabel[doc.tipo] ?? doc.tipo}{doc.diagnostico ? ` — ${doc.diagnostico}` : ""}
                               </p>
                               <p className="mt-0.5 text-xs text-gray-500">
                                 {formatNombreMedico(doc.medico_nombre, doc.medico_titulo)}

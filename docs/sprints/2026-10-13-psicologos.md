@@ -110,7 +110,18 @@ La revisión encontró además dos problemas que ya existían y se arreglaron ap
 - Si el profesional no tocó "Finalizar" y la atención se cerró sola, el rescate guarda la evolución pero no emite la constancia: se emite desde "completar documentación".
 - Etiqueta "Constancia de atención" en las pantallas del paciente y del profesional, y en el mail de documentos.
 
-**Para que decida Diego antes de abrir:** que la constancia salga tildada por defecto (propuesta: sí, el paciente suele necesitarla) y el texto de la casilla. La matrícula nacional se escribe "MN 12345 — Nacional".
+Revisión independiente de F3 (13/10): con el flag apagado no cambia nada para los médicos (los PDF existentes salen idénticos byte a byte). Corregido en el mismo PR, antes de abrir:
+- **La constancia dice que el paciente asistió:** ahora la emite el servidor (`lib/documentos/emitir-constancia.ts`, ruta `/api/turno/[turnoId]/constancia`) y solo si la sala registró que el paciente entró (`video_presencia`). Si no entró, no sale. Si no hay registro, por ahora tampoco (decisión 1.14 en `DECISIONES.md`).
+- **Red en la base** (`20261013_documentos_segun_profesion.sql` + espejo `043`, aplicada y probada en las dos bases): un psicólogo solo puede guardar constancias, un médico nunca, y una sola constancia por turno. Si un día la lectura de la profesión fallara, la base frena igual.
+- **Cierre automático:** con un psicólogo guarda la evolución y deja un aviso propio ("la constancia de atención no se emite sola: emitila desde Documentación pendiente"); no avisa al equipo y el repaso nocturno no lo repite.
+- **Documentación pendiente:** una sesión de psicología con evolución ya no figura pendiente (la constancia es opcional).
+- **Completar documentación:** guarda la evolución aunque no se emita la constancia, y dice por qué no salió.
+- **Rectificación de identidad:** no se ofrece para una constancia (el nombre y el DNI van dentro del texto firmado; hay que emitir una nueva).
+- El texto normaliza nombres, DNI y tipo de matrícula; una MP sin provincia no se emite.
+
+**Para que decida Diego antes de abrir:** los cinco puntos de la decisión 1.14 de `DECISIONES.md` (constancia tildada por defecto, qué hacer sin registro de presencia, sacar "Firmado electrónicamente en Docto.", lectura del borrador por el paciente) y estos textos nuevos: la casilla "Emitir la constancia de atención para el paciente"; "La constancia de atención no se puede emitir: falta tu domicilio profesional o tu matrícula, o el DNI del paciente."; los motivos de `textoMotivoSinConstancia`; el aviso "Tu sesión se cerró sola…"; el push "Ya podés ver la constancia de atención de tu sesión."; "Constancia de atención" en las listas. La matrícula nacional se escribe "MN 12345 — Nacional".
+
+Queda para F4: `/verificar` dice "Verificando receta" y habla de "acto médico".
 
 ### F4 — Textos y avisos
 - "Médico" → "profesional" en todo el recorrido del turno (pantallas, mails, push) y en el panel; consentimiento informado con las líneas de salud mental (números verificados antes de publicar); mail de bienvenida sin consulta inmediata.

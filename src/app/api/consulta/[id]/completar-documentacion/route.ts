@@ -154,6 +154,62 @@ export async function POST(
       ? body.dias_reposo
       : null;
 
+  // ── Psicología (13/10/2026): solo evolución y constancia ────────────────
+  // La constancia la emite `emitirConstanciaDelTurno` (el mismo camino que el
+  // cierre normal: controla que el paciente haya entrado a la sesión). La
+  // evolución se guarda aunque no haya constancia: destildarla es una opción.
+  // Nunca receta, indicaciones, certificado ni orden, ni el relleno.
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  if ((await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo") {
+    const avisosPsico: string[] = [];
+    let evolucionGuardada = false;
+    if (evolucion && !(registro.evolucion ?? "").trim()) {
+      const { error: errEvo } = await admin
+        .from(tabla)
+        .update({ evolucion, evolucion_validada_at: new Date().toISOString(), evolucion_editada: body.evolucion_editada === true })
+        .eq("id", id);
+      evolucionGuardada = !errEvo;
+      if (errEvo) avisosPsico.push("No se pudo guardar la evolución. Probá de nuevo.");
+    }
+    const emitidosPsico: string[] = [];
+    let firmadosPsico = 0;
+    if (body.constancia === true && canal === "turno") {
+      const { emitirConstanciaDelTurno, textoMotivoSinConstancia } = await import("@/lib/documentos/emitir-constancia");
+      const r = await emitirConstanciaDelTurno(admin, { turnoId: id, medicoId: medico.id, postCierre: true });
+      if (r.ok) {
+        emitidosPsico.push("constancia");
+        const ipP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "no-informada";
+        const uaP = req.headers.get("user-agent") || "no-informado";
+        try {
+          if (!(await tieneClaves(medico.id))) await provisionarClaves(medico.id);
+          const f = await firmarDocumentoPorSesion(r.documentoId, medico.id, { userId: user.id, ip: ipP, userAgent: uaP });
+          if (f.ok) firmadosPsico++;
+          else console.error(`[completar-documentacion] constancia sin firmar: ${f.error}`);
+        } catch (err) {
+          console.error("[completar-documentacion] fallo de firma:", err instanceof Error ? err.message : err);
+        }
+        if (registro.paciente_id) {
+          pushAlPaciente(registro.paciente_id, {
+            title: "📄 Docto",
+            body: "Ya podés ver la constancia de atención de tu sesión.",
+            url: "/mis-consultas",
+            tag: `docs-${id}`,
+          }).catch(() => {});
+          enviarEmailDocumentacionDisponible({ pacienteId: registro.paciente_id, medicoId: medico.id, tipos: ["constancia"] }).catch(() => {});
+        }
+      } else {
+        avisosPsico.push(textoMotivoSinConstancia(r.motivo));
+      }
+    }
+    if (emitidosPsico.length === 0 && !evolucionGuardada) {
+      return NextResponse.json(
+        { ok: false, error: avisosPsico[0] ?? "No hay documentación nueva para emitir.", avisos: avisosPsico },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ ok: true, emitidos: emitidosPsico, firmados: firmadosPsico, omitidos: [], avisos: avisosPsico });
+  }
+
   // Certificado de reposo sin días: dato jurídico obligatorio (art. 210 LCT).
   if ((certificado || diasReposo) && !diasReposo) {
     return NextResponse.json(
@@ -219,19 +275,8 @@ export async function POST(
   const omitidos: string[] = [];
   const candidatos: DocNuevo[] = [];
 
-  // Psicología (13/10/2026): solo la constancia de atención, con el texto que
-  // arma el servidor. Nunca receta, indicaciones, certificado ni orden, y sin
-  // el relleno de "indicaciones" del cierre normal.
-  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
-  const esPsicologia = (await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo";
-  if (esPsicologia) {
-    if (body.constancia === true && canal === "turno") {
-      const { textoConstanciaDelTurno } = await import("@/lib/documentos/constancia-datos");
-      const texto = await textoConstanciaDelTurno(admin, id);
-      if (texto) candidatos.push({ tipo: "constancia", contenido: texto });
-      else avisos.push("La constancia no se emitió: falta tu domicilio profesional o tu matrícula, o el DNI del paciente.");
-    }
-  } else if (receta) {
+  // (La psicología ya volvió más arriba: desde acá todo es de médico.)
+  if (receta) {
     // Sin CUIL no hay receta válida (mismo criterio que el cierre normal).
     if (!pacienteCuil) {
       avisos.push("La receta no se emitió: al paciente le falta el CUIL en su perfil.");
@@ -239,8 +284,8 @@ export async function POST(
       candidatos.push({ tipo: "receta", contenido: receta });
     }
   }
-  if (!esPsicologia && indicaciones) candidatos.push({ tipo: "indicaciones", contenido: indicaciones });
-  if (!esPsicologia && (certificado || diasReposo)) {
+  if (indicaciones) candidatos.push({ tipo: "indicaciones", contenido: indicaciones });
+  if (certificado || diasReposo) {
     candidatos.push({
       tipo: "certificado",
       contenido: certificado,
@@ -248,11 +293,11 @@ export async function POST(
       dias_reposo: diasReposo,
     });
   }
-  if (!esPsicologia && orden) candidatos.push({ tipo: "orden", contenido: orden });
+  if (orden) candidatos.push({ tipo: "orden", contenido: orden });
 
   // Fallback del cierre normal: sin ningún documento explícito, el diagnóstico
-  // igual le llega al paciente como indicaciones. No en psicología.
-  if (!esPsicologia && candidatos.length === 0) {
+  // igual le llega al paciente como indicaciones.
+  if (candidatos.length === 0) {
     candidatos.push({ tipo: "indicaciones", contenido: diagnostico });
   }
 
@@ -287,8 +332,7 @@ export async function POST(
     paciente_id: pacienteId,
     medico_id: medico.id,
     tipo: d.tipo,
-    // La constancia no lleva nada clínico (secreto profesional).
-    diagnostico: d.tipo === "constancia" ? "" : diagnostico,
+    diagnostico,
     contenido: d.contenido,
     tratamiento: d.tratamiento ?? null,
     dias_reposo: d.dias_reposo ?? null,
