@@ -166,7 +166,7 @@ export async function POST(
     for (const palabra of receta.split(/[\s,;.()/\-]+/)) {
       if (palabra.length >= 4 && esControlado(palabra)) {
         return NextResponse.json(
-          { ok: false, error: "La receta incluye un psicotrópico o estupefaciente: no se receta por Docto." },
+          { ok: false, error: "La receta incluye un psicotrópico o estupefaciente: no se puede recetar por Docto." },
           { status: 422 }
         );
       }

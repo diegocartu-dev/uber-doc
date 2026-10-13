@@ -433,11 +433,8 @@ export default function MedicamentoAutocomplete({
             <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 12px" }}>
               Los medicamentos con <strong>{bloqueadoControlado}</strong> están incluidos en las listas de psicotrópicos y estupefacientes (Ley 17.818 y Ley 19.303).
             </p>
-            <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 12px" }}>
-              Por Docto se puede recetar cualquier medicamento, excepto psicotrópicos y estupefacientes.
-            </p>
             <p style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, margin: "0 0 20px" }}>
-              Si lo indicás, emití esa receta por el canal habitual que utilices para controlados.
+              Por Docto no se puede recetar.
             </p>
             <button
               type="button"
