@@ -149,3 +149,19 @@ test("los topes cortan: 2 de CI por defecto", () => {
   });
   assert.equal(r.ciAhora.length, 2);
 });
+
+test("profesión (13/10/2026): a quien pidió un médico no se le ofrece un psicólogo, ni al revés", () => {
+  const medicos = [
+    medico({ id: "medica" }),
+    medico({ id: "psico", profesion: "psicologo", disponible: false, especialidad: "Psicología", especialidadesTodas: ["Psicología"] }),
+  ];
+  const turnosDisponibles = [
+    { medico_id: "psico", fecha: "2026-09-01", hora_inicio: "09:00:00" },
+    { medico_id: "medica", fecha: "2026-09-01", hora_inicio: "10:00:00" },
+  ];
+  const deMedico = seleccionarAlternativas({ ...base, medicos, turnosDisponibles });
+  assert.deepEqual([...deMedico.ciAhora, ...deMedico.turnos].map((a) => a.medicoId).filter((id) => id === "psico"), []);
+  const dePsicologia = seleccionarAlternativas({ ...base, especialidad: "Psicología", medicos, turnosDisponibles, profesion: "psicologo" });
+  assert.equal(dePsicologia.ciAhora.length, 0);
+  assert.deepEqual(dePsicologia.turnos.map((t) => t.medicoId), ["psico"]);
+});

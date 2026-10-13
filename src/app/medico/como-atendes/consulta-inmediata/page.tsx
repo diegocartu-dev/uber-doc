@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import AppNavbar from "@/components/AppNavbar";
 import ConfigCI from "./ConfigCI";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ export default async function ConfigCIPage() {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
+  // En psicología se atiende solo con turno (Diego, 13/10/2026).
+  if ((await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo") redirect("/medico/como-atendes");
 
   // MP + firma: el hub es el paso natural DESPUÉS de la activación — si faltan,
   // la pantalla lo avisa (el server action igual re-verifica al activar).

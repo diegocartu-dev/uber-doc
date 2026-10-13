@@ -60,6 +60,9 @@ export default async function TurnosPage({
   const { data: pausaRow } = await createAdminClient()
     .from("medicos").select("agenda_pausada_at").eq("id", medicoId).maybeSingle();
   if (pausaRow?.agenda_pausada_at) redirect("/clinica");
+  // Turno de psicología (13/10/2026): sin el término de controlados (el psicólogo no receta).
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  const esPsicologia = (await profesionDeLaFicha(createAdminClient(), { medicoId })) === "psicologo";
 
   // Enforcement del canal privado (Roberto, gate 15/07): consultorio apagado =
   // su calendario privado tampoco se ve por URL directa.
@@ -126,6 +129,7 @@ export default async function TurnosPage({
             precio: medico.precio_consulta,
           }}
           canalOrigen={canalOrigen}
+          sinTerminoControlados={esPsicologia}
         />
       </main>
     </div>

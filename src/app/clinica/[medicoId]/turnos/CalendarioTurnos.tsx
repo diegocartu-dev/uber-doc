@@ -25,10 +25,13 @@ export default function CalendarioTurnos({
   turnos,
   medico,
   canalOrigen = "clinica_virtual",
+  sinTerminoControlados = false,
 }: {
   turnos: Turno[];
   medico: Medico;
   canalOrigen?: "clinica_virtual" | "consultorio_privado";
+  /** Turno de psicología (13/10/2026): el psicólogo no receta, el término no va. */
+  sinTerminoControlados?: boolean;
 }) {
   // Mes/año inicial del calendario también en hora AR (borde de mes con TZ corrida).
   const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -83,12 +86,13 @@ export default function CalendarioTurnos({
   // se exige: nunca frenar una consulta por esto.
   const [necesitaControlados, setNecesitaControlados] = useState(false);
   useEffect(() => {
+    if (sinTerminoControlados) return;
     let vivo = true;
     necesitaAceptarControlados()
       .then((n) => { if (vivo) setNecesitaControlados(n); })
       .catch(() => {});
     return () => { vivo = false; };
-  }, []);
+  }, [sinTerminoControlados]);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);

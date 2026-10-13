@@ -243,6 +243,8 @@ export default function FormularioModelo({ canal }: { canal: Canal }) {
             <option value="20">20 minutos</option>
             <option value="30">30 minutos</option>
             <option value="45">45 minutos</option>
+            {/* 50: la sesión de psicología (Diego, 13/10/2026). */}
+            <option value="50">50 minutos</option>
             <option value="60">60 minutos</option>
           </select>
           {errores.duracion && <p className={errClass} style={{ color: "#E24B4A" }}>{errores.duracion}</p>}

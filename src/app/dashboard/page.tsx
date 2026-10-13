@@ -8,6 +8,7 @@ import LinkNav from "@/components/ui/LinkNav";
 import AppNavbar from "@/components/AppNavbar";
 import DashboardMedicoProvider from "./DashboardMedicoProvider";
 import AvisoControladosMedico from "./AvisoControladosMedico";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import BloqueConsultaInmediata from "./BloqueConsultaInmediata";
 import TurnosEnEspera from "./TurnosEnEspera";
 import AgendaHoy from "./AgendaHoy";
@@ -623,7 +624,11 @@ export default async function DashboardPage({
     // desactualizado). Gobierna el gate del toggle "disponible" y el banner.
     const perfilCompletoReal = perfilMedicoCompleto(medico, { mpConectado, firmaConfigurada });
 
-    const colConsulta = (
+    // En psicología se atiende solo con turno (Diego, 13/10/2026): el panel no
+    // muestra nada de consulta inmediata ni el término de controlados (no receta).
+    const esPsicologo = (await profesionDeLaFicha(createAdminClient(), { medicoId: medico.id })) === "psicologo";
+
+    const colConsulta = esPsicologo ? null : (
       <BloqueConsultaInmediata
         medicoId={medico.id}
         disponibleDesde={medico.disponible_desde}
@@ -659,7 +664,7 @@ export default async function DashboardPage({
           <PopupApagado />
           <AvisoCancelacionPaciente />
           {/* Término de controlados para quien ya estaba registrado (12/10/2026). Solo B2C: la instancia es marca blanca. */}
-          {!esInstitucional() && <AvisoControladosMedico />}
+          {!esInstitucional() && !esPsicologo && <AvisoControladosMedico />}
           {/* Topbar */}
           <nav className="bg-white" style={{ borderBottom: "0.5px solid #e5e7eb" }}>
             <div className="mx-auto max-w-7xl px-4 lg:px-6">
@@ -791,7 +796,7 @@ export default async function DashboardPage({
                 Va aparte del cartel de activación a propósito — ése lleva al
                 asistente, y mandarlo ahí para algo que el asistente no resuelve
                 es un callejón. Éste lleva a la pantalla donde el precio se carga. */}
-            {!medico.precio_consulta && (
+            {!esPsicologo && !medico.precio_consulta && (
               <a
                 href="/medico/como-atendes/consulta-inmediata"
                 className="mt-4 block rounded-xl p-4"
@@ -819,7 +824,7 @@ export default async function DashboardPage({
                 No se apila con el del precio: si falta el precio, ése es el paso
                 accionable y éste no tiene sentido todavía. Y no aparece si ya la
                 tiene prendida. */}
-            {!!medico.precio_consulta && !medico.disponible && (
+            {!esPsicologo && !!medico.precio_consulta && !medico.disponible && (
               <a
                 href="/medico/como-atendes/consulta-inmediata"
                 className="mt-4 block rounded-xl p-4"
@@ -847,7 +852,7 @@ export default async function DashboardPage({
             >
               <div>
                 <p className="text-[14px] font-semibold text-gray-900">Configurá cómo atendés</p>
-                <p className="text-[12px] text-gray-500">Consulta inmediata, agendas y tu consultorio privado</p>
+                <p className="text-[12px] text-gray-500">{esPsicologo ? "Agendas y tu consultorio privado" : "Consulta inmediata, agendas y tu consultorio privado"}</p>
               </div>
               <span className="text-sm font-medium" style={{ color: "var(--color-text-link)" }}>→</span>
             </a>
@@ -865,7 +870,7 @@ export default async function DashboardPage({
             />
 
             {/* Dos hemisferios — desktop */}
-            <div className="mt-6 hidden gap-6 lg:grid lg:grid-cols-2 lg:items-start">
+            <div className={`mt-6 hidden gap-6 lg:grid lg:items-start ${esPsicologo ? "" : "lg:grid-cols-2"}`}>
               {colTurnos}
               {colConsulta}
             </div>

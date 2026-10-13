@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { alternativasVivas } from "@/lib/oferta";
+import { profesionDe, type Profesion } from "@/lib/refeps/profesion";
 import { buscarEncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import { trackEvent } from "@/lib/funnel";
 
@@ -53,31 +54,35 @@ export async function GET(req: NextRequest) {
   let momento: "ci_caida" | "turno_caido";
   let excluirMedicoId: string | null = null;
   let especialidad: string | null = null;
+  // Profesión del que se cayó (13/10/2026): las alternativas son de la misma.
+  let profesion: Profesion = "medico";
 
   if (consultaId) {
     const { data: c } = await admin
       .from("consultas")
-      .select("paciente_id, medico_id, estado, medicos(especialidad)")
+      .select("paciente_id, medico_id, estado, medicos(especialidad, profesion)")
       .eq("id", consultaId)
       .maybeSingle();
     if (!c || c.paciente_id !== user.id) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
     if (!CONSULTA_RESCATABLE.has(c.estado)) return NextResponse.json({ error: "Sin rescate para este estado" }, { status: 409 });
     momento = "ci_caida";
     excluirMedicoId = c.medico_id;
-    const mc = c.medicos as { especialidad: string } | { especialidad: string }[] | null;
+    const mc = c.medicos as { especialidad: string; profesion?: string | null } | { especialidad: string; profesion?: string | null }[] | null;
     especialidad = (Array.isArray(mc) ? mc[0]?.especialidad : mc?.especialidad) ?? null;
+    profesion = profesionDe((Array.isArray(mc) ? mc[0] : mc)?.profesion);
   } else {
     const { data: t } = await admin
       .from("turnos")
-      .select("paciente_id, medico_id, estado, medicos(especialidad)")
+      .select("paciente_id, medico_id, estado, medicos(especialidad, profesion)")
       .eq("id", turnoId!)
       .maybeSingle();
     if (!t || t.paciente_id !== pac.id) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
     if (!TURNO_RESCATABLE.has(t.estado)) return NextResponse.json({ error: "Sin rescate para este estado" }, { status: 409 });
     momento = "turno_caido";
     excluirMedicoId = t.medico_id;
-    const mt = t.medicos as { especialidad: string } | { especialidad: string }[] | null;
+    const mt = t.medicos as { especialidad: string; profesion?: string | null } | { especialidad: string; profesion?: string | null }[] | null;
     especialidad = (Array.isArray(mt) ? mt[0]?.especialidad : mt?.especialidad) ?? null;
+    profesion = profesionDe((Array.isArray(mt) ? mt[0] : mt)?.profesion);
   }
 
   // Regla del Uber: con plata comprometida en OTRA atención no se ofrece nada.
@@ -91,6 +96,7 @@ export async function GET(req: NextRequest) {
     especialidad,
     excluirMedicoId,
     pacienteEsTest: pac.es_cuenta_test === true,
+    profesion,
   });
 
   // La medición va ANTES del render y también con cero opciones: "no tuvimos

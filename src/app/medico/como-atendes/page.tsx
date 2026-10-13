@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import AppNavbar from "@/components/AppNavbar";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { esInstitucional } from "@/lib/instancia";
@@ -29,6 +30,8 @@ export default async function ComoAtendesPage() {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!medico) redirect("/dashboard");
+  // En psicología se atiende solo con turno (Diego, 13/10/2026): sin la tarjeta de consulta inmediata.
+  const esPsicologo = (await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo";
 
   const { data: modelos } = await admin
     .from("agenda_modelos")
@@ -102,7 +105,8 @@ export default async function ComoAtendesPage() {
           </a>
         )}
 
-        {/* ── Consulta inmediata ── */}
+        {/* ── Consulta inmediata ── (nunca para psicología) */}
+        {!esPsicologo && (
         <Link
           href="/medico/como-atendes/consulta-inmediata"
           className="mt-5 flex items-center gap-3 rounded-xl bg-white p-4 transition hover:bg-gray-50 active:scale-[0.99]"
@@ -132,6 +136,7 @@ export default async function ComoAtendesPage() {
             Configurar <ChevronRight size={16} />
           </span>
         </Link>
+        )}
 
         {/* ── Turnos programados ── */}
         <div className="mt-5">

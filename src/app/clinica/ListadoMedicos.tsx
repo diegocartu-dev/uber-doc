@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin } from "lucide-react";
 import { formatNombreMedico } from "@/lib/utils/texto";
@@ -35,7 +35,13 @@ export default function ListadoMedicos({
   pilotoDespertarActivo,
   flagTurnosActivos,
   onCambiarProvincia,
+  seccion = "medicos",
+  selectorSeccion = null,
 }: {
+  /** "psicologia" (13/10/2026): solo turnos, sin nada de consulta inmediata. */
+  seccion?: "medicos" | "psicologia";
+  /** El selector Médicos / Psicología (lo arma ClinicaFlow si hay psicólogos). */
+  selectorSeccion?: ReactNode;
   provincia: string;
   medicos: Medico[]; // ya filtrados por jurisdicción (fail-safe aplicado antes)
   consultasEspera: ConsultaEspera[];
@@ -47,6 +53,8 @@ export default function ListadoMedicos({
   onCambiarProvincia: () => void;
 }) {
   const router = useRouter();
+  // En psicología se atiende solo con turno (Diego, 13/10/2026).
+  const soloTurnos = seccion === "psicologia";
   const [busqueda, setBusqueda] = useState("");
   const [emailLead, setEmailLead] = useState("");
   const [leadEnviado, setLeadEnviado] = useState(false);
@@ -122,6 +130,7 @@ export default function ListadoMedicos({
     ciOnline: medicos.filter((m) => m.habilitadoIdentidad && puedeAtenderAhora(m)).length,
     conAgendaTurnos: new Set(turnosClinicaVirtual.map((t) => t.medico_id)).size,
     atajoVisible,
+    seccion,
   };
   useEffect(() => {
     const t = setTimeout(() => trackFunnel("clinica_vista", snapshotRef.current), 1200);
@@ -169,6 +178,7 @@ export default function ListadoMedicos({
       <div data-testid="listado-vacio" className="mx-auto max-w-md px-5 py-8">
         <h1 className="text-[22px] font-bold text-gray-900">Todavía no tenemos médicos en {provincia}</h1>
         <div className="mt-3">{chip}</div>
+        {selectorSeccion}
         <div className="mt-4 rounded-xl bg-white p-6 text-center" style={{ border: "1px solid #e5e7eb" }}>
           {leadEnviado ? (
             <p className="text-[15px] font-medium" style={{ color: "#1D9E75" }}>
@@ -212,15 +222,22 @@ export default function ListadoMedicos({
 
   return (
     <div data-testid="listado-medicos" className="mx-auto max-w-2xl px-5 py-8">
-      <h1 className="text-[22px] font-bold text-gray-900">Médicos habilitados para tu jurisdicción</h1>
+      <h1 className="text-[22px] font-bold text-gray-900">
+        {soloTurnos ? "Psicólogos habilitados para tu jurisdicción" : "Médicos habilitados para tu jurisdicción"}
+      </h1>
       <p className="mt-1 text-[14px] text-gray-500">
-        {medicos.length} {medicos.length === 1 ? "médico habilitado" : "médicos habilitados"} en {provincia}
+        {medicos.length}{" "}
+        {soloTurnos
+          ? medicos.length === 1 ? "psicólogo habilitado" : "psicólogos habilitados"
+          : medicos.length === 1 ? "médico habilitado" : "médicos habilitados"}{" "}
+        en {provincia}
       </p>
       <div className="mt-3">{chip}</div>
+      {selectorSeccion}
 
-      {(!flagCiActiva || !flagTurnosActivos) && (
+      {(soloTurnos ? !flagTurnosActivos : !flagCiActiva || !flagTurnosActivos) && (
         <div className="mb-4 rounded-lg bg-[#BA7517]/10 px-4 py-3 text-center text-[13px] text-[#BA7517]" style={{ border: "1px solid #BA751730" }}>
-          {!flagCiActiva ? "La Consulta Inmediata está en pausa por unos minutos. Podés agendar un turno." : "Estamos actualizando la agenda. La reserva de turnos vuelve en breve."}
+          {!soloTurnos && !flagCiActiva ? "La Consulta Inmediata está en pausa por unos minutos. Podés agendar un turno." : "Estamos actualizando la agenda. La reserva de turnos vuelve en breve."}
         </div>
       )}
 
@@ -240,13 +257,15 @@ export default function ListadoMedicos({
         />
       </div>
 
+      {!soloTurnos && (
       <div className="mb-5 flex flex-wrap gap-4 text-[13px] text-gray-600">
         <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "#1D9E75" }} />Disponible ahora</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "#BA7517" }} />Con espera</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: "#D85A30" }} />Solo programada</span>
       </div>
+      )}
 
-      {atajoVisible && mejorTurno && (
+      {!soloTurnos && atajoVisible && mejorTurno && (
         <button
           onClick={reservarAtajo}
           className="mb-3 w-full rounded-xl border border-[#378ADD]/40 bg-[#378ADD]/5 p-4 text-left active:scale-[0.99] transition-all duration-100"
@@ -274,7 +293,7 @@ export default function ListadoMedicos({
         </button>
       )}
 
-      {pilotoDespertarActivo && flagCiActiva && ordenados.length > 0 && !hayCIVisible && (
+      {!soloTurnos && pilotoDespertarActivo && flagCiActiva && ordenados.length > 0 && !hayCIVisible && (
         <div className="mb-4 text-center">
           {despertar === "idle" && (
             <button
@@ -304,7 +323,7 @@ export default function ListadoMedicos({
       )}
 
       {ordenados.length === 0 ? (
-        <p className="py-10 text-center text-[15px] text-gray-500">No encontramos médicos para “{busqueda}”.</p>
+        <p className="py-10 text-center text-[15px] text-gray-500">No encontramos {soloTurnos ? "psicólogos" : "médicos"} para “{busqueda}”.</p>
       ) : (
         <div className="space-y-3">
           {ordenados.map((m) => {
@@ -317,7 +336,7 @@ export default function ListadoMedicos({
               <div
                 key={m.id}
                 data-testid="medico-fila"
-                className={`flex items-center justify-between rounded-xl bg-white p-4 ${disponibleAhora ? "" : "opacity-70"}`}
+                className={`flex items-center justify-between rounded-xl bg-white p-4 ${disponibleAhora || soloTurnos ? "" : "opacity-70"}`}
                 style={{ border: "1px solid #e5e7eb" }}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -334,7 +353,9 @@ export default function ListadoMedicos({
                           antepone el tratamiento elegido por el médico. Sin título
                           devuelve el nombre pelado: nunca inventa un "Dr.". */}
                       <p className="truncate text-[15px] font-medium text-gray-900">{formatNombreMedico(m.nombre_completo, m.titulo)}</p>
-                      <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
+                      {!soloTurnos && (
+                        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: disponibleAhora ? "#1D9E75" : "#e5e7eb" }} />
+                      )}
                     </div>
                     <p className="mt-0.5 truncate text-[13px] text-gray-500">
                       {especialidadesEnOrdenDeBusqueda(m, termino).join(" · ")}
@@ -350,6 +371,8 @@ export default function ListadoMedicos({
                         {texto}
                       </p>
                     ))}
+                    {!soloTurnos && (
+                    <>
                     <p className="mt-0.5 text-[13px] font-medium" style={{ color: disponibleAhora ? esperaInfo.color : m.ciBloqueadaPorTurno ? "#BA7517" : "#9ca3af" }}>
                       {disponibleAhora
                         ? esperaInfo.texto
@@ -363,10 +386,12 @@ export default function ListadoMedicos({
                         <span className="ml-1.5 text-[12px] font-normal text-gray-400">· {m.duracion_consulta} min</span>
                       ) : null}
                     </p>
+                    </>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-1.5">
-                  {flagCiActiva && (
+                  {flagCiActiva && !soloTurnos && (
                     <button
                       disabled={!disponibleAhora}
                       onClick={() => elegirCI(m)}

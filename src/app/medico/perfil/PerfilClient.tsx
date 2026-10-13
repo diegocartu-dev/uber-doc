@@ -489,7 +489,8 @@ export default function PerfilClient({
           </div>
         </div>
 
-        {/* Áreas de atención adicionales (Adolescencia, etc.) */}
+        {/* Áreas de atención adicionales (Adolescencia, etc.). No para psicología: solo adultos (13/10/2026). */}
+        {medico.profesion !== "psicologo" && (
         <AreasAtencion
           areas={areas}
           onChange={(next) => {
@@ -498,6 +499,7 @@ export default function PerfilClient({
           }}
           error={errorAreas}
         />
+        )}
 
         {/* Contacto privado */}
         <div className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
