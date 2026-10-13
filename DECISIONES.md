@@ -15,7 +15,6 @@ Cómo se usa:
 | # | Desde | Qué hay que decidir | Dónde está el detalle | Verificado |
 |---|---|---|---|---|
 | 1.1 | 07/08 | **Consentimiento de firma electrónica del profesional.** Texto de los T&C del profesional donde conste que su clic es su firma, y el punto de aceptación. Hoy no existe: la firma por sesión queda sin consentimiento documentado (dictamen del 07/08, punto 3). | `src/lib/firma/documento.ts` (snapshot del firmante) | 12/10: no hay ninguna aceptación ni versión `tyc_medico` |
-| 1.2 | 12/10 | **Medicamentos controlados en T&C y pantallas.** El bloqueo existe en el código, pero el cartel dice "próximamente", el error habla de "firma digital" y los T&C del paciente insinúan que se pueden pedir. Hay que aprobar los textos. | pedido de AC Ai (buzón de Sara) | 12/10 (sesión del buzón): la aceptación de T&C no está versionada |
 | 1.3 | 12/10 | **Psicólogos en Docto.** ¿Consulta inmediata o solo turnos? ¿Qué documentos emiten? ¿Cómo aparecen en la clínica? REFEPS para psicólogos sin verificar. | pedido de AC Ai | — |
 | 1.4 | 01/09 | **Política de categorías founder / tradicional.** (1) ¿La primera plantada avisa o ya baja de categoría? (2) ¿Hay camino de vuelta a founder? (3) ¿Cuentan las cancelaciones repetidas de turnos pagos? (4) ¿Se usa el recupero del reembolso además o en vez de la escalera? (5) La categoría vive en la cuenta y no en la matrícula: un degradado que se registra con otro mail vuelve a founder. (6) Suspender a alguien con turnos pagos deja pacientes sin atender. | esta tabla (antes solo en memoria) | sin verificar en código |
 | 1.5 | 11/08 | **Respaldos.** PITR (recuperación a un punto, USD 100/mes): sin él, un incidente a media tarde pierde hasta 24 h. Copia semanal del Storage (firmas manuscritas, credenciales) fuera de Supabase. Y la restauración **nunca se probó**. | `docs/infra/2026-08-11-respaldos-y-recuperacion.md` | 12/10: PITR apagado en las dos bases; 8 respaldos diarios en cada una |
@@ -94,6 +93,7 @@ Las reglas operativas están en `CLAUDE.md`; acá, la fecha y dónde está el po
 | Fecha | Decisión | Dónde |
 |---|---|---|
 | 12/10 | **Norma suprema:** lo terminado se impacta sin pedir permiso | `CLAUDE.md` → Protocolo de trabajo |
+| 12/10 | **Medicamentos controlados:** por Docto se receta cualquier medicamento excepto psicotrópicos y estupefacientes (Leyes 19.303 y 17.818; los antibióticos no entran). Término aparte, con su propio tilde, **dinámico**: aparece solo a quien todavía no lo aceptó (paciente antes de pagar; profesional al registrarse o desde su panel, posponible). | `src/lib/legal/controlados-texto.ts` |
 | 12/10 | Recordatorios al paciente: 24 h y 10 min por mail y notificación, sin WhatsApp | `docs/sprints/2026-10-12-recordatorio-10m-nunca-agendado.md` |
 | 12/10 | Se borró la firma con código por mail (nunca se usó) | #545 |
 | 08/10 | Profesional que no recibe los avisos no atiende ni oferta | `src/lib/medicos/bloqueo-whatsapp.ts` |
