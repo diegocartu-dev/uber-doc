@@ -9,6 +9,8 @@ import type { EncuentroActivo } from "@/lib/consultas/encuentro-activo";
 import DoctoLogo from "@/components/DoctoLogo";
 import LoadingButton from "@/components/ui/LoadingButton";
 import TerminosContent from "@/app/terminos/TerminosContent";
+import TerminoControlados from "@/components/legal/TerminoControlados";
+import { necesitaAceptarControlados } from "@/lib/legal/controlados-acciones";
 import { trackFunnel } from "@/lib/funnel-client";
 import { createClient } from "@/lib/supabase/client";
 import { formatPrecio } from "@/app/clinica/disponibilidad";
@@ -81,6 +83,20 @@ function TriageContent() {
   const [scrollCompleto, setScrollCompleto] = useState(false);
   const [checkTerminos, setCheckTerminos] = useState(false);
   const [checkMayorEdad, setCheckMayorEdad] = useState(false);
+  // Término aparte de medicamentos controlados (Diego, 12/10/2026): su propio
+  // tilde, antes de pagar. Se registra en el servidor al crear la consulta.
+  const [checkControlados, setCheckControlados] = useState(false);
+  // Dinámico (Diego, 12/10/2026): el término aparece solo si este usuario
+  // todavía no lo aceptó. Mientras se averigua (o si falla), no se muestra ni
+  // se exige: nunca frenar una consulta por esto.
+  const [necesitaControlados, setNecesitaControlados] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    necesitaAceptarControlados()
+      .then((n) => { if (vivo) setNecesitaControlados(n); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   // Paso 2: Triage
   const [motivo, setMotivo] = useState("");
@@ -234,7 +250,7 @@ function TriageContent() {
     void pedirPermisoAvisos();
     startTransition(async () => {
       procesarRespuesta(
-        await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen)
+        await crearConsulta(medicoId, especialidad, motivo, sintomas, tiempo, canalOrigen, necesitaControlados && checkControlados)
       );
     });
   }
@@ -254,7 +270,8 @@ function TriageContent() {
           motivo,
           sintomas,
           tiempo,
-          canalOrigen
+          canalOrigen,
+          necesitaControlados && checkControlados
         )
       );
     });
@@ -366,10 +383,14 @@ function TriageContent() {
                   Soy mayor de edad y mis datos son verídicos
                 </span>
               </label>
+
+              {necesitaControlados && (
+                <TerminoControlados aceptado={checkControlados} onChange={setCheckControlados} />
+              )}
             </div>
 
             <button
-              disabled={!checkTerminos || !checkMayorEdad}
+              disabled={!checkTerminos || !checkMayorEdad || (necesitaControlados && !checkControlados)}
               onClick={() => {
                 trackFunnel("triage_paso", { paso: "formulario", medicoId, canal: canalOrigen });
                 setPaso(2);

@@ -14,6 +14,7 @@ import { logInfo } from "@/lib/logger";
 import { esInstitucional } from "@/lib/instancia";
 import { estadoCuentaMp } from "@/lib/mp-cuenta";
 import { waitUntil } from "@vercel/functions";
+import { registrarAceptacionControlados } from "@/lib/legal/controlados";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,7 +50,8 @@ export async function crearConsulta(
   motivoConsulta: string,
   sintomas: string[],
   tiempoSintomas: string,
-  canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
+  canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual",
+  aceptaControlados = false
 ) {
   // Capa B (modo institucional): un server action se invoca por POST con header
   // Next-Action a CUALQUIER ruta del deploy — el 404 de Capa A sobre /clinica
@@ -232,6 +234,13 @@ export async function crearConsulta(
     }).catch(() => false)
   );
 
+  // El tilde del término de controlados, con esta consulta. Si no vino (una
+  // pestaña abierta con la versión anterior de la pantalla), la consulta sigue
+  // igual: no se pierde un pedido por el registro.
+  if (aceptaControlados) {
+    waitUntil(registrarAceptacionControlados({ userId: user.id, consultaId: data.id }));
+  }
+
   redirect(`/sala-espera/${data.id}`);
 }
 
@@ -257,7 +266,8 @@ export async function cambiarDeProfesional(
   motivoConsulta: string,
   sintomas: string[],
   tiempoSintomas: string,
-  canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual"
+  canalOrigen: "clinica_virtual" | "consultorio_privado" = "clinica_virtual",
+  aceptaControlados = false
 ) {
   const supabase = await createClient();
   const {
@@ -364,5 +374,5 @@ export async function cambiarDeProfesional(
 
   // Ya no hay encuentro activo: el camino normal se encarga del resto (gates de
   // médico, insert, WhatsApp y redirect a la sala de espera).
-  return crearConsulta(medicoId, especialidad, motivoConsulta, sintomas, tiempoSintomas, canalOrigen);
+  return crearConsulta(medicoId, especialidad, motivoConsulta, sintomas, tiempoSintomas, canalOrigen, aceptaControlados);
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import TerminoControlados from "@/components/legal/TerminoControlados";
+import { necesitaAceptarControlados } from "@/lib/legal/controlados-acciones";
 import { reservarTurno, limpiarReservasExpiradas } from "./actions";
 import { useEffect } from "react";
 import LoadingButton from "@/components/ui/LoadingButton";
@@ -73,6 +75,20 @@ export default function CalendarioTurnos({
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null);
   const [cuando, setCuando] = useState<string[]>(["24h", "10m"]);
   const [canal, setCanal] = useState("ambos");
+  // Término aparte de medicamentos controlados (Diego, 12/10/2026): se tilda
+  // antes de pagar el turno y se registra al reservarlo.
+  const [checkControlados, setCheckControlados] = useState(false);
+  // Dinámico (Diego, 12/10/2026): el término aparece solo si este usuario
+  // todavía no lo aceptó. Mientras se averigua (o si falla), no se muestra ni
+  // se exige: nunca frenar una consulta por esto.
+  const [necesitaControlados, setNecesitaControlados] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    necesitaAceptarControlados()
+      .then((n) => { if (vivo) setNecesitaControlados(n); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState(false);
@@ -124,7 +140,7 @@ export default function CalendarioTurnos({
     setError(null);
 
     startTransition(async () => {
-      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen);
+      const result = await reservarTurno(turnoSeleccionado.id, { cuando: cuando.join(","), canal }, canalOrigen, necesitaControlados && checkControlados);
       if (result?.error) { setError(result.error); return; }
       window.location.href = `/turno/${turnoSeleccionado.id}/pago`;
     });
@@ -410,6 +426,12 @@ export default function CalendarioTurnos({
               </ul>
             </div>
 
+            {necesitaControlados && (
+              <div className="mt-3">
+                <TerminoControlados aceptado={checkControlados} onChange={setCheckControlados} tamano="chico" />
+              </div>
+            )}
+
             {error && (
               <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">{error}</div>
             )}
@@ -424,6 +446,7 @@ export default function CalendarioTurnos({
               <LoadingButton
                 onClick={handleConfirmar}
                 isLoading={isPending}
+                disabled={necesitaControlados && !checkControlados}
                 className="flex-1 rounded-lg bg-[#378ADD] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2e6fb5] disabled:opacity-50 active:scale-95 transition-all duration-100 min-h-[48px]"
               >
                 Confirmar y pagar
