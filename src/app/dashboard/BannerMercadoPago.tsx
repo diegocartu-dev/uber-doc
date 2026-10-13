@@ -12,7 +12,9 @@
 
 import { Wallet } from "lucide-react";
 
-export default function BannerMercadoPago() {
+// `esPsicologo` (13/10/2026, psicólogos F4): sin consulta inmediata, el cartel solo
+// habla de la agenda. Para los médicos el texto no cambia.
+export default function BannerMercadoPago({ esPsicologo = false }: { esPsicologo?: boolean } = {}) {
   return (
     <div
       className="mb-4 rounded-2xl p-6"
@@ -35,8 +37,10 @@ export default function BannerMercadoPago() {
           <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
             Tu registro ya está completo — este es el paso que te habilita a
             atender. Los pacientes pagan la consulta y el dinero va directo a tu
-            cuenta de Mercado Pago. Sin esto no podés publicar tu agenda ni
-            activar la consulta inmediata.
+            cuenta de Mercado Pago.{" "}
+            {esPsicologo
+              ? "Sin esto no podés publicar tu agenda."
+              : "Sin esto no podés publicar tu agenda ni activar la consulta inmediata."}
           </p>
           <a
             href="/api/mp/oauth/start"

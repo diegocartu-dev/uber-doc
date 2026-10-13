@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 // "Mis pacientes" — índice por paciente del médico (Evoluciones, pieza 2B)
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import AppNavbar from "@/components/AppNavbar";
 import MisPacientesClient, { type PacienteResumen } from "./MisPacientesClient";
 
@@ -30,6 +32,10 @@ export default async function MisPacientesPage() {
     .single();
 
   if (!medico) redirect("/dashboard");
+
+  // Profesión en query propia (13/10/2026, psicólogos F4): el SELECT que arma la
+  // lista no se toca. Solo decide "consulta" o "sesión" en cada fila.
+  const esPsicologo = (await profesionDeLaFicha(createAdminClient(), { userId: user.id })) === "psicologo";
 
   const fullName = user.user_metadata?.full_name || user.email;
 
@@ -156,7 +162,7 @@ export default async function MisPacientesPage() {
     <div className="min-h-full bg-[#f8f9fa]">
       <AppNavbar userName={fullName} userRole="medico" />
       <main className="mx-auto max-w-3xl px-6 py-6">
-        <MisPacientesClient pacientes={pacientes} />
+        <MisPacientesClient pacientes={pacientes} esPsicologo={esPsicologo} />
       </main>
     </div>
   );

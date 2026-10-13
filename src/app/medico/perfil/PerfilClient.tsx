@@ -366,7 +366,9 @@ export default function PerfilClient({
         <div id="datos" className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>
           <p className="text-xs font-medium tracking-wide text-gray-400 uppercase">DATOS PROFESIONALES DEL CONSULTORIO</p>
           <p className="mt-1 text-xs text-gray-400">
-            Estos datos aparecen en recetas, certificados y son visibles para el paciente.
+            {medico.profesion === "psicologo"
+              ? "Estos datos aparecen en tus constancias de atención y son visibles para el paciente."
+              : "Estos datos aparecen en recetas, certificados y son visibles para el paciente."}
           </p>
 
           <div className="mt-5 space-y-4">
@@ -537,7 +539,7 @@ export default function PerfilClient({
         </div>
 
         {/* Firma Manuscrita */}
-        <FirmaManuscrita firmaUrl={medico.firma_manuscrita_url} />
+        <FirmaManuscrita firmaUrl={medico.firma_manuscrita_url} esPsicologo={medico.profesion === "psicologo"} />
 
         {/* Mercado Pago */}
         <div className="mt-4 rounded-xl bg-white p-6" style={{ border: "0.5px solid #e5e7eb" }}>

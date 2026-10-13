@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import AppNavbar from "@/components/AppNavbar";
 import { getComisionForMedico } from "@/lib/comisiones";
 import ConsultorioParticular from "./ConsultorioParticular";
@@ -49,6 +50,8 @@ export default async function ConsultorioParticularPage() {
   const fullName = user.user_metadata?.full_name || user.email;
   // Transparencia de comisión (Martín): acá quema más — el paciente lo trae el médico.
   const comisionPct = await getComisionForMedico(medico.id);
+  // Query propia (13/10/2026, psicólogos F4): el SELECT de arriba no se toca.
+  const esPsicologo = (await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo";
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f9fa]">
@@ -59,6 +62,7 @@ export default async function ConsultorioParticularPage() {
         comisionPct={comisionPct}
         visibleInicial={medico.visible_consultorio_particular !== false}
         esFounder={medico.categoria === "founder"}
+        esPsicologo={esPsicologo}
       />
     </div>
   );

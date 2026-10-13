@@ -96,7 +96,7 @@ export default async function ComoAtendesPage() {
             tres modos son lo primero que hay que resolver— pero ahí abajo no se
             ven: hay que pasar las tres tarjetas y dos notas. Esto no cambia el
             orden, solo baja de un toque al que busca cómo se usa. */}
-        {puedeVerVideos && (
+        {puedeVerVideos && !esPsicologo && (
           <a
             href="#videos"
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#378ADD] px-3 py-2 text-[13px] font-medium text-[#378ADD] transition hover:bg-blue-50 active:scale-[0.98]"
@@ -195,12 +195,14 @@ export default async function ComoAtendesPage() {
         </div>
 
         <p className="mt-5 text-[13px] text-gray-500">
-          El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees.
+          {esPsicologo
+            ? "El precio lo ponés en cada agenda que crees."
+            : "El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees."}
         </p>
         {/* Founders ven la felicitación con su beneficio (pedido Diego 15/07). */}
         {medico.categoria === "founder" ? (
           <p className="mt-2 text-[13px] text-gray-500">
-            <strong className="text-gray-700">¡Felicitaciones por tu categoría de Médico Fundador!</strong>{" "}
+            <strong className="text-gray-700">¡Felicitaciones por tu categoría de {esPsicologo ? "Profesional" : "Médico"} Fundador!</strong>{" "}
             Docto te descuenta una comisión de solo el <strong className="text-gray-700">{comisionPct}%</strong> por
             consulta realizada; el resto va directo a tu Mercado Pago.
           </p>
@@ -216,8 +218,11 @@ export default async function ComoAtendesPage() {
             consulta inmediata la sigue teniendo como lo primero. Y las dos notas
             de arriba (precio y comisión) hablan de las tarjetas: si los videos
             quedaban en el medio, se leían como parte de los videos.
-            El id es el destino del link del cierre del onboarding. */}
-        {puedeVerVideos && (
+            El id es el destino del link del cierre del onboarding.
+            Psicología no la ve (13/10/2026): los dos videos muestran la consulta
+            inmediata y la receta, que un psicólogo no tiene. Cuando haya videos
+            propios, se saca el gate (misma decisión en onboarding/page.tsx). */}
+        {puedeVerVideos && !esPsicologo && (
           <section id="videos" className="mt-7 scroll-mt-20">
             <h2 className="text-[15px] font-semibold text-gray-900">Cómo se usa Docto</h2>
             <p className="mt-0.5 text-[13px] text-gray-500">

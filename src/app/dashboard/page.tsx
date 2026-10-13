@@ -562,6 +562,11 @@ export default async function DashboardPage({
     const footerClass = "flex items-center justify-between border-t border-gray-100 pt-3 mt-4";
     const actionClass = "text-sm font-medium text-[#378ADD] hover:underline transition-colors";
 
+    // En psicología se atiende solo con turno (Diego, 13/10/2026): el panel no
+    // muestra nada de consulta inmediata ni el término de controlados (no receta).
+    // Va antes de armar las columnas porque AgendaHoy también lo necesita.
+    const esPsicologo = (await profesionDeLaFicha(createAdminClient(), { medicoId: medico.id })) === "psicologo";
+
     const colTurnos = (
       <div className={hemiPad} style={{ ...hemiStyle, borderLeft: "4px solid #378ADD", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
         {/* Título */}
@@ -611,7 +616,7 @@ export default async function DashboardPage({
         )}
 
         {/* Lista del día */}
-        <AgendaHoy turnos={turnosHoy} proximosTurnos={proximosTurnos} />
+        <AgendaHoy turnos={turnosHoy} proximosTurnos={proximosTurnos} esPsicologo={esPsicologo} />
 
         {/* Pie — historial full-width */}
         <div className="border-t border-gray-100 pt-3 mt-4">
@@ -623,10 +628,6 @@ export default async function DashboardPage({
     // Completitud REAL del perfil (no el flag DB `perfil_completo`, que quedaba
     // desactualizado). Gobierna el gate del toggle "disponible" y el banner.
     const perfilCompletoReal = perfilMedicoCompleto(medico, { mpConectado, firmaConfigurada });
-
-    // En psicología se atiende solo con turno (Diego, 13/10/2026): el panel no
-    // muestra nada de consulta inmediata ni el término de controlados (no receta).
-    const esPsicologo = (await profesionDeLaFicha(createAdminClient(), { medicoId: medico.id })) === "psicologo";
 
     const colConsulta = esPsicologo ? null : (
       <BloqueConsultaInmediata
@@ -658,7 +659,7 @@ export default async function DashboardPage({
       >
         <div className="min-h-full bg-[#f8f9fa]">
           <PresenciaTracker rol="medico" />
-          <ModalPushMedico />
+          <ModalPushMedico esPsicologo={esPsicologo} />
           <PopupEsperando />
           <PopupPagada />
           <PopupApagado />
@@ -673,10 +674,14 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-4 lg:gap-5">
                   <span className="text-lg font-medium text-gray-900">Docto</span>
                   <BadgeEsperando />
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
-                    <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
-                  </div>
+                  {/* El punto describe la consulta inmediata, un canal que la psicología no tiene:
+                      a un psicólogo no se le muestra (quedaría gris para siempre). */}
+                  {!esPsicologo && (
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-block h-2 w-2 rounded-full ${medico.disponible ? "bg-[#1D9E75] animate-pulse" : "bg-gray-300"}`} />
+                      <span className="text-xs text-gray-500">{medico.disponible ? "Disponible" : "No disponible"}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 lg:gap-4">
                   <BotonSilenciar />
@@ -736,7 +741,9 @@ export default async function DashboardPage({
                 <p className="text-[15px] font-semibold text-gray-900">No te están llegando nuestros WhatsApp</p>
                 <p className="mt-1 text-sm text-gray-700">
                   {bloqueoWhatsApp.motivo}. Sin esos avisos no te enterarías de los pacientes que te esperan, así que
-                  por ahora no aparecés en la clínica ni podés recibir consultas.
+                  {esPsicologo
+                    ? " por ahora no aparecés en la sección de Psicología ni podés recibir turnos."
+                    : " por ahora no aparecés en la clínica ni podés recibir consultas."}
                 </p>
                 <a
                   href="/medico/perfil"
@@ -765,7 +772,7 @@ export default async function DashboardPage({
                 nunca lo hicieron — el paso post-aprobación era el cementerio). */}
             {medico.estado_registro === "aprobado" && !mpConectado && (
               <div className="mt-4">
-                <BannerMercadoPago />
+                <BannerMercadoPago esPsicologo={esPsicologo} />
               </div>
             )}
 
@@ -1034,7 +1041,7 @@ export default async function DashboardPage({
         >
           <Building2 size={32} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} />
           <p className="mt-3 text-base font-medium" style={{ color: "var(--color-text-primary)" }}>Clinica Virtual</p>
-          <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>Consulta un medico ahora o agenda turno</p>
+          <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>Consultá un médico ahora o agendá un turno</p>
         </Link>
 
         {/* -- Mis turnos -- */}

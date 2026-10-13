@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 // Ficha del paciente — datos + Evoluciones (timeline) + historial (F3)
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import DescargarPDF from "@/app/documentos/DescargarPDF";
 import OrigenBadge from "@/components/OrigenBadge";
 import AppNavbar from "@/components/AppNavbar";
@@ -120,6 +122,10 @@ export default async function FichaPacientePage({
     .single();
 
   if (!medico) redirect("/dashboard");
+
+  // Profesión en query propia con service role (13/10/2026, psicólogos F4): el
+  // SELECT de arriba va con el cliente RLS y no se toca. Solo cambia vocabulario.
+  const esPsicologo = (await profesionDeLaFicha(createAdminClient(), { userId: user.id })) === "psicologo";
 
   // Traer datos del paciente
   const { data: paciente } = await supabase
@@ -438,7 +444,7 @@ export default async function FichaPacientePage({
                     </p>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${estadoColor[t.estado] ?? "bg-gray-100 text-gray-600"}`}>
-                    {estadoLabel[t.estado] ?? t.estado}
+                    {t.estado === "cancelado_medico" && esPsicologo ? "Cancelado por el profesional" : (estadoLabel[t.estado] ?? t.estado)}
                   </span>
                 </div>
 
@@ -523,7 +529,7 @@ export default async function FichaPacientePage({
         />
 
         {/* Evoluciones — timeline unificado (CI + turnos completados con evolución) */}
-        <EvolucionesTimeline entradas={entradasEvolucion} />
+        <EvolucionesTimeline entradas={entradasEvolucion} esPsicologo={esPsicologo} />
 
         {/* Secciones de historial — orden según origen */}
         {desde === "turno" ? (
