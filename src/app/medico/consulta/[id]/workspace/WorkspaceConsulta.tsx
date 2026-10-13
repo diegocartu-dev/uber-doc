@@ -58,6 +58,7 @@ const ETIQUETA_DOC: Record<string, string> = {
   indicaciones: "Indicaciones",
   certificado: "Certificado",
   orden: "Orden médica",
+  constancia: "Constancia de atención",
 };
 
 // Documentos clínicos que emite una atención. Se usa para saber si esta consulta
@@ -65,7 +66,7 @@ const ETIQUETA_DOC: Record<string, string> = {
 // y no se importa de lib/firma (código de servidor) para no arrastrar el módulo
 // de firma al bundle del navegador. Espeja TIPOS_FIRMABLES: son las mismas
 // cuatro piezas que el médico redacta y firma.
-const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden"];
+const TIPOS_CLINICOS = ["receta", "indicaciones", "certificado", "orden", "constancia"];
 
 // Estados en los que la atención quedó ANULADA: cancelada, con ausencia
 // registrada (que dispara reembolso), rechazada, reprogramada o bloqueada. Si
@@ -473,6 +474,11 @@ type Props = {
   // tocar lo ya emitido. Es el camino de reparación del agujero del borrador.
   modoCompletar?: boolean;
   cierre?: CierreAtencion | null;
+  // Psicología (13/10/2026): el profesional emite solo la evolución y una
+  // constancia de atención, nunca receta, orden, certificado ni indicaciones.
+  // `textoConstancia` lo arma el servidor con el texto aprobado; `null` si
+  // faltan datos para emitirla. Sin este prop, el profesional es médico.
+  psicologia?: { textoConstancia: string | null } | null;
   consulta: {
     especialidad: string;
     motivo_consulta: string | null;
@@ -833,9 +839,14 @@ export default function WorkspaceConsulta({
   evolucionesPrevias = [],
   modoCompletar = false,
   cierre = null,
+  psicologia = null,
   consulta,
 }: Props) {
   const router = useRouter();
+  const esPsicologia = !!psicologia;
+  // Sale tildada: el paciente suele necesitarla para justificar la sesión. El
+  // profesional la destilda si no hace falta.
+  const [emitirConstancia, setEmitirConstancia] = useState(true);
 
   // Tipos de documento que el paciente YA recibió. Un documento firmado es
   // inmutable: en modo completar no se muestra su campo ni se puede reemplazar.
@@ -843,7 +854,8 @@ export default function WorkspaceConsulta({
   const yaEmitido = (t: string) => modoCompletar && tiposEmitidos.has(t);
   // Los cuatro tipos ya salieron: no queda nada que emitir por este camino.
   const todoEmitido =
-    modoCompletar && ["receta", "indicaciones", "certificado", "orden"].every((t) => tiposEmitidos.has(t));
+    modoCompletar &&
+    (esPsicologia ? ["constancia"] : ["receta", "indicaciones", "certificado", "orden"]).every((t) => tiposEmitidos.has(t));
 
   // --- Canal: tabla, estado de cierre y helper de lookup del pacientes.id ---
   // turnos.paciente_id YA ES pacientes.id (FK directo, verificado en prod).
@@ -1284,6 +1296,7 @@ export default function WorkspaceConsulta({
           certificado: yaEmitido("certificado") ? "" : certificado,
           dias_reposo: !yaEmitido("certificado") && diasReposoValido ? diasReposoNum : null,
           orden: yaEmitido("orden") ? "" : orden,
+          constancia: esPsicologia && emitirConstancia && !yaEmitido("constancia"),
           evolucion,
           evolucion_editada: evolucion.trim() !== evolucionBase.trim(),
         }),
@@ -1539,23 +1552,29 @@ export default function WorkspaceConsulta({
         // del paciente con nombre + DNI cuando no lo hay (`src/lib/pdf/receta.ts`),
         // y además es DERIVABLE de DNI + sexo — lo deriva `cuilDePaciente` al
         // armar el snapshot de identidad del documento.
-        if (receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
-        if (indicaciones.trim())
+        // Psicología: solo la constancia, y solo si quedó tildada. Nada de
+        // relleno: sin constancia, la atención queda con su evolución.
+        if (esPsicologia) {
+          if (emitirConstancia && psicologia?.textoConstancia)
+            docs.push({ tipo: "constancia", contenido: psicologia.textoConstancia });
+        }
+        if (!esPsicologia && receta.trim()) docs.push({ tipo: "receta", contenido: receta.trim() });
+        if (!esPsicologia && indicaciones.trim())
           docs.push({ tipo: "indicaciones", contenido: indicaciones.trim() });
         // Certificado de reposo (art. 210 LCT): se emite si hay tratamiento o días.
         // El PDF arma TRATAMIENTO INDICADO desde `tratamiento` (prefill: el cuerpo
         // del certificado, o las indicaciones como fallback) y REPOSO LABORAL desde
         // `dias_reposo`. El rango se calcula desde `created_at` (día de emisión).
-        if (certificado.trim() || diasReposoValido)
+        if (!esPsicologia && (certificado.trim() || diasReposoValido))
           docs.push({
             tipo: "certificado",
             contenido: certificado.trim(),
             tratamiento: certificado.trim() || indicaciones.trim() || null,
             dias_reposo: diasReposoValido ? diasReposoNum : null,
           });
-        if (orden.trim())
+        if (!esPsicologia && orden.trim())
           docs.push({ tipo: "orden", contenido: orden.trim() });
-        if (docs.length === 0)
+        if (!esPsicologia && docs.length === 0)
           docs.push({ tipo: "indicaciones", contenido: diagnostico.trim() });
 
         // Insert de los documentos. El cliente de Supabase NO lanza excepciones:
@@ -1567,7 +1586,8 @@ export default function WorkspaceConsulta({
           paciente_id: pacienteId,
           medico_id: registroDb.medico_id,
           tipo: d.tipo,
-          diagnostico: diagnostico.trim(),
+          // La constancia no lleva nada clínico (secreto profesional).
+          diagnostico: d.tipo === "constancia" ? "" : diagnostico.trim(),
           contenido: d.contenido,
           tratamiento: d.tratamiento ?? null,
           dias_reposo: d.dias_reposo ?? null,
@@ -2361,7 +2381,7 @@ export default function WorkspaceConsulta({
           {/* Acordeón: INDICACIONES.
               En modo completar, los tipos ya entregados no tienen campo: lo
               firmado es inmutable y ofrecer un textarea sería mentir. */}
-          {!yaEmitido("indicaciones") && (
+          {!esPsicologia && !yaEmitido("indicaciones") && (
           <AccordionSection title="INDICACIONES" hasContent={indicaciones.trim().length > 0}>
             <CampoDictado
               label=""
@@ -2378,7 +2398,7 @@ export default function WorkspaceConsulta({
           )}
 
           {/* Acordeón: RECETA */}
-          {!yaEmitido("receta") && (
+          {!esPsicologia && !yaEmitido("receta") && (
           <AccordionSection title="RECETA" hasContent={medicamentos.length > 0 || recetaTextoLibre.trim().length > 0}>
             <MedicamentoAutocomplete
               medicamentos={medicamentos}
@@ -2395,7 +2415,7 @@ export default function WorkspaceConsulta({
           {/* Acordeón: CERTIFICADO DE REPOSO (art. 210 LCT) — días estructurados +
               tratamiento (prefill opcional desde indicaciones). El reposo arranca el
               día de emisión; el inicio no es editable. */}
-          {!yaEmitido("certificado") && (
+          {!esPsicologia && !yaEmitido("certificado") && (
           <AccordionSection
             title="CERTIFICADO DE REPOSO"
             hasContent={emitiendoCertificado}
@@ -2497,7 +2517,7 @@ export default function WorkspaceConsulta({
 
           {/* Acordeón: ORDEN MÉDICA — texto plano, persiste como documento tipo
               "orden". NO entra en la evolución ni en la HC. */}
-          {!yaEmitido("orden") && (
+          {!esPsicologia && !yaEmitido("orden") && (
           <AccordionSection title="ORDEN MÉDICA" hasContent={orden.trim().length > 0}>
             <CampoDictado
               label=""
@@ -2511,6 +2531,33 @@ export default function WorkspaceConsulta({
               soportado={dictadoSoportado}
             />
           </AccordionSection>
+          )}
+
+          {/* Constancia de atención — solo psicología (13/10/2026). El texto lo arma
+              el servidor (lib/documentos/constancia.ts) y no se edita. */}
+          {esPsicologia && !yaEmitido("constancia") && (
+            <div className="rounded-xl bg-white p-4" style={{ border: "0.5px solid #e5e7eb" }}>
+              {psicologia?.textoConstancia ? (
+                <>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={emitirConstancia}
+                      onChange={(e) => setEmitirConstancia(e.target.checked)}
+                      className="mt-0.5 h-5 w-5 rounded border-gray-300"
+                    />
+                    <span className="text-sm font-medium text-gray-900">Emitir la constancia de atención para el paciente</span>
+                  </label>
+                  {emitirConstancia && (
+                    <p className="mt-3 whitespace-pre-line text-xs leading-relaxed text-gray-500">{psicologia.textoConstancia}</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  La constancia de atención no se puede emitir: falta tu domicilio profesional o tu matrícula, o el DNI del paciente.
+                </p>
+              )}
+            </div>
           )}
 
           {/* Evolución — TarjetaEvolucion, plana y ÚLTIMA. El ref + scrollIntoView

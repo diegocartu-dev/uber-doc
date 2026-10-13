@@ -476,7 +476,17 @@ async function ejecutarRescate(
     return { ...base, resultado: "error", detalle, evolucion_guardada: evolucionGuardada };
   }
 
-  const { filas, certificadoOmitidoSinDias } = armarDocumentos(borrador);
+  // Psicología (13/10/2026): el rescate solo guarda la evolución. La constancia
+  // no se emite sola (el profesional la emite desde "completar documentación"),
+  // y el relleno de "indicaciones" con el diagnóstico nunca va: sería mandarle
+  // al paciente el diagnóstico como indicaciones médicas.
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  const esPsicologia = registro.medico_id
+    ? (await profesionDeLaFicha(admin, { medicoId: registro.medico_id })) === "psicologo"
+    : false;
+  const { filas, certificadoOmitidoSinDias } = esPsicologia
+    ? { filas: [] as FilaDocumento[], certificadoOmitidoSinDias: false }
+    : armarDocumentos(borrador);
 
   if (filas.length === 0) {
     // Se llega acá cuando lo ÚNICO escrito era algo que no se puede emitir:

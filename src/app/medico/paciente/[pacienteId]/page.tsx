@@ -86,6 +86,7 @@ const tipoLabel: Record<string, string> = {
   indicaciones: "Indicaciones",
   certificado: "Certificado",
   orden: "Orden médica",
+  constancia: "Constancia de atención",
 };
 
 const tipoIcon: Record<string, string> = {

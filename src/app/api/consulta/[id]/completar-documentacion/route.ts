@@ -36,6 +36,8 @@ type Body = {
   orden?: string;
   evolucion?: string;
   evolucion_editada?: boolean;
+  /** Psicología (13/10/2026): emitir la constancia de atención. */
+  constancia?: boolean;
 };
 
 type DocNuevo = {
@@ -217,7 +219,19 @@ export async function POST(
   const omitidos: string[] = [];
   const candidatos: DocNuevo[] = [];
 
-  if (receta) {
+  // Psicología (13/10/2026): solo la constancia de atención, con el texto que
+  // arma el servidor. Nunca receta, indicaciones, certificado ni orden, y sin
+  // el relleno de "indicaciones" del cierre normal.
+  const { profesionDeLaFicha } = await import("@/lib/medicos/profesion-ficha");
+  const esPsicologia = (await profesionDeLaFicha(admin, { medicoId: medico.id })) === "psicologo";
+  if (esPsicologia) {
+    if (body.constancia === true && canal === "turno") {
+      const { textoConstanciaDelTurno } = await import("@/lib/documentos/constancia-datos");
+      const texto = await textoConstanciaDelTurno(admin, id);
+      if (texto) candidatos.push({ tipo: "constancia", contenido: texto });
+      else avisos.push("La constancia no se emitió: falta tu domicilio profesional o tu matrícula, o el DNI del paciente.");
+    }
+  } else if (receta) {
     // Sin CUIL no hay receta válida (mismo criterio que el cierre normal).
     if (!pacienteCuil) {
       avisos.push("La receta no se emitió: al paciente le falta el CUIL en su perfil.");
@@ -225,8 +239,8 @@ export async function POST(
       candidatos.push({ tipo: "receta", contenido: receta });
     }
   }
-  if (indicaciones) candidatos.push({ tipo: "indicaciones", contenido: indicaciones });
-  if (certificado || diasReposo) {
+  if (!esPsicologia && indicaciones) candidatos.push({ tipo: "indicaciones", contenido: indicaciones });
+  if (!esPsicologia && (certificado || diasReposo)) {
     candidatos.push({
       tipo: "certificado",
       contenido: certificado,
@@ -234,11 +248,11 @@ export async function POST(
       dias_reposo: diasReposo,
     });
   }
-  if (orden) candidatos.push({ tipo: "orden", contenido: orden });
+  if (!esPsicologia && orden) candidatos.push({ tipo: "orden", contenido: orden });
 
   // Fallback del cierre normal: sin ningún documento explícito, el diagnóstico
-  // igual le llega al paciente como indicaciones.
-  if (candidatos.length === 0) {
+  // igual le llega al paciente como indicaciones. No en psicología.
+  if (!esPsicologia && candidatos.length === 0) {
     candidatos.push({ tipo: "indicaciones", contenido: diagnostico });
   }
 
@@ -273,7 +287,8 @@ export async function POST(
     paciente_id: pacienteId,
     medico_id: medico.id,
     tipo: d.tipo,
-    diagnostico,
+    // La constancia no lleva nada clínico (secreto profesional).
+    diagnostico: d.tipo === "constancia" ? "" : diagnostico,
     contenido: d.contenido,
     tratamiento: d.tratamiento ?? null,
     dias_reposo: d.dias_reposo ?? null,

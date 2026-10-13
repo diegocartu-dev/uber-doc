@@ -85,7 +85,7 @@ export default async function WorkspacePage({
           .from("documentos")
           .select("id, tipo, created_at")
           .eq("consulta_id", consultaId)
-          .in("tipo", ["receta", "indicaciones", "certificado", "orden"])
+          .in("tipo", ["receta", "indicaciones", "certificado", "orden", "constancia"])
           .order("created_at", { ascending: true })
       ).data ?? []
     : [];

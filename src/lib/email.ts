@@ -580,6 +580,7 @@ export async function enviarEmailDocumentacionDisponible(params: {
       indicaciones: "Indicaciones",
       certificado: "Certificado",
       orden: "Orden m&eacute;dica",
+      constancia: "Constancia de atenci&oacute;n",
     };
     const lista = [...new Set(params.tipos)].map((t) => etiquetas[t] ?? t);
     const listaHtml = lista.length > 0

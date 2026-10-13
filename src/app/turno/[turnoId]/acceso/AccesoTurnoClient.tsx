@@ -53,6 +53,7 @@ const NOMBRE_DOC: Record<string, string> = {
   orden: "Orden médica",
   certificado: "Certificado",
   derivacion: "Derivación",
+  constancia: "Constancia de atención",
 };
 
 function horaDe(ms: number): string {

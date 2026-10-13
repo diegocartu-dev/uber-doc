@@ -102,10 +102,15 @@ La revisión encontró además dos problemas que ya existían y se arreglaron ap
 - Mensajes: "En psicología se atiende solo con turno: la consulta inmediata no está disponible."; "La atención psicológica en Docto es solo para mayores de 18 años."; "Por ahora la atención psicológica en Docto es solo para adultos."
 - Agenda: "50 minutos" (este se ve apenas se mergea, para todos).
 
-### F3 — Documentos
-- Tipo `constancia` (CHECK en las dos bases), firmable, con el texto aprobado; el PDF sin bloque de diagnóstico.
-- El espacio de trabajo del psicólogo: solo evolución y constancia (sin el relleno automático de "indicaciones").
-- La identidad congelada en la firma suma profesión y jurisdicción (versión nueva del snapshot).
+### F3 — Documentos · ✅ 13/10 (dormida: solo la ve un psicólogo)
+- Tipo `constancia` en `documentos` (CHECK en las dos bases, migración `20261013_documentos_constancia.sql` + espejo `039`) y firmable (`TIPOS_FIRMABLES`).
+- El texto aprobado lo arma el servidor (`lib/documentos/constancia.ts`, con tests; los datos salen de `constancia-datos.ts`): paciente y DNI, fecha y hora del turno, "Lic." + nombre, "Licenciado/a en Psicología", matrícula con jurisdicción ("MP 5555 — Córdoba"; la nacional dice "MN 12345 — Nacional") y domicilio profesional. Va entero en `contenido`, que entra al hash de la firma: no hizo falta una versión nueva de la identidad congelada.
+- PDF: título "CONSTANCIA DE ATENCIÓN", el texto aprobado, la firma y el QR de verificación; sin los bloques de profesional, paciente y diagnóstico (serían los mismos datos dos veces y nada clínico). El resto de los documentos sale idéntico byte a byte (test de huellas).
+- Espacio de trabajo del psicólogo: diagnóstico y evolución como siempre (historia clínica), sin receta, indicaciones, certificado ni orden, y una casilla "Emitir la constancia de atención para el paciente" que sale **tildada** (con el texto a la vista). Sin relleno de "indicaciones" en ningún camino (cierre normal, completar documentación y rescate del cierre automático). El documento de la constancia no guarda el diagnóstico.
+- Si el profesional no tocó "Finalizar" y la atención se cerró sola, el rescate guarda la evolución pero no emite la constancia: se emite desde "completar documentación".
+- Etiqueta "Constancia de atención" en las pantallas del paciente y del profesional, y en el mail de documentos.
+
+**Para que decida Diego antes de abrir:** que la constancia salga tildada por defecto (propuesta: sí, el paciente suele necesitarla) y el texto de la casilla. La matrícula nacional se escribe "MN 12345 — Nacional".
 
 ### F4 — Textos y avisos
 - "Médico" → "profesional" en todo el recorrido del turno (pantallas, mails, push) y en el panel; consentimiento informado con las líneas de salud mental (números verificados antes de publicar); mail de bienvenida sin consulta inmediata.

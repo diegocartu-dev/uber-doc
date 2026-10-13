@@ -11,7 +11,8 @@ const bwipjs = require("bwip-js");
 
 export type DocumentoPDF = {
   id: string;
-  tipo: "receta" | "indicaciones" | "certificado" | "orden";
+  // "constancia": la del psicólogo (13/10/2026, lib/documentos/constancia.ts).
+  tipo: "receta" | "indicaciones" | "certificado" | "orden" | "constancia";
   diagnostico: string;
   contenido: string;
   created_at: string;
@@ -148,6 +149,7 @@ const tipoLabel: Record<string, string> = {
   indicaciones: "INDICACIONES MÉDICAS",
   certificado: "CERTIFICADO MÉDICO",
   orden: "ORDEN MÉDICA",
+  constancia: "CONSTANCIA DE ATENCIÓN",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -338,23 +340,36 @@ export async function generarRecetaPDF(
       // ─── HEADER ──────────────────────────────────────────────────────
       renderHeader(pdf, titulo, doc.created_at, accent, branding);
 
-      // ─── PROFESIONAL (Hallazgo 1) ───────────────────────────────────────
-      await renderProfesionalBox(pdf, doc, accent);
+      // ─── CONSTANCIA DE ATENCIÓN (psicología, 13/10/2026) ────────────────
+      // El texto aprobado ya trae al paciente (nombre y DNI) y al profesional
+      // (título, profesión, matrícula con jurisdicción y domicilio), y entra
+      // entero al hash. No lleva los bloques de profesional y paciente (serían
+      // los mismos datos dos veces) ni el de diagnóstico: nada clínico.
+      const esConstancia = doc.tipo === "constancia";
 
-      // ─── PACIENTE (Hallazgo 1) ───────────────────────────────────────
-      renderPacienteBox(pdf, doc, accent, branding);
+      if (!esConstancia) {
+        // ─── PROFESIONAL (Hallazgo 1) ───────────────────────────────────────
+        await renderProfesionalBox(pdf, doc, accent);
 
-      // ─── DIAGNÓSTICO (Hallazgo 7, 9) ─────────────────────────────────
-      pdf.moveDown(0.3);
-      renderSectionLabel(pdf, "DIAGNÓSTICO", accent);
-      pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
-      pdf.text(doc.diagnostico, MARGIN.left, undefined, { width: CONTENT_WIDTH });
+        // ─── PACIENTE (Hallazgo 1) ───────────────────────────────────────
+        renderPacienteBox(pdf, doc, accent, branding);
+
+        // ─── DIAGNÓSTICO (Hallazgo 7, 9) ─────────────────────────────────
+        pdf.moveDown(0.3);
+        renderSectionLabel(pdf, "DIAGNÓSTICO", accent);
+        pdf.font("Inter").fontSize(10).fillColor(COLORS.primary);
+        pdf.text(doc.diagnostico, MARGIN.left, undefined, { width: CONTENT_WIDTH });
+      }
 
       // ─── CONTENIDO ────────────────────────────────────────────────────
       // Observación #3 Martín: evitar "RECETA MÉDICA" duplicado (ya está en el header)
       pdf.moveDown(0.3);
 
-      if (doc.tipo === "certificado") {
+      if (esConstancia) {
+        pdf.moveDown(0.8);
+        pdf.font("Inter").fontSize(11).fillColor(COLORS.primary);
+        pdf.text(doc.contenido, MARGIN.left, undefined, { width: CONTENT_WIDTH, lineGap: 3 });
+      } else if (doc.tipo === "certificado") {
         // Certificado de reposo laboral (art. 210 LCT) — bloques estructurados.
         // El diagnóstico ya se renderizó arriba. Acá: tratamiento + días de reposo.
         renderSectionLabel(pdf, "TRATAMIENTO INDICADO", accent);
