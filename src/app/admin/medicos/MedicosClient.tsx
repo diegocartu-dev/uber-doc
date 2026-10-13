@@ -125,6 +125,9 @@ export default function MedicosClient({
   const COLUMNAS: Columna<Medico>[] = useMemo(() => [
     { k: "profesional", t: "Profesional", val: (m) => m.nombre_completo,
       busca: (m) => `${m.nombre_completo} ${m.email} ${m.dni ?? ""}` },
+    // Profesión (13/10/2026, psicólogos): dos valores cerrados → embudo. "Médico" va
+    // primero en el embudo porque es lo que son todas las fichas anteriores.
+    { k: "profesion", t: "Profesión", val: (m) => nombreProfesionTabla(m), rango: CICLO_PROFESION },
     { k: "especialidad", t: "Especialidad", val: (m) => m.especialidad },
     { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
     { k: "categoria", t: "Categoría", val: (m) => (m.categoria === "founder" ? "Founder" : m.categoria ? "Tradicional" : "—"),
@@ -419,6 +422,7 @@ function coincideConTexto(m: Medico, texto: string): boolean {
   const heno = textoBuscable([
     m.nombre_completo, m.email, m.numero_matricula, m.tipo_matricula, m.dni,
     m.especialidad, m.provincia_matricula, m.categoria === "founder" ? "founder fundador" : m.categoria,
+    nombreProfesionTabla(m),
     ...(m.jurisdicciones ?? []),
   ].filter(Boolean).join(" "));
   return q.split(/\s+/).every((t) => heno.includes(t));
@@ -429,6 +433,13 @@ function coincideConTexto(m: Medico, texto: string): boolean {
 // atender · faltan 3 de 5" como chips sueltos: informaban, pero no se podían filtrar.
 // Como valor de columna, "mostrame los que no pueden cobrar" es un clic en el embudo.
 // El texto largo con su explicación no se pierde: viaja en el `title` de la celda.
+
+// Profesión como valor de columna: "Médico" para toda ficha anterior al 13/10/2026
+// (y para la que no lo diga), "Psicólogo" solo si la ficha lo dice.
+const CICLO_PROFESION = ["Médico", "Psicólogo"];
+function nombreProfesionTabla(m: { profesion?: string | null }): string {
+  return profesionDe(m.profesion) === "psicologo" ? "Psicólogo" : "Médico";
+}
 
 const CICLO_COBROS = ["Puede cobrar", "Sin cuenta", "Permiso vencido", "Cuenta de otro país"];
 function estadoCobros(m: Medico): string {
@@ -928,6 +939,7 @@ function MedicoFila({
           </button>
           <span className="block max-w-[220px] truncate text-[11px] text-gray-400">{m.email}</span>
         </td>
+        <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-gray-600">{nombreProfesionTabla(m)}</td>
         <td className="px-3 py-2.5 text-[12px] text-gray-600">{m.especialidad}</td>
         <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-gray-500">
           {m.tipo_matricula} {m.numero_matricula}
@@ -1376,6 +1388,7 @@ function MedicoDetalle({
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Matrícula</p>
         <div className="mt-3 space-y-2 text-sm">
+          <Field label="Profesión" value={nombreProfesionTabla(m)} />
           <Field label="Tipo" value={m.tipo_matricula} />
           <Field label="Número" value={m.numero_matricula} />
           <Field label="Provincia" value={m.provincia_matricula} />

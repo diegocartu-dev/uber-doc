@@ -20,6 +20,18 @@ function hoyAR() {
 const medianocheARenUTC = (fechaISO: string) => `${fechaISO}T03:00:00Z`;
 const SLOTS = ["disponible", "bloqueado", "bloqueado_sin_cobro"];
 
+// Profesión de cada profesional (13/10/2026, psicólogos): para que la fila diga
+// "Lic." y "Psicología". Query APARTE de la de nombres, a propósito: si la
+// columna faltara en una base, PostgREST falla la query entera y el panel se
+// quedaría sin nombres. Si esta falla, todos salen como médicos (lo que eran).
+async function profesionPorMedico(admin: ReturnType<typeof createAdminClient>, medicoIds: string[]) {
+  const mapa = new Map<string, string | null>();
+  if (medicoIds.length === 0) return mapa;
+  const { data } = await admin.from("medicos").select("id, profesion").in("id", medicoIds);
+  for (const m of data ?? []) mapa.set(m.id as string, (m.profesion as string | null) ?? null);
+  return mapa;
+}
+
 // Las reservas ABANDONADAS (decisión Diego 06/08) no se muestran en ningún
 // reporte: el criterio, el mecanismo que las genera y por qué no se borran de la
 // base viven en un solo lugar, `src/lib/insights/reservas.ts`. Acá se aplican
@@ -49,9 +61,10 @@ export async function GET(req: NextRequest) {
     const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...(turnos ?? []).map((t) => t.medico_id)])];
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...(turnos ?? []).map((t) => t.paciente_id)])];
 
-    const [{ data: medicos }, { data: pacientes }] = await Promise.all([
+    const [{ data: medicos }, { data: pacientes }, profesiones] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0 ? admin.from("pacientes").select("id, user_id, nombre_completo").in("user_id", pacienteIds) : { data: [] },
+      profesionPorMedico(admin, medicoIds),
     ]);
 
     const testIds = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
@@ -65,6 +78,7 @@ export async function GET(req: NextRequest) {
         tipo: "CI" as const,
         estado: c.estado,
         medico: medMap.get(c.medico_id) ?? "—",
+        profesion: profesiones.get(c.medico_id) ?? null,
         paciente: pacMapUserId.get(c.paciente_id) ?? "Paciente",
         inicio: c.created_at,
         especialidad: c.especialidad,
@@ -74,6 +88,7 @@ export async function GET(req: NextRequest) {
         tipo: "Turno" as const,
         estado: t.estado,
         medico: medMap.get(t.medico_id) ?? "—",
+        profesion: profesiones.get(t.medico_id) ?? null,
         paciente: pacMapId.get(t.paciente_id) ?? "Paciente",
         inicio: `${t.fecha}T${t.hora_inicio}`,
         especialidad: "",
@@ -118,11 +133,12 @@ export async function GET(req: NextRequest) {
     const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnosActividad.map((t) => t.medico_id)])];
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnosActividad.map((t) => t.paciente_id)])].filter(Boolean);
 
-    const [{ data: medicos }, { data: pacientes }] = await Promise.all([
+    const [{ data: medicos }, { data: pacientes }, profesiones] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0
         ? admin.from("pacientes").select("id, user_id, nombre_completo, es_cuenta_test").or(`user_id.in.(${pacienteIds.join(",")}),id.in.(${pacienteIds.join(",")})`)
         : { data: [] },
+      profesionPorMedico(admin, medicoIds),
     ]);
 
     const medTest = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
@@ -141,6 +157,7 @@ export async function GET(req: NextRequest) {
           canal: "ci",
           estado: c.estado,
           medico: medMap.get(c.medico_id) ?? "—",
+          profesion: profesiones.get(c.medico_id) ?? null,
           paciente: pacDe(c.paciente_id)?.nombre_completo ?? "—",
           especialidad: c.especialidad ?? "",
           solicitada: c.created_at,
@@ -155,6 +172,7 @@ export async function GET(req: NextRequest) {
           canal: (t.canal_origen as string) === "consultorio_privado" ? "consultorio" : "clinica",
           estado: t.estado,
           medico: medMap.get(t.medico_id) ?? "—",
+          profesion: profesiones.get(t.medico_id) ?? null,
           paciente: pacDe(t.paciente_id)?.nombre_completo ?? "—",
           especialidad: "",
           solicitada: (t.mp_payment_created_at as string | null) ?? t.updated_at,
@@ -236,11 +254,12 @@ export async function GET(req: NextRequest) {
     // `consultas.paciente_id` es el user_id; `turnos.paciente_id` es pacientes.id.
     const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnos.map((t) => t.paciente_id)])].filter(Boolean);
 
-    const [{ data: medicos }, { data: pacientes }] = await Promise.all([
+    const [{ data: medicos }, { data: pacientes }, profesiones] = await Promise.all([
       medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
       pacienteIds.length > 0
         ? admin.from("pacientes").select("id, user_id, nombre_completo, es_cuenta_test").or(`user_id.in.(${pacienteIds.join(",")}),id.in.(${pacienteIds.join(",")})`)
         : { data: [] },
+      profesionPorMedico(admin, medicoIds),
     ]);
 
     const testIds3 = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
@@ -255,6 +274,7 @@ export async function GET(req: NextRequest) {
       ...(consultas ?? []).filter((c) => real(c.medico_id, c.paciente_id)).map((c) => ({
         id: c.id, tipo: "CI" as const, canal: "ci", estado: c.estado,
         medico: medMap3.get(c.medico_id) ?? "—",
+        profesion: profesiones.get(c.medico_id) ?? null,
         paciente: pacDe3(c.paciente_id)?.nombre_completo ?? "Paciente",
         inicio: c.created_at, especialidad: c.especialidad,
         porque: diagnosticarConsulta({ ...c, cierre_evidencia: (evidencias.get(c.id) as never) ?? null }),
@@ -264,6 +284,7 @@ export async function GET(req: NextRequest) {
         canal: (t.canal_origen as string) === "consultorio_privado" ? "consultorio" : "clinica",
         estado: t.estado,
         medico: medMap3.get(t.medico_id) ?? "—",
+        profesion: profesiones.get(t.medico_id) ?? null,
         paciente: pacDe3(t.paciente_id)?.nombre_completo ?? "Paciente",
         // El "inicio" de un turno es la hora de la cita, no cuándo se reservó.
         inicio: `${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`,
