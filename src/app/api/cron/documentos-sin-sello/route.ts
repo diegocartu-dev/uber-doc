@@ -73,13 +73,18 @@ export const GET = withCron("documentos-sin-sello", async () => {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { count: total } = await admin
+  const { count: total, error: errorTotal } = await admin
     .from("documentos")
     .select("id, medicos!inner(es_cuenta_test)", { count: "exact", head: true })
     .not("medicos.es_cuenta_test", "is", true)
     .in("tipo", tipos)
     .gte("created_at", desde)
     .lte("created_at", hasta);
+
+  // Sin el total, "N de 0" escondería el aviso rojo: también avisa withCron.
+  if (errorTotal) {
+    return NextResponse.json({ error: errorTotal.message }, { status: 500 });
+  }
 
   const faltantes = sinSello?.length ?? 0;
   const emitidos = total ?? 0;

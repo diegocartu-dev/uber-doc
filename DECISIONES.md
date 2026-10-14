@@ -80,6 +80,8 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - **`revocarClaves()` rota:** nadie la llama; el día que haya que rotar una clave, el profesional queda sin poder firmar.
 - **La CI de PRs no prueba Safari móvil** (solo Chromium).
 
+- **El vigilante de firma (`documentos-sin-sello`) excluye solo al profesional de prueba (14/10, revisión de #574).** Un documento de un paciente de prueba con un profesional real, creado por script, todavía dispararía la alerta (la convención de `src/lib/insights/filtro-test.ts` filtra los dos lados). Hoy no hay ningún caso así.
+
 **Prolijidad:**
 - `cerrar-huerfanas` en la instancia loguea una vez por día `column mp_oauth_state.id does not exist` (el cron da ok).
 - Badge "N pendientes" de la agenda del profesional (`src/app/medico/agenda/PanelDerecho.tsx`): cuenta reservas muertas.
