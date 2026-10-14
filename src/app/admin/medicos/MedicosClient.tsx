@@ -72,6 +72,12 @@ interface Medico {
   mpSiteVerificadoAt?: string | null;
 }
 
+// La categoría se muestra con su porcentaje: sin él, "Founder" no dice cuánto se cobra.
+function etiquetaCategoria(m: Pick<Medico, "categoria">, comisiones: { founder: number; tradicional: number }): string {
+  if (m.categoria === "founder") return `Founder · ${comisiones.founder}%`;
+  return m.categoria ? `Tradicional · ${comisiones.tradicional}%` : "—";
+}
+
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -84,10 +90,13 @@ const TABS: { key: Tab; label: string }[] = [
 export default function MedicosClient({
   medicos: initial,
   gateIdentidadActiva,
+  comisiones,
 }: {
   medicos: Medico[];
   // Estado REAL del flag identidad_gate_activa, leído en el server (page.tsx).
   gateIdentidadActiva: boolean;
+  // Coste por uso de cada categoría, de comisiones_config (page.tsx).
+  comisiones: { founder: number; tradicional: number };
 }) {
   const router = useRouter();
   const [medicos, setMedicos] = useState(initial);
@@ -130,8 +139,8 @@ export default function MedicosClient({
     { k: "profesion", t: "Profesión", val: (m) => nombreProfesionTabla(m), rango: CICLO_PROFESION },
     { k: "especialidad", t: "Especialidad", val: (m) => m.especialidad },
     { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
-    { k: "categoria", t: "Categoría", val: (m) => (m.categoria === "founder" ? "Founder" : m.categoria ? "Tradicional" : "—"),
-      busca: (m) => (m.categoria === "founder" ? "founder fundador" : m.categoria ?? "") },
+    { k: "categoria", t: "Categoría", val: (m) => etiquetaCategoria(m, comisiones),
+      busca: (m) => `${etiquetaCategoria(m, comisiones)} ${m.categoria === "founder" ? "fundador" : ""}` },
     // Fecha de alta: sin ella, decidir una suspensión es a ciegas — el que se anotó
     // anteayer merece más tiempo que el de hace ocho meses. Crece sin techo, así que
     // lleva orden y NO embudo (mandato de tablas), y se busca por "14/09", no por ISO.
@@ -140,7 +149,7 @@ export default function MedicosClient({
     { k: "cobros", t: "Cobros", val: (m) => estadoCobros(m), rango: CICLO_COBROS },
     { k: "identidad", t: "Identidad", val: (m) => estadoIdentidad(m), rango: CICLO_IDENTIDAD },
     { k: "acc", t: "Acciones", val: () => "", sinOrden: true, sinBuscar: true },
-  ], []);
+  ], [comisiones]);
 
   const vista = useVistaTabla(esFlujo ? [] : filtered, COLUMNAS, {
     clave: (m) => m.id,
@@ -385,6 +394,7 @@ export default function MedicosClient({
                       onCancelConfirm={() => setConfirmando(null)}
                       onVerPerfil={() => setPanelMedicoId(m.id)}
                       onImpersonate={() => handleImpersonate(m.user_id, m.nombre_completo)}
+                      categoria={etiquetaCategoria(m, comisiones)}
                     />
                   ))}
                 </tbody>
@@ -400,7 +410,7 @@ export default function MedicosClient({
         onClose={() => setPanelMedicoId(null)}
         title={panelMedico?.nombre_completo ?? ""}
       >
-        {panelMedico && <MedicoDetalle medico={panelMedico} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} onContactoActualizado={actualizarContacto} onMatriculaCorregida={actualizarMatricula} onRefepsActualizado={(validado, data, juris) => actualizarRefeps(panelMedico.id, validado, data, juris)} />}
+        {panelMedico && <MedicoDetalle medico={panelMedico} categoria={etiquetaCategoria(panelMedico, comisiones)} onImpersonate={() => handleImpersonate(panelMedico.user_id, panelMedico.nombre_completo)} onContactoActualizado={actualizarContacto} onMatriculaCorregida={actualizarMatricula} onRefepsActualizado={(validado, data, juris) => actualizarRefeps(panelMedico.id, validado, data, juris)} />}
       </SidePanel>
     </div>
   );
@@ -920,8 +930,10 @@ function MedicoFila({
   onCancelConfirm,
   onVerPerfil,
   onImpersonate,
+  categoria,
 }: {
   medico: Medico;
+  categoria: string;
   procesando: boolean;
   confirmando: string | null;
   onAccion: (accion: string, motivo?: string) => void;
@@ -949,7 +961,7 @@ function MedicoFila({
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
               m.categoria === "founder" ? "bg-blue-50 text-[#378ADD]" : "bg-gray-100 text-gray-600"
             }`}>
-              {m.categoria === "founder" ? "Founder" : "Tradicional"}
+              {categoria}
             </span>
           ) : <span className="text-gray-300">—</span>}
         </td>
@@ -1316,12 +1328,14 @@ function BloqueElegirMatricula({
 
 function MedicoDetalle({
   medico: m,
+  categoria,
   onImpersonate,
   onContactoActualizado,
   onMatriculaCorregida,
   onRefepsActualizado,
 }: {
   medico: Medico;
+  categoria: string;
   onImpersonate: () => void;
   onContactoActualizado?: (id: string, celular: string | null, telefono: string | null) => void;
   onMatriculaCorregida?: (id: string, campos: Partial<Medico>) => void;
@@ -1393,6 +1407,7 @@ function MedicoDetalle({
           <Field label="Número" value={m.numero_matricula} />
           <Field label="Provincia" value={m.provincia_matricula} />
           <Field label="Especialidad" value={m.especialidad} />
+          <Field label="Categoría" value={categoria} />
         </div>
         <BloqueElegirMatricula medico={m} onCorregida={onMatriculaCorregida} />
       </div>
