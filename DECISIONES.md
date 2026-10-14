@@ -82,6 +82,7 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 - **Si falla la lectura del porcentaje, se cobra 5 % (14/10, revisión de #573).** `getComisionForMedico` (`src/lib/comisiones.ts`) devuelve 5 ante un error y `get_comision_medico` cae a 5 con `COALESCE`. Con profesionales Tradicional, un error les cobra la mitad (la diferencia la pierde Docto, no el profesional). Viene de antes; no frena ningún pago.
 - **`medicos` no se upsertea con `categoria` (14/10, revisión de #573).** El trigger del 14/10 pisa la categoría en todo INSERT, y un upsert con ON CONFLICT DO UPDATE que incluya `categoria` (o la fila entera) bajaría a un fundador a Tradicional. Hoy no hay ningún camino así (latente).
+- **El vigilante de firma (`documentos-sin-sello`) excluye solo al profesional de prueba (14/10, revisión de #574).** Un documento de un paciente de prueba con un profesional real, creado por script, todavía dispararía la alerta (la convención de `src/lib/insights/filtro-test.ts` filtra los dos lados). Hoy no hay ningún caso así.
 
 **Prolijidad:**
 - "Comisión" en el panel del profesional (`src/app/medico/como-atendes/page.tsx` y `ConsultorioParticular.tsx`): la regla de textos #2 pide "coste por uso de la plataforma". Desde el 14/10 todo profesional nuevo ve la rama Tradicional de ese texto.

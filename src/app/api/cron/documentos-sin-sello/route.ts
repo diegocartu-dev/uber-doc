@@ -54,9 +54,13 @@ export const GET = withCron("documentos-sin-sello", async () => {
   const hasta = new Date(ahora - GRACIA_MS).toISOString();
   const tipos = [...TIPOS_FIRMABLES];
 
+  // Las cuentas de prueba no se cuentan (14/10/2026): una receta de prueba creada
+  // por script, sin pasar por "Finalizar" (que es lo que firma), disparó el mail
+  // rojo de "ningún documento se está firmando" con todos los reales firmados.
   const { data: sinSello, error } = await admin
     .from("documentos")
-    .select("id, tipo, created_at")
+    .select("id, tipo, created_at, medicos!inner(es_cuenta_test)")
+    .not("medicos.es_cuenta_test", "is", true)
     .in("tipo", tipos)
     .is("firma_digital", null)
     .gte("created_at", desde)
@@ -69,12 +73,18 @@ export const GET = withCron("documentos-sin-sello", async () => {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { count: total } = await admin
+  const { count: total, error: errorTotal } = await admin
     .from("documentos")
-    .select("id", { count: "exact", head: true })
+    .select("id, medicos!inner(es_cuenta_test)", { count: "exact", head: true })
+    .not("medicos.es_cuenta_test", "is", true)
     .in("tipo", tipos)
     .gte("created_at", desde)
     .lte("created_at", hasta);
+
+  // Sin el total, "N de 0" escondería el aviso rojo: también avisa withCron.
+  if (errorTotal) {
+    return NextResponse.json({ error: errorTotal.message }, { status: 500 });
+  }
 
   const faltantes = sinSello?.length ?? 0;
   const emitidos = total ?? 0;
