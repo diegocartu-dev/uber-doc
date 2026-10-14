@@ -782,8 +782,8 @@ export async function avisarMedicoPorPlantada(
       `Se reembolsó el 100% al paciente, se pausó la publicación de su agenda` +
       `${seApago ? " y se apagó su Consulta Inmediata" : ""}. ` +
       (esFounder
-        ? "Es fundador (5%): revisar si corresponde pasarlo a categoría general."
-        : "Ya está en categoría general."),
+        ? "Es fundador (5%): revisar si corresponde pasarlo a Oro."
+        : "Ya está en Oro."),
     entidad_tipo: "medico",
     entidad_id: medicoId,
     severidad: "alta",

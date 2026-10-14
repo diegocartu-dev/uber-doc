@@ -22,6 +22,7 @@ import {
 import { profesionDe } from "@/lib/refeps/profesion";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
+import { nombreCategoria } from "@/lib/categorias";
 
 interface Medico {
   id: string;
@@ -72,10 +73,10 @@ interface Medico {
   mpSiteVerificadoAt?: string | null;
 }
 
-// La categoría se muestra con su porcentaje: sin él, "Founder" no dice cuánto se cobra.
+// La categoría se muestra con su porcentaje: sin él, "Fundador" no dice cuánto se cobra.
 function etiquetaCategoria(m: Pick<Medico, "categoria">, comisiones: { founder: number; tradicional: number }): string {
-  if (m.categoria === "founder") return `Founder · ${comisiones.founder}%`;
-  return m.categoria ? `Tradicional · ${comisiones.tradicional}%` : "—";
+  if (m.categoria === "founder") return `${nombreCategoria("founder")} · ${comisiones.founder}%`;
+  return m.categoria ? `${nombreCategoria(m.categoria)} · ${comisiones.tradicional}%` : "—";
 }
 
 type Tab = "pendiente_revision" | "aprobado" | "rechazado" | "suspendido";
@@ -140,7 +141,8 @@ export default function MedicosClient({
     { k: "especialidad", t: "Especialidad", val: (m) => m.especialidad },
     { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
     { k: "categoria", t: "Categoría", val: (m) => etiquetaCategoria(m, comisiones),
-      busca: (m) => `${etiquetaCategoria(m, comisiones)} ${m.categoria === "founder" ? "fundador" : ""}` },
+      // Busca también por el nombre anterior (founder / tradicional).
+      busca: (m) => `${etiquetaCategoria(m, comisiones)} ${m.categoria ?? ""}` },
     // Fecha de alta: sin ella, decidir una suspensión es a ciegas — el que se anotó
     // anteayer merece más tiempo que el de hace ocho meses. Crece sin techo, así que
     // lleva orden y NO embudo (mandato de tablas), y se busca por "14/09", no por ISO.
@@ -310,8 +312,8 @@ export default function MedicosClient({
         <div className="mt-3 flex gap-2">
           {[
             { key: null, label: "Todos" },
-            { key: "founder", label: "Founder" },
-            { key: "tradicional", label: "Tradicional" },
+            { key: "founder", label: nombreCategoria("founder") },
+            { key: "tradicional", label: nombreCategoria("tradicional") },
           ].map(({ key, label }) => {
             const count = key
               ? medicos.filter((m) => m.estado_registro === "aprobado" && m.categoria === key).length
@@ -431,7 +433,7 @@ function coincideConTexto(m: Medico, texto: string): boolean {
   if (!q) return true;
   const heno = textoBuscable([
     m.nombre_completo, m.email, m.numero_matricula, m.tipo_matricula, m.dni,
-    m.especialidad, m.provincia_matricula, m.categoria === "founder" ? "founder fundador" : m.categoria,
+    m.especialidad, m.provincia_matricula, m.categoria === "founder" ? "founder fundador" : m.categoria ? "tradicional oro" : "",
     nombreProfesionTabla(m),
     ...(m.jurisdicciones ?? []),
   ].filter(Boolean).join(" "));

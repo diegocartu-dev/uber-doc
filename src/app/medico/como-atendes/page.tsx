@@ -9,6 +9,7 @@ import { esInstitucional } from "@/lib/instancia";
 import { videosParaPantalla, puedeVerCapacitacion } from "@/lib/capacitacion";
 import VideosCapacitacion from "./VideosCapacitacion";
 import { Zap, CalendarDays, Link2, ChevronRight, ChevronLeft, PlayCircle } from "lucide-react";
+import CosteCategoria from "@/components/CosteCategoria";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function ComoAtendesPage() {
   const agendasConsultorio = activasPorCanal("consultorio_privado");
 
   // Transparencia de comisión (Martín, gate 15/07): el % REAL del médico según
-  // su categoría (founder/tradicional), nunca un número hardcodeado.
+  // su categoría (Fundador/Oro), nunca un número hardcodeado.
   const comisionPct = await getComisionForMedico(medico.id);
 
   const ciConfigurada =
@@ -199,18 +200,10 @@ export default async function ComoAtendesPage() {
             ? "El precio lo ponés en cada agenda que crees."
             : "El precio lo ponés en cada modo: uno para la consulta inmediata, y uno por cada agenda que crees."}
         </p>
-        {/* Founders ven la felicitación con su beneficio (pedido Diego 15/07). */}
-        {medico.categoria === "founder" ? (
-          <p className="mt-2 text-[13px] text-gray-500">
-            <strong className="text-gray-700">¡Felicitaciones por tu categoría de {esPsicologo ? "Profesional" : "Médico"} Fundador!</strong>{" "}
-            Docto te descuenta una comisión de solo el <strong className="text-gray-700">{comisionPct}%</strong> por
-            consulta realizada; el resto va directo a tu Mercado Pago.
-          </p>
-        ) : (
-          <p className="mt-2 text-[13px] text-gray-500">
-            Docto descuenta una comisión del <strong className="text-gray-700">{comisionPct}%</strong> por
-            consulta realizada; el resto va directo a tu Mercado Pago.
-          </p>
+        {/* Categoría y coste por uso (Diego, 15/07 y 14/10/2026). La instancia
+            institucional no cobra por Mercado Pago: ahí no se muestra. */}
+        {!esInstitucional() && (
+          <CosteCategoria categoria={medico.categoria} comisionPct={comisionPct} esPsicologo={esPsicologo} className="mt-2" />
         )}
 
         {/* ── Cómo se usa Docto ──

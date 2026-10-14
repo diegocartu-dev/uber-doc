@@ -5,6 +5,7 @@ import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
 import AppNavbar from "@/components/AppNavbar";
 import { getComisionForMedico } from "@/lib/comisiones";
 import ConsultorioParticular from "./ConsultorioParticular";
+import { esInstitucional } from "@/lib/instancia";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,7 @@ export default async function ConsultorioParticularPage() {
         modelos={modelosCompletos}
         comisionPct={comisionPct}
         visibleInicial={medico.visible_consultorio_particular !== false}
-        esFounder={medico.categoria === "founder"}
+        categoria={esInstitucional() ? null : medico.categoria}
         esPsicologo={esPsicologo}
       />
     </div>

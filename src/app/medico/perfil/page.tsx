@@ -7,6 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import PerfilClient from "./PerfilClient";
 import { parsearAreasAtencion } from "@/lib/areas-atencion";
+import { esInstitucional } from "@/lib/instancia";
+import { getComisionForMedico } from "@/lib/comisiones";
+import { nombreCategoria } from "@/lib/categorias";
 
 export default async function PerfilMedicoPage() {
   const supabase = await createClient();
@@ -66,6 +69,18 @@ export default async function PerfilMedicoPage() {
   // Profesión (13/10/2026): un psicólogo no se pasa a Medicina general.
   const profesion = (areasRow as { profesion?: string | null } | null)?.profesion ?? null;
 
+  // Categoría y su coste por uso (Diego, 14/10/2026): "Categoría: Fundador 5 %".
+  // Query PROPIA con service role, por la misma regla que la de arriba. La
+  // instancia institucional no cobra por Mercado Pago: ahí no se muestra.
+  let categoria: string | null = null;
+  if (!esInstitucional()) {
+    const [{ data: categoriaRow }, comisionPct] = await Promise.all([
+      admin.from("medicos").select("categoria").eq("user_id", user.id).maybeSingle(),
+      getComisionForMedico(medico.id),
+    ]);
+    if (categoriaRow?.categoria) categoria = `${nombreCategoria(categoriaRow.categoria)} ${comisionPct}\u00a0%`;
+  }
+
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
     .select(
@@ -83,6 +98,7 @@ export default async function PerfilMedicoPage() {
           userEmail={user.email ?? ""}
           areasAtencion={areasAtencion}
           especialidadesAdicionales={especialidadesAdicionales}
+          categoria={categoria}
         />
       </Suspense>
     </div>

@@ -51,6 +51,7 @@ export default function PerfilClient({
   userEmail,
   areasAtencion = [],
   especialidadesAdicionales = [],
+  categoria = null,
 }: {
   medico: Medico;
   mpAccount: MpAccount | null;
@@ -60,6 +61,8 @@ export default function PerfilClient({
   // Áreas de atención adicionales ya declaradas (ej: Adolescencia 10-19). Llega
   // con default [] para que la pantalla nunca dependa de que el dato exista.
   areasAtencion?: AreaAtencion[];
+  /** "Fundador 5 %" / "Oro 10 %" (14/10/2026); null en la instancia institucional. */
+  categoria?: string | null;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -342,6 +345,11 @@ export default function PerfilClient({
           {/* Con su tratamiento: es cómo el médico se ve nombrado en su propia
               ficha y cómo lo va a ver el paciente en la clínica. */}
           <p className="mt-2 text-base font-medium text-gray-900">{formatNombreMedico(medico.nombre_completo, medico.titulo)}</p>
+          {categoria && (
+            <p className="mt-0.5 text-xs text-gray-500">
+              Categoría: <strong className="text-gray-700">{categoria}</strong>
+            </p>
+          )}
           <button
             onClick={() => fileRef.current?.click()}
             className="mt-1 text-sm font-medium text-[#378ADD]"

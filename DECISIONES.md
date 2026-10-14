@@ -85,7 +85,6 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - **El vigilante de firma (`documentos-sin-sello`) excluye solo al profesional de prueba (14/10, revisión de #574).** Un documento de un paciente de prueba con un profesional real, creado por script, todavía dispararía la alerta (la convención de `src/lib/insights/filtro-test.ts` filtra los dos lados). Hoy no hay ningún caso así.
 
 **Prolijidad:**
-- "Comisión" en el panel del profesional (`src/app/medico/como-atendes/page.tsx` y `ConsultorioParticular.tsx`): la regla de textos #2 pide "coste por uso de la plataforma". Desde el 14/10 todo profesional nuevo ve la rama Tradicional de ese texto.
 - `cerrar-huerfanas` en la instancia loguea una vez por día `column mp_oauth_state.id does not exist` (el cron da ok).
 - Badge "N pendientes" de la agenda del profesional (`src/app/medico/agenda/PanelDerecho.tsx`): cuenta reservas muertas.
 - Tres variables VAPID en Vercel tienen un salto de línea pegado (el código lo limpia).
@@ -98,6 +97,8 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - **Consentimiento del turno: no es obligatorio y la info médica acepta cualquier destino (13/10, revisión de #566).** Nada exige el consentimiento del turno (espera, sala y confirmación no lo miran): quien vuelve de Mercado Pago por "pendiente" o entra por el panel no lo firma. Y `/turno/[id]/info-medica` y `/consulta/[id]/info-medica` usan `?redirect=` sin pasarlo por `sanitizeRedirect` (las páginas de consentimiento sí): un link armado puede mandar afuera después de guardar la info médica. Arreglo: sanitizar en las dos, y si el consentimiento tiene que ser obligatorio, pedirlo en `/turno/[id]/espera`.
 
 ## 5. Decisiones vigentes — índice
+
+- **14/10 — Las categorías del profesional se llaman Fundador (5 %) y Oro (10 %).** Diego: "le podríamos poner esa categoría que les da nivel… los metales es un buen indicador; el top es Fundador por ahora". Lo guardado no cambia (`founder` / `tradicional`); el nombre se pone al mostrar (`src/lib/categorias.ts`). El profesional lo ve en Mi perfil ("Categoría: Fundador 5 %") y en "Cómo atendés" y "Consultorio particular", con el texto de Diego: "El pago del paciente va directo a tu Mercado Pago. A Docto por uso de la plataforma: solo N % por consulta realizada" (`src/components/CosteCategoria.tsx`; "sesión" en psicología; no se muestra en la instancia institucional). Con esto el panel deja de decir "comisión".
 
 - **14/10 — Se cierra el ingreso de fundadores: todo profesional que se registre desde hoy entra como Tradicional (10 %).** Diego: "eliminamos el ingreso de nuevos médicos fundadores, ahora todos entran con 10%". Los que ya tenían ficha conservan su categoría (Fundador, 5 %). Hasta hoy el "Régimen para nuevos médicos" del admin no lo leía nadie (la ficha nacía `founder` por el default de la columna); ahora un trigger le pone a cada ficha nueva la categoría de ese régimen, y el régimen está en Tradicional. El admin muestra el porcentaje junto a la categoría. Ningún texto público ni mail prometía el 5 % a los nuevos (verificado el 14/10). Dónde: `supabase/migrations/20261014_nuevos_medicos_tradicional.sql`, aplicada y probada en la base principal el 14/10.
 
