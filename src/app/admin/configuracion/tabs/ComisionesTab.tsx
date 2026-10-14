@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, AlertTriangle } from "lucide-react";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import { nombreCategoria } from "@/lib/categorias";
 
 interface ComisionesData {
   comisiones: { founder: number; tradicional: number };
@@ -132,9 +133,9 @@ export default function ComisionesTab() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Founders activos" value={data.stats.foundersActivos} />
+        <StatCard label="Fundadores activos" value={data.stats.foundersActivos} />
         <StatCard
-          label="Tradicionales activos"
+          label="Oro activos"
           value={data.stats.tradicionalActivos}
         />
         <StatCard label="Total activos" value={data.stats.totalActivos} />
@@ -154,8 +155,8 @@ export default function ComisionesTab() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-900 capitalize">
-                  {cat}
+                <p className="text-sm font-medium text-gray-900">
+                  {nombreCategoria(cat)}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {data.comisiones[cat]}%
@@ -241,15 +242,15 @@ export default function ComisionesTab() {
           Los medicos que se registren entraran con esta categoria
         </p>
         <div className="mt-3 flex items-center gap-3">
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-[#378ADD] capitalize">
-            {data.regimenNuevos}
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-[#378ADD]">
+            {nombreCategoria(data.regimenNuevos)}
           </span>
           <button
             onClick={() => setConfirmandoRegimen(true)}
             className="text-xs text-gray-500 hover:text-gray-700 underline"
           >
             Cambiar a{" "}
-            {data.regimenNuevos === "founder" ? "tradicional" : "founder"}
+            {nombreCategoria(data.regimenNuevos === "founder" ? "tradicional" : "founder")}
           </button>
         </div>
       </div>
@@ -264,8 +265,8 @@ export default function ComisionesTab() {
             onClick={(e) => e.stopPropagation()}
           >
             <ConfirmDialog
-              title={`Cambiar regimen a ${data.regimenNuevos === "founder" ? "Tradicional" : "Founder"}?`}
-              description={`Los nuevos medicos que se registren entraran como ${data.regimenNuevos === "founder" ? "Tradicional (10%)" : "Founder (5%)"}. Los medicos existentes no se ven afectados.`}
+              title={`Cambiar regimen a ${nombreCategoria(data.regimenNuevos === "founder" ? "tradicional" : "founder")}?`}
+              description={`Los nuevos medicos que se registren entraran como ${data.regimenNuevos === "founder" ? `Oro (${data.comisiones.tradicional}%)` : `Fundador (${data.comisiones.founder}%)`}. Los medicos existentes no se ven afectados.`}
               confirmLabel="Si, cambiar"
               variant="warning"
               onConfirm={cambiarRegimen}
