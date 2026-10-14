@@ -80,7 +80,11 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - **`revocarClaves()` rota:** nadie la llama; el día que haya que rotar una clave, el profesional queda sin poder firmar.
 - **La CI de PRs no prueba Safari móvil** (solo Chromium).
 
+- **Si falla la lectura del porcentaje, se cobra 5 % (14/10, revisión de #573).** `getComisionForMedico` (`src/lib/comisiones.ts`) devuelve 5 ante un error y `get_comision_medico` cae a 5 con `COALESCE`. Con profesionales Tradicional, un error les cobra la mitad (la diferencia la pierde Docto, no el profesional). Viene de antes; no frena ningún pago.
+- **`medicos` no se upsertea con `categoria` (14/10, revisión de #573).** El trigger del 14/10 pisa la categoría en todo INSERT, y un upsert con ON CONFLICT DO UPDATE que incluya `categoria` (o la fila entera) bajaría a un fundador a Tradicional. Hoy no hay ningún camino así (latente).
+
 **Prolijidad:**
+- "Comisión" en el panel del profesional (`src/app/medico/como-atendes/page.tsx` y `ConsultorioParticular.tsx`): la regla de textos #2 pide "coste por uso de la plataforma". Desde el 14/10 todo profesional nuevo ve la rama Tradicional de ese texto.
 - `cerrar-huerfanas` en la instancia loguea una vez por día `column mp_oauth_state.id does not exist` (el cron da ok).
 - Badge "N pendientes" de la agenda del profesional (`src/app/medico/agenda/PanelDerecho.tsx`): cuenta reservas muertas.
 - Tres variables VAPID en Vercel tienen un salto de línea pegado (el código lo limpia).

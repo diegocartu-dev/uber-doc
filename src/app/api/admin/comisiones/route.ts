@@ -139,7 +139,9 @@ export async function PATCH(req: Request) {
       .eq("id", 1)
       .single();
 
-    await admin
+    // Desde el 14/10 el régimen decide la categoría de cada ficha nueva (trigger
+    // trg_asignar_categoria_nuevo_medico): si el update falla, no se dice "listo".
+    const { error: errorRegimen } = await admin
       .from("regimen_nuevos_medicos")
       .update({
         categoria_actual: nuevaCategoria,
@@ -147,6 +149,9 @@ export async function PATCH(req: Request) {
         ultima_modificacion_por: user.id,
       })
       .eq("id", 1);
+    if (errorRegimen) {
+      return NextResponse.json({ error: "No se pudo cambiar el régimen" }, { status: 500 });
+    }
 
     await logAdminAction({
       adminUserId: adminUser.id,
