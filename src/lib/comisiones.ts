@@ -26,7 +26,8 @@ export async function getComisionForMedico(
 }
 
 /**
- * Devuelve la categoria que recibiran los nuevos medicos al aprobarse.
+ * Devuelve la categoria que recibiran los nuevos medicos al registrarse
+ * (la aplica el trigger trg_asignar_categoria_nuevo_medico).
  */
 export async function getRegimenNuevosMedicos(): Promise<CategoriaMedico> {
   const supabase = createAdminClient();
@@ -36,7 +37,7 @@ export async function getRegimenNuevosMedicos(): Promise<CategoriaMedico> {
     .eq("id", 1)
     .single();
 
-  return (data?.categoria_actual as CategoriaMedico) || "founder";
+  return (data?.categoria_actual as CategoriaMedico) || "tradicional";
 }
 
 export async function getComisionesGlobales(): Promise<{
