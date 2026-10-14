@@ -46,6 +46,21 @@
 >   role; cubre los cuatro caminos que crean recetas. Regla de oro de abajo:
 >   si Farmalink falla, la receta se entrega igual.
 >
+> **Especificación oficial leída el 13/10** (catálogo de Farmalink, RecetaElectRest
+> 3.0.0). Está guardada fuera del repo, en `.privado/farmalink/` (gitignored:
+> Farmalink la marca confidencial), con `LEEME.md` y la lista de campos.
+> Lo que cambia el plan:
+> - **Farmalink hoy no devuelve la CUIR:** el campo existe en la respuesta pero
+>   dice "uso futuro, se retorna sin valor". Lo que devuelve es su número de
+>   receta. Registrar la receta sirve igual: la farmacia la encuentra y la valida.
+> - Cada ítem exige cantidad de envases y los códigos ALFABETA de producto y de
+>   droga; Docto no guarda ni la cantidad ni esos códigos.
+> - Del profesional exige fecha de nacimiento y sexo; no se mandan la firma ni el
+>   CIE-10 (alcanza el diagnóstico en texto).
+> - Falta de Farmalink, además de los valores de organización y punto emisor: el
+>   código de entidad para pacientes particulares y de dónde sale el catálogo
+>   ALFABETA.
+>
 > Lo que sigue de este documento es la preparación de mayo-junio. Quedó
 > desactualizado en tres cosas: la tabla `recetas` no está en uso, no existe un
 > QR reservado en el PDF y no hay CIE-10 ni códigos CNPM.

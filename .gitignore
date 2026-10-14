@@ -60,3 +60,6 @@ DOCUMENTACION*/
 design_handoff_landing/
 files.zip
 MANUAL-NOVA-DEMANDA.md
+
+# Documentación de terceros que no se publica (p. ej. la especificación de Farmalink, confidencial)
+.privado/
