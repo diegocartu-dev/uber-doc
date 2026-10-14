@@ -140,7 +140,7 @@ export default function MedicosClient({
     { k: "especialidad", t: "Especialidad", val: (m) => m.especialidad },
     { k: "matricula", t: "Matrícula", val: (m) => `${m.tipo_matricula} ${m.numero_matricula}`, porEvento: true },
     { k: "categoria", t: "Categoría", val: (m) => etiquetaCategoria(m, comisiones),
-      busca: (m) => (m.categoria === "founder" ? "founder fundador" : m.categoria ?? "") },
+      busca: (m) => `${etiquetaCategoria(m, comisiones)} ${m.categoria === "founder" ? "fundador" : ""}` },
     // Fecha de alta: sin ella, decidir una suspensión es a ciegas — el que se anotó
     // anteayer merece más tiempo que el de hace ocho meses. Crece sin techo, así que
     // lleva orden y NO embudo (mandato de tablas), y se busca por "14/09", no por ISO.
