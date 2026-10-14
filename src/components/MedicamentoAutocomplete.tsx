@@ -24,7 +24,13 @@ export type MedicamentoReceta = {
   presentacion: string;
   forma_farmaceutica: string;
   via: string;
+  /** Cantidad de envases (13/10/2026). Sin dato = 1, como siempre. */
+  cantidad?: number;
 };
+
+// Opciones del selector de envases. Una receta común rara vez pide más; si un
+// borrador trae otro número, se agrega a la lista para no perderlo.
+const OPCIONES_ENVASES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // ---------------------------------------------------------------------------
 // Lazy-load del vademécum — NO se incluye en el bundle del workspace.
@@ -98,17 +104,21 @@ function uid(): string {
 function LineaMedicamento({
   med,
   onRemove,
+  onCantidadChange,
 }: {
   med: MedicamentoReceta;
   onRemove: () => void;
+  onCantidadChange: (cantidad: number) => void;
 }) {
+  const cantidad = med.cantidad ?? 1;
+  const opciones = OPCIONES_ENVASES.includes(cantidad) ? OPCIONES_ENVASES : [...OPCIONES_ENVASES, cantidad].sort((a, b) => a - b);
   return (
     <div
       className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2.5 mb-2"
       style={{ border: "0.5px solid #e5e7eb" }}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900">
+        <p className="text-sm font-semibold text-gray-900 break-words">
           {med.nombre}
           {med.droga && med.droga !== med.nombre && (
             <span className="ml-1.5 text-xs font-normal text-gray-400">
@@ -128,6 +138,22 @@ function LineaMedicamento({
           )}
         </div>
       </div>
+      <label className="shrink-0 flex items-center gap-1.5 text-xs text-gray-500">
+        Envases
+        <select
+          value={cantidad}
+          onChange={(e) => onCantidadChange(Number(e.target.value))}
+          className="rounded-md bg-white px-2 text-sm text-gray-900"
+          style={{ minHeight: "44px", border: "0.5px solid #d1d5db" }}
+          aria-label={`Cantidad de envases de ${med.nombre}`}
+        >
+          {opciones.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         onClick={onRemove}
@@ -236,6 +262,7 @@ export default function MedicamentoAutocomplete({
         presentacion: med.presentacion || "",
         forma_farmaceutica: med.forma_farmaceutica || "",
         via: med.via || "",
+        cantidad: 1,
       };
       onMedicamentosChange([...medicamentos, nuevo]);
       setQuery("");
@@ -270,6 +297,10 @@ export default function MedicamentoAutocomplete({
     onMedicamentosChange(medicamentos.filter((m) => m.id !== id));
   }
 
+  function cambiarCantidad(id: string, cantidad: number) {
+    onMedicamentosChange(medicamentos.map((m) => (m.id === id ? { ...m, cantidad } : m)));
+  }
+
   return (
     <div className="mt-4">
       {/* Header con dictado */}
@@ -302,6 +333,7 @@ export default function MedicamentoAutocomplete({
               key={med.id}
               med={med}
               onRemove={() => removeMed(med.id)}
+              onCantidadChange={(n) => cambiarCantidad(med.id, n)}
             />
           ))}
         </div>

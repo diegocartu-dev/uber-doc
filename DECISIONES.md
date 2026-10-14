@@ -94,6 +94,8 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 ## 5. Decisiones vigentes — índice
 
+- **14/10 — Lo que Farmalink exige de nuestro lado, sin tocar lo que funciona.** Diego (13/10): "4, 5 y 6 hay que hacerlos, con cuidado de que no se rompa nada… no toquemos más de lo necesario". Hecho: la receta guarda la lista de medicamentos (`documentos.medicamentos`, solo si coincide con el texto firmado); el profesional elige la cantidad de envases ("Envases", 1 por defecto; con más de uno la receta dice "Cantidad: N envases", con uno sale igual que antes); y la fecha de nacimiento y el sexo del profesional se guardan aparte (`medicos_identidad`, desde Didit). Detalle: `docs/farmalink-integracion.md`.
+
 - **13/10 — La CUIR queda fuera del congelamiento.** Diego: "esto es urgente". Se integra Farmalink (repositorio de recetas de pacientes particulares) para que cada receta lleve su CUIR. Estado y plan: `docs/farmalink-integracion.md` (arriba de todo).
 
 - **13/10 — Congelamiento hasta el 22/10 inclusive.** Diego: "no quiero más cambios ni hallazgos que decidir"; le propuse no sumar nada nuevo hasta una semana después del relanzamiento del 15/10, salvo lo que haga perder consultas, y respondió "me parece lo mejor". Los hallazgos van a §4 sin traérselos. Regla en `CLAUDE.md` (Protocolo de trabajo).

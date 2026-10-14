@@ -29,6 +29,7 @@ import {
 } from "@/lib/documentacion-pendiente";
 import LoadingButton from "@/components/ui/LoadingButton";
 import MedicamentoAutocomplete, { type MedicamentoReceta } from "@/components/MedicamentoAutocomplete";
+import { serializarMedicamentos } from "@/lib/recetas/serializar";
 import ModalDatosPaciente from "@/components/ModalDatosPaciente";
 import { datosCoberturaCompletos, type DatosCobertura } from "@/lib/cobertura";
 import { componerEvolucion, type DatosEvolucion } from "@/lib/evolucion/componer";
@@ -179,43 +180,8 @@ function formatTimer(seg: number): string {
 // Serialización de medicamentos estructurados a texto para PDF/documentos
 // ---------------------------------------------------------------------------
 
-// Formato IFA compatible con AAIP/ReNaPDiS — cada medicamento con Rp/ + IFA + detalles
-function serializarMedicamentos(meds: MedicamentoReceta[], textoLibre: string): string {
-  const bloques: string[] = [];
-  for (let i = 0; i < meds.length; i++) {
-    const med = meds[i];
-    const nombre = (med.nombre ?? "").trim();
-    if (!nombre) continue;
-
-    const lineas: string[] = [];
-    // IFA (droga) como línea principal — formato prescripción
-    const ifa = (med.droga ?? "").trim();
-    lineas.push(`Rp/ ${ifa ? ifa.toUpperCase() : nombre.toUpperCase()}`);
-    if (ifa && nombre !== ifa) {
-      lineas.push(`    Nombre comercial: ${nombre}`);
-    }
-    if (med.forma_farmaceutica?.trim()) {
-      lineas.push(`    Forma farmacéutica: ${capitalizar(med.forma_farmaceutica.trim())}`);
-    }
-    if (med.presentacion?.trim()) {
-      lineas.push(`    Presentación: ${med.presentacion.trim()}`);
-    }
-    if (med.via?.trim()) {
-      lineas.push(`    Vía: ${med.via.trim()}`);
-    }
-    bloques.push(lineas.join("\n"));
-  }
-
-  if ((textoLibre ?? "").trim()) {
-    if (bloques.length > 0) bloques.push("");
-    bloques.push(textoLibre.trim());
-  }
-  return bloques.join("\n\n");
-}
-
-function capitalizar(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+// La serialización vive en src/lib/recetas/serializar.ts (13/10/2026): el
+// servidor la usa para verificar que la lista guardada coincide con la receta.
 
 function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]; textoLibre: string } {
   if (borrador?.medicamentos_structured && Array.isArray(borrador.medicamentos_structured)) {
@@ -226,6 +192,7 @@ function parsearMedicamentosBorrador(borrador: any): { meds: MedicamentoReceta[]
       presentacion: m.presentacion ?? "",
       forma_farmaceutica: m.forma_farmaceutica ?? "",
       via: m.via ?? "",
+      cantidad: typeof m.cantidad === "number" && m.cantidad >= 1 ? m.cantidad : 1,
     }));
     return {
       meds,
@@ -1639,6 +1606,22 @@ export default function WorkspaceConsulta({
           // atención para poder reintentar. El médico se entera por el aviso.
           avisarDocumentacionPendiente("documentos");
           return;
+        }
+
+        // Receta estructurada (13/10/2026): la lista de medicamentos con la
+        // cantidad de envases, para registrar la receta en Farmalink. Solo suma:
+        // la receta ya está guardada; esto no se espera y si falla no cambia
+        // nada de lo que el paciente recibe.
+        // Solo si la receta la guardó ESTE cierre: si ya estaba (la emitió el
+        // rescate con otro borrador), la lista de ahora podría no ser la suya.
+        if (!esPsicologia && medicamentos.length > 0 && filasFaltantes.some((f) => f.tipo === "receta")) {
+          fetch("/api/documentos/receta-medicamentos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            keepalive: true,
+            body: JSON.stringify({ consultaId, tipo, medicamentos }),
+          }).catch(() => {});
         }
 
         // Cierre + evolución. Si el sistema ya la había cerrado, NO se pisan

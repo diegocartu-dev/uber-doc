@@ -61,6 +61,19 @@
 >   código de entidad para pacientes particulares y de dónde sale el catálogo
 >   ALFABETA.
 >
+> **Hecho el 14/10 (lo de Docto que no depende de Farmalink):**
+> - `documentos.medicamentos`: la lista de medicamentos con la cantidad de
+>   envases. La guarda `POST /api/documentos/receta-medicamentos` después de que
+>   la receta ya se guardó, solo si coincide con el texto (`listaCoincideConReceta`,
+>   `src/lib/recetas/serializar.ts`) y sin controlados. Quien la use para
+>   Farmalink la vuelve a validar igual (el profesional podría insertarla con su
+>   sesión). No la tienen las recetas que salen por "completar documentación"
+>   ni por el rescate del borrador: para esas, el texto.
+> - Cantidad de envases: selector por medicamento en la receta (1 por defecto).
+> - `medicos_identidad`: fecha de nacimiento, sexo, nombre y apellido del DNI,
+>   desde Didit (`asegurarIdentidadMedico`, `src/lib/medicos/identidad-didit.ts`);
+>   los ya verificados se completan con `/api/admin/identidad-medicos`.
+>
 > Lo que sigue de este documento es la preparación de mayo-junio. Quedó
 > desactualizado en tres cosas: la tabla `recetas` no está en uso, no existe un
 > QR reservado en el PDF y no hay CIE-10 ni códigos CNPM.
