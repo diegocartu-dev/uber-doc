@@ -238,7 +238,7 @@ export default function ComisionesTab() {
           Regimen para nuevos medicos
         </h2>
         <p className="mt-1 text-xs text-gray-400">
-          Los medicos que se aprueben entraran con esta categoria
+          Los medicos que se registren entraran con esta categoria
         </p>
         <div className="mt-3 flex items-center gap-3">
           <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-[#378ADD] capitalize">
@@ -265,7 +265,7 @@ export default function ComisionesTab() {
           >
             <ConfirmDialog
               title={`Cambiar regimen a ${data.regimenNuevos === "founder" ? "Tradicional" : "Founder"}?`}
-              description={`Los nuevos medicos que se aprueben entraran como ${data.regimenNuevos === "founder" ? "Tradicional (10%)" : "Founder (5%)"}. Los medicos existentes no se ven afectados.`}
+              description={`Los nuevos medicos que se registren entraran como ${data.regimenNuevos === "founder" ? "Tradicional (10%)" : "Founder (5%)"}. Los medicos existentes no se ven afectados.`}
               confirmLabel="Si, cambiar"
               variant="warning"
               onConfirm={cambiarRegimen}
