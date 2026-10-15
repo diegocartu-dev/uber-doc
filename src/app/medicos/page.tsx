@@ -83,7 +83,7 @@ export default async function MedicosLanding() {
     { titulo: "Secretaria virtual siempre disponible", texto: "Nova arma tu agenda y te muestra tus turnos del día." },
     {
       titulo: "Coste claro",
-      texto: `Docto cobra el ${costeNuevos}\u00a0% de cada ${conPsicologos ? "consulta o sesión" : "consulta"} solo cuando vos cobrás. Nada más: sin abono ni costos ocultos. Mercado Pago descuenta aparte su cargo por procesar el pago.`,
+      texto: `Docto cobra el ${costeNuevos}\u00a0% de cada ${conPsicologos ? "consulta o sesión" : "consulta"} solo cuando vos cobrás. Nada más: sin abono ni costos ocultos. Mercado Pago descuenta aparte su cargo por procesar el pago. Lo elegimos porque te permite cobrar antes de atender y recibir la plata directo en tu cuenta.`,
     },
     {
       titulo: "Documentar es simple",
