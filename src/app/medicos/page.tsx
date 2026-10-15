@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Footer from "@/components/Footer";
 import { getFlag } from "@/lib/feature-flags";
+import { getComisionesGlobales } from "@/lib/comisiones";
 
 export default async function MedicosLanding() {
   const supabase = await createClient();
@@ -34,6 +35,9 @@ export default async function MedicosLanding() {
   // Lo que la landing dice de psicología aparece recién con el flag prendido
   // (doc legal §5 y §6): hasta entonces nadie puede registrarse como psicólogo.
   const conPsicologos = await getFlag("registro_psicologos");
+  // El coste por uso que ve quien se registra hoy (todo profesional nuevo entra en
+  // la categoría Oro, 14/10/2026), leído de la configuración y no escrito a mano.
+  const { tradicional: costeNuevos } = await getComisionesGlobales();
 
   const formas = [
     {
@@ -77,6 +81,10 @@ export default async function MedicosLanding() {
     { titulo: "Cobrás antes de atender", texto: "El paciente paga antes de entrar y va directo a tu Mercado Pago." },
     { titulo: "Todo en un solo lugar", texto: "Videoconsulta, agenda, cobro, receta, certificado e historia clínica, sin salir de Docto." },
     { titulo: "Secretaria virtual siempre disponible", texto: "Nova arma tu agenda y te muestra tus turnos del día." },
+    {
+      titulo: "Coste claro",
+      texto: `Docto cobra el ${costeNuevos}\u00a0% de cada ${conPsicologos ? "consulta o sesión" : "consulta"} solo cuando vos cobrás. Nada más: sin abono ni costos ocultos. Mercado Pago descuenta aparte su cargo por procesar el pago.`,
+    },
     {
       titulo: "Documentar es simple",
       texto: `Receta, certificado e historia clínica dentro de la consulta, también dictando. La historia clínica se arma sola con lo que ya cargaron vos y el paciente.${conPsicologos ? " En psicología, la evolución y la constancia de atención." : ""}`,
