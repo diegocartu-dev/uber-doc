@@ -65,7 +65,22 @@ export default async function MedicosLanding() {
   const checks = [
     "Tus honorarios van directo a tu Mercado Pago.",
     "Docto nunca toca tu dinero.",
-    "Sin abono. Sin contrato. Sin letra chica. Solo una comisión cuando atendés.",
+    "Sin abono. Sin contrato. Sin letra chica. Solo un coste por uso de la plataforma cuando atendés.",
+  ];
+
+  // "¿Qué te da Docto?" (texto de Diego, 14/10/2026). Cada línea dice solo lo que
+  // el producto cumple hoy: la historia clínica "se arma sola" con lo que ya
+  // cargaron el paciente y el profesional (componerEvolucion no inventa nada).
+  const queTeDa = [
+    { titulo: "Libertad", texto: "Trabajás para vos, el tiempo que elijas y desde donde quieras. Sin abono, sin contrato." },
+    { titulo: "Tu precio", texto: "Vos fijás tus honorarios." },
+    { titulo: "Cobrás antes de atender", texto: "El paciente paga antes de entrar y va directo a tu Mercado Pago." },
+    { titulo: "Todo en un solo lugar", texto: "Videoconsulta, agenda, cobro, receta, certificado e historia clínica, sin salir de Docto." },
+    { titulo: "Secretaria virtual siempre disponible", texto: "Nova arma tu agenda y te muestra tus turnos del día." },
+    {
+      titulo: "Documentar es simple",
+      texto: `Receta, certificado e historia clínica dentro de la consulta, también dictando. La historia clínica se arma sola con lo que ya cargaron vos y el paciente.${conPsicologos ? " En psicología, la evolución y la constancia de atención." : ""}`,
+    },
   ];
 
   const pasos = [
@@ -165,6 +180,48 @@ export default async function MedicosLanding() {
             Registrarme gratis
             <ArrowRight size={16} />
           </Link>
+        </div>
+      </section>
+
+      {/* ─── QUÉ TE DA DOCTO ─── */}
+      <section style={{ padding: "72px 24px", background: "#fff", borderTop: "1px solid var(--color-border-default)" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+          <h2 style={{
+            fontSize: "clamp(24px, 3vw, 34px)",
+            lineHeight: 1.15,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            margin: "0 0 40px",
+            color: "var(--color-text-primary)",
+            textAlign: "center",
+          }}>
+            ¿Qué te da Docto?
+          </h2>
+          <div className="medicos-que-te-da-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px 40px" }}>
+            {queTeDa.map((item) => (
+              <div key={item.titulo} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{
+                  flexShrink: 0,
+                  width: 24,
+                  height: 24,
+                  borderRadius: 999,
+                  background: "rgba(55, 138, 221, 0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 1,
+                }}>
+                  <Check size={14} style={{ color: "#378ADD" }} />
+                </div>
+                <div style={{ fontSize: 15, lineHeight: 1.55, color: "var(--color-text-secondary)" }}>
+                  <strong style={{ color: "var(--color-text-primary)" }}>{item.titulo}:</strong> {item.texto}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ margin: "36px 0 0", textAlign: "center", fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Y seguimos sumando herramientas.
+          </p>
         </div>
       </section>
 
@@ -438,6 +495,9 @@ export default async function MedicosLanding() {
       <style>{`
         .medicos-hero-h1 { white-space: pre-line; }
         @media (max-width: 840px) {
+          .medicos-que-te-da-grid {
+            grid-template-columns: 1fr !important;
+          }
           .medicos-formas-grid {
             grid-template-columns: 1fr !important;
             max-width: 480px !important;
