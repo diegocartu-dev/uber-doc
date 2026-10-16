@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { rebotePaciente } from "@/lib/instancia";
+import { rebotePaciente, esInstitucional } from "@/lib/instancia";
 import { entrarSalaEspera } from "@/app/clinica/[medicoId]/turnos/actions";
 import EsperaTurno from "./EsperaTurno";
 import DoctoLogo from "@/components/DoctoLogo";
@@ -8,6 +8,7 @@ import { getReturnUrl } from "@/lib/consultorio-url";
 import { registrarEntradaSala } from "@/lib/sala-espera";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { profesionDeLaFicha } from "@/lib/medicos/profesion-ficha";
+import { antesDeLaSala } from "@/lib/turnos/sala-abierta";
 
 export default async function EsperaTurnoPage({
   params,
@@ -32,6 +33,15 @@ export default async function EsperaTurnoPage({
   // salir hacia la del paciente, nunca hacia el dashboard del B2C.
   if (turno.estado !== "confirmado" && turno.estado !== "en_espera")
     redirect(rebotePaciente("/dashboard", `/turno/${turnoId}/acceso`));
+
+  // La sala abre 15 minutos antes del turno (16/10/2026, src/lib/turnos/sala-abierta.ts).
+  // Antes de eso no se marca "esperando" ni se avisa al profesional: se vuelve a
+  // la confirmación del turno, que ya dice cuándo es y muestra el botón de la sala
+  // cuando abre. El mail de "Turno confirmado" trae un link directo a esta página.
+  // Solo B2C: la instancia institucional tiene su propio camino de acceso.
+  if (turno.estado === "confirmado" && !esInstitucional() && antesDeLaSala(turno.fecha, turno.hora_inicio)) {
+    redirect(`/turno/${turnoId}/confirmacion`);
+  }
 
   // Marcar como en_espera si está confirmado
   if (turno.estado === "confirmado") {
