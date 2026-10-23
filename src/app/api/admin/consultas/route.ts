@@ -3,8 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarAdmin, getAdminUser } from "@/lib/admin-auth";
 import { logAdminAction, ADMIN_ACTIONS } from "@/lib/admin-audit";
 import { sinReservasAbandonadas } from "@/lib/insights/reservas";
-import { diagnosticarConsulta, diagnosticarTurno } from "@/lib/consultas/diagnostico";
-import { esInstitucional } from "@/lib/instancia";
+import { cargarAtenciones } from "@/lib/consultas/que-paso";
 
 function fechaAR(offsetDias = 0) {
   const ar = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
@@ -185,114 +184,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (tab === "historial") {
-    // El Historial listaba SOLO consultas inmediatas. La tabla `turnos` quedaba
-    // entera afuera: un turno atendido, o uno al que el profesional no se
-    // presentó y se reembolsó, NO figuraba en ningún lado de esta pantalla.
-    // Diego lo leyó como "no hay consultas" y como una falla del sistema — y en
-    // términos de reporte lo era: la atención existió y la pantalla decía que no.
-    // Los turnos se filtran con `sinReservasAbandonadas` (lib/insights/reservas):
-    // un `reservado_pendiente` con la retención vencida y sin pago es un paciente
-    // que se arrepintió, no una atención.
-    const desde = req.nextUrl.searchParams.get("desde");
-    const hasta = req.nextUrl.searchParams.get("hasta");
-
-    // Las columnas del porqué: la etiqueta de cada caída (lib/consultas/diagnostico).
-    // `cierre_evidencia` NO va acá: la base institucional no la tiene, y una sola
-    // columna inexistente hace fallar la query entera (el Historial quedaría vacío).
-    // Se lee aparte, más abajo, y si falla el porqué sale sin evidencia.
-    let query = admin
-      .from("consultas")
-      .select("id, especialidad, estado, created_at, paciente_id, medico_id, aceptada_at, resuelta_por, resolucion_motivo, pago_id, mp_status, sala_video_url, en_curso_at")
-      .order("created_at", { ascending: false })
-      .limit(200);
-
-    // Límites en día ARGENTINO (no UTC): el día AR arranca a las 03:00Z. Con el
-    // corte anterior ("2026-08-04" = 00:00Z) se colaban consultas de la noche
-    // anterior y se perdían las de 21-24hs AR (reclamo Diego 04/08).
-    if (desde) query = query.gte("created_at", medianocheARenUTC(desde));
-    if (hasta) {
-      const sig = new Date(`${hasta}T12:00:00Z`);
-      sig.setUTCDate(sig.getUTCDate() + 1);
-      query = query.lt("created_at", medianocheARenUTC(sig.toISOString().slice(0, 10)));
-    }
-
-    // Los turnos se acotan por su columna `fecha`, que YA es una fecha
-    // argentina: no lleva el corrimiento de medianoche que sí necesita
-    // `created_at` (timestamptz) arriba.
-    let qTurnos = admin
-      .from("turnos")
-      .select("id, fecha, hora_inicio, estado, paciente_id, medico_id, canal_origen, reservado_hasta, mp_status")
-      .not("paciente_id", "is", null)
-      .not("estado", "in", `(${SLOTS.join(",")})`)
-      .order("fecha", { ascending: false })
-      .limit(200);
-    if (desde) qTurnos = qTurnos.gte("fecha", desde);
-    if (hasta) qTurnos = qTurnos.lte("fecha", hasta);
-
-    const [{ data: consultas }, { data: turnosRaw }] = await Promise.all([query, qTurnos]);
-    const turnos = sinReservasAbandonadas(turnosRaw ?? []);
-
-    const evidencias = new Map<string, unknown>();
-    if (!esInstitucional() && (consultas ?? []).length > 0) {
-      const { data: evs } = await admin
-        .from("consultas")
-        .select("id, cierre_evidencia")
-        .in("id", (consultas ?? []).map((c) => c.id));
-      for (const e of evs ?? []) evidencias.set(e.id, e.cierre_evidencia);
-    }
-    // Lo mismo para los turnos: la columna existe solo en la base del B2C.
-    const evidenciasTurno = new Map<string, unknown>();
-    if (!esInstitucional() && turnos.length > 0) {
-      const { data: evs } = await admin
-        .from("turnos")
-        .select("id, cierre_evidencia")
-        .in("id", turnos.map((t) => t.id));
-      for (const e of evs ?? []) evidenciasTurno.set(e.id, e.cierre_evidencia);
-    }
-
-    const medicoIds = [...new Set([...(consultas ?? []).map((c) => c.medico_id), ...turnos.map((t) => t.medico_id)])];
-    // `consultas.paciente_id` es el user_id; `turnos.paciente_id` es pacientes.id.
-    const pacienteIds = [...new Set([...(consultas ?? []).map((c) => c.paciente_id), ...turnos.map((t) => t.paciente_id)])].filter(Boolean);
-
-    const [{ data: medicos }, { data: pacientes }, profesiones] = await Promise.all([
-      medicoIds.length > 0 ? admin.from("medicos").select("id, nombre_completo, es_cuenta_test").in("id", medicoIds) : { data: [] },
-      pacienteIds.length > 0
-        ? admin.from("pacientes").select("id, user_id, nombre_completo, es_cuenta_test").or(`user_id.in.(${pacienteIds.join(",")}),id.in.(${pacienteIds.join(",")})`)
-        : { data: [] },
-      profesionPorMedico(admin, medicoIds),
-    ]);
-
-    const testIds3 = new Set((medicos ?? []).filter((m) => m.es_cuenta_test).map((m) => m.id));
-    const medMap3 = new Map((medicos ?? []).map((m) => [m.id, m.nombre_completo]));
-    const pacPorUser3 = new Map((pacientes ?? []).map((p) => [p.user_id, p]));
-    const pacPorId3 = new Map((pacientes ?? []).map((p) => [p.id, p]));
-    const pacDe3 = (pid: string | null) => (pid ? pacPorUser3.get(pid) ?? pacPorId3.get(pid) : undefined);
-    const real = (medicoId: string, pacienteId: string | null) =>
-      !testIds3.has(medicoId) && !pacDe3(pacienteId)?.es_cuenta_test;
-
-    const items = [
-      ...(consultas ?? []).filter((c) => real(c.medico_id, c.paciente_id)).map((c) => ({
-        id: c.id, tipo: "CI" as const, canal: "ci", estado: c.estado,
-        medico: medMap3.get(c.medico_id) ?? "—",
-        profesion: profesiones.get(c.medico_id) ?? null,
-        paciente: pacDe3(c.paciente_id)?.nombre_completo ?? "Paciente",
-        inicio: c.created_at, especialidad: c.especialidad,
-        porque: diagnosticarConsulta({ ...c, cierre_evidencia: (evidencias.get(c.id) as never) ?? null }),
-      })),
-      ...turnos.filter((t) => real(t.medico_id, t.paciente_id)).map((t) => ({
-        id: t.id, tipo: "Turno" as const,
-        canal: (t.canal_origen as string) === "consultorio_privado" ? "consultorio" : "clinica",
-        estado: t.estado,
-        medico: medMap3.get(t.medico_id) ?? "—",
-        profesion: profesiones.get(t.medico_id) ?? null,
-        paciente: pacDe3(t.paciente_id)?.nombre_completo ?? "Paciente",
-        // El "inicio" de un turno es la hora de la cita, no cuándo se reservó.
-        inicio: `${t.fecha}T${String(t.hora_inicio).slice(0, 8)}-03:00`,
-        especialidad: "",
-        porque: diagnosticarTurno(t, (evidenciasTurno.get(t.id) as never) ?? null),
-      })),
-    ].sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
-
+    // La fila del Historial (consultas + turnos, con su porqué) vive en
+    // `lib/consultas/que-paso.ts`: la misma que ven el Dashboard y el Tablero
+    // en la tarjeta «Qué pasó». Así las tres pantallas no pueden contradecirse.
+    const items = await cargarAtenciones(admin, {
+      desde: req.nextUrl.searchParams.get("desde"),
+      hasta: req.nextUrl.searchParams.get("hasta"),
+    });
     return NextResponse.json({ items });
   }
 

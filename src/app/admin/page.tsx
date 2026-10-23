@@ -7,7 +7,8 @@ import DashboardAdminClient from "./DashboardAdminClient";
 import MobileControlCenter from "./MobileControlCenter";
 import { setsDeTest, esTest } from "@/lib/insights/filtro-test";
 import { soloActividadReal } from "@/lib/insights/reservas";
-import { fechaAR, medianocheARenUTC, fechaARdeISO } from "@/lib/insights/fechas";
+import { fechaAR, medianocheARenUTC } from "@/lib/insights/fechas";
+import { cargarAtenciones, cargarAhora, resumirDia, resumirRango } from "@/lib/consultas/que-paso";
 
 function isMobileUA(ua: string): boolean {
   return /Mobile|Android|iPhone|iPad/i.test(ua);
@@ -36,6 +37,7 @@ export default async function AdminDashboardPage({
 
   const admin = createAdminClient();
   const hoy = fechaAR();
+  const ayer = fechaAR(1);
   const desde7 = fechaAR(6);
 
   const [
@@ -45,12 +47,10 @@ export default async function AdminDashboardPage({
     { count: totalPacientes },
     { data: consHoyRows },
     { data: turnosHoyRows },
-    { data: consEnCursoRows },
-    { data: turnosEnCursoRows },
     { count: pendingMedicos },
     { count: pendingAlertas },
-    { data: consultasSemanaRaw },
-    { data: turnosSemanaRaw },
+    atenciones7,
+    ahora,
     { data: medicosDisponiblesData },
     { data: turnosDisponiblesData },
     { count: reembolsosPendientes },
@@ -61,14 +61,14 @@ export default async function AdminDashboardPage({
     admin.from("pacientes").select("id", { count: "exact", head: true }).eq("es_cuenta_test", false),
     admin.from("consultas").select("id, estado, medico_id, paciente_id").gte("created_at", medianocheARenUTC(hoy)),
     admin.from("turnos").select("id, estado, medico_id, paciente_id, reservado_hasta, mp_status").eq("fecha", hoy),
-    admin.from("consultas").select("id, estado, medico_id, paciente_id").in("estado", ["aceptada", "pagada", "en_curso"]),
-    admin.from("turnos").select("id, estado, medico_id, paciente_id").eq("estado", "en_curso"),
     admin.from("medicos").select("id", { count: "exact", head: true }).eq("estado_registro", "pendiente_revision").eq("es_cuenta_test", false),
     admin.from("alertas_admin").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
-    admin.from("consultas").select("created_at, estado, medico_id, paciente_id").gte("created_at", medianocheARenUTC(desde7)).limit(5000),
-    // Chart: excluir slots vacíos (no son "consultas") → alinea el chart con "Consultas
-    // hoy" y baja el volumen para que el .limit() no trunque en silencio (Roberto #224).
-    admin.from("turnos").select("fecha, estado, medico_id, paciente_id, reservado_hasta, mp_status").gte("fecha", desde7).not("estado", "in", "(disponible,bloqueado,bloqueado_sin_cobro)").limit(5000),
+    // «Qué pasó»: cada atención de los últimos 7 días con su desenlace (la fila
+    // del Historial) y lo que está pasando ahora. Reemplaza los contadores
+    // "Consultas hoy" / "En curso ahora" y el gráfico de 7 días, que contaban
+    // sin decir qué pasó (Diego, 23/10/2026).
+    cargarAtenciones(admin, { desde: desde7, hasta: hoy }),
+    cargarAhora(admin),
     // Plantilla: médicos disponibles AHORA (toggle prendido), con sus canales
     admin.from("medicos").select("id, nombre_completo, especialidad, oculto_clinica, visible_consultorio_particular, disponible_hasta").eq("verificado", true).eq("disponible", true).eq("es_cuenta_test", false).order("especialidad"),
     // Oferta: slots de turno libres en los próximos 7 días
@@ -91,15 +91,6 @@ export default async function AdminDashboardPage({
   // cuando hubo UNA. Mismo criterio que /insights → las dos pantallas coinciden.
   const turnosAtencion = <T extends { estado: string; reservado_hasta?: string | null; mp_status?: string | null }>(filas: T[]) =>
     soloActividadReal(filas.filter((t) => !SLOT.has(t.estado)));
-  // "Consultas hoy" = CI reales creadas hoy + turnos reales de hoy que NO son slots vacíos.
-  const consultasHoyTotal =
-    (consHoyRows ?? []).filter(real).length +
-    turnosAtencion((turnosHoyRows ?? []).filter(real)).length;
-  const enCursoTotal =
-    (consEnCursoRows ?? []).filter(real).length +
-    (turnosEnCursoRows ?? []).filter(real).length;
-  const consultasSemana = (consultasSemanaRaw ?? []).filter(real);
-  const turnosSemana = turnosAtencion((turnosSemanaRaw ?? []).filter(real));
   // Cuántas atenciones de prueba se ocultaron hoy (para no confundir "día vacío" con
   // "día sin actividad real pero con test"). Mismo criterio que "Consultas hoy".
   const testOcultasHoy =
@@ -157,21 +148,12 @@ export default async function AdminDashboardPage({
     turnosHoy: turnosHoyPorMedico.get(m.id) ?? 0,
   }));
 
-  const diasSemana: { fecha: string; consultas: number; completadas: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const fecha = fechaAR(i);
-
-    // `startsWith(fecha)` comparaba el prefijo UTC del timestamp: una consulta
-    // de las 21:04 ART se guarda como 00:04Z del día siguiente y caía en la
-    // barra equivocada. Bucketear por su fecha argentina.
-    const consDelDia = (consultasSemana ?? []).filter((c) => c.created_at && fechaARdeISO(c.created_at) === fecha);
-    const turnosDelDia = (turnosSemana ?? []).filter((t) => t.fecha === fecha);
-    const total = consDelDia.length + turnosDelDia.length;
-    const completadas = consDelDia.filter((c) => c.estado === "completada").length +
-      turnosDelDia.filter((t) => t.estado === "completado").length;
-
-    diasSemana.push({ fecha, consultas: total, completadas });
-  }
+  const quePaso = {
+    hoy: resumirDia(hoy, atenciones7),
+    ayer: resumirDia(ayer, atenciones7),
+    semana: resumirRango(desde7, hoy, atenciones7),
+    ahora,
+  };
 
   // El puente a la instancia institucional solo se ofrece si ESTE deploy lo
   // tiene configurado: sin las dos variables, el botón llevaría a un error.
@@ -186,17 +168,15 @@ export default async function AdminDashboardPage({
     <DashboardAdminClient
       puente={puente}
       metrics={{
-        consultasHoy: consultasHoyTotal,
         medicosActivos: medicosActivos ?? 0,
         totalMedicos: totalMedicos ?? 0,
         totalPacientes: totalPacientes ?? 0,
-        enCursoAhora: enCursoTotal,
         pendingMedicos: pendingMedicos ?? 0,
         pendingAlertas: pendingAlertas ?? 0,
         reembolsosPendientes: reembolsosPendientes ?? 0,
         testOcultasHoy,
       }}
-      diasSemana={diasSemana}
+      quePaso={quePaso}
       medicosDisponibles={medicosDisponibles}
       turnosPorEspecialidad={turnosPorEspecialidad}
     />
