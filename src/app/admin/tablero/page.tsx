@@ -7,6 +7,10 @@ import { redirect } from "next/navigation";
 import { verificarAdmin } from "@/lib/admin-auth";
 import { cargarTablero } from "@/lib/tablero/cargar";
 import TableroClient from "./TableroClient";
+import QuePaso from "../QuePaso";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fechaAR } from "@/lib/insights/fechas";
+import { cargarAtenciones, cargarAhora, resumirDia, resumirRango } from "@/lib/consultas/que-paso";
 
 // Tablero único de gestión (Diego, 04/09/2026): "Un solo tablero, no dos".
 // Convive con /admin (Dashboard) y /insights mientras se valida; cuando Diego
@@ -19,6 +23,27 @@ import TableroClient from "./TableroClient";
 export default async function TableroPage() {
   const user = await verificarAdmin();
   if (!user) redirect("/dashboard");
-  const datos = await cargarTablero();
-  return <TableroClient datos={datos} />;
+  // «Qué pasó» va primero, también acá (Diego, 23/10/2026): la misma tarjeta
+  // que en /admin, con la fila del Historial. El motor del tablero sigue igual.
+  const admin = createAdminClient();
+  const hoy = fechaAR();
+  const desde7 = fechaAR(6);
+  const [datos, atenciones7, ahora] = await Promise.all([
+    cargarTablero(),
+    cargarAtenciones(admin, { desde: desde7, hasta: hoy }),
+    cargarAhora(admin),
+  ]);
+  return (
+    <>
+      <div className="px-6 pt-6 lg:px-8">
+        <QuePaso
+          hoy={resumirDia(hoy, atenciones7)}
+          ayer={resumirDia(fechaAR(1), atenciones7)}
+          semana={resumirRango(desde7, hoy, atenciones7)}
+          ahora={ahora}
+        />
+      </div>
+      <TableroClient datos={datos} />
+    </>
+  );
 }

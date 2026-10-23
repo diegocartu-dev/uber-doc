@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, Stethoscope, Users, CalendarCheck, Bell, Clock, Wallet, CalendarDays, Building2 } from "lucide-react";
+import { Activity, Stethoscope, Users, Bell, Clock, Wallet, CalendarDays, Building2 } from "lucide-react";
 import OnlineAhora from "./OnlineAhora";
+import QuePaso, { type QuePasoProps } from "./QuePaso";
 
 interface Props {
   /**
@@ -12,25 +13,20 @@ interface Props {
    */
   puente: { motivo: string | null } | null;
   metrics: {
-    consultasHoy: number;
     medicosActivos: number;
     totalMedicos: number;
     totalPacientes: number;
-    enCursoAhora: number;
     pendingMedicos: number;
     pendingAlertas: number;
     reembolsosPendientes: number;
     testOcultasHoy: number;
   };
-  diasSemana: { fecha: string; consultas: number; completadas: number }[];
+  quePaso: QuePasoProps;
   medicosDisponibles: { id: string; nombre: string; especialidad: string; clinica: boolean; consultorio: boolean; hasta: string | null; turnosHoy: number }[];
   turnosPorEspecialidad: { especialidad: string; slots: number; medicos: { id: string; nombre: string; slots: number }[] }[];
 }
 
-const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-
-export default function DashboardAdminClient({ metrics, diasSemana, medicosDisponibles, turnosPorEspecialidad, puente }: Props) {
-  const maxConsultas = Math.max(...diasSemana.map((d) => d.consultas), 1);
+export default function DashboardAdminClient({ metrics, quePaso, medicosDisponibles, turnosPorEspecialidad, puente }: Props) {
   // # de médicos distintos ofertando turnos (para el resumen "de una mirada")
   const medicosOfertando = new Set(turnosPorEspecialidad.flatMap((e) => e.medicos.map((m) => m.id))).size;
 
@@ -46,12 +42,15 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
         </span>
       </div>
 
+      {/* Qué pasó: hoy siempre primero (Diego, 23/10/2026) */}
+      <div className="mt-6">
+        <QuePaso {...quePaso} />
+      </div>
+
       {/* Metric cards */}
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4">
         <OnlineAhora />
-        <MetricCard icon={CalendarCheck} label="Consultas hoy" value={metrics.consultasHoy} color="#378ADD" />
         <MetricCard icon={Users} label="Pacientes" value={metrics.totalPacientes} sub={`${metrics.totalMedicos} médicos registrados`} color="#378ADD" />
-        <MetricCard icon={Activity} label="En curso ahora" value={metrics.enCursoAhora} color={metrics.enCursoAhora > 0 ? "#378ADD" : "#888780"} />
       </div>
 
       {/* Operación en vivo: plantilla de médicos + oferta de turnos */}
@@ -153,58 +152,8 @@ export default function DashboardAdminClient({ metrics, diasSemana, medicosDispo
         </div>
       </div>
 
-      {/* 7 day chart */}
-      <div className="mt-6 rounded-xl bg-white p-5" style={{ border: "1px solid #e5e7eb" }}>
-        <h2 className="text-sm font-semibold text-gray-900">Últimos 7 días</h2>
-        <p className="mt-0.5 text-xs text-gray-400">Consultas realizadas (sólido) vs. creadas/agendadas (tenue) — sin slots vacíos ni cuentas de prueba</p>
-        <div className="mt-4 flex items-end gap-3" style={{ height: 160 }}>
-          {diasSemana.map((d) => {
-            const pctTotal = (d.consultas / maxConsultas) * 100;
-            const pctReal = (d.completadas / maxConsultas) * 100;
-            const dia = DIAS[new Date(d.fecha + "T12:00:00").getDay()];
-            return (
-              <div key={d.fecha} className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-xs font-semibold text-gray-700">
-                  {d.completadas}<span className="font-normal text-gray-400"> / {d.consultas}</span>
-                </span>
-                <div className="relative w-full" style={{ height: 120 }}>
-                  {/* creadas/agendadas (tenue) */}
-                  <div
-                    className="absolute bottom-0 w-full rounded-t-md bg-[#378ADD]/15"
-                    style={{ height: `${Math.max(pctTotal, 2)}%` }}
-                  />
-                  {/* realizadas (sólido) */}
-                  <div
-                    className="absolute bottom-0 w-full rounded-t-md bg-[#378ADD] transition-all"
-                    style={{ height: `${pctReal}%` }}
-                  />
-                </div>
-                <span className="text-[11px] text-gray-400">{dia}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3 flex items-center gap-4 border-t border-gray-100 pt-3">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]" />
-            <span className="text-xs text-gray-500">Realizadas</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm bg-[#378ADD]/15" />
-            <span className="text-xs text-gray-500">Creadas / agendadas</span>
-          </div>
-        </div>
-      </div>
-
       {/* Quick status */}
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <QuickLink
-          icon={Activity}
-          label="Consultas en curso"
-          value={metrics.enCursoAhora}
-          href="/admin/consultas"
-          color="#378ADD"
-        />
         <QuickLink
           icon={Clock}
           label="Médicos pendientes"
