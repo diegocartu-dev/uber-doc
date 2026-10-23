@@ -19,7 +19,8 @@ Palabras: el estado usa `ESTADO_LAB` del tablero (una palabra por cosa); el porq
 ## Verificación
 - `npm run test:unit` en verde (789), `tsc` sin errores en `src/`, lint limpio.
 - Render estático del componente con datos de ejemplo.
-- En producción, con sesión de admin: ver el cierre de este doc.
+- PR #584 mergeado (rebase, checks en verde) el 23/10 a las 19:17 ART; producción sirve ese commit (`/api/health`), `/admin` y `/admin/tablero` responden (307 al login sin sesión) y el endpoint del Historial sigue protegido (403 sin sesión).
+- La pantalla con sesión de admin no se pudo mirar desde esta sesión (ningún navegador con sesión): la valida Diego en docto.com.ar/admin.
 
 ## Pendiente
 - La ficha de cada atención no se abre desde la tarjeta (el Historial no recibe un id por URL). Si hace falta, va al mandato de tablas (la vista en la URL).
