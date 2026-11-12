@@ -91,7 +91,7 @@ export async function enviarDesdeBandeja(params: {
     errorEnvio = err instanceof Error ? err.message : String(err);
   }
 
-  await admin.from("correos").insert({
+  const { error: errorRegistro } = await admin.from("correos").insert({
     direccion: "salida",
     de: direccionDe,
     para: params.para,
@@ -106,6 +106,9 @@ export async function enviarDesdeBandeja(params: {
     error_envio: errorEnvio,
     ...(params.datos ? { datos: params.datos } : {}),
   });
+  // El mail ya salió. Si la fila no se guardó, la Bandeja no lo muestra y los
+  // conteos no lo ven: que al menos quede en los logs.
+  if (errorRegistro) console.error("[correo] el mail salió pero no se pudo registrar la salida:", errorRegistro.message);
 
   if (!errorEnvio && params.enRespuestaA) {
     await admin.from("correos").update({ atendido: true }).eq("id", params.enRespuestaA);

@@ -66,7 +66,6 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 | 12/10 | Destinos de pago (#522) | ver 1.11 |
 | 01/09 | Piloto "despertar oferta" | en pausa, no empujar |
 | 31/08 | Pantalla para cargar especialidades adicionales | se evalúa cuando aparezcan más casos (hoy por SQL) |
-| 11/09 | Envío automático de respuestas de Grokbot | apagado: la cadena /ayuda → modelo → mail no es segura |
 | 09/08 | Agente legal (@carolina) | en pausa: lo legal va directo a Diego |
 | — | App en las tiendas | sin SRL no se puede (apps de salud) |
 
@@ -98,7 +97,7 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 ## 5. Decisiones vigentes — índice
 
-- **12/11 — El asistente de la Bandeja (Grokbot) envía solo.** Diego: "vamos a activar el envío automático… lo que no pueda resolver de forma segura, me consulte… que me reclame cuando tenga pendientes… los spam los mande a otro buzón". Se prende `BANDEJA_BOT_ENVIO`, con una respuesta automática por correo, tope de 30 por día y un verbo de spam que no puede esconder a nadie nuestro. Reemplaza la decisión del 11/09 de dejarlo apagado. Detalle: `docs/BANDEJA-ACCESO-ASISTENTE.md`.
+- **12/11 — El asistente de la Bandeja (Grokbot) envía solo.** Diego: "vamos a activar el envío automático… lo que no pueda resolver de forma segura, me consulte… que me reclame cuando tenga pendientes… los spam los mande a otro buzón". Se prende `BANDEJA_BOT_ENVIO`, con remitente comprobado (DMARC), una respuesta automática por correo, dos por dirección y 30 por día, y un verbo de spam que no puede esconder a nadie nuestro. Reemplaza la decisión del 11/09 de dejarlo apagado. Detalle: `docs/BANDEJA-ACCESO-ASISTENTE.md`.
 
 - **23/10 — Lo primero que se ve en el admin es qué pasó, no cuánto.** Diego: "tableros con muchísima información que no dicen nada; necesito tarjetas claras donde ver qué está pasando de un solo vistazo", y "siempre primero hoy". La tarjeta «Qué pasó» (Hoy con la línea Ahora, Ayer, Últimos 7 días) abre `/admin` y `/admin/tablero`, una línea por atención con su desenlace y su porqué, la misma fila que el Historial (`src/lib/consultas/que-paso.ts`). Se fueron del Dashboard los contadores y el gráfico que contaban sin decir qué pasó. `docs/sprints/2026-10-23-tarjeta-que-paso.md`, PR #584.
 

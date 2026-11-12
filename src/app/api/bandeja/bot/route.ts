@@ -8,7 +8,7 @@ import { estaEnHorario } from "@/app/clinica/disponibilidad";
 import { tieneClaves } from "@/lib/firma/claves";
 import { logInfo, logWarn } from "@/lib/logger";
 import { assertNoInstitucional } from "@/lib/instancia";
-import { decidirEnvio, puedeMarcarSpam, MARCA_ASISTENTE, TEXTO_MOTIVO } from "@/lib/bandeja/asistente";
+import { decidirEnvio, puedeMarcarSpam, esCasillaAutomatica, MARCA_ASISTENTE, TEXTO_MOTIVO } from "@/lib/bandeja/asistente";
 
 // ─── Acceso acotado a la Bandeja para un asistente externo ───────────────────
 //
@@ -219,7 +219,7 @@ async function quienEscribio(
 
   const { data: correo, error: errCorreo } = await admin
     .from("correos")
-    .select("id, de, direccion, resend_id")
+    .select("id, de, direccion, resend_id, remitente_user_id")
     .eq("id", correoId)
     .eq("origen", "correo")
     .maybeSingle();
@@ -232,7 +232,15 @@ async function quienEscribio(
     return NextResponse.json({ error: "Solo se consulta sobre un correo recibido" }, { status: 400 });
   }
 
-  const email = direccionDe(correo.de);
+  // Pedido del formulario CON sesión: la persona es la de la cuenta, no la
+  // dirección que tipeó. Es la misma que usa el POST para responder; antes acá
+  // se miraba la tipeada y las dos puertas no coincidían.
+  let mailDeLaCuenta: string | null = null;
+  if (correo.remitente_user_id) {
+    const { data: cuenta } = await admin.auth.admin.getUserById(correo.remitente_user_id as string);
+    mailDeLaCuenta = (cuenta?.user?.email ?? "").trim().toLowerCase() || null;
+  }
+  const email = mailDeLaCuenta ?? direccionDe(correo.de);
   if (!email) {
     return NextResponse.json({ error: "El correo no tiene remitente válido" }, { status: 422 });
   }
@@ -243,7 +251,7 @@ async function quienEscribio(
   // persona tipeó, sin sesión y sin comprobar que sea suya. El que sí llegó como
   // correo tiene `resend_id`. La diferencia viaja en la respuesta para que del
   // otro lado no se trate igual a una dirección tipeada que a una que escribió.
-  const direccionProbada = !!correo.resend_id;
+  const direccionProbada = !!correo.resend_id || !!mailDeLaCuenta;
 
   // `ilike` acerca candidatos sin depender de la capitalización guardada, con los
   // comodines escapados para no arrastrar direcciones ajenas. Igual NO decide: la
@@ -426,7 +434,7 @@ export async function POST(req: NextRequest) {
   // que impide que esta ruta sirva para escribirle a cualquiera.
   const { data: original, error: errOriginal } = await admin
     .from("correos")
-    .select("id, de, para, asunto, direccion, resend_id, remitente_user_id")
+    .select("id, de, para, asunto, direccion, resend_id, remitente_user_id, atendido, sistema")
     .eq("id", correoId)
     .eq("origen", "correo")
     .maybeSingle();
@@ -446,7 +454,9 @@ export async function POST(req: NextRequest) {
   if (original.remitente_user_id) {
     const { data: cuenta } = await admin.auth.admin.getUserById(original.remitente_user_id as string);
     const suyo = (cuenta?.user?.email ?? "").trim().toLowerCase();
-    if (suyo) {
+    // Solo si confirmó ese mail: una cuenta creada con la dirección de otro y
+    // sin confirmar no prueba nada.
+    if (suyo && cuenta?.user?.email_confirmed_at) {
       mailDeLaCuenta = suyo;
       destino = suyo;
     }
@@ -474,32 +484,54 @@ export async function POST(req: NextRequest) {
   // aprobando una persona, y está bien — ahí no sabemos de quién es el mail.
   const direccionProbada = !!original.resend_id || !!mailDeLaCuenta;
 
-  // El interruptor y los dos frenos del envío prendido (12/11/2026):
-  //  · una sola respuesta automática por correo: si ya salió una (del asistente o
-  //    de una persona), la siguiente la aprueba alguien. Corta bucles y duplicados;
-  //  · un tope por día, que acota el daño si alguien logra manejarlo con un mail.
+  // El interruptor y los frenos del envío prendido (12/11/2026). Ninguno confía
+  // en el asistente: los aplica el servidor, y si uno no se puede leer, no manda.
+  //  · el remitente no está falsificado (DMARC), o el destino es el mail de una
+  //    cuenta con sesión. "Llegó un mail" no alcanza: el From se inventa;
+  //  · no se le contesta solo a una casilla automática, ni a un correo que ya
+  //    figura atendido o que ya tiene una respuesta enviada;
+  //  · dos respuestas automáticas por dirección y treinta en total cada 24 h:
+  //    cortan el ping-pong con un autorespondedor y acotan el daño si alguien
+  //    logra manejarlo con un mail.
   const envioHabilitado = process.env.BANDEJA_BOT_ENVIO === "on";
+  const pidioEnviar = body.enviar === true;
+  let remitenteAutentico = false;
   let yaRespondido = false;
+  let enviadosAlDestinoHoy = 0;
   let enviadosHoy = 0;
-  if (body.enviar && envioHabilitado && direccionProbada) {
+  if (pidioEnviar && envioHabilitado && direccionProbada) {
+    remitenteAutentico = mailDeLaCuenta ? true : await pasoDmarc(original.resend_id as string | null);
     const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const [previas, delDia] = await Promise.all([
+    const delAsistente = () =>
+      admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").gte("creado_en", hace24h).contains("datos", MARCA_ASISTENTE);
+    const [previas, delDia, alDestino] = await Promise.all([
       admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").eq("en_respuesta_a", correoId).is("error_envio", null),
-      admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").gte("creado_en", hace24h).contains("datos", MARCA_ASISTENTE),
+      delAsistente(),
+      delAsistente().ilike("para", sinComodines(destino)),
     ]);
-    // Si no se puede contar, no se manda: un freno que no se pudo leer no frena.
-    if (previas.error || delDia.error) {
+    if (previas.error || delDia.error || alDestino.error) {
       logWarn("[bandeja-bot]", "No se pudieron leer los frenos del envío", { correoId });
       return NextResponse.json({ error: "No se pudo verificar el envío" }, { status: 502 });
     }
     yaRespondido = (previas.count ?? 0) > 0;
     enviadosHoy = delDia.count ?? 0;
+    enviadosAlDestinoHoy = alDestino.count ?? 0;
   }
-  const decision = decidirEnvio({ pidioEnviar: Boolean(body.enviar), envioHabilitado, direccionProbada, yaRespondido, enviadosHoy });
+  const decision = decidirEnvio({
+    pidioEnviar,
+    envioHabilitado,
+    direccionProbada,
+    remitenteAutentico,
+    destinoAutomatico: esCasillaAutomatica(destino),
+    yaAtendido: !!original.atendido || !!original.sistema,
+    yaRespondido,
+    enviadosAlDestinoHoy,
+    enviadosHoy,
+  });
   if (!decision.enviar) {
     logInfo("[bandeja-bot]", "Borrador propuesto", {
       correoId,
-      pidioEnviar: Boolean(body.enviar),
+      pidioEnviar,
       envioHabilitado,
       direccionProbada,
       motivo: decision.motivo,
@@ -518,10 +550,8 @@ export async function POST(req: NextRequest) {
     cuerpo,
     desde,
     enRespuestaA: correoId,
-    // No hay persona detrás. Ojo: `null` acá NO distingue al asistente — el
-    // formulario de ayuda también manda null cuando el pedido es anónimo. Para
-    // saber cuál salió del asistente, el registro fiable son los logs de esta
-    // ruta, no la fila.
+    // No hay persona detrás. `null` solo no distingue al asistente (el formulario
+    // de ayuda también manda null): lo que lo distingue es la marca en `datos`.
     enviadoPor: null,
     adjuntos: [],
     datos: { ...MARCA_ASISTENTE },
@@ -540,11 +570,36 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ enviado: true, para: destino, asunto });
 }
 
+// ── ¿EL REMITENTE ES QUIEN DICE SER? ────────────────────────────────────────
+// Que un mail haya llegado no prueba de quién es: el From lo escribe quien lo
+// manda. Resend informa el resultado de SPF / DKIM / DMARC de cada correo
+// recibido; DMARC "pass" quiere decir que el dominio del From autorizó ese
+// envío. Sin eso, la respuesta automática podría salirle a un tercero que nunca
+// escribió. Si no se puede consultar, se asume que no: lo aprueba una persona.
+async function pasoDmarc(resendId: string | null): Promise<boolean> {
+  if (!resendId) return false;
+  try {
+    const res = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(resendId)}`, {
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      logWarn("[bandeja-bot]", "No se pudo consultar la autenticación del correo", { status: res.status });
+      return false;
+    }
+    const correo = (await res.json()) as { authentication?: { dmarc?: string } };
+    return String(correo.authentication?.dmarc ?? "").toLowerCase() === "pass";
+  } catch {
+    return false;
+  }
+}
+
 // ── SPAM ────────────────────────────────────────────────────────────────────
 // Saca de la vista principal un correo que no es de nadie nuestro (12/11/2026,
 // pedido de Diego). No borra nada: lo marca `sistema`, que es lo que la Bandeja
-// pliega en "Otros" y lo que `pendientes` deja de traer. Se revierte desde la
-// base y el buscador de la Bandeja lo sigue encontrando.
+// pliega en "Otros" y lo que `pendientes` deja de traer. El buscador de la
+// Bandeja lo sigue encontrando y "marcar sin atender" lo devuelve a la vista.
 //
 // Lo que NO se puede marcar lo decide el servidor (`puedeMarcarSpam`): quien
 // tiene cuenta, quien escribió con sesión o alguien a quien ya le escribimos.
@@ -554,7 +609,7 @@ async function marcarSpam(admin: ReturnType<typeof createAdminClient>, correoId:
 
   const { data: correo, error } = await admin
     .from("correos")
-    .select("id, de, direccion, remitente_user_id, sistema")
+    .select("id, de, direccion, remitente_user_id, sistema, datos")
     .eq("id", correoId)
     .eq("origen", "correo")
     .maybeSingle();
@@ -565,13 +620,15 @@ async function marcarSpam(admin: ReturnType<typeof createAdminClient>, correoId:
   const email = direccionDe(correo.de as string);
   if (!email) return NextResponse.json({ marcado: false, motivo: "El correo no tiene remitente válido: lo mira una persona" });
   const patron = sinComodines(email.toLowerCase());
-  const [medicos, pacientes, salidas] = await Promise.all([
+  const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [medicos, pacientes, salidas, marcados] = await Promise.all([
     admin.from("medicos").select("id", { count: "exact", head: true }).ilike("email", patron),
     admin.from("pacientes").select("id", { count: "exact", head: true }).ilike("email", patron),
     admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").ilike("para", patron),
+    admin.from("correos").select("id", { count: "exact", head: true }).contains("datos", { spam_por_asistente: true }).gte("datos->>spam_at", hace24h),
   ]);
   // Sin poder comprobarlo, no se esconde nada.
-  if (medicos.error || pacientes.error || salidas.error) {
+  if (medicos.error || pacientes.error || salidas.error || marcados.error) {
     return NextResponse.json({ error: "No se pudo verificar el remitente" }, { status: 502 });
   }
 
@@ -580,13 +637,17 @@ async function marcarSpam(admin: ReturnType<typeof createAdminClient>, correoId:
     conSesion: !!correo.remitente_user_id,
     tieneCuenta: (medicos.count ?? 0) > 0 || (pacientes.count ?? 0) > 0,
     leEscribimosAntes: (salidas.count ?? 0) > 0,
+    marcadosHoy: marcados.count ?? 0,
   });
   if (!puede.ok) {
     logInfo("[bandeja-bot]", "Spam rechazado", { correoId, motivo: puede.motivo });
     return NextResponse.json({ marcado: false, motivo: puede.motivo });
   }
 
-  const { error: errUpdate } = await admin.from("correos").update({ sistema: true, atendido: true }).eq("id", correoId);
+  // Queda escrito quién lo sacó de la vista y cuándo: es lo que permite contarlo,
+  // mostrarlo en la Bandeja y deshacerlo ("marcar sin atender" lo devuelve).
+  const datos = { ...((correo.datos as Record<string, unknown> | null) ?? {}), spam_por_asistente: true, spam_at: new Date().toISOString() };
+  const { error: errUpdate } = await admin.from("correos").update({ sistema: true, atendido: true, datos }).eq("id", correoId);
   if (errUpdate) return NextResponse.json({ error: "No se pudo marcar" }, { status: 502 });
   logInfo("[bandeja-bot]", "Marcado como spam", { correoId });
   return NextResponse.json({ marcado: true });

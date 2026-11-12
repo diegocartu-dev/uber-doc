@@ -68,7 +68,14 @@ export async function marcarAtendido(correoId: string, atendido: boolean): Promi
   const uid = await usuarioAdmin();
   if (!uid) return { ok: false };
   const admin = createAdminClient();
-  await admin.from("correos").update({ atendido }).eq("id", correoId);
+  // Un correo que el asistente sacó de la vista como spam vuelve a la bandeja
+  // al marcarlo sin atender: sin esto quedaba en "Otros" para siempre.
+  let volverDeSpam = false;
+  if (!atendido) {
+    const { data: fila } = await admin.from("correos").select("datos").eq("id", correoId).maybeSingle();
+    volverDeSpam = (fila?.datos as { spam_por_asistente?: boolean } | null)?.spam_por_asistente === true;
+  }
+  await admin.from("correos").update(volverDeSpam ? { atendido, sistema: false } : { atendido }).eq("id", correoId);
   revalidatePath("/admin/bandeja");
   revalidatePath(`/admin/bandeja/${correoId}`);
   return { ok: true };
