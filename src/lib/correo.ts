@@ -63,6 +63,8 @@ export async function enviarDesdeBandeja(params: {
   enRespuestaA?: string | null;
   enviadoPor?: string | null;
   adjuntos?: AdjuntoSalida[];
+  /** Marca opcional en `correos.datos` de la salida (la usa el asistente para contarse). */
+  datos?: Record<string, unknown>;
 }): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
   const direccionDe = DIRECCIONES[params.desde ?? "contacto"];
@@ -102,6 +104,7 @@ export async function enviarDesdeBandeja(params: {
     resend_id: resendId,
     enviado_por: params.enviadoPor ?? null,
     error_envio: errorEnvio,
+    ...(params.datos ? { datos: params.datos } : {}),
   });
 
   if (!errorEnvio && params.enRespuestaA) {
