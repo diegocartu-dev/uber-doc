@@ -12,8 +12,8 @@ Manual de contenido para responder: `docs/MANUAL-SOPORTE-MAIL.md`.
 ## La idea en una línea
 
 El asistente no entra a Docto. Entra a **una sola puerta** que solo sabe hacer
-cuatro cosas: listar lo que está sin atender, abrir un hilo, ver el estado de
-quien escribió, y contestarle.
+cinco cosas: listar lo que está sin atender, abrir un hilo, ver el estado de
+quien escribió, contestarle, y sacar el spam de la vista.
 
 ## Por qué no se le da el panel ni la base
 
@@ -55,21 +55,34 @@ Diego decidió prenderlo sabiendo el riesgo que describe la sección de abajo
 (escrita en septiembre, cuando se apagó). Lo que se sumó para acotarlo
 (`src/lib/bandeja/asistente.ts`, con tests):
 
-- **Una sola respuesta automática por correo.** Si ese correo ya tiene una
-  respuesta enviada, la siguiente queda en borrador.
-- **Tope de 30 respuestas automáticas por día.** Las salidas del asistente llevan
-  una marca en `correos.datos` y se cuentan; si el conteo no se puede leer, no
-  se manda.
+- **El remitente tiene que estar comprobado.** Que llegue un mail no prueba de
+  quién es: el From se inventa. Antes de enviar, el servidor le pregunta a Resend
+  por la autenticación de ese correo y exige DMARC `pass` (o que el destino sea
+  el mail confirmado de una cuenta con sesión). Si no se puede consultar, no manda.
+- **Nunca a una casilla automática** (no-reply, mailer-daemon, postmaster…).
+- **Una sola respuesta automática por correo**, y no se contesta solo un correo
+  que ya figura atendido.
+- **Dos respuestas automáticas por dirección y 30 en total cada 24 h.** Las
+  salidas del asistente llevan una marca en `correos.datos` y se cuentan; si el
+  conteo no se puede leer, no se manda. Corta el ping-pong con un autorespondedor.
 - **Verbo `spam`** (`POST { accion: "spam", correoId }`): marca `sistema`, que es
-  lo que la Bandeja pliega en "Otros". El servidor se niega si el remitente tiene
-  cuenta, escribió con sesión o ya le escribimos.
+  lo que la Bandeja pliega en "Otros", y deja escrito en `datos` que lo marcó el
+  asistente. El servidor se niega si el remitente tiene cuenta, escribió con
+  sesión o ya le escribimos; tope de 10 por día; "marcar sin atender" en la
+  Bandeja lo devuelve a la vista.
+
+Lo que la revisión encontró y queda sin tapar: dos pedidos simultáneos al mismo
+correo pueden pasar los dos el control (con un solo asistente es improbable), y
+una persona real sin cuenta que escribe por primera vez puede terminar en
+"Otros" si el asistente se equivoca (a Diego igual le llega el aviso de correo
+nuevo cuando entra).
 - **Instrucciones:** manda solo lo que puede resolver de forma segura; lo demás
   lo consulta a Diego y se lo reclama en cada revisión.
 
 Lo que sigue sin tapar, y por eso es una decisión y no un arreglo: los candados
 gobiernan a quién se le escribe y cuántas veces, no qué se le dice.
 
-## Por qué el envío automático conviene que siga apagado
+## Por qué estuvo apagado hasta el 12/11 (el riesgo que se aceptó al prenderlo)
 
 No es cautela genérica, es una cadena concreta que se puede recorrer:
 
@@ -89,7 +102,7 @@ Y del otro lado, `pendientes` le entrega al asistente los cuerpos completos de
 los mails de otras personas, que es lo que se pidió para que sepa responder.
 
 Contra eso, lo único que cierra de verdad es que una persona apruebe cada
-respuesta antes de que salga. Por eso el interruptor está apagado.
+respuesta antes de que salga. Por eso el interruptor estuvo apagado hasta el 12/11/2026.
 
 ---
 
@@ -223,7 +236,7 @@ no lo cumple por sí solo. Los párrafos redactados para agregarlo esperan la
 decisión de Diego, y una de las frases ("no se utiliza para entrenar modelos")
 solo puede escribirse si el contrato con el proveedor lo garantiza.
 
-Mientras eso no esté resuelto, lo prudente es dejar `BANDEJA_BOT_ENVIO` apagado
+Hasta el 12/11/2026 eso fue motivo para dejar `BANDEJA_BOT_ENVIO` apagado (Diego decidió prenderlo igual; ver arriba). Sin resolver eso, lo prudente era dejarlo apagado
 y usar la puerta para entrenar y proponer, no para contestarle a la gente.
 
 ## Lo que queda pendiente
