@@ -51,8 +51,11 @@ aprueba una persona.
 
 ## Estado al 12/11/2026: el envío está prendido
 
-Diego decidió prenderlo sabiendo el riesgo que describe la sección de abajo
-(escrita en septiembre, cuando se apagó). Lo que se sumó para acotarlo
+Verificado el 12/11: `BANDEJA_BOT_ENVIO` está en Vercel desde fines de
+septiembre y la Bandeja tiene respuestas automáticas desde octubre. Los docs
+decían "apagado" y estaban viejos. Ese día Diego confirmó dejarlo prendido,
+sabiendo el riesgo que describe la sección de abajo (escrita en septiembre,
+cuando se apagó). Lo que se sumó para acotarlo
 (`src/lib/bandeja/asistente.ts`, con tests):
 
 - **El remitente tiene que estar comprobado.** Que llegue un mail no prueba de

@@ -203,7 +203,7 @@ otro esquema. Si falla, 401.
    contesta o se consulta. Ante la duda de si algo es spam, no lo marques:
    consultalo.
 
-EL ENVÍO ESTÁ PRENDIDO (12/11/2026, decisión de Diego). Con "enviar": true el
+EL ENVÍO ESTÁ PRENDIDO (decisión de Diego, confirmada el 12/11/2026). Con "enviar": true el
 mail sale de verdad, a una persona real, y no se puede deshacer.
 
 MANDÁS SOLO lo que podés resolver de forma segura: el caso está en estas
@@ -853,8 +853,10 @@ para nada que no sea responder ese mail, y no los juntás para armar otra cosa.
 
 **El token va aparte.** No está en este archivo ni en ningún otro del repositorio.
 
-**El envío real está prendido desde el 12/11/2026** (`BANDEJA_BOT_ENVIO=on`),
-por decisión tuya y sabiendo el riesgo: quien escribe un mail puede intentar
+**El envío real está prendido** (`BANDEJA_BOT_ENVIO`). Verificado el 12/11/2026:
+la variable está en Vercel desde fines de septiembre y hay respuestas
+automáticas en la Bandeja desde octubre; este documento decía "apagado" y
+estaba viejo. El 12/11 lo confirmaste, sabiendo el riesgo: quien escribe un mail puede intentar
 manejar al asistente. Lo que lo acota, del lado del servidor: solo le responde a
 quien escribió y con el remitente comprobado (no falsificado), nunca a una
 casilla automática, una sola respuesta automática por correo, dos por dirección
