@@ -224,7 +224,9 @@ casos. Ninguno es un error y ninguno se reintenta:
   - direccion_probada es false: el mail entró por el formulario de la web sin
     sesión, donde cualquiera puede tipear la dirección de otro.
   - No se pudo comprobar que el mail venga de esa dirección (el remitente de un
-    mail se puede falsificar).
+    mail se puede falsificar). Pasa siempre con correos recibidos antes del
+    12/10/2026: esos no los podés mandar vos ni con el OK de Diego. Decíselo
+    así: los manda él desde el panel con el texto aprobado.
   - El remitente es una casilla automática (no-reply y parecidas).
   - Ese correo ya figura atendido, o ya tiene una respuesta enviada.
   - Ya salieron dos respuestas automáticas a esa dirección en 24 horas, o se

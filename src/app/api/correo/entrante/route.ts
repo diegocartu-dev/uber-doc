@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
   let cuerpoTexto: string | null = null;
   let cuerpoHtml: string | null = null;
   let adjuntos: unknown = data.attachments ?? null;
+  // Resultado de SPF / DKIM / DMARC que informa Resend (12/11/2026). Se guarda
+  // con el correo porque Resend lo conserva unos 30 días, y el asistente de la
+  // Bandeja lo necesita para saber si el remitente es quien dice ser.
+  let autenticacion: { spf?: string; dkim?: string; dmarc?: string } | null = null;
 
   try {
     const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
@@ -55,6 +59,11 @@ export async function POST(req: NextRequest) {
       cuerpoTexto = (completo.text as string | null) ?? null;
       cuerpoHtml = (completo.html as string | null) ?? null;
       adjuntos = completo.attachments ?? adjuntos;
+      const auth = completo.authentication as Record<string, unknown> | null | undefined;
+      if (auth && typeof auth === "object") {
+        const txt = (v: unknown) => (typeof v === "string" ? v.toLowerCase().slice(0, 20) : undefined);
+        autenticacion = { spf: txt(auth.spf), dkim: txt(auth.dkim), dmarc: txt(auth.dmarc) };
+      }
     } else {
       console.error("[correo] API de Resend respondió", res.status, "para", emailId);
     }
@@ -84,6 +93,7 @@ export async function POST(req: NextRequest) {
       resend_id: emailId,
       sistema: esSistema,
       atendido: esSistema,
+      ...(autenticacion ? { datos: { autenticacion } } : {}),
     })
     .select("id")
     .single();
