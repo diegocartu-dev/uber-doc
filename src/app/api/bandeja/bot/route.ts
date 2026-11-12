@@ -434,7 +434,7 @@ export async function POST(req: NextRequest) {
   // que impide que esta ruta sirva para escribirle a cualquiera.
   const { data: original, error: errOriginal } = await admin
     .from("correos")
-    .select("id, de, para, asunto, direccion, resend_id, remitente_user_id, atendido, sistema")
+    .select("id, de, para, asunto, direccion, resend_id, remitente_user_id, atendido, sistema, datos")
     .eq("id", correoId)
     .eq("origen", "correo")
     .maybeSingle();
@@ -500,7 +500,15 @@ export async function POST(req: NextRequest) {
   let enviadosAlDestinoHoy = 0;
   let enviadosHoy = 0;
   if (pidioEnviar && envioHabilitado && direccionProbada) {
-    remitenteAutentico = mailDeLaCuenta ? true : await pasoDmarc(original.resend_id as string | null);
+    // Primero lo que se guardó al recibir el correo (el webhook de entrada lo
+    // anota desde el 12/11/2026); si no está, se le pregunta a Resend, que lo
+    // conserva unos 30 días. Un correo más viejo y sin el dato lo aprueba una persona.
+    const guardada = (original.datos as { autenticacion?: { dmarc?: string } } | null)?.autenticacion?.dmarc;
+    remitenteAutentico = mailDeLaCuenta
+      ? true
+      : guardada
+        ? guardada === "pass"
+        : await pasoDmarc(original.resend_id as string | null);
     const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const delAsistente = () =>
       admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").gte("creado_en", hace24h).contains("datos", MARCA_ASISTENTE);
