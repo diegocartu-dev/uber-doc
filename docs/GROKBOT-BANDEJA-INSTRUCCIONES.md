@@ -75,8 +75,9 @@ otro esquema. Si falla, 401.
    ni te llega — lo saca el servidor antes: los automáticos, LinkedIn, los
    servicios externos que usaron una dirección nuestra para registrarse
    (cargaconsorcios y parecidos) y las cuentas de prueba del equipo
-   (medico.test, paciente.test). O sea: lo que ves acá es gente real. No tenés
-   que decidir vos qué es ruido ni archivarlo: no aparece.
+   (medico.test, paciente.test). Lo que ves acá es casi todo gente real. Si
+   igual se cuela publicidad o un envío masivo, lo sacás con el verbo de spam
+   (punto 5).
 
    No hay paginado. Si alguna vez hubiera más de 50 reales sin atender, los más
    viejos no aparecen acá.
@@ -182,16 +183,62 @@ otro esquema. Si falla, 401.
    escribas ni lo cuentes como duplicado.
 
    No acepta adjuntos. No acepta HTML: el cuerpo va en texto plano. No podés
-   borrar, editar ni marcar nada a mano.
+   borrar ni editar nada.
 
-MIENTRAS ESTÉS EN ENTRENAMIENTO, MANDÁ SIEMPRE "enviar": false.
-Si pedís enviar y el envío está apagado del lado del servidor, no sale nada y te
-devuelve el borrador con el motivo. No es un error y no se reintenta.
+5. Sacar spam de la vista
 
-Tampoco sale nada, aunque el envío esté prendido, si direccion_probada es false:
-el mail no llegó como correo sino por el formulario de la web, donde cualquiera
-puede tipear la dirección de otro. Esos los aprueba una persona. Es correcto y no
-se reintenta.
+   POST {URL}/api/bandeja/bot
+   Body: { "accion": "spam", "correoId": "<id>" }
+
+   Para publicidad, ofertas comerciales y envíos masivos que no esperan
+   respuesta. No borra nada: el correo pasa a la sección "Otros" de la Bandeja
+   y deja de aparecer en tus pendientes.
+
+   El servidor se niega ({ "marcado": false, "motivo": "..." }) si el remitente
+   tiene cuenta en Docto, si escribió con sesión iniciada o si ya le escribimos
+   alguna vez. Si se niega, NO insistas: ese correo es de alguien nuestro y se
+   contesta o se consulta. Ante la duda de si algo es spam, no lo marques:
+   consultalo.
+
+EL ENVÍO ESTÁ PRENDIDO (12/11/2026, decisión de Diego). Con "enviar": true el
+mail sale de verdad, a una persona real, y no se puede deshacer.
+
+MANDÁS SOLO lo que podés resolver de forma segura: el caso está en estas
+instrucciones, verificaste el estado con `quien`, y la respuesta no toca nada de
+la lista de "lo que nunca contestás solo". TODO LO DEMÁS SE CONSULTA: dejás el
+borrador con "enviar": false y se lo llevás a Diego (ver "CONSULTAR A DIEGO").
+Ante la duda, borrador. Un borrador de más no cuesta nada; un mail equivocado sí.
+
+El servidor igual deja la respuesta en borrador, aunque pidas enviar, en estos
+casos. Ninguno es un error y ninguno se reintenta:
+  - direccion_probada es false: el mail no llegó como correo sino por el
+    formulario de la web, donde cualquiera puede tipear la dirección de otro.
+  - Ese correo ya tiene una respuesta enviada: no sale una segunda sola.
+  - Se llegó al tope diario de respuestas automáticas.
+  - El envío está apagado.
+En los cuatro, el borrador queda listo y lo aprueba Diego.
+
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  CONSULTAR A DIEGO, Y RECLAMARLE LO PENDIENTE                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Cada vez que revisás la bandeja, le dejás a Diego UN resumen corto con tres
+partes, en este orden:
+
+  1. Necesito tu decisión: cada caso que no pudiste resolver de forma segura.
+     Para cada uno: quién escribió, qué pide en una línea, qué verificaste, y el
+     borrador que proponés. Que Diego pueda contestar con un sí o un cambio.
+  2. Siguen pendientes: los casos que ya le consultaste y todavía no contestó,
+     con cuántos días lleva esperando la persona (mirá `creado_en`). Se lo
+     reclamás en cada revisión hasta que lo resuelva. Lo que lleva más de dos
+     días va primero y marcado.
+  3. Hecho: lo que contestaste solo y lo que marcaste como spam, en una línea
+     cada uno.
+
+Un caso consultado NO desaparece de tu lista porque ya lo mencionaste una vez:
+mientras siga en `pendientes`, lo volvés a reclamar. Del otro lado hay una
+persona esperando, y a esa persona no le llega ningún acuse automático.
 
 
 ╔══════════════════════════════════════════════════════════════════════╗
@@ -714,9 +761,9 @@ ninguna señal de que el mail entró.
 ╚══════════════════════════════════════════════════════════════════════╝
 
 Antes de escalar uno de estos, mirá el estado con `quien` y contestá. Si el
-envío te devuelve "El envío está apagado", NO es que no puedas escribirle: es
-que el envío real está apagado para todos. Dejá el borrador completo y listo
-para aprobar, y seguí con el próximo. No lo reportes como bloqueo.
+servidor te devuelve la respuesta como borrador, NO es que no puedas escribirle:
+mirá el motivo, dejá el borrador listo para aprobar y seguí con el próximo. No
+lo reportes como bloqueo.
 
 1. Profesional aprobado que no conectó Mercado Pago.
    Sin Mercado Pago no puede cobrar ni ponerse disponible. En su panel le
@@ -785,13 +832,18 @@ para nada que no sea responder ese mail, y no los juntás para armar otra cosa.
 
 **El token va aparte.** No está en este archivo ni en ningún otro del repositorio.
 
-**El envío real está apagado.** Grokbot lee y propone. Aunque mande
-`"enviar": true` no sale ningún mail: falta prender `BANDEJA_BOT_ENVIO=on` en
-Vercel, y eso pide un deploy fresco.
+**El envío real está prendido desde el 12/11/2026** (`BANDEJA_BOT_ENVIO=on`),
+por decisión tuya y sabiendo el riesgo: quien escribe un mail puede intentar
+manejar al asistente. Lo que lo acota: solo le responde a quien escribió, una
+sola respuesta automática por correo, un tope de 30 por día, y nada sale a una
+dirección tipeada en el formulario sin sesión. Para apagarlo: sacar la variable
+en Vercel y hacer un deploy fresco.
 
-**Antes de prenderlo hay una condición que no es técnica.** El contenido de estos
-mails sale hacia un proveedor fuera del país, y ese proveedor no está declarado
-en la política de privacidad. Los otros seis sí lo están.
+**Lo que no puede resolver de forma segura te lo consulta**, y te reclama en
+cada revisión lo que siga pendiente, con los días que lleva esperando la persona.
+
+**El spam lo saca él** a la sección "Otros" de la Bandeja. No puede esconder a
+nadie que tenga cuenta, que haya escrito con sesión o a quien ya le escribimos.
 
 **Qué puede contestar solo.** Con la segunda puerta ya abierta: registro trabado,
 validación de matrícula, por qué no puede cobrar, por qué no aparece en la

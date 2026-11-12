@@ -8,6 +8,7 @@ import { estaEnHorario } from "@/app/clinica/disponibilidad";
 import { tieneClaves } from "@/lib/firma/claves";
 import { logInfo, logWarn } from "@/lib/logger";
 import { assertNoInstitucional } from "@/lib/instancia";
+import { decidirEnvio, puedeMarcarSpam, MARCA_ASISTENTE, TEXTO_MOTIVO } from "@/lib/bandeja/asistente";
 
 // ─── Acceso acotado a la Bandeja para un asistente externo ───────────────────
 //
@@ -385,6 +386,7 @@ async function quienEscribio(
 
 // ── RESPONDER ───────────────────────────────────────────────────────────────
 // POST { correoId, cuerpo, asunto?, desde?, enviar? }
+// POST { accion: "spam", correoId }   → saca un correo ajeno de la vista ("Otros")
 //
 // `enviar` sin `BANDEJA_BOT_ENVIO=on` NO envía: devuelve el borrador.
 export async function POST(req: NextRequest) {
@@ -396,11 +398,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  let body: { correoId?: string; cuerpo?: string; asunto?: string; desde?: string; enviar?: boolean };
+  let body: { accion?: string; correoId?: string; cuerpo?: string; asunto?: string; desde?: string; enviar?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+
+  if (body.accion === "spam") return await marcarSpam(createAdminClient(), body.correoId);
+  if (body.accion && body.accion !== "responder") {
+    return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
   }
 
   const { correoId, cuerpo } = body;
@@ -467,23 +474,39 @@ export async function POST(req: NextRequest) {
   // aprobando una persona, y está bien — ahí no sabemos de quién es el mail.
   const direccionProbada = !!original.resend_id || !!mailDeLaCuenta;
 
-  // El interruptor. Sin él, el asistente propone y no manda nada.
+  // El interruptor y los dos frenos del envío prendido (12/11/2026):
+  //  · una sola respuesta automática por correo: si ya salió una (del asistente o
+  //    de una persona), la siguiente la aprueba alguien. Corta bucles y duplicados;
+  //  · un tope por día, que acota el daño si alguien logra manejarlo con un mail.
   const envioHabilitado = process.env.BANDEJA_BOT_ENVIO === "on";
-  if (!body.enviar || !envioHabilitado || !direccionProbada) {
+  let yaRespondido = false;
+  let enviadosHoy = 0;
+  if (body.enviar && envioHabilitado && direccionProbada) {
+    const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const [previas, delDia] = await Promise.all([
+      admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").eq("en_respuesta_a", correoId).is("error_envio", null),
+      admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").gte("creado_en", hace24h).contains("datos", MARCA_ASISTENTE),
+    ]);
+    // Si no se puede contar, no se manda: un freno que no se pudo leer no frena.
+    if (previas.error || delDia.error) {
+      logWarn("[bandeja-bot]", "No se pudieron leer los frenos del envío", { correoId });
+      return NextResponse.json({ error: "No se pudo verificar el envío" }, { status: 502 });
+    }
+    yaRespondido = (previas.count ?? 0) > 0;
+    enviadosHoy = delDia.count ?? 0;
+  }
+  const decision = decidirEnvio({ pidioEnviar: Boolean(body.enviar), envioHabilitado, direccionProbada, yaRespondido, enviadosHoy });
+  if (!decision.enviar) {
     logInfo("[bandeja-bot]", "Borrador propuesto", {
       correoId,
       pidioEnviar: Boolean(body.enviar),
       envioHabilitado,
       direccionProbada,
+      motivo: decision.motivo,
     });
-    const motivo = !body.enviar
-      ? "No se pidió enviar"
-      : !envioHabilitado
-        ? "El envío está apagado (BANDEJA_BOT_ENVIO)"
-        : "La dirección no está comprobada: vino del formulario de ayuda sin sesión iniciada, así que la respuesta la aprueba una persona";
     return NextResponse.json({
       enviado: false,
-      motivo,
+      motivo: TEXTO_MOTIVO[decision.motivo],
       direccion_probada: direccionProbada,
       borrador: { para: destino, asunto, cuerpo, desde },
     });
@@ -501,6 +524,7 @@ export async function POST(req: NextRequest) {
     // ruta, no la fila.
     enviadoPor: null,
     adjuntos: [],
+    datos: { ...MARCA_ASISTENTE },
   });
 
   if (!r.ok) {
@@ -514,4 +538,56 @@ export async function POST(req: NextRequest) {
   // salida con `enRespuestaA`. Repetirlo acá sería escribir dos veces lo mismo.
   logInfo("[bandeja-bot]", "Respuesta enviada", { correoId, desde });
   return NextResponse.json({ enviado: true, para: destino, asunto });
+}
+
+// ── SPAM ────────────────────────────────────────────────────────────────────
+// Saca de la vista principal un correo que no es de nadie nuestro (12/11/2026,
+// pedido de Diego). No borra nada: lo marca `sistema`, que es lo que la Bandeja
+// pliega en "Otros" y lo que `pendientes` deja de traer. Se revierte desde la
+// base y el buscador de la Bandeja lo sigue encontrando.
+//
+// Lo que NO se puede marcar lo decide el servidor (`puedeMarcarSpam`): quien
+// tiene cuenta, quien escribió con sesión o alguien a quien ya le escribimos.
+// Un mail no puede convencer al asistente de esconder a un paciente.
+async function marcarSpam(admin: ReturnType<typeof createAdminClient>, correoId: string | undefined) {
+  if (!correoId) return NextResponse.json({ error: "Falta correoId" }, { status: 400 });
+
+  const { data: correo, error } = await admin
+    .from("correos")
+    .select("id, de, direccion, remitente_user_id, sistema")
+    .eq("id", correoId)
+    .eq("origen", "correo")
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: "No se pudo leer el correo" }, { status: 502 });
+  if (!correo) return NextResponse.json({ error: "Correo no encontrado" }, { status: 404 });
+  if (correo.sistema) return NextResponse.json({ marcado: true, ya_estaba: true });
+
+  const email = direccionDe(correo.de as string);
+  if (!email) return NextResponse.json({ marcado: false, motivo: "El correo no tiene remitente válido: lo mira una persona" });
+  const patron = sinComodines(email.toLowerCase());
+  const [medicos, pacientes, salidas] = await Promise.all([
+    admin.from("medicos").select("id", { count: "exact", head: true }).ilike("email", patron),
+    admin.from("pacientes").select("id", { count: "exact", head: true }).ilike("email", patron),
+    admin.from("correos").select("id", { count: "exact", head: true }).eq("direccion", "salida").ilike("para", patron),
+  ]);
+  // Sin poder comprobarlo, no se esconde nada.
+  if (medicos.error || pacientes.error || salidas.error) {
+    return NextResponse.json({ error: "No se pudo verificar el remitente" }, { status: 502 });
+  }
+
+  const puede = puedeMarcarSpam({
+    esEntrada: correo.direccion === "entrada",
+    conSesion: !!correo.remitente_user_id,
+    tieneCuenta: (medicos.count ?? 0) > 0 || (pacientes.count ?? 0) > 0,
+    leEscribimosAntes: (salidas.count ?? 0) > 0,
+  });
+  if (!puede.ok) {
+    logInfo("[bandeja-bot]", "Spam rechazado", { correoId, motivo: puede.motivo });
+    return NextResponse.json({ marcado: false, motivo: puede.motivo });
+  }
+
+  const { error: errUpdate } = await admin.from("correos").update({ sistema: true, atendido: true }).eq("id", correoId);
+  if (errUpdate) return NextResponse.json({ error: "No se pudo marcar" }, { status: 502 });
+  logInfo("[bandeja-bot]", "Marcado como spam", { correoId });
+  return NextResponse.json({ marcado: true });
 }

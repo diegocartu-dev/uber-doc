@@ -49,6 +49,26 @@ llegó de verdad tiene `resend_id`. Una fila escrita por el formulario público 
 sesión y sin comprobar que sea suya. A esas se les redacta un borrador y lo
 aprueba una persona.
 
+## Estado al 12/11/2026: el envío está prendido
+
+Diego decidió prenderlo sabiendo el riesgo que describe la sección de abajo
+(escrita en septiembre, cuando se apagó). Lo que se sumó para acotarlo
+(`src/lib/bandeja/asistente.ts`, con tests):
+
+- **Una sola respuesta automática por correo.** Si ese correo ya tiene una
+  respuesta enviada, la siguiente queda en borrador.
+- **Tope de 30 respuestas automáticas por día.** Las salidas del asistente llevan
+  una marca en `correos.datos` y se cuentan; si el conteo no se puede leer, no
+  se manda.
+- **Verbo `spam`** (`POST { accion: "spam", correoId }`): marca `sistema`, que es
+  lo que la Bandeja pliega en "Otros". El servidor se niega si el remitente tiene
+  cuenta, escribió con sesión o ya le escribimos.
+- **Instrucciones:** manda solo lo que puede resolver de forma segura; lo demás
+  lo consulta a Diego y se lo reclama en cada revisión.
+
+Lo que sigue sin tapar, y por eso es una decisión y no un arreglo: los candados
+gobiernan a quién se le escribe y cuántas veces, no qué se le dice.
+
 ## Por qué el envío automático conviene que siga apagado
 
 No es cautela genérica, es una cadena concreta que se puede recorrer:

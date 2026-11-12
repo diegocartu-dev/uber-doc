@@ -98,6 +98,8 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 
 ## 5. Decisiones vigentes — índice
 
+- **12/11 — El asistente de la Bandeja (Grokbot) envía solo.** Diego: "vamos a activar el envío automático… lo que no pueda resolver de forma segura, me consulte… que me reclame cuando tenga pendientes… los spam los mande a otro buzón". Se prende `BANDEJA_BOT_ENVIO`, con una respuesta automática por correo, tope de 30 por día y un verbo de spam que no puede esconder a nadie nuestro. Reemplaza la decisión del 11/09 de dejarlo apagado. Detalle: `docs/BANDEJA-ACCESO-ASISTENTE.md`.
+
 - **23/10 — Lo primero que se ve en el admin es qué pasó, no cuánto.** Diego: "tableros con muchísima información que no dicen nada; necesito tarjetas claras donde ver qué está pasando de un solo vistazo", y "siempre primero hoy". La tarjeta «Qué pasó» (Hoy con la línea Ahora, Ayer, Últimos 7 días) abre `/admin` y `/admin/tablero`, una línea por atención con su desenlace y su porqué, la misma fila que el Historial (`src/lib/consultas/que-paso.ts`). Se fueron del Dashboard los contadores y el gráfico que contaban sin decir qué pasó. `docs/sprints/2026-10-23-tarjeta-que-paso.md`, PR #584.
 
 - **20/10 — Pedidos de consulta inmediata sin respuesta: aviso, después revisión del nivel, después suspensión.** Diego, ante una profesional que dejó pasar dos pedidos en dos días figurando disponible (avisos entregados y no leídos): primero un aviso por mail (enviado el 20/10, firmado Valentina); si se repite, se revisa el nivel Fundador; si sigue, se suspende el perfil. Hoy no está automatizado: lo decide Diego caso por caso y con más casos a la vista ("no quiero ser reactivo", 19/10). Responde en parte a 1.4.
