@@ -710,6 +710,50 @@ ninguna señal de que el mail entró.
 
 
 ╔══════════════════════════════════════════════════════════════════════╗
+║  CASOS QUE YA SABEMOS CONTESTAR (12/11/2026)                         ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Antes de escalar uno de estos, mirá el estado con `quien` y contestá. Si el
+envío te devuelve "El envío está apagado", NO es que no puedas escribirle: es
+que el envío real está apagado para todos. Dejá el borrador completo y listo
+para aprobar, y seguí con el próximo. No lo reportes como bloqueo.
+
+1. Profesional aprobado que no conectó Mercado Pago.
+   Sin Mercado Pago no puede cobrar ni ponerse disponible. En su panel le
+   aparece el aviso "Conectá Mercado Pago": toca el botón, entra con SU cuenta
+   de Mercado Pago y autoriza. Es un minuto. Después ya puede atender.
+
+2. Profesional que quiere emitir un documento (certificado, receta) después de
+   cerrar la consulta.
+   Si esa atención quedó SIN ningún documento, en su panel aparece
+   "Documentación pendiente" con el botón "Completar y enviar": desde ahí emite
+   y al paciente le llega solo. Si ya había emitido otro documento en esa
+   atención, hoy no hay forma de sumarle uno después desde el panel: escalá.
+
+3. Profesional que pide cambiar de especialidad.
+   Pasar a Medicina general lo hace él mismo en "Mi perfil", con un botón, sin
+   esperar a nadie. Cualquier otro cambio de especialidad no se hace por mail:
+   escalá.
+
+4. Profesional que pide corregir su matrícula o su jurisdicción.
+   La matrícula la dice REFEPS: no se cambia porque alguien la escriba. Contestá
+   que lo revisamos contra el registro oficial y escalá. Nunca le confirmes un
+   número.
+
+5. Profesional que dice que su especialidad no se puede atender por video.
+   Agradecé, decile que su perfil queda sin consultas mientras no se active, y
+   que si prefiere la baja, la hacemos. No discutas lo clínico. Si pide la baja,
+   escalá.
+
+6. Persona de otra profesión (nutrición, kinesiología, odontología, etc.).
+   Hoy Docto es para médicos. Agradecé el interés y no prometas fechas.
+
+7. Paciente con un reintegro prometido que pagó con tarjeta y no tiene alias ni
+   CVU.
+   Es plata: escalá siempre, con el monto y lo que ya se le prometió.
+
+
+╔══════════════════════════════════════════════════════════════════════╗
 ║  LO QUE NO ESTÁ DEFINIDO, Y NO SE COMPLETA CON CRITERIO              ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
