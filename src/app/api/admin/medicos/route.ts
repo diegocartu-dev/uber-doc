@@ -20,6 +20,7 @@ import {
 import { obtenerDecisionDidit } from "@/lib/didit/client";
 import { aplicarDecisionAprobada, soloDigitos } from "@/lib/didit/reconciliar";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
+import { cambiarMatriculaValidada } from "@/lib/medicos/cambiar-matricula-validada";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -595,6 +596,48 @@ export async function PATCH(req: NextRequest) {
       .eq("id", medicoId)
       .single();
     return NextResponse.json({ ok: true, cruce: cruce.outcome, ficha: despues ?? null });
+  }
+
+  // Lo mismo, para un profesional con la identidad YA validada (13/11/2026): la
+  // base congela la matrícula y la única puerta es lib/medicos/cambiar-matricula-validada
+  // (biometría + REFEPS en vivo). Sigue aprobado: es otra de SUS matrículas oficiales.
+  if (accion === "cambiar_matricula_validada") {
+    if (!adminUser) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+    const elegida = body.matricula as { numero?: unknown; tipo?: unknown } | undefined;
+    if (typeof elegida?.numero !== "string" || typeof elegida?.tipo !== "string") {
+      return NextResponse.json({ error: "Falta la matrícula elegida" }, { status: 400 });
+    }
+    if (body.confirmado !== true) {
+      return NextResponse.json(
+        { error: "La matrícula elegida pasa a ser la de su perfil y la de los documentos que emita desde ahora.", requiereConfirmacion: true },
+        { status: 409 }
+      );
+    }
+
+    const cambio = await cambiarMatriculaValidada(admin, medicoId, { tipo: elegida.tipo, numero: elegida.numero });
+    if (!cambio.ok) return NextResponse.json({ error: cambio.error }, { status: cambio.status });
+
+    await logAdminAction({
+      adminUserId: adminUser.id,
+      accion: ADMIN_ACTIONS.CORREGIR_MATRICULA_MEDICO,
+      recursoTipo: "medico",
+      recursoId: medicoId,
+      payloadAnterior: { ...cambio.anterior },
+      payloadNuevo: { ...cambio.nueva },
+      motivo: motivo || "Elegida entre las matrículas de REFEPS (identidad ya validada)",
+    });
+
+    // Se informa el estado real de la ficha después, no el supuesto.
+    const { data: despues } = await admin
+      .from("medicos")
+      .select(
+        "tipo_matricula, numero_matricula, provincia_matricula, estado_registro, verificado, verificado_at, verificado_por, identidad_validada, didit_status, identidad_revision_motivo, refeps_validado, refeps_data, refeps_validado_at, jurisdicciones"
+      )
+      .eq("id", medicoId)
+      .single();
+    return NextResponse.json({ ok: true, cruce: "validada", ficha: despues ?? null });
   }
 
   if (accion === "cambiar_categoria") {

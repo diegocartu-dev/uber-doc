@@ -146,6 +146,53 @@ export function esUtilizable(m: MatriculaDeRefeps, profesion: Profesion = "medic
 }
 
 /**
+ * La matrícula elegida (jurisdicción + número), tal como REFEPS la tiene hoy para
+ * esa persona y como va en la ficha. `null` si REFEPS no la tiene como de su
+ * profesión y habilitada: nunca se escribe un número que REFEPS no devolvió.
+ */
+export function elegirDeRefeps(
+  deRefeps: MatriculaDeRefeps[] | null | undefined,
+  elegida: { tipo: string; numero: string },
+  profesion: Profesion = "medico"
+): MatriculaEnFicha | null {
+  const jurisdiccion = normalizarJurisdiccion(elegida.tipo);
+  const numero = normalizarNumeroMatricula(elegida.numero);
+  if (!jurisdiccion || !numero) return null;
+  const enRefeps = (deRefeps ?? []).find(
+    (m) =>
+      esUtilizable(m, profesion) &&
+      normalizarJurisdiccion(m.tipo) === jurisdiccion &&
+      normalizarNumeroMatricula(m.numero) === numero
+  );
+  return enRefeps ? declaradaDesdeRefeps(enRefeps) : null;
+}
+
+/**
+ * Las matrículas habilitadas que REFEPS tiene para esa persona y que NO son la de
+ * la ficha: lo que se le puede ofrecer para cambiar. Una matrícula guardada sin
+ * dato de profesión (validaciones anteriores al 13/10/2026) se ofrece igual: el
+ * servidor vuelve a consultar REFEPS y solo acepta una de SU profesión.
+ */
+export function otrasHabilitadas(
+  ficha: MatriculaDeclarada,
+  deRefeps: MatriculaDeRefeps[] | null | undefined,
+  profesion: Profesion = "medico"
+): MatriculaDeRefeps[] {
+  const unicas = new Map<string, MatriculaDeRefeps>();
+  for (const mat of deRefeps ?? []) {
+    if (
+      mat.habilitada === true &&
+      (!mat.profesion || esMatriculaDe(profesion, mat)) &&
+      declaradaDesdeRefeps(mat) !== null &&
+      !esLaDeLaFicha(ficha, mat)
+    ) {
+      unicas.set(`${normalizarJurisdiccion(mat.tipo)}|${normalizarNumeroMatricula(mat.numero)}`, mat);
+    }
+  }
+  return [...unicas.values()];
+}
+
+/**
  * ¿REFEPS valida a este profesional (`refeps_validado`)? Para un médico, como
  * siempre: figura y está activo. Para un psicólogo, además, tiene que tener al
  * menos una matrícula de psicología habilitada y con jurisdicción reconocible
