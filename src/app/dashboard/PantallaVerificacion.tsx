@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Clock, ShieldX, ShieldAlert, Stethoscope, Upload, CheckCircle2, AlertCircle } from "lucide-react";
 import LogoutButton from "./LogoutButton";
 import { resubirCredencial } from "./credencial-actions";
+import BannerIdentidad from "./BannerIdentidad";
 
 const estadoConfig = {
   pendiente_revision: {
@@ -45,6 +46,10 @@ interface Props {
   numeroMatricula: string;
   fotoCredencialUrl: string | null;
   userId: string;
+  // En revisión y sin la identidad validada: el paso que falta es SUYO. Sin esta
+  // puerta, quien dejó el registro a la mitad no tenía cómo volver a la
+  // validación (13/11/2026): esta pantalla solo le decía que esperara.
+  identidadPendiente?: boolean;
 }
 
 export default function PantallaVerificacion({
@@ -56,6 +61,7 @@ export default function PantallaVerificacion({
   numeroMatricula,
   fotoCredencialUrl,
   userId,
+  identidadPendiente = false,
 }: Props) {
   const router = useRouter();
   const estado = estadoConfig[estadoRegistro as keyof typeof estadoConfig] ?? estadoConfig.pendiente_revision;
@@ -154,6 +160,11 @@ export default function PantallaVerificacion({
         </div>
       </nav>
       <div className="mx-auto max-w-lg px-6 py-16 text-center">
+        {identidadPendiente && (
+          <div className="mb-8 text-left">
+            <BannerIdentidad />
+          </div>
+        )}
         <div
           className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full"
           style={{ backgroundColor: estado.bgColor }}
