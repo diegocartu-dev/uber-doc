@@ -28,8 +28,8 @@ DECLARE
   v_cambio_refeps boolean :=
     coalesce(current_setting('docto.cambio_matricula_refeps', true), '') = 'on'
     AND coalesce(current_setting('role', true), '') NOT IN ('authenticated', 'anon')
-    AND OLD.identidad_validada = true
-    AND NEW.identidad_validada = true;
+    AND coalesce(OLD.identidad_validada, false)
+    AND coalesce(NEW.identidad_validada, false);
 BEGIN
   -- CANDADO: si la identidad ya está validada, el DNI queda congelado siempre.
   IF OLD.identidad_validada = true AND OLD.dni IS DISTINCT FROM NEW.dni THEN
@@ -85,6 +85,9 @@ END;
 $$;
 
 -- La puerta. Devuelve cuántas fichas cambió (0 = la ficha ya no estaba como se leyó).
+-- El rastro en `admin_audit_log` se escribe ACÁ, en la misma transacción: o
+-- quedan el cambio y su rastro, o no queda ninguno de los dos.
+-- `p_admin_user_id` vacío = lo pidió el propio profesional (va en `p_metadata`).
 CREATE OR REPLACE FUNCTION public.cambiar_matricula_validada(
   p_medico_id uuid,
   p_tipo text,
@@ -92,7 +95,10 @@ CREATE OR REPLACE FUNCTION public.cambiar_matricula_validada(
   p_provincia text,
   p_tipo_anterior text,
   p_numero_anterior text,
-  p_provincia_anterior text
+  p_provincia_anterior text,
+  p_admin_user_id uuid,
+  p_motivo text,
+  p_metadata jsonb
 )
  RETURNS integer
  LANGUAGE plpgsql
@@ -123,14 +129,31 @@ BEGIN
      AND provincia_matricula IS NOT DISTINCT FROM p_provincia_anterior;
   GET DIAGNOSTICS v_filas = ROW_COUNT;
 
-  -- La marca no sobrevive a esta llamada (si el UPDATE falla, la transacción
-  -- entera se deshace y la marca con ella).
+  -- La marca no sobrevive a esta llamada (si algo falla, la transacción entera
+  -- se deshace y la marca con ella).
   PERFORM set_config('docto.cambio_matricula_refeps', 'off', true);
+
+  IF v_filas = 1 THEN
+    INSERT INTO admin_audit_log
+      (admin_user_id, accion, recurso_tipo, recurso_id, desde_mobile, payload_anterior, payload_nuevo, motivo, metadata)
+    VALUES (
+      p_admin_user_id,
+      'corregir_matricula',
+      'medico',
+      p_medico_id::text,
+      false,
+      jsonb_build_object('tipo_matricula', p_tipo_anterior, 'numero_matricula', p_numero_anterior, 'provincia_matricula', p_provincia_anterior),
+      jsonb_build_object('tipo_matricula', p_tipo, 'numero_matricula', p_numero, 'provincia_matricula', p_provincia),
+      p_motivo,
+      coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object('identidad_validada', true)
+    );
+  END IF;
+
   RETURN v_filas;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text) FROM anon;
-REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text, uuid, text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text, uuid, text, jsonb) FROM anon;
+REVOKE ALL ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text, uuid, text, jsonb) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.cambiar_matricula_validada(uuid, text, text, text, text, text, text, uuid, text, jsonb) TO service_role;

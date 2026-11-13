@@ -431,7 +431,7 @@ export async function PATCH(req: NextRequest) {
     if (errFicha || !ficha) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
     if (ficha.identidad_validada === true) {
       return NextResponse.json(
-        { error: "La identidad ya está validada: la matrícula quedó congelada y no se puede cambiar." },
+        { error: "La identidad de este profesional ya quedó validada. Recargá la página: la matrícula se cambia desde su ficha." },
         { status: 409 }
       );
     }
@@ -611,23 +611,24 @@ export async function PATCH(req: NextRequest) {
     }
     if (body.confirmado !== true) {
       return NextResponse.json(
-        { error: "La matrícula elegida pasa a ser la de su perfil y la de los documentos que emita desde ahora.", requiereConfirmacion: true },
+        { error: "La matrícula elegida pasa a ser la de su perfil y la de los documentos que firme desde ahora.", requiereConfirmacion: true },
         { status: 409 }
       );
     }
 
-    const cambio = await cambiarMatriculaValidada(admin, medicoId, { tipo: elegida.tipo, numero: elegida.numero });
+    // El rastro (admin_audit_log) lo escribe la función de la base, en la misma
+    // transacción que el cambio: acá no se registra de nuevo.
+    const cambio = await cambiarMatriculaValidada(
+      admin,
+      medicoId,
+      { tipo: elegida.tipo, numero: elegida.numero },
+      {
+        adminUserId: adminUser.id,
+        motivo: motivo || "Elegida entre las matrículas de REFEPS (identidad ya validada)",
+        actor: "equipo",
+      }
+    );
     if (!cambio.ok) return NextResponse.json({ error: cambio.error }, { status: cambio.status });
-
-    await logAdminAction({
-      adminUserId: adminUser.id,
-      accion: ADMIN_ACTIONS.CORREGIR_MATRICULA_MEDICO,
-      recursoTipo: "medico",
-      recursoId: medicoId,
-      payloadAnterior: { ...cambio.anterior },
-      payloadNuevo: { ...cambio.nueva },
-      motivo: motivo || "Elegida entre las matrículas de REFEPS (identidad ya validada)",
-    });
 
     // Se informa el estado real de la ficha después, no el supuesto.
     const { data: despues } = await admin
