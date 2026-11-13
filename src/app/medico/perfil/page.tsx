@@ -10,6 +10,7 @@ import { parsearAreasAtencion } from "@/lib/areas-atencion";
 import { esInstitucional } from "@/lib/instancia";
 import { getComisionForMedico } from "@/lib/comisiones";
 import { nombreCategoria } from "@/lib/categorias";
+import { matriculaEnPerfil, type FichaParaPerfil } from "@/lib/medicos/matricula-perfil";
 
 export default async function PerfilMedicoPage() {
   const supabase = await createClient();
@@ -81,6 +82,20 @@ export default async function PerfilMedicoPage() {
     if (categoriaRow?.categoria) categoria = `${nombreCategoria(categoriaRow.categoria)} ${comisionPct}\u00a0%`;
   }
 
+  // Matrícula con la identidad validada (13/11/2026): no se escribe, se elige entre
+  // las que REFEPS le tiene habilitadas. Query PROPIA con service role (columnas
+  // sin GRANT, misma regla que las de arriba): si falla, la pantalla queda como
+  // antes. Al navegador va solo la lista armada, no lo que guardó REFEPS.
+  const { data: matriculaRow, error: errMatricula } = await admin
+    .from("medicos")
+    .select(
+      "tipo_matricula, numero_matricula, provincia_matricula, identidad_validada, didit_status, refeps_data, es_cuenta_test, profesion"
+    )
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (errMatricula) console.error("[medico/perfil] no se pudo leer la matrícula:", errMatricula.message, { userId: user.id });
+  const matricula = matriculaEnPerfil(matriculaRow as FichaParaPerfil | null, esInstitucional());
+
   const { data: mpAccount } = await admin
     .from("medicos_mp_accounts")
     .select(
@@ -99,6 +114,7 @@ export default async function PerfilMedicoPage() {
           areasAtencion={areasAtencion}
           especialidadesAdicionales={especialidadesAdicionales}
           categoria={categoria}
+          matricula={matricula}
         />
       </Suspense>
     </div>
