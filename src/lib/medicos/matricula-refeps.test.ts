@@ -285,3 +285,50 @@ test("REFEPS valida: al médico como siempre; al psicólogo, solo con una matrí
   assert.equal(refepsValida({ ...base, matriculas: [psi("1", "Córdoba")] }, "psicologo"), true);
   assert.equal(refepsValida({ encontrado: true, activo: false, matriculas: [psi("1", "Córdoba")] }, "psicologo"), false);
 });
+
+// ── Elegir otra matrícula con la identidad ya validada (13/11/2026) ──────────
+import { elegirDeRefeps, otrasHabilitadas } from "./matricula-refeps";
+
+const deUnMedico = [
+  { tipo: "Salta", numero: "4001", habilitada: true, profesion: "Médico" },
+  { tipo: "CABA", numero: "900001", habilitada: false, profesion: "Médico" },
+  { tipo: "Jujuy", numero: "4002", habilitada: true, profesion: "Médico" },
+  { tipo: "Jujuy", numero: "777", habilitada: true, profesion: "Licenciado en Psicología" },
+];
+
+test("elegir: solo una matrícula habilitada, de su profesión, que REFEPS tenga", () => {
+  assert.deepEqual(elegirDeRefeps(deUnMedico, { tipo: "Jujuy", numero: "4002" }), {
+    tipo_matricula: "MP",
+    numero_matricula: "4002",
+    provincia_matricula: "Jujuy",
+  });
+  // La inhabilitada no, aunque sea suya.
+  assert.equal(elegirDeRefeps(deUnMedico, { tipo: "CABA", numero: "900001" }), null);
+  // El número de una jurisdicción no vale para otra.
+  assert.equal(elegirDeRefeps(deUnMedico, { tipo: "Salta", numero: "4002" }), null);
+  // La de otra profesión no.
+  assert.equal(elegirDeRefeps(deUnMedico, { tipo: "Jujuy", numero: "777" }), null);
+  // Un número que REFEPS no devolvió, nunca.
+  assert.equal(elegirDeRefeps(deUnMedico, { tipo: "Jujuy", numero: "9999" }), null);
+  assert.equal(elegirDeRefeps(null, { tipo: "Jujuy", numero: "4002" }), null);
+  assert.equal(elegirDeRefeps(deUnMedico, { tipo: "", numero: "" }), null);
+});
+
+test("elegir: la de CABA se guarda como Nacional", () => {
+  assert.deepEqual(elegirDeRefeps([{ tipo: "CABA", numero: "123", habilitada: true, profesion: "Médico" }], { tipo: "CABA", numero: "123" }), {
+    tipo_matricula: "MN",
+    numero_matricula: "123",
+    provincia_matricula: null,
+  });
+});
+
+test("las otras habilitadas: no ofrece la de la ficha, las inhabilitadas ni las de otra profesión", () => {
+  const ficha = { tipo_matricula: "MN", numero_matricula: "900001", provincia_matricula: null };
+  assert.deepEqual(
+    otrasHabilitadas(ficha, deUnMedico).map((m) => `${m.tipo} ${m.numero}`),
+    ["Salta 4001", "Jujuy 4002"]
+  );
+  const yaEnJujuy = { tipo_matricula: "MP", numero_matricula: "4002", provincia_matricula: "Jujuy" };
+  assert.deepEqual(otrasHabilitadas(yaEnJujuy, deUnMedico).map((m) => `${m.tipo} ${m.numero}`), ["Salta 4001"]);
+  assert.deepEqual(otrasHabilitadas(ficha, null), []);
+});

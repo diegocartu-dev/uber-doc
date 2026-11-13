@@ -8,13 +8,12 @@ import StatusBadge from "../components/StatusBadge";
 import { BarraTabla, CabezaTabla, useVistaTabla, type Columna } from "@/components/tabla/TablaDatos";
 import ConfirmDialog from "../components/ConfirmDialog";
 import SidePanel from "../components/SidePanel";
-import { derivarJurisdicciones, normalizarJurisdiccion } from "@/lib/jurisdicciones";
+import { derivarJurisdicciones } from "@/lib/jurisdicciones";
 import {
   declaradaDesdeRefeps,
   esLaDeLaFicha,
-  esMatriculaDe,
   etiquetaMatricula,
-  normalizarNumeroMatricula,
+  otrasHabilitadas,
   MOTIVO_DNI_NO_COINCIDE,
   MOTIVO_SIN_PROFESIONAL_EN_REFEPS,
   type MatriculaDeRefeps,
@@ -1186,23 +1185,16 @@ function BloqueElegirMatricula({
   const [resultado, setResultado] = useState<string | null>(null);
 
   const pendiente = hayCruceDeMatriculaPendiente(m);
-  if (!pendiente && !resultado) return null;
-
   const deRefeps = ((m.refeps_data as { matriculas?: MatriculaDeRefeps[] } | null)?.matriculas ?? []) as MatriculaDeRefeps[];
   // Sin dato de profesión (validaciones anteriores) se ofrece igual: el servidor
   // vuelve a consultar REFEPS y solo acepta una matrícula habilitada de SU profesión.
-  const unicas = new Map<string, MatriculaDeRefeps>();
-  for (const mat of deRefeps) {
-    if (
-      mat.habilitada === true &&
-      (!mat.profesion || esMatriculaDe(profesionDe(m.profesion), mat)) &&
-      declaradaDesdeRefeps(mat) !== null &&
-      !esLaDeLaFicha(m, mat)
-    ) {
-      unicas.set(`${normalizarJurisdiccion(mat.tipo)}|${normalizarNumeroMatricula(mat.numero)}`, mat);
-    }
-  }
-  const candidatas = [...unicas.values()];
+  const candidatas = otrasHabilitadas(m, deRefeps, profesionDe(m.profesion));
+  // Con la identidad ya validada (13/11/2026): la matrícula está congelada, pero se
+  // puede pasar a otra de las que REFEPS le tiene habilitadas. Sigue aprobado.
+  const validada = m.identidad_validada === true && candidatas.length > 0;
+  // ¿La de la ficha figura hoy habilitada en lo que REFEPS devolvió?
+  const laDeLaFichaHabilitada = deRefeps.some((mat) => mat.habilitada === true && esLaDeLaFicha(m, mat));
+  if (!pendiente && !validada && !resultado) return null;
   const clave = (mat: MatriculaDeRefeps) => `${mat.tipo}|${mat.numero}`;
   const etiqueta = (mat: MatriculaDeRefeps) => {
     const enFicha = declaradaDesdeRefeps(mat);
@@ -1224,7 +1216,12 @@ function BloqueElegirMatricula({
       const res = await fetch("/api/admin/medicos", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ medicoId: m.id, accion: "usar_matricula_refeps", matricula: { numero: mat.numero, tipo: mat.tipo }, confirmado }),
+        body: JSON.stringify({
+          medicoId: m.id,
+          accion: validada ? "cambiar_matricula_validada" : "usar_matricula_refeps",
+          matricula: { numero: mat.numero, tipo: mat.tipo },
+          confirmado,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -1242,7 +1239,9 @@ function BloqueElegirMatricula({
         provincia_matricula: ficha.provincia_matricula,
       });
       setResultado(
-        ficha.identidad_validada === true
+        data.cruce === "validada"
+          ? `Listo: la matrícula quedó en ${quedo}. Sigue aprobado.`
+          : ficha.identidad_validada === true
           ? `Listo: la matrícula quedó en ${quedo} y la identidad está validada.`
           : data.cruce === "en_revision"
             ? `La matrícula quedó en ${quedo}, pero el cruce sigue sin cerrar: ${ficha.identidad_revision_motivo ?? "mirá el motivo arriba"}`
@@ -1257,7 +1256,11 @@ function BloqueElegirMatricula({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-[#D85A30]/40 bg-white p-3 text-xs text-gray-700">
+    <div
+      className={`mt-3 rounded-lg border bg-white p-3 text-xs text-gray-700 ${
+        pendiente || !laDeLaFichaHabilitada ? "border-[#D85A30]/40" : "border-gray-200"
+      }`}
+    >
       {pendiente && (
         <>
           <p className="text-sm font-medium text-gray-900">Elegí la matrícula correcta</p>
@@ -1291,8 +1294,44 @@ function BloqueElegirMatricula({
           )}
         </>
       )}
+      {!pendiente && validada && (
+        <>
+          <p className="text-sm font-medium text-gray-900">Cambiar la matrícula</p>
+          <p className="mt-1">
+            En la ficha figura {etiquetaMatricula(m)}
+            {laDeLaFichaHabilitada ? "." : (
+              <>
+                , que <strong className="text-[#D85A30]">no figura habilitada en REFEPS</strong>.
+              </>
+            )}{" "}
+            REFEPS le tiene habilitadas también estas; si atiende con otra, elegila:
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {candidatas.map((mat) => (
+              <li key={clave(mat)} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-gray-900">{etiqueta(mat)}</span>
+                {mat.profesion && <span className="text-gray-500">· {mat.profesion}</span>}
+                <button
+                  type="button"
+                  onClick={() => usar(mat)}
+                  disabled={guardando !== null}
+                  className="rounded border border-[#378ADD] px-2 py-0.5 font-medium text-[#378ADD] hover:bg-[#378ADD]/10 disabled:opacity-50"
+                >
+                  {guardando === clave(mat) ? "Consultando REFEPS…" : "Usar esta"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {confirmar && (
         <div className="mt-2 rounded-lg border border-[#D85A30]/40 bg-white p-2">
+          {!pendiente && validada ? (
+            <p>
+              <strong>{etiqueta(confirmar)}</strong> pasa a ser su matrícula: es la que figura en su perfil y en los
+              documentos que emita desde ahora. Sigue aprobado y los documentos ya emitidos no cambian.
+            </p>
+          ) : (
           <p>
             <strong>{etiqueta(confirmar)}</strong> queda como su matrícula y la identidad se valida en el momento:
             después no se puede cambiar desde la aplicación.
@@ -1304,6 +1343,7 @@ function BloqueElegirMatricula({
               </>
             )}
           </p>
+          )}
           <div className="mt-2 flex gap-2">
             <button
               type="button"
