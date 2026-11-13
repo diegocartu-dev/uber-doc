@@ -33,11 +33,32 @@ import {
   type MatriculaEnFicha,
 } from "./matricula-refeps";
 
+/**
+ * Por qué no se cambió. El `error` está escrito para el equipo (habla de "la
+ * ficha" y "este profesional"); la pantalla del profesional arma su propio texto
+ * a partir de este código (lib/medicos/matricula-perfil.ts).
+ */
+export type MotivoSinCambio =
+  | "no_disponible" // la ficha no admite el cambio desde acá (sin validar, de prueba, sin biometría)
+  | "identidad" // la biometría ya no confirma el DNI de la ficha
+  | "transitorio" // Didit o REFEPS no respondieron: se puede reintentar
+  | "refeps" // REFEPS hoy no lo encuentra o no lo da por activo
+  | "no_habilitada" // la elegida no figura hoy habilitada y de su profesión
+  | "ya_es" // la elegida ya es la de la ficha
+  | "duplicada" // esa matrícula está en otra cuenta
+  | "cambio_mientras" // la ficha cambió entre la lectura y la escritura
+  | "error"; // falló la lectura o la escritura
+
 export type CambioDeMatricula =
   | { ok: true; anterior: MatriculaEnFicha; nueva: MatriculaEnFicha }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; codigo: MotivoSinCambio };
 
-const no = (status: number, error: string): CambioDeMatricula => ({ ok: false, status, error });
+const no = (status: number, error: string, codigo: MotivoSinCambio): CambioDeMatricula => ({
+  ok: false,
+  status,
+  error,
+  codigo,
+});
 
 /** Quién lo pide: queda en el rastro. `adminUserId` vacío = el propio profesional. */
 export interface QuienCambia {
@@ -59,14 +80,14 @@ export async function cambiarMatriculaValidada(
     )
     .eq("id", medicoId)
     .maybeSingle();
-  if (errFicha) return no(500, "No se pudo leer la ficha. No se cambió nada.");
-  if (!ficha) return no(404, "Profesional no encontrado");
+  if (errFicha) return no(500, "No se pudo leer la ficha. No se cambió nada.", "error");
+  if (!ficha) return no(404, "Profesional no encontrado", "no_disponible");
   if (ficha.identidad_validada !== true) {
-    return no(409, "La identidad todavía no está validada: la matrícula se corrige con el cruce de identidad.");
+    return no(409, "La identidad todavía no está validada: la matrícula se corrige con el cruce de identidad.", "no_disponible");
   }
-  if (ficha.es_cuenta_test === true) return no(400, "Las cuentas de prueba no se consultan contra REFEPS.");
+  if (ficha.es_cuenta_test === true) return no(400, "Las cuentas de prueba no se consultan contra REFEPS.", "no_disponible");
   if (!ficha.didit_session_id) {
-    return no(409, "Esta ficha no tiene una verificación biométrica para confirmar el DNI: no se puede cambiar desde acá.");
+    return no(409, "Esta ficha no tiene una verificación biométrica para confirmar el DNI: no se puede cambiar desde acá.", "no_disponible");
   }
 
   // El DNI que vale es el del documento que verificó la biometría.
@@ -74,7 +95,7 @@ export async function cambiarMatriculaValidada(
   try {
     const decision = await obtenerDecisionDidit(ficha.didit_session_id as string);
     if (decision.status !== "Approved") {
-      return no(409, "La verificación de identidad ya no figura aprobada. No se cambió nada.");
+      return no(409, "La verificación de identidad ya no figura aprobada. No se cambió nada.", "identidad");
     }
     dniDidit = soloDigitos(decision.id_verifications?.[0]?.document_number);
   } catch (e) {
@@ -82,12 +103,13 @@ export async function cambiarMatriculaValidada(
     const codigo = /\((\d{3})\)/.exec(e instanceof Error ? e.message : "")?.[1] ?? "sin respuesta";
     console.error(`[medicos/cambiar-matricula] Didit no devolvió la decisión: ${codigo}`, { medicoId });
     // Un 4xx no se arregla esperando (la sesión ya no existe o la clave no sirve).
-    return codigo.startsWith("4")
-      ? no(409, "La verificación de identidad de esta ficha ya no se puede consultar: no se puede cambiar desde acá. No se cambió nada.")
-      : no(503, "No pudimos confirmar la identidad en este momento. No se cambió nada: probá de nuevo en un rato.");
+    // Un 408 o un 429 sí: son de paso, igual que un 5xx.
+    return codigo.startsWith("4") && codigo !== "408" && codigo !== "429"
+      ? no(409, "La verificación de identidad de esta ficha ya no se puede consultar: no se puede cambiar desde acá. No se cambió nada.", "identidad")
+      : no(503, "No pudimos confirmar la identidad en este momento. No se cambió nada: probá de nuevo en un rato.", "transitorio");
   }
   if (!dniDidit || dniDidit !== soloDigitos(ficha.dni as string | null)) {
-    return no(409, "El DNI de la ficha no es el del documento verificado. No se cambió nada.");
+    return no(409, "El DNI de la ficha no es el del documento verificado. No se cambió nada.", "identidad");
   }
 
   // REFEPS en vivo, por ese DNI.
@@ -95,18 +117,35 @@ export async function cambiarMatriculaValidada(
   if (!refeps.encontrado) {
     const transitorio = !!refeps.error && ERRORES_TRANSITORIOS_REFEPS.has(refeps.error);
     return transitorio
-      ? no(503, "REFEPS no respondió. No se cambió nada: probá de nuevo en un rato.")
-      : no(400, "REFEPS no devolvió ningún profesional para este DNI.");
+      ? no(503, "REFEPS no respondió. No se cambió nada: probá de nuevo en un rato.", "transitorio")
+      : no(400, "REFEPS no devolvió ningún profesional para este DNI.", "refeps");
   }
   const profesion = profesionDe(ficha.profesion as string | null);
+  const guardarLoQueDijoRefeps = async () => {
+    const { error: errRefeps } = await admin
+      .from("medicos")
+      .update(
+        datosRefeps(
+          refeps,
+          { estado_registro: (ficha.estado_registro as string | null) ?? null, profesion: (ficha.profesion as string | null) ?? null },
+          new Date().toISOString()
+        )
+      )
+      .eq("id", medicoId);
+    if (errRefeps) console.warn("[medicos/cambiar-matricula] no se guardó lo que dijo REFEPS:", errRefeps.message, { medicoId });
+  };
   // Si REFEPS hoy no lo valida (inactivo), no se le cambia nada: eso lo resuelve
   // el equipo, no una elección de matrícula.
   if (!refepsValida(refeps, profesion)) {
-    return no(409, "REFEPS hoy no da a este profesional por activo. No se cambió nada.");
+    return no(409, "REFEPS hoy no da a este profesional por activo. No se cambió nada.", "refeps");
   }
   const nueva = elegirDeRefeps((refeps.matriculas ?? []) as MatriculaDeRefeps[], elegida, profesion);
   if (!nueva) {
-    return no(400, `REFEPS no tiene hoy esa matrícula como de ${nombreProfesion(profesion)} y habilitada para este DNI.`);
+    // REFEPS respondió y la elegida no está entre las suyas: lo guardado en la ficha
+    // estaba viejo. Se actualiza para que no se le siga ofreciendo una opción que
+    // va a fallar siempre (mismo criterio que al final: REFEPS acaba de validarlo).
+    await guardarLoQueDijoRefeps();
+    return no(400, `REFEPS no tiene hoy esa matrícula como de ${nombreProfesion(profesion)} y habilitada para este DNI.`, "no_habilitada");
   }
 
   const anterior: MatriculaEnFicha = {
@@ -119,7 +158,7 @@ export async function cambiarMatriculaValidada(
     anterior.numero_matricula === nueva.numero_matricula &&
     anterior.provincia_matricula === nueva.provincia_matricula
   ) {
-    return no(409, `${etiquetaMatricula(nueva)} ya es la matrícula de la ficha.`);
+    return no(409, `${etiquetaMatricula(nueva)} ya es la matrícula de la ficha.`, "ya_es");
   }
 
   // Solo si la ficha sigue como se leyó (la función compara los valores anteriores).
@@ -136,7 +175,7 @@ export async function cambiarMatriculaValidada(
     p_metadata: { actor: quien.actor },
   });
   if (error) {
-    if (error.code === "23505") return no(409, "Esa matrícula ya está cargada en otra cuenta de Docto.");
+    if (error.code === "23505") return no(409, "Esa matrícula ya está cargada en otra cuenta de Docto.", "duplicada");
     console.error("[medicos/cambiar-matricula] la base devolvió un error:", error.message, { medicoId });
     // La respuesta se puede perder DESPUÉS de que la base guardó: no se afirma
     // "no se cambió" sin mirar. Se relee y se dice lo que quedó.
@@ -152,27 +191,17 @@ export async function cambiarMatriculaValidada(
       (ahora?.provincia_matricula ?? null) === nueva.provincia_matricula;
     if (!quedoLaNueva) {
       return errAhora || !ahora
-        ? no(500, "No pudimos confirmar si el cambio se guardó. Recargá la página y mirá qué matrícula figura.")
-        : no(500, "No se pudo guardar el cambio. No se cambió nada.");
+        ? no(500, "No pudimos confirmar si el cambio se guardó. Recargá la página y mirá qué matrícula figura.", "error")
+        : no(500, "No se pudo guardar el cambio. No se cambió nada.", "error");
     }
   } else if (filas !== 1) {
-    return no(409, "La ficha cambió mientras tanto. Recargá la página y probá de nuevo.");
+    return no(409, "La ficha cambió mientras tanto. Recargá la página y probá de nuevo.", "cambio_mientras");
   }
 
   // Lo que REFEPS acaba de decir se guarda con el mismo criterio que el cruce (a
   // un aprobado, solo el "sí"; las provincias, solo si vienen). Si esto falla, la
   // matrícula ya quedó bien: se avisa en el log y la próxima validación lo pisa.
-  const { error: errRefeps } = await admin
-    .from("medicos")
-    .update(
-      datosRefeps(
-        refeps,
-        { estado_registro: (ficha.estado_registro as string | null) ?? null, profesion: (ficha.profesion as string | null) ?? null },
-        new Date().toISOString()
-      )
-    )
-    .eq("id", medicoId);
-  if (errRefeps) console.warn("[medicos/cambiar-matricula] no se guardó lo que dijo REFEPS:", errRefeps.message, { medicoId });
+  await guardarLoQueDijoRefeps();
 
   return { ok: true, anterior, nueva };
 }

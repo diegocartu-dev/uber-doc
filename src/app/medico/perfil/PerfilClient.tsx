@@ -10,6 +10,7 @@ import FirmaManuscrita from "./FirmaManuscrita";
 import AreasAtencion from "./AreasAtencion";
 import { type AreaAtencion, serializarAreas, validarAreas } from "@/lib/areas-atencion";
 import { formatNombreMedico } from "@/lib/utils/texto";
+import type { MatriculaEnPerfil, OpcionDeMatricula } from "@/lib/medicos/matricula-perfil";
 
 interface MpAccount {
   mp_user_id: string;
@@ -52,6 +53,7 @@ export default function PerfilClient({
   areasAtencion = [],
   especialidadesAdicionales = [],
   categoria = null,
+  matricula = null,
 }: {
   medico: Medico;
   mpAccount: MpAccount | null;
@@ -63,6 +65,12 @@ export default function PerfilClient({
   areasAtencion?: AreaAtencion[];
   /** "Fundador 5 %" / "Oro 10 %" (14/10/2026); null en la instancia institucional. */
   categoria?: string | null;
+  /**
+   * Con la identidad validada (13/11/2026): la matrícula que figura y las otras
+   * que REFEPS le tiene habilitadas. `null` = identidad sin validar (se tipea,
+   * como siempre, y el cruce de identidad decide).
+   */
+  matricula?: MatriculaEnPerfil | null;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -85,6 +93,41 @@ export default function PerfilClient({
       router.refresh();
     } finally {
       setCambiandoEspecialidad(false);
+    }
+  }
+  // Cambiar a otra de SUS matrículas de REFEPS (13/11/2026). No se tipea nada: se
+  // elige de la lista y el servidor vuelve a consultar REFEPS en el momento.
+  // Confirmación inline, nunca window.confirm.
+  const matriculaFija = matricula !== null;
+  const [elegirMatricula, setElegirMatricula] = useState<OpcionDeMatricula | null>(null);
+  const [cambiandoMatricula, setCambiandoMatricula] = useState(false);
+  // El porqué de un cambio que no se hizo queda fijo en el recuadro (un cartel
+  // que se va a los 5 segundos no alcanza para algo que pide recargar y mirar).
+  const [errorMatricula, setErrorMatricula] = useState<string | null>(null);
+  async function usarMatricula(opcion: OpcionDeMatricula) {
+    setCambiandoMatricula(true);
+    setErrorMatricula(null);
+    try {
+      const res = await fetch("/api/medico/matricula", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: opcion.tipo, numero: opcion.numero, confirmado: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setErrorMatricula(data.error ?? "No pudimos cambiar tu matrícula. Probá de nuevo en un rato.");
+        setElegirMatricula(null);
+        // La lista pudo quedar vieja: se vuelve a pedir.
+        if (data.recargar) router.refresh();
+        return;
+      }
+      setElegirMatricula(null);
+      setToast({ msg: `Listo: tu matrícula ahora es ${data.etiqueta ?? opcion.etiqueta}.`, type: "ok" });
+      router.refresh();
+    } catch {
+      setErrorMatricula("No pudimos cambiar tu matrícula. Revisá tu conexión y probá de nuevo.");
+    } finally {
+      setCambiandoMatricula(false);
     }
   }
   const [stickyError, setStickyError] = useState<string | null>(null);
@@ -114,8 +157,9 @@ export default function PerfilClient({
   const camposDirty =
     telefono !== (medico.telefono ?? "") ||
     domicilio !== (medico.domicilio_consultorio ?? "") ||
-    tipoMatricula !== (medico.tipo_matricula ?? "") ||
-    numeroMatricula !== (medico.numero_matricula ?? "") ||
+    // Con la identidad validada la matrícula no viaja con el formulario.
+    (!matriculaFija &&
+      (tipoMatricula !== (medico.tipo_matricula ?? "") || numeroMatricula !== (medico.numero_matricula ?? ""))) ||
     provincia !== (medico.provincia ?? "") ||
     celularPersonal !== (medico.celular_personal ?? "") ||
     emailPersonal !== (medico.email_personal ?? "") ||
@@ -231,8 +275,9 @@ export default function PerfilClient({
           body: JSON.stringify({
             telefono,
             domicilio_consultorio: domicilio,
-            tipo_matricula: tipoMatricula,
-            numero_matricula: numeroMatricula,
+            // Con la identidad validada no se manda: se cambia eligiendo (arriba), y
+            // mandar la que este formulario recuerda rebotaría el guardado entero.
+            ...(matriculaFija ? {} : { tipo_matricula: tipoMatricula, numero_matricula: numeroMatricula }),
             provincia,
             celular_personal: celularPersonal || null,
             email_personal: emailPersonal || null,
@@ -433,29 +478,102 @@ export default function PerfilClient({
               )}
             </div>
 
-            {/* Tipo matrícula */}
-            <div id="matricula">
-              <label className="text-xs text-gray-400">Tipo matrícula</label>
-              <select
-                value={tipoMatricula}
-                onChange={(e) => setTipoMatricula(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
-              >
-                <option value="MN">MN (Nacional)</option>
-                <option value="MP">MP (Provincial)</option>
-              </select>
-            </div>
+            {/* Matrícula. Con la identidad validada no se tipea: se elige entre las
+                que REFEPS le tiene habilitadas (texto aprobado por Diego, 13/11/2026). */}
+            {matricula ? (
+              <div id="matricula">
+                <label className="text-xs text-gray-400">Matrícula</label>
+                <p className="mt-1 text-sm text-gray-700">
+                  En tu perfil y tus documentos figura: <strong className="text-gray-900">{matricula.etiqueta}</strong>.
+                </p>
+                {errorMatricula && (
+                  <p className="mt-2 rounded-lg border border-[#E24B4A]/40 bg-white p-3 text-sm text-[#E24B4A]" role="alert">
+                    {errorMatricula}
+                  </p>
+                )}
+                {matricula.otras.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
+                    <p>
+                      {matricula.otras.length === 1
+                        ? "REFEPS también tiene habilitada a tu nombre esta matrícula. Si atendés con esa, elegila:"
+                        : "REFEPS también tiene habilitadas a tu nombre estas matrículas. Si atendés con otra, elegila:"}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {matricula.otras.map((o) => (
+                        <li key={`${o.tipo}|${o.numero}`} className="flex flex-wrap items-center gap-3">
+                          <span className="font-medium text-gray-900">{o.etiqueta}</span>
+                          <button
+                            type="button"
+                            disabled={cambiandoMatricula}
+                            onClick={() => {
+                              setErrorMatricula(null);
+                              setElegirMatricula(o);
+                            }}
+                            className="rounded-lg border border-[#378ADD] px-3 py-1 text-sm font-medium text-[#378ADD] hover:bg-[#378ADD]/10 disabled:opacity-50"
+                          >
+                            Usar esta
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {elegirMatricula && (
+                      <div className="mt-3 border-t border-gray-200 pt-3">
+                        <p>
+                          Tu matrícula pasa a ser <strong>{elegirMatricula.etiqueta}</strong>. Es la que va a figurar en
+                          tu perfil y en los documentos que firmes desde ahora. Los que ya firmaste no cambian.
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={cambiandoMatricula}
+                            onClick={() => usarMatricula(elegirMatricula)}
+                            className="rounded-lg px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                            style={{ backgroundColor: "#378ADD" }}
+                          >
+                            {cambiandoMatricula ? "Consultando REFEPS…" : "Sí, cambiar"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={cambiandoMatricula}
+                            onClick={() => setElegirMatricula(null)}
+                            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Tipo matrícula */}
+                <div id="matricula">
+                  <label className="text-xs text-gray-400">Tipo matrícula</label>
+                  <select
+                    value={tipoMatricula}
+                    onChange={(e) => setTipoMatricula(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+                  >
+                    <option value="MN">MN (Nacional)</option>
+                    <option value="MP">MP (Provincial)</option>
+                  </select>
+                </div>
 
-            {/* Número matrícula */}
-            <div>
-              <label className="text-xs text-gray-400">Número de matrícula</label>
-              <input
-                type="text"
-                value={numeroMatricula}
-                onChange={(e) => setNumeroMatricula(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
-              />
-            </div>
+                {/* Número matrícula */}
+                <div>
+                  <label className="text-xs text-gray-400">Número de matrícula</label>
+                  <input
+                    type="text"
+                    value={numeroMatricula}
+                    onChange={(e) => setNumeroMatricula(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#378ADD]/40"
+                  />
+                </div>
+
+              </>
+            )}
 
             {/* Provincia */}
             <div>
