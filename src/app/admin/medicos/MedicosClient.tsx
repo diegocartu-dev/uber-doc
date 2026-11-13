@@ -100,9 +100,39 @@ export default function MedicosClient({
 }) {
   const router = useRouter();
   const [medicos, setMedicos] = useState(initial);
+  // El servidor manda (13/11/2026). La lista vivía en un useState(initial) que no
+  // se enteraba de nada posterior a la carga: con el panel abierto desde temprano,
+  // una profesional que se registró después no figuraba en ninguna pestaña ni en
+  // el buscador, mientras el globito del menú ya la contaba. Cuando llega una
+  // lista nueva del servidor, reemplaza a la de pantalla. Se resuelve durante el
+  // render, no en un efecto (mismo patrón que el globito, en AdminShell).
+  const [ultimaDelServidor, setUltimaDelServidor] = useState(initial);
+  if (ultimaDelServidor !== initial) {
+    setUltimaDelServidor(initial);
+    setMedicos(initial);
+  }
   const [tab, setTab] = useState<Tab>("pendiente_revision");
   const [search, setSearch] = useState("");
   const [procesando, setProcesando] = useState<string | null>(null);
+  // Y la lista se pide sola: al volver la pestaña al frente, cuando el globito
+  // avisa que cambió algo y cada minuto con la pantalla a la vista (el panel queda
+  // abierto horas). No se pide con una acción en curso: una respuesta anterior al
+  // guardado devolvería la ficha a como estaba hasta la siguiente.
+  const accionEnCurso = procesando !== null;
+  useEffect(() => {
+    if (accionEnCurso) return;
+    function pedirLista() {
+      if (document.visibilityState === "visible") router.refresh();
+    }
+    document.addEventListener("visibilitychange", pedirLista);
+    window.addEventListener("focus", pedirLista);
+    const cadaMinuto = window.setInterval(pedirLista, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", pedirLista);
+      window.removeEventListener("focus", pedirLista);
+      window.clearInterval(cadaMinuto);
+    };
+  }, [router, accionEnCurso]);
   const [confirmando, setConfirmando] = useState<{ id: string; accion: string } | null>(null);
   // Se guarda el ID, no una copia del médico.
   //
@@ -234,11 +264,9 @@ export default function MedicosClient({
     );
   }
 
-  // `medicos` es un useState(initial): `router.refresh()` trae datos nuevos del
-  // servidor pero NO los mete acá, así que cada acción parchea el estado a mano
-  // (mismo patrón que `actualizarRefeps`). Sin esto, el contacto se guardaba
-  // bien en la base y la pantalla seguía mostrando el número viejo — se veía
-  // exactamente igual que si no hubiera funcionado.
+  // Cada acción parchea la lista a mano para que el cambio se vea en el momento,
+  // sin esperar la vuelta del servidor (mismo patrón que `actualizarRefeps`). La
+  // lista del servidor llega después y reemplaza a esta: ver arriba.
   function actualizarContacto(medicoId: string, celular: string | null, telefono: string | null) {
     setMedicos((prev) =>
       prev.map((m) => (m.id === medicoId ? { ...m, celular_personal: celular, telefono } : m))
