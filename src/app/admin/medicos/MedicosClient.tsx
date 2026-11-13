@@ -128,6 +128,16 @@ export default function MedicosClient({
     return coincideConTexto(m, search);
   });
 
+  // El buscador filtra la pestaña abierta, pero lo buscado puede estar en otra
+  // (13/11/2026: una profesional recién registrada estaba en Pendientes y no
+  // "aparecía" buscándola desde otra pestaña). Se cuenta en cuáles coincide para
+  // ofrecer el salto: nadie tiene que adivinar en qué estado está una ficha.
+  const enOtrasPestanas = search.trim()
+    ? TABS.filter((t) => t.key !== tab)
+        .map((t) => ({ ...t, n: medicos.filter((m) => m.estado_registro === t.key && coincideConTexto(m, search)).length }))
+        .filter((t) => t.n > 0)
+    : [];
+
   // Las columnas de las pestañas que son LISTA (aprobados, rechazados, suspendidos).
   // Pendientes no entra: es un flujo de aprobación con REFEPS, identidad y credencial,
   // y eso no se mete en una fila.
@@ -306,6 +316,22 @@ export default function MedicosClient({
         />
       </div>
 
+      {enOtrasPestanas.length > 0 && (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          {filtered.length === 0 ? "No está en esta pestaña. Coincide en:" : "También coincide en:"}
+          {enOtrasPestanas.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className="rounded-full border border-[#378ADD] px-2.5 py-0.5 font-medium text-[#378ADD] hover:bg-[#378ADD]/10"
+            >
+              {t.label} ({t.n})
+            </button>
+          ))}
+        </p>
+      )}
+
       {/* Filtro categoria - solo en tab aprobado */}
       {tab === "aprobado" && (
         <div className="mt-3 flex gap-2">
@@ -425,10 +451,17 @@ function textoBuscable(v: unknown): string {
   return String(v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+const TRATAMIENTOS = new Set(["dr", "dra", "lic", "doctor", "doctora"]);
+
 /** ¿La ficha coincide con lo tipeado? Varias palabras separadas por espacio funcionan
  *  como Y: "cardiologia cordoba" trae al que cumple las dos cosas. */
 function coincideConTexto(m: Medico, texto: string): boolean {
-  const q = textoBuscable(texto).trim();
+  // "Dra. Paz …" tiene que encontrar a Paz: el tratamiento no está en la ficha
+  // que se compara, y con varias palabras = Y dejaba la búsqueda en cero.
+  const q = textoBuscable(texto)
+    .split(/\s+/)
+    .filter((t) => t && !TRATAMIENTOS.has(t.replace(/\.$/, "")))
+    .join(" ");
   if (!q) return true;
   const heno = textoBuscable([
     m.nombre_completo, m.email, m.numero_matricula, m.tipo_matricula, m.dni,
