@@ -513,6 +513,7 @@ export default async function DashboardPage({
           numeroMatricula={medico.numero_matricula}
           fotoCredencialUrl={medico.foto_credencial_url}
           userId={user.id}
+          identidadPendiente={medico.estado_registro === "pendiente_revision" && !identidadHabilitada(medico)}
         />
         <CampanaMedico flotante />
       </>
