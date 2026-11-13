@@ -124,7 +124,11 @@ const COLUMNAS_DEL_CRUCE = [
  * exige REFEPS validado para estar aprobado; si dejó de estarlo, lo resuelve el
  * gate de aprobar, que consulta en vivo).
  */
-function datosRefeps(refeps: ResultadoREFEPS, ficha: FichaCruce, ahoraIso: string): Record<string, unknown> {
+export function datosRefeps(
+  refeps: ResultadoREFEPS,
+  ficha: Pick<FichaCruce, "estado_registro" | "profesion">,
+  ahoraIso: string
+): Record<string, unknown> {
   const estadoRegistro = ficha.estado_registro;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw: _raw, ...refepsSinRaw } = refeps;

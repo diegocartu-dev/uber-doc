@@ -1191,7 +1191,8 @@ function BloqueElegirMatricula({
   const candidatas = otrasHabilitadas(m, deRefeps, profesionDe(m.profesion));
   // Con la identidad ya validada (13/11/2026): la matrícula está congelada, pero se
   // puede pasar a otra de las que REFEPS le tiene habilitadas. Sigue aprobado.
-  const validada = m.identidad_validada === true && candidatas.length > 0;
+  // Solo con biometría aprobada: sin ella el servidor no tiene con qué confirmar el DNI.
+  const validada = m.identidad_validada === true && m.didit_status === "Approved" && candidatas.length > 0;
   // ¿La de la ficha figura hoy habilitada en lo que REFEPS devolvió?
   const laDeLaFichaHabilitada = deRefeps.some((mat) => mat.habilitada === true && esLaDeLaFicha(m, mat));
   if (!pendiente && !validada && !resultado) return null;
@@ -1240,7 +1241,7 @@ function BloqueElegirMatricula({
       });
       setResultado(
         data.cruce === "validada"
-          ? `Listo: la matrícula quedó en ${quedo}. Sigue aprobado.`
+          ? `Listo: la matrícula quedó en ${quedo}. Su estado no cambia.`
           : ficha.identidad_validada === true
           ? `Listo: la matrícula quedó en ${quedo} y la identidad está validada.`
           : data.cruce === "en_revision"
@@ -1301,7 +1302,7 @@ function BloqueElegirMatricula({
             En la ficha figura {etiquetaMatricula(m)}
             {laDeLaFichaHabilitada ? "." : (
               <>
-                , que <strong className="text-[#D85A30]">no figura habilitada en REFEPS</strong>.
+                , que <strong className="text-[#D85A30]">no figuraba habilitada en la última consulta a REFEPS</strong>.
               </>
             )}{" "}
             REFEPS le tiene habilitadas también estas; si atiende con otra, elegila:
@@ -1329,12 +1330,12 @@ function BloqueElegirMatricula({
           {!pendiente && validada ? (
             <p>
               <strong>{etiqueta(confirmar)}</strong> pasa a ser su matrícula: es la que figura en su perfil y en los
-              documentos que emita desde ahora. Sigue aprobado y los documentos ya emitidos no cambian.
+              documentos que firme desde ahora. Su estado no cambia y los documentos ya firmados tampoco.
             </p>
           ) : (
           <p>
             <strong>{etiqueta(confirmar)}</strong> queda como su matrícula y la identidad se valida en el momento:
-            después no se puede cambiar desde la aplicación.
+            después solo se puede cambiar por otra de las que REFEPS le tenga habilitadas.
             {m.verificado && (
               <>
                 {" "}
