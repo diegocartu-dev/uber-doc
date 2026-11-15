@@ -10,6 +10,7 @@ import {
   ACCION_APROBAR,
   ACCIONES_QUE_FRENAN,
   APROBADO_POR_SISTEMA,
+  CRUCE_VIGENTE_DESDE,
   aprobarPendientesEnVerde,
   aprobarSiCorresponde,
   decidirAprobacionAutomatica,
@@ -22,6 +23,7 @@ const EN_VERDE: FichaAprobacion = {
   dado_de_baja: false,
   profesion: "medico",
   identidad_validada: true,
+  identidad_validada_at: "2026-11-13T15:00:00+00:00",
   didit_status: "Approved",
   refeps_validado: true,
 };
@@ -56,6 +58,21 @@ test("identidad validada pero Didit ya no dice Approved: no se aprueba sola", ()
     const d = decidirAprobacionAutomatica({ ...EN_VERDE, didit_status: estado }, []);
     assert.deepEqual(d, { aprobar: false, motivo: "sin_biometria" });
   }
+});
+
+test("una identidad validada con el cruce anterior (o sin fecha) no alcanza", () => {
+  const motivo = (at: string | null) => {
+    const d = decidirAprobacionAutomatica({ ...EN_VERDE, identidad_validada_at: at }, []);
+    return d.aprobar ? "aprobar" : d.motivo;
+  };
+  assert.equal(motivo("2026-08-20T12:00:00+00:00"), "identidad_anterior_al_cruce");
+  assert.equal(motivo("2026-10-03T23:59:59-03:00"), "identidad_anterior_al_cruce");
+  assert.equal(motivo(null), "identidad_anterior_al_cruce");
+  assert.equal(motivo("no es una fecha"), "identidad_anterior_al_cruce");
+  assert.equal(motivo(CRUCE_VIGENTE_DESDE), "aprobar");
+  // La base devuelve la fecha en UTC: las 03:00 UTC del 04/10 son las 00:00 de Argentina.
+  assert.equal(motivo("2026-10-04T03:00:00+00:00"), "aprobar");
+  assert.equal(motivo("2026-10-04T02:59:59+00:00"), "identidad_anterior_al_cruce");
 });
 
 test("si el equipo la rechazó o la suspendió alguna vez, se aprueba a mano", () => {
@@ -93,7 +110,14 @@ function baseFalsa(
 ) {
   const fila: Fila = { id: "m1", ...inicial };
   const llamadas: Llamada[] = [];
-  const cumple = (filtros: Llamada["filtros"]) => filtros.every(([op, col, v]) => op !== "eq" || (v !== null && fila[col] === v));
+  const cumple = (filtros: Llamada["filtros"]) =>
+    filtros.every(([op, col, v]) =>
+      op === "eq"
+        ? v !== null && fila[col] === v
+        : op === "gte"
+          ? typeof fila[col] === "string" && Date.parse(fila[col] as string) >= Date.parse(v as string)
+          : true
+    );
   const cliente = {
     from(tabla: string) {
       const c: Llamada = { tabla, op: "select", filtros: [] };
@@ -104,6 +128,7 @@ function baseFalsa(
         update(payload: Fila) { c.op = "update"; c.payload = payload; return b; },
         insert(payload: Fila) { c.op = "insert"; c.payload = payload; return b; },
         eq(col: string, v: unknown) { c.filtros.push(["eq", col, v]); return b; },
+        gte(col: string, v: unknown) { c.filtros.push(["gte", col, v]); return b; },
         in(col: string, v: unknown) { c.filtros.push(["in", col, v]); return b; },
         order() { return b; },
         limit() { return b; },
@@ -116,7 +141,9 @@ function baseFalsa(
             if (opciones.fallaHistorial) return r(null, { message: "sin conexión" });
             return r((opciones.historial ?? []).map((accion) => ({ accion })));
           }
-          if (c.op === "select") return unaSola ? r({ ...fila }) : r(cumple(c.filtros) ? [{ id: fila.id }] : []);
+          if (c.op === "select") {
+            return unaSola ? r({ ...fila }) : r(cumple(c.filtros) ? [{ id: fila.id, es_cuenta_test: fila.es_cuenta_test ?? null }] : []);
+          }
           if (c.op === "update") {
             opciones.antesDeEscribir?.(fila);
             if (!cumple(c.filtros)) return r(quiereFilas ? [] : null);
@@ -132,16 +159,25 @@ function baseFalsa(
   return { cliente: cliente as unknown as SupabaseClient, fila, llamadas };
 }
 
-function conBienvenida() {
+function conBienvenida(sale = true) {
   const enviadas: string[] = [];
-  return { enviadas, deps: { enviarBienvenida: async (id: string) => { enviadas.push(id); } } };
+  const avisos: string[] = [];
+  return {
+    enviadas,
+    avisos,
+    deps: {
+      enviarBienvenida: async (id: string) => { enviadas.push(id); return sale; },
+      avisarEquipo: async (asunto: string) => { avisos.push(asunto); },
+    },
+  };
 }
 
 test("aprueba, deja el rastro sin administrador y manda la bienvenida una vez", async () => {
   const { cliente, fila, llamadas } = baseFalsa({ ...EN_VERDE });
-  const { enviadas, deps } = conBienvenida();
+  const { enviadas, avisos, deps } = conBienvenida();
   const r = await aprobarSiCorresponde(cliente, "m1", deps);
   assert.deepEqual(r, { aprobado: true, bienvenida: true });
+  assert.equal(avisos.length, 0); // lo que cierra solo no suena
   assert.equal(fila.estado_registro, "aprobado");
   assert.equal(fila.verificado, true);
   assert.equal(fila.verificado_por, APROBADO_POR_SISTEMA);
@@ -164,6 +200,7 @@ test("el update exige que la ficha siga en revisión y en verde", async () => {
     profesion: "medico",
     dado_de_baja: false,
     identidad_validada: true,
+    identidad_validada_at: CRUCE_VIGENTE_DESDE,
     didit_status: "Approved",
     refeps_validado: true,
   });
@@ -213,11 +250,32 @@ test("sin biometría no lee el historial ni escribe", async () => {
   assert.deepEqual(llamadas.map((l) => `${l.tabla}:${l.op}`), ["medicos:select"]);
 });
 
-test("que falle el rastro o el mail no deshace la aprobación ni lanza", async () => {
+test("si la bienvenida no sale, la ficha queda aprobada y se le avisa al equipo", async () => {
+  // El mail real no lanza: devuelve false (flag apagado, sin mail, o falló el envío).
+  const { cliente, fila } = baseFalsa({ ...EN_VERDE });
+  const { avisos, deps } = conBienvenida(false);
+  const r = await aprobarSiCorresponde(cliente, "m1", deps);
+  assert.deepEqual(r, { aprobado: true, bienvenida: false });
+  assert.equal(fila.estado_registro, "aprobado");
+  assert.equal(avisos.length, 1);
+});
+
+test("que falle el rastro, lance el mail o falle el aviso no deshace la aprobación ni lanza", async () => {
   const { cliente, fila } = baseFalsa({ ...EN_VERDE }, { fallaAuditoria: true });
-  const r = await aprobarSiCorresponde(cliente, "m1", { enviarBienvenida: async () => { throw new Error("resend caído"); } });
+  const r = await aprobarSiCorresponde(cliente, "m1", {
+    enviarBienvenida: async () => { throw new Error("resend caído"); },
+    avisarEquipo: async () => { throw new Error("alertas caídas"); },
+  });
   assert.equal(fila.estado_registro, "aprobado");
   assert.deepEqual(r, { aprobado: true, bienvenida: false });
+});
+
+test("al que ya estuvo aprobado no se le manda bienvenida ni suena su falta", async () => {
+  const { cliente } = baseFalsa({ ...EN_VERDE }, { historial: [ACCION_APROBAR] });
+  const { enviadas, avisos, deps } = conBienvenida(false);
+  assert.deepEqual(await aprobarSiCorresponde(cliente, "m1", deps), { aprobado: true, bienvenida: false });
+  assert.equal(enviadas.length, 0);
+  assert.equal(avisos.length, 0);
 });
 
 test("en la instancia institucional no hace nada", async () => {
@@ -226,7 +284,7 @@ test("en la instancia institucional no hace nada", async () => {
   try {
     const { cliente, fila, llamadas } = baseFalsa({ ...EN_VERDE });
     assert.deepEqual(await aprobarSiCorresponde(cliente, "m1", conBienvenida().deps), { aprobado: false, motivo: "instancia_institucional" });
-    assert.deepEqual(await aprobarPendientesEnVerde(cliente, conBienvenida().deps), { revisadas: 0, aprobadas: 0 });
+    assert.deepEqual(await aprobarPendientesEnVerde(cliente, {}, conBienvenida().deps), { revisadas: 0, aprobadas: 0 });
     assert.equal(llamadas.length, 0);
     assert.equal(fila.estado_registro, "pendiente_revision");
   } finally {
@@ -238,10 +296,23 @@ test("en la instancia institucional no hace nada", async () => {
 test("el barrido aprueba la ficha en verde que quedó sin aprobar", async () => {
   const { cliente, fila } = baseFalsa({ ...EN_VERDE });
   const { enviadas, deps } = conBienvenida();
-  assert.deepEqual(await aprobarPendientesEnVerde(cliente, deps), { revisadas: 1, aprobadas: 1 });
+  assert.deepEqual(await aprobarPendientesEnVerde(cliente, {}, deps), { revisadas: 1, aprobadas: 1 });
   assert.equal(fila.estado_registro, "aprobado");
   assert.deepEqual(enviadas, ["m1"]);
   // Segunda pasada: ya no está en la lista.
-  assert.deepEqual(await aprobarPendientesEnVerde(cliente, deps), { revisadas: 0, aprobadas: 0 });
+  assert.deepEqual(await aprobarPendientesEnVerde(cliente, {}, deps), { revisadas: 0, aprobadas: 0 });
   assert.equal(enviadas.length, 1);
+});
+
+test("el barrido no empieza una ficha pasado su plazo, ni mira cuentas de prueba ni identidades viejas", async () => {
+  const vencido = baseFalsa({ ...EN_VERDE });
+  assert.deepEqual(await aprobarPendientesEnVerde(vencido.cliente, { hasta: Date.now() - 1 }, conBienvenida().deps), { revisadas: 0, aprobadas: 0 });
+  assert.equal(vencido.fila.estado_registro, "pendiente_revision");
+
+  const prueba = baseFalsa({ ...EN_VERDE, es_cuenta_test: true });
+  assert.deepEqual(await aprobarPendientesEnVerde(prueba.cliente, {}, conBienvenida().deps), { revisadas: 0, aprobadas: 0 });
+
+  const vieja = baseFalsa({ ...EN_VERDE, identidad_validada_at: "2026-08-20T12:00:00+00:00" });
+  assert.deepEqual(await aprobarPendientesEnVerde(vieja.cliente, {}, conBienvenida().deps), { revisadas: 0, aprobadas: 0 });
+  assert.equal(vieja.fila.estado_registro, "pendiente_revision");
 });

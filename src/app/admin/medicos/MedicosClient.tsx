@@ -1304,7 +1304,13 @@ function BloqueElegirMatricula({
         data.cruce === "validada"
           ? `Listo: la matrícula quedó en ${quedo}. Su estado no cambia.`
           : ficha.identidad_validada === true
-          ? `Listo: la matrícula quedó en ${quedo} y la identidad está validada.${ficha.estado_registro === "aprobado" ? " Quedó aprobado." : ""}`
+          ? `Listo: la matrícula quedó en ${quedo} y la identidad está validada.${
+              ficha.estado_registro === "aprobado"
+                ? " Quedó aprobado."
+                : m.verificado
+                  ? " Quedó en revisión y no se aprobó solo: aprobalo con el botón «Aprobar»."
+                  : ""
+            }`
           : data.cruce === "en_revision"
             ? `La matrícula quedó en ${quedo}, pero el cruce sigue sin cerrar: ${ficha.identidad_revision_motivo ?? "mirá el motivo arriba"}`
             : `La matrícula quedó en ${quedo}, pero la validación no se pudo guardar (la ficha cambió mientras tanto o falló la escritura). El sistema vuelve a intentar en su próxima pasada.`
