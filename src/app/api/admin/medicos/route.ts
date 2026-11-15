@@ -21,6 +21,7 @@ import { obtenerDecisionDidit } from "@/lib/didit/client";
 import { aplicarDecisionAprobada, soloDigitos } from "@/lib/didit/reconciliar";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
 import { cambiarMatriculaValidada } from "@/lib/medicos/cambiar-matricula-validada";
+import { aprobarSiCorresponde } from "@/lib/medicos/aprobacion-automatica";
 
 // Diagnóstico + robustez (15/06/2026): el gate REFEPS al aprobar se colgaba desde
 // Vercel y la función moría sin completar (refeps_validado_at quedaba null).
@@ -466,7 +467,7 @@ export async function PATCH(req: NextRequest) {
         {
           error:
             ficha.verificado === true
-              ? "Este profesional está aprobado: al cambiarle la matrícula vuelve a revisión y hay que aprobarlo de nuevo."
+              ? "Este profesional está aprobado: al cambiarle la matrícula vuelve a revisión. Si REFEPS y la biometría cierran, se aprueba solo; si no, hay que aprobarlo de nuevo."
               : "La matrícula elegida queda como la suya y no se puede cambiar después.",
           requiereConfirmacion: true,
         },
@@ -586,6 +587,10 @@ export async function PATCH(req: NextRequest) {
       dniDidit,
       { refeps, alertar: false }
     );
+
+    // Con la identidad recién validada, la ficha en revisión con REFEPS en
+    // verde se aprueba sola (lib/medicos/aprobacion-automatica.ts).
+    if (cruce.outcome === "validado") await aprobarSiCorresponde(admin, medicoId);
 
     // Se informa el estado real de la ficha después, no el supuesto.
     const { data: despues } = await admin
