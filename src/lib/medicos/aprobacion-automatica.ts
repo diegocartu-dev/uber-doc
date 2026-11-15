@@ -10,11 +10,14 @@
 //   · está en revisión (`pendiente_revision`), no es cuenta de prueba y el
 //     profesional no se dio de baja;
 //   · es de un médico (psicología: su apertura es una decisión aparte);
-//   · la identidad quedó validada por biometría (`identidad_validada`, que solo
-//     escribe `cerrarCruce` cuando el DNI de la biometría es el de la ficha y la
-//     matrícula es una habilitada que REFEPS tiene para ese DNI) y Didit sigue
-//     diciendo "Approved". La exención de biometría NO cuenta: es una decisión
-//     manual y la aprobación de esa ficha también.
+//   · la identidad quedó validada por biometría, CON EL CRUCE VIGENTE
+//     (`identidad_validada_at` desde `CRUCE_VIGENTE_DESDE`), y Didit sigue
+//     diciendo "Approved". Desde esa fecha `identidad_validada` solo lo escribe
+//     `cerrarCruce`, cuando el DNI de la biometría es el de la ficha y la
+//     matrícula es una de médico, habilitada, que REFEPS tiene para ese DNI. El
+//     cruce anterior no miraba profesión ni habilitación: una identidad
+//     validada antes no alcanza, y esa ficha se aprueba a mano. La exención de
+//     biometría tampoco cuenta: es una decisión manual y la aprobación también.
 //   · REFEPS validado;
 //   · el equipo nunca la rechazó ni la suspendió. Lo que una persona decidió no
 //     lo deshace el sistema: esa ficha se aprueba a mano.
@@ -22,7 +25,9 @@
 //
 // El registro crea la ficha recién con el formulario completo (credencial,
 // firma, celular, términos) y la biometría es el último paso: una ficha en
-// revisión con las dos fuentes en verde es un registro terminado.
+// revisión con las dos fuentes en verde es un registro terminado. (Una ficha
+// anterior al 20/07/2026 puede no tener credencial o firma: se aprueba igual,
+// y para ponerse disponible necesita el perfil completo como cualquiera.)
 //
 // Solo B2C: en la instancia institucional el alta es provisionada.
 //
@@ -33,6 +38,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { esInstitucional } from "@/lib/instancia";
+
+/**
+ * Desde cuándo vale una identidad validada para aprobar sola: el cruce que
+ * exige una matrícula de médico habilitada llegó a producción el 03/10/2026
+ * por la mañana. Se toma el día siguiente entero.
+ */
+export const CRUCE_VIGENTE_DESDE = "2026-10-04T00:00:00-03:00";
 
 /** Lo que queda en `verificado_por` y se ve en la ficha del panel. */
 export const APROBADO_POR_SISTEMA = "Aprobación automática";
@@ -49,6 +61,7 @@ export interface FichaAprobacion {
   dado_de_baja: boolean | null;
   profesion: string | null;
   identidad_validada: boolean | null;
+  identidad_validada_at: string | null;
   didit_status: string | null;
   refeps_validado: boolean | null;
 }
@@ -59,6 +72,7 @@ export type MotivoNoAprobar =
   | "se_dio_de_baja"
   | "otra_profesion"
   | "sin_biometria"
+  | "identidad_anterior_al_cruce"
   | "sin_refeps"
   | "decision_previa_del_equipo";
 
@@ -76,6 +90,8 @@ export function decidirAprobacionAutomatica(ficha: FichaAprobacion, accionesPrev
   if (ficha.dado_de_baja === true) return no("se_dio_de_baja");
   if (ficha.profesion !== "medico") return no("otra_profesion");
   if (ficha.identidad_validada !== true || ficha.didit_status !== "Approved") return no("sin_biometria");
+  const validadaAt = ficha.identidad_validada_at ? Date.parse(ficha.identidad_validada_at) : NaN;
+  if (!(validadaAt >= Date.parse(CRUCE_VIGENTE_DESDE))) return no("identidad_anterior_al_cruce");
   if (ficha.refeps_validado !== true) return no("sin_refeps");
   if (accionesPrevias.some((a) => (ACCIONES_QUE_FRENAN as readonly string[]).includes(a))) {
     return no("decision_previa_del_equipo");
@@ -84,22 +100,29 @@ export function decidirAprobacionAutomatica(ficha: FichaAprobacion, accionesPrev
 }
 
 export type ResultadoAprobacion =
-  // `bienvenida`: si salió el mail de bienvenida en esta aprobación.
+  // `bienvenida`: si el mail de bienvenida salió de verdad en esta aprobación.
   | { aprobado: true; bienvenida: boolean }
   | {
       aprobado: false;
       motivo: MotivoNoAprobar | "instancia_institucional" | "no_se_pudo_leer" | "la_ficha_cambio" | "no_se_pudo_escribir";
     };
 
+// Inyectables para las pruebas.
 interface Dependencias {
-  /** El mail de bienvenida de siempre. Inyectable para las pruebas. */
-  enviarBienvenida: (medicoId: string) => Promise<void>;
+  /** El mail de bienvenida de siempre. Devuelve si salió. */
+  enviarBienvenida: (medicoId: string) => Promise<boolean>;
+  /** Aviso al equipo: solo cuando un paso de la aprobación falla. */
+  avisarEquipo: (asunto: string, texto: string) => Promise<void>;
 }
 
 const DEPENDENCIAS: Dependencias = {
   enviarBienvenida: async (medicoId) => {
     const { enviarEmailMedicoAprobado } = await import("@/lib/email");
-    await enviarEmailMedicoAprobado(medicoId);
+    return enviarEmailMedicoAprobado(medicoId);
+  },
+  avisarEquipo: async (asunto, texto) => {
+    const { sendDoctoAlert } = await import("@/lib/alertas");
+    await sendDoctoAlert(asunto, texto);
   },
 };
 
@@ -119,7 +142,7 @@ export async function aprobarSiCorresponde(
   try {
     const { data, error: errFicha } = await admin
       .from("medicos")
-      .select("estado_registro, es_cuenta_test, dado_de_baja, profesion, identidad_validada, didit_status, refeps_validado")
+      .select("estado_registro, es_cuenta_test, dado_de_baja, profesion, identidad_validada, identidad_validada_at, didit_status, refeps_validado")
       .eq("id", medicoId)
       .single();
     const ficha = data as FichaAprobacion | null;
@@ -162,6 +185,7 @@ export async function aprobarSiCorresponde(
       .eq("profesion", "medico")
       .eq("dado_de_baja", false)
       .eq("identidad_validada", true)
+      .gte("identidad_validada_at", CRUCE_VIGENTE_DESDE)
       .eq("didit_status", "Approved")
       .eq("refeps_validado", true)
       .select("id");
@@ -185,14 +209,33 @@ export async function aprobarSiCorresponde(
 
     // La bienvenida, igual que en la aprobación a mano: una sola vez. Si ya
     // estuvo aprobado (volvió a revisión por un cambio de matrícula), no se repite.
-    // Un mail que falla no cambia lo que pasó: la ficha ya está aprobada.
-    let bienvenida = !acciones.includes(ACCION_APROBAR);
-    if (bienvenida) {
+    // Un mail que no sale no cambia lo que pasó (la ficha ya está aprobada),
+    // pero es un proceso que falló y acá no hay nadie mirando: suena.
+    let bienvenida = false;
+    if (!acciones.includes(ACCION_APROBAR)) {
       try {
-        await deps.enviarBienvenida(medicoId);
+        bienvenida = await deps.enviarBienvenida(medicoId);
       } catch (e) {
-        bienvenida = false;
-        console.error(`[aprobacion-automatica] aprobado sin bienvenida medico=${medicoId}:`, e instanceof Error ? e.message : String(e));
+        console.error("[aprobacion-automatica] la bienvenida lanzó:", e instanceof Error ? e.message : String(e));
+      }
+      if (!bienvenida) {
+        console.error(`[aprobacion-automatica] aprobado sin bienvenida medico=${medicoId}`);
+        await deps
+          .avisarEquipo(
+            "Un profesional quedó aprobado y no le salió el mail de bienvenida",
+            [
+              "La aprobación automática aprobó a un profesional (REFEPS y biometría en verde),",
+              "pero el mail de bienvenida no salió: no tiene mail cargado, los mails están",
+              "apagados o falló el envío.",
+              "",
+              "¿Hay que hacer algo? Sí: avisarle que su cuenta ya está aprobada. En el panel",
+              "(/admin/medicos, pestaña Aprobados) figura con «Verificado por: Aprobación automática».",
+              "",
+              "———",
+              `Detalle técnico (para Claude): medico_id=${medicoId}.`,
+            ].join("\n")
+          )
+          .catch(() => undefined);
       }
     }
 
@@ -204,42 +247,58 @@ export async function aprobarSiCorresponde(
   }
 }
 
-const MAX_POR_PASADA = 25;
+// Cuántas fichas se miran por pasada y cuántas se aprueban como mucho: mirar
+// una que no corresponde son dos consultas; aprobar lleva además un mail.
+const MAX_MIRADAS_POR_PASADA = 50;
+const MAX_APROBADAS_POR_PASADA = 5;
 
 /**
  * Respaldo: las fichas en revisión que ya tienen las dos fuentes en verde y no
- * se aprobaron en el momento (la función murió, REFEPS se validó después, o
- * estaban así desde antes de esta regla). Lo corre el cron `reconciliar-identidad`.
+ * se aprobaron en el momento (la función murió antes, REFEPS se validó
+ * después). Lo corre el cron `reconciliar-identidad`.
  *
- * Las más nuevas primero: una ficha con una decisión previa del equipo queda en
- * esta lista para siempre (se aprueba a mano) y no puede taparle el lugar a la
- * que acaba de terminar.
+ * Las más nuevas primero. Una ficha con una decisión previa del equipo queda
+ * en esta lista hasta que alguien la aprueba a mano: por eso se miran muchas y
+ * se aprueban pocas, para que no le tapen el lugar a la que acaba de terminar.
+ *
+ * `hasta`: momento (ms) a partir del cual no se empieza otra ficha. El cron lo
+ * usa para no pasarse de su tiempo: una función que muere entre el update y el
+ * mail deja a alguien aprobado sin bienvenida, y eso ya no lo reintenta nadie.
  */
 export async function aprobarPendientesEnVerde(
   admin: SupabaseClient,
+  opciones: { hasta?: number } = {},
   deps: Dependencias = DEPENDENCIAS
 ): Promise<{ revisadas: number; aprobadas: number }> {
   if (esInstitucional()) return { revisadas: 0, aprobadas: 0 };
   const { data, error } = await admin
     .from("medicos")
-    .select("id")
+    .select("id, es_cuenta_test")
     .eq("estado_registro", "pendiente_revision")
     .eq("profesion", "medico")
     .eq("dado_de_baja", false)
     .eq("identidad_validada", true)
+    .gte("identidad_validada_at", CRUCE_VIGENTE_DESDE)
     .eq("didit_status", "Approved")
     .eq("refeps_validado", true)
     .order("identidad_validada_at", { ascending: false })
-    .limit(MAX_POR_PASADA);
+    .limit(MAX_MIRADAS_POR_PASADA);
   if (error) {
     console.error("[aprobacion-automatica] no se pudo buscar las fichas en verde:", error.message);
     return { revisadas: 0, aprobadas: 0 };
   }
+  // `es_cuenta_test` admite NULL: se filtra acá y no en la consulta.
+  const ids = ((data ?? []) as Array<{ id: string; es_cuenta_test: boolean | null }>)
+    .filter((m) => m.es_cuenta_test !== true)
+    .map((m) => m.id);
+  let revisadas = 0;
   let aprobadas = 0;
-  const ids = ((data ?? []) as Array<{ id: string }>).map((m) => m.id);
   for (const id of ids) {
+    if (aprobadas >= MAX_APROBADAS_POR_PASADA) break;
+    if (opciones.hasta !== undefined && Date.now() >= opciones.hasta) break;
+    revisadas++;
     const r = await aprobarSiCorresponde(admin, id, deps);
     if (r.aprobado) aprobadas++;
   }
-  return { revisadas: ids.length, aprobadas };
+  return { revisadas, aprobadas };
 }

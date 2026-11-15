@@ -14,38 +14,44 @@ Se aprueba sola la ficha que cumple todo:
 
 1. está en revisión, no es cuenta de prueba y el profesional no se dio de baja;
 2. es de un médico;
-3. la identidad quedó validada por biometría y Didit sigue en "Approved" (la exención manual de biometría no cuenta);
+3. la identidad quedó validada por biometría **desde el 04/10/2026** y Didit sigue en "Approved" (la exención manual de biometría no cuenta);
 4. REFEPS validado;
 5. el equipo nunca la rechazó ni la suspendió.
 
-`identidad_validada` solo lo escribe `cerrarCruce` (`src/lib/didit/reconciliar.ts`), y solo cuando el DNI que verificó la biometría es el de la ficha y la matrícula es una habilitada que REFEPS tiene para ese DNI. En ese mismo update se guarda el REFEPS del DNI biométrico. Por eso "identidad validada + REFEPS validado" es la condición fuerte, y no hace falta volver a consultar ninguna fuente al aprobar.
+Desde el 03/10/2026, `identidad_validada` solo lo escribe `cerrarCruce` (`src/lib/didit/reconciliar.ts`), y solo cuando el DNI que verificó la biometría es el de la ficha y la matrícula es una de médico, habilitada, que REFEPS tiene para ese DNI. En ese mismo update se guarda el REFEPS del DNI biométrico. Por eso "identidad validada + REFEPS validado" es la condición fuerte, y no hace falta volver a consultar ninguna fuente al aprobar.
 
-El registro crea la ficha recién con el formulario completo (credencial, firma, celular, términos) y la biometría es su último paso: una ficha en revisión con las dos fuentes en verde es un registro terminado.
+El cruce anterior (julio a octubre) comparaba solo los dígitos de la matrícula contra cualquier matrícula que REFEPS tuviera para el DNI, sin mirar profesión ni habilitación; y para un médico `refeps_validado` es "figura y está activo", de cualquier profesión. Una identidad validada en ese período no garantiza lo que la regla necesita: por eso el corte por fecha (`CRUCE_VIGENTE_DESDE`), y esas fichas se aprueban a mano. Lo encontró la revisión independiente.
+
+El registro crea la ficha recién con el formulario completo (credencial, firma, celular, términos) y la biometría es su último paso: una ficha en revisión con las dos fuentes en verde es un registro terminado. Una ficha anterior al 20/07 puede no tener credencial o firma: se aprueba igual, y para ponerse disponible necesita el perfil completo como cualquiera.
 
 ## Dónde corre
 
 - `src/lib/medicos/aprobacion-automatica.ts`: la regla pura (`decidirAprobacionAutomatica`), la escritura (`aprobarSiCorresponde`) y el barrido (`aprobarPendientesEnVerde`).
 - La llaman los tres caminos que validan una identidad: el webhook de Didit, el cron `reconciliar-identidad` y «Usar esta» del panel.
-- El barrido corre dentro del mismo cron, cada 10 minutos: aprueba lo que quedó en verde y no se aprobó en el momento (la función murió, o la ficha estaba así desde antes de la regla). No es un cron nuevo.
+- El barrido corre dentro del mismo cron, cada 10 minutos, al final y con plazo: aprueba lo que quedó en verde y no se aprobó en el momento (la función murió antes, REFEPS se validó después, o la ficha estaba así desde antes de la regla). Mira hasta 50 fichas y aprueba hasta 5 por pasada; no empieza una aprobación pasados 60 s de la corrida. No es un cron nuevo.
 
 ## Cuidados
 
 - **No pisa a una persona.** El update lleva como condición que la ficha siga en revisión y en verde: si en el medio alguien la rechazó, la suspendió o la aprobó a mano, no escribe.
 - **No deshace una decisión.** Con un rechazo o una suspensión en el log de auditoría, la ficha se aprueba a mano. Si el log no se puede leer, no se aprueba: no saber no es "nunca fue rechazada".
 - **Rastro.** `verificado_por = "Aprobación automática"` (se ve en la ficha) y una fila en `admin_audit_log` sin administrador.
-- **Bienvenida.** El mail de siempre, una sola vez: si ya estuvo aprobado (volvió a revisión por un cambio de matrícula), no se repite.
+- **Bienvenida.** El mail de siempre, una sola vez: si ya estuvo aprobado (volvió a revisión por un cambio de matrícula), no se repite. Si el mail no sale (sin mail cargado, mails apagados, envío fallido), se le avisa al equipo: es un proceso que falló y acá no hay nadie mirando.
 - **No lanza.** Una falla de la aprobación no voltea la validación de identidad que la disparó; el barrido vuelve a mirar.
 - **Sin aviso al equipo.** Lo que cierra solo no suena. Lo que no cierra ya tenía su aviso (identidad rechazada, en revisión de Didit, cruce sin una única respuesta).
 - **Solo B2C.** En la instancia institucional el alta es provisionada; la lib corta sola y no consulta nada.
 
 ## Qué sigue a mano
 
-Biometría rechazada o en revisión, cruce de matrícula sin una única respuesta, exentos de biometría, fichas con una decisión previa del equipo, reactivaciones y psicología (pendiente 1.19 de `DECISIONES.md`, para decidir junto con su apertura).
+Biometría rechazada o en revisión, cruce de matrícula sin una única respuesta, exentos de biometría, identidades validadas antes del 04/10, fichas con una decisión previa del equipo, reactivaciones y psicología (pendiente 1.19 de `DECISIONES.md`, para decidir junto con su apertura).
 
 ## Efecto lateral buscado
 
-Un profesional aprobado al que se le elige otra matrícula con «Usar esta» vuelve a revisión (trigger de la base); si el cruce cierra, se aprueba solo en el mismo clic. El panel lo dice en la confirmación y en el resultado.
+Un profesional aprobado al que se le elige otra matrícula con «Usar esta» vuelve a revisión (trigger de la base); si el cruce cierra, se aprueba solo en el mismo clic. El panel lo dice en la confirmación y en el resultado, y si no se aprobó solo (por ejemplo, tiene una suspensión previa) dice que quedó en revisión y que hay que aprobarlo con el botón.
 
 ## Pruebas
 
-`src/lib/medicos/aprobacion-automatica.test.ts`: la regla caso por caso, las condiciones exactas del update, la carrera con un rechazo, el historial ilegible, la bienvenida única, la instancia institucional y el barrido.
+`src/lib/medicos/aprobacion-automatica.test.ts`: la regla caso por caso, el corte por fecha, las condiciones exactas del update, la carrera con un rechazo, el historial ilegible, la bienvenida única y el aviso cuando no sale, la instancia institucional y el barrido con su plazo.
+
+## Revisión independiente
+
+Hecha antes del merge (toca un cron y la aprobación). Encontró el hueco de las identidades validadas con el cruce anterior (corregido con el corte por fecha), el presupuesto de tiempo del cron (plazo y tope por pasada), que el resultado decía "bienvenida enviada" aunque el mail no hubiera salido (ahora el mail informa si salió y, si no, suena) y un mensaje del panel que quedaba mudo. Lo que quedó fuera de alcance está en `DECISIONES.md` §4.

@@ -29,6 +29,9 @@ import { aprobarPendientesEnVerde } from "@/lib/medicos/aprobacion-automatica";
 export const maxDuration = 90;
 
 const MAX_POR_CORRIDA = 10;
+// La aprobación automática no empieza una ficha nueva pasados 60 s de la
+// corrida (de 90): cada aprobación lleva un mail y no puede quedar a medias.
+const PLAZO_APROBACION_MS = 60_000;
 // Estados terminales de Didit: no tiene sentido re-consultarlos (no cambian sin una
 // sesión NUEVA, que crear-sesion registra con otro session_id + status no-terminal).
 // Nota: son NULL-safe abajo; hoy todos los pendientes están en "Not Started" (el
@@ -37,6 +40,7 @@ const MAX_POR_CORRIDA = 10;
 const TERMINALES = new Set(["Declined", "Expired", "Abandoned"]);
 
 async function handler(req: Request) {
+  const arranque = Date.now();
   // Fail-closed: sin CRON_SECRET configurado, "Bearer undefined" pasaría el check.
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "CRON_SECRET no configurado" }, { status: 500 });
@@ -117,21 +121,6 @@ async function handler(req: Request) {
     console.log(
       "[cron/reconciliar-identidad]",
       JSON.stringify({ procesados: candidatos.length, validados, resumen })
-    );
-  }
-
-  // ── Aprobación automática (15/11/2026) ──────────────────────────────────────
-  // La ficha en revisión con REFEPS y biometría en verde se aprueba sola
-  // (lib/medicos/aprobacion-automatica.ts). El webhook lo hace en el momento;
-  // esto es el respaldo, y también aprueba a los que esta misma pasada acaba de
-  // validar. En la instancia institucional no hace nada.
-  let aprobadosSolos = 0;
-  try {
-    aprobadosSolos = (await aprobarPendientesEnVerde(admin)).aprobadas;
-  } catch (e) {
-    console.error(
-      "[cron/reconciliar-identidad] la aprobación automática falló:",
-      e instanceof Error ? e.message : String(e)
     );
   }
 
@@ -278,6 +267,23 @@ async function handler(req: Request) {
     // Un aviso que falla NUNCA voltea la reconciliación, que es lo importante.
     console.error(
       "[cron/reconciliar-identidad] no se pudo revisar los trabados sin empuje:",
+      e instanceof Error ? e.message : String(e)
+    );
+  }
+
+  // ── Aprobación automática (15/11/2026) ──────────────────────────────────────
+  // La ficha en revisión con REFEPS y biometría en verde se aprueba sola
+  // (lib/medicos/aprobacion-automatica.ts). El webhook lo hace en el momento;
+  // esto es el respaldo, y también aprueba a los que esta misma pasada acaba de
+  // validar. Va al final y con plazo: si la reconciliación ya gastó el tiempo
+  // (REFEPS lento), no arranca y queda para la pasada siguiente. En la
+  // instancia institucional no hace nada.
+  let aprobadosSolos = 0;
+  try {
+    aprobadosSolos = (await aprobarPendientesEnVerde(admin, { hasta: arranque + PLAZO_APROBACION_MS })).aprobadas;
+  } catch (e) {
+    console.error(
+      "[cron/reconciliar-identidad] la aprobación automática falló:",
       e instanceof Error ? e.message : String(e)
     );
   }

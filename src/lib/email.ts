@@ -725,8 +725,9 @@ export async function enviarEmailRecordatorio10m(turnoId: string): Promise<boole
   }
 }
 
-export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void> {
-  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "medico_aprobado"); return; }
+/** Devuelve si el mail salió (15/11/2026: la aprobación automática avisa al equipo cuando no). */
+export async function enviarEmailMedicoAprobado(medicoId: string): Promise<boolean> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "medico_aprobado"); return false; }
   try {
     const supabase = createAdminClient();
     const { data: medico } = await supabase
@@ -735,14 +736,14 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
       .select("nombre_completo, titulo, slug, email, user_id, jurisdicciones")
       .eq("id", medicoId)
       .single();
-    if (!medico) return;
+    if (!medico) return false;
 
     let email = (medico.email as string | null) ?? null;
     if (!email && medico.user_id) {
       const { data: { user } } = await supabase.auth.admin.getUserById(medico.user_id);
       email = user?.email ?? null;
     }
-    if (!email) { console.warn("[email] médico sin email, no se envía bienvenida:", medicoId); return; }
+    if (!email) { console.warn("[email] médico sin email, no se envía bienvenida:", medicoId); return false; }
     const destinatario = email;
 
     // Psicología (13/10/2026): no tiene consulta inmediata ni "ponerse
@@ -818,8 +819,10 @@ export async function enviarEmailMedicoAprobado(medicoId: string): Promise<void>
     );
 
     console.log("[email] bienvenida médico aprobado enviada:", medicoId);
+    return true;
   } catch (err) {
     console.error("[email] enviarEmailMedicoAprobado falló:", err);
+    return false;
   }
 }
 
