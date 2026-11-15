@@ -19,6 +19,7 @@
 import { clasificarAtencion, MOTIVO, type FilaAtencion } from "./clasificar";
 import type { EvidenciaCierre } from "./evidencia-cierre";
 import type { EvidenciaTurno } from "./evidencia-turno";
+import { rechazoEsDelPagador } from "../pagos/rechazo-del-pagador";
 
 export type ClaseDiagnostico = "atendida" | "en_curso" | "suceso" | "falla" | "sin_datos";
 export type Diagnostico = { clase: ClaseDiagnostico; texto: string };
@@ -89,6 +90,10 @@ function vioElBotonDeVerdad(ev: Partial<EvidenciaCierre>): boolean {
 function aceptadaSinPago(fila: FilaDiagnostico, ev: Partial<EvidenciaCierre> | null): Diagnostico {
   // Primero lo que falló al intentar pagar: si intentó y no pudo, eso explica
   // la caída aunque después haya cancelado él o el profesional.
+  // Salvo los fondos insuficientes, que son del paciente (Diego, 15/11/2026).
+  if (ev?.rechazo_mp && rechazoEsDelPagador(ev.rechazo_mp)) {
+    return suceso("Al paciente no le alcanzó la plata en Mercado Pago (fondos insuficientes)");
+  }
   if (ev?.rechazo_mp) return falla(`Mercado Pago rechazó el pago (${ev.rechazo_mp})`);
   if (fila.mp_status === "rejected") return falla("Mercado Pago rechazó el pago");
   if (ev?.rechazo_docto) return falla(`Tocó Pagar y nuestro servidor no lo dejó pagar (${ev.rechazo_docto})`);

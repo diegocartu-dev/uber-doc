@@ -9,6 +9,7 @@ import { avisarMedicoTurnoWhatsApp, fechaTurnoParaAviso } from "@/lib/whatsapp";
 import { waitUntil } from "@vercel/functions";
 import { enviarEmailTurnoConfirmado } from "@/lib/email";
 import { assertNoInstitucional } from "@/lib/instancia";
+import { rechazoEsDelPagador } from "@/lib/pagos/rechazo-del-pagador";
 import { presenciaDelPaciente, decidirReaccionADevolucion } from "@/lib/video/presencia";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -556,6 +557,9 @@ async function handleRejected(
   // (regla de Diego 06/10: alarmas de procesos, no de sucesos). waitUntil: el
   // estado ya quedó escrito y el mail no demora la respuesta a MP.
   if (!alarmar) return;
+  // Salvo que el motivo sea del pagador (fondos insuficientes, Diego 15/11):
+  // queda registrado arriba con su motivo, y no se le avisa al equipo.
+  if (rechazoEsDelPagador(statusDetail)) return;
   waitUntil(
     sendDoctoAlert(
       "Mercado Pago rechazó un pago",
