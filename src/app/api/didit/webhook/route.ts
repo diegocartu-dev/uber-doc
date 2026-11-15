@@ -3,10 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verificarFirmaWebhook, timestampEsValido } from "@/lib/didit/client";
 import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconciliar";
 import type { DiditWebhookPayload } from "@/lib/didit/types";
+import { aprobarSiCorresponde } from "@/lib/medicos/aprobacion-automatica";
 
 // El cruce contra REFEPS (validarMedicoREFEPS) puede reintentar ante timeout del Bus.
 // Sin esto, el default de Vercel (~15s) mataría el webhook a mitad del cruce.
-export const maxDuration = 60;
+// 90 s, igual que el cron: Didit (15 s) + REFEPS en el peor caso (~51 s) + la
+// aprobación automática con su mail de bienvenida (15/11/2026).
+export const maxDuration = 90;
 
 // POST /api/didit/webhook
 // Didit notifica cuando cambia el estado de una sesión.
@@ -108,6 +111,12 @@ export async function POST(req: NextRequest) {
       resultado.error
     );
     return NextResponse.json({ error: "decision" }, { status: 502 });
+  }
+  // Identidad validada: si la ficha estaba en revisión con REFEPS en verde, se
+  // aprueba en el momento (lib/medicos/aprobacion-automatica.ts). No lanza; si
+  // no llega a correr, el barrido del cron la aprueba en la próxima pasada.
+  if (resultado.outcome === "validado") {
+    await aprobarSiCorresponde(admin, medico.id);
   }
   if (resultado.outcome === "en_revision") {
     console.warn(

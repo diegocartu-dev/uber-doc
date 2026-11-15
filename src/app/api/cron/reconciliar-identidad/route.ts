@@ -5,6 +5,7 @@ import { getFlag } from "@/lib/feature-flags";
 import { enviarEmailRecordatorioIdentidad } from "@/lib/email";
 import { withCron } from "@/lib/cron-guard";
 import { sendDoctoAlert } from "@/lib/alertas";
+import { aprobarPendientesEnVerde } from "@/lib/medicos/aprobacion-automatica";
 
 /**
  * Cron cada 10 min: BACKSTOP de la validación de identidad biométrica (Didit).
@@ -116,6 +117,21 @@ async function handler(req: Request) {
     console.log(
       "[cron/reconciliar-identidad]",
       JSON.stringify({ procesados: candidatos.length, validados, resumen })
+    );
+  }
+
+  // ── Aprobación automática (15/11/2026) ──────────────────────────────────────
+  // La ficha en revisión con REFEPS y biometría en verde se aprueba sola
+  // (lib/medicos/aprobacion-automatica.ts). El webhook lo hace en el momento;
+  // esto es el respaldo, y también aprueba a los que esta misma pasada acaba de
+  // validar. En la instancia institucional no hace nada.
+  let aprobadosSolos = 0;
+  try {
+    aprobadosSolos = (await aprobarPendientesEnVerde(admin)).aprobadas;
+  } catch (e) {
+    console.error(
+      "[cron/reconciliar-identidad] la aprobación automática falló:",
+      e instanceof Error ? e.message : String(e)
     );
   }
 
@@ -270,6 +286,7 @@ async function handler(req: Request) {
     ok: true,
     procesados: candidatos.length,
     validados,
+    aprobados_solos: aprobadosSolos,
     recordatorios,
     trabados_sin_empuje: trabadosSinEmpuje,
     resumen,

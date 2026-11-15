@@ -161,8 +161,8 @@ export const CRONS_META: Record<string, CronMeta> = {
   },
   "reconciliar-identidad": {
     nombre: "Reconciliación de identidad biométrica",
-    queHace: "trae los resultados de verificación de identidad (Didit) que el webhook no entregó",
-    impacto: "médicos que ya se verificaron no avanzan en el alta",
+    queHace: "trae los resultados de verificación de identidad (Didit) que el webhook no entregó y aprueba las fichas que quedaron con REFEPS y biometría en verde",
+    impacto: "médicos que ya se verificaron no avanzan en el alta ni quedan aprobados",
     cadencia: "cada 10 minutos",
     autoRecupera: false,
   },
