@@ -37,6 +37,13 @@ test("a) el paciente que se retira y el profesional que rechaza son sucesos", ()
   assert.equal(diagnosticarConsulta({ estado: "rechazada", resuelta_por: "medico", resolucion_motivo: "cancelo_profesional" }).clase, "suceso");
 });
 
+test("c) aceptada sin pagar: los fondos insuficientes son del paciente, no una falla", () => {
+  const d = sinPago({ rechazo_mp: "cc_rejected_insufficient_amount" });
+  assert.equal(d.clase, "suceso");
+  assert.equal(suena(d), false);
+  assert.equal(sinPago({ rechazo_mp: "cc_rejected_insufficient_amount" }, { resuelta_por: "medico" }).clase, "suceso");
+});
+
 test("c) aceptada sin pagar: si intentó y no pudo, falla — aunque después haya cancelado él", () => {
   assert.equal(sinPago({ rechazo_mp: "cc_rejected_high_risk" }).texto, "Mercado Pago rechazó el pago (cc_rejected_high_risk)");
   assert.equal(sinPago({ rechazo_mp: "cc_rejected_high_risk" }, { resuelta_por: "paciente" }).clase, "falla");
