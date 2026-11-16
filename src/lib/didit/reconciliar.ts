@@ -14,6 +14,7 @@ import {
   type MatriculaDeclarada,
 } from "@/lib/medicos/matricula-refeps";
 import { moverSlugSiNuncaSeAprobo } from "@/lib/medicos/slug-matricula";
+import { avisarQueRepita } from "@/lib/medicos/aviso-identidad";
 
 // ─── Reconciliación de identidad biométrica (Didit) ──────────────────────────
 // ÚNICA fuente de verdad del control anti-suplantación. La usan TRES caminos:
@@ -446,28 +447,36 @@ export async function reconciliarIdentidad(
   }
 
   // 4. Estado no-aprobado (In Progress, Declined, Expired…) → solo registramos,
-  //    con dos alertas de transición al admin (nunca repetidas por corrida):
-  //    - "In Review" REAL de Didit: no la aprobó sola. El profesional la hace
-  //      de nuevo (16/11/2026); antes se decidía a mano en la consola de Didit.
-  //    - "Declined": el verificador rechazó — revisar el caso en el panel.
+  //    y si Didit no la aprobó ("In Review" real o "Declined") el profesional
+  //    la hace de nuevo (16/11/2026): se le avisa a él, y al equipo solo cuando
+  //    no se le pudo avisar o cuando vuelve a fallar. Siempre en la transición,
+  //    nunca en cada corrida.
   //    El motivo de un In Review sintético anterior se limpia: ya no aplica (si
   //    quedara, el panel confundiría un In Review real de Didit con uno nuestro).
   await admin
     .from("medicos")
     .update({ didit_status: decisionStatus, identidad_revision_motivo: null })
     .eq("id", medico.id);
-  if (decisionStatus !== medico.didit_status) {
+  const noAprobada = decisionStatus === "In Review" || decisionStatus === "Declined";
+  if (noAprobada && decisionStatus !== medico.didit_status) {
     const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
-    if (decisionStatus === "In Review") {
-      // Desde el 16/11/2026 lo que Didit no aprueba solo se hace de nuevo: la
-      // pantalla del profesional ya se lo pide (lib/medicos/estado-identidad.ts)
-      // y nadie tiene que decidirlo en la consola. Este aviso queda mientras el
-      // profesional no reciba un mail que se lo diga: sin él, solo se entera si entra.
+    // Al profesional en revisión se le escribe para que la haga de nuevo
+    // (lib/medicos/aviso-identidad.ts). Si el mail le salió y es su primera
+    // verificación sin aprobar, no hay nada que hacer de nuestro lado y no
+    // suena. Suena cuando vuelve a fallar (un proceso que no cierra) o cuando
+    // no se le pudo avisar (aprobados, o el mail no salió).
+    const aviso = await avisarQueRepita(admin, medico.id, sessionId, decisionStatus);
+    if (aviso.avisado && aviso.intentos >= 2) {
+      await sendDoctoAlert(
+        `🟠 Identidad de ${nombre}: repitió la verificación y Didit volvió a no aprobarla`,
+        `${nombre} ya hizo ${aviso.intentos} verificaciones de identidad y Didit no aprobó ninguna (la última quedó "${decisionStatus}"). Le volvimos a pedir por mail que la repita, pero si falla dos veces puede no ser un problema de foto.\n\n¿Tenés que hacer algo? Sí, cuando puedas: mirá en la consola de Didit (https://business.didit.me) qué le marca, y decidí si lo contactás o si la ficha se rechaza.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=${decisionStatus}, intentos=${aviso.intentos}.`
+      );
+    } else if (!aviso.avisado && decisionStatus === "In Review") {
       await sendDoctoAlert(
         `🟡 Identidad de ${nombre}: Didit no la aprobó y tiene que repetirla`,
-        `${nombre} completó la verificación y Didit la dejó "In Review": encontró algo que no cierra solo (foto dudosa, documento difícil de leer, datos que no coinciden).\n\n¿Tenés que hacer algo? No hace falta decidir nada en Didit: cuando entre a su cuenta, Docto le pide que haga la verificación de nuevo, y si sale bien sigue todo solo. Lo que todavía no recibe es un mail que le diga que tiene que repetirla: si no vuelve a entrar, puede no enterarse. Si querés apurarlo, avisale vos.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=In Review (real, reportado por Didit).`
+        `${nombre} completó la verificación y Didit la dejó "In Review": encontró algo que no cierra solo (foto dudosa, documento difícil de leer, datos que no coinciden).\n\n¿Tenés que hacer algo? No hace falta decidir nada en Didit: cuando entre a su cuenta, Docto le pide que haga la verificación de nuevo, y si sale bien sigue todo solo. A este profesional no le salió el mail que se lo avisa (no está en revisión, o el envío falló): si no vuelve a entrar, puede no enterarse. Si querés apurarlo, avisale vos.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=In Review (real, reportado por Didit).`
       );
-    } else if (decisionStatus === "Declined") {
+    } else if (!aviso.avisado) {
       await sendDoctoAlert(
         `🔴 Identidad de ${nombre}: RECHAZADA por el verificador`,
         `Didit no pudo confirmar que ${nombre} sea quien dice ser (documento ilegible, selfie que no coincide, o intento de suplantación).\n\n¿Tenés que hacer algo? Sí, cuando puedas: mirá el caso en el panel de médicos (badge rojo) y la credencial. El médico ya ve en su pantalla la opción de reintentar con mejores fotos; si insiste en fallar, es señal de alerta real.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=Declined.`

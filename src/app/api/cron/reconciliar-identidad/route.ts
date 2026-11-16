@@ -6,6 +6,7 @@ import { enviarEmailRecordatorioIdentidad } from "@/lib/email";
 import { withCron } from "@/lib/cron-guard";
 import { sendDoctoAlert } from "@/lib/alertas";
 import { aprobarPendientesEnVerde } from "@/lib/medicos/aprobacion-automatica";
+import { avisarIdentidadPendientes } from "@/lib/medicos/aviso-identidad";
 
 /**
  * Cron cada 10 min: BACKSTOP de la validación de identidad biométrica (Didit).
@@ -184,6 +185,21 @@ async function handler(req: Request) {
     }
   }
 
+  // ── Avisos al profesional EN REVISIÓN (16/11/2026) ──────────────────────────
+  // El recordatorio de arriba es para aprobados. Quien terminó el registro y
+  // dejó la identidad sin hacer, a medias, o con un resultado que Didit no
+  // aprobó, no recibía nada. Qué aviso y cuándo: lib/medicos/aviso-identidad.ts.
+  // Solo B2C. Un aviso que falla nunca voltea la reconciliación.
+  let avisosEnRevision = 0;
+  try {
+    avisosEnRevision = (await avisarIdentidadPendientes(admin)).enviados;
+  } catch (e) {
+    console.error(
+      "[cron/reconciliar-identidad] los avisos a profesionales en revisión fallaron:",
+      e instanceof Error ? e.message : String(e)
+    );
+  }
+
   // ── Los que ya nadie está empujando ────────────────────────────────────────
   //
   // El mail automático tiene dos frenos deliberados: no se le manda a un
@@ -294,6 +310,7 @@ async function handler(req: Request) {
     validados,
     aprobados_solos: aprobadosSolos,
     recordatorios,
+    avisos_en_revision: avisosEnRevision,
     trabados_sin_empuje: trabadosSinEmpuje,
     resumen,
   });
