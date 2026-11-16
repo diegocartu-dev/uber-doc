@@ -6,6 +6,7 @@ import { Stethoscope, ShieldCheck, Check, RefreshCw, Clock } from "lucide-react"
 import PasosDidit from "@/components/identidad/PasosDidit";
 import ConsentimientoIdentidad from "@/components/identidad/ConsentimientoIdentidad";
 import CtaSticky from "@/components/identidad/CtaSticky";
+import { pasoIdentidad } from "@/lib/medicos/estado-identidad";
 
 // ─── Design system ─────────────────────────────────────────────────────────
 const AZUL = "#378ADD";
@@ -17,12 +18,18 @@ type Fase = "intro" | "completo" | "rechazada";
 // REGLA DE ORO (spec 14/07): ninguna pantalla del registro espera a un proveedor
 // externo. Volver del escaneo = registro completo, AL INSTANTE, sin spinner. El
 // resultado fino de Didit viaja por atrás al panel del admin.
-function faseInicial(diditStatus: string | null, yaHabilitado: boolean, recienVolvio: boolean): Fase {
+function faseInicial(diditStatus: string | null, yaHabilitado: boolean, recienVolvio: boolean, revisionDeDocto: boolean): Fase {
   if (yaHabilitado) return "completo";
   if (recienVolvio) return "completo"; // acaba de volver del escaneo → completo
+  // Lo que Didit no aprobó solo (rechazo, revisión, duda) se hace de nuevo
+  // (16/11/2026, lib/medicos/estado-identidad.ts): antes el "In Review" real de
+  // Didit mostraba «registro completo» y no había cómo repetirla.
+  const paso = pasoIdentidad({ habilitada: false, diditStatus, revisionDeDocto });
+  if (paso === "repetir") return "rechazada";
+  if (paso === "procesando" || paso === "cruce_en_revision") return "completo";
   const s = diditStatus ?? "Not Started";
-  if (["Approved", "In Review", "In Progress", "Resubmitted"].includes(s)) return "completo";
-  if (["Declined", "Expired", "Abandoned"].includes(s)) return "rechazada";
+  if (s === "In Progress") return "completo";
+  if (s === "Expired" || s === "Abandoned") return "rechazada";
   return "intro";
 }
 
@@ -30,6 +37,8 @@ interface Props {
   diditStatus: string | null;
   yaHabilitado: boolean;
   recienVolvio: boolean;
+  /** El "In Review" lo puso Docto (identidad aprobada, cruce sin cerrar), no Didit. */
+  revisionDeDocto: boolean;
 }
 
 // Respec Sofía 20/07: la pantalla anterior ponía la burocracia antes que la
@@ -39,8 +48,8 @@ interface Props {
 // legal compacto expandible, y preparación explícita para los 2 pasos de Didit.
 // Criterio de aceptación: en un iPhone SE se ve título + pasos + consentimiento
 // con su casilla + CTA sin scrollear.
-export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVolvio }: Props) {
-  const [fase, setFase] = useState<Fase>(() => faseInicial(diditStatus, yaHabilitado, recienVolvio));
+export default function RegistroIdentidad({ diditStatus, yaHabilitado, recienVolvio, revisionDeDocto }: Props) {
+  const [fase, setFase] = useState<Fase>(() => faseInicial(diditStatus, yaHabilitado, recienVolvio, revisionDeDocto));
   const [aceptado, setAceptado] = useState(false);
   const [guardActiva, setGuardActiva] = useState(false);
   const [cargando, setCargando] = useState(false);

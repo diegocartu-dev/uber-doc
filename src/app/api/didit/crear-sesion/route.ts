@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { crearSesionDidit } from "@/lib/didit/client";
 import { sendDoctoAlertThrottled } from "@/lib/alertas";
+import { pasoIdentidadDeFicha } from "@/lib/medicos/estado-identidad";
 import {
   CONSENTIMIENTO_TIPO,
   CONSENTIMIENTO_VERSION,
@@ -50,6 +51,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ yaValidado: true });
     }
 
+    // Didit ya aprobó esta identidad y lo que falta es de Docto (el cruce está en
+    // vuelo o quedó en revisión): repetir la biometría no lo arregla, y una
+    // sesión nueva borraría el motivo de la revisión que el equipo necesita ver
+    // en el panel. La pantalla no ofrece el botón en esos casos; esto lo hace
+    // cumplir también para quien llame a la API a mano. Lectura aparte con
+    // service role: `identidad_revision_motivo` no es legible con la sesión del
+    // profesional.
+    const adminLectura = createAdminClient();
+    const { data: estadoActual, error: errEstado } = await adminLectura
+      .from("medicos")
+      .select("didit_status, identidad_revision_motivo")
+      .eq("id", medico.id)
+      .maybeSingle();
+    if (errEstado || !estadoActual) {
+      console.error("[didit/crear-sesion] no se pudo leer el estado de la verificación:", errEstado?.message);
+      return NextResponse.json(
+        { error: "No se pudo iniciar la verificación de identidad." },
+        { status: 500 }
+      );
+    }
+    const paso = pasoIdentidadDeFicha(estadoActual);
+    if (paso === "procesando" || paso === "cruce_en_revision") {
+      return NextResponse.json(
+        { error: "verificacion_en_revision", mensaje: "Estamos revisando tu verificación. Te avisamos por email." },
+        { status: 409 }
+      );
+    }
+
     // Versión vigente del consentimiento
     const { data: version } = await supabase
       .from("versiones_textos_legales")
@@ -67,7 +96,7 @@ export async function POST(req: NextRequest) {
     // ¿Ya hay aceptación registrada de ESTA versión? (admin: lectura interna
     // filtrada por user_id — un bump de CONSENTIMIENTO_VERSION invalida las
     // viejas y fuerza re-consentimiento naturalmente.)
-    const admin = createAdminClient();
+    const admin = adminLectura;
     const { data: aceptacionPrevia, error: prevErr } = await admin
       .from("aceptaciones_legales")
       .select("id")
@@ -139,14 +168,31 @@ export async function POST(req: NextRequest) {
       language: "es",
     });
 
-    // Guardar referencia (admin: campos internos)
-    await admin
+    if (!sesion?.session_id || !sesion?.url) {
+      throw new Error("DIDIT crear sesión: la respuesta no trae session_id o url");
+    }
+
+    // Guardar referencia (admin: campos internos). Si no se pudo guardar, no se
+    // lo manda a Didit: el cron de respaldo y el webhook trabajan sobre la sesión
+    // guardada en la ficha (16/11/2026). Al reintentar, Didit devuelve la misma
+    // sesión mientras no esté cerrada (según su documentación).
+    const { error: errSesion } = await admin
       .from("medicos")
       .update({
         didit_session_id: sesion.session_id,
         didit_status: sesion.status,
+        // Verificación nueva: el motivo de una revisión anterior ya no aplica.
+        identidad_revision_motivo: null,
       })
-      .eq("id", medico.id);
+      .eq("id", medico.id)
+      .eq("identidad_validada", false);
+    if (errSesion) {
+      console.error("[didit/crear-sesion] no se pudo guardar la sesión:", errSesion.message);
+      return NextResponse.json(
+        { error: "No se pudo iniciar la verificación de identidad." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ url: sesion.url, sessionId: sesion.session_id });
   } catch (e) {

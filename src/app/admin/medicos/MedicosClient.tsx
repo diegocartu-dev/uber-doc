@@ -22,6 +22,7 @@ import { profesionDe } from "@/lib/refeps/profesion";
 import { esSiteArgentino, paisDeSite } from "@/lib/mp-site";
 import { fechaAR, fechaARdeISO } from "@/lib/insights/fechas";
 import { nombreCategoria } from "@/lib/categorias";
+import { pasoIdentidadDeFicha } from "@/lib/medicos/estado-identidad";
 
 interface Medico {
   id: string;
@@ -528,13 +529,14 @@ function detalleCobros(m: Medico): string | undefined {
   return undefined;
 }
 
-const CICLO_IDENTIDAD = ["Validada", "Necesita revisión", "Rechazada", "En revisión", "Pendiente", "Exenta"];
+const CICLO_IDENTIDAD = ["Validada", "Necesita revisión", "Rechazada", "Debe repetirla", "Pendiente", "Exenta"];
 function estadoIdentidad(m: Medico): string {
   if (m.identidad_validada) return "Validada";
   if (m.biometria_exenta) return "Exenta";
   if (m.didit_status === "Declined") return "Rechazada";
-  if ((m.didit_status === "In Review" || m.didit_status === "Resubmitted") && m.identidad_revision_motivo) return "Necesita revisión";
-  if (m.didit_status === "In Review" || m.didit_status === "Resubmitted") return "En revisión";
+  const paso = pasoIdentidadDeFicha(m);
+  if (paso === "cruce_en_revision") return "Necesita revisión";
+  if (paso === "repetir") return "Debe repetirla";
   return "Pendiente";
 }
 
@@ -564,7 +566,7 @@ function antiguedad(iso: string): string {
 const COLOR_ESTADO_TABLA: Record<string, string> = {
   "Puede cobrar": "#1D9E75", "Sin cuenta": "#E24B4A", "Permiso vencido": "#E24B4A", "Cuenta de otro país": "#E24B4A",
   "Validada": "#1D9E75", "Exenta": "#888780", "Rechazada": "#E24B4A", "Necesita revisión": "#E24B4A",
-  "En revisión": "#BA7517", "Pendiente": "#BA7517",
+  "Debe repetirla": "#BA7517", "Pendiente": "#BA7517",
 };
 
 const REFEPS_ERRORES_SISTEMA = new Set(["REFEPS_TIMEOUT", "REFEPS_AUTH_ERROR", "REFEPS_ERROR_INTERNO"]);
@@ -636,7 +638,7 @@ function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva
   }
   // "In Review" con motivo = SINTÉTICO (Didit aprobó, el cruce de Docto no cierra)
   // → necesita acción del ADMIN, nadie más lo va a resolver (caso Williana 20/07).
-  // Sin motivo = revisión manual REAL de Didit → esperar.
+  // Sin motivo = revisión REAL de Didit → el profesional la hace de nuevo (16/11/2026).
   if (m.didit_status === "In Review" || m.didit_status === "Resubmitted") {
     return m.identidad_revision_motivo ? (
       <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
@@ -655,10 +657,11 @@ function BloqueIdentidad({ medico: m, gateActiva }: { medico: Medico; gateActiva
     ) : (
       <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
         <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
-          <Clock size={16} /> Didit está revisando la verificación
+          <Clock size={16} /> Tiene que repetir la verificación
         </div>
         <p className="mt-1 text-xs text-amber-700">
-          Revisión manual del verificador (suele resolverse en horas). Nada que hacer de nuestro lado.
+          Didit no la aprobó sola (la dejó en revisión). No hay que decidir nada en Didit: cuando entra a su
+          cuenta, Docto le pide que la haga de nuevo.
         </p>
       </div>
     );

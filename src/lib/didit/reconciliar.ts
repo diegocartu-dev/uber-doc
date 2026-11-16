@@ -447,10 +447,8 @@ export async function reconciliarIdentidad(
 
   // 4. Estado no-aprobado (In Progress, Declined, Expired…) → solo registramos,
   //    con dos alertas de transición al admin (nunca repetidas por corrida):
-  //    - "In Review" REAL de Didit: la revisión es NUESTRA, en la consola de Didit
-  //      (docs.didit.me/console/manual-review: "requires your manual attention").
-  //      Hasta el 18/10/2026 el aviso decía lo contrario y dos profesionales
-  //      quedaron días sin que nadie los mirara.
+  //    - "In Review" REAL de Didit: no la aprobó sola. El profesional la hace
+  //      de nuevo (16/11/2026); antes se decidía a mano en la consola de Didit.
   //    - "Declined": el verificador rechazó — revisar el caso en el panel.
   //    El motivo de un In Review sintético anterior se limpia: ya no aplica (si
   //    quedara, el panel confundiría un In Review real de Didit con uno nuestro).
@@ -461,9 +459,13 @@ export async function reconciliarIdentidad(
   if (decisionStatus !== medico.didit_status) {
     const nombre = medico.nombre_completo ?? `médico ${medico.id}`;
     if (decisionStatus === "In Review") {
+      // Desde el 16/11/2026 lo que Didit no aprueba solo se hace de nuevo: la
+      // pantalla del profesional ya se lo pide (lib/medicos/estado-identidad.ts)
+      // y nadie tiene que decidirlo en la consola. Este aviso queda mientras el
+      // profesional no reciba un mail que se lo diga: sin él, solo se entera si entra.
       await sendDoctoAlert(
-        `🟡 Identidad de ${nombre}: hay que revisarla en la consola de Didit`,
-        `${nombre} completó la verificación y Didit la dejó "In Review": su sistema encontró algo que no cierra solo (documento extranjero, foto dudosa, datos que no coinciden) y espera que LO DECIDAMOS NOSOTROS.\n\n¿Tenés que hacer algo? Sí: entrá a https://business.didit.me, abrí la sesión de ${nombre}, mirá lo que marca y aprobá, rechazá o pedí que repita el paso. Hasta que alguien decida ahí, queda sin verificar y no puede atender. Cuando decidas, el sistema sigue solo.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=In Review (real, reportado por Didit; la decisión es nuestra en la consola).`
+        `🟡 Identidad de ${nombre}: Didit no la aprobó y tiene que repetirla`,
+        `${nombre} completó la verificación y Didit la dejó "In Review": encontró algo que no cierra solo (foto dudosa, documento difícil de leer, datos que no coinciden).\n\n¿Tenés que hacer algo? No hace falta decidir nada en Didit: cuando entre a su cuenta, Docto le pide que haga la verificación de nuevo, y si sale bien sigue todo solo. Lo que todavía no recibe es un mail que le diga que tiene que repetirla: si no vuelve a entrar, puede no enterarse. Si querés apurarlo, avisale vos.\n\n———\nDetalle técnico (para Claude): medico_id=${medico.id}, didit_status=In Review (real, reportado por Didit).`
       );
     } else if (decisionStatus === "Declined") {
       await sendDoctoAlert(
