@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verificarFirmaWebhook, timestampEsValido } from "@/lib/didit/client";
+import { verificarFirmaWebhook, timestampEsValido, obtenerDecisionDidit } from "@/lib/didit/client";
 import { reconciliarIdentidad, type MedicoIdentidad } from "@/lib/didit/reconciliar";
 import type { DiditWebhookPayload } from "@/lib/didit/types";
 import { aprobarSiCorresponde } from "@/lib/medicos/aprobacion-automatica";
+import { esSesionVigente } from "@/lib/medicos/estado-identidad";
 
 // El cruce contra REFEPS (validarMedicoREFEPS) puede reintentar ante timeout del Bus.
 // Sin esto, el default de Vercel (~15s) mataría el webhook a mitad del cruce.
@@ -79,11 +80,11 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
 
   // 3. Resolver médico por vendor_data (medico_id) o por didit_session_id.
-  let medico: MedicoIdentidad | null = null;
+  let medico: (MedicoIdentidad & { didit_session_id?: string | null }) | null = null;
   if (medicoId) {
     const { data } = await admin
       .from("medicos")
-      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status")
+      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status, didit_session_id")
       .eq("id", medicoId)
       .maybeSingle();
     medico = data;
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
   if (!medico) {
     const { data } = await admin
       .from("medicos")
-      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status")
+      .select("id, dni, numero_matricula, identidad_validada, nombre_completo, didit_status, didit_session_id")
       .eq("didit_session_id", sessionId)
       .maybeSingle();
     medico = data;
@@ -99,6 +100,38 @@ export async function POST(req: NextRequest) {
   if (!medico) {
     console.warn("[didit/webhook] médico no encontrado para sesión", sessionId);
     return NextResponse.json({ ok: true });
+  }
+
+  // 3 bis. La verificación que vale es la VIGENTE: la última que el profesional
+  // inició (la que guardó crear-sesion). Lo que Didit no aprueba solo se hace de
+  // nuevo (16/11/2026), así que un profesional puede tener varias sesiones, y el
+  // aviso de una anterior que venció, se abandonó o quedó en duda no puede pisar
+  // el estado de la nueva. La única excepción es una sesión anterior que Didit
+  // APROBÓ (la terminó en otra pestaña, o alguien la aprobó en la consola): es
+  // una verificación completa de la misma persona, así que pasa a ser la vigente
+  // y sigue al cruce de siempre. Se le pregunta a Didit; el payload no decide.
+  if (!esSesionVigente(medico.didit_session_id, sessionId)) {
+    let estadoAnterior: string;
+    try {
+      estadoAnterior = (await obtenerDecisionDidit(sessionId)).status;
+    } catch (e) {
+      console.error("[didit/webhook] no se pudo consultar una sesión anterior:", e instanceof Error ? e.message : e);
+      return NextResponse.json({ error: "decision" }, { status: 502 });
+    }
+    if (estadoAnterior !== "Approved" || medico.identidad_validada) {
+      console.warn(`[didit/webhook] aviso de una sesión anterior (${estadoAnterior}), se ignora; medico=${medico.id}`);
+      return NextResponse.json({ ok: true, ignorado: "sesion_anterior" });
+    }
+    const { error: errVigente } = await admin
+      .from("medicos")
+      .update({ didit_session_id: sessionId })
+      .eq("id", medico.id)
+      .eq("identidad_validada", false);
+    if (errVigente) {
+      console.error("[didit/webhook] no se pudo tomar la sesión aprobada como vigente:", errVigente.message);
+      return NextResponse.json({ error: "sesion" }, { status: 502 });
+    }
+    console.warn(`[didit/webhook] una sesión anterior quedó aprobada y pasa a ser la vigente; medico=${medico.id}`);
   }
 
   // 4. Decisión autoritativa + cruce anti-suplantación + persistencia (compartido).

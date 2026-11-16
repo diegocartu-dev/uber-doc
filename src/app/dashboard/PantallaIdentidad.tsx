@@ -10,6 +10,7 @@ import LogoutButton from "./LogoutButton";
 import PasosDidit from "@/components/identidad/PasosDidit";
 import ConsentimientoIdentidad from "@/components/identidad/ConsentimientoIdentidad";
 import CtaSticky from "@/components/identidad/CtaSticky";
+import { pasoIdentidad } from "@/lib/medicos/estado-identidad";
 
 // ─── Colores del design system ────────────────────────────────────────────────
 const AZUL = "#378ADD";
@@ -28,19 +29,22 @@ type Estado =
   | "rechazada"
   | "procesando";
 
-function mapEstado(diditStatus: string | null, recienVolvio: boolean): Estado {
-  const s = diditStatus ?? "Not Started";
+// La traducción del estado de Didit vive en lib/medicos/estado-identidad.ts.
+// Lo que Didit no aprueba solo (rechazo, revisión, duda) se hace de nuevo
+// (Diego, 16/11/2026): antes el "In Review" real de Didit caía en «Estamos
+// revisando tu verificación», que le decía que su identidad estaba bien y no le
+// daba ningún botón.
+function mapEstado(diditStatus: string | null, recienVolvio: boolean, revisionDeDocto: boolean): Estado {
+  const paso = pasoIdentidad({ habilitada: false, diditStatus, revisionDeDocto });
   // Aprobado por Didit pero identidad_validada todavía en vuelo (webhook/cruce) →
   // "procesando". Esta pantalla solo se monta si !identidad_validada, así que un
   // "Approved" acá significa que falta el flip final, NO que tenga que empezar.
-  if (s === "Approved") return "procesando";
-  const terminal = ["In Review", "Resubmitted", "Declined"];
+  if (paso === "procesando") return "procesando";
+  if (paso === "repetir") return "rechazada";
+  if (paso === "cruce_en_revision") return "en_revision";
   // Volvió de Didit pero el webhook todavía no resolvió → mostrar "procesando".
-  if (recienVolvio && !terminal.includes(s)) return "procesando";
-  if (s === "In Progress" || s === "Abandoned" || s === "Expired")
-    return "en_progreso";
-  if (s === "In Review" || s === "Resubmitted") return "en_revision";
-  if (s === "Declined") return "rechazada";
+  if (recienVolvio) return "procesando";
+  if (paso === "a_medias") return "en_progreso";
   return "sin_empezar";
 }
 
@@ -80,6 +84,8 @@ interface Props {
   diditStatus: string | null;
   recienVolvio: boolean;
   userId: string;
+  /** El "In Review" lo puso Docto (identidad aprobada, cruce sin cerrar), no Didit. */
+  revisionDeDocto: boolean;
 }
 
 // Respec Sofía 20/07: se fusionaron las dos pantallas del flujo "sin empezar"
@@ -93,9 +99,10 @@ export default function PantallaIdentidad({
   diditStatus,
   recienVolvio,
   userId,
+  revisionDeDocto,
 }: Props) {
   const router = useRouter();
-  const estado = mapEstado(diditStatus, recienVolvio);
+  const estado = mapEstado(diditStatus, recienVolvio, revisionDeDocto);
 
   const [aceptado, setAceptado] = useState(false);
   const [guardActiva, setGuardActiva] = useState(false);

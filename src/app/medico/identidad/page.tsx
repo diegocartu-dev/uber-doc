@@ -27,7 +27,7 @@ export default async function IdentidadPage({
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, didit_status, identidad_validada, biometria_exenta, es_cuenta_test, estado_registro, didit_session_id")
+    .select("id, didit_status, identidad_validada, biometria_exenta, es_cuenta_test, estado_registro, didit_session_id, identidad_revision_motivo")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -42,6 +42,8 @@ export default async function IdentidadPage({
       diditStatus={medico.didit_status}
       recienVolvio={identidad === "verificada" && !!medico.didit_session_id}
       userId={user.id}
+      // Solo el booleano: el texto del motivo es del equipo y no baja al navegador.
+      revisionDeDocto={!!medico.identidad_revision_motivo}
     />
   );
 }

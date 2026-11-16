@@ -23,7 +23,7 @@ export default async function RegistroIdentidadPage({
   const admin = createAdminClient();
   const { data: medico } = await admin
     .from("medicos")
-    .select("id, didit_status, identidad_validada, biometria_exenta, didit_session_id")
+    .select("id, didit_status, identidad_validada, biometria_exenta, didit_session_id, identidad_revision_motivo")
     .eq("user_id", user.id)
     .maybeSingle();
   // Sin ficha todavía = confirmó el mail pero no completó datos (Fase B). Lo
@@ -35,6 +35,7 @@ export default async function RegistroIdentidadPage({
   return (
     <RegistroIdentidad
       diditStatus={medico.didit_status}
+      revisionDeDocto={!!medico.identidad_revision_motivo}
       yaHabilitado={!!medico.identidad_validada || !!medico.biometria_exenta}
       // El callback ?identidad=verificada solo cuenta si HAY una sesión Didit real:
       // una URL vieja del historial (o un typo) no puede fabricar un "completo"
