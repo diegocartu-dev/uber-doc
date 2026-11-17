@@ -1,0 +1,30 @@
+name: Recordatorio — probar la restauración del respaldo
+
+# Cada tres meses abre un issue para repetir la prueba de restauración.
+# Procedimiento: docs/infra/2026-11-16-restauracion-probada.md
+on:
+  schedule:
+    # 16 de feb, may, ago y nov, 10:00 Argentina (13:00 UTC).
+    - cron: "0 13 16 2,5,8,11 *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  abrir-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Abrir el issue del trimestre
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          titulo="Probar la restauración del respaldo ($(date -u +%Y-%m))"
+          if gh issue list --state open --search "\"$titulo\" in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "Ya está abierto: $titulo"; exit 0
+          fi
+          gh issue create --title "$titulo" --body "Toca repetir la prueba de restauración (cada tres meses).
+
+          Procedimiento: docs/infra/2026-11-16-restauracion-probada.md, sección «Procedimiento».
+          Al terminar: anotar fecha, tiempo y qué falló en el historial de ese archivo, y cerrar este issue."

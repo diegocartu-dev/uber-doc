@@ -1,5 +1,7 @@
 # Respaldos y recuperación — auditoría del 11/08/2026
 
+> **Actualización 16/11/2026:** la restauración se probó y el Storage tiene copia diaria fuera de Supabase. Ver `docs/infra/2026-11-16-restauracion-probada.md`. PITR sigue apagado (pendiente 1.22).
+
 Verificado contra los proveedores reales (Management API de Supabase, GitHub,
 Vercel), no contra documentación ni de memoria. Motivo: pregunta de Diego —
 *"¿dónde tenemos nuestros respaldos del sistema, bases de datos, la plataforma y
