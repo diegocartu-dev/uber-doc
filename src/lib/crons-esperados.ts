@@ -14,6 +14,9 @@ export const ESPERADOS: Record<string, number> = {
   "cerrar-huerfanas": 1440,
   recordatorios: 1440,
   "limpieza-estudios-temp": 1440,
+  // Copia del Storage a Vercel Blob (16/11): si deja de correr, un borrado
+  // nuestro de una firma o una credencial vuelve a no tener vuelta atrás.
+  "copia-storage": 1440,
   "sala-espera-diaria": 1440,
   "reintentar-refunds": 1440,
   "rejoin-expirar": 1440,

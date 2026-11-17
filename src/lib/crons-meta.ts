@@ -80,6 +80,13 @@ export const CRONS_META: Record<string, CronMeta> = {
     autoRecupera: false,
     pierdeLoNoHecho: true,
   },
+  "copia-storage": {
+    nombre: "Copia de los archivos (firmas, credenciales, fotos)",
+    queHace: "copia fuera de Supabase los archivos nuevos o cambiados del día, para poder recuperarlos si se borran",
+    impacto: "los archivos nuevos quedan sin copia: si se borran, no hay de dónde traerlos",
+    cadencia: "una vez por día a las 02:30",
+    autoRecupera: true,
+  },
   "limpieza-estudios-temp": {
     nombre: "Limpieza de archivos temporales",
     queHace: "borra los archivos temporales de estudios que ya no se usan",
