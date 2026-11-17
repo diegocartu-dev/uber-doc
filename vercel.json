@@ -24,6 +24,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/copia-storage",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/limpieza-estudios-temp",
       "schedule": "0 6 * * *"
     },
