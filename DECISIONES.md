@@ -95,6 +95,7 @@ Detalle y por qué de cada uno: `~/EMPRESA SE MARKETING/reportes/2026-10-12-pend
 - **El vigilante de firma (`documentos-sin-sello`) excluye solo al profesional de prueba (14/10, revisión de #574).** Un documento de un paciente de prueba con un profesional real, creado por script, todavía dispararía la alerta (la convención de `src/lib/insights/filtro-test.ts` filtra los dos lados). Hoy no hay ningún caso así.
 
 **Prolijidad:**
+- **Costos compartidos (19/11, al medir el costo por consulta).** (1) Los eventos de Observability son el ítem más grande de lo que Docto paga en Vercel (más de un tercio): se achica registrando menos. (2) La cuenta de Twilio la comparte otro proyecto que manda la mayoría de los mensajes; conviene separarla para que cada uno vea su gasto. El análisis con cifras está fuera del repo: `.privado/finanzas/costo-por-consulta-2026-11.html`.
 - `cerrar-huerfanas` en la instancia loguea una vez por día `column mp_oauth_state.id does not exist` (el cron da ok).
 - Badge "N pendientes" de la agenda del profesional (`src/app/medico/agenda/PanelDerecho.tsx`): cuenta reservas muertas.
 - Tres variables VAPID en Vercel tienen un salto de línea pegado (el código lo limpia).
