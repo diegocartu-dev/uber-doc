@@ -21,7 +21,8 @@ env:
 jobs:
   test:
     name: Etapa 1 — Tests críticos
-    runs-on: ubuntu-latest
+    # Fijo en 24.04 (19/11): ubuntu-latest pasó a 26.04 y Playwright no instala Chromium ahí.
+    runs-on: ubuntu-24.04
     # 45 y no 20: la espera de la vista previa puede llevar hasta 30 (abajo).
     timeout-minutes: 45
     steps:
