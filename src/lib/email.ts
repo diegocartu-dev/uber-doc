@@ -932,6 +932,74 @@ export async function enviarEmailRecordatorioIdentidad(medicoId: string): Promis
   }
 }
 
+// ─── Avisos de identidad al profesional EN REVISIÓN (16/11/2026) ─────────────
+// Cuándo sale cada uno lo decide lib/medicos/aviso-identidad.ts. "falta": no
+// empezó o no terminó la verificación. "repetir": Didit no la aprobó y la hace
+// de nuevo. Devuelve si el mail salió: quien llama lleva el plazo entre avisos.
+// TEXTO PENDIENTE DEL OK DE DIEGO (DECISIONES.md 1.20): no mergear sin él.
+export async function enviarEmailIdentidadEnRevision(medicoId: string, variante: "falta" | "repetir"): Promise<boolean> {
+  if (!(await emailsActivos())) { console.log("[email] skipped por flag:", "identidad_en_revision"); return false; }
+  try {
+    const supabase = createAdminClient();
+    const { data: medico, error } = await supabase
+      .from("medicos")
+      .select("nombre_completo, email, user_id")
+      .eq("id", medicoId)
+      .single();
+    if (error || !medico) { console.error("[email] identidad en revisión: no se pudo leer la ficha:", error?.message); return false; }
+
+    let email = (medico.email as string | null) ?? null;
+    if (!email && medico.user_id) {
+      const { data: { user } } = await supabase.auth.admin.getUserById(medico.user_id);
+      email = user?.email ?? null;
+    }
+    if (!email) { console.warn("[email] profesional sin email, no se envía el aviso de identidad:", medicoId); return false; }
+
+    const profesion = await profesionDeLaFicha(supabase, { medicoId });
+    // Sin nombre no se adivina tratamiento: el saludo queda "Hola" a secas.
+    const primerNombre = (medico.nombre_completo as string | null)?.trim().split(/\s+/)[0] || "";
+    const saludo = primerNombre ? `Hola, ${primerNombre}:` : "Hola:";
+    const parrafo = (html: string) => `<p style="margin:0 0 16px;font-size:15px;color:#6b7280;line-height:1.55;">${html}</p>`;
+    const cierre = `
+      <p style="margin:24px 0 0;font-size:14px;color:#6b7280;line-height:1.55;">
+        Si ten&eacute;s alg&uacute;n inconveniente, escribinos a
+        <a href="mailto:soporte@docto.com.ar" style="color:${AZUL};">soporte@docto.com.ar</a> y te ayudamos.
+      </p>
+      <p style="margin:16px 0 0;font-size:14px;color:#6b7280;">&mdash; El equipo de Docto</p>`;
+
+    const { asunto, titulo, contenido } = variante === "repetir"
+      ? {
+          asunto: "Tenemos que repetir tu verificación de identidad",
+          titulo: "Repetir la verificación de identidad",
+          contenido: `
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">${saludo}</h1>
+      ${parrafo("No pudimos confirmar la verificaci&oacute;n de identidad que hiciste. Suele pasar por una foto borrosa, poca luz o un documento dif&iacute;cil de leer.")}
+      ${parrafo("Hacela de nuevo desde tu cuenta: con buena luz, el DNI sin reflejos y la cara despejada.")}
+      ${boton("Repetir verificación", `${BASE_URL}/medico/identidad`, AZUL)}
+      ${cierre}`,
+        }
+      : {
+          asunto: "Te falta un paso para terminar tu registro en Docto",
+          titulo: "Verificación de identidad pendiente",
+          contenido: `
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:${GRIS};">${saludo}</h1>
+      ${parrafo("Recibimos tus datos y tu credencial. Para terminar tu registro falta la <strong>verificaci&oacute;n de identidad</strong>: se hace desde tu cuenta, con tu DNI y la c&aacute;mara del tel&eacute;fono o la computadora.")}
+      ${boton("Verificar mi identidad", `${BASE_URL}/medico/identidad`, AZUL)}
+      ${cierre}`,
+        };
+
+    await conRetry(
+      () => resend().emails.send({ from: FROM, to: email, subject: asunto, html: wrapHtml(titulo, contenido, profesion) }),
+      `identidad-en-revision-${variante}`
+    );
+    console.log(`[email] aviso de identidad (${variante}) enviado:`, medicoId);
+    return true;
+  } catch (e) {
+    console.error("[email] aviso de identidad en revisión falló:", e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
 // ─── Aviso de vencimiento de agenda ──────────────────────────────────────────
 // Decisión Diego 17/07: el día en que vence su agenda, el médico SIN otras
 // agendas activas a futuro recibe UNA invitación a renovarla — la contracara

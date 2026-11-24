@@ -94,7 +94,17 @@ después cada 72 h, hasta los 30 días):
 > — El equipo de Docto
 
 Con esos mails andando, el aviso al equipo por la primera revisión o el primer
-rechazo deja de salir; suena recién si el mismo profesional vuelve a fallar.
+rechazo de un profesional en revisión deja de salir; suena recién si el mismo
+profesional falla en una segunda verificación, o si el mail no le salió.
+
+Dónde está el código (PR aparte, sin mergear hasta el OK del texto):
+`src/lib/medicos/aviso-identidad.ts` (a quién y cuándo, con tests),
+`enviarEmailIdentidadEnRevision` en `src/lib/email.ts` (los dos textos), el
+barrido en el cron `reconciliar-identidad` y el aviso al momento en
+`src/lib/didit/reconciliar.ts`. Cada verificación sin aprobar deja una fila
+`identidad_a_repetir` en el log de auditoría (sin administrador): de ahí sale
+la cuenta de intentos. Solo B2C y solo fichas en revisión; el recordatorio de
+los aprobados no cambia. Sin migración.
 
 ## Deudas
 
